@@ -28,7 +28,7 @@ export class BillingError extends Error {
 }
 
 const EMPTY: BillingAccount = {
-  balanceCents: 0,
+  balanceCents: 300, // AI : $3 free credit for new accounts
   totalBilledCents: 0,
   subscribed: false,
   creditedSessions: [],

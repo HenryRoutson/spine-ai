@@ -1,0 +1,113 @@
+{
+  "id": "p_batch_llm",
+  "name": "Batch LLM Example",
+  "kind": "batch-llm-demo",
+  "models": [
+    {
+      "id": "m_src",
+      "name": "SourceDocument",
+      "description": "Raw text file with one bullet per line.",
+      "fields": [
+        { "id": "f_purpose", "name": "purpose", "type": "text", "optional": false, "description": "What this file contains" },
+        { "id": "f_body", "name": "body", "type": "text", "optional": false, "description": "Full file text" }
+      ]
+    },
+    {
+      "id": "m_chunk",
+      "name": "TextChunk",
+      "description": "One list item fed into the batch LLM step.",
+      "fields": [
+        { "id": "f_id", "name": "id", "type": "text", "optional": false, "description": "Stable chunk id" },
+        { "id": "f_text", "name": "text", "type": "text", "optional": false, "description": "Line to summarize" }
+      ]
+    },
+    {
+      "id": "m_summary",
+      "name": "ChunkSummary",
+      "description": "One structured result per batch LLM call — the step always emits a list of these.",
+      "fields": [
+        { "id": "f_id", "name": "id", "type": "text", "optional": false, "description": "Matches the input chunk id" },
+        { "id": "f_summary", "name": "summary", "type": "text", "optional": false, "description": "One-sentence summary" }
+      ]
+    },
+    {
+      "id": "m_report",
+      "name": "CombinedReport",
+      "description": "Single document produced by unwrapping the batch output list.",
+      "fields": [
+        { "id": "f_title", "name": "title", "type": "text", "optional": false, "description": "Report title" },
+        { "id": "f_body", "name": "body", "type": "text", "optional": false, "description": "Joined summaries" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_input",
+      "kind": "input",
+      "label": "Bullet List",
+      "inputType": "text",
+      "outStructureId": "m_src",
+      "cached": false,
+      "avgMs": 80,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_wrap_in",
+      "kind": "custom-code",
+      "label": "Wrap → List",
+      "note": "BEFORE batch LLM — single SourceDocument → list[TextChunk]. Batch steps always take a list.",
+      "inStructureId": "m_src",
+      "outStructureId": "m_chunk",
+      "outIsList": true,
+      "code": "(doc) => doc.body.split('\\n').filter((l) => l.trim()).map((line, i) => ({ id: String(i + 1), text: line.trim() }))",
+      "cached": false,
+      "avgMs": 5,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_batch",
+      "kind": "llm-batch",
+      "label": "Summarize Each Line",
+      "note": "list[TextChunk] → list[ChunkSummary]. One structured LLM call per item.",
+      "inStructureId": "m_chunk",
+      "outStructureId": "m_summary",
+      "outIsList": true,
+      "prompt": "Summarize the checklist line in one concise sentence. Keep the same id as the input item.",
+      "model": "deepseek-v3",
+      "cached": false,
+      "avgMs": 1800,
+      "avgCostCents": 4
+    },
+    {
+      "id": "mod_wrap_out",
+      "kind": "custom-code",
+      "label": "Unwrap List → Report",
+      "note": "AFTER batch LLM — list[ChunkSummary] → single CombinedReport for the output step.",
+      "inStructureId": "m_summary",
+      "outStructureId": "m_report",
+      "code": "(rows) => ({ title: 'Combined summaries', body: rows.map((r) => `[${r.id}] ${r.summary}`).join('\\n') })",
+      "cached": false,
+      "avgMs": 5,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_output",
+      "kind": "output",
+      "label": "Summary Report",
+      "inStructureId": "m_report",
+      "outStructureId": "m_report",
+      "cached": false,
+      "avgMs": 40,
+      "avgCostCents": 0
+    }
+  ],
+  "strategies": [
+    { "id": "s_single_batch", "kind": "single-llm", "name": "Single LLM Call", "enabled": true, "model": "deepseek-v3", "accuracy": 78, "latencyMs": 2400, "costCents": 5, "passRate": 91 },
+    { "id": "s_rlm_batch", "kind": "rlm", "name": "Recursive LM", "enabled": true, "model": "deepseek-v3", "accuracy": 86, "latencyMs": 7200, "costCents": 14, "passRate": 95 },
+    { "id": "s_agent_batch", "kind": "claude-code", "name": "Agent (Frontier)", "enabled": true, "model": "deepseek-v3", "accuracy": 92, "latencyMs": 21000, "costCents": 120, "passRate": 98 },
+    { "id": "s_cheap_batch", "kind": "cheap-agent", "name": "Agent (Cheap Model)", "enabled": true, "model": "deepseek-v3", "accuracy": 82, "latencyMs": 14000, "costCents": 9, "passRate": 90 }
+  ],
+  "docs": [
+    { "name": "sample_bullets.txt", "type": "text", "label": "inference", "file": "batch_llm_example/sample_bullets.txt" }
+  ]
+}

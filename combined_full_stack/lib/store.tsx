@@ -54,6 +54,7 @@ interface StoreState {
   activeProjectId: string
   setActiveProjectId: (id: string) => void
   addProject: () => void
+  renameProject: (id: string, name: string) => void
   project: Project
   // shortcuts that read/write the active project
   models: StructureModel[]
@@ -170,6 +171,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .catch(console.error)
   }, [])
 
+  // AI : discrete rename — save immediately (not debounced like builder keystrokes).
+  const renameProject = useCallback((id: string, name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setState((prev) => {
+      if (!prev) return prev
+      const current = prev.projects.find((p) => p.id === id)
+      if (!current || current.name === trimmed) return prev
+      const next = { ...current, name: trimmed }
+      fetch(`/api/projects/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(next),
+      }).catch(console.error)
+      return { ...prev, projects: prev.projects.map((p) => (p.id === id ? next : p)) }
+    })
+  }, [])
+
   const addDoc = useCallback(async (file: File, label: DocLabel) => {
     const form = new FormData()
     form.append("file", file)
@@ -202,6 +221,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     activeProjectId: project.id,
     setActiveProjectId,
     addProject,
+    renameProject,
     project,
     models: project.models,
     setModels: (m) => patchProject({ models: m }),

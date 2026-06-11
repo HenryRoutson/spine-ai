@@ -12,6 +12,7 @@ import {
   Check,
   LogOut,
   UserRound,
+  Pencil,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { StoreProvider, useStore } from "@/lib/store"
@@ -36,6 +37,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { ChevronDown } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 
 type WindowId =
   | "structure"
@@ -55,7 +58,20 @@ const WINDOWS: { id: WindowId; label: string; hint: string; icon: typeof Boxes }
 ]
 
 function ProjectSelector() {
-  const { projects, project, setActiveProjectId, addProject } = useStore()
+  const { projects, project, setActiveProjectId, addProject, renameProject } = useStore()
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState("")
+
+  function startRename(id: string, name: string) {
+    setEditingId(id)
+    setDraft(name)
+  }
+
+  function commitRename(id: string) {
+    renameProject(id, draft)
+    setEditingId(null)
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="flex items-center gap-2 rounded-md border border-border bg-secondary px-2.5 py-1.5 text-xs transition-colors hover:bg-accent">
@@ -74,14 +90,49 @@ function ProjectSelector() {
         {projects.map((p) => (
           <DropdownMenuItem
             key={p.id}
-            onClick={() => setActiveProjectId(p.id)}
-            className="flex items-center justify-between gap-2 text-xs"
+            onClick={() => editingId !== p.id && setActiveProjectId(p.id)}
+            onSelect={(e) => editingId === p.id && e.preventDefault()}
+            className="group flex items-center justify-between gap-2 text-xs"
           >
-            <span className="flex flex-col">
-              <span className="font-medium">{p.name}</span>
-              <span className="font-mono text-[10px] text-muted-foreground">{p.kind}</span>
-            </span>
-            {p.id === project.id && <Check className="h-3.5 w-3.5 text-primary" />}
+            {editingId === p.id ? (
+              <Input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  e.stopPropagation()
+                  if (e.key === "Enter") commitRename(p.id)
+                  if (e.key === "Escape") setEditingId(null)
+                }}
+                onBlur={() => commitRename(p.id)}
+                onClick={(e) => e.stopPropagation()}
+                autoFocus
+                className="h-7 text-xs"
+              />
+            ) : (
+              <>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate font-medium">{p.name}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground">{p.kind}</span>
+                </span>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      startRename(p.id, p.name)
+                    }}
+                    aria-label={`Rename ${p.name}`}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                  {p.id === project.id && <Check className="h-3.5 w-3.5 text-primary" />}
+                </div>
+              </>
+            )}
           </DropdownMenuItem>
         ))}
         </DropdownMenuGroup>
@@ -150,13 +201,10 @@ function Shell() {
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2.5">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <span className="font-mono text-sm font-bold">F</span>
+              <span className="font-mono text-sm font-bold">|</span>
             </div>
             <div className="hidden leading-tight sm:block">
-              <h1 className="text-sm font-semibold tracking-tight">Forge</h1>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                ai engineering pipeline builder
-              </p>
+              <h1 className="text-sm font-semibold tracking-tight">auto pipeline</h1>
             </div>
           </div>
           <div className="mx-1 h-6 w-px bg-border" />

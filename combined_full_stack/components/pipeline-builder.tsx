@@ -16,6 +16,8 @@ import {
   Merge,
   Code2,
   AlertTriangle,
+  Copy,
+  Check,
   type LucideIcon,
 } from "lucide-react"
 import { useStore, uid } from "@/lib/store"
@@ -45,6 +47,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 // AI : batch llm is a 2×2 sparkle grid so it reads as "many calls" vs single Sparkle.
 function BatchSparkleIcon({ className }: { className?: string }) {
@@ -105,9 +115,41 @@ function modelName(models: StructureModel[], id?: string) {
   return models.find((m) => m.id === id)?.name
 }
 
+// AI : factory for a fresh module — shared by append + colab-style insert slots.
+function makeModule(
+  kind: ModuleKind,
+  models: StructureModel[],
+  globalModel: string,
+): PipelineModule {
+  const isLlm = LLM_KINDS.includes(kind)
+  return {
+    id: uid(),
+    kind,
+    label: MODULE_META[kind].label,
+    cached: false,
+    avgMs: isLlm ? 2500 : kind === "doc-to-text" ? 450 : 200,
+    avgCostCents: isLlm ? 8 : kind === "doc-to-text" ? 1 : 0,
+    inputType: kind === "input" ? "pdf" : undefined,
+    outStructureId: models[0]?.id,
+    inStructureId: kind !== "input" ? models[0]?.id : undefined,
+    prompt: isLlm ? "" : undefined,
+    code: kind === "custom-code" ? "(input) => input" : undefined,
+    model: isLlm ? globalModel : undefined,
+  }
+}
+
+function insertBeforeIndex(seg: ReturnType<typeof segmentPipeline>[number]): number {
+  return seg.kind === "combine" ? seg.index - 1 : seg.index
+}
+
+function insertAfterIndex(seg: ReturnType<typeof segmentPipeline>[number]): number {
+  return seg.index + 1
+}
+
 export function PipelineBuilder() {
   const { modules, setModules, models, model: globalModel, runs } = useStore()
   const [selectedId, setSelectedId] = useState<string>(modules[0]?.id ?? "")
+  const [copied, setCopied] = useState(false)
 
   const selected = modules.find((m) => m.id === selectedId)
   // AI : de-mocked — invalid check is the shared server definition; latency/cost are
@@ -120,25 +162,20 @@ export function PipelineBuilder() {
   const totalCost = modules.reduce((a, m) => a + (m.cached ? 0 : avgCostOf(m)), 0)
   const cachedCount = modules.filter((m) => m.cached).length
 
-  function addModule(kind: ModuleKind) {
-    const isLlm = LLM_KINDS.includes(kind)
-    const m: PipelineModule = {
-      id: uid(),
-      kind,
-      label: MODULE_META[kind].label,
-      cached: false,
-      avgMs: isLlm ? 2500 : kind === "doc-to-text" ? 450 : 200,
-      avgCostCents: isLlm ? 8 : kind === "doc-to-text" ? 1 : 0,
-      inputType: kind === "input" ? "pdf" : undefined,
-      outStructureId: kind === "input" || isLlm ? models[0]?.id : undefined,
-      inStructureId: kind !== "input" ? models[0]?.id : undefined,
-      prompt: isLlm ? "" : undefined,
-      code: kind === "custom-code" ? "(input) => input" : undefined,
-      model: isLlm ? globalModel : undefined,
-    }
-    setModules([...modules, m])
-    setSelectedId(m.id)
+  function insertModule(kind: ModuleKind, at = modules.length) {
+    const fresh: PipelineModule[] =
+      kind === "combine"
+        ? [
+            { ...makeModule("input", models, globalModel), label: "Document Input" },
+            makeModule("combine", models, globalModel),
+          ]
+        : [makeModule(kind, models, globalModel)]
+    const next = [...modules.slice(0, at), ...fresh, ...modules.slice(at)]
+    setModules(next)
+    setSelectedId(fresh[fresh.length - 1].id)
   }
+
+  const segments = segmentPipeline(modules)
 
   function update(id: string, patch: Partial<PipelineModule>) {
     setModules(modules.map((m) => (m.id === id ? { ...m, ...patch } : m)))
@@ -162,6 +199,13 @@ export function PipelineBuilder() {
     setModules(next)
   }
 
+  async function copyPipelineJson() {
+    const json = JSON.stringify({ models, modules }, null, 2)
+    await navigator.clipboard.writeText(json)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
@@ -170,6 +214,15 @@ export function PipelineBuilder() {
         description="Each step declares its input and output model. Mismatched I/O is flagged — there is no explicit validation step."
         actions={
           <div className="flex items-center gap-3 font-mono text-[11px]">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 text-[10px]"
+              onClick={() => void copyPipelineJson()}
+            >
+              {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              {copied ? "Copied" : "Copy prompt"}
+            </Button>
             <span className="text-muted-foreground">~{(totalMs / 1000).toFixed(1)}s avg</span>
             <span className="text-muted-foreground">${(totalCost / 100).toFixed(2)}/run</span>
             <Badge variant="outline" className="gap-1 text-[10px]">
@@ -189,7 +242,10 @@ export function PipelineBuilder() {
         <div className="min-w-0 flex-1 overflow-auto">
           <div className="flex min-h-full flex-col items-center gap-0 px-6 py-8">
             <PipelineNode label="Start" subtle />
-            {segmentPipeline(modules).map((seg) => {
+            {segments.length > 0 && (
+              <InsertSlot insertAt={insertBeforeIndex(segments[0])} onInsert={insertModule} />
+            )}
+            {segments.map((seg) => {
               if (seg.kind === "combine") {
                 const { combine, input, index } = seg
                 const isInvalid = invalid.has(combine.id)
@@ -198,7 +254,6 @@ export function PipelineBuilder() {
                 const groupSelected = selectedId === combine.id || selectedId === input.id
                 return (
                   <div key={combine.id} className="flex flex-col items-center">
-                    <Connector invalid={isInvalid} />
                     <div
                       className={cn(
                         "w-80 rounded-lg border-2 border-dashed px-3.5 py-3 transition-colors",
@@ -263,6 +318,7 @@ export function PipelineBuilder() {
                         {modelName(models, modules[index - 2]?.outStructureId) ?? "?"}
                       </p>
                     )}
+                    <InsertSlot insertAt={insertAfterIndex(seg)} onInsert={insertModule} />
                   </div>
                 )
               }
@@ -272,7 +328,6 @@ export function PipelineBuilder() {
               const isInvalid = invalid.has(m.id)
               return (
                 <div key={m.id} className="flex flex-col items-center">
-                  <Connector invalid={isInvalid} />
                   <button
                     onClick={() => setSelectedId(m.id)}
                     className={cn(
@@ -314,30 +369,21 @@ export function PipelineBuilder() {
                       {modelName(models, modules[i - 1]?.outStructureId) ?? "?"}
                     </p>
                   )}
+                  <InsertSlot
+                    insertAt={insertAfterIndex(seg)}
+                    onInsert={insertModule}
+                    invalid={isInvalid}
+                  />
                 </div>
               )
             })}
-            <Connector />
+            {segments.length === 0 && (
+              <InsertSlot insertAt={0} onInsert={insertModule} alwaysShow />
+            )}
             <PipelineNode label="End" subtle />
 
-            <div className="mt-6 flex flex-wrap items-start justify-center gap-2">
-              {ADDABLE.map((k) => {
-                const Icon = KIND_ICON[k]
-                return (
-                  <Button
-                    key={k}
-                    variant="outline"
-                    size="sm"
-                    className="h-auto flex-col gap-1 bg-transparent px-3 py-2"
-                    onClick={() => addModule(k)}
-                  >
-                    <Icon className={cn("h-4 w-4", KIND_COLOR[k])} />
-                    <span className="max-w-16 text-center text-[10px] leading-tight">
-                      {MODULE_META[k].label}
-                    </span>
-                  </Button>
-                )
-              })}
+            <div className="mt-6">
+              <AddStepMenu insertAt={modules.length} onInsert={insertModule} variant="button" />
             </div>
           </div>
         </div>
@@ -524,8 +570,85 @@ function KindIcon({ kind, size = "md" }: { kind: ModuleKind; size?: "sm" | "md" 
   )
 }
 
-function Connector({ invalid }: { invalid?: boolean }) {
-  return <div className={cn("h-6 w-px", invalid ? "bg-destructive" : "bg-border")} />
+// AI : colab-style gap — hover the connector to reveal +, click to pick a step type.
+function InsertSlot({
+  insertAt,
+  onInsert,
+  invalid,
+  alwaysShow,
+}: {
+  insertAt: number
+  onInsert: (kind: ModuleKind, at: number) => void
+  invalid?: boolean
+  alwaysShow?: boolean
+}) {
+  return (
+    <div className="group relative flex h-8 w-full items-center justify-center">
+      <div
+        className={cn(
+          "absolute h-full w-px bg-border transition-colors group-hover:bg-muted-foreground/40",
+          invalid && "bg-destructive/70",
+        )}
+      />
+      <AddStepMenu
+        insertAt={insertAt}
+        onInsert={onInsert}
+        variant="slot"
+        alwaysShow={alwaysShow}
+      />
+    </div>
+  )
+}
+
+function AddStepMenu({
+  insertAt,
+  onInsert,
+  variant,
+  alwaysShow,
+}: {
+  insertAt: number
+  onInsert: (kind: ModuleKind, at: number) => void
+  variant: "slot" | "button"
+  alwaysShow?: boolean
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className={cn(
+          variant === "slot"
+            ? cn(
+                "relative z-10 flex h-5 w-5 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition-all hover:border-primary hover:bg-primary/10 hover:text-primary",
+                alwaysShow
+                  ? "opacity-100"
+                  : "opacity-30 group-hover:opacity-100 data-popup-open:opacity-100",
+              )
+            : "inline-flex h-8 items-center gap-1.5 rounded-md border border-dashed border-border bg-transparent px-3 text-xs text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-foreground",
+        )}
+        aria-label="Add pipeline step"
+      >
+        <Plus className={variant === "slot" ? "h-3 w-3" : "h-3.5 w-3.5"} />
+        {variant === "button" && <span>Add step</span>}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="center" className="min-w-52">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="font-mono text-[10px] text-muted-foreground">
+            Insert step
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
+        <DropdownMenuGroup>
+          {ADDABLE.map((k) => {
+            const Icon = KIND_ICON[k]
+            return (
+              <DropdownMenuItem key={k} onClick={() => onInsert(k, insertAt)} className="gap-2">
+                <Icon className={cn("h-3.5 w-3.5", KIND_COLOR[k])} />
+                <span>{MODULE_META[k].label}</span>
+              </DropdownMenuItem>
+            )
+          })}
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 function PipelineNode({ label, subtle }: { label: string; subtle?: boolean }) {

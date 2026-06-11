@@ -51,3 +51,6 @@ Could not find the table 'public.billing_accounts' in the schema cache
   88 |
 
 Next.js version: 16.2.6 (Turbopack)
+
+
+

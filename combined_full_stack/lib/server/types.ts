@@ -220,7 +220,7 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   input: { label: "Input", description: "Ingest a source (pdf, word, web, json…)" },
   "doc-to-text": { label: "Doc → Text", description: "Prebuilt parser, document to text" },
   llm: { label: "LLM Call", description: "Run a model against a prompt + schema" },
-  "llm-batch": { label: "Batch LLM", description: "One structured call per list item → typed list out" },
+  "llm-batch": { label: "Batch LLM", description: "list in → list out (one structured call per item). Wrap with Custom TS before/after when upstream/downstream is a single object." },
   transform: { label: "Transform", description: "Reshape, chunk, or map data" },
   combine: { label: "Combine Inputs", description: "Merge a new input with the pipeline state" },
   "custom-code": { label: "Custom TS Function", description: "Saved (input) => output code step, no LLM cost" },

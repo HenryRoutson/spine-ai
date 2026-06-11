@@ -122,10 +122,10 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-lg border border-border bg-card p-6">
         <div className="mb-5 flex items-center gap-2.5">
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <span className="font-mono text-sm font-bold">F</span>
+            <span className="font-mono text-sm font-bold">|</span>
           </div>
           <div className="leading-tight">
-            <h1 className="text-sm font-semibold tracking-tight">Forge</h1>
+            <h1 className="text-sm font-semibold tracking-tight">auto pipeline</h1>
             <p className="font-mono text-[10px] text-muted-foreground">
               {mode === "sign-in" ? "sign in to your pipelines" : "create an account"}
             </p>

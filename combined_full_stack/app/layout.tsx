@@ -9,7 +9,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'Forge — AI Engineering Pipeline Builder',
+  title: 'auto pipeline',
   description:
     'Define structured outputs, compose linear pipelines, A/B test strategies, and run inference.',
 }
