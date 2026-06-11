@@ -1,37 +1,36 @@
-\documentclass[11pt]{article}
+% AI : ACM acmart class in nonacm mode — Libertine typography + clean section style,
+% without the academic copyright/DOI/bibliography boilerplate.
+\documentclass[acmsmall,nonacm]{acmart}
 
-\usepackage[a4paper,margin=1in]{geometry}
-\usepackage{fontspec}
-% AI : reference Latin Modern by filename (tectonic bundles it); NoCommon ligatures keeps
-% PDF text extraction byte-exact for quote grounding
-\setmainfont{lmroman10-regular.otf}[
-  BoldFont = lmroman10-bold.otf,
-  ItalicFont = lmroman10-italic.otf,
-  BoldItalicFont = lmroman10-bolditalic.otf,
+\settopmatter{printacmref=false, printccs=false, printfolios=true}
+\setcopyright{none}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+\pagestyle{plain}
+
+% AI : acmart loads Libertine via fontspec under XeTeX; re-set it with NoCommon ligatures so
+% the assessment text matches the rules byte-for-byte when read back from the PDF.
+\setmainfont{LinLibertine_R.otf}[
+  BoldFont = LinLibertine_RB.otf,
+  ItalicFont = LinLibertine_RI.otf,
+  BoldItalicFont = LinLibertine_RBI.otf,
   Ligatures = NoCommon]
-\usepackage{titlesec}
-\usepackage{parskip}
-
-% AI : wording kept identical to the markdown so the assessment step lines up with the rules
-\titleformat{\section}{\large\bfseries}{}{0em}{}
-\titlespacing*{\section}{0pt}{16pt}{6pt}
 
 \begin{document}
 
-\begin{center}
-  {\LARGE\bfseries Company Profile: MediFlow AI}\\[0.6em]
-  \rule{\textwidth}{0.4pt}
-\end{center}
+\title{Company Profile: MediFlow AI}
+\author{Compliance Assessment}
+\affiliation{\institution{Digital Health / Clinical Decision Support}\city{Berlin}\country{Germany}}
+\renewcommand{\shortauthors}{MediFlow AI}
+\authorsaddresses{}  % AI : suppress the journal "Author's address" footnote
 
-\noindent\textbf{Sector:} Digital health / clinical decision support\\
-\textbf{Headquarters:} Berlin, Germany\\
-\textbf{Stage:} Series A
+\begin{abstract}
+MediFlow AI (Series A, headquartered in Berlin, Germany) builds an AI-powered symptom
+triage and care-coordination platform used by patients and clinics across the European
+Union and, more recently, the United States. The following is a summary of the company's
+current data and operational practices, prepared for compliance assessment.
+\end{abstract}
 
-\medskip
-MediFlow AI builds an AI-powered symptom triage and care-coordination platform used by
-patients and clinics across the European Union and, more recently, the United States. The
-following is a summary of the company's current data and operational practices, prepared
-for compliance assessment.
+\maketitle
 
 \section{Product and Data Collected}
 MediFlow's mobile app collects each user's name, email, date of birth, self-reported

@@ -30,7 +30,10 @@ def build(tex: TexPath, out_dir: PdfPath) -> PdfPath:
 
 
 def main() -> None:
-    targets = [Path(a) for a in sys.argv[1:]] or sorted(LATEX_DIR.glob("*.tex"))
+    # AI : skip template_*.tex — reference templates, not demo documents
+    targets = [Path(a) for a in sys.argv[1:]] or sorted(
+        t for t in LATEX_DIR.glob("*.tex") if not t.name.startswith("template")
+    )
     if not targets:
         sys.exit(f"no .tex files found in {LATEX_DIR}")
     for tex in targets:

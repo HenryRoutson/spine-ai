@@ -1,40 +1,40 @@
-\documentclass[11pt]{article}
+% AI : ACM acmart class in nonacm mode — Libertine typography + clean section style,
+% without the academic copyright/DOI/bibliography boilerplate.
+\documentclass[acmsmall,nonacm]{acmart}
 
-\usepackage[a4paper,margin=1in]{geometry}
-\usepackage{fontspec}
-% AI : reference Latin Modern by filename (tectonic bundles it); NoCommon ligatures keeps
-% PDF text extraction byte-exact for quote grounding
-\setmainfont{lmroman10-regular.otf}[
-  BoldFont = lmroman10-bold.otf,
-  ItalicFont = lmroman10-italic.otf,
-  BoldItalicFont = lmroman10-bolditalic.otf,
+\settopmatter{printacmref=false, printccs=false, printfolios=true}
+\setcopyright{none}
+\renewcommand\footnotetextcopyrightpermission[1]{}
+\pagestyle{plain}
+
+% AI : acmart loads Libertine via fontspec under XeTeX; re-set it with NoCommon ligatures so
+% PDF text extraction stays byte-exact for quote grounding (fi/ffi ligatures would break it).
+\setmainfont{LinLibertine_R.otf}[
+  BoldFont = LinLibertine_RB.otf,
+  ItalicFont = LinLibertine_RI.otf,
+  BoldItalicFont = LinLibertine_RBI.otf,
   Ligatures = NoCommon]
-\usepackage{titlesec}
-\usepackage{enumitem}
-\usepackage{parskip}
-
-% AI : keep wording identical to the markdown source so extracted-quote grounding still matches
-\titleformat{\section}{\large\bfseries}{\thesection.}{0.6em}{}
-\titlespacing*{\section}{0pt}{16pt}{6pt}
 
 % AI : numbered clause; the bold "1.1" label is what the rule-extraction step quotes against
-\newcommand{\clause}[2]{\noindent\textbf{#1}\quad #2\par\medskip}
+\newcommand{\clause}[2]{\par\smallskip\noindent\textbf{#1}\quad #2}
 
 \begin{document}
 
-\begin{center}
-  {\LARGE\bfseries Health Data Protection and AI Governance Agreement}\\[0.6em]
-  \rule{\textwidth}{0.4pt}
-\end{center}
+\title{Health Data Protection and AI Governance Agreement}
+\author{Office of Health Data Protection}
+\affiliation{\institution{Supervisory Authority}\country{European Union}}
+\renewcommand{\shortauthors}{Health Data Protection Agreement}
+\authorsaddresses{}  % AI : suppress the journal "Author's address" footnote
 
-\noindent\textbf{Effective Date:} 1 January 2026\\
-\textbf{Parties:} The Data Controller (``the Company'') and its end users (``Data Subjects'').
+\begin{abstract}
+This Agreement sets out the binding obligations of the Data Controller (``the Company'')
+with respect to the collection, processing, storage, and automated analysis of personal
+and health-related data of its end users (``Data Subjects''). It takes effect on
+1 January 2026. Failure to comply with any clause below may expose the Company to
+regulatory penalties, civil liability, and termination of its operating licence.
+\end{abstract}
 
-\medskip
-This Agreement sets out the binding obligations of the Company with respect to the
-collection, processing, storage, and automated analysis of personal and health-related
-data. Failure to comply with any clause below may expose the Company to regulatory
-penalties, civil liability, and termination of its operating licence.
+\maketitle
 
 \section{Lawful Basis and Consent}
 \clause{1.1}{The Company shall not collect or process any personal data unless it has first
