@@ -135,3 +135,15 @@ For the prebuild "document to text step", please default to a python pdf reader 
 
 
 please make every part of the pipeline which is a placeholder to be implemented in backend or fake data as "TODO placeholder".
+
+
+
+
+
+
+
+_______
+
+
+What is going to be built in the backend?
+TODO

@@ -2,8 +2,13 @@
 
 \usepackage[a4paper,margin=1in]{geometry}
 \usepackage{fontspec}
-% AI : XeTeX engine — disable ligatures so PDF text extraction is byte-exact for quote grounding
-\setmainfont{Latin Modern Roman}[Ligatures=NoCommon]
+% AI : reference Latin Modern by filename (tectonic bundles it); NoCommon ligatures keeps
+% PDF text extraction byte-exact for quote grounding
+\setmainfont{lmroman10-regular.otf}[
+  BoldFont = lmroman10-bold.otf,
+  ItalicFont = lmroman10-italic.otf,
+  BoldItalicFont = lmroman10-bolditalic.otf,
+  Ligatures = NoCommon]
 \usepackage{titlesec}
 \usepackage{parskip}
 
