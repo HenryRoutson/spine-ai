@@ -9,6 +9,9 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 })
 
+// AI : read Supabase env at request time — static build would bake an empty config otherwise.
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: 'auto pipeline',
   description:

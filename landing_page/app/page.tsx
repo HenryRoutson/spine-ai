@@ -3,6 +3,9 @@ import Image from "next/image";
 // AI : nominal aliases so paths/copy aren't interchangeable plain strings
 type ImagePath = string;
 type SectionId = string;
+type AppLoginUrl = string;
+
+const APP_LOGIN_URL: AppLoginUrl = "https://auto-pipeline-app.dev/login?next=%2F";
 
 type Feature = {
   id: SectionId;
@@ -176,7 +179,7 @@ export default function Home() {
               </a>
             ))}
             <a
-              href="#cta"
+              href={APP_LOGIN_URL}
               className="rounded bg-accent px-3 py-1.5 font-semibold text-background hover:bg-accent/85 transition-colors"
             >
               Get a demo
@@ -204,7 +207,7 @@ export default function Home() {
           <div className="mt-8 flex items-center justify-center gap-4">
             <a
               id="cta-top"
-              href="#cta"
+              href={APP_LOGIN_URL}
               className="rounded bg-accent px-6 py-3 font-mono text-sm font-semibold text-background hover:bg-accent/85 transition-colors"
             >
               ⚡ Get a demo
@@ -333,7 +336,7 @@ export default function Home() {
             how you get there.
           </p>
           <a
-            href="mailto:hello@forge.dev?subject=Forge%20demo"
+            href={APP_LOGIN_URL}
             className="mt-8 inline-block rounded bg-accent px-8 py-3.5 font-mono text-sm font-semibold text-background hover:bg-accent/85 transition-colors"
           >
             ⚡ Book a demo

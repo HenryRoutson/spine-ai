@@ -152,8 +152,8 @@ function ProjectSelector() {
 function AccountMenu() {
   const [email, setEmail] = useState<string | null>(null)
   useEffect(() => {
-    createClient()
-      .auth.getUser()
+    void createClient()
+      .then((supabase) => supabase.auth.getUser())
       .then(({ data }) => setEmail(data.user?.email ?? null))
       .catch(() => setEmail(null))
   }, [])
@@ -172,8 +172,8 @@ function AccountMenu() {
       <DropdownMenuContent align="end" className="w-48">
         <DropdownMenuItem
           onClick={() => {
-            createClient()
-              .auth.signOut()
+            void createClient()
+              .then((supabase) => supabase.auth.signOut())
               .then(() => (window.location.href = "/login"))
           }}
           className="gap-2 text-xs"

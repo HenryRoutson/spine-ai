@@ -41,6 +41,13 @@ function isRuleRows(v: unknown): v is RuleRow[] {
   return Array.isArray(v) && v.length > 0 && v.every((r) => r && typeof r === "object" && "rule_id" in r && "source" in r)
 }
 
+// AI : step errors are stored on RunStep.outputPreview — surface them instead of a generic "run error".
+function pipelineRunError(run: PipelineRun): string | null {
+  const step = run.steps.find((s) => s.status === "error")
+  if (!step) return run.status === "error" ? "Pipeline failed" : null
+  return step.outputPreview ? `${step.label}: ${step.outputPreview}` : `${step.label} failed`
+}
+
 export function Inference() {
   const { project, modules, model, addDoc, addRun, docs, refreshBilling } = useStore()
   const { open } = useDocViewer()
@@ -95,6 +102,8 @@ export function Inference() {
       })
       setRun(finished)
       addRun(finished)
+      const runErr = pipelineRunError(finished)
+      if (runErr) setError(runErr)
       setPhase("done")
     } catch (e) {
       setError((e as Error).message)
@@ -132,6 +141,7 @@ export function Inference() {
     [parsedSteps],
   )
   const finalStep = useMemo(() => [...(run?.steps ?? [])].reverse().find((s) => s.outputJson), [run])
+  const runErr = useMemo(() => (run ? pipelineRunError(run) : null), [run])
 
   return (
     <div className="flex h-full flex-col">
@@ -241,16 +251,28 @@ export function Inference() {
                                 : "idle"
                       return (
                         <div key={seg.combine.id} className="space-y-1">
-                          <StepRow label={seg.combine.label} state={state} />
-                          <StepRow label={seg.input.label} state={inputState} nested />
+                          <StepRow
+                            label={seg.combine.label}
+                            state={state}
+                            errorMessage={run?.steps.find((s) => s.moduleId === seg.combine.id && s.status === "error")?.outputPreview}
+                          />
+                          <StepRow
+                            label={seg.input.label}
+                            state={inputState}
+                            nested
+                            errorMessage={run?.steps.find((s) => s.moduleId === seg.input.id && s.status === "error")?.outputPreview}
+                          />
                         </div>
                       )
                     }
+                    const moduleState = stepStates.get(seg.module.id) ?? "idle"
+                    const failedStep = run?.steps.find((s) => s.moduleId === seg.module.id && s.status === "error")
                     return (
                       <StepRow
                         key={seg.module.id}
                         label={seg.module.label}
-                        state={stepStates.get(seg.module.id) ?? "idle"}
+                        state={moduleState}
+                        errorMessage={failedStep?.outputPreview}
                       />
                     )
                   })}
@@ -293,6 +315,13 @@ export function Inference() {
                     {run.status === "ok" ? "schema valid" : "run error"}
                   </Badge>
                 </div>
+
+                {runErr && (
+                  <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+                    <p className="font-mono text-[11px] text-destructive">{runErr}</p>
+                  </div>
+                )}
 
                 {rules.length > 0 && (
                   <div>
@@ -378,22 +407,29 @@ function StepRow({
   label,
   state,
   nested,
+  errorMessage,
 }: {
   label: string
   state: StepProgress["status"] | "idle"
   nested?: boolean
+  errorMessage?: string
 }) {
   return (
-    <div className={cn("flex items-center gap-2.5", nested && "pl-5")}>
-      {state === "ok" && <CheckCircle2 className="h-4 w-4 text-primary" />}
-      {state === "cached" && <Zap className="h-4 w-4 text-chart-3" />}
-      {state === "running" && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-      {state === "error" && <AlertTriangle className="h-4 w-4 text-destructive" />}
-      {state === "idle" && <Circle className="h-4 w-4 text-muted-foreground/40" />}
-      <span className={cn("flex-1 text-xs", state === "idle" ? "text-muted-foreground" : "text-foreground")}>
-        {label}
-      </span>
-      {state === "cached" && <span className="font-mono text-[10px] text-chart-3">cache · $0.00</span>}
+    <div className={cn(nested && "pl-5")}>
+      <div className="flex items-center gap-2.5">
+        {state === "ok" && <CheckCircle2 className="h-4 w-4 text-primary" />}
+        {state === "cached" && <Zap className="h-4 w-4 text-chart-3" />}
+        {state === "running" && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+        {state === "error" && <AlertTriangle className="h-4 w-4 text-destructive" />}
+        {state === "idle" && <Circle className="h-4 w-4 text-muted-foreground/40" />}
+        <span className={cn("flex-1 text-xs", state === "idle" ? "text-muted-foreground" : "text-foreground")}>
+          {label}
+        </span>
+        {state === "cached" && <span className="font-mono text-[10px] text-chart-3">cache · $0.00</span>}
+      </div>
+      {state === "error" && errorMessage && (
+        <p className="mt-1 pl-7 font-mono text-[10px] text-destructive">{errorMessage}</p>
+      )}
     </div>
   )
 }

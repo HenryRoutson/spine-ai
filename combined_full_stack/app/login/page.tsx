@@ -63,7 +63,7 @@ export default function LoginPage() {
     setOauthBusy(provider)
     setError(null)
     setNotice(null)
-    const supabase = createClient()
+    const supabase = await createClient()
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
@@ -81,7 +81,7 @@ export default function LoginPage() {
     setBusy(true)
     setError(null)
     setNotice(null)
-    const supabase = createClient()
+    const supabase = await createClient()
 
     if (mode === "sign-in") {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
