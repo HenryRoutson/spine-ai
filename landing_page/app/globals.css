@@ -1,12 +1,14 @@
 @import "tailwindcss";
 
-/* AI : palette pulled from the Forge product screenshots — near-black bg, emerald accent */
+/* AI : palette pulled from the auto pipeline product screenshots — near-black bg, emerald accent */
 :root {
   --background: #0a0c0b;
   --foreground: #e6ebe8;
   --panel: #101413;
   --line: #1e2622;
   --accent: #34d399;
+  --primary: #34d399;
+  --primary-foreground: #0a0c0b;
   --muted: #7d8a83;
 }
 
@@ -16,6 +18,8 @@
   --color-panel: var(--panel);
   --color-line: var(--line);
   --color-accent: var(--accent);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
   --color-muted: var(--muted);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);

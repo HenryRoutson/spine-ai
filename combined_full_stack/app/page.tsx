@@ -13,6 +13,7 @@ import {
   LogOut,
   UserRound,
   Pencil,
+  ArrowLeft,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { StoreProvider, useStore } from "@/lib/store"
@@ -38,7 +39,10 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ChevronDown } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
+
+// AI : marketing site lives on a separate deploy from the app
+const LANDING_PAGE_URL = "https://auto-pipeline.dev/"
 
 type WindowId =
   | "structure"
@@ -199,6 +203,16 @@ function Shell() {
     <div className="flex h-dvh flex-col bg-background text-foreground">
       <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-3">
+          <a
+            href={LANDING_PAGE_URL}
+            title="Back to landing page"
+            className={cn(
+              buttonVariants({ variant: "ghost", size: "icon-sm" }),
+              "text-muted-foreground",
+            )}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </a>
           <div className="flex items-center gap-2.5">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
               <span className="font-mono text-sm font-bold">|</span>

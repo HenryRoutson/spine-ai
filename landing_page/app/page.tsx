@@ -155,7 +155,7 @@ function FeatureRow({ feature, flip }: { feature: Feature; flip: boolean }) {
         </ul>
       </div>
       <div className={flip ? "lg:order-1" : ""}>
-        <Shot src={feature.image} alt={`forge — ${feature.name.toLowerCase()}`} />
+        <Shot src={feature.image} alt={`auto pipeline — ${feature.name.toLowerCase()}`} />
       </div>
     </div>
   );
@@ -168,11 +168,12 @@ export default function Home() {
       <header className="sticky top-0 z-50 border-b border-line bg-background/80 backdrop-blur">
         <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
           <a href="#" className="flex items-center gap-2.5">
-            <span className="grid h-7 w-7 place-items-center rounded bg-accent font-mono text-sm font-bold text-background">
-              F
-            </span>
-            <span className="font-semibold tracking-tight">Forge</span>
-            <span className="hidden font-mono text-xs text-muted sm:inline">ai engineering pipeline builder</span>
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <span className="font-mono text-sm font-bold">|</span>
+            </div>
+            <div className="hidden leading-tight sm:block">
+              <h1 className="text-sm font-semibold tracking-tight">auto pipeline</h1>
+            </div>
           </a>
           <div className="hidden items-center gap-6 font-mono text-xs text-muted md:flex">
             {FEATURES.slice(0, 4).map((f: Feature) => (
@@ -203,7 +204,7 @@ export default function Home() {
             <span className="text-accent">Your pipeline shouldn&apos;t be.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted sm:text-lg">
-            Forge turns LLM work into typed, cached, validated pipeline steps. Define structures, wire steps together,
+            auto pipeline turns LLM work into typed, cached, validated pipeline steps. Define structures, wire steps together,
             A/B test strategies on cheap open models, and ship a drag-and-drop inference page — no deploy required.
           </p>
           <div className="mt-8 flex items-center justify-center">
@@ -233,7 +234,7 @@ export default function Home() {
             <span>hackathon · independent, not funded</span>
           </a>
           <div className="mt-14 text-left">
-            <Shot src="/screens/s-pipeline.png" alt="forge — pipeline builder" priority />
+            <Shot src="/screens/s-pipeline.png" alt="auto pipeline — pipeline builder" priority />
           </div>
         </div>
       </section>
@@ -285,7 +286,7 @@ export default function Home() {
               text → list[tuple[text, quote]] · closest-match fallback · offsets stored with the run
             </p>
           </div>
-          <Shot src="/screens/s-docviewer.png" alt="forge — source document viewer" />
+          <Shot src="/screens/s-docviewer.png" alt="auto pipeline — source document viewer" />
         </div>
       </section>
 
@@ -296,7 +297,7 @@ export default function Home() {
             <p className="font-mono text-sm text-accent">default project</p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Company Legal Evaluation</h2>
             <p className="mt-4 leading-relaxed text-muted">
-              Forge ships with a working example: ingest a legal PDF, extract atomic rules with source quotes, combine
+              auto pipeline ships with a working example: ingest a legal PDF, extract atomic rules with source quotes, combine
               with company data, and output a legal considerations report — every step typed and cached.
             </p>
           </div>
@@ -328,7 +329,7 @@ export default function Home() {
             for <span className="text-accent">pipeline problems.</span>
           </h2>
           <p className="mx-auto mt-5 max-w-xl text-muted">
-            Cheap open models, properly structured and validated, beat an expensive model on a messy prompt. Forge is
+            Cheap open models, properly structured and validated, beat an expensive model on a messy prompt. auto pipeline is
             how you get there.
           </p>
           <a
@@ -342,7 +343,7 @@ export default function Home() {
 
       <footer className="border-t border-line">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-8 font-mono text-xs text-muted sm:flex-row">
-          <span>Forge — ai engineering pipeline builder</span>
+          <span>auto pipeline — ai engineering pipeline builder</span>
           <span>pipelines are linear. left to right.</span>
         </div>
       </footer>
