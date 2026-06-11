@@ -48,22 +48,9 @@ export function totalSaved(runs: PipelineRun[]): number {
   return +runs.reduce((a, r) => a + r.savedCents, 0).toFixed(4);
 }
 
-// AI : TODO placeholder — seeded 7-day series for the demo until enough real runs exist.
-export function seededBillingSeries(): BillingPoint[] {
-  const days = ["Jun 05", "Jun 06", "Jun 07", "Jun 08", "Jun 09", "Jun 10", "Jun 11"];
-  return days.map((day, i) => ({
-    day,
-    "Qwen 2.5 72B": +(0.4 + Math.sin(i) * 0.2 + i * 0.08).toFixed(2),
-    "DeepSeek V3": +(0.6 + Math.cos(i) * 0.25 + i * 0.05).toFixed(2),
-    "Claude Opus 4.6": +(1.8 + Math.sin(i / 2) * 0.6 + i * 0.12).toFixed(2),
-    "doc-parse svc": +(0.12 + i * 0.02).toFixed(2),
-  }));
-}
-
-// AI : prefer real billing, fall back to the seeded series when there's no run history yet.
+// AI : real run history only — empty until the user has pipeline runs.
 export function billingSeries(runs: PipelineRun[]): BillingPoint[] {
-  const real = billingFromRuns(runs);
-  return real.length > 0 ? real : seededBillingSeries();
+  return billingFromRuns(runs);
 }
 
 // AI : metrics — recompute per-module avgMs/avgCostCents from historical runs (Pipeline tab).

@@ -71,7 +71,7 @@ interface StoreState {
   // runs / logs
   runs: PipelineRun[]
   addRun: (r: PipelineRun) => void
-  // billing (computed from real run history; seeded series until runs exist)
+  // billing (computed from real run history only)
   billing: BillingPoint[]
   billingAccount: BillingAccountView | null
   refreshBilling: () => Promise<void>

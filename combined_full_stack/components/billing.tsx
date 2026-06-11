@@ -79,8 +79,8 @@ export function Billing() {
     return t
   }, [billing, series])
 
-  const grand = Object.values(totals).reduce((a, b) => a + b, 0) || 1
-  // attribute spend to "open / cheap" vs "frontier" to make the cost-shifting point
+  const grand = Object.values(totals).reduce((a, b) => a + b, 0)
+  const hasSpend = grand > 0
   const cheapSpend = series.filter((s) => isCheapKey(s.key)).reduce((a, s) => a + totals[s.key], 0)
   const frontierSpend = series.filter((s) => !isCheapKey(s.key)).reduce((a, s) => a + totals[s.key], 0)
   // AI : real cache savings from run history (replaces the hardcoded "$3.41").
@@ -150,24 +150,24 @@ export function Billing() {
           </div>
           {!canRun && (
             <p className="mt-3 font-mono text-[10px] text-amber-600 dark:text-amber-400">
-              Not enough credit to run a pipeline — subscribe or top up. Test card: 4242 4242 4242 4242.
+              Not enough credit to run a pipeline — subscribe or top up.
             </p>
           )}
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-px border-b border-border bg-border lg:grid-cols-4">
-        <Stat label="7-day spend" value={`$${grand.toFixed(2)}`} />
+        <Stat label="Total spend" value={`$${grand.toFixed(2)}`} />
         <Stat
           label="Open / cheap models"
           value={`$${cheapSpend.toFixed(2)}`}
-          sub={`${Math.round((cheapSpend / grand) * 100)}% of spend`}
+          sub={hasSpend ? `${Math.round((cheapSpend / grand) * 100)}% of spend` : "no runs yet"}
           good
         />
         <Stat
           label="Frontier models"
           value={`$${frontierSpend.toFixed(2)}`}
-          sub={`${Math.round((frontierSpend / grand) * 100)}% of spend`}
+          sub={hasSpend ? `${Math.round((frontierSpend / grand) * 100)}% of spend` : "no runs yet"}
         />
         <Stat label="Cache savings" value={`$${savedUsd.toFixed(2)}`} sub="vs no caching" good />
       </div>
@@ -177,65 +177,77 @@ export function Billing() {
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-medium">Daily spend by model</h3>
-              <p className="font-mono text-[10px] text-muted-foreground">USD · stacked · last 7 days</p>
+              <p className="font-mono text-[10px] text-muted-foreground">USD · stacked · from pipeline runs</p>
             </div>
-            <Badge variant="outline" className="gap-1 font-mono text-[10px] text-primary">
-              <TrendingDown className="h-3 w-3" /> blended $/run trending down
-            </Badge>
+            {hasSpend && (
+              <Badge variant="outline" className="gap-1 font-mono text-[10px] text-primary">
+                <TrendingDown className="h-3 w-3" /> {runs.length} run{runs.length === 1 ? "" : "s"}
+              </Badge>
+            )}
           </div>
-          <ChartContainer config={chartConfig} className="aspect-[3/1] w-full">
-            <AreaChart data={billing} margin={{ left: 4, right: 8, top: 8 }}>
-              <defs>
+          {hasSpend ? (
+            <ChartContainer config={chartConfig} className="aspect-[3/1] w-full">
+              <AreaChart data={billing} margin={{ left: 4, right: 8, top: 8 }}>
+                <defs>
+                  {series.map((s) => (
+                    <linearGradient key={s.key} id={`fill-${s.key}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={s.color} stopOpacity={0.5} />
+                      <stop offset="95%" stopColor={s.color} stopOpacity={0.05} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <CartesianGrid vertical={false} stroke="var(--border)" />
+                <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={8} className="text-[10px]" />
+                <YAxis tickLine={false} axisLine={false} tickMargin={8} width={32} className="text-[10px]" tickFormatter={(v) => `$${v}`} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent />} />
                 {series.map((s) => (
-                  <linearGradient key={s.key} id={`fill-${s.key}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={s.color} stopOpacity={0.5} />
-                    <stop offset="95%" stopColor={s.color} stopOpacity={0.05} />
-                  </linearGradient>
+                  <Area
+                    key={s.key}
+                    dataKey={s.key}
+                    type="monotone"
+                    stackId="1"
+                    stroke={s.color}
+                    fill={`url(#fill-${s.key})`}
+                    strokeWidth={1.5}
+                  />
                 ))}
-              </defs>
-              <CartesianGrid vertical={false} stroke="var(--border)" />
-              <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={8} className="text-[10px]" />
-              <YAxis tickLine={false} axisLine={false} tickMargin={8} width={32} className="text-[10px]" tickFormatter={(v) => `$${v}`} />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <ChartLegend content={<ChartLegendContent />} />
-              {series.map((s) => (
-                <Area
-                  key={s.key}
-                  dataKey={s.key}
-                  type="monotone"
-                  stackId="1"
-                  stroke={s.color}
-                  fill={`url(#fill-${s.key})`}
-                  strokeWidth={1.5}
-                />
-              ))}
-            </AreaChart>
-          </ChartContainer>
+              </AreaChart>
+            </ChartContainer>
+          ) : (
+            <p className="py-12 text-center font-mono text-xs text-muted-foreground">
+              No spend yet — run a pipeline to see daily cost breakdown.
+            </p>
+          )}
         </div>
 
         <div className="mt-4 rounded-lg border border-border">
           <div className="border-b border-border px-4 py-2.5">
             <h3 className="text-sm font-medium">Cost attribution</h3>
           </div>
-          <ul className="divide-y divide-border">
-            {series.map((s) => {
-              const value = totals[s.key]
-              const pct = (value / grand) * 100
-              return (
-                <li key={s.key} className="flex items-center gap-3 px-4 py-2.5">
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.color }} />
-                  <span className="w-40 shrink-0 font-mono text-xs">{s.key}</span>
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
-                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: s.color }} />
-                  </div>
-                  <span className="w-16 text-right font-mono text-xs">${value.toFixed(2)}</span>
-                  <span className="w-12 text-right font-mono text-[10px] text-muted-foreground">
-                    {pct.toFixed(0)}%
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
+          {hasSpend ? (
+            <ul className="divide-y divide-border">
+              {series.map((s) => {
+                const value = totals[s.key]
+                const pct = (value / grand) * 100
+                return (
+                  <li key={s.key} className="flex items-center gap-3 px-4 py-2.5">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.color }} />
+                    <span className="w-40 shrink-0 font-mono text-xs">{s.key}</span>
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
+                      <div className="h-full rounded-full" style={{ width: `${pct}%`, background: s.color }} />
+                    </div>
+                    <span className="w-16 text-right font-mono text-xs">${value.toFixed(2)}</span>
+                    <span className="w-12 text-right font-mono text-[10px] text-muted-foreground">
+                      {pct.toFixed(0)}%
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : (
+            <p className="px-4 py-6 font-mono text-xs text-muted-foreground">No cost data yet.</p>
+          )}
         </div>
       </div>
     </div>

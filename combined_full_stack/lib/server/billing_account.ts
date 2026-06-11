@@ -52,6 +52,12 @@ function saveJsonAccount(key: BillingUserKey, account: BillingAccount): void {
   writeFileSync(path, JSON.stringify(all, null, 2));
 }
 
+// AI : schema.sql billing_accounts block may not be run yet — fall back to local billing.json.
+function isMissingBillingTable(error: { message?: string }): boolean {
+  const msg = error.message ?? "";
+  return msg.includes("billing_accounts") || msg.includes("schema cache");
+}
+
 async function loadSupabaseAccount(userId: BillingUserKey): Promise<BillingAccount | null> {
   const db = await createClient();
   const { data, error } = await db
@@ -60,8 +66,7 @@ async function loadSupabaseAccount(userId: BillingUserKey): Promise<BillingAccou
     .eq("user_id", userId)
     .maybeSingle();
   if (error) {
-    // AI : billing_accounts table may not be migrated yet — treat as zero balance, don't 500 the app.
-    console.error("billing_accounts:", error.message);
+    if (!isMissingBillingTable(error)) console.error("billing_accounts:", error.message);
     return null;
   }
   if (!data) return null;
@@ -94,12 +99,23 @@ export async function getBillingUserKey(): Promise<BillingUserKey> {
 export async function loadBillingAccount(key: BillingUserKey): Promise<BillingAccount> {
   if (key === "anon") return loadJsonAccounts()[key] ?? { ...EMPTY };
   const row = await loadSupabaseAccount(key);
-  return row ?? { ...EMPTY };
+  if (row) return row;
+  // AI : no Supabase row yet, or billing_accounts table missing — reuse local JSON keyed by user id.
+  return loadJsonAccounts()[key] ?? { ...EMPTY };
 }
 
 export async function saveBillingAccount(key: BillingUserKey, account: BillingAccount): Promise<void> {
-  if (key === "anon") saveJsonAccount(key, account);
-  else await saveSupabaseAccount(key, account);
+  if (key === "anon") {
+    saveJsonAccount(key, account);
+    return;
+  }
+  try {
+    await saveSupabaseAccount(key, account);
+  } catch (err) {
+    if (!isMissingBillingTable(err as { message?: string })) throw err;
+    console.warn("billing_accounts table missing — persisting to local billing.json");
+    saveJsonAccount(key, account);
+  }
 }
 
 export function canBill(account: BillingAccount, amountCents: number): boolean {

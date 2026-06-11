@@ -18,3 +18,11 @@ https://openrouter.ai/workspaces/default/keys
 
 
 https://vercel.com/henryroutsons-projects/antler-vc-hackathon/deployments
+
+
+https://dashboard.stripe.com/acct_1TgyfqFu5fCTjk8r/dashboard
+
+
+https://antler-vc-hackathon.vercel.app/
+https://vercel.com/henryroutsons-projects/~/deployments
+
