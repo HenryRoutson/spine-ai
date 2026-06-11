@@ -161,7 +161,9 @@ export interface ModelOption {
   label: string;
   provider: string;
   flag: string; // origin marker for the demo
-  costPer1k: number; // cents per 1k tokens (blended)
+  costPer1k: number; // cents per 1k tokens (blended, OpenRouter + 40%)
+  promptUsdPerToken: number; // raw OpenRouter prompt rate (USD/token)
+  completionUsdPerToken: number; // raw OpenRouter completion rate (USD/token)
   cheap?: boolean;
   // AI : backend-only — the real OpenRouter slug this demo id maps to.
   slug: OpenRouterSlug;
@@ -177,15 +179,15 @@ export interface TokenUsage {
 // ---- registries (kept identical to the frontend stub, plus `slug`) ----
 
 export const MODEL_OPTIONS: ModelOption[] = [
-  { id: "qwen-2.5-72b", label: "Qwen 2.5 72B", provider: "openrouter", flag: "CN", costPer1k: 0.09, cheap: true, slug: "qwen/qwen-2.5-72b-instruct" as OpenRouterSlug },
-  { id: "deepseek-v3", label: "DeepSeek V3", provider: "openrouter", flag: "CN", costPer1k: 0.14, cheap: true, slug: "deepseek/deepseek-chat" as OpenRouterSlug },
-  { id: "glm-4-plus", label: "GLM-4 Plus", provider: "openrouter", flag: "CN", costPer1k: 0.21, cheap: true, slug: "z-ai/glm-4-32b" as OpenRouterSlug },
-  { id: "gpt-5-mini", label: "GPT-5 mini", provider: "openai", flag: "US", costPer1k: 0.6, slug: "openai/gpt-4o-mini" as OpenRouterSlug },
+  { id: "qwen-2.5-72b", label: "Qwen 2.5 72B", provider: "openrouter", flag: "CN", costPer1k: 0.1064, promptUsdPerToken: 3.6e-7, completionUsdPerToken: 4e-7, cheap: true, slug: "qwen/qwen-2.5-72b-instruct" as OpenRouterSlug },
+  { id: "deepseek-v3", label: "DeepSeek V3", provider: "openrouter", flag: "CN", costPer1k: 0.14, promptUsdPerToken: 2.002e-7, completionUsdPerToken: 8.001e-7, cheap: true, slug: "deepseek/deepseek-chat" as OpenRouterSlug },
+  { id: "glm-4-plus", label: "GLM-4 Plus", provider: "openrouter", flag: "CN", costPer1k: 0.3038, promptUsdPerToken: 4.3e-7, completionUsdPerToken: 0.00000174, cheap: true, slug: "z-ai/glm-4.6" as OpenRouterSlug },
+  { id: "gpt-5-mini", label: "GPT-5 mini", provider: "openai", flag: "US", costPer1k: 0.105, promptUsdPerToken: 1.5e-7, completionUsdPerToken: 6e-7, slug: "openai/gpt-4o-mini" as OpenRouterSlug },
   // AI : bug fix — old slug anthropic/claude-3.5-sonnet is gone from OpenRouter (404).
-  { id: "claude-opus-4.6", label: "Claude Opus 4.6", provider: "anthropic", flag: "US", costPer1k: 2.4, slug: "anthropic/claude-opus-4.1" as OpenRouterSlug },
+  { id: "claude-opus-4.6", label: "Claude Opus 4.6", provider: "anthropic", flag: "US", costPer1k: 12.6, promptUsdPerToken: 0.000015, completionUsdPerToken: 0.000075, slug: "anthropic/claude-opus-4.1" as OpenRouterSlug },
   // AI : demo_outline §3 — the A/B fallback model "if nothing else works well".
-  { id: "sonnet-4.7", label: "Claude Sonnet 4.7", provider: "anthropic", flag: "US", costPer1k: 1.5, slug: "anthropic/claude-sonnet-4.5" as OpenRouterSlug },
-  { id: "gemini-3-flash", label: "Gemini 3 Flash", provider: "google", flag: "US", costPer1k: 0.35, slug: "google/gemini-flash-1.5" as OpenRouterSlug },
+  { id: "sonnet-4.7", label: "Claude Sonnet 4.7", provider: "anthropic", flag: "US", costPer1k: 2.52, promptUsdPerToken: 0.000003, completionUsdPerToken: 0.000015, slug: "anthropic/claude-sonnet-4.5" as OpenRouterSlug },
+  { id: "gemini-3-flash", label: "Gemini 3 Flash", provider: "google", flag: "US", costPer1k: 0.49, promptUsdPerToken: 5e-7, completionUsdPerToken: 0.000003, slug: "google/gemini-3-flash-preview" as OpenRouterSlug },
 ];
 
 // AI : default to DeepSeek V3 — cheap Chinese model, maps to deepseek/deepseek-chat, fast + reliable

@@ -1,3 +1,4 @@
+import { PRICE_MARKUP, tokenCostCents } from "./openrouter_pricing";
 import { type ModelId, type TokenUsage, modelOption } from "./types";
 
 type Cents = number;
@@ -8,11 +9,14 @@ export interface UsageRecord extends TokenUsage {
   at: number;
 }
 
-// AI : cost = total tokens × costPer1k (cents per 1k blended tokens).
+// AI : bill prompt + completion separately at OpenRouter rates × 40% markup.
 export function costOf(usage: TokenUsage): Cents {
-  const { costPer1k } = modelOption(usage.model);
-  const tokens = usage.promptTokens + usage.completionTokens;
-  return (tokens / 1000) * costPer1k;
+  const opt = modelOption(usage.model);
+  return tokenCostCents(
+    { promptUsdPerToken: opt.promptUsdPerToken, completionUsdPerToken: opt.completionUsdPerToken },
+    usage.promptTokens,
+    usage.completionTokens,
+  );
 }
 
 // AI : per-run ledger of every billable event; aggregated by Logging + Billing.
@@ -25,8 +29,9 @@ export class UsageLedger {
 
   // AI : flat-cost services (PDF parse etc.) bill as synthetic completion tokens on a model line.
   recordService(service: ServiceName, model: ModelId, costCents: Cents): void {
-    const { costPer1k } = modelOption(model);
-    const tokens = costPer1k > 0 ? Math.round((costCents / costPer1k) * 1000) : 0;
+    const opt = modelOption(model);
+    const markedUpCompletionCents = opt.completionUsdPerToken * 100 * PRICE_MARKUP;
+    const tokens = markedUpCompletionCents > 0 ? Math.round(costCents / markedUpCompletionCents) : 0;
     this.records.push({ model, service, promptTokens: 0, completionTokens: tokens, at: Date.now() });
   }
 
