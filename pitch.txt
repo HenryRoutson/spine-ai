@@ -1,0 +1,124 @@
+Antler 
+
+AI engineering is hard.
+
+
+Most companies are desperate for ‘validated AI’, but tools as simple as quote libraries don’t exist.
+
+
+
+RAG is terrible, and most managers and developers are too swamped to research what is better.
+
+
+
+
+My internal codebase is 40k lines and includes code for batched and parallel ….
+
+
+Validated output - ‘getting json without decreasing accuracy requires advanced prompting and seperation of concerns that most people haven’t considered, pydantic  ’
+Quotes, - ‘validated AI’  nope langextract.
+Sliding window / splitting string, - ‘context window management’
+Web scraping, 
+Recursive language models, - ‘’better than rag’
+OCR, - ‘most chatbots can’t ready full documents, azure OCR is terrible and breaks all the time! deepseek OCR is open source’
+Cloud deployment - ‘we’re starting to use ray (used by open-ai) but most people don’t even know this exists’
+Auto structure - json to a structured class - shorten prompts by extracting out with regex 
+Caching
+Clustering with llm
+Table of contents extraction
+Export to excel with formatting - coloured outputs 
+
+
+
+Group by function in python
+
+Most companies are probably spending 3x what they need to because they’re using larger models to compensate for a 1 time engineering issue.
+
+
+Chinese models are amazing, and incredibly cheap. 
+They’re also very fast for inference.
+I’m often waiting for pipelines to finish executing,
+Faster models would be a massive multiplier to my productivity.
+
+
+
+
+Companies like anthropic are increasingly looking to target real world tasks, 
+Companies which can have data around this would be prime for acquisition to add to their training data pool,
+In the same way as windsurf was for coding.
+Profitability is very possible, but not important if the data itself is valuable.
+
+
+The output of my current pipeline goes to text logs, 
+But It would be very easy to output to live html with a couple of tweaks
+
+
+I think there is more room available to manage context length for agents that hasn’t been explored openly.
+Often times agents need to dump old tokens, but there isn’t an easy framework to do this.
+
+
+
+
+
+
+
+Write in rust - don’t have the time where I am
+
+
+
+
+
+
+List of modules
+Amplify 
+Auto parser json
+Azure batch / cloud batch with ray
+Batch types for tasks to execute in pipeline or on cloud
+Cache pipeline for saving to json with structure
+Clean 
+	remove if ends with
+	remove if starts with
+	remove markdown backticks
+Closed source deep research -> Gemini deep research
+Clustering_llm > fundamental algorithm for grouping any dictionary data with llm (model can’t get a high level overview without it)
+Deepseek OCR > accurate document conversion
+Document to table of contents > create a structured table of contents for a document
+Export excel > export excel with metadata and coloured numbers / conditional formatting
+Excel infer > call auto parser json to get pydantic structure
+Excel loader > infer and load any excel into a pydantic model, giving llm structure
+Export pdf > export to pdf
+Fallback > common pattern where you try one thing, if fails try another
+file_write_helper > save both a _latest.ext and a 20_06_2026_time.ext file
+Get llm instance > single place to get llm instances, already cached
+Google search > 
+Cache pipeline > use step to get pydantic, save to json, load from cache if you want. 
+Group_by > common operation not native to python, but important to efficient handling of data
+json_helper > find json blocks, extract dictionaries
+Merge > merge dictionaries with OVERWRITE, KEEP FIRST, combine to list if shared key, or combine to list always, or error
+Prompt size profiler > evaluate the size of your prompt, shared parts of your prompt 
+Quotation > extract and validate quotes, find closest quote if not an exact match and export into linked structures with original text linked
+RLM > recursive language model
+Simple cache > handle caching of slow operations like llm calls or pdf reads 
+Sliding window > slide a window over context to extract things like quotes
+Split string > used in sliding window, split a string into n parts with overlap or at a certain regex break point with min gap
+Tree.py > generic tree module, useful for representing web scraping data
+llm.py > formatted response, RLM response, claude code response. 
+Logging > all logs into convenient logging locations like folder and _latest.md. progress bars in terminal. Ideally output to json
+File processing > able to easily load any file, handle extension, convert to text and standard format with options like page seperation and pydantic inference.
+Config.py > load all env variables into a single constant for easy intellisense, additionally add config options into a json file with validation. Raise errors early if you are missing a config or environment required. Config is useful for global constants 
+
+PROJECTS
+Extract rules from a doc
+Evaluate the rules from a rules document with another document
+Scrape the web and find quantum data for a database
+Find suitable mappings for a database migration
+
+COMMON PATTERNS
+Map with llm to formatted output, save to json, load and validate with pydantic.
+Create AB testing
+
+
+OTHER
+
+
+

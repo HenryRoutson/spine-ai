@@ -1,0 +1,12 @@
+
+build demo in v0
+use open router to get demo working
+add option for rlm and placeholder for claude code.
+
+
+
+
+One of the important steps i havent yet investigated is AB testing, comparing which algorithm is better for different steps. 
+
+
+use claude desktop to develop slides

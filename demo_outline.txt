@@ -1,0 +1,47 @@
+
+
+The goal for the demo is a 'AI engineering pipeline builder'.
+After getting visibility on multiple real world use cases, this is the core of all projects.
+
+It allows you to 
+1. validate the output of an LLM in a defined structure
+2. outline the modules and pipeline to get from input to output in the way to get the most performance.
+
+
+What i mean by that is the you need to have intermediate steps which are used to
+1. check your work
+2. seperate out tasks to make things less difficult for the llm
+3. make sure your development is modular and reusable for later projects.
+4. cache and avoid recalculating and billing yourself for steps you've already completed.
+
+
+the UI should the following window
+1. Structure builder
+  using code or a UI to build pydantic model (structures) that your LLM should output to
+2. Pipeline builder
+  where does the model take inputs?
+    For example maybe you input a legal pdf, convert it to text and atomic rules to assess.
+    Then you take in a company outline after that step and see if the company is adhereing to those rules or if they might be liable for damages.
+  What types of inputs are they? excel, word, pdf, json.
+3. AB testing
+  test what approach works best in the pipeline
+  You might want to compare what works best between
+    3.1 A single LLM call
+    3.2 A RLM call (Recursive Language Models)
+    3.3 A full claude code instance tackling your problem. 
+    3.4 A claude code like system running on a cheap chinese model for cost efficiency.
+    (Should only be placeholders when prototyping in V0 or another UI tool)
+
+4. Inference
+  running your pipeline with a simple drag and drop system
+
+
+
+For now the pipeline should be a straight line and not a tree.
+
+
+
+
+
+
+
