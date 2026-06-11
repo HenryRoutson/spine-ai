@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { useDocViewer } from "@/lib/doc-viewer"
-import { awaitRun, startRun, type JobLogEntry, type StepProgress } from "@/lib/run-engine"
+import { awaitRun, mergeStepStates, startRun, type JobLogEntry, type StepProgress } from "@/lib/run-engine"
 import { collectQuotes } from "@/lib/quotes"
 import type { DocId, DocRef, ModuleId, PipelineRun, ProjectId } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
@@ -106,7 +106,7 @@ export function Inference() {
       const jobId = await startRun(project.id as ProjectId, inputDoc.id as DocId, model)
       refreshBilling().catch(console.error)
       const finished = await awaitRun(jobId, {
-        onStep: (steps) => setStepStates(new Map(steps.map((s) => [s.moduleId, s.status]))),
+        onStep: (steps) => setStepStates((prev) => mergeStepStates(prev, steps)),
         onLogs: (logs) => setDebugLogs(logs),
       })
       setRun(finished)
@@ -131,7 +131,10 @@ export function Inference() {
   const progressPct = useMemo(() => {
     if (phase === "idle") return 0
     if (phase === "done") return 100
-    const done = [...stepStates.values()].filter((s) => s !== "running").length
+    const done = modules.filter((m) => {
+      const s = stepStates.get(m.id)
+      return s !== undefined && s !== "running"
+    }).length
     return Math.round((done / Math.max(1, modules.length)) * 100)
   }, [phase, stepStates, modules.length])
 
@@ -302,7 +305,7 @@ export function Inference() {
               <div className="rounded-lg border border-border">
                 <div className="border-b border-border px-3 py-2">
                   <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    server logs · also in DevTools console
+                    server logs · 
                   </span>
                 </div>
                 <div className="max-h-48 overflow-y-auto p-2 font-mono text-[10px] leading-relaxed">

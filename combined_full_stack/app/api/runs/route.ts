@@ -57,7 +57,12 @@ export async function POST(req: NextRequest) {
       try {
         const run = await runPipeline(store, projectId, inputDocId, {
           model,
-          onStep: (p) => jobProgress(jobId, p, jobDb),
+          // AI : never block the pipeline on Supabase job upserts — progress is memory-hot during the run.
+          onStep: (p) => {
+            void jobProgress(jobId, p, jobDb).catch((err) =>
+              apiLog.error(`jobProgress failed`, { jobId, moduleId: p.moduleId, error: (err as Error).message }),
+            );
+          },
         });
         apiLog.info(`pipeline finished — flushing store`, { jobId, runId: run.id, status: run.status });
         await store.flush(); // AI : SupabaseStore queues addRun — persist before the job reports done

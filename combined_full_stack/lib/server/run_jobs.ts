@@ -16,6 +16,72 @@ export type { JobLogEntry };
 
 const MAX_JOB_LOGS = 400;
 const LOG_PERSIST_MS = 300;
+const SUPABASE_PERSIST_MS = 200;
+
+// AI : pipeline steps must not await Supabase — disk is sync + shared across Next dev bundles.
+const supabasePersistTimers = new Map<RunJobId, ReturnType<typeof setTimeout>>();
+const supabasePersistChains = new Map<RunJobId, Promise<void>>();
+
+function setJob(id: RunJobId, job: RunJob): void {
+  jobs().set(id, job);
+  persistJobLocal(id, job);
+}
+
+function queueSupabasePersist(id: RunJobId, db: JobDb): void {
+  if (!db) return;
+  const existing = supabasePersistTimers.get(id);
+  if (existing) clearTimeout(existing);
+  supabasePersistTimers.set(
+    id,
+    setTimeout(() => {
+      supabasePersistTimers.delete(id);
+      const prev = supabasePersistChains.get(id) ?? Promise.resolve();
+      const next = prev
+        .catch(() => {})
+        .then(async () => {
+          const job = jobs().get(id);
+          if (!job) return;
+          jobLog.debug(`persist job → supabase`, {
+            jobId: id,
+            stepCount: job.steps.length,
+            hasRun: !!job.run,
+            error: job.error,
+          });
+          await supabasePersistJob(db, id, job);
+        });
+      supabasePersistChains.set(id, next);
+      void next.finally(() => {
+        if (supabasePersistChains.get(id) === next) supabasePersistChains.delete(id);
+      });
+    }, SUPABASE_PERSIST_MS),
+  );
+}
+
+function queuePersist(id: RunJobId, db: JobDb): void {
+  queueSupabasePersist(id, db);
+}
+
+async function flushPersistChain(id: RunJobId, db: JobDb): Promise<void> {
+  flushLogPersistTimer(id);
+  const t = supabasePersistTimers.get(id);
+  if (t) {
+    clearTimeout(t);
+    supabasePersistTimers.delete(id);
+  }
+  const job = jobs().get(id);
+  if (!job) return;
+  if (!db) return;
+  const prev = supabasePersistChains.get(id) ?? Promise.resolve();
+  await prev.catch(() => {});
+  jobLog.debug(`persist job → supabase (flush)`, {
+    jobId: id,
+    stepCount: job.steps.length,
+    hasRun: !!job.run,
+    error: job.error,
+  });
+  await supabasePersistJob(db, id, job);
+  supabasePersistChains.delete(id);
+}
 
 type ActiveJobCtx = { jobId: RunJobId; db: JobDb };
 const activeJob = new AsyncLocalStorage<ActiveJobCtx>();
@@ -121,51 +187,42 @@ async function appendJobLog(id: RunJobId, entry: JobLogEntry, db: JobDb): Promis
   job.logs ??= [];
   job.logs.push(entry);
   if (job.logs.length > MAX_JOB_LOGS) job.logs.splice(0, job.logs.length - MAX_JOB_LOGS);
-  jobs().set(id, job);
+  setJob(id, job);
 
   flushLogPersistTimer(id);
   logPersistTimers.set(
     id,
     setTimeout(() => {
       logPersistTimers.delete(id);
-      const j = jobs().get(id);
-      if (j) void persistJob(id, j, db);
+      queuePersist(id, db);
     }, LOG_PERSIST_MS),
   );
 }
 
-async function persistJob(id: RunJobId, job: RunJob, db: JobDb): Promise<void> {
-  flushLogPersistTimer(id);
-  if (db) {
-    jobLog.debug(`persist job → supabase`, { jobId: id, stepCount: job.steps.length, hasRun: !!job.run, error: job.error });
-    await supabasePersistJob(db, id, job);
-    jobs().set(id, job);
-    return;
-  }
-  jobLog.debug(`persist job → disk`, { jobId: id, stepCount: job.steps.length, hasRun: !!job.run, error: job.error });
-  persistJobLocal(id, job);
-}
-
 async function loadJob(id: RunJobId, db: JobDb): Promise<RunJob | undefined> {
-  if (db) {
-    const cached = jobs().get(id);
-    if (cached) return cached;
-    const job = await supabaseLoadJob(db, id);
-    if (job) jobs().set(id, job);
-    return job;
-  }
-  return loadJobLocal(id);
+  const cached = jobs().get(id);
+  if (cached) return cached;
+  const onDisk = loadJobLocal(id);
+  if (onDisk) return onDisk;
+  if (!db) return undefined;
+  const job = await supabaseLoadJob(db, id);
+  if (job) setJob(id, job);
+  return job;
 }
 
 export async function createJob(db: JobDb): Promise<RunJobId> {
   const id = ("job_" + Math.random().toString(36).slice(2, 9)) as RunJobId;
   jobLog.info(`createJob`, { jobId: id, backend: db ? "supabase" : "local" });
-  await persistJob(id, { steps: [], logs: [] }, db);
+  const job: RunJob = { steps: [], logs: [] };
+  setJob(id, job);
+  await flushPersistChain(id, db);
   return id;
 }
 
 export async function jobProgress(id: RunJobId, p: StepProgress, db: JobDb): Promise<void> {
-  const job = await loadJob(id, db);
+  // AI : never reload from Supabase mid-run — a stale remote row would rewind in-memory progress.
+  let job = jobs().get(id) ?? loadJobLocal(id);
+  if (!job) job = await loadJob(id, db);
   if (!job) {
     jobLog.warn(`jobProgress — job not found`, { jobId: id, moduleId: p.moduleId });
     return;
@@ -181,7 +238,8 @@ export async function jobProgress(id: RunJobId, p: StepProgress, db: JobDb): Pro
   const i = job.steps.findIndex((s) => s.moduleId === p.moduleId);
   if (i === -1) job.steps.push(p);
   else job.steps[i] = p;
-  await persistJob(id, job, db);
+  setJob(id, job);
+  queuePersist(id, db);
 }
 
 export async function finishJob(
@@ -203,7 +261,8 @@ export async function finishJob(
     billedCents: outcome.run?.billedCents,
   });
   Object.assign(job, outcome);
-  await persistJob(id, job, db);
+  setJob(id, job);
+  await flushPersistChain(id, db);
 }
 
 export async function getJob(id: RunJobId, db: JobDb): Promise<RunJob | undefined> {

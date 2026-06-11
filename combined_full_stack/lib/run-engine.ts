@@ -3,9 +3,33 @@
 // AI : type-only imports from lib/server are erased at compile time (no Node code bundled).
 import type { JobLogEntry, RunJob, RunJobId } from "@/lib/server/run_jobs"
 import type { StepProgress } from "@/lib/server/run_engine"
-import type { DocId, ModelId, PipelineRun, ProjectId } from "@/lib/types"
+import type { DocId, ModelId, ModuleId, PipelineRun, ProjectId, RunStepStatus } from "@/lib/types"
 
 export type { JobLogEntry, RunJob, RunJobId, StepProgress }
+
+type StepUiStatus = StepProgress["status"] | RunStepStatus
+
+function stepStatusRank(s: StepUiStatus): number {
+  if (s === "running") return 1
+  if (s === "ok" || s === "cached") return 2
+  if (s === "error") return 3
+  return 0
+}
+
+// AI : stale Supabase polls must not rewind a step from ok → running in the progress UI.
+export function mergeStepStates(
+  prev: Map<ModuleId, StepUiStatus>,
+  polled: StepProgress[],
+): Map<ModuleId, StepUiStatus> {
+  const next = new Map(prev)
+  for (const s of polled) {
+    const cur = next.get(s.moduleId)
+    if (!cur || s.status === "error" || stepStatusRank(s.status) >= stepStatusRank(cur)) {
+      next.set(s.moduleId, s.status)
+    }
+  }
+  return next
+}
 
 type ApiErrorBody = { error?: string; detail?: string; code?: string }
 
