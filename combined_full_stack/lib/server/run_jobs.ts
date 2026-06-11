@@ -1,5 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@/utils/supabase/server";
+import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { dataDir } from "./config";
 import type { StepProgress } from "./run_engine";
 import type { PipelineRun } from "./types";
@@ -13,6 +16,8 @@ export interface RunJob {
   run?: PipelineRun; // set once the run finished (ok or error)
   error?: string; // set when runPipeline itself threw (e.g. invalid pipeline)
 }
+
+export type JobDb = SupabaseClient | null;
 
 type JobsSlot = { __forgeRunJobs?: Map<RunJobId, RunJob> };
 
@@ -30,15 +35,43 @@ function jobPath(id: RunJobId): string {
   return join(jobsDir(), `${id}.json`);
 }
 
-// AI : disk is source of truth — Next bundles route handlers separately in dev and
+// AI : Vercel /tmp is per serverless instance — Supabase is the shared backend when configured.
+function useSupabaseJobs(): boolean {
+  return getSupabasePublicEnv() !== null;
+}
+
+export async function openJobDb(): Promise<JobDb> {
+  if (!useSupabaseJobs()) return null;
+  return createClient();
+}
+
+function supabaseErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err)
+    return String((err as { message: unknown }).message);
+  return String(err);
+}
+
+async function supabasePersistJob(db: SupabaseClient, id: RunJobId, job: RunJob): Promise<void> {
+  const { error } = await db.from("run_jobs").upsert({ id, data: job, updated_at: Date.now() });
+  if (error) throw new Error(`run_jobs upsert failed: ${supabaseErrorMessage(error)}`);
+}
+
+async function supabaseLoadJob(db: SupabaseClient, id: RunJobId): Promise<RunJob | undefined> {
+  const { data, error } = await db.from("run_jobs").select("data").eq("id", id).maybeSingle();
+  if (error) throw new Error(`run_jobs load failed: ${supabaseErrorMessage(error)}`);
+  return data?.data as RunJob | undefined;
+}
+
+// AI : disk is source of truth locally — Next bundles route handlers separately in dev and
 // AI : after() can land on a different globalThis than POST / progress GET.
-function persistJob(id: RunJobId, job: RunJob): void {
+function persistJobLocal(id: RunJobId, job: RunJob): void {
   mkdirSync(jobsDir(), { recursive: true });
   writeFileSync(jobPath(id), JSON.stringify(job), "utf8");
   jobs().set(id, job);
 }
 
-function loadJob(id: RunJobId): RunJob | undefined {
+function loadJobLocal(id: RunJobId): RunJob | undefined {
   const cached = jobs().get(id);
   if (cached) return cached;
   const path = jobPath(id);
@@ -48,34 +81,67 @@ function loadJob(id: RunJobId): RunJob | undefined {
   return job;
 }
 
-export function createJob(): RunJobId {
+async function persistJob(id: RunJobId, job: RunJob, db: JobDb): Promise<void> {
+  if (db) {
+    await supabasePersistJob(db, id, job);
+    jobs().set(id, job);
+    return;
+  }
+  persistJobLocal(id, job);
+}
+
+async function loadJob(id: RunJobId, db: JobDb): Promise<RunJob | undefined> {
+  if (db) {
+    const cached = jobs().get(id);
+    if (cached) return cached;
+    const job = await supabaseLoadJob(db, id);
+    if (job) jobs().set(id, job);
+    return job;
+  }
+  return loadJobLocal(id);
+}
+
+export async function createJob(db: JobDb): Promise<RunJobId> {
   const id = ("job_" + Math.random().toString(36).slice(2, 9)) as RunJobId;
-  persistJob(id, { steps: [] });
+  await persistJob(id, { steps: [] }, db);
   return id;
 }
 
-export function jobProgress(id: RunJobId, p: StepProgress): void {
-  const job = loadJob(id);
+export async function jobProgress(id: RunJobId, p: StepProgress, db: JobDb): Promise<void> {
+  const job = await loadJob(id, db);
   if (!job) return;
   const i = job.steps.findIndex((s) => s.moduleId === p.moduleId);
   if (i === -1) job.steps.push(p);
   else job.steps[i] = p;
-  persistJob(id, job);
+  await persistJob(id, job, db);
 }
 
-export function finishJob(id: RunJobId, outcome: { run?: PipelineRun; error?: string }): void {
-  const job = loadJob(id);
+export async function finishJob(
+  id: RunJobId,
+  outcome: { run?: PipelineRun; error?: string },
+  db: JobDb,
+): Promise<void> {
+  const job = await loadJob(id, db);
   if (!job) return;
   Object.assign(job, outcome);
-  persistJob(id, job);
+  await persistJob(id, job, db);
 }
 
-export function getJob(id: RunJobId): RunJob | undefined {
-  return loadJob(id);
+export async function getJob(id: RunJobId, db: JobDb): Promise<RunJob | undefined> {
+  return loadJob(id, db);
 }
 
 // AI : extra context for progress 404s — helps distinguish cold-start races from lost jobs.
-export function jobMissingDetail(id: RunJobId): string {
+export async function jobMissingDetail(id: RunJobId, db: JobDb): Promise<string> {
+  if (db) {
+    try {
+      const job = await supabaseLoadJob(db, id);
+      if (job) return "job exists in Supabase but failed to load from cache";
+      return "no run_jobs row in Supabase — POST /api/runs may not have created this job (check run_jobs table exists)";
+    } catch (err) {
+      return `Supabase run_jobs lookup failed: ${supabaseErrorMessage(err)}`;
+    }
+  }
   const path = jobPath(id);
   const onDisk = existsSync(path);
   const inMemory = jobs().has(id);

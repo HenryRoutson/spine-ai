@@ -32,9 +32,17 @@ create table public.runs (
   primary key (user_id, id)
 );
 
+-- AI : ephemeral pipeline progress — keyed by unguessable job_* id, shared across Vercel instances.
+create table public.run_jobs (
+  id text primary key,
+  data jsonb not null,
+  updated_at bigint not null
+);
+
 alter table public.projects enable row level security;
 alter table public.docs enable row level security;
 alter table public.runs enable row level security;
+alter table public.run_jobs enable row level security;
 
 -- AI : one policy per table — a user can do everything, but only on their own rows.
 create policy "own rows" on public.projects for all to authenticated
@@ -43,6 +51,8 @@ create policy "own rows" on public.docs for all to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 create policy "own rows" on public.runs for all to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+create policy "run_jobs by id" on public.run_jobs for all to authenticated, anon
+  using (true) with check (true);
 
 -- AI : Stripe credit billing (stripe/stripe.js) — one row per user, RLS-scoped like projects/docs/runs.
 create table public.billing_accounts (

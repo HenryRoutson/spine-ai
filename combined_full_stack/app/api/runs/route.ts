@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest, after } from "next/server";
 import { getStore } from "@/lib/server/app_store";
 import { BillingError, chargeForRun, getBillingUserKey } from "@/lib/server/billing_account";
 import { runPipeline } from "@/lib/server/run_engine";
-import { createJob, finishJob, jobProgress } from "@/lib/server/run_jobs";
+import { createJob, finishJob, jobProgress, openJobDb } from "@/lib/server/run_jobs";
 import type { DocId, ModelId, ProjectId } from "@/lib/server/types";
 
 // AI : todo §8 — after() keeps the pipeline alive once the response is sent (Vercel
@@ -32,17 +32,20 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
-  const jobId = createJob();
+  const jobDb = await openJobDb();
+  const jobId = await createJob(jobDb);
   after(async () => {
     try {
       const run = await runPipeline(store, projectId, inputDocId, {
         model,
-        onStep: (p) => jobProgress(jobId, p),
+        onStep: (p) => {
+          void jobProgress(jobId, p, jobDb).catch(console.error);
+        },
       });
       await store.flush(); // AI : SupabaseStore queues addRun — persist before the job reports done
-      finishJob(jobId, { run });
+      await finishJob(jobId, { run }, jobDb);
     } catch (err) {
-      finishJob(jobId, { error: (err as Error).message });
+      await finishJob(jobId, { error: (err as Error).message }, jobDb);
     }
   });
   return NextResponse.json({ jobId });
