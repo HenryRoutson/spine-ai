@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "./config";
-import { pdfToText } from "./pdf_to_text";
 import { allProjectSeeds, blankProject, type SeedDocSpec } from "./seed";
 import type {
   DocId,
@@ -30,17 +29,20 @@ export function savePdfBytes(id: DocId, bytes: Uint8Array): void {
   writeFileSync(join(docsDir(), `${id}.pdf`), bytes);
 }
 
-// AI : lazy backfill — docs ingested before originals were kept (existing store.json,
-// AI : per-user Supabase seeds) resolve by hashing each seed PDF's extracted text once
-// AI : and copying the matching original into place.
+// AI : lazy backfill — match seed PDFs via their .txt sidecar hash (no pdf-parse on serverless).
 export async function pdfFilePath(id: DocId): Promise<string | undefined> {
   const path = join(docsDir(), `${id}.pdf`);
   if (existsSync(path)) return path;
   for (const seed of allProjectSeeds()) {
     for (const spec of seed.docSpecs) {
-      if (spec.type !== "pdf" || hashContent(await pdfToText(spec.path)) !== id) continue;
+      if (spec.type !== "pdf") continue;
+      const txtSidecar = spec.path.replace(/\.pdf$/i, ".txt");
+      if (!existsSync(txtSidecar)) continue;
+      if (hashContent(readFileSync(txtSidecar, "utf8")) !== id) continue;
+      const pdfPath = spec.path.endsWith(".pdf") ? spec.path : spec.path.replace(/\.txt$/i, ".pdf");
+      if (!existsSync(pdfPath)) continue;
       mkdirSync(docsDir(), { recursive: true });
-      copyFileSync(spec.path, path);
+      copyFileSync(pdfPath, path);
       return path;
     }
   }
@@ -195,7 +197,7 @@ export class JsonStore implements Store {
   }
 }
 
-// AI : only PDFs need parsing — json/text seed docs are stored verbatim.
+// AI : seed docs ship as .txt sidecars — never pull pdf-parse into the store module graph.
 async function seedDocContent(spec: SeedDocSpec): Promise<string> {
   const txtSidecar = spec.path.replace(/\.pdf$/i, ".txt");
   if (existsSync(txtSidecar)) return readFileSync(txtSidecar, "utf8");
@@ -203,13 +205,7 @@ async function seedDocContent(spec: SeedDocSpec): Promise<string> {
     console.warn(`seed doc missing: ${spec.path}`);
     return `[seed doc unavailable on this deploy: ${spec.name}]`;
   }
-  if (spec.type !== "pdf" || process.env.VERCEL) return readFileSync(spec.path, "utf8");
-  try {
-    return await pdfToText(spec.path);
-  } catch (err) {
-    console.error(`pdf seed parse failed (${spec.path}):`, err);
-    return readFileSync(spec.path, "utf8");
-  }
+  return readFileSync(spec.path, "utf8");
 }
 
 // AI : convenience — an initialised store for scripts/tests.

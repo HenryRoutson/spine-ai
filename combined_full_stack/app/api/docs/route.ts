@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getStore } from "@/lib/server/app_store";
-import { pdfBytesToText } from "@/lib/server/pdf_to_text";
 import { savePdfBytes } from "@/lib/server/store";
 import type { DocLabel, InputType } from "@/lib/server/types";
 
@@ -32,7 +31,12 @@ export async function POST(req: NextRequest) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   let content: string;
   try {
-    content = type === "pdf" ? await pdfBytesToText(bytes) : new TextDecoder().decode(bytes);
+    if (type === "pdf") {
+      const { pdfBytesToText } = await import("@/lib/server/pdf_to_text");
+      content = await pdfBytesToText(bytes);
+    } else {
+      content = new TextDecoder().decode(bytes);
+    }
   } catch (err) {
     return NextResponse.json({ error: `could not parse ${file.name}: ${(err as Error).message}` }, { status: 422 });
   }
