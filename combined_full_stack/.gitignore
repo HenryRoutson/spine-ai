@@ -1,0 +1,7 @@
+# AI : data/ is local JSON persistence + run artifacts — never commit (todo gotchas).
+data/
+node_modules/
+.next/
+.env.local
+*.tsbuildinfo
+next-env.d.ts
