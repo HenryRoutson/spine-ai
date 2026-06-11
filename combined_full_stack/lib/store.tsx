@@ -33,7 +33,7 @@ export type BillingAccountView = {
   totalBilledCents: number
   subscribed: boolean
   useCostCents: number
-  topupCents: number
+  topupOptionsCents: number[]
   subCentsPerMonth: number
   billingCapCents: number
 }

@@ -6,7 +6,7 @@ import { dataDir } from "./config";
 import { getStripe } from "./stripe_client";
 
 // AI : credit-based billing ported from stripe/stripe.js — $5/mo sub grants $5 credit,
-// AI : $1 top-up, 50c per pipeline run, $20 hard cap; new accounts get $10 free credit.
+// AI : $10 / $20 top-up options, 50c per pipeline run, $20 hard cap; new accounts get $10 free credit.
 export type BillingUserKey = string & { __brand: "BillingUserKey" };
 
 export type BillingAccount = {
@@ -17,7 +17,7 @@ export type BillingAccount = {
 };
 
 export const USE_COST_CENTS = 50;
-export const TOPUP_CENTS = 100;
+export const TOPUP_OPTIONS_CENTS = [1000, 2000] as const;
 export const SUB_CENTS_PER_MONTH = 500;
 export const BILLING_CAP_CENTS = 2000;
 
@@ -139,9 +139,18 @@ export async function createCheckoutSession(
   key: BillingUserKey,
   mode: "payment" | "subscription",
   origin: string,
+  topupCents?: number,
 ): Promise<{ sessionId: string; url: string | null }> {
   const account = await loadBillingAccount(key);
-  const amount = mode === "payment" ? TOPUP_CENTS : SUB_CENTS_PER_MONTH;
+  const amount =
+    mode === "payment"
+      ? (() => {
+          if (topupCents == null || !TOPUP_OPTIONS_CENTS.includes(topupCents as (typeof TOPUP_OPTIONS_CENTS)[number])) {
+            throw new Error("topupCents must be one of the configured top-up amounts");
+          }
+          return topupCents;
+        })()
+      : SUB_CENTS_PER_MONTH;
   if (!canBill(account, amount)) throw new BillingError("cap_reached");
 
   const lineItem =
@@ -149,7 +158,7 @@ export async function createCheckoutSession(
       ? {
           price_data: {
             currency: "usd",
-            unit_amount: TOPUP_CENTS,
+            unit_amount: amount,
             product_data: { name: "Credit top up" },
           },
         }

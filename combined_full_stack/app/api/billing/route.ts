@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import {
   BILLING_CAP_CENTS,
   SUB_CENTS_PER_MONTH,
-  TOPUP_CENTS,
+  TOPUP_OPTIONS_CENTS,
   USE_COST_CENTS,
   getBillingUserKey,
   loadBillingAccount,
@@ -16,7 +16,7 @@ export async function GET() {
     totalBilledCents: account.totalBilledCents,
     subscribed: account.subscribed,
     useCostCents: USE_COST_CENTS,
-    topupCents: TOPUP_CENTS,
+    topupOptionsCents: [...TOPUP_OPTIONS_CENTS],
     subCentsPerMonth: SUB_CENTS_PER_MONTH,
     billingCapCents: BILLING_CAP_CENTS,
   });

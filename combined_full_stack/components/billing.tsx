@@ -34,17 +34,18 @@ function isCheapKey(key: string) {
 
 export function Billing() {
   const { billing, runs, billingAccount, refreshBilling } = useStore()
-  const [checkoutMode, setCheckoutMode] = useState<"payment" | "subscription" | null>(null)
+  const [checkoutKey, setCheckoutKey] = useState<string | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
 
-  async function startCheckout(mode: "payment" | "subscription") {
-    setCheckoutMode(mode)
+  async function startCheckout(mode: "payment" | "subscription", amountCents?: number) {
+    const key = mode === "subscription" ? "subscription" : `topup:${amountCents}`
+    setCheckoutKey(key)
     setBanner(null)
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode }),
+        body: JSON.stringify({ mode, amountCents }),
       })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? "Checkout failed")
@@ -52,7 +53,7 @@ export function Billing() {
       await redirectToCheckout(body.url)
     } catch (e) {
       setBanner((e as Error).message)
-      setCheckoutMode(null)
+      setCheckoutKey(null)
     }
   }
 
@@ -120,10 +121,10 @@ export function Billing() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={!!checkoutMode || billingAccount.subscribed || capReached}
+                disabled={!!checkoutKey || billingAccount.subscribed || capReached}
                 onClick={() => startCheckout("subscription")}
               >
-                {checkoutMode === "subscription" ? (
+                {checkoutKey === "subscription" ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <CreditCard className="h-3.5 w-3.5" />
@@ -132,17 +133,23 @@ export function Billing() {
                   ? `Subscribed — ${dollars(billingAccount.subCentsPerMonth)}/mo`
                   : `Subscribe ${dollars(billingAccount.subCentsPerMonth)}/mo`}
               </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={!!checkoutMode || capReached}
-                onClick={() => startCheckout("payment")}
-              >
-                {checkoutMode === "payment" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : null}
-                Top up {dollars(billingAccount.topupCents)}
-              </Button>
+              {billingAccount.topupOptionsCents.map((amountCents) => {
+                const topupKey = `topup:${amountCents}`
+                const topupCapReached =
+                  billingAccount.totalBilledCents + amountCents > billingAccount.billingCapCents
+                return (
+                  <Button
+                    key={amountCents}
+                    variant="secondary"
+                    size="sm"
+                    disabled={!!checkoutKey || capReached || topupCapReached}
+                    onClick={() => startCheckout("payment", amountCents)}
+                  >
+                    {checkoutKey === topupKey ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                    Top up {dollars(amountCents)}
+                  </Button>
+                )
+              })}
               <Button variant="ghost" size="sm" onClick={() => refreshBilling().catch(console.error)}>
                 Refresh
               </Button>
