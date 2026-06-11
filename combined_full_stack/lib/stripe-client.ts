@@ -12,9 +12,7 @@ export function getStripe(): Promise<Stripe | null> {
   return stripePromise;
 }
 
-// AI : Checkout Sessions redirect — redirectToCheckout was removed in stripe-js v4+.
-export async function redirectToCheckout(url: string): Promise<void> {
-  const stripe = await getStripe();
-  if (!stripe) throw new Error("Stripe.js failed to load");
-  window.location.href = url;
+// AI : Checkout Sessions redirect — stripe-js v4+ dropped redirectToCheckout; assign URL directly.
+export function redirectToCheckout(url: string): void {
+  window.location.assign(url);
 }

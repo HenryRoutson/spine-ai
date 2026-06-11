@@ -50,7 +50,7 @@ export function Billing() {
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? "Checkout failed")
       if (!body.url) throw new Error("Checkout session missing redirect URL")
-      await redirectToCheckout(body.url)
+      redirectToCheckout(body.url)
     } catch (e) {
       setBanner((e as Error).message)
       setCheckoutKey(null)
@@ -101,7 +101,7 @@ export function Billing() {
       />
 
       {billingAccount && (
-        <div className="border-b border-border bg-card px-5 py-4">
+        <div className="relative z-10 shrink-0 border-b border-border bg-card px-5 py-4">
           {banner && (
             <p className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive">
               {banner}
@@ -117,8 +117,9 @@ export function Billing() {
                 {capReached ? " — cap reached" : ""}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="relative z-10 flex flex-wrap gap-2">
               <Button
+                type="button"
                 variant="outline"
                 size="sm"
                 disabled={!!checkoutKey || billingAccount.subscribed || capReached}
@@ -140,21 +141,34 @@ export function Billing() {
                 return (
                   <Button
                     key={amountCents}
+                    type="button"
                     variant="secondary"
                     size="sm"
                     disabled={!!checkoutKey || capReached || topupCapReached}
                     onClick={() => startCheckout("payment", amountCents)}
+                    title={
+                      capReached
+                        ? "Billing cap reached"
+                        : topupCapReached
+                          ? `Would exceed ${dollars(billingAccount.billingCapCents)} cap`
+                          : undefined
+                    }
                   >
                     {checkoutKey === topupKey ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                     Top up {dollars(amountCents)}
                   </Button>
                 )
               })}
-              <Button variant="ghost" size="sm" onClick={() => refreshBilling().catch(console.error)}>
+              <Button type="button" variant="ghost" size="sm" onClick={() => refreshBilling().catch(console.error)}>
                 Refresh
               </Button>
             </div>
           </div>
+          {capReached && (
+            <p className="mt-3 font-mono text-[10px] text-amber-600 dark:text-amber-400">
+              App billing cap reached — top-ups are disabled.
+            </p>
+          )}
           {!canRun && (
             <p className="mt-3 font-mono text-[10px] text-amber-600 dark:text-amber-400">
               Not enough credit to run a pipeline — subscribe or top up.
@@ -163,7 +177,7 @@ export function Billing() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-px border-b border-border bg-border lg:grid-cols-4">
+      <div className="shrink-0 grid grid-cols-2 gap-px border-b border-border bg-border lg:grid-cols-4">
         <Stat label="Total spend" value={`$${grand.toFixed(2)}`} />
         <Stat
           label="Open / cheap models"
