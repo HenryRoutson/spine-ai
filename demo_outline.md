@@ -139,4 +139,21 @@ Please make every part of the pipeline which is a placeholder to be implemented 
 ---
 
 ## What is going to be built in the backend?
-TODO given front end code, please populate this
+
+The frontend is presentation-only — it imports a `lib/` (`store`, `types`, `run-engine`, `pydantic`, `doc-viewer`) that doesn't exist yet. The backend owns that `lib/` plus all real data, execution and persistence. Stack is JS + `zod`, default model is a cheap Chinese one via OpenRouter. Full detail lives in `backend/requirements/overall_requirements.md`; summary by tab:
+
+**Shared** — OpenRouter gateway (done: `getStringResponse`, `getStructuredResponse`), typed `config`, model registry (`MODEL_OPTIONS` with cost + cheap flag), per-project store, `file_write_helper`, token-usage capture on every call.
+
+1. **Structure** — CRUD of `StructureModel`/`ModelField`; one canonical `zodFromModel` that backs both the `models.py` code view and runtime `validate(value, model)` (implicit on every step's I/O, no separate validation step); auto-structure from sample JSON (**TODO placeholder** beyond the legal example).
+
+2. **Pipeline** — CRUD of the ordered `PipelineModule[]`; canonical I/O-validity check (upstream output model must equal a step's input model) driving the invalid badges + dark run buttons; per-kind executors: `input`, `doc-to-text` (Python PDF reader default, **DeepSeek OCR placeholder**), `llm` (`getStructuredResponse`), `transform`, `combine` (auto `{Company data, Company legal requirements}`), `custom-code` (**TODO placeholder**), `output`; per-module `avgMs`/`avgCostCents` from history. Seeds the default Company Legal Evaluation pipeline.
+
+3. **A/B Test** — runner per `StrategyKind`: `single-llm` (real), `rlm`, `claude-code`, `cheap-claude-code` (**TODO placeholders**); metrics (accuracy, schema pass-rate, latency, cost) + an LLM judge that picks the winner.
+
+4. **Inference** — `runPipeline(projectId, inputDocId, model)` executes the linear pipeline step-by-step, honours the cache, streams progress, and returns a `PipelineRun` (per-step trace, totals, `savedCents`). Output rules carry `{quote, start, end}` offsets for the clickable doc jump. Share link is a **TODO placeholder**.
+
+5. **Logging** — persist every `PipelineRun` with full trace/tokens/cost; filterable history; detailed logs **and** a high-level HTML view (progress bars, mirrored in Inference); download endpoint + `*_latest`/timestamped files.
+
+6. **Documents** — content-addressed store (hash = id, dedupe on collision); `inference`/`training` labels; PDF served as both PDF and text view; **quotation/validated-text** (langextract-style: extract, validate, closest-match, store offset link); "previous runs" = cached step JSON (with attached static zod structure) + `document_input_latest/<timestamp>.txt`.
+
+7. **Billing** — aggregate token usage into daily spend per model and per service (`doc-parse svc`); cost = tokens × `costPer1k`; cheap/open vs frontier split; cache savings. Seeded 7-day series is a **TODO placeholder** until wired to real runs.
