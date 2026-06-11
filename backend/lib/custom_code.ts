@@ -13,6 +13,9 @@ export function compileCustomFn(code: string): CustomFn {
   // or a bare body that uses `input` and `return`s the output
   const isExpression = /^\s*(\(|function\b|async\b)/.test(code);
   const src = isExpression ? `(${code})` : `((input) => { ${code} })`;
+  // AI : TODO bug — the timeout only bounds COMPILING the expression; invoking the returned
+  // AI : function (runCustomFn) is unbounded, so `while (true) {}` in a user step hangs the
+  // AI : whole run engine with no error step. Invoke inside the vm with a timeout instead.
   const fn = vm.runInNewContext(src, { console }, { timeout: 1_000 });
   if (typeof fn !== "function") throw new Error("custom code must evaluate to a function (input) => output");
   return fn as CustomFn;

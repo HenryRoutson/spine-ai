@@ -25,6 +25,10 @@ describe("compileCustomFn", () => {
 
 describe("custom-code step in a pipeline (offline, no LLM)", () => {
   it("applies the saved (input) => output mapping and records the step", async () => {
+    // AI : TODO bug — tests share the LIVE backend/data dir with the demo: saveProject below
+    // AI : permanently persists "p_custom_test" into store.json (it shows in the project
+    // AI : selector), and test runs write into the shared data/cache. Point tests at a temp
+    // AI : data dir and purge p_custom_test from the demo store.
     const store = await openStore();
     const doc = store.docs().find((d) => d.label === "inference")!;
     // AI : minimal project — input → custom ts fn → output; runs fully offline

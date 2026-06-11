@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { dataDir } from "./config.js";
 import { fileWriteHelper } from "./file_write_helper.js";
 import { llmBatchStructured, llmStructured } from "./llm.js";
-import { findQuote } from "./quotation.js";
+import { collectQuotes, findQuote } from "./quotation.js";
 import { runCustomFn } from "./custom_code.js";
 import { type LiveStep, progressHtml, runToHtml } from "./logging.js";
 import { hasQuoteField, llmSchema, validate, zodFromModel } from "./structure.js";
@@ -290,6 +290,8 @@ export async function runPipeline(
   const artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[] = [];
 
   // AI : live HTML — rewrite the (stable-path) progress page on every step transition.
+  // AI : TODO bug (cosmetic) — the final frame always says "run finished" even when a step
+  // AI : errored and the rest render as "pending"; the `at` counter is also off on that frame.
   const liveHtml = opts.liveHtml ?? persist;
   const writeLive = (runningIndex: number) => {
     if (!liveHtml) return;
@@ -365,6 +367,10 @@ export async function runPipeline(
       moduleId: m.id,
       kind: m.kind,
       label: m.label,
+      // AI : TODO bug — only `llm` steps record their model; `llm-batch` executes with
+      // AI : m.model ?? ctx.model but leaves RunStep.model undefined, so billingFromRuns/
+      // AI : spendSplit misattribute its cost to the run's global model and filterRuns
+      // AI : ({model}) can't find it. Latent: the seed has no llm-batch module.
       model: m.kind === "llm" ? m.model ?? model : undefined,
       status,
       ms,
@@ -430,12 +436,19 @@ function persistArtifacts(
       JSON.stringify({ structure: a.structure, value: a.value }, null, 2),
     );
   }
+  // AI : quotes index — every resolved quote in this run (deduped by href), exported with the
+  // AI : doc CONTENT HASH + [start, end) index range so saved quotes link back to the source
+  // AI : document after export, with no run context needed (resolve docs/<hash>.txt and slice).
+  const quotes = [...new Map(artifacts.flatMap((a) => collectQuotes(a.value)).map((q) => [q.href, q])).values()];
+  if (quotes.length) fileWriteHelper(dir, "quotes", "json", JSON.stringify(quotes, null, 2));
   // AI : the final output module also emits a readable markdown document.
   const final = artifacts.at(-1);
   if (final) fileWriteHelper(dir, "legal_considerations", "md", renderReport(final.value));
 }
 
 // AI : metrics — recompute per-module avgMs/avgCostCents from historical runs (Pipeline tab).
+// AI : TODO bug — averages include cached (ms=0, cost=0) and error steps, dragging the
+// AI : Pipeline tab's "avg latency / avg cost" below the real execution numbers.
 export function moduleMetrics(runs: PipelineRun[]): Map<ModuleId, { avgMs: number; avgCostCents: number }> {
   const agg = new Map<ModuleId, { ms: number; cents: number; n: number }>();
   for (const r of runs) {

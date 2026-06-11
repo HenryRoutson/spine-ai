@@ -30,6 +30,10 @@ export function isPipelineValid(modules: PipelineModule[]): boolean {
 
 // AI : a step's run button is enabled only when the pipeline is valid AND the step is
 // AI : cached or has an input ready (demo_outline: "run button on each step which has a cached or input").
+// AI : TODO bug — "cached" here is the m.cached CONFIG toggle, not whether a cache artifact
+// AI : actually exists for the step's key (run_engine readCache); a cached:true step with no
+// AI : cache file lights up with nothing to serve. Also: there is no per-step run entry point
+// AI : in the engine at all — only the whole-pipeline runPipeline (demo_outline §2/§4).
 export function canRunStep(modules: PipelineModule[], moduleId: ModuleId, hasInput: boolean): boolean {
   if (!isPipelineValid(modules)) return false;
   const m = modules.find((x) => x.id === moduleId);

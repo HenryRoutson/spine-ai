@@ -69,6 +69,9 @@ describe("runPipeline (live)", () => {
       ),
     };
     expect(computeInvalid(broken.modules).size).toBeGreaterThan(0);
+    // AI : TODO bug — this writes the broken pipeline to the LIVE demo store.json and only
+    // AI : restores it if the expect below passes; a failing assertion leaves the demo's
+    // AI : p_legal invalid (run buttons dark) until reseeded. Use a temp data dir / try-finally.
     store.saveProject(broken);
     await expect(runPipeline(store, projectId, "anything" as DocId, { persist: false })).rejects.toThrow(/invalid/);
     // restore

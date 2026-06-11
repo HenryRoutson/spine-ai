@@ -1,6 +1,11 @@
 // AI : canonical contract shared with the V0 frontend (`ai-pipeline-builder/lib/types.ts`).
 // AI : the frontend stub is presentation-only; this is the real, combinable definition.
 // AI : backend-only additions are marked. Everything else is byte-compatible with the stub.
+// AI : TODO bug — known drift vs the v2 frontend stub to reconcile at merge time:
+// AI :   - frontend ModuleKind/MODULE_META lack "llm-batch" (any Record<ModuleKind,…> in
+// AI :     frontend COMPONENTS will fail to typecheck once these types land),
+// AI :   - frontend DEFAULT_MODEL is "qwen-2.5-72b" (backend: "deepseek-v3"),
+// AI :   - frontend MODEL_OPTIONS is missing "sonnet-4.7" (the A/B fallback model).
 
 // ---- branded id types (rule 4: differentiate otherwise-shared strings) ----
 export type ProjectId = string & { __brand: "ProjectId" };

@@ -2,9 +2,11 @@ import type { DocId, SourceQuote } from "./types.js";
 
 type Normalized = string;
 
-// AI : collapse whitespace so quotes that differ only in spacing still match the source.
+// AI : collapse whitespace + ASCII-fold case so spacing/case-only differences still match
+// AI : exactly. ASCII-only folding keeps string length stable (unicode lowercasing can change
+// AI : it), so normalized offsets keep mapping 1:1 back onto the source.
 function norm(s: string): Normalized {
-  return s.replace(/\s+/g, " ").trim();
+  return s.replace(/\s+/g, " ").trim().replace(/[A-Z]/g, (c) => c.toLowerCase());
 }
 
 export interface QuoteMatch extends SourceQuote {
@@ -33,12 +35,18 @@ function denormOffset(source: string, normIndex: number): number {
   return i;
 }
 
-function tokenOverlap(a: Normalized, b: Normalized): number {
-  const at = new Set(a.toLowerCase().split(" "));
-  const bt = b.toLowerCase().split(" ");
-  if (bt.length === 0) return 0;
-  const hit = bt.filter((t) => at.has(t)).length;
-  return hit / bt.length;
+// AI : bug fix — scoring was normalized by the WINDOW's token count, so truncated windows at
+// AI : the document tail scored a spurious 1.0 and beat better full-length matches. Score is
+// AI : now the fraction of the QUOTE's tokens covered; punctuation is stripped ("(72)" ≈ "72").
+function tokens(s: Normalized): string[] {
+  return s.split(" ").map((t) => t.replace(/[^\p{L}\p{N}]/gu, "")).filter(Boolean);
+}
+
+function tokenOverlap(quote: Normalized, window: Normalized): number {
+  const qt = tokens(quote);
+  const wt = new Set(tokens(window));
+  if (qt.length === 0) return 0;
+  return qt.filter((t) => wt.has(t)).length / qt.length;
 }
 
 // AI : langextract-style quotation — validate an extracted quote against the source.
@@ -68,4 +76,41 @@ export function findQuote(quote: string, source: string, docId: DocId): QuoteMat
   const start = denormOffset(source, best.normStart);
   const end = denormOffset(source, best.normStart + best.normLen);
   return { text: source.slice(start, end), docId, start, end, exact: false, score: Math.max(0, best.score) };
+}
+
+// AI : canonical export link for a saved quote — the doc CONTENT HASH + index range survive
+// AI : export and resolve without any run context: load docs/<hash>.txt and slice [start, end).
+export function quoteHref(q: Pick<SourceQuote, "docId" | "start" | "end">): string {
+  return `doc://${q.docId}#${q.start}-${q.end}`;
+}
+
+export function parseQuoteHref(href: string): Pick<SourceQuote, "docId" | "start" | "end"> | undefined {
+  const m = href.match(/^doc:\/\/([^#]+)#(\d+)-(\d+)$/);
+  return m ? { docId: m[1] as DocId, start: +m[2], end: +m[3] } : undefined;
+}
+
+// AI : a quote as serialized in exported artifacts (snake_case doc_id, plus its href).
+export interface ExportedQuote {
+  text: string;
+  doc_id: DocId;
+  start: number;
+  end: number;
+  href: string;
+}
+
+// AI : walk any exported artifact value and collect every resolved {text, quote:{…}} span.
+export function collectQuotes(value: unknown, out: ExportedQuote[] = []): ExportedQuote[] {
+  if (Array.isArray(value)) {
+    for (const v of value) collectQuotes(v, out);
+    return out;
+  }
+  if (!value || typeof value !== "object") return out;
+  const o = value as { text?: unknown; quote?: { doc_id?: unknown; start?: unknown; end?: unknown } };
+  if (typeof o.text === "string" && typeof o.quote?.doc_id === "string" && typeof o.quote.start === "number" && typeof o.quote.end === "number") {
+    const { doc_id, start, end } = o.quote as { doc_id: DocId; start: number; end: number };
+    out.push({ text: o.text, doc_id, start, end, href: quoteHref({ docId: doc_id, start, end }) });
+    return out;
+  }
+  for (const v of Object.values(o)) collectQuotes(v, out);
+  return out;
 }

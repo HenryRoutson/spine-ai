@@ -1,6 +1,9 @@
 import type { FieldType, ModelField, StructureModel } from "./types.js";
 
 // AI : ported from the frontend stub so the `models.py` code view stays identical post-merge.
+// AI : TODO bug — tuple[text,quote] renders as `tuple[str, Quote]` but the runtime/zod shape
+// AI : (and the structure attached to cached artifacts) is the OBJECT {text: str, quote: Quote},
+// AI : so the pydantic code view doesn't match the JSON shown next to it.
 const PY_TYPE: Record<FieldType, string> = {
   text: "str",
   int: "int",

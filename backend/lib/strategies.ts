@@ -209,6 +209,8 @@ export interface BenchmarkOutcome {
 
 // AI : full benchmark per outline — all enabled environments on the cheap model; if none work,
 // AI : one single Sonnet call as fallback; the judge evaluates; all logs persisted.
+// AI : TODO bug — results are never written back to project.strategies, so the A/B tab keeps
+// AI : showing the seeded static numbers (accuracy 94 etc.) after a real benchmark has run.
 export async function runBenchmark(project: Project, store: Store, inputDocId: DocId): Promise<BenchmarkOutcome> {
   const enabled = project.strategies.filter((s) => s.enabled);
   const results = await Promise.all(

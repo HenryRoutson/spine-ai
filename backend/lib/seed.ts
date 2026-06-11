@@ -119,6 +119,10 @@ export function loadProjectSeed(path: string): ProjectSeed {
       modules: raw.modules as PipelineModule[],
       strategies: raw.strategies as Strategy[],
     },
+    // AI : TODO bug — seed `file` entries ("legal_doc_text.pdf") are joined directly onto
+    // AI : DOCUMENTS_DIR but the PDFs actually live under documents/legal/; works today only
+    // AI : because store.json already exists, a fresh seed (clean clone / deleted data/) throws
+    // AI : ENOENT in openStore(). Fix: "legal/legal_doc_text.pdf" in the seed JSON or recurse.
     docSpecs: raw.docs.map((d) => ({ name: d.name, type: d.type, label: d.label, pdfPath: join(DOCUMENTS_DIR, d.file) })),
   };
 }
