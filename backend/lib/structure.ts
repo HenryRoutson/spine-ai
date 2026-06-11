@@ -71,7 +71,9 @@ function build(
   const shape: Record<string, ZodType> = {};
   for (const f of model.fields) {
     const base = leafSchema(f.type, f.ref, index, next);
-    shape[f.name] = f.optional ? base.optional() : base;
+    // AI : optional ⇒ absent OR null — deterministic steps (db migration mapping) emit explicit
+    // AI : nulls per spec; llmSchema keeps plain .optional() so models omit instead.
+    shape[f.name] = f.optional ? base.nullish() : base;
   }
   return z.object(shape);
 }

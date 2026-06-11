@@ -30,7 +30,9 @@ describe("custom-code step in a pipeline (offline, no LLM)", () => {
     // AI : selector), and test runs write into the shared data/cache. Point tests at a temp
     // AI : data dir and purge p_custom_test from the demo store.
     const store = await openStore();
-    const doc = store.docs().find((d) => d.label === "inference")!;
+    // AI : pick the long legal doc by name — "newest inference doc" broke once the
+    // AI : database-migration seed added small JSON docs to the shared store.
+    const doc = store.docs().find((d) => d.name.includes("health_data"))!;
     // AI : minimal project — input → custom ts fn → output; runs fully offline
     const project: Project = {
       id: "p_custom_test" as ProjectId,

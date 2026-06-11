@@ -170,21 +170,25 @@ async function execModule(m: PipelineModule, ctx: RunCtx): Promise<ExecResult> {
     }
 
     case "combine": {
-      // AI : merge current pipeline data with the new input → auto model {company_data, requirements}.
+      // AI : merge current pipeline data with the new input — generic: keys come from the auto
+      // AI : out structure (`document` field ← the new input, every other field ← pipeline data).
+      const out = modelById(project.models, m.outStructureId);
+      if (!out) throw new Error(`combine step ${m.id} has no output structure`);
       const newInput = (ctx.prevModuleId && ctx.outputs.get(ctx.prevModuleId)) as { doc_id?: DocId; body?: string } | undefined;
       const pipelineData = ctx.byModel.get(m.inStructureId as StructureModelId);
-      const value = {
-        company_data: { doc_id: newInput?.doc_id ?? "", purpose: "Company profile", body: newInput?.body ?? "" },
-        company_legal_requirements: pipelineData ?? [],
-      };
+      // AI : purpose = the upstream input module's label (e.g. "Company Data", "Field Mapping").
+      const purpose = project.modules.find((x) => x.id === ctx.prevModuleId)?.label ?? "Document";
+      const value: Record<string, unknown> = {};
+      const summary: Record<string, unknown> = {};
+      for (const f of out.fields) {
+        const isDoc = f.type === "document";
+        value[f.name] = isDoc ? { doc_id: newInput?.doc_id ?? "", purpose, body: newInput?.body ?? "" } : pipelineData ?? [];
+        summary[f.name] = isDoc ? newInput?.doc_id : Array.isArray(pipelineData) ? `${pipelineData.length} items` : pipelineData;
+      }
       return {
         value,
-        preview: 'merged → {"company_data", "company_legal_requirements"}',
-        json: JSON.stringify(
-          { company_data: newInput?.doc_id, company_legal_requirements: Array.isArray(pipelineData) ? `${pipelineData.length} rules` : pipelineData },
-          null,
-          2,
-        ),
+        preview: `merged → {${out.fields.map((f) => `"${f.name}"`).join(", ")}}`,
+        json: JSON.stringify(summary, null, 2),
       };
     }
 
@@ -222,24 +226,35 @@ async function execModule(m: PipelineModule, ctx: RunCtx): Promise<ExecResult> {
 
     case "output": {
       const report = ctx.byModel.get(m.inStructureId as StructureModelId) ?? ctx.outputs.get(ctx.prevModuleId!);
-      return { value: report, preview: "LegalConsiderations.md emitted", json: JSON.stringify(report, null, 2) };
+      const name = modelById(project.models, m.outStructureId)?.name ?? "Output";
+      return { value: report, preview: `${name}.md emitted`, json: JSON.stringify(report, null, 2) };
     }
   }
 }
 
 // AI : render the final structured report into a human-readable markdown document.
-function renderReport(report: unknown): string {
-  if (!Array.isArray(report)) return `# Legal Considerations\n\n${JSON.stringify(report, null, 2)}\n`;
+// AI : rows carrying a rule_id keep the curated legal layout; anything else renders generically.
+function renderReport(report: unknown, title: string): string {
+  if (!Array.isArray(report)) return `# ${title}\n\n${JSON.stringify(report, null, 2)}\n`;
   const rows = report as Array<Record<string, unknown>>;
-  const lines = ["# Legal Considerations", ""];
+  const lines = [`# ${title}`, ""];
   for (const r of rows) {
-    lines.push(`## ${r.rule_id ?? "Rule"} — ${r.compliant ? "Compliant" : "Non-compliant"}`);
+    if (r.rule_id === undefined) {
+      lines.push("```json", JSON.stringify(r, null, 2), "```", "");
+      continue;
+    }
+    lines.push(`## ${r.rule_id} — ${r.compliant ? "Compliant" : "Non-compliant"}`);
     if (r.summary) lines.push(`${r.summary}`);
     if (r.rationale) lines.push(`\n${r.rationale}`);
     if (r.liability_usd) lines.push(`\n**Estimated exposure:** $${r.liability_usd}`);
     lines.push("");
   }
   return lines.join("\n");
+}
+
+// AI : "LegalConsiderations" → "legal_considerations" (final-artifact filename from its structure).
+function snakeCase(name: string): string {
+  return name.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
 }
 
 // AI : runPipeline — execute the linear pipeline step-by-step, honour the cache, stream progress.
@@ -441,9 +456,12 @@ function persistArtifacts(
   // AI : document after export, with no run context needed (resolve docs/<hash>.txt and slice).
   const quotes = [...new Map(artifacts.flatMap((a) => collectQuotes(a.value)).map((q) => [q.href, q])).values()];
   if (quotes.length) fileWriteHelper(dir, "quotes", "json", JSON.stringify(quotes, null, 2));
-  // AI : the final output module also emits a readable markdown document.
+  // AI : the final output module also emits a readable markdown document, named for its structure.
   const final = artifacts.at(-1);
-  if (final) fileWriteHelper(dir, "legal_considerations", "md", renderReport(final.value));
+  if (final) {
+    const name = final.structure?.name ?? "FinalOutput";
+    fileWriteHelper(dir, snakeCase(name), "md", renderReport(final.value, name.replace(/([a-z0-9])([A-Z])/g, "$1 $2")));
+  }
 }
 
 // AI : metrics — recompute per-module avgMs/avgCostCents from historical runs (Pipeline tab).

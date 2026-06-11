@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
@@ -98,7 +98,7 @@ export interface SeedDocSpec {
   name: string;
   type: InputType;
   label: DocLabel;
-  pdfPath: string;
+  path: string; // absolute path under the repo /documents folder (pdf or plain text/json)
 }
 
 export interface ProjectSeed {
@@ -119,12 +119,18 @@ export function loadProjectSeed(path: string): ProjectSeed {
       modules: raw.modules as PipelineModule[],
       strategies: raw.strategies as Strategy[],
     },
-    // AI : TODO bug — seed `file` entries ("legal_doc_text.pdf") are joined directly onto
-    // AI : DOCUMENTS_DIR but the PDFs actually live under documents/legal/; works today only
-    // AI : because store.json already exists, a fresh seed (clean clone / deleted data/) throws
-    // AI : ENOENT in openStore(). Fix: "legal/legal_doc_text.pdf" in the seed JSON or recurse.
-    docSpecs: raw.docs.map((d) => ({ name: d.name, type: d.type, label: d.label, pdfPath: join(DOCUMENTS_DIR, d.file) })),
+    // AI : bug fix — seed `file` entries are now repo-/documents/-relative paths
+    // AI : ("legal/legal_doc_text.pdf"), so a fresh seed no longer ENOENTs in openStore().
+    docSpecs: raw.docs.map((d) => ({ name: d.name, type: d.type, label: d.label, path: join(DOCUMENTS_DIR, d.file) })),
   };
+}
+
+// AI : every JSON under seeds/ is a project — drop a file in, it lands in the store on next boot.
+export function allProjectSeeds(): ProjectSeed[] {
+  return readdirSync(SEEDS_DIR)
+    .filter((f) => f.endsWith(".json"))
+    .sort()
+    .map((f) => loadProjectSeed(join(SEEDS_DIR, f)));
 }
 
 // ---- the default seed: Company Legal Evaluation, loaded (and validated) at import time ----

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "./config.js";
 import { pdfToText } from "./pdf_to_text.js";
-import { blankProject, defaultProject, seedDocSpecs } from "./seed.js";
+import { allProjectSeeds, blankProject, type SeedDocSpec } from "./seed.js";
 import type {
   DocId,
   DocLabel,
@@ -45,20 +45,24 @@ export class JsonStore implements Store {
   private docsDir = join(this.dir, "docs");
   private state: Persisted = { projects: [], docs: [], runs: [], runProjects: {} };
 
-  // AI : idempotent — load from disk, else seed the default project + real docs (parses PDFs).
+  // AI : idempotent — load from disk, then upsert any seed project the store doesn't have yet
+  // AI : (so newly authored seeds/*.json land in existing stores too) + ingest its real docs.
   async init(): Promise<void> {
     mkdirSync(this.docsDir, { recursive: true });
-    if (existsSync(this.storeFile)) {
+    const fresh = !existsSync(this.storeFile);
+    if (!fresh) {
       this.state = JSON.parse(readFileSync(this.storeFile, "utf8")) as Persisted;
       this.state.runProjects ??= {};
-      return;
     }
-    this.state.projects = [defaultProject(), blankProject("p_blank" as ProjectId)];
-    for (const spec of seedDocSpecs) {
-      const content = await pdfToText(spec.pdfPath);
-      this.ingest(spec.name, spec.type, content, spec.label);
+    let dirty = fresh;
+    for (const seed of allProjectSeeds()) {
+      if (this.project(seed.project.id)) continue;
+      this.state.projects.push(structuredClone(seed.project));
+      for (const spec of seed.docSpecs) this.ingest(spec.name, spec.type, await seedDocContent(spec), spec.label);
+      dirty = true;
     }
-    this.flush();
+    if (fresh) this.state.projects.push(blankProject("p_blank" as ProjectId));
+    if (dirty) this.flush();
   }
 
   private flush(): void {
@@ -125,6 +129,11 @@ export class JsonStore implements Store {
     this.state.runs = [run, ...this.state.runs].slice(0, 100);
     this.flush();
   }
+}
+
+// AI : only PDFs need parsing — json/text seed docs are stored verbatim.
+async function seedDocContent(spec: SeedDocSpec): Promise<string> {
+  return spec.type === "pdf" ? pdfToText(spec.path) : readFileSync(spec.path, "utf8");
 }
 
 // AI : convenience — an initialised store for scripts/tests.
