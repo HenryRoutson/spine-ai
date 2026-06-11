@@ -16,9 +16,14 @@ const nextConfig = {
   outputFileTracingIncludes: {
     "/api/*": ["./seeds/**/*", "./documents/**/*"],
     "/*": ["./seeds/**/*", "./documents/**/*"],
+    "/api/docs": [
+      "./node_modules/pdf-parse/**/*",
+      "./node_modules/pdfjs-dist/**/*",
+      "./node_modules/@napi-rs/canvas/**/*",
+    ],
   },
-  // AI : pdf-parse must stay an unbundled node dep (worker files + dynamic requires).
-  serverExternalPackages: ["pdf-parse"],
+  // AI : pdf-parse + canvas must stay unbundled (worker files + native .node binaries).
+  serverExternalPackages: ["pdf-parse", "pdfjs-dist", "@napi-rs/canvas"],
   images: {
     unoptimized: true,
   },

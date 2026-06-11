@@ -39,7 +39,7 @@ export interface StepProgress {
 export interface RunOptions {
   model: ModelId; // global model (per-step `module.model` overrides for llm)
   inputDocIds?: DocId[]; // docs assigned to `input` modules in order; [0] is the dropped doc
-  onStep?: (p: StepProgress) => void;
+  onStep?: (p: StepProgress) => void | Promise<void>;
   persist?: boolean; // write run + artifacts to the store/disk (default true)
   liveHtml?: boolean; // write an auto-refreshing progress page during the run (default = persist)
 }
@@ -328,7 +328,7 @@ export async function runPipeline(
 
   for (let i = 0; i < project.modules.length; i++) {
     const m = project.modules[i];
-    opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status: "running" });
+    await opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status: "running" });
     writeLive(i);
 
     const inputPreview = i === 0 ? `${m.inputType} document` : modelById(project.models, m.inStructureId)?.name ?? "Any";
@@ -396,7 +396,7 @@ export async function runPipeline(
       outputPreview: result.preview,
       outputJson: result.json,
     });
-    opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status });
+    await opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status });
     if (status === "error") break;
   }
 

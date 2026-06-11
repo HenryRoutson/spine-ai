@@ -38,9 +38,7 @@ export async function POST(req: NextRequest) {
     try {
       const run = await runPipeline(store, projectId, inputDocId, {
         model,
-        onStep: (p) => {
-          void jobProgress(jobId, p, jobDb).catch(console.error);
-        },
+        onStep: (p) => jobProgress(jobId, p, jobDb),
       });
       await store.flush(); // AI : SupabaseStore queues addRun — persist before the job reports done
       await finishJob(jobId, { run }, jobDb);
