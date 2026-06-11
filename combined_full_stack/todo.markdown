@@ -1,6 +1,6 @@
 # Combining `backend` + `V0 frontend prototypes/v2/ai-pipeline-builder` → `combined_full_stack`
 
-## The core idea
+## The core idea 
 
 The v2 frontend is a Next.js shell whose entire `lib/` layer is **missing from disk** —
 every component imports `@/lib/store`, `@/lib/types`, `@/lib/run-engine`, `@/lib/pydantic`,
