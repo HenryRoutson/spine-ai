@@ -19,4 +19,13 @@ PDF originals for Supabase users — uploaded PDF bytes are saved to local disk 
 Billing on Vercel — uses billing_accounts table for signed-in users, local JSON for anonymous.
 
 
+it's not clear how the 
 
+
+pipeline steps :
+  4. sort rules 
+  5. company data
+  6. combine inputs
+
+works,
+as the input doesn't go into the output. you need to wrap the comany data (rename to company data input) with the combine inputs component so you can see how things work. the chain doesn't make sense. do the same thing for the CRM project.
