@@ -22,7 +22,7 @@ export type BillingAccount = {
 export const USE_COST_CENTS = 50;
 export const TOPUP_OPTIONS_CENTS = [100, 1000, 2000] as const;
 export const SUB_CENTS_PER_MONTH = 500;
-export const BILLING_CAP_CENTS = 2000;
+export const BILLING_CAP_CENTS = 30000; 
 
 export class BillingError extends Error {
   constructor(readonly code: "insufficient_funds" | "cap_reached") {
