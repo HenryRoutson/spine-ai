@@ -18,7 +18,7 @@ What i mean by that is the you need to have intermediate steps which are used to
 the UI should the following window for each project inside the project selector.
 
 1. Structure builder
-  using code or a UI to build pydantic model (structures) that your LLM should output to
+  using code or a UI to build pydantic / zod model (structures) that your LLM should output to
 2. Pipeline builder
   where does the model take inputs?
     For example maybe you input a legal pdf, convert it to text and atomic rules to assess.
@@ -36,7 +36,14 @@ the UI should the following window for each project inside the project selector.
   include some metrics like average latency and average cost.
   The most important part is that each steps shows their input and output model, and the UI points out where a pipeline is invalid because a input flows into an output that isn't equal. 
   schema validation isn't an explicit step in the pipeline, it's implicit in the validation of every input and output from every step.
-  you should not include a schema validation step.
+  you should not include a seperate schema validation step.
+
+  please have the input output schema visible without clicking on each individual step. 
+    input : ...
+    output : ...
+
+  please have a run button on each step which has a cached or has an input ready. this should go dark if the pipeline is invalid.
+
 
 
 3. AB testing
@@ -51,6 +58,8 @@ the UI should the following window for each project inside the project selector.
 
 4. Inference
   running your pipeline with a simple drag and drop system, no need to depoy anything like a custom pipeline. it should be easy to send a link to others of just this page.
+  please have a run button on each step which has a cached or has an input ready. the cache files should be saved in documents tab probably as json files, with a pydantic / zod structure attatched which should be static and valid.
+  this tab should show the same errors if the input doesn't feed into the output.
 
 5. Logging
   there should be a page dedicated to logging of all the pipeline inference. This should have syntax highlighting where json or markdown is used in the UI, there should be a download button. 
@@ -82,7 +91,7 @@ COMPANY LEGAL EVALUATION
 1. Take in a legal document with a prebuilt document to text step - annotate with it's purpose.
 
 # skipped
-  Use a prebuild sliding window components which converts a long context task into much smaller tasks. pydantic is text -> list[text]. use text in place of string for non technical. (For this demo i might skip building this, ignore in UI demo)
+  Use a prebuild sliding window components which converts a long context task into much smaller tasks. pydantic / zod is text -> list[text]. use text in place of string for non technical. (For this demo i might skip building this, ignore in UI demo)
 
 
 
@@ -109,8 +118,18 @@ Define this as a model automatically ;
 
 
 
+
 ---
 
 Other considerations.
 
 Some of the parts in this pipeline require custom code to loop over things to make efficient. ideally this would be interesting to have as something automated in the AB testing, but would need to consider how to auto merge things. maybe just have a custom step option if you need to code a single step.
+
+
+Given i'm developing in JS, ill use zod instead of pydantic to create the schemas. 
+
+
+For the prebuild "document to text step", please default to a python pdf reader (i will only provide pdf files while demoing), but have a placholder option for deepseek OCR.
+
+
+please make every part of the pipeline which is a placeholder to be implemented in backend or fake data as "TODO placeholder".
