@@ -71,7 +71,7 @@ https://github.com/google/langextract
 
 For now the pipeline should be a straight line and not a tree.
 
-where appropriate there should be selectors for what llm can be used, by default this should be a cheaper chinese model.
+where appropriate there should be selectors for what llm can be used, by default this should be a cheaper chinese model. This will use open router in the background or something to easily switch. 
 
 
 
