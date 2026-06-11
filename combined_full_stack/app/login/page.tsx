@@ -1,29 +1,17 @@
 "use client"
 
-// AI : todo §7 — email/password via the Supabase browser client (GitHub/Google OAuth commented out for now).
+// AI : todo §7 — email/password via server actions (GitHub/Google OAuth commented out for now).
 // AI : A signed-in session makes every API route open the per-user SupabaseStore.
 
-import { useState, useEffect, type FormEvent } from "react"
+import { useActionState, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 // import { Separator } from "@/components/ui/separator"
-import { createClient } from "@/utils/supabase/client"
+import { authAction, type AuthActionState } from "@/app/login/actions"
+import type { AuthMode } from "@/utils/supabase/auth_messages"
 
-type AuthMode = "sign-in" | "sign-up"
 // type OAuthProvider = "github" | "google"
-
-function authErrorMessage(error: { message: string; code?: string }, mode: AuthMode): string {
-  if (error.code === "invalid_credentials" || error.message === "Invalid login credentials")
-    return mode === "sign-in"
-      ? "No account with those credentials — sign up first, or check your password."
-      : error.message
-  if (error.code === "email_address_invalid")
-    return "That email address isn't allowed — try a real address (e.g. Gmail)."
-  if (error.code === "over_email_send_rate_limit")
-    return "Too many sign-up emails sent — wait a few minutes and try again."
-  return error.message
-}
 
 // function GitHubIcon() {
 //   return (
@@ -46,76 +34,33 @@ function authErrorMessage(error: { message: string; code?: string }, mode: AuthM
 
 export default function LoginPage() {
   const [mode, setMode] = useState<AuthMode>("sign-in")
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [state, formAction, pending] = useActionState<AuthActionState, FormData>(
+    authAction,
+    null,
+  )
+  const [urlError, setUrlError] = useState<string | null>(null)
   // const [oauthBusy, setOauthBusy] = useState<OAuthProvider | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get("error") === "auth")
-      setError("Sign in failed — please try again.")
+      setUrlError("Sign in failed — please try again.")
   }, [])
 
   // async function signInWithOAuth(provider: OAuthProvider) {
   //   setOauthBusy(provider)
-  //   setError(null)
-  //   setNotice(null)
   //   const supabase = await createClient()
   //   const { error } = await supabase.auth.signInWithOAuth({
   //     provider,
   //     options: {
-  //       redirectTo: `${window.location.origin}/auth/callback`,
+  //       redirectTo: `${getSiteUrl()}/auth/callback`,
   //     },
   //   })
-  //   if (error) {
-  //     setError(error.message)
-  //     setOauthBusy(null)
-  //   }
+  //   if (error) setOauthBusy(null)
   // }
 
-  async function submit(e: FormEvent) {
-    e.preventDefault()
-    setBusy(true)
-    setError(null)
-    setNotice(null)
-    const supabase = await createClient()
-
-    if (mode === "sign-in") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) {
-        setError(authErrorMessage(error, mode))
-        setBusy(false)
-        return
-      }
-      window.location.href = "/"
-      return
-    }
-
-    const { data, error } = await supabase.auth.signUp({ email, password })
-    if (error) {
-      setError(authErrorMessage(error, mode))
-      setBusy(false)
-      return
-    }
-    // AI : Supabase hides duplicate emails — empty identities means account already exists.
-    if (data.user && data.user.identities?.length === 0) {
-      setError("An account with this email already exists — sign in instead.")
-      setBusy(false)
-      return
-    }
-    if (data.session) {
-      window.location.href = "/"
-      return
-    }
-    // AI : email confirmation enabled in Supabase — no session until they click the link.
-    setNotice("Account created — check your email for a confirmation link, then sign in.")
-    setMode("sign-in")
-    setPassword("")
-    setBusy(false)
-  }
+  const error = state?.error ?? urlError
+  const notice = state?.notice ?? null
 
   return (
     <div className="flex h-dvh items-center justify-center bg-background text-foreground">
@@ -136,7 +81,7 @@ export default function LoginPage() {
           <Button
             type="button"
             variant="outline"
-            disabled={!!oauthBusy || busy}
+            disabled={!!oauthBusy || pending}
             onClick={() => signInWithOAuth("github")}
             className="w-full gap-2"
           >
@@ -146,7 +91,7 @@ export default function LoginPage() {
           <Button
             type="button"
             variant="outline"
-            disabled={!!oauthBusy || busy}
+            disabled={!!oauthBusy || pending}
             onClick={() => signInWithOAuth("google")}
             className="w-full gap-2"
           >
@@ -161,16 +106,16 @@ export default function LoginPage() {
           <Separator className="flex-1" />
         </div> */}
 
-        <form onSubmit={submit} className="flex flex-col gap-3">
+        <form action={formAction} className="flex flex-col gap-3">
+          <input type="hidden" name="mode" value={mode} />
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="email" className="text-xs">Email</Label>
             <Input
               id="email"
+              name="email"
               type="email"
               required
               autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
               placeholder="you@company.com"
             />
           </div>
@@ -178,12 +123,11 @@ export default function LoginPage() {
             <Label htmlFor="password" className="text-xs">Password</Label>
             <Input
               id="password"
+              name="password"
               type="password"
               required
               minLength={6}
               autoComplete={mode === "sign-in" ? "current-password" : "new-password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
             />
           </div>
@@ -191,8 +135,8 @@ export default function LoginPage() {
           {notice && <p className="text-xs text-primary">{notice}</p>}
           {error && <p className="text-xs text-destructive">{error}</p>}
 
-          <Button type="submit" disabled={busy} className="mt-1 w-full">
-            {busy ? "…" : mode === "sign-in" ? "Sign in" : "Sign up"}
+          <Button type="submit" disabled={pending} className="mt-1 w-full">
+            {pending ? "…" : mode === "sign-in" ? "Sign in" : "Sign up"}
           </Button>
         </form>
 
@@ -201,8 +145,7 @@ export default function LoginPage() {
             type="button"
             onClick={() => {
               setMode(mode === "sign-in" ? "sign-up" : "sign-in")
-              setError(null)
-              setNotice(null)
+              setUrlError(null)
             }}
             className="font-mono text-[11px] text-muted-foreground transition-colors hover:text-foreground"
           >

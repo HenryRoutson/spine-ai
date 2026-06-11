@@ -16,9 +16,10 @@ export async function createClient() {
         getAll() {
           return cookieStore.getAll();
         },
-        setAll(cookiesToSet, _headers) {
+        setAll(cookiesToSet, headers) {
           try {
             cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+            void headers;
           } catch {
             // AI : called from a Server Component — proxy handles session refresh there.
           }

@@ -1,16 +1,18 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
+import { getSiteUrl } from "@/utils/supabase/site_url";
 
 // AI : OAuth redirect target — exchanges the provider code for a session cookie.
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/";
   const env = getSupabasePublicEnv();
+  const siteUrl = getSiteUrl();
 
   if (code && env) {
-    const response = NextResponse.redirect(`${origin}${next}`);
+    const response = NextResponse.redirect(`${siteUrl}${next}`);
     const supabase = createServerClient(env.url, env.key, {
       cookies: {
         getAll() {
@@ -30,5 +32,5 @@ export async function GET(request: NextRequest) {
     if (!error) return response;
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth`);
+  return NextResponse.redirect(`${siteUrl}/login?error=auth`);
 }

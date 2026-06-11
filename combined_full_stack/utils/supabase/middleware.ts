@@ -8,11 +8,21 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-function redirectUnauthenticated(request: NextRequest, pathname: string): NextResponse {
+function copySessionCookies(from: NextResponse, to: NextResponse): void {
+  from.cookies.getAll().forEach((cookie) => to.cookies.set(cookie));
+}
+
+function redirectUnauthenticated(
+  request: NextRequest,
+  pathname: string,
+  sessionResponse: NextResponse,
+): NextResponse {
   const loginUrl = request.nextUrl.clone();
   loginUrl.pathname = "/login";
   loginUrl.searchParams.set("next", pathname);
-  return NextResponse.redirect(loginUrl);
+  const redirectResponse = NextResponse.redirect(loginUrl);
+  copySessionCookies(sessionResponse, redirectResponse);
+  return redirectResponse;
 }
 
 // AI : refreshes expired auth tokens, rewrites session cookies, and gates pages behind sign-in.
@@ -25,12 +35,12 @@ export async function updateSession(request: NextRequest) {
   if (!supabaseEnv) {
     // AI : missing Vercel env vars must not crash proxy — gate pages, let /login render.
     if (!isApiRoute && !isPublic) {
-      return redirectUnauthenticated(request, pathname);
+      return NextResponse.redirect(new URL("/login", request.url));
     }
     return NextResponse.next({ request });
   }
 
-  let response = NextResponse.next({ request });
+  let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(supabaseEnv.url, supabaseEnv.key, {
     cookies: {
@@ -39,30 +49,33 @@ export async function updateSession(request: NextRequest) {
       },
       setAll(cookiesToSet, headers) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        response = NextResponse.next({ request });
-        cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+        supabaseResponse = NextResponse.next({ request });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          supabaseResponse.cookies.set(name, value, options),
+        );
         Object.entries(headers).forEach(([headerName, headerValue]) =>
-          response.headers.set(headerName, headerValue),
+          supabaseResponse.headers.set(headerName, headerValue),
         );
       },
     },
   });
 
-  // AI : getUser() (not getSession()) — revalidates the JWT and triggers the refresh.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // AI : getClaims() revalidates the JWT — required so Vercel proxy and browser stay in sync.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims;
 
   if (!user && !isApiRoute && !isPublic) {
-    return redirectUnauthenticated(request, pathname);
+    return redirectUnauthenticated(request, pathname, supabaseResponse);
   }
 
   if (user && pathname === "/login") {
     const nextUrl = request.nextUrl.clone();
     nextUrl.pathname = request.nextUrl.searchParams.get("next") || "/";
     nextUrl.searchParams.delete("next");
-    return NextResponse.redirect(nextUrl);
+    const redirectResponse = NextResponse.redirect(nextUrl);
+    copySessionCookies(supabaseResponse, redirectResponse);
+    return redirectResponse;
   }
 
-  return response;
+  return supabaseResponse;
 }

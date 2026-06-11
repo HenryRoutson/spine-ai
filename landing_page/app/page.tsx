@@ -204,19 +204,13 @@ export default function Home() {
             Forge turns LLM work into typed, cached, validated pipeline steps. Define structures, wire steps together,
             A/B test strategies on cheap open models, and ship a drag-and-drop inference page — no deploy required.
           </p>
-          <div className="mt-8 flex items-center justify-center gap-4">
+          <div className="mt-8 flex items-center justify-center">
             <a
               id="cta-top"
-              href={APP_LOGIN_URL}
+              href="https://www.auto-pipeline-app.dev/"
               className="rounded bg-accent px-6 py-3 font-mono text-sm font-semibold text-background hover:bg-accent/85 transition-colors"
             >
-              ⚡ Get a demo
-            </a>
-            <a
-              href="#structure"
-              className="rounded border border-line bg-panel px-6 py-3 font-mono text-sm text-foreground hover:border-accent/50 transition-colors"
-            >
-              See how it works
+              Try now
             </a>
           </div>
           {/* AI : hackathon credit only — deliberately worded to avoid implying funding/affiliation */}
