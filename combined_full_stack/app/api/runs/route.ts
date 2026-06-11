@@ -8,6 +8,7 @@ import type { DocId, ModelId, ProjectId } from "@/lib/server/types";
 // AI : todo §8 — after() keeps the pipeline alive once the response is sent (Vercel
 // AI : freezes plain dangling promises); maxDuration is the Fluid-compute ceiling.
 export const maxDuration = 300;
+export const dynamic = "force-dynamic";
 
 interface RunRequest {
   projectId: ProjectId;

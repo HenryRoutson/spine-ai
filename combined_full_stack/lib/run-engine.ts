@@ -18,9 +18,17 @@ export async function startRun(projectId: ProjectId, inputDocId: DocId, model: M
 }
 
 export async function runProgress(jobId: RunJobId): Promise<RunJob> {
-  const res = await fetch(`/api/runs/${jobId}/progress`)
-  if (!res.ok) throw new Error(`progress poll failed (${res.status})`)
-  return res.json() as Promise<RunJob>
+  // AI : first polls can 404 when progress GET hits a cold bundle before the job file is visible.
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const res = await fetch(`/api/runs/${jobId}/progress`, { cache: "no-store" })
+    if (res.status === 404 && attempt < 9) {
+      await new Promise((r) => setTimeout(r, 200 * (attempt + 1)))
+      continue
+    }
+    if (!res.ok) throw new Error(`progress poll failed (${res.status})`)
+    return res.json() as Promise<RunJob>
+  }
+  throw new Error("progress poll failed (404)")
 }
 
 // AI : poll until the run finishes; onStep streams partial progress to the UI.
