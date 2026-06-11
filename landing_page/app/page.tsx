@@ -4,7 +4,9 @@ import Image from "next/image";
 type ImagePath = string;
 type SectionId = string;
 type AppLoginUrl = string;
+type AppUrl = string;
 
+const APP_URL: AppUrl = "https://auto-pipeline-app.dev/";
 const APP_LOGIN_URL: AppLoginUrl = "https://auto-pipeline-app.dev/login?next=%2F";
 
 type Feature = {
@@ -207,7 +209,7 @@ export default function Home() {
           <div className="mt-8 flex items-center justify-center">
             <a
               id="cta-top"
-              href="https://www.auto-pipeline-app.dev/"
+              href={APP_URL}
               className="rounded bg-accent px-6 py-3 font-mono text-sm font-semibold text-background hover:bg-accent/85 transition-colors"
             >
               Try now
