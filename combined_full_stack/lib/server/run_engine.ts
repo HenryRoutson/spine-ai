@@ -34,6 +34,13 @@ import {
   type StructureModelId,
 } from "./types";
 
+// AI : finer-grained progress inside a step — shown as a smaller bar under the step row (LLM calls, etc.).
+export interface StepSubProgress {
+  label: string;
+  current: number;
+  total: number;
+}
+
 // AI : streamed to the Inference progress bar + Logging high-level HTML view.
 export interface StepProgress {
   index: number;
@@ -41,6 +48,7 @@ export interface StepProgress {
   moduleId: ModuleId;
   label: string;
   status: "running" | RunStepStatus;
+  sub?: StepSubProgress;
 }
 
 export interface RunOptions {
@@ -123,6 +131,7 @@ interface RunCtx {
   sourceText: string;
   sourceDocId: DocId;
   prevModuleId?: ModuleId;
+  reportSub?: (sub: StepSubProgress) => void;
 }
 
 function materializeHints(m: PipelineModule, ctx: RunCtx, docId?: DocId, sourceText?: string) {
@@ -198,6 +207,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       const schema = llmSchema(out, project.models, !!m.outIsList);
       const prompt = structuredLlmPrompt(userPrompt, schema);
       log.debug(`llm prompt built`, { promptChars: prompt.length, hasQuoteField: hasQuoteField(out) });
+      ctx.reportSub?.({ label: "LLM call", current: 0, total: 1 });
       const raw = await llmStructured(userPrompt, schema, { model: stepModel, ledger: ctx.ledger }, log.child("llm"));
       log.info(`llm response received`, { moduleId: m.id, items: Array.isArray(raw) ? raw.length : 1 });
       // AI : resolve quote strings → validated source-linked spans.
@@ -278,6 +288,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       const sampleItem = items[0];
       const sampleUser = `${m.prompt ?? "Process the item."}\n\nITEM:\n${JSON.stringify(sampleItem, null, 2)}`;
       const samplePrompt = structuredLlmPrompt(sampleUser, schema);
+      ctx.reportSub?.({ label: "LLM calls", current: 0, total: items.length });
       const rows = await llmBatchStructured(
         items,
         (item) => `${m.prompt ?? "Process the item."}\n\nITEM:\n${JSON.stringify(item, null, 2)}`,
@@ -285,6 +296,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         { model: stepModel, ledger: ctx.ledger },
         2,
         log.child("llm-batch"),
+        (current, total) => ctx.reportSub?.({ label: "LLM calls", current, total }),
       );
       log.info(`llm-batch complete`, { moduleId: m.id, rows: rows.length });
       const value = hasQuoteField(out) ? rows.map((r) => resolveQuotes(r, out, ctx.sourceText, ctx.sourceDocId)) : rows;
@@ -436,6 +448,17 @@ export async function runPipeline(
     await opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status: "running" });
     writeLive(i);
 
+    ctx.reportSub = (sub) => {
+      void opts.onStep?.({
+        index: i,
+        total: project.modules.length,
+        moduleId: m.id,
+        label: m.label,
+        status: "running",
+        sub,
+      });
+    };
+
     const defaultInputPreview =
       i === 0 ? `${m.inputType} document` : modelById(project.models, m.inStructureId)?.name ?? "Any";
     const beforeCents = ledger.totalCents();
@@ -518,6 +541,7 @@ export async function runPipeline(
       outputJson: result.json,
     });
     await opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status });
+    ctx.reportSub = undefined;
     if (status === "error") {
       log.warn(`pipeline aborted after error`, { failedModule: m.id, stepsCompleted: steps.length });
       break;

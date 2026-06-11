@@ -52,17 +52,20 @@ export async function llmBatchStructured<T>(
   // AI : default 2 — matches openrouter_llm in-flight cap; 4 parallel calls routinely 429 DeepInfra.
   concurrency = 2,
   log?: ServerLogger,
+  onProgress?: (current: number, total: number) => void,
 ): Promise<T[]> {
   log?.info(`llmBatchStructured start`, { itemCount: items.length, concurrency, model: ctx.model });
   const out: T[] = new Array(items.length);
   let next = 0;
   let completed = 0;
+  onProgress?.(0, items.length);
   const worker = async () => {
     while (next < items.length) {
       const i = next++;
       log?.debug(`batch item start`, { index: i, total: items.length });
       out[i] = await llmStructured(promptFor(items[i], i), schema, ctx, log);
       completed++;
+      onProgress?.(completed, items.length);
       log?.info(`batch item done`, { index: i, completed, total: items.length });
     }
   };

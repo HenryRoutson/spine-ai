@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { useDocViewer } from "@/lib/doc-viewer"
-import { awaitRun, mergeStepStates, startRun, type JobLogEntry, type StepProgress } from "@/lib/run-engine"
+import { awaitRun, mergeStepStates, startRun, type JobLogEntry, type StepProgress, type StepSubProgress, type StepUiState } from "@/lib/run-engine"
 import { collectQuotes } from "@/lib/quotes"
 import type { DocId, DocRef, ModuleId, PipelineRun, ProjectId } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
@@ -57,7 +57,7 @@ export function Inference() {
   const [uploading, setUploading] = useState(false)
   const [inputDoc, setInputDoc] = useState<DocRef | null>(null)
   const [phase, setPhase] = useState<Phase>("idle")
-  const [stepStates, setStepStates] = useState<Map<ModuleId, StepProgress["status"]>>(new Map())
+  const [stepStates, setStepStates] = useState<Map<ModuleId, StepUiState>>(new Map())
   const [run, setRun] = useState<PipelineRun | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [debugLogs, setDebugLogs] = useState<JobLogEntry[]>([])
@@ -132,8 +132,8 @@ export function Inference() {
     if (phase === "idle") return 0
     if (phase === "done") return 100
     const done = modules.filter((m) => {
-      const s = stepStates.get(m.id)
-      return s !== undefined && s !== "running"
+      const s = stepStates.get(m.id)?.status
+      return s !== undefined && s !== "idle" && s !== "running"
     }).length
     return Math.round((done / Math.max(1, modules.length)) * 100)
   }, [phase, stepStates, modules.length])
@@ -250,8 +250,10 @@ export function Inference() {
                 <div className="mt-4 space-y-2.5">
                   {segmentPipeline(modules).map((seg) => {
                     if (seg.kind === "combine") {
-                      const combineState = stepStates.get(seg.combine.id) ?? "idle"
-                      const inputState = stepStates.get(seg.input.id) ?? "idle"
+                      const combineUi = stepStates.get(seg.combine.id)
+                      const inputUi = stepStates.get(seg.input.id)
+                      const combineState = combineUi?.status ?? "idle"
+                      const inputState = inputUi?.status ?? "idle"
                       const state =
                         combineState === "error" || inputState === "error"
                           ? "error"
@@ -267,24 +269,28 @@ export function Inference() {
                           <StepRow
                             label={seg.combine.label}
                             state={state}
+                            sub={combineUi?.sub}
                             errorMessage={run?.steps.find((s) => s.moduleId === seg.combine.id && s.status === "error")?.outputPreview}
                           />
                           <StepRow
                             label={seg.input.label}
                             state={inputState}
+                            sub={inputUi?.sub}
                             nested
                             errorMessage={run?.steps.find((s) => s.moduleId === seg.input.id && s.status === "error")?.outputPreview}
                           />
                         </div>
                       )
                     }
-                    const moduleState = stepStates.get(seg.module.id) ?? "idle"
+                    const moduleUi = stepStates.get(seg.module.id)
+                    const moduleState = moduleUi?.status ?? "idle"
                     const failedStep = run?.steps.find((s) => s.moduleId === seg.module.id && s.status === "error")
                     return (
                       <StepRow
                         key={seg.module.id}
                         label={seg.module.label}
                         state={moduleState}
+                        sub={moduleUi?.sub}
                         errorMessage={failedStep?.outputPreview}
                       />
                     )
@@ -447,11 +453,13 @@ function StepRow({
   label,
   state,
   nested,
+  sub,
   errorMessage,
 }: {
   label: string
   state: StepProgress["status"] | "idle"
   nested?: boolean
+  sub?: StepSubProgress
   errorMessage?: string
 }) {
   return (
@@ -467,6 +475,25 @@ function StepRow({
         </span>
         {state === "cached" && <span className="font-mono text-[10px] text-chart-3">cache · $0.00</span>}
       </div>
+      {state === "running" && sub && (
+        <div className="mt-1 pl-7">
+          <div className="mb-0.5 flex items-center justify-between gap-2">
+            <span className="font-mono text-[9px] text-muted-foreground">{sub.label}</span>
+            {sub.total > 1 && (
+              <span className="font-mono text-[9px] tabular-nums text-muted-foreground">
+                {sub.current}/{sub.total}
+              </span>
+            )}
+          </div>
+          {sub.total === 1 && sub.current === 0 ? (
+            <div className="relative h-0.5 overflow-hidden rounded-full bg-muted">
+              <div className="absolute h-full w-1/3 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-primary/70" />
+            </div>
+          ) : (
+            <Progress value={sub.total > 0 ? Math.round((sub.current / sub.total) * 100) : 0} className="h-0.5" />
+          )}
+        </div>
+      )}
       {state === "error" && errorMessage && (
         <p className="mt-1 pl-7 font-mono text-[10px] text-destructive">{errorMessage}</p>
       )}

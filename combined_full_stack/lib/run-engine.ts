@@ -2,12 +2,17 @@
 // AI : then the Inference tab polls progress until the persisted PipelineRun arrives.
 // AI : type-only imports from lib/server are erased at compile time (no Node code bundled).
 import type { JobLogEntry, RunJob, RunJobId } from "@/lib/server/run_jobs"
-import type { StepProgress } from "@/lib/server/run_engine"
+import type { StepProgress, StepSubProgress } from "@/lib/server/run_engine"
 import type { DocId, ModelId, ModuleId, PipelineRun, ProjectId, RunStepStatus } from "@/lib/types"
 
-export type { JobLogEntry, RunJob, RunJobId, StepProgress }
+export type { JobLogEntry, RunJob, RunJobId, StepProgress, StepSubProgress }
 
-type StepUiStatus = StepProgress["status"] | RunStepStatus
+export type StepUiState = {
+  status: StepProgress["status"] | "idle"
+  sub?: StepSubProgress
+}
+
+type StepUiStatus = StepProgress["status"] | RunStepStatus | "idle"
 
 function stepStatusRank(s: StepUiStatus): number {
   if (s === "running") return 1
@@ -18,15 +23,21 @@ function stepStatusRank(s: StepUiStatus): number {
 
 // AI : stale Supabase polls must not rewind a step from ok → running in the progress UI.
 export function mergeStepStates(
-  prev: Map<ModuleId, StepUiStatus>,
+  prev: Map<ModuleId, StepUiState>,
   polled: StepProgress[],
-): Map<ModuleId, StepUiStatus> {
+): Map<ModuleId, StepUiState> {
   const next = new Map(prev)
   for (const s of polled) {
     const cur = next.get(s.moduleId)
-    if (!cur || s.status === "error" || stepStatusRank(s.status) >= stepStatusRank(cur)) {
-      next.set(s.moduleId, s.status)
+    const curStatus = cur?.status ?? "idle"
+    let status: StepUiState["status"] = curStatus
+    if (!cur || s.status === "error" || stepStatusRank(s.status) >= stepStatusRank(curStatus)) {
+      status = s.status
     }
+    next.set(s.moduleId, {
+      status,
+      sub: status === "running" ? s.sub ?? cur?.sub : undefined,
+    })
   }
   return next
 }
