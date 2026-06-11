@@ -73,3 +73,13 @@ export function finishJob(id: RunJobId, outcome: { run?: PipelineRun; error?: st
 export function getJob(id: RunJobId): RunJob | undefined {
   return loadJob(id);
 }
+
+// AI : extra context for progress 404s — helps distinguish cold-start races from lost jobs.
+export function jobMissingDetail(id: RunJobId): string {
+  const path = jobPath(id);
+  const onDisk = existsSync(path);
+  const inMemory = jobs().has(id);
+  if (onDisk) return `job file exists at ${path} but could not be loaded`;
+  if (inMemory) return "job is in server memory but failed to load from cache";
+  return `no job file at ${path} — POST /api/runs may not have created this job, or the server restarted and cleared ${jobsDir()}`;
+}

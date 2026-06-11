@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getJob, type RunJobId } from "@/lib/server/run_jobs";
+import { getJob, jobMissingDetail, type RunJobId } from "@/lib/server/run_jobs";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +7,11 @@ export const dynamic = "force-dynamic";
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const job = getJob(id as RunJobId);
-  if (!job) return NextResponse.json({ error: `unknown job ${id}` }, { status: 404 });
+  if (!job) {
+    return NextResponse.json(
+      { error: `unknown job ${id}`, detail: jobMissingDetail(id as RunJobId) },
+      { status: 404 },
+    );
+  }
   return NextResponse.json(job);
 }

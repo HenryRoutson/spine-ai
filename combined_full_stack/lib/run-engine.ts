@@ -7,28 +7,66 @@ import type { DocId, ModelId, PipelineRun, ProjectId } from "@/lib/types"
 
 export type { RunJob, RunJobId, StepProgress }
 
+type ApiErrorBody = { error?: string; detail?: string; code?: string }
+
+const MAX_PROGRESS_POLLS = 10
+
+async function readApiErrorBody(res: Response): Promise<ApiErrorBody | null> {
+  try {
+    return (await res.json()) as ApiErrorBody
+  } catch {
+    return null
+  }
+}
+
+function formatApiError(context: string, res: Response, body: ApiErrorBody | null): string {
+  const parts = [body?.error, body?.detail].filter(Boolean)
+  const suffix = parts.length > 0 ? `: ${parts.join(" — ")}` : ""
+  const code = body?.code ? ` [${body.code}]` : ""
+  return `${context} (HTTP ${res.status})${code}${suffix}`
+}
+
 export async function startRun(projectId: ProjectId, inputDocId: DocId, model: ModelId): Promise<RunJobId> {
   const res = await fetch("/api/runs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ projectId, inputDocId, model }),
   })
-  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `run failed to start (${res.status})`)
+  if (!res.ok) {
+    throw new Error(
+      formatApiError(
+        `Failed to start pipeline for project ${projectId}, doc ${inputDocId}, model ${model}`,
+        res,
+        await readApiErrorBody(res),
+      ),
+    )
+  }
   return (await res.json()).jobId as RunJobId
 }
 
 export async function runProgress(jobId: RunJobId): Promise<RunJob> {
   // AI : first polls can 404 when progress GET hits a cold bundle before the job file is visible.
-  for (let attempt = 0; attempt < 10; attempt++) {
+  let lastDetail: string | undefined
+  for (let attempt = 0; attempt < MAX_PROGRESS_POLLS; attempt++) {
     const res = await fetch(`/api/runs/${jobId}/progress`, { cache: "no-store" })
-    if (res.status === 404 && attempt < 9) {
+    if (res.status === 404 && attempt < MAX_PROGRESS_POLLS - 1) {
+      const body = await readApiErrorBody(res)
+      lastDetail = [body?.error, body?.detail].filter(Boolean).join(" — ") || lastDetail
       await new Promise((r) => setTimeout(r, 200 * (attempt + 1)))
       continue
     }
-    if (!res.ok) throw new Error(`progress poll failed (${res.status})`)
+    if (!res.ok) {
+      throw new Error(
+        formatApiError(`Progress poll for job ${jobId} failed`, res, await readApiErrorBody(res)),
+      )
+    }
     return res.json() as Promise<RunJob>
   }
-  throw new Error("progress poll failed (404)")
+  throw new Error(
+    `Progress poll for job ${jobId} failed after ${MAX_PROGRESS_POLLS} attempts (404)` +
+      (lastDetail ? `: ${lastDetail}` : ": server has no record of this run") +
+      ". The job may not have been created, or the server restarted and dropped in-progress runs. Try Run pipeline again.",
+  )
 }
 
 // AI : poll until the run finishes; onStep streams partial progress to the UI.
@@ -40,7 +78,7 @@ export async function awaitRun(
   for (;;) {
     const job = await runProgress(jobId)
     onStep(job.steps)
-    if (job.error) throw new Error(job.error)
+    if (job.error) throw new Error(`Pipeline run ${jobId} failed: ${job.error}`)
     if (job.run) return job.run
     await new Promise((r) => setTimeout(r, intervalMs))
   }

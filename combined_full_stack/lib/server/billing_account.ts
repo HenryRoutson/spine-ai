@@ -6,7 +6,7 @@ import { dataDir } from "./config";
 import { getStripe } from "./stripe_client";
 
 // AI : credit-based billing ported from stripe/stripe.js — $5/mo sub grants $5 credit,
-// AI : $10 / $20 top-up options, 50c per pipeline run, $20 hard cap; new accounts get $10 free credit.
+// AI : $1 / $10 / $20 top-up options, 50c per pipeline run, $20 hard cap; new accounts get $10 free credit.
 export type BillingUserKey = string & { __brand: "BillingUserKey" };
 
 export type BillingAccount = {
@@ -17,7 +17,7 @@ export type BillingAccount = {
 };
 
 export const USE_COST_CENTS = 50;
-export const TOPUP_OPTIONS_CENTS = [1000, 2000] as const;
+export const TOPUP_OPTIONS_CENTS = [100, 1000, 2000] as const;
 export const SUB_CENTS_PER_MONTH = 500;
 export const BILLING_CAP_CENTS = 2000;
 
