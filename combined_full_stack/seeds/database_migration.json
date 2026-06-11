@@ -89,7 +89,7 @@
     {
       "id": "mod_input_mapping",
       "kind": "input",
-      "label": "Field Mapping",
+      "label": "Field Mapping Input",
       "inputType": "json",
       "outStructureId": "m_src",
       "cached": false,

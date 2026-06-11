@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import { defaultInferenceDoc } from "@/lib/project-docs"
+import { segmentPipeline } from "@/lib/pipeline-layout"
 
 type Phase = "idle" | "running" | "done"
 
@@ -224,27 +225,33 @@ export function Inference() {
                 </div>
                 <Progress value={progressPct} className="h-1.5" />
                 <div className="mt-4 space-y-2.5">
-                  {modules.map((m) => {
-                    const state = stepStates.get(m.id) ?? "idle"
+                  {segmentPipeline(modules).map((seg) => {
+                    if (seg.kind === "combine") {
+                      const combineState = stepStates.get(seg.combine.id) ?? "idle"
+                      const inputState = stepStates.get(seg.input.id) ?? "idle"
+                      const state =
+                        combineState === "error" || inputState === "error"
+                          ? "error"
+                          : combineState === "running" || inputState === "running"
+                            ? "running"
+                            : combineState === "cached" && inputState === "cached"
+                              ? "cached"
+                              : combineState !== "idle" || inputState !== "idle"
+                                ? "ok"
+                                : "idle"
+                      return (
+                        <div key={seg.combine.id} className="space-y-1">
+                          <StepRow label={seg.combine.label} state={state} />
+                          <StepRow label={seg.input.label} state={inputState} nested />
+                        </div>
+                      )
+                    }
                     return (
-                      <div key={m.id} className="flex items-center gap-2.5">
-                        {state === "ok" && <CheckCircle2 className="h-4 w-4 text-primary" />}
-                        {state === "cached" && <Zap className="h-4 w-4 text-chart-3" />}
-                        {state === "running" && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-                        {state === "error" && <AlertTriangle className="h-4 w-4 text-destructive" />}
-                        {state === "idle" && <Circle className="h-4 w-4 text-muted-foreground/40" />}
-                        <span
-                          className={cn(
-                            "flex-1 text-xs",
-                            state === "idle" ? "text-muted-foreground" : "text-foreground",
-                          )}
-                        >
-                          {m.label}
-                        </span>
-                        {state === "cached" && (
-                          <span className="font-mono text-[10px] text-chart-3">cache · $0.00</span>
-                        )}
-                      </div>
+                      <StepRow
+                        key={seg.module.id}
+                        label={seg.module.label}
+                        state={stepStates.get(seg.module.id) ?? "idle"}
+                      />
                     )
                   })}
                 </div>
@@ -363,6 +370,30 @@ export function Inference() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function StepRow({
+  label,
+  state,
+  nested,
+}: {
+  label: string
+  state: StepProgress["status"] | "idle"
+  nested?: boolean
+}) {
+  return (
+    <div className={cn("flex items-center gap-2.5", nested && "pl-5")}>
+      {state === "ok" && <CheckCircle2 className="h-4 w-4 text-primary" />}
+      {state === "cached" && <Zap className="h-4 w-4 text-chart-3" />}
+      {state === "running" && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+      {state === "error" && <AlertTriangle className="h-4 w-4 text-destructive" />}
+      {state === "idle" && <Circle className="h-4 w-4 text-muted-foreground/40" />}
+      <span className={cn("flex-1 text-xs", state === "idle" ? "text-muted-foreground" : "text-foreground")}>
+        {label}
+      </span>
+      {state === "cached" && <span className="font-mono text-[10px] text-chart-3">cache · $0.00</span>}
     </div>
   )
 }

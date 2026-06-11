@@ -1,5 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
-import { openStore, type JsonStore } from "./store";
+import { ensureSeeded, openStore, type JsonStore } from "./store";
 import type { Store } from "./store";
 import { openUserStore } from "./supabase_store";
 
@@ -21,5 +21,7 @@ export async function getStore(): Promise<Store> {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
   if (data.user) return openUserStore(supabase);
-  return getJsonStore();
+  const store = await getJsonStore();
+  await ensureSeeded(store); // AI : re-sync seed labels/docs on each request (JsonStore init is once per process)
+  return store;
 }

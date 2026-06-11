@@ -69,6 +69,19 @@ export interface Store {
   flush(): Promise<void>;
 }
 
+// AI : keep persisted projects aligned with seeds/*.json label/note tweaks (no module reorder).
+function syncProjectFromSeed(existing: Project, seed: Project): Project {
+  let next = existing
+  if (!existing.seedDocNames?.length && seed.seedDocNames?.length)
+    next = { ...next, seedDocNames: seed.seedDocNames }
+  const modules = next.modules.map((m) => {
+    const sm = seed.modules.find((s) => s.id === m.id)
+    if (!sm || (m.label === sm.label && m.note === sm.note)) return m
+    return { ...m, label: sm.label, note: sm.note }
+  })
+  return modules.some((m, i) => m !== next.modules[i]) ? { ...next, modules } : next
+}
+
 // AI : idempotent — upsert every seeds/*.json project (+ ingest its source docs) that the
 // AI : store doesn't have yet. Shared by JsonStore.init() and per-user first-sign-in seeding.
 export async function ensureSeeded(store: Store): Promise<void> {
@@ -79,10 +92,9 @@ export async function ensureSeeded(store: Store): Promise<void> {
       for (const spec of seed.docSpecs) store.addDoc(spec.name, spec.type, await seedDocContent(spec), spec.label);
       continue;
     }
-    // AI : backfill seedDocNames on stores created before multi-project doc scoping landed.
-    if (!existing.seedDocNames?.length && seed.project.seedDocNames?.length) {
-      store.saveProject({ ...existing, seedDocNames: seed.project.seedDocNames });
-    }
+    // AI : backfill seedDocNames + module labels from seeds/*.json on existing projects.
+    const synced = syncProjectFromSeed(existing, seed.project);
+    if (synced !== existing) store.saveProject(synced);
   }
 }
 

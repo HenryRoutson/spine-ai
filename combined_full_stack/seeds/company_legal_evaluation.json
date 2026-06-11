@@ -98,7 +98,7 @@
     {
       "id": "mod_input_company",
       "kind": "input",
-      "label": "Company Data",
+      "label": "Company Data Input",
       "inputType": "word",
       "outStructureId": "m_doc",
       "cached": false,

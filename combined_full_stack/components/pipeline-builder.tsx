@@ -21,6 +21,7 @@ import {
 import { useStore, uid } from "@/lib/store"
 import { computeInvalid } from "@/lib/validity"
 import { moduleMetrics } from "@/lib/billing"
+import { combinePairIds, segmentPipeline } from "@/lib/pipeline-layout"
 import {
   INPUT_TYPES,
   MODULE_META,
@@ -125,17 +126,20 @@ export function PipelineBuilder() {
   }
 
   function remove(id: string) {
-    const next = modules.filter((m) => m.id !== id)
+    const drop = new Set(combinePairIds(modules, id))
+    const next = modules.filter((m) => !drop.has(m.id))
     setModules(next)
-    if (selectedId === id) setSelectedId(next[0]?.id ?? "")
+    if (drop.has(selectedId)) setSelectedId(next[0]?.id ?? "")
   }
 
   function move(id: string, dir: -1 | 1) {
-    const i = modules.findIndex((m) => m.id === id)
-    const j = i + dir
-    if (j < 0 || j >= modules.length) return
-    const next = [...modules]
-    ;[next[i], next[j]] = [next[j], next[i]]
+    const ids = combinePairIds(modules, id)
+    const block = ids.map((x) => modules.find((m) => m.id === x)!)
+    const rest = modules.filter((m) => !ids.includes(m.id))
+    const at = modules.findIndex((m) => m.id === ids[0])
+    const insertAt = dir === -1 ? at - 1 : at + ids.length
+    if (insertAt < 0 || insertAt > rest.length) return
+    const next = [...rest.slice(0, insertAt), ...block, ...rest.slice(insertAt)]
     setModules(next)
   }
 
@@ -166,7 +170,86 @@ export function PipelineBuilder() {
         <div className="min-w-0 flex-1 overflow-auto">
           <div className="flex min-h-full flex-col items-center gap-0 px-6 py-8">
             <PipelineNode label="Start" subtle />
-            {modules.map((m, i) => {
+            {segmentPipeline(modules).map((seg) => {
+              if (seg.kind === "combine") {
+                const { combine, input, index } = seg
+                const isInvalid = invalid.has(combine.id)
+                const pipelineModel = modelName(models, combine.inStructureId)
+                const outModel = modelName(models, combine.outStructureId)
+                const groupSelected = selectedId === combine.id || selectedId === input.id
+                return (
+                  <div key={combine.id} className="flex flex-col items-center">
+                    <Connector invalid={isInvalid} />
+                    <div
+                      className={cn(
+                        "w-80 rounded-lg border-2 border-dashed px-3.5 py-3 transition-colors",
+                        isInvalid
+                          ? "border-destructive/70 bg-destructive/5"
+                          : groupSelected
+                            ? "border-primary bg-primary/5"
+                            : "border-chart-3/40 bg-chart-3/5",
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(combine.id)}
+                        className="flex w-full items-center gap-2 text-left"
+                      >
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                        <Merge className="h-4 w-4 shrink-0 text-chart-3" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{combine.label}</p>
+                          <p className="truncate font-mono text-[10px] text-muted-foreground">
+                            {pipelineModel ?? "pipeline"}
+                            <span className="text-muted-foreground/60"> + </span>
+                            document
+                            <span className="text-muted-foreground/60"> → </span>
+                            {outModel ?? "·"}
+                          </p>
+                        </div>
+                        {combine.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      </button>
+                      {combine.note && (
+                        <p className="mt-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                          {combine.note}
+                        </p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(input.id)}
+                        className={cn(
+                          "mt-2 flex w-full items-center gap-3 rounded-md border bg-card px-3 py-2.5 text-left transition-colors",
+                          selectedId === input.id
+                            ? "border-primary"
+                            : "border-border hover:border-muted-foreground/40",
+                        )}
+                      >
+                        <FileInput className="h-3.5 w-3.5 shrink-0 text-chart-2" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-medium">{input.label}</p>
+                          <p className="truncate font-mono text-[10px] text-muted-foreground">
+                            {input.inputType ?? "·"}
+                            <span className="text-muted-foreground/60"> → </span>
+                            {modelName(models, input.outStructureId) ?? "·"}
+                          </p>
+                        </div>
+                      </button>
+                    </div>
+                    {isInvalid && (
+                      <p className="mt-1 max-w-80 text-center font-mono text-[10px] text-destructive">
+                        combine expects {pipelineModel}, upstream emits{" "}
+                        {modelName(models, modules[index - 2]?.outStructureId) ?? "?"}
+                      </p>
+                    )}
+                  </div>
+                )
+              }
+
+              const m = seg.module
+              const i = seg.index
               const Icon = KIND_ICON[m.kind]
               const isInvalid = invalid.has(m.id)
               return (
