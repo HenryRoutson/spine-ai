@@ -16,7 +16,12 @@ export async function GET(req: NextRequest) {
       runs: store.runs(project?.id),
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Store load failed";
+    const message =
+      err instanceof Error
+        ? err.message
+        : typeof err === "object" && err !== null && "message" in err
+          ? String((err as { message: unknown }).message)
+          : "Store load failed";
     console.error("GET /api/state:", err);
     return NextResponse.json({ error: message }, { status: 500 });
   }

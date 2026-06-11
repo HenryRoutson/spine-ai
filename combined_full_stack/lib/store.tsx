@@ -82,13 +82,14 @@ interface StoreState {
 const StoreContext = createContext<StoreState | null>(null)
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, init)
+  const res = await fetch(url, { credentials: "same-origin", ...init })
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `${url} → ${res.status}`)
   return res.json() as Promise<T>
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ServerState | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [billingAccount, setBillingAccount] = useState<BillingAccountView | null>(null)
   const [activeProjectId, setActiveProjectId] = useState<string>("")
   const [model, setModel] = useState<string>(DEFAULT_MODEL)
@@ -101,6 +102,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async (projectId = activeProjectId) => {
     const q = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""
     const data = await api<ServerState>(`/api/state${q}`)
+    setLoadError(null)
     setState(data)
     // AI : first load (or stale id) — pin to the first project so the selector stays in sync.
     if (!projectId || !data.projects.some((p) => p.id === projectId))
@@ -109,7 +111,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [activeProjectId, refreshBilling])
 
   useEffect(() => {
-    refresh().catch(console.error)
+    refresh().catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load store"))
     // AI : refetch on project switch so runs/billing re-scope to the active project.
   }, [activeProjectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -207,6 +209,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const runs = state?.runs ?? []
   const billing = useMemo(() => billingSeries(runs), [runs])
+
+  if (loadError) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-2 bg-background px-6 text-center">
+        <p className="font-mono text-xs text-destructive">{loadError}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setLoadError(null)
+            refresh().catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load store"))
+          }}
+          className="font-mono text-[11px] text-muted-foreground underline"
+        >
+          retry
+        </button>
+      </div>
+    )
+  }
 
   if (!state || !project) {
     return (

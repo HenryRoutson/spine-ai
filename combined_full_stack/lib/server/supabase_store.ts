@@ -78,7 +78,9 @@ export class SupabaseStore implements Store {
     const i = this.state.projects.findIndex((x) => x.id === p.id);
     if (i === -1) this.state.projects.push(p);
     else this.state.projects[i] = p;
-    this.pending.push(this.db.from("projects").upsert({ id: p.id, data: p }));
+    this.pending.push(
+      this.db.from("projects").upsert({ id: p.id, data: p }, { onConflict: "user_id,id" }),
+    );
   }
 
   docs(): DocRef[] {
@@ -105,16 +107,19 @@ export class SupabaseStore implements Store {
     this.state.docs = [doc, ...this.state.docs];
     this.state.contents.set(id, content);
     this.pending.push(
-      this.db.from("docs").upsert({
-        id,
-        name,
-        type,
-        label,
-        size_kb: doc.sizeKb,
-        uploaded_at: doc.uploadedAt,
-        preview: doc.preview,
-        content,
-      }),
+      this.db.from("docs").upsert(
+        {
+          id,
+          name,
+          type,
+          label,
+          size_kb: doc.sizeKb,
+          uploaded_at: doc.uploadedAt,
+          preview: doc.preview,
+          content,
+        },
+        { onConflict: "user_id,id" },
+      ),
     );
     return doc;
   }
@@ -128,7 +133,10 @@ export class SupabaseStore implements Store {
     this.state.runProjects[run.id] = projectId;
     this.state.runs = [run, ...this.state.runs];
     this.pending.push(
-      this.db.from("runs").upsert({ id: run.id, project_id: projectId, started_at: run.startedAt, data: run }),
+      this.db.from("runs").upsert(
+        { id: run.id, project_id: projectId, started_at: run.startedAt, data: run },
+        { onConflict: "user_id,id" },
+      ),
     );
   }
 
@@ -143,12 +151,24 @@ export class SupabaseStore implements Store {
 
 // AI : schema.sql may not be applied yet — detect missing tables and fall back to local JSON.
 export function isMissingSchemaError(error: unknown): boolean {
-  const msg = error instanceof Error ? error.message : String(error);
+  const msg = storeErrorMessage(error);
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code: unknown }).code)
+      : "";
   return (
+    code === "PGRST205" ||
     msg.includes("schema cache") ||
     msg.includes("Could not find the table") ||
     (msg.includes("relation") && msg.includes("does not exist"))
   );
+}
+
+function storeErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err)
+    return String((err as { message: unknown }).message);
+  return String(err);
 }
 
 // AI : a ready store for one signed-in user — first sign-in gets the seed projects + docs,

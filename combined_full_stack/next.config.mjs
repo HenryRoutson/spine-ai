@@ -12,6 +12,11 @@ const nextConfig = {
     ...(supabaseUrl ? { NEXT_PUBLIC_SUPABASE_URL: supabaseUrl } : {}),
     ...(supabaseKey ? { NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: supabaseKey } : {}),
   },
+  // AI : seeds/ + documents/ are read at runtime (not imported) — must ship in serverless traces.
+  outputFileTracingIncludes: {
+    "/api/*": ["./seeds/**/*", "./documents/**/*"],
+    "/*": ["./seeds/**/*", "./documents/**/*"],
+  },
   // AI : pdf-parse must stay an unbundled node dep (worker files + dynamic requires).
   serverExternalPackages: ["pdf-parse"],
   images: {
