@@ -5,5 +5,7 @@ export default defineConfig({
   test: {
     fileParallelism: false,
     testTimeout: 180_000, // live pipeline tests make several real LLM calls over full documents
+    // AI : streams data/logs/testing.log (+ testing.html) alongside the terminal output
+    reporters: ["default", "./lib/vitest_reporter.ts"],
   },
 });

@@ -223,3 +223,4 @@ __marimo__/
 
 # backend local JSON store (prototype persistence)
 backend/data/
+stripe/state.json

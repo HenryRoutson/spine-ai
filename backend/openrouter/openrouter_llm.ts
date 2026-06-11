@@ -25,9 +25,14 @@ export interface ChatOptions {
   model?: ModelSlug;
   system?: string;
   temperature?: number;
+  maxTokens?: number;
   // AI : fired with token counts after every successful call (feeds Logging + Billing).
   onUsage?: (usage: RawUsage) => void;
 }
+
+// AI : bug fix — without an explicit cap OpenRouter reserves the model's max output (64k for
+// AI : Anthropic) against the account balance and 402s; 8k is plenty for every step we run.
+const DEFAULT_MAX_TOKENS = 8192;
 
 function apiKey(): ApiKey {
   const key = process.env.OPENROUTER_API_KEY;
@@ -51,6 +56,7 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn): Pr
       model: opts.model ?? DEFAULT_MODEL,
       messages,
       temperature: opts.temperature ?? 0,
+      max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
       ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
     }),
   });
