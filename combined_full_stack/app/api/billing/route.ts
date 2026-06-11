@@ -7,10 +7,14 @@ import {
   getBillingUserKey,
   loadBillingAccount,
 } from "@/lib/server/billing_account";
+import { logger } from "@/lib/server/server_logger";
+
+const apiLog = logger("api:billing");
 
 export async function GET() {
   const key = await getBillingUserKey();
   const account = await loadBillingAccount(key);
+  apiLog.debug(`GET /api/billing`, { key, balanceCents: account.balanceCents, subscribed: account.subscribed });
   return NextResponse.json({
     balanceCents: account.balanceCents,
     totalBilledCents: account.totalBilledCents,

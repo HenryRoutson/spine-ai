@@ -3,7 +3,10 @@ import { join } from "node:path";
 import type Stripe from "stripe";
 import { createClient } from "@/utils/supabase/server";
 import { dataDir } from "./config";
+import { logger } from "./server_logger";
 import { getStripe } from "./stripe_client";
+
+const billLog = logger("billing");
 
 // AI : credit-based billing ported from stripe/stripe.js — $5/mo sub grants $5 credit,
 // AI : $1 / $10 / $20 top-up options, 50c per pipeline run, $20 hard cap; new accounts get $10 free credit.
@@ -130,8 +133,10 @@ export function chargeCredit(account: BillingAccount, cents: number): BillingAcc
 // AI : deduct run credit before starting a pipeline — returns the updated account (caller saves).
 export async function chargeForRun(key: BillingUserKey): Promise<BillingAccount> {
   const account = await loadBillingAccount(key);
+  billLog.info(`chargeForRun`, { key, balanceBefore: account.balanceCents, cost: USE_COST_CENTS });
   const next = chargeCredit(account, USE_COST_CENTS);
   await saveBillingAccount(key, next);
+  billLog.info(`chargeForRun ok`, { key, balanceAfter: next.balanceCents });
   return next;
 }
 

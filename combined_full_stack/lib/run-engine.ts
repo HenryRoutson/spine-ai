@@ -1,11 +1,11 @@
 // AI : client shim for the real server run engine — POST /api/runs starts the pipeline,
 // AI : then the Inference tab polls progress until the persisted PipelineRun arrives.
 // AI : type-only imports from lib/server are erased at compile time (no Node code bundled).
-import type { RunJob, RunJobId } from "@/lib/server/run_jobs"
+import type { JobLogEntry, RunJob, RunJobId } from "@/lib/server/run_jobs"
 import type { StepProgress } from "@/lib/server/run_engine"
 import type { DocId, ModelId, PipelineRun, ProjectId } from "@/lib/types"
 
-export type { RunJob, RunJobId, StepProgress }
+export type { JobLogEntry, RunJob, RunJobId, StepProgress }
 
 type ApiErrorBody = { error?: string; detail?: string; code?: string }
 
@@ -69,15 +69,32 @@ export async function runProgress(jobId: RunJobId): Promise<RunJob> {
   )
 }
 
-// AI : poll until the run finishes; onStep streams partial progress to the UI.
+export interface AwaitRunCallbacks {
+  onStep?: (steps: StepProgress[]) => void
+  onLogs?: (logs: JobLogEntry[], newLines: JobLogEntry[]) => void
+}
+
+// AI : poll until the run finishes; callbacks stream progress + server logs to the UI / console.
 export async function awaitRun(
   jobId: RunJobId,
-  onStep: (steps: StepProgress[]) => void,
+  callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
   intervalMs = 700,
 ): Promise<PipelineRun> {
+  const { onStep, onLogs } = typeof callbacks === "function" ? { onStep: callbacks } : callbacks
+  let seenLogs = 0
   for (;;) {
     const job = await runProgress(jobId)
-    onStep(job.steps)
+    onStep?.(job.steps)
+    const logs = job.logs ?? []
+    const newLines = logs.slice(seenLogs)
+    if (newLines.length) {
+      for (const l of newLines) {
+        const fn = l.level === "error" ? console.error : l.level === "warn" ? console.warn : console.log
+        fn(`[pipeline] ${l.line}`)
+      }
+      onLogs?.(logs, newLines)
+      seenLogs = logs.length
+    }
     if (job.error) throw new Error(`Pipeline run ${jobId} failed: ${job.error}`)
     if (job.run) return job.run
     await new Promise((r) => setTimeout(r, intervalMs))

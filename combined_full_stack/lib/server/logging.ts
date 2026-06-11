@@ -66,7 +66,14 @@ export function progressHtml(title: string, subtitle: string, steps: LiveStep[],
       const color = STATUS_COLOR[s.status] ?? "#64748b";
       const pct = s.status === "running" ? 100 : s.status === "pending" ? 0 : Math.max(4, Math.round((s.ms / maxMs) * 100));
       const meta = s.status === "pending" ? "·" : s.status === "running" ? "running…" : `${s.ms}ms · ${s.costCents.toFixed(2)}c · ${s.status}`;
-      const detail = (s.detail ?? []).map((d) => `<code>${escapeHtml(d)}</code>`).join("");
+      const detail = (s.detail ?? [])
+        .map((d) => {
+          const sep = d.indexOf(": ");
+          const label = sep > 0 ? d.slice(0, sep) : "log";
+          const body = sep > 0 ? d.slice(sep + 2) : d;
+          return `<div class="io-block"><span class="io-label">${escapeHtml(label)}</span><pre class="io-pre">${escapeHtml(body)}</pre></div>`;
+        })
+        .join("");
       return `
     <div class="step">
       <div class="step-head"><span class="dot" style="background:${color}"></span><b>${escapeHtml(s.label)}</b> <span class="kind">${s.kind}</span><span class="meta">${meta}</span></div>
@@ -82,10 +89,12 @@ export function progressHtml(title: string, subtitle: string, steps: LiveStep[],
   .dot{width:9px;height:9px;border-radius:50%} .kind{color:#64748b;font-size:12px}
   .meta{margin-left:auto;color:#94a3b8;font-size:12px}
   .bar{height:8px;background:#1e293b;border-radius:4px;overflow:hidden;margin:4px 0}
-  .fill{height:100%;transition:width .3s} .io{display:flex;flex-direction:column;gap:2px;font-size:12px;color:#94a3b8}
+  .fill{height:100%;transition:width .3s} .io{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+  .io-block{display:flex;flex-direction:column;gap:2px}
+  .io-label{font-size:10px;font-weight:600;text-transform:uppercase;color:#64748b}
+  .io-pre{margin:0;padding:8px 10px;background:#111827;border:1px solid #1e293b;border-radius:6px;font-size:11px;line-height:1.45;color:#cbd5e1;white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto}
   .overall{height:10px;margin-bottom:18px}
   .pulse{animation:pulse 1.2s ease-in-out infinite} @keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
-  code{white-space:pre-wrap;word-break:break-word}
   </style></head><body>
   <h1>${escapeHtml(title)}</h1>
   <div class="summary">${escapeHtml(subtitle)}</div>
@@ -105,7 +114,10 @@ export function runToHtml(run: PipelineRun): string {
       status: s.status,
       ms: s.ms,
       costCents: s.costCents,
-      detail: [`in: ${s.inputPreview}`, `out: ${s.outputPreview}`],
+      detail: [
+        `${s.kind === "llm" || s.kind === "llm-batch" ? "prompt" : "in"}: ${s.inputPreview}`,
+        `out: ${s.outputJson ?? s.outputPreview}`,
+      ],
     })),
     false,
   );

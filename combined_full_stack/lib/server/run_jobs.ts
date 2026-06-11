@@ -1,11 +1,35 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/server";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { dataDir } from "./config";
+import { installJobLogSink, type JobLogEntry } from "./job_log_sink";
 import type { StepProgress } from "./run_engine";
+import { logger } from "./server_logger";
 import type { PipelineRun } from "./types";
+
+const jobLog = logger("run-jobs");
+
+export type { JobLogEntry };
+
+const MAX_JOB_LOGS = 400;
+const LOG_PERSIST_MS = 300;
+
+type ActiveJobCtx = { jobId: RunJobId; db: JobDb };
+const activeJob = new AsyncLocalStorage<ActiveJobCtx>();
+const logPersistTimers = new Map<RunJobId, ReturnType<typeof setTimeout>>();
+
+// AI : any ServerLogger emit inside withJobLogging() is mirrored into job.logs for the browser.
+installJobLogSink((entry) => {
+  const ctx = activeJob.getStore();
+  if (ctx) void appendJobLog(ctx.jobId, entry, ctx.db);
+});
+
+export function withJobLogging<T>(jobId: RunJobId, db: JobDb, fn: () => Promise<T>): Promise<T> {
+  return activeJob.run({ jobId, db }, fn);
+}
 
 export type RunJobId = string & { __brand: "RunJobId" };
 
@@ -13,6 +37,7 @@ export type RunJobId = string & { __brand: "RunJobId" };
 // AI : pipeline executes server-side after the POST /api/runs response was sent.
 export interface RunJob {
   steps: StepProgress[]; // latest progress event per module, in pipeline order
+  logs?: JobLogEntry[]; // streamed to browser via progress poll
   run?: PipelineRun; // set once the run finished (ok or error)
   error?: string; // set when runPipeline itself threw (e.g. invalid pipeline)
 }
@@ -81,12 +106,43 @@ function loadJobLocal(id: RunJobId): RunJob | undefined {
   return job;
 }
 
+function flushLogPersistTimer(id: RunJobId): void {
+  const t = logPersistTimers.get(id);
+  if (t) {
+    clearTimeout(t);
+    logPersistTimers.delete(id);
+  }
+}
+
+async function appendJobLog(id: RunJobId, entry: JobLogEntry, db: JobDb): Promise<void> {
+  let job = jobs().get(id);
+  if (!job) job = await loadJob(id, db);
+  if (!job) return;
+  job.logs ??= [];
+  job.logs.push(entry);
+  if (job.logs.length > MAX_JOB_LOGS) job.logs.splice(0, job.logs.length - MAX_JOB_LOGS);
+  jobs().set(id, job);
+
+  flushLogPersistTimer(id);
+  logPersistTimers.set(
+    id,
+    setTimeout(() => {
+      logPersistTimers.delete(id);
+      const j = jobs().get(id);
+      if (j) void persistJob(id, j, db);
+    }, LOG_PERSIST_MS),
+  );
+}
+
 async function persistJob(id: RunJobId, job: RunJob, db: JobDb): Promise<void> {
+  flushLogPersistTimer(id);
   if (db) {
+    jobLog.debug(`persist job → supabase`, { jobId: id, stepCount: job.steps.length, hasRun: !!job.run, error: job.error });
     await supabasePersistJob(db, id, job);
     jobs().set(id, job);
     return;
   }
+  jobLog.debug(`persist job → disk`, { jobId: id, stepCount: job.steps.length, hasRun: !!job.run, error: job.error });
   persistJobLocal(id, job);
 }
 
@@ -103,13 +159,25 @@ async function loadJob(id: RunJobId, db: JobDb): Promise<RunJob | undefined> {
 
 export async function createJob(db: JobDb): Promise<RunJobId> {
   const id = ("job_" + Math.random().toString(36).slice(2, 9)) as RunJobId;
-  await persistJob(id, { steps: [] }, db);
+  jobLog.info(`createJob`, { jobId: id, backend: db ? "supabase" : "local" });
+  await persistJob(id, { steps: [], logs: [] }, db);
   return id;
 }
 
 export async function jobProgress(id: RunJobId, p: StepProgress, db: JobDb): Promise<void> {
   const job = await loadJob(id, db);
-  if (!job) return;
+  if (!job) {
+    jobLog.warn(`jobProgress — job not found`, { jobId: id, moduleId: p.moduleId });
+    return;
+  }
+  jobLog.info(`jobProgress`, {
+    jobId: id,
+    moduleId: p.moduleId,
+    label: p.label,
+    status: p.status,
+    index: p.index,
+    total: p.total,
+  });
   const i = job.steps.findIndex((s) => s.moduleId === p.moduleId);
   if (i === -1) job.steps.push(p);
   else job.steps[i] = p;
@@ -122,13 +190,26 @@ export async function finishJob(
   db: JobDb,
 ): Promise<void> {
   const job = await loadJob(id, db);
-  if (!job) return;
+  if (!job) {
+    jobLog.warn(`finishJob — job not found`, { jobId: id });
+    return;
+  }
+  jobLog.info(`finishJob`, {
+    jobId: id,
+    runId: outcome.run?.id,
+    runStatus: outcome.run?.status,
+    error: outcome.error,
+    totalMs: outcome.run?.totalMs,
+    billedCents: outcome.run?.billedCents,
+  });
   Object.assign(job, outcome);
   await persistJob(id, job, db);
 }
 
 export async function getJob(id: RunJobId, db: JobDb): Promise<RunJob | undefined> {
-  return loadJob(id, db);
+  const job = await loadJob(id, db);
+  jobLog.debug(`getJob`, { jobId: id, found: !!job, stepCount: job?.steps.length, done: !!(job?.run || job?.error) });
+  return job;
 }
 
 // AI : extra context for progress 404s — helps distinguish cold-start races from lost jobs.

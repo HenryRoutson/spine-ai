@@ -1,7 +1,11 @@
 import { z, type ZodType } from "zod";
+import { structuredLlmPrompt } from "./structure";
+import { type ServerLogger, logger } from "./server_logger";
 // AI : env loading is centralised in ./config (cwd-anchored) — importing it for the
 // AI : side effect keeps OPENROUTER_API_KEY available here without a second dotenv path.
 import "./config";
+
+const orLog = logger("openrouter");
 
 type ApiKey = string & { __brand: "OpenRouterApiKey" };
 type ModelSlug = string & { __brand: "ModelSlug" };
@@ -38,18 +42,23 @@ const MAX_IN_FLIGHT = 2;
 let inFlight = 0;
 const slotWaiters: (() => void)[] = [];
 
-async function acquireOpenRouterSlot(): Promise<() => void> {
+async function acquireOpenRouterSlot(log = orLog): Promise<() => void> {
   if (inFlight < MAX_IN_FLIGHT) {
     inFlight++;
+    log.debug(`slot acquired immediately`, { inFlight, max: MAX_IN_FLIGHT });
     return () => {
       inFlight--;
+      log.debug(`slot released`, { inFlight, waiters: slotWaiters.length });
       slotWaiters.shift()?.();
     };
   }
+  log.info(`slot queue — waiting`, { inFlight, waiters: slotWaiters.length + 1 });
   await new Promise<void>((resolve) => slotWaiters.push(resolve));
   inFlight++;
+  log.debug(`slot acquired from queue`, { inFlight });
   return () => {
     inFlight--;
+    log.debug(`slot released`, { inFlight, waiters: slotWaiters.length });
     slotWaiters.shift()?.();
   };
 }
@@ -79,7 +88,15 @@ function apiKey(): ApiKey {
 }
 
 // AI : single low-level call; jsonMode forces the model into strict json output
-async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn): Promise<RawReply> {
+async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn, log = orLog): Promise<RawReply> {
+  const model = opts.model ?? DEFAULT_MODEL;
+  log.info(`chat request`, {
+    model,
+    jsonMode,
+    promptChars: prompt.length,
+    temperature: opts.temperature ?? 0,
+    maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+  });
   const messages = [
     ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
     { role: "user" as const, content: prompt },
@@ -95,10 +112,11 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn): Pr
     ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
   });
 
-  const release = await acquireOpenRouterSlot();
+  const release = await acquireOpenRouterSlot(log);
   try {
     let lastError = "";
     for (let attempt = 0; attempt < MAX_CHAT_ATTEMPTS; attempt++) {
+      log.debug(`fetch attempt`, { attempt: attempt + 1, max: MAX_CHAT_ATTEMPTS });
       const res = await fetch(OPENROUTER_URL, {
         method: "POST",
         headers: {
@@ -109,10 +127,14 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn): Pr
       });
       if (!res.ok) {
         lastError = await res.text();
+        log.warn(`chat HTTP error`, { status: res.status, attempt: attempt + 1, bodyPreview: lastError.slice(0, 200) });
         if (RETRYABLE_STATUSES.has(res.status) && attempt < MAX_CHAT_ATTEMPTS - 1) {
-          await sleep(retryDelayMs(res, attempt));
+          const delay = retryDelayMs(res, attempt);
+          log.info(`retrying after delay`, { delayMs: delay, status: res.status });
+          await sleep(delay);
           continue;
         }
+        log.error(`chat failed permanently`, { status: res.status, attempts: attempt + 1 });
         throw new Error(`OpenRouter ${res.status}: ${lastError}`);
       }
       const data = (await res.json()) as {
@@ -120,13 +142,19 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn): Pr
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
       const content = data.choices?.[0]?.message?.content;
-      if (typeof content !== "string") throw new Error("OpenRouter returned no message content");
-      opts.onUsage?.({
+      if (typeof content !== "string") {
+        log.error(`no message content in response`);
+        throw new Error("OpenRouter returned no message content");
+      }
+      const usage = {
         promptTokens: data.usage?.prompt_tokens ?? 0,
         completionTokens: data.usage?.completion_tokens ?? 0,
-      });
+      };
+      log.info(`chat success`, { model, ...usage, replyChars: content.length, attempt: attempt + 1 });
+      opts.onUsage?.(usage);
       return content as RawReply;
     }
+    log.error(`exhausted all attempts`, { attempts: MAX_CHAT_ATTEMPTS, lastError: lastError.slice(0, 200) });
     throw new Error(`OpenRouter failed after ${MAX_CHAT_ATTEMPTS} attempts: ${lastError}`);
   } finally {
     release();
@@ -152,23 +180,30 @@ export async function getStructuredResponse<T>(
   prompt: string,
   schema: ZodType<T>,
   opts: ChatOptions = {},
+  log: ServerLogger = orLog,
 ): Promise<T> {
-  const jsonSchema = JSON.stringify(z.toJSONSchema(schema), null, 2);
-  const base = `${prompt}\n\nRespond with ONLY a JSON value that validates against this JSON Schema:\n${jsonSchema}`;
+  const base = structuredLlmPrompt(prompt, schema);
   let lastError = "";
   for (let attempt = 0; attempt < 2; attempt++) {
+    log.debug(`structured attempt`, { attempt: attempt + 1, correcting: attempt > 0 });
     const ask =
       attempt === 0
         ? base
         : `${base}\n\nYour previous reply failed validation:\n${lastError}\nReturn corrected JSON only.`;
-    const raw = await chat(ask, opts, true);
+    const raw = await chat(ask, opts, true, log);
     try {
       const result = schema.safeParse(JSON.parse(extractJson(raw)));
-      if (result.success) return result.data;
+      if (result.success) {
+        log.info(`structured parse ok`, { attempt: attempt + 1 });
+        return result.data;
+      }
       lastError = result.error.toString();
+      log.warn(`zod validation failed`, { attempt: attempt + 1, error: lastError.slice(0, 300) });
     } catch (e) {
       lastError = `not valid JSON: ${(e as Error).message}\nraw: ${raw}`;
+      log.warn(`json parse failed`, { attempt: attempt + 1, error: (e as Error).message, rawPreview: raw.slice(0, 200) });
     }
   }
+  log.error(`structured response failed after retry`, { lastError: lastError.slice(0, 500) });
   throw new Error(`structured response failed validation after retry:\n${lastError}`);
 }

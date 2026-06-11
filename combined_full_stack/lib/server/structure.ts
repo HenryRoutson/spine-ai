@@ -94,6 +94,17 @@ export function hasQuoteField(model: StructureModel): boolean {
 // AI : model/list[model] ref keeps the full {text, quote:{doc_id,start,end}} shape, asking the
 // AI : LLM for byte offsets it cannot know. Latent: the seed never nests a quote-carrying model
 // AI : under an llm step's output, but any user structure that does will fail validation.
+// AI : the exact suffix appended to every structured LLM call (logging + OpenRouter).
+export function structuredLlmPrompt(userPrompt: string, schema: ZodType): string {
+  const jsonSchema = JSON.stringify(z.toJSONSchema(schema), null, 2);
+  return `${userPrompt}\n\nRespond with ONLY a JSON value that validates against this JSON Schema:\n${jsonSchema}`;
+}
+
+// AI : JSON Schema preview for the pipeline inspector (Zod llmSchema → JSON Schema).
+export function llmSchemaJson(model: StructureModel, models: StructureModel[], isList: boolean): string {
+  return JSON.stringify(z.toJSONSchema(llmSchema(model, models, isList)), null, 2);
+}
+
 export function llmSchema(model: StructureModel, models: StructureModel[], isList: boolean): ZodType {
   const index = byId(models);
   const shape: Record<string, ZodType> = {};
@@ -112,6 +123,105 @@ export interface ValidationResult<T = unknown> {
   ok: boolean;
   value?: T;
   error?: string;
+}
+
+// AI : hints when coercing loose step output (doc text, labels) into a declared StructureModel.
+export interface MaterializeHints {
+  docId?: string;
+  label?: string;
+  note?: string;
+  sourceText?: string;
+}
+
+function asRecord(v: unknown): Record<string, unknown> {
+  return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+}
+
+function defaultTextForField(
+  field: ModelField,
+  hints: MaterializeHints,
+  body: string,
+  purpose: string,
+): string {
+  if (field.name === "body") return body;
+  if (field.name === "purpose") return purpose;
+  return "";
+}
+
+function coerceFieldValue(
+  val: unknown,
+  field: ModelField,
+  models: StructureModel[],
+  hints: MaterializeHints,
+  body: string,
+  purpose: string,
+  docId: string,
+): unknown {
+  if (val !== undefined && val !== null) {
+    if (field.type === "model" && field.ref) {
+      const ref = models.find((m) => m.id === field.ref);
+      if (ref) return materializeToModel(val, ref, models, hints);
+    }
+    if (field.type === "list[model]" && field.ref && Array.isArray(val)) {
+      const ref = models.find((m) => m.id === field.ref);
+      if (ref) return val.map((item) => materializeToModel(item, ref, models, hints));
+    }
+    return val;
+  }
+  switch (field.type) {
+    case "text":
+      return defaultTextForField(field, hints, body, purpose);
+    case "int":
+      return 0;
+    case "float":
+      return 0;
+    case "bool":
+      return false;
+    case "datetime":
+      return "";
+    case "document":
+      return { doc_id: docId, purpose, body };
+    case "list[text]":
+      return [];
+    case "tuple[text,quote]":
+      return "";
+    case "list[tuple[text,quote]]":
+      return [];
+    case "model":
+      if (!field.ref) return {};
+      const ref = models.find((m) => m.id === field.ref);
+      return ref ? materializeToModel({}, ref, models, hints) : {};
+    case "list[model]":
+      return [];
+  }
+}
+
+// AI : map loose runtime values (file text, doc_id) into every field of a pydantic/zod StructureModel.
+export function materializeToModel(
+  partial: unknown,
+  model: StructureModel,
+  models: StructureModel[] = [],
+  hints: MaterializeHints = {},
+): Record<string, unknown> {
+  const raw = asRecord(partial);
+  const body =
+    typeof raw.body === "string"
+      ? raw.body
+      : hints.sourceText ?? (typeof partial === "string" ? partial : "");
+  const purpose =
+    typeof raw.purpose === "string" && raw.purpose.trim()
+      ? raw.purpose.trim()
+      : hints.note?.trim() ||
+        hints.label?.trim() ||
+        body.split("\n").find((l) => l.trim())?.trim() ||
+        "Document";
+  const docId = typeof raw.doc_id === "string" ? raw.doc_id : hints.docId ?? "";
+
+  const out: Record<string, unknown> = {};
+  for (const f of model.fields) {
+    out[f.name] = coerceFieldValue(raw[f.name], f, models, hints, body, purpose, docId);
+  }
+  return out;
 }
 
 // AI : implicit validation reused by Pipeline/Inference on every step's I/O (no standalone step).

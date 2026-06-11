@@ -4,6 +4,7 @@ import {
   getStructuredResponse,
   type ChatOptions,
 } from "./openrouter_llm";
+import { type ServerLogger } from "./server_logger";
 import { type ModelId, slugFor } from "./types";
 import { type UsageLedger } from "./usage";
 
@@ -15,12 +16,15 @@ interface CallContext {
   system?: string;
 }
 
-function chatOpts(ctx: CallContext): ChatOptions {
+function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
   return {
     // AI : the demo ModelId maps to a real OpenRouter slug; both are branded strings.
     model: slugFor(ctx.model) as unknown as ChatOptions["model"],
     system: ctx.system,
-    onUsage: (u) => ctx.ledger.recordLlm({ model: ctx.model, ...u }),
+    onUsage: (u) => {
+      log?.info(`token usage`, { model: ctx.model, ...u });
+      ctx.ledger.recordLlm({ model: ctx.model, ...u });
+    },
   };
 }
 
@@ -28,8 +32,14 @@ export function llmString(prompt: string, ctx: CallContext): Promise<string> {
   return getStringResponse(prompt, chatOpts(ctx));
 }
 
-export function llmStructured<T>(prompt: string, schema: ZodType<T>, ctx: CallContext): Promise<T> {
-  return getStructuredResponse(prompt, schema, chatOpts(ctx));
+export function llmStructured<T>(
+  prompt: string,
+  schema: ZodType<T>,
+  ctx: CallContext,
+  log?: ServerLogger,
+): Promise<T> {
+  log?.debug(`llmStructured call`, { model: ctx.model, promptChars: prompt.length });
+  return getStructuredResponse(prompt, schema, chatOpts(ctx, log), log);
 }
 
 // AI : batch llm — one structured (zod-validated) call per list item with bounded concurrency,
@@ -41,15 +51,22 @@ export async function llmBatchStructured<T>(
   ctx: CallContext,
   // AI : default 2 — matches openrouter_llm in-flight cap; 4 parallel calls routinely 429 DeepInfra.
   concurrency = 2,
+  log?: ServerLogger,
 ): Promise<T[]> {
+  log?.info(`llmBatchStructured start`, { itemCount: items.length, concurrency, model: ctx.model });
   const out: T[] = new Array(items.length);
   let next = 0;
+  let completed = 0;
   const worker = async () => {
     while (next < items.length) {
       const i = next++;
-      out[i] = await llmStructured(promptFor(items[i], i), schema, ctx);
+      log?.debug(`batch item start`, { index: i, total: items.length });
+      out[i] = await llmStructured(promptFor(items[i], i), schema, ctx, log);
+      completed++;
+      log?.info(`batch item done`, { index: i, completed, total: items.length });
     }
   };
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  log?.info(`llmBatchStructured complete`, { itemCount: items.length });
   return out;
 }

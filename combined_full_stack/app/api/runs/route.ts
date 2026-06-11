@@ -2,8 +2,11 @@ import { NextResponse, type NextRequest, after } from "next/server";
 import { getStore } from "@/lib/server/app_store";
 import { BillingError, chargeForRun, getBillingUserKey } from "@/lib/server/billing_account";
 import { runPipeline } from "@/lib/server/run_engine";
-import { createJob, finishJob, jobProgress, openJobDb } from "@/lib/server/run_jobs";
+import { createJob, finishJob, jobProgress, openJobDb, withJobLogging } from "@/lib/server/run_jobs";
+import { logger } from "@/lib/server/server_logger";
 import type { DocId, ModelId, ProjectId } from "@/lib/server/types";
+
+const apiLog = logger("api:runs");
 
 // AI : todo §8 — after() keeps the pipeline alive once the response is sent (Vercel
 // AI : freezes plain dangling promises); maxDuration is the Fluid-compute ceiling.
@@ -18,33 +21,53 @@ interface RunRequest {
 
 export async function POST(req: NextRequest) {
   const { projectId, inputDocId, model } = (await req.json()) as RunRequest;
+  apiLog.info(`POST /api/runs`, { projectId, inputDocId, model });
+
   const store = await getStore();
-  if (!store.project(projectId)) return NextResponse.json({ error: `unknown project ${projectId}` }, { status: 404 });
-  if (store.docContent(inputDocId) === undefined)
+  if (!store.project(projectId)) {
+    apiLog.warn(`unknown project`, { projectId });
+    return NextResponse.json({ error: `unknown project ${projectId}` }, { status: 404 });
+  }
+  if (store.docContent(inputDocId) === undefined) {
+    apiLog.warn(`unknown doc`, { inputDocId });
     return NextResponse.json({ error: `unknown doc ${inputDocId}` }, { status: 404 });
+  }
 
   try {
-    await chargeForRun(await getBillingUserKey());
+    const billingKey = await getBillingUserKey();
+    apiLog.info(`charging for run`, { billingKey });
+    await chargeForRun(billingKey);
+    apiLog.info(`billing charge ok`);
   } catch (err) {
     if (err instanceof BillingError) {
+      apiLog.warn(`billing rejected`, { code: err.code, message: err.message });
       return NextResponse.json({ error: err.message, code: err.code }, { status: 402 });
     }
+    apiLog.error(`billing error`, { error: (err as Error).message });
     throw err;
   }
 
   const jobDb = await openJobDb();
   const jobId = await createJob(jobDb);
+  apiLog.info(`job created — scheduling pipeline via after()`, { jobId });
+
   after(async () => {
-    try {
-      const run = await runPipeline(store, projectId, inputDocId, {
-        model,
-        onStep: (p) => jobProgress(jobId, p, jobDb),
-      });
-      await store.flush(); // AI : SupabaseStore queues addRun — persist before the job reports done
-      await finishJob(jobId, { run }, jobDb);
-    } catch (err) {
-      await finishJob(jobId, { error: (err as Error).message }, jobDb);
-    }
+    await withJobLogging(jobId, jobDb, async () => {
+      apiLog.info(`after() pipeline starting`, { jobId, projectId, inputDocId, model });
+      try {
+        const run = await runPipeline(store, projectId, inputDocId, {
+          model,
+          onStep: (p) => jobProgress(jobId, p, jobDb),
+        });
+        apiLog.info(`pipeline finished — flushing store`, { jobId, runId: run.id, status: run.status });
+        await store.flush(); // AI : SupabaseStore queues addRun — persist before the job reports done
+        await finishJob(jobId, { run }, jobDb);
+        apiLog.info(`job finished ok`, { jobId, runId: run.id });
+      } catch (err) {
+        apiLog.error(`pipeline threw`, { jobId, error: (err as Error).message, stack: (err as Error).stack });
+        await finishJob(jobId, { error: (err as Error).message }, jobDb);
+      }
+    });
   });
   return NextResponse.json({ jobId });
 }

@@ -1,12 +1,19 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "./config";
+import { runLogger } from "./server_logger";
 import { fileWriteHelper } from "./file_write_helper";
 import { llmBatchStructured, llmStructured } from "./llm";
 import { collectQuotes, findQuote } from "./quotation";
 import { runCustomFn } from "./custom_code";
 import { type LiveStep, progressHtml, runToHtml } from "./logging";
-import { hasQuoteField, llmSchema, validate, zodFromModel } from "./structure";
+import {
+  hasQuoteField,
+  llmSchema,
+  materializeToModel,
+  structuredLlmPrompt,
+  validate,
+} from "./structure";
 import type { Store } from "./store";
 import { computeInvalid } from "./validity";
 import { projectSeedDocNames } from "./seed";
@@ -100,6 +107,7 @@ interface ExecResult {
   value: unknown;
   preview: string;
   json?: string;
+  inputPreview?: string; // AI : full LLM prompt when applicable (for HTML logging)
 }
 
 // AI : the per-kind executors. Real where possible; placeholders are clearly marked.
@@ -117,18 +125,41 @@ interface RunCtx {
   prevModuleId?: ModuleId;
 }
 
-async function execModule(m: PipelineModule, ctx: RunCtx): Promise<ExecResult> {
+function materializeHints(m: PipelineModule, ctx: RunCtx, docId?: DocId, sourceText?: string) {
+  return {
+    docId: docId ?? ctx.sourceDocId,
+    label: m.label,
+    note: m.note,
+    sourceText: sourceText ?? ctx.sourceText,
+  };
+}
+
+function materializeStepOutput(
+  m: PipelineModule,
+  project: Project,
+  partial: unknown,
+  hints: ReturnType<typeof materializeHints>,
+): unknown {
+  const out = modelById(project.models, m.outStructureId);
+  if (!out) return partial;
+  return materializeToModel(partial, out, project.models, hints);
+}
+
+async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof runLogger>): Promise<ExecResult> {
   const { project, store } = ctx;
+  log.debug(`execModule start`, { moduleId: m.id, kind: m.kind, label: m.label });
   switch (m.kind) {
     case "input": {
       const docId = ctx.inputQueue.shift();
       const content = docId ? store.docContent(docId) ?? "" : "";
+      log.info(`input module loaded doc`, { docId, chars: content.length, queueRemaining: ctx.inputQueue.length });
       // AI : first input is the primary source for quote offsets.
       if (!ctx.sourceText) {
         ctx.sourceText = content;
         ctx.sourceDocId = docId ?? ("none" as DocId);
       }
-      const value = { doc_id: docId, body: content };
+      const hints = materializeHints(m, ctx, docId, content);
+      const value = materializeStepOutput(m, project, { doc_id: docId, body: content }, hints);
       ctx.outputs.set(m.id, value);
       return { value, preview: `loaded ${m.inputType} → ${docId ?? "(none)"}` };
     }
@@ -137,28 +168,38 @@ async function execModule(m: PipelineModule, ctx: RunCtx): Promise<ExecResult> {
       // AI : prebuilt parser. Input already carries text (PDF parsed at ingest); annotate purpose.
       const upstream = (ctx.prevModuleId && ctx.outputs.get(ctx.prevModuleId)) as { doc_id?: DocId; body?: string } | undefined;
       const body = upstream?.body ?? ctx.sourceText;
-      const purpose = (body.split("\n").find((l) => l.trim().length > 0) ?? "Document").trim();
       const docId = upstream?.doc_id ?? ctx.sourceDocId;
       ctx.sourceText = body;
       ctx.sourceDocId = docId;
       // AI : doc parsing is a billable service line (Billing "doc-parse svc"), flat ~1c.
       ctx.ledger.recordService("doc-parse svc", ctx.model, 1);
-      const value = { doc_id: docId, purpose, body };
-      return { value, preview: `purpose: ${purpose}`, json: JSON.stringify({ doc_id: docId, purpose, chars: body.length }, null, 2) };
+      log.info(`doc-to-text`, { docId, chars: body.length, purpose: m.label });
+      const hints = materializeHints(m, ctx, docId, body);
+      const value = materializeStepOutput(m, project, { doc_id: docId, body }, hints);
+      const purpose = typeof (value as { purpose?: string }).purpose === "string" ? (value as { purpose: string }).purpose : m.label;
+      return {
+        value,
+        preview: `purpose: ${purpose}`,
+        json: JSON.stringify({ doc_id: docId, purpose, chars: body.length }, null, 2),
+      };
     }
 
     case "llm": {
       const out = modelById(project.models, m.outStructureId);
       if (!out) throw new Error(`llm step ${m.id} has no output structure`);
       const stepModel = m.model ?? ctx.model;
+      log.info(`llm step`, { moduleId: m.id, model: stepModel, outStructure: out.name, outIsList: !!m.outIsList });
       const inputData = ctx.byModel.get(m.inStructureId as StructureModelId) ?? ctx.outputs.get(ctx.prevModuleId!);
       const context =
         ctx.sourceText && hasQuoteField(out)
           ? `SOURCE DOCUMENT:\n${ctx.sourceText}`
           : `INPUT DATA:\n${JSON.stringify(inputData, null, 2)}`;
-      const prompt = `${m.prompt ?? "Process the input."}\n\n${context}`;
+      const userPrompt = `${m.prompt ?? "Process the input."}\n\n${context}`;
       const schema = llmSchema(out, project.models, !!m.outIsList);
-      const raw = await llmStructured(prompt, schema, { model: stepModel, ledger: ctx.ledger });
+      const prompt = structuredLlmPrompt(userPrompt, schema);
+      log.debug(`llm prompt built`, { promptChars: prompt.length, hasQuoteField: hasQuoteField(out) });
+      const raw = await llmStructured(userPrompt, schema, { model: stepModel, ledger: ctx.ledger }, log.child("llm"));
+      log.info(`llm response received`, { moduleId: m.id, items: Array.isArray(raw) ? raw.length : 1 });
       // AI : resolve quote strings → validated source-linked spans.
       let value: unknown = raw;
       if (hasQuoteField(out)) {
@@ -167,7 +208,12 @@ async function execModule(m: PipelineModule, ctx: RunCtx): Promise<ExecResult> {
           : resolveQuotes(raw, out, ctx.sourceText, ctx.sourceDocId);
       }
       const count = Array.isArray(value) ? value.length : 1;
-      return { value, preview: `${count} ${out.name} item(s) produced`, json: JSON.stringify(value, null, 2) };
+      return {
+        value,
+        preview: `${count} ${out.name} item(s) produced`,
+        json: JSON.stringify(value, null, 2),
+        inputPreview: prompt,
+      };
     }
 
     case "combine": {
@@ -183,11 +229,19 @@ async function execModule(m: PipelineModule, ctx: RunCtx): Promise<ExecResult> {
       const summary: Record<string, unknown> = {};
       for (const f of out.fields) {
         const isDoc = f.type === "document";
-        value[f.name] = isDoc ? { doc_id: newInput?.doc_id ?? "", purpose, body: newInput?.body ?? "" } : pipelineData ?? [];
+        value[f.name] = isDoc
+          ? { doc_id: newInput?.doc_id ?? "", purpose, body: newInput?.body ?? "" }
+          : pipelineData ?? [];
         summary[f.name] = isDoc ? newInput?.doc_id : Array.isArray(pipelineData) ? `${pipelineData.length} items` : pipelineData;
       }
-      return {
+      const merged = materializeStepOutput(
+        m,
+        project,
         value,
+        materializeHints(m, ctx, newInput?.doc_id, newInput?.body ?? ""),
+      );
+      return {
+        value: merged,
         preview: `merged → {${out.fields.map((f) => `"${f.name}"`).join(", ")}}`,
         json: JSON.stringify(summary, null, 2),
       };
@@ -202,8 +256,13 @@ async function execModule(m: PipelineModule, ctx: RunCtx): Promise<ExecResult> {
     case "custom-code": {
       // AI : custom TS function — saved `code` compiled to (input) => output and applied.
       const input = (ctx.prevModuleId && ctx.outputs.get(ctx.prevModuleId)) ?? null;
-      if (!m.code) return { value: input, preview: "custom step passthrough (no code set)", json: JSON.stringify(input, null, 2) };
+      if (!m.code) {
+        log.warn(`custom-code passthrough (no code)`, { moduleId: m.id });
+        return { value: input, preview: "custom step passthrough (no code set)", json: JSON.stringify(input, null, 2) };
+      }
+      log.info(`custom-code executing`, { moduleId: m.id, codeLines: m.code.split("\n").length });
       const value = await runCustomFn(m.code, input);
+      log.info(`custom-code done`, { moduleId: m.id });
       return { value, preview: `custom ts fn applied (${m.code.split("\n")[0].slice(0, 60)})`, json: JSON.stringify(value, null, 2) };
     }
 
@@ -214,15 +273,30 @@ async function execModule(m: PipelineModule, ctx: RunCtx): Promise<ExecResult> {
       const stepModel = m.model ?? ctx.model;
       const data = ctx.byModel.get(m.inStructureId as StructureModelId) ?? (ctx.prevModuleId ? ctx.outputs.get(ctx.prevModuleId) : undefined);
       const items = Array.isArray(data) ? data : [data];
+      log.info(`llm-batch step`, { moduleId: m.id, model: stepModel, itemCount: items.length, outStructure: out.name });
       const schema = llmSchema(out, project.models, false); // per-item schema
+      const sampleItem = items[0];
+      const sampleUser = `${m.prompt ?? "Process the item."}\n\nITEM:\n${JSON.stringify(sampleItem, null, 2)}`;
+      const samplePrompt = structuredLlmPrompt(sampleUser, schema);
       const rows = await llmBatchStructured(
         items,
         (item) => `${m.prompt ?? "Process the item."}\n\nITEM:\n${JSON.stringify(item, null, 2)}`,
         schema,
         { model: stepModel, ledger: ctx.ledger },
+        2,
+        log.child("llm-batch"),
       );
+      log.info(`llm-batch complete`, { moduleId: m.id, rows: rows.length });
       const value = hasQuoteField(out) ? rows.map((r) => resolveQuotes(r, out, ctx.sourceText, ctx.sourceDocId)) : rows;
-      return { value, preview: `${items.length} items → ${value.length} ${out.name}`, json: JSON.stringify(value, null, 2) };
+      return {
+        value,
+        preview: `${items.length} items → ${value.length} ${out.name}`,
+        json: JSON.stringify(value, null, 2),
+        inputPreview:
+          items.length > 1
+            ? `${samplePrompt}\n\n… same prompt × ${items.length} items`
+            : samplePrompt,
+      };
     }
 
     case "output": {
@@ -271,13 +345,27 @@ export async function runPipeline(
   const model = opts.model ?? project.modules.find((m) => m.kind === "llm")?.model ?? DEFAULT_MODEL;
   const persist = opts.persist ?? true;
 
-  // AI : run button is dark when the pipeline is invalid — refuse to execute, mirror the UI.
-  const invalid = computeInvalid(project.modules);
-  if (invalid.size > 0) throw new Error(`pipeline invalid: ${[...invalid.keys()].join(", ")}`);
-
   const ledger = new UsageLedger();
   const runId = ("run_" + Math.random().toString(36).slice(2, 9)) as RunId;
+  const log = runLogger(runId);
   const startedAt = Date.now();
+
+  log.section("pipeline start");
+  log.info(`runPipeline invoked`, {
+    projectId,
+    projectName: project.name,
+    inputDocId,
+    model,
+    persist,
+    moduleCount: project.modules.length,
+  });
+
+  // AI : run button is dark when the pipeline is invalid — refuse to execute, mirror the UI.
+  const invalid = computeInvalid(project.modules);
+  if (invalid.size > 0) {
+    log.error(`pipeline invalid`, { invalidModules: [...invalid.keys()] });
+    throw new Error(`pipeline invalid: ${[...invalid.keys()].join(", ")}`);
+  }
 
   // AI : assign docs to `input` modules in order; caller's dropped doc is first.
   // AI : bug fix — previously appended EVERY store doc, so any unrelated upload could silently
@@ -290,6 +378,12 @@ export async function runPipeline(
     .map((d) => d.id)
     .reverse(); // docs() is newest-first; fall back in upload order (oldest seed first)
   const inputQueue = [...explicit, ...fallbacks];
+  log.info(`input queue resolved`, {
+    explicit,
+    fallbackCount: fallbacks.length,
+    inputQueue,
+    inputDocIds: opts.inputDocIds,
+  });
 
   const ctx: RunCtx = {
     project,
@@ -314,8 +408,17 @@ export async function runPipeline(
     if (!liveHtml) return;
     const display: LiveStep[] = project.modules.map((m, idx) => {
       const done = steps.find((s) => s.moduleId === m.id);
-      if (done)
-        return { label: m.label, kind: m.kind, status: done.status, ms: done.ms, costCents: done.costCents, detail: [`out: ${done.outputPreview}`] };
+      if (done) {
+        const inLabel = m.kind === "llm" || m.kind === "llm-batch" ? "prompt" : "in";
+        return {
+          label: m.label,
+          kind: m.kind,
+          status: done.status,
+          ms: done.ms,
+          costCents: done.costCents,
+          detail: [`${inLabel}: ${done.inputPreview}`, `out: ${done.outputJson ?? done.outputPreview}`],
+        };
+      }
       return { label: m.label, kind: m.kind, status: idx === runningIndex ? "running" : "pending", ms: 0, costCents: 0 };
     });
     const at = Math.min(steps.length + 1, project.modules.length);
@@ -328,16 +431,20 @@ export async function runPipeline(
 
   for (let i = 0; i < project.modules.length; i++) {
     const m = project.modules[i];
+    log.section(`step ${i + 1}/${project.modules.length}: ${m.label}`);
+    log.info(`step starting`, { moduleId: m.id, kind: m.kind, cached: !!m.cached, stepModel: m.model ?? model });
     await opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status: "running" });
     writeLive(i);
 
-    const inputPreview = i === 0 ? `${m.inputType} document` : modelById(project.models, m.inStructureId)?.name ?? "Any";
+    const defaultInputPreview =
+      i === 0 ? `${m.inputType} document` : modelById(project.models, m.inStructureId)?.name ?? "Any";
     const beforeCents = ledger.totalCents();
     const t0 = Date.now();
     let status: RunStepStatus = "ok";
     let result: ExecResult;
 
     const key = cacheKey(projectId, m.id, m.model ?? model, inputDocId);
+    log.debug(`cache lookup`, { key, cachedFlag: !!m.cached });
     // AI : TODO bug — a cache hit bypasses execModule, so its side effects never run:
     // AI : `input` skips inputQueue.shift() (the NEXT input module then consumes the wrong doc)
     // AI : and never sets ctx.sourceText/sourceDocId (quote resolution runs against "" and llm
@@ -349,28 +456,42 @@ export async function runPipeline(
       if (cached) {
         status = "cached";
         result = { value: cached.value, preview: "(from cache)", json: cached.json };
+        log.info(`cache HIT`, { moduleId: m.id, key });
       } else {
-        result = await execModule(m, ctx);
+        result = await execModule(m, ctx, log);
         // AI : implicit validation — validate the step output against its declared out structure.
         const out = modelById(project.models, m.outStructureId);
-        if (out && m.kind !== "input") {
+        if (out) {
           // AI : llm-batch always emits a list, regardless of the outIsList flag
           const isList = m.outIsList || m.kind === "llm-batch";
           const toCheck = isList && Array.isArray(result.value) ? result.value : [result.value];
           for (const v of toCheck) {
             const check = validate(v, out, project.models);
-            if (!check.ok) throw new Error(`output failed ${out.name} validation: ${check.error}`);
+            if (!check.ok) {
+              log.error(`validation failed`, { moduleId: m.id, structure: out.name, error: check.error });
+              throw new Error(`output failed ${out.name} validation: ${check.error}`);
+            }
           }
+          log.debug(`validation ok`, { moduleId: m.id, structure: out.name, itemCount: toCheck.length });
         }
         writeCache(key, result.value, result.json);
+        log.debug(`cache written`, { key });
       }
     } catch (err) {
       status = "error";
       result = { value: null, preview: (err as Error).message };
+      log.error(`step failed`, { moduleId: m.id, kind: m.kind, error: (err as Error).message, stack: (err as Error).stack });
     }
 
     const ms = status === "cached" ? 0 : Date.now() - t0;
     const costCents = status === "cached" ? 0 : ledger.totalCents() - beforeCents;
+    log.info(`step finished`, {
+      moduleId: m.id,
+      status,
+      ms,
+      costCents: +costCents.toFixed(4),
+      preview: result.preview,
+    });
 
     // record flowing state for downstream steps
     if (status !== "error") {
@@ -392,12 +513,15 @@ export async function runPipeline(
       status,
       ms,
       costCents,
-      inputPreview,
+      inputPreview: result.inputPreview ?? defaultInputPreview,
       outputPreview: result.preview,
       outputJson: result.json,
     });
     await opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status });
-    if (status === "error") break;
+    if (status === "error") {
+      log.warn(`pipeline aborted after error`, { failedModule: m.id, stepsCompleted: steps.length });
+      break;
+    }
   }
 
   const totalMs = steps.reduce((a, s) => a + s.ms, 0);
@@ -421,7 +545,22 @@ export async function runPipeline(
 
   writeLive(-1); // final state, refresh meta dropped
 
+  log.section("pipeline complete");
+  log.info(`run summary`, {
+    runId,
+    status: run.status,
+    totalMs,
+    billedCents,
+    savedCents,
+    stepCount: steps.length,
+    usageRecords: ledger.all().length,
+  });
+  log.json("steps", steps.map((s) => ({ moduleId: s.moduleId, kind: s.kind, status: s.status, ms: s.ms, costCents: s.costCents })));
+  log.json("usage ledger", ledger.all());
+  log.finish(`Run ${runId} ${run.status} — ${totalMs}ms · billed ${billedCents.toFixed(2)}c · saved ${savedCents.toFixed(2)}c`);
+
   if (persist) {
+    log.info(`persisting artifacts`, { artifactCount: artifacts.length });
     persistArtifacts(runId, inputDocId, store, artifacts);
     // AI : save each custom step's code next to its input/output artifact (previous runs).
     for (const m of project.modules) {

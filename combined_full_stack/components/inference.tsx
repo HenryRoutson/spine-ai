@@ -14,7 +14,7 @@ import {
 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { useDocViewer } from "@/lib/doc-viewer"
-import { awaitRun, startRun, type StepProgress } from "@/lib/run-engine"
+import { awaitRun, startRun, type JobLogEntry, type StepProgress } from "@/lib/run-engine"
 import { collectQuotes } from "@/lib/quotes"
 import type { DocId, DocRef, ModuleId, PipelineRun, ProjectId } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
@@ -60,6 +60,8 @@ export function Inference() {
   const [stepStates, setStepStates] = useState<Map<ModuleId, StepProgress["status"]>>(new Map())
   const [run, setRun] = useState<PipelineRun | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [debugLogs, setDebugLogs] = useState<JobLogEntry[]>([])
+  const logEndRef = useRef<HTMLDivElement>(null)
 
   const inputModules = modules.filter((m) => m.kind === "input")
 
@@ -70,7 +72,12 @@ export function Inference() {
     setStepStates(new Map())
     setRun(null)
     setError(null)
+    setDebugLogs([])
   }, [project.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [debugLogs.length])
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -94,11 +101,13 @@ export function Inference() {
     setError(null)
     setRun(null)
     setStepStates(new Map())
+    setDebugLogs([])
     try {
       const jobId = await startRun(project.id as ProjectId, inputDoc.id as DocId, model)
       refreshBilling().catch(console.error)
-      const finished = await awaitRun(jobId, (steps) => {
-        setStepStates(new Map(steps.map((s) => [s.moduleId, s.status])))
+      const finished = await awaitRun(jobId, {
+        onStep: (steps) => setStepStates(new Map(steps.map((s) => [s.moduleId, s.status]))),
+        onLogs: (logs) => setDebugLogs(logs),
       })
       setRun(finished)
       addRun(finished)
@@ -116,6 +125,7 @@ export function Inference() {
     setStepStates(new Map())
     setRun(null)
     setError(null)
+    setDebugLogs([])
   }
 
   const progressPct = useMemo(() => {
@@ -285,6 +295,33 @@ export function Inference() {
                 <Stat label="latency" value={`${(run.totalMs / 1000).toFixed(1)}s`} />
                 <Stat label="billed" value={`$${(run.billedCents / 100).toFixed(2)}`} />
                 <Stat label="saved" value={`$${(run.savedCents / 100).toFixed(2)}`} accent />
+              </div>
+            )}
+
+            {debugLogs.length > 0 && (
+              <div className="rounded-lg border border-border">
+                <div className="border-b border-border px-3 py-2">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    server logs · also in DevTools console
+                  </span>
+                </div>
+                <div className="max-h-48 overflow-y-auto p-2 font-mono text-[10px] leading-relaxed">
+                  {debugLogs.map((l, i) => (
+                    <div
+                      key={`${l.at}-${i}`}
+                      className={cn(
+                        "whitespace-pre-wrap break-words",
+                        l.level === "error" && "text-destructive",
+                        l.level === "warn" && "text-yellow-500",
+                        l.level === "debug" && "text-muted-foreground",
+                        l.level === "info" && "text-foreground/80",
+                      )}
+                    >
+                      {l.line}
+                    </div>
+                  ))}
+                  <div ref={logEndRef} />
+                </div>
               </div>
             )}
           </div>

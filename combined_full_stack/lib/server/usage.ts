@@ -1,5 +1,8 @@
 import { PRICE_MARKUP, tokenCostCents } from "./openrouter_pricing";
+import { logger } from "./server_logger";
 import { type ModelId, type TokenUsage, modelOption } from "./types";
+
+const usageLog = logger("usage");
 
 type Cents = number;
 type ServiceName = string; // e.g. "doc-parse svc" — a non-LLM billable service
@@ -24,11 +27,14 @@ export class UsageLedger {
   private records: UsageRecord[] = [];
 
   recordLlm(usage: TokenUsage): void {
+    const cost = costOf(usage);
+    usageLog.debug(`recordLlm`, { ...usage, costCents: +cost.toFixed(4) });
     this.records.push({ ...usage, at: Date.now() });
   }
 
   // AI : flat-cost services (PDF parse etc.) bill as synthetic completion tokens on a model line.
   recordService(service: ServiceName, model: ModelId, costCents: Cents): void {
+    usageLog.debug(`recordService`, { service, model, costCents });
     const opt = modelOption(model);
     const markedUpCompletionCents = opt.completionUsdPerToken * 100 * PRICE_MARKUP;
     const tokens = markedUpCompletionCents > 0 ? Math.round(costCents / markedUpCompletionCents) : 0;

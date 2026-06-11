@@ -22,6 +22,8 @@ import {
 } from "lucide-react"
 import { useStore, uid } from "@/lib/store"
 import { computeInvalid, computeWarnings, invalidStepMessage } from "@/lib/validity"
+import { llmSchemaJson } from "@/lib/structure"
+import { JsonHighlight } from "@/components/highlight"
 import { moduleMetrics } from "@/lib/billing"
 import { combinePairIds, segmentPipeline } from "@/lib/pipeline-layout"
 import {
@@ -126,7 +128,7 @@ function makeModule(
     id: uid(),
     kind,
     label: MODULE_META[kind].label,
-    cached: false,
+    cached: true,
     avgMs: 0,
     avgCostCents: 0,
     inputType: kind === "input" ? "pdf" : undefined,
@@ -161,6 +163,13 @@ export function PipelineBuilder() {
     () => models.map((m) => ({ value: m.id, label: m.name })),
     [models],
   )
+  const llmSchemaPreview = useMemo(() => {
+    if (!selected || !LLM_KINDS.includes(selected.kind) || !selected.outStructureId) return null
+    const out = models.find((m) => m.id === selected.outStructureId)
+    if (!out) return null
+    const isList = selected.outIsList || selected.kind === "llm-batch"
+    return llmSchemaJson(out, models, isList)
+  }, [selected, models])
   const okRuns = runs.filter((r) => r.status === "ok")
   const totalMs =
     okRuns.length > 0
@@ -242,11 +251,6 @@ export function PipelineBuilder() {
             <Badge variant="outline" className="gap-1 text-[10px]">
               <Zap className="h-3 w-3 text-primary" /> {cachedCount} cached
             </Badge>
-            {warnings.size > 0 && (
-              <Badge variant="outline" className="gap-1 border-amber-500/50 text-[10px] text-amber-600 dark:text-amber-500">
-                <AlertTriangle className="h-3 w-3" /> {warnings.size} warning{warnings.size === 1 ? "" : "s"}
-              </Badge>
-            )}
             {invalid.size > 0 && (
               <Badge variant="outline" className="gap-1 border-destructive/50 text-[10px] text-destructive">
                 <AlertTriangle className="h-3 w-3" /> {invalid.size} invalid
@@ -268,7 +272,6 @@ export function PipelineBuilder() {
               if (seg.kind === "combine") {
                 const { combine, input, index } = seg
                 const isInvalid = invalid.has(combine.id)
-                const isWarning = warnings.has(combine.id)
                 const pipelineModel = modelName(models, combine.inStructureId)
                 const outModel = modelName(models, combine.outStructureId)
                 const groupSelected = selectedId === combine.id || selectedId === input.id
@@ -279,11 +282,9 @@ export function PipelineBuilder() {
                         "w-80 rounded-lg border-2 border-dashed px-3.5 py-3 transition-colors",
                         isInvalid
                           ? "border-destructive/70 bg-destructive/5"
-                          : isWarning
-                            ? "border-amber-500/60 bg-amber-500/5"
-                            : groupSelected
-                              ? "border-primary bg-primary/5"
-                              : "border-chart-3/40 bg-chart-3/5",
+                          : groupSelected
+                            ? "border-primary bg-primary/5"
+                            : "border-chart-3/40 bg-chart-3/5",
                       )}
                     >
                       <button
@@ -327,9 +328,7 @@ export function PipelineBuilder() {
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-xs font-medium">{input.label}</p>
                           <p className="truncate font-mono text-[10px] text-muted-foreground">
-                            {input.inputType ?? "·"}
-                            <span className="text-muted-foreground/60"> → </span>
-                            {modelName(models, input.outStructureId) ?? "·"}
+                            {modelName(models, input.outStructureId) ?? "·"} · {input.inputType ?? "file"}
                           </p>
                         </div>
                       </button>
@@ -347,7 +346,6 @@ export function PipelineBuilder() {
               const m = seg.module
               const i = seg.index
               const isInvalid = invalid.has(m.id)
-              const isWarning = warnings.has(m.id)
               return (
                 <div key={m.id} className="flex flex-col items-center">
                   <button
@@ -356,11 +354,9 @@ export function PipelineBuilder() {
                       "group relative flex w-80 items-center gap-3 rounded-lg border bg-card px-3.5 py-3 text-left transition-colors",
                       isInvalid
                         ? "border-destructive/70"
-                        : isWarning
-                          ? "border-amber-500/60"
-                          : m.id === selectedId
-                            ? "border-primary"
-                            : "border-border hover:border-muted-foreground/40",
+                        : m.id === selectedId
+                          ? "border-primary"
+                          : "border-border hover:border-muted-foreground/40",
                     )}
                   >
                     <span className="font-mono text-[10px] text-muted-foreground">
@@ -370,9 +366,13 @@ export function PipelineBuilder() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{m.label}</p>
                       <p className="truncate font-mono text-[10px] text-muted-foreground">
-                        {modelName(models, m.inStructureId) ?? (m.inputType ?? "·")}
-                        <span className="text-muted-foreground/60"> → </span>
-                        {modelName(models, m.outStructureId) ?? "·"}
+                        {m.kind === "input"
+                          ? `${modelName(models, m.outStructureId) ?? "·"} · ${m.inputType ?? "file"}`
+                          : <>
+                              {modelName(models, m.inStructureId) ?? "·"}
+                              <span className="text-muted-foreground/60"> → </span>
+                              {modelName(models, m.outStructureId) ?? "·"}
+                            </>}
                       </p>
                     </div>
                     {m.kind === "llm" && m.model && (
@@ -383,8 +383,6 @@ export function PipelineBuilder() {
                     {m.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
                     {isInvalid ? (
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
-                    ) : isWarning ? (
-                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
                     ) : (
                       <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     )}
@@ -392,11 +390,6 @@ export function PipelineBuilder() {
                   {isInvalid && (
                     <p className="mt-1 max-w-80 text-center font-mono text-[10px] text-destructive">
                       {invalidStepMessage(invalid.get(m.id)!, models, modules)}
-                    </p>
-                  )}
-                  {isWarning && !isInvalid && (
-                    <p className="mt-1 max-w-80 text-center font-mono text-[10px] text-amber-600 dark:text-amber-500">
-                      LLM step has no prompt — will use a generic fallback at runtime
                     </p>
                   )}
                   <InsertSlot
@@ -470,23 +463,62 @@ export function PipelineBuilder() {
               )}
 
               {selected.kind === "input" && (
-                <Field label="Input type">
-                  <Select
-                    value={selected.inputType}
-                    onValueChange={(v) => update(selected.id, { inputType: v as InputType })}
+                <>
+                  <Field label="Input type">
+                    <Select
+                      value={selected.inputType}
+                      onValueChange={(v) => update(selected.id, { inputType: v as InputType })}
+                    >
+                      <SelectTrigger className="h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INPUT_TYPES.map((t) => (
+                          <SelectItem key={t.value} value={t.value}>
+                            {t.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  <Field
+                    label="I/O model"
+                    hint={
+                      invalid.has(selected.id) && invalid.get(selected.id)?.kind === "no-output"
+                        ? "required — defines the structure this file is loaded into"
+                        : undefined
+                    }
+                    hintTone={
+                      invalid.has(selected.id) && invalid.get(selected.id)?.kind === "no-output"
+                        ? "error"
+                        : undefined
+                    }
                   >
-                    <SelectTrigger className="h-8 text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INPUT_TYPES.map((t) => (
-                        <SelectItem key={t.value} value={t.value}>
-                          {t.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
+                    <Select
+                      value={selected.outStructureId ?? null}
+                      onValueChange={(v) => update(selected.id, { outStructureId: v ?? undefined })}
+                      items={structureModelItems}
+                    >
+                      <SelectTrigger
+                        className={cn(
+                          "h-8 font-mono text-xs",
+                          invalid.has(selected.id) &&
+                            invalid.get(selected.id)?.kind === "no-output" &&
+                            "border-destructive/70",
+                        )}
+                      >
+                        <SelectValue placeholder="Select model" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {models.map((m) => (
+                          <SelectItem key={m.id} value={m.id} label={m.name} className="font-mono text-xs">
+                            {m.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                </>
               )}
 
               {selected.kind !== "input" && (
@@ -510,43 +542,45 @@ export function PipelineBuilder() {
                 </Field>
               )}
 
-              <Field
-                label="Output model"
-                hint={
-                  invalid.has(selected.id) && invalid.get(selected.id)?.kind === "no-output"
-                    ? "required — step must emit a structure"
-                    : undefined
-                }
-                hintTone={
-                  invalid.has(selected.id) && invalid.get(selected.id)?.kind === "no-output"
-                    ? "error"
-                    : undefined
-                }
-              >
-                <Select
-                  value={selected.outStructureId ?? null}
-                  onValueChange={(v) => update(selected.id, { outStructureId: v ?? undefined })}
-                  items={structureModelItems}
+              {selected.kind !== "input" && (
+                <Field
+                  label="Output model"
+                  hint={
+                    invalid.has(selected.id) && invalid.get(selected.id)?.kind === "no-output"
+                      ? "required — step must emit a structure"
+                      : undefined
+                  }
+                  hintTone={
+                    invalid.has(selected.id) && invalid.get(selected.id)?.kind === "no-output"
+                      ? "error"
+                      : undefined
+                  }
                 >
-                  <SelectTrigger
-                    className={cn(
-                      "h-8 font-mono text-xs",
-                      invalid.has(selected.id) &&
-                        invalid.get(selected.id)?.kind === "no-output" &&
-                        "border-destructive/70",
-                    )}
+                  <Select
+                    value={selected.outStructureId ?? null}
+                    onValueChange={(v) => update(selected.id, { outStructureId: v ?? undefined })}
+                    items={structureModelItems}
                   >
-                    <SelectValue placeholder="Select model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {models.map((m) => (
-                      <SelectItem key={m.id} value={m.id} label={m.name} className="font-mono text-xs">
-                        {m.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
+                    <SelectTrigger
+                      className={cn(
+                        "h-8 font-mono text-xs",
+                        invalid.has(selected.id) &&
+                          invalid.get(selected.id)?.kind === "no-output" &&
+                          "border-destructive/70",
+                      )}
+                    >
+                      <SelectValue placeholder="Select model" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {models.map((m) => (
+                        <SelectItem key={m.id} value={m.id} label={m.name} className="font-mono text-xs">
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
 
               {LLM_KINDS.includes(selected.kind) && (
                 <>
@@ -557,23 +591,37 @@ export function PipelineBuilder() {
                     />
                   </Field>
                   <Field
-                    label="Prompt"
-                    hint={
+                    label={
                       warnings.has(selected.id)
-                        ? "empty — pipeline will fall back to a generic instruction"
-                        : undefined
+                        ? "Prompt · optional"
+                        : "Prompt"
                     }
                   >
                     <Textarea
                       value={selected.prompt ?? ""}
                       onChange={(e) => update(selected.id, { prompt: e.target.value })}
-                      placeholder="Instruction for this step…"
-                      className={cn(
-                        "min-h-24 text-xs leading-relaxed",
-                        warnings.has(selected.id) && "border-amber-500/60",
-                      )}
+                      placeholder="Extra instruction (schema below also guides the model)…"
+                      className="min-h-20 text-xs leading-relaxed"
                     />
+                    {warnings.has(selected.id) && (
+                      <p className="mt-1 font-mono text-[9px] text-muted-foreground">
+                        no custom text — JSON schema is sent as the structured output contract
+                      </p>
+                    )}
                   </Field>
+                  {llmSchemaPreview && (
+                    <Field
+                      label={
+                        selected.kind === "llm-batch"
+                          ? "Output schema · per item"
+                          : "Output schema · Zod → JSON Schema"
+                      }
+                    >
+                      <div className="max-h-48 overflow-auto rounded-md border border-border bg-[oklch(0.14_0.004_264)] p-2">
+                        <JsonHighlight json={llmSchemaPreview} />
+                      </div>
+                    </Field>
+                  )}
                 </>
               )}
 
