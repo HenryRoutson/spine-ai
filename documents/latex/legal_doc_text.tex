@@ -1,0 +1,102 @@
+\documentclass[11pt]{article}
+
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{fontspec}
+% AI : XeTeX engine — disable ligatures so PDF text extraction is byte-exact for quote grounding
+\setmainfont{Latin Modern Roman}[Ligatures=NoCommon]
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{parskip}
+
+% AI : keep wording identical to the markdown source so extracted-quote grounding still matches
+\titleformat{\section}{\large\bfseries}{\thesection.}{0.6em}{}
+\titlespacing*{\section}{0pt}{16pt}{6pt}
+
+% AI : numbered clause; the bold "1.1" label is what the rule-extraction step quotes against
+\newcommand{\clause}[2]{\noindent\textbf{#1}\quad #2\par\medskip}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries Health Data Protection and AI Governance Agreement}\\[0.6em]
+  \rule{\textwidth}{0.4pt}
+\end{center}
+
+\noindent\textbf{Effective Date:} 1 January 2026\\
+\textbf{Parties:} The Data Controller (``the Company'') and its end users (``Data Subjects'').
+
+\medskip
+This Agreement sets out the binding obligations of the Company with respect to the
+collection, processing, storage, and automated analysis of personal and health-related
+data. Failure to comply with any clause below may expose the Company to regulatory
+penalties, civil liability, and termination of its operating licence.
+
+\section{Lawful Basis and Consent}
+\clause{1.1}{The Company shall not collect or process any personal data unless it has first
+obtained the explicit, freely given, and informed consent of the Data Subject for each
+distinct purpose of processing.}
+\clause{1.2}{Where data is classified as health data, the Company must obtain a separate,
+affirmative opt-in consent that is recorded and time-stamped at the moment it is given.}
+\clause{1.3}{Consent must be as easy to withdraw as it is to give, and withdrawal must take
+effect within seventy-two (72) hours of the request.}
+
+\section{Data Minimisation and Purpose Limitation}
+\clause{2.1}{The Company shall collect only the personal data that is strictly necessary for
+the stated purpose, and shall not repurpose data for any use not disclosed at the time of
+collection.}
+\clause{2.2}{Personal data shall be retained for no longer than is necessary to fulfil its
+purpose. In no event shall health data be retained for more than twenty-four (24) months
+after the Data Subject's account becomes inactive.}
+
+\section{Security of Processing}
+\clause{3.1}{All personal data must be encrypted in transit using TLS 1.2 or higher, and
+encrypted at rest using AES-256 or an equivalent industry-standard algorithm.}
+\clause{3.2}{The Company shall enforce role-based access control and multi-factor
+authentication for all employees and contractors who can access personal data.}
+\clause{3.3}{The Company shall commission an independent third-party penetration test and
+security audit at least once every twelve (12) months.}
+
+\section{Data Residency and Cross-Border Transfers}
+\clause{4.1}{Personal data belonging to residents of the European Economic Area must be
+stored and processed exclusively within the European Economic Area, unless an approved
+transfer mechanism is in place.}
+\clause{4.2}{The Company shall not transfer personal data to any third country that has not
+been recognised as providing an adequate level of data protection.}
+
+\section{Automated Decision-Making and AI Governance}
+\clause{5.1}{Where the Company uses automated or AI-driven systems to make decisions that
+materially affect a Data Subject, it must provide a clear explanation of the logic involved
+and offer a route to human review.}
+\clause{5.2}{The Company shall maintain a written record of every AI model used in
+production, including its purpose, training data sources, and a documented bias assessment.}
+\clause{5.3}{No automated system shall make a final decision concerning a Data Subject's
+medical treatment without the review and approval of a qualified human clinician.}
+
+\section{Sub-Processors and Third Parties}
+\clause{6.1}{The Company shall not engage any sub-processor to handle personal data unless
+that sub-processor is bound by contractual obligations no less protective than those in this
+Agreement.}
+\clause{6.2}{The Company shall maintain and publish a current list of all sub-processors
+that have access to personal data.}
+
+\section{Breach Notification}
+\clause{7.1}{In the event of a personal data breach, the Company shall notify the relevant
+supervisory authority without undue delay and in any case within seventy-two (72) hours of
+becoming aware of the breach.}
+\clause{7.2}{Where a breach is likely to result in a high risk to the rights of Data
+Subjects, the Company shall also notify the affected Data Subjects without undue delay.}
+
+\section{Data Subject Rights}
+\clause{8.1}{The Company shall enable Data Subjects to access, rectify, and export their
+personal data, and shall fulfil any such request within thirty (30) days.}
+\clause{8.2}{The Company shall delete a Data Subject's personal data within thirty (30) days
+of a valid erasure request, except where retention is required by law.}
+
+\section{Accountability and Governance}
+\clause{9.1}{Where the Company processes the health data of more than ten thousand (10,000)
+Data Subjects, it shall appoint a Data Protection Officer responsible for compliance with
+this Agreement.}
+\clause{9.2}{The Company shall maintain a written record of all processing activities and
+make it available to the supervisory authority on request.}
+
+\end{document}

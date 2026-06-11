@@ -18,7 +18,9 @@ What i mean by that is the you need to have intermediate steps which are used to
 the UI should the following window for each project inside the project selector.
 
 1. Structure builder
-  using code or a UI to build pydantic / zod model (structures) that your LLM should output to
+  using code or a UI to build pydantic / zod model (structures) that each step should output or input.
+  For the demo please have the UI structure builder when you click on it say "in progress", additionally add a pydantic tab with the same thing.
+
 2. Pipeline builder
   where does the model take inputs?
     For example maybe you input a legal pdf, convert it to text and atomic rules to assess.
