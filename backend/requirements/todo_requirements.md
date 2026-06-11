@@ -23,7 +23,7 @@ Real OpenRouter calls. Local-JSON persistence behind one `Store` interface (swap
 | OpenRouter gateway + token usage | `openrouter/openrouter_llm.ts`, `lib/llm.ts`, `lib/usage.ts` | ✅ |
 | Persistence (local JSON, content-addressed docs) | `lib/store.ts` | ✅ |
 | `file_write_helper` (`_latest` + timestamped) | `lib/file_write_helper.ts` | ✅ |
-| Seed: Company Legal Evaluation project + real docs | `lib/seed.ts` | ✅ |
+| Seed: generic JSON project seeds (legal example) | `seeds/company_legal_evaluation.json` + `lib/seed.ts` loader | ✅ |
 | Public surface barrel | `lib/index.ts` | ✅ |
 | CLI demo harness | `lib/demo.ts` | ✅ |
 
@@ -49,7 +49,8 @@ Real OpenRouter calls. Local-JSON persistence behind one `Store` interface (swap
 - ✅ `computeInvalid` / `isPipelineValid` / `canRunStep` (mirrors frontend `computeInvalid`).
 - ✅ Executors: `input`, `doc-to-text` (pdf-parse), `llm`, `transform`, `combine`, `output`.
 - 🟡 `doc-to-text` DeepSeek OCR option (`docToTextOcrPlaceholder`).
-- 🟡 `custom-code` — passes input through (Python sandbox not built).
+- ✅ `custom-code` — saved TypeScript `(input) => output` function, compiled via `node:vm` and run on the previous step's output; code persisted per run (`<module>_code_latest.ts` + timestamped). Seeded example: "Sort Rules by Severity".
+- ✅ `llm-batch` — one structured (zod-validated) call per list item with bounded concurrency, merged into a typed list in input order (`llmBatchStructured`).
 - ✅ Per-module metrics from history (`moduleMetrics`).
 - ✅ Default 4-stage legal pipeline seeded (sliding-window + per-rule fan-out skipped per outline).
 
@@ -102,9 +103,32 @@ Real OpenRouter calls. Local-JSON persistence behind one `Store` interface (swap
 1. ⬜ Combine with the V0 frontend: replace its presentation-only `lib/` with this backend.
 2. ⬜ Shareable read-only inference run link.
 3. 🟡 Promote remaining placeholders to real: spawn a true Claude Code instance for the
-   `claude-code` environment, custom-code sandbox, DeepSeek OCR.
+   `claude-code` environment, DeepSeek OCR.
 4. ⬜ Migrate `JsonStore` → Supabase (auth/sign-ins) — single interface, noted at the seam.
 5. 🟡 Nested/array auto-structure inference beyond flat objects.
+
+## Bugs found — NOT yet fixed (11 Jun second review; `// AI : TODO bug` at each site)
+1. **Cache hit skips execModule side effects** (`run_engine.ts`) — a cached `input` step never
+   shifts the inputQueue (next input module consumes the wrong doc) and never sets
+   `sourceText`/`sourceDocId` (quotes resolve against `""`, llm steps lose their SOURCE DOCUMENT
+   context). Latent: seed has `cached:false` everywhere; breaks once a user toggles `cached`.
+2. **Cache key too narrow** (`run_engine.ts`) — key omits secondary input docs
+   (`opts.inputDocIds`, e.g. the company doc) and the step prompt; swapping the company doc or
+   editing a prompt serves stale cached output.
+3. **Nested quote fields** (`structure.ts` `llmSchema` + `run_engine.ts` `resolveQuotes`) — only
+   top-level `tuple[text,quote]` fields collapse to strings / get offset-resolved; a quote field
+   inside a nested `model`/`list[model]` ref asks the LLM for byte offsets and then fails
+   validation. Latent for the seed, real for user-authored structures.
+4. **Benchmark fallback duplicates a kind** (`strategies.ts` `runBenchmark`) — the Sonnet
+   fallback row shares its `kind` with the failed cheap row; judge scores are keyed by kind, so
+   both rows get the same accuracy and `winnerKind` can't distinguish them.
+5. **Judge cost dropped** (`strategies.ts` `judgeStrategies`) — its ledger is billed but never
+   read; the judge call is missing from every benchmark cost total.
+6. **`runProjects` never pruned** (`store.ts` `addRun`) — runs are capped at 100 but evicted
+   runs' map entries stay in store.json forever.
+7. **json_object vs array schemas** (`openrouter_llm.ts`) — json mode formally promises an
+   object while every `outIsList` schema expects a top-level array; works on deepseek today,
+   brittle on stricter providers (risk, not yet observed failing).
 
 ## Bugs found & fixed (11 Jun review)
 - **OpenRouter 402 on Anthropic models** — no `max_tokens` cap meant OpenRouter reserved the
@@ -126,6 +150,10 @@ Real OpenRouter calls. Local-JSON persistence behind one `Store` interface (swap
 - **Shared strategy ids** — blank projects copied the legal project's strategy ids verbatim.
 
 ## Notes / decisions
+- Seeds are generic JSON (11 Jun): the legal example lives in
+  `seeds/company_legal_evaluation.json` — project + models + modules + strategies + source docs
+  (`file` is a name under repo `/documents`). `loadProjectSeed(path)` zod-validates and loads any
+  such file at import time (fails early on a bad seed); author a new JSON to seed a new project.
 - Default model `deepseek-v3` (→ `deepseek/deepseek-chat`): qwen-2.5-72b was ~3x slower for
   large structured outputs on OpenRouter. Still a cheap Chinese model per the spec.
 - Rule extraction capped at the 6 most important rules to keep demo latency sane (~37s).

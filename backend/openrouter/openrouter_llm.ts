@@ -57,6 +57,9 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn): Pr
       messages,
       temperature: opts.temperature ?? 0,
       max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+      // AI : TODO bug/risk — json_object mode formally promises an OBJECT, yet every outIsList
+      // AI : schema expects a top-level ARRAY. deepseek happens to emit arrays; stricter providers
+      // AI : (openai) will wrap or refuse, leaving only the extractJson + retry path.
       ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
     }),
   });

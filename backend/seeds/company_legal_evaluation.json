@@ -83,6 +83,19 @@
       "avgCostCents": 6
     },
     {
+      "id": "mod_sort_rules",
+      "kind": "custom-code",
+      "label": "Sort Rules by Severity",
+      "note": "Custom TS function — deterministic glue step, no LLM cost.",
+      "inStructureId": "m_rule",
+      "outStructureId": "m_rule",
+      "outIsList": true,
+      "code": "(rules) => [...rules].sort((a, b) => b.severity - a.severity)",
+      "cached": false,
+      "avgMs": 5,
+      "avgCostCents": 0
+    },
+    {
       "id": "mod_input_company",
       "kind": "input",
       "label": "Company Data",

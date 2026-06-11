@@ -141,6 +141,22 @@ Where appropriate there should be selectors for what LLM can be used, by default
 
 Some of the parts in this pipeline require custom code to loop over things to make efficient. Ideally this would be interesting to have as something automated in the AB testing, but would need to consider how to auto merge things. Maybe just have a custom step option if you need to code a single step.
 
+### Custom TypeScript function steps
+
+Instead of a prebuilt step you can write a custom TypeScript function as a pipeline step:
+
+- The step stores its **code** (a string on the module) and compiles it to one **function which maps input to output** — `(input) => output` (async allowed, or a bare body using `input` with a `return`).
+- The code is **saved**: with the pipeline definition, and per run alongside the step's input/output artifacts (`<module>_code_latest.ts` + timestamped) in 'previous runs'.
+- Output passes the same implicit schema validation as every other step — useful for splitting tasks into smaller deterministic pieces (sort, filter, reshape) with no LLM cost.
+- The default legal pipeline seeds an example: "Sort Rules by Severity" between rule extraction and combine.
+
+### Batch LLM step
+
+A very basic batch step (`llm-batch`) which gets a pydantic / zod output from a list of LLM responses:
+
+- Input is a **list**; the step makes **one structured call per item** (bounded concurrency), each response validated against the step's output structure.
+- Results merge back into a single typed list in input order — this is the "n calls so you don't overwhelm the LLM" pattern from the example pipeline.
+
 Given I'm developing in JS, I'll use zod instead of pydantic to create the schemas.
 
 For the prebuilt "document to text step", please default to a Python PDF reader (I will only provide PDF files while demoing), but have a placeholder option for DeepSeek OCR.
@@ -157,7 +173,7 @@ The frontend is presentation-only — it imports a `lib/` (`store`, `types`, `ru
 
 1. **Structure** — CRUD of `StructureModel`/`ModelField`; one canonical `zodFromModel` that backs both the `models.py` code view and runtime `validate(value, model)` (implicit on every step's I/O, no separate validation step); auto-structure from sample JSON (**TODO placeholder** beyond the legal example).
 
-2. **Pipeline** — CRUD of the ordered `PipelineModule[]`; canonical I/O-validity check (upstream output model must equal a step's input model) driving the invalid badges + dark run buttons; per-kind executors: `input`, `doc-to-text` (Python PDF reader default, **DeepSeek OCR placeholder**), `llm` (`getStructuredResponse`), `transform`, `combine` (auto `{Company data, Company legal requirements}`), `custom-code` (**TODO placeholder**), `output`; per-module `avgMs`/`avgCostCents` from history. Seeds the default Company Legal Evaluation pipeline.
+2. **Pipeline** — CRUD of the ordered `PipelineModule[]`; canonical I/O-validity check (upstream output model must equal a step's input model) driving the invalid badges + dark run buttons; per-kind executors: `input`, `doc-to-text` (JS PDF reader default, **DeepSeek OCR placeholder**), `llm` (`getStructuredResponse`), `llm-batch` (one structured call per list item → typed list), `transform`, `combine` (auto `{Company data, Company legal requirements}`), `custom-code` (saved TypeScript `(input) => output` function), `output`; per-module `avgMs`/`avgCostCents` from history. Seeds the default Company Legal Evaluation pipeline (incl. a custom-fn severity sort).
 
 3. **A/B Test** — runner per `StrategyKind`: `single-llm` (real), `rlm`, `claude-code`, `cheap-claude-code` (**TODO placeholders**); metrics (accuracy, schema pass-rate, latency, cost) + an LLM judge that picks the winner.
 
