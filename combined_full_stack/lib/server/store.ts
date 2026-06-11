@@ -191,6 +191,10 @@ export class JsonStore implements Store {
 
 // AI : only PDFs need parsing — json/text seed docs are stored verbatim.
 async function seedDocContent(spec: SeedDocSpec): Promise<string> {
+  if (!existsSync(spec.path)) {
+    console.warn(`seed doc missing: ${spec.path}`);
+    return `[seed doc unavailable on this deploy: ${spec.name}]`;
+  }
   return spec.type === "pdf" ? pdfToText(spec.path) : readFileSync(spec.path, "utf8");
 }
 

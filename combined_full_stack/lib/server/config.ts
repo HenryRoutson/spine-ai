@@ -1,4 +1,5 @@
 import { config as loadEnv } from "dotenv";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 // AI : import.meta.url breaks once Next bundles this into .next/server — anchor on the
@@ -41,4 +42,12 @@ export function dataDir(): string {
 }
 
 export const REPO_ROOT = resolve(here, "..");
-export const DOCUMENTS_DIR = resolve(REPO_ROOT, "documents");
+
+// AI : Vercel root is combined_full_stack/ — seed PDFs ship in-app; monorepo dev still uses ../documents.
+function documentsDir(): string {
+  const inApp = resolve(here, "documents");
+  const inRepo = resolve(REPO_ROOT, "documents");
+  return existsSync(inApp) ? inApp : inRepo;
+}
+
+export const DOCUMENTS_DIR = documentsDir();

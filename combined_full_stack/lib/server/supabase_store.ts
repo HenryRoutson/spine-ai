@@ -141,6 +141,16 @@ export class SupabaseStore implements Store {
   }
 }
 
+// AI : schema.sql may not be applied yet — detect missing tables and fall back to local JSON.
+export function isMissingSchemaError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return (
+    msg.includes("schema cache") ||
+    msg.includes("Could not find the table") ||
+    (msg.includes("relation") && msg.includes("does not exist"))
+  );
+}
+
 // AI : a ready store for one signed-in user — first sign-in gets the seed projects + docs,
 // AI : mirroring what JsonStore.init() does for the anonymous local store.
 export async function openUserStore(db: SupabaseClient): Promise<SupabaseStore> {
