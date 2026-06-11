@@ -1,22 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { getSupabasePublicEnv } from "@/utils/supabase/env";
 
 const PUBLIC_PATHS = ["/login", "/auth/callback"];
 
-type supabase_url_string = string;
-type supabase_key_string = string;
-
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-}
-
-function getSupabaseEnv(): { url: supabase_url_string | undefined; key: supabase_key_string | undefined } {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
-  const key =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
-    process.env.SUPABASE_ANON_KEY;
-  return { url, key };
 }
 
 function redirectUnauthenticated(request: NextRequest, pathname: string): NextResponse {
@@ -32,8 +21,8 @@ export async function updateSession(request: NextRequest) {
   const isApiRoute = pathname.startsWith("/api/");
   const isPublic = isPublicPath(pathname);
 
-  const { url, key } = getSupabaseEnv();
-  if (!url || !key) {
+  const supabaseEnv = getSupabasePublicEnv();
+  if (!supabaseEnv) {
     // AI : missing Vercel env vars must not crash proxy — gate pages, let /login render.
     if (!isApiRoute && !isPublic) {
       return redirectUnauthenticated(request, pathname);
@@ -43,7 +32,7 @@ export async function updateSession(request: NextRequest) {
 
   let response = NextResponse.next({ request });
 
-  const supabase = createServerClient(url, key, {
+  const supabase = createServerClient(supabaseEnv.url, supabaseEnv.key, {
     cookies: {
       getAll() {
         return request.cookies.getAll();

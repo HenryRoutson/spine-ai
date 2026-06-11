@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
+import { getSupabasePublicEnv } from '@/utils/supabase/env'
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 const geistMono = Geist_Mono({
@@ -19,11 +20,22 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const supabasePublic = getSupabasePublicEnv()
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} bg-background`}
     >
+      <head>
+        {supabasePublic ? (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `window.__SUPABASE_PUBLIC__=${JSON.stringify(supabasePublic)}`,
+            }}
+          />
+        ) : null}
+      </head>
       <body className="font-sans antialiased">{children}</body>
     </html>
   )
