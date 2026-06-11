@@ -220,3 +220,6 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .DS_Store
+
+# backend local JSON store (prototype persistence)
+backend/data/

@@ -9,5 +9,6 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["*.ts", "openrouter/openrouter_llm.test.ts", "openrouter/openrouter_llm.ts"]
+  "exclude": ["node_modules", "data"],
+  "include": ["**/*.ts"]
 }

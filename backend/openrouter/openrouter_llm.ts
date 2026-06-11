@@ -3,9 +3,9 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { z, type ZodType } from "zod";
 
-// AI : .env lives at repo root, one level above backend/
+// AI : .env lives at repo root, two levels above backend/openrouter/
 const here = dirname(fileURLToPath(import.meta.url));
-loadEnv({ path: resolve(here, "../.env") });
+loadEnv({ path: resolve(here, "../../.env") });
 
 type ApiKey = string & { __brand: "OpenRouterApiKey" };
 type ModelSlug = string & { __brand: "ModelSlug" };
@@ -15,10 +15,18 @@ type JsonModeOn = boolean;
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const DEFAULT_MODEL = "deepseek/deepseek-chat" as ModelSlug;
 
+// AI : raw OpenRouter token counts, surfaced so callers can bill per call.
+export interface RawUsage {
+  promptTokens: number;
+  completionTokens: number;
+}
+
 export interface ChatOptions {
   model?: ModelSlug;
   system?: string;
   temperature?: number;
+  // AI : fired with token counts after every successful call (feeds Logging + Billing).
+  onUsage?: (usage: RawUsage) => void;
 }
 
 function apiKey(): ApiKey {
@@ -47,9 +55,16 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn): Pr
     }),
   });
   if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${await res.text()}`);
-  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
+  };
   const content = data.choices?.[0]?.message?.content;
   if (typeof content !== "string") throw new Error("OpenRouter returned no message content");
+  opts.onUsage?.({
+    promptTokens: data.usage?.prompt_tokens ?? 0,
+    completionTokens: data.usage?.completion_tokens ?? 0,
+  });
   return content as RawReply;
 }
 
