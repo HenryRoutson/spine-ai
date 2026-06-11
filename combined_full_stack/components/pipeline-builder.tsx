@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import {
   Plus,
   Trash2,
@@ -21,7 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { useStore, uid } from "@/lib/store"
-import { computeInvalid } from "@/lib/validity"
+import { computeInvalid, computeWarnings, invalidStepMessage } from "@/lib/validity"
 import { moduleMetrics } from "@/lib/billing"
 import { combinePairIds, segmentPipeline } from "@/lib/pipeline-layout"
 import {
@@ -127,8 +127,8 @@ function makeModule(
     kind,
     label: MODULE_META[kind].label,
     cached: false,
-    avgMs: isLlm ? 2500 : kind === "doc-to-text" ? 450 : 200,
-    avgCostCents: isLlm ? 8 : kind === "doc-to-text" ? 1 : 0,
+    avgMs: 0,
+    avgCostCents: 0,
     inputType: kind === "input" ? "pdf" : undefined,
     outStructureId: models[0]?.id,
     inStructureId: kind !== "input" ? models[0]?.id : undefined,
@@ -155,11 +155,21 @@ export function PipelineBuilder() {
   // AI : de-mocked — invalid check is the shared server definition; latency/cost are
   // AI : recomputed from real run history (falls back to seeded avgs before any run).
   const invalid = computeInvalid(modules)
+  const warnings = computeWarnings(modules)
   const metrics = moduleMetrics(runs)
-  const avgMsOf = (m: PipelineModule) => metrics.get(m.id)?.avgMs ?? m.avgMs
-  const avgCostOf = (m: PipelineModule) => metrics.get(m.id)?.avgCostCents ?? m.avgCostCents
-  const totalMs = modules.reduce((a, m) => a + (m.cached ? 0 : avgMsOf(m)), 0)
-  const totalCost = modules.reduce((a, m) => a + (m.cached ? 0 : avgCostOf(m)), 0)
+  const structureModelItems = useMemo(
+    () => models.map((m) => ({ value: m.id, label: m.name })),
+    [models],
+  )
+  const okRuns = runs.filter((r) => r.status === "ok")
+  const totalMs =
+    okRuns.length > 0
+      ? okRuns.reduce((a, r) => a + r.totalMs, 0) / okRuns.length
+      : null
+  const totalCost =
+    okRuns.length > 0
+      ? okRuns.reduce((a, r) => a + r.billedCents, 0) / okRuns.length
+      : null
   const cachedCount = modules.filter((m) => m.cached).length
 
   function insertModule(kind: ModuleKind, at = modules.length) {
@@ -223,11 +233,20 @@ export function PipelineBuilder() {
               {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
               {copied ? "Copied" : "Copy prompt"}
             </Button>
-            <span className="text-muted-foreground">~{(totalMs / 1000).toFixed(1)}s avg</span>
-            <span className="text-muted-foreground">${(totalCost / 100).toFixed(2)}/run</span>
+            <span className="text-muted-foreground">
+              {totalMs != null ? `~${(totalMs / 1000).toFixed(1)}s avg` : "— avg"}
+            </span>
+            <span className="text-muted-foreground">
+              {totalCost != null ? `$${(totalCost / 100).toFixed(2)}/run` : "—/run"}
+            </span>
             <Badge variant="outline" className="gap-1 text-[10px]">
               <Zap className="h-3 w-3 text-primary" /> {cachedCount} cached
             </Badge>
+            {warnings.size > 0 && (
+              <Badge variant="outline" className="gap-1 border-amber-500/50 text-[10px] text-amber-600 dark:text-amber-500">
+                <AlertTriangle className="h-3 w-3" /> {warnings.size} warning{warnings.size === 1 ? "" : "s"}
+              </Badge>
+            )}
             {invalid.size > 0 && (
               <Badge variant="outline" className="gap-1 border-destructive/50 text-[10px] text-destructive">
                 <AlertTriangle className="h-3 w-3" /> {invalid.size} invalid
@@ -249,6 +268,7 @@ export function PipelineBuilder() {
               if (seg.kind === "combine") {
                 const { combine, input, index } = seg
                 const isInvalid = invalid.has(combine.id)
+                const isWarning = warnings.has(combine.id)
                 const pipelineModel = modelName(models, combine.inStructureId)
                 const outModel = modelName(models, combine.outStructureId)
                 const groupSelected = selectedId === combine.id || selectedId === input.id
@@ -259,9 +279,11 @@ export function PipelineBuilder() {
                         "w-80 rounded-lg border-2 border-dashed px-3.5 py-3 transition-colors",
                         isInvalid
                           ? "border-destructive/70 bg-destructive/5"
-                          : groupSelected
-                            ? "border-primary bg-primary/5"
-                            : "border-chart-3/40 bg-chart-3/5",
+                          : isWarning
+                            ? "border-amber-500/60 bg-amber-500/5"
+                            : groupSelected
+                              ? "border-primary bg-primary/5"
+                              : "border-chart-3/40 bg-chart-3/5",
                       )}
                     >
                       <button
@@ -314,8 +336,7 @@ export function PipelineBuilder() {
                     </div>
                     {isInvalid && (
                       <p className="mt-1 max-w-80 text-center font-mono text-[10px] text-destructive">
-                        combine expects {pipelineModel}, upstream emits{" "}
-                        {modelName(models, modules[index - 2]?.outStructureId) ?? "?"}
+                        {invalidStepMessage(invalid.get(combine.id)!, models, modules)}
                       </p>
                     )}
                     <InsertSlot insertAt={insertAfterIndex(seg)} onInsert={insertModule} />
@@ -326,6 +347,7 @@ export function PipelineBuilder() {
               const m = seg.module
               const i = seg.index
               const isInvalid = invalid.has(m.id)
+              const isWarning = warnings.has(m.id)
               return (
                 <div key={m.id} className="flex flex-col items-center">
                   <button
@@ -334,9 +356,11 @@ export function PipelineBuilder() {
                       "group relative flex w-80 items-center gap-3 rounded-lg border bg-card px-3.5 py-3 text-left transition-colors",
                       isInvalid
                         ? "border-destructive/70"
-                        : m.id === selectedId
-                          ? "border-primary"
-                          : "border-border hover:border-muted-foreground/40",
+                        : isWarning
+                          ? "border-amber-500/60"
+                          : m.id === selectedId
+                            ? "border-primary"
+                            : "border-border hover:border-muted-foreground/40",
                     )}
                   >
                     <span className="font-mono text-[10px] text-muted-foreground">
@@ -359,14 +383,20 @@ export function PipelineBuilder() {
                     {m.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
                     {isInvalid ? (
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                    ) : isWarning ? (
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
                     ) : (
                       <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     )}
                   </button>
                   {isInvalid && (
                     <p className="mt-1 max-w-80 text-center font-mono text-[10px] text-destructive">
-                      input expects {modelName(models, m.inStructureId)}, upstream emits{" "}
-                      {modelName(models, modules[i - 1]?.outStructureId) ?? "?"}
+                      {invalidStepMessage(invalid.get(m.id)!, models, modules)}
+                    </p>
+                  )}
+                  {isWarning && !isInvalid && (
+                    <p className="mt-1 max-w-80 text-center font-mono text-[10px] text-amber-600 dark:text-amber-500">
+                      LLM step has no prompt — will use a generic fallback at runtime
                     </p>
                   )}
                   <InsertSlot
@@ -462,15 +492,16 @@ export function PipelineBuilder() {
               {selected.kind !== "input" && (
                 <Field label="Input model">
                   <Select
-                    value={selected.inStructureId}
+                    value={selected.inStructureId ?? null}
                     onValueChange={(v) => update(selected.id, { inStructureId: v ?? undefined })}
+                    items={structureModelItems}
                   >
                     <SelectTrigger className="h-8 font-mono text-xs">
                       <SelectValue placeholder="Select model" />
                     </SelectTrigger>
                     <SelectContent>
                       {models.map((m) => (
-                        <SelectItem key={m.id} value={m.id} className="font-mono text-xs">
+                        <SelectItem key={m.id} value={m.id} label={m.name} className="font-mono text-xs">
                           {m.name}
                         </SelectItem>
                       ))}
@@ -479,17 +510,37 @@ export function PipelineBuilder() {
                 </Field>
               )}
 
-              <Field label="Output model">
+              <Field
+                label="Output model"
+                hint={
+                  invalid.has(selected.id) && invalid.get(selected.id)?.kind === "no-output"
+                    ? "required — step must emit a structure"
+                    : undefined
+                }
+                hintTone={
+                  invalid.has(selected.id) && invalid.get(selected.id)?.kind === "no-output"
+                    ? "error"
+                    : undefined
+                }
+              >
                 <Select
-                  value={selected.outStructureId}
+                  value={selected.outStructureId ?? null}
                   onValueChange={(v) => update(selected.id, { outStructureId: v ?? undefined })}
+                  items={structureModelItems}
                 >
-                  <SelectTrigger className="h-8 font-mono text-xs">
+                  <SelectTrigger
+                    className={cn(
+                      "h-8 font-mono text-xs",
+                      invalid.has(selected.id) &&
+                        invalid.get(selected.id)?.kind === "no-output" &&
+                        "border-destructive/70",
+                    )}
+                  >
                     <SelectValue placeholder="Select model" />
                   </SelectTrigger>
                   <SelectContent>
                     {models.map((m) => (
-                      <SelectItem key={m.id} value={m.id} className="font-mono text-xs">
+                      <SelectItem key={m.id} value={m.id} label={m.name} className="font-mono text-xs">
                         {m.name}
                       </SelectItem>
                     ))}
@@ -505,12 +556,22 @@ export function PipelineBuilder() {
                       onChange={(v) => update(selected.id, { model: v })}
                     />
                   </Field>
-                  <Field label="Prompt">
+                  <Field
+                    label="Prompt"
+                    hint={
+                      warnings.has(selected.id)
+                        ? "empty — pipeline will fall back to a generic instruction"
+                        : undefined
+                    }
+                  >
                     <Textarea
                       value={selected.prompt ?? ""}
                       onChange={(e) => update(selected.id, { prompt: e.target.value })}
                       placeholder="Instruction for this step…"
-                      className="min-h-24 text-xs leading-relaxed"
+                      className={cn(
+                        "min-h-24 text-xs leading-relaxed",
+                        warnings.has(selected.id) && "border-amber-500/60",
+                      )}
                     />
                   </Field>
                 </>
@@ -541,8 +602,22 @@ export function PipelineBuilder() {
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-2">
-                <Stat label="avg latency" value={`${avgMsOf(selected)}ms`} />
-                <Stat label="avg cost" value={`$${(avgCostOf(selected) / 100).toFixed(2)}`} />
+                <Stat
+                  label="avg latency"
+                  value={
+                    metrics.has(selected.id)
+                      ? `${metrics.get(selected.id)!.avgMs}ms`
+                      : "—"
+                  }
+                />
+                <Stat
+                  label="avg cost"
+                  value={
+                    metrics.has(selected.id)
+                      ? `$${(metrics.get(selected.id)!.avgCostCents / 100).toFixed(2)}`
+                      : "—"
+                  }
+                />
               </div>
             </div>
           ) : (
@@ -664,12 +739,34 @@ function PipelineNode({ label, subtle }: { label: string; subtle?: boolean }) {
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  hintTone = "warning",
+  children,
+}: {
+  label: string
+  hint?: string
+  hintTone?: "warning" | "error"
+  children: React.ReactNode
+}) {
   return (
     <div className="mb-3">
       <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
         {label}
       </label>
+      {hint && (
+        <p
+          className={cn(
+            "mb-1.5 font-mono text-[10px]",
+            hintTone === "error"
+              ? "text-destructive"
+              : "text-amber-600 dark:text-amber-500",
+          )}
+        >
+          {hint}
+        </p>
+      )}
       {children}
     </div>
   )

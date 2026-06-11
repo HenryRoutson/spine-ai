@@ -61,6 +61,8 @@ export function moduleMetrics(runs: PipelineRun[]): Map<ModuleId, { avgMs: numbe
   const agg = new Map<ModuleId, { ms: number; cents: number; n: number }>();
   for (const r of runs) {
     for (const s of r.steps) {
+      // AI : cached/error steps skew averages toward 0 — only count real executions.
+      if (s.status !== "ok") continue;
       const cur = agg.get(s.moduleId) ?? { ms: 0, cents: 0, n: 0 };
       agg.set(s.moduleId, { ms: cur.ms + s.ms, cents: cur.cents + s.costCents, n: cur.n + 1 });
     }

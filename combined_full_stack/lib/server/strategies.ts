@@ -6,6 +6,7 @@ import { llmStructured } from "./llm";
 import { llmSchema, validate } from "./structure";
 import type { Store } from "./store";
 import { UsageLedger } from "./usage";
+import { pipelineOutputModel, pipelineTaskPrompt } from "./validity";
 import {
   DEFAULT_MODEL,
   type DocId,
@@ -38,6 +39,7 @@ export interface StrategyResult {
 
 interface BenchTask {
   source: string;
+  taskBrief: string; // AI : from the pipeline's LLM step prompt — not hardcoded per project kind
   out: StructureModel; // the report structure every environment must produce
   models: StructureModel[];
   model: ModelId;
@@ -58,14 +60,11 @@ function validRows(task: BenchTask, rows: unknown): unknown[] {
   return rows.filter((r) => validate(r, task.out, task.models).ok);
 }
 
-const TASK_BRIEF =
-  "You are a legal compliance engine. Read the document, derive its obligations, and produce a per-rule compliance assessment (concise summary, rule_id, compliant verdict, brief rationale, liability_usd if non-compliant).";
-
 // ---- the four LLL environments ----
 
 // 1. single-llm — one direct structured call.
 async function envSingleLlm(task: BenchTask): Promise<unknown[]> {
-  const prompt = `${TASK_BRIEF}\n\nDOCUMENT:\n${task.source}`;
+  const prompt = `${task.taskBrief}\n\nDOCUMENT:\n${task.source}`;
   task.log.push("## single-llm", "One structured call.", fence("text", prompt.slice(0, 400) + "…"));
   const rows = await llmStructured(prompt, rowSchema(task), { model: task.model, ledger: task.ledger });
   task.log.push("Output:", fence("json", JSON.stringify(rows, null, 2)));
@@ -81,13 +80,13 @@ async function envRlm(task: BenchTask): Promise<unknown[]> {
 
   const partials: unknown[] = [];
   for (let i = 0; i < chunks.length; i++) {
-    const prompt = `${TASK_BRIEF}\nOnly assess obligations present in this document SECTION.\n\nSECTION ${i + 1}/${chunks.length}:\n${chunks[i]}`;
+    const prompt = `${task.taskBrief}\nOnly process content present in this document SECTION.\n\nSECTION ${i + 1}/${chunks.length}:\n${chunks[i]}`;
     const rows = (await llmStructured(prompt, rowSchema(task), { model: task.model, ledger: task.ledger })) as unknown[];
     task.log.push(`### recursive call ${i + 1}/${chunks.length} → ${rows.length} rows`, fence("json", JSON.stringify(rows, null, 2)));
     partials.push(...rows);
   }
 
-  const synth = `${TASK_BRIEF}\nMerge these partial assessments: dedupe overlapping rules, keep distinct rule_ids, prefer the stricter verdict.\n\nPARTIALS:\n${JSON.stringify(partials, null, 2)}`;
+  const synth = `${task.taskBrief}\nMerge these partial results: dedupe overlaps, keep distinct ids, prefer the stricter or more complete answer.\n\nPARTIALS:\n${JSON.stringify(partials, null, 2)}`;
   const rows = await llmStructured(synth, rowSchema(task), { model: task.model, ledger: task.ledger });
   task.log.push("### synthesis", fence("json", JSON.stringify(rows, null, 2)));
   return rows as unknown[];
@@ -98,7 +97,7 @@ async function envRlm(task: BenchTask): Promise<unknown[]> {
 // AI : the demo runs this same critique loop, just under the claude-code label.
 async function envAgentLoop(task: BenchTask, label: string): Promise<unknown[]> {
   task.log.push(`## ${label} (agent loop)`, "draft → validate → critique → revise");
-  const draftPrompt = `${TASK_BRIEF}\n\nDOCUMENT:\n${task.source}`;
+  const draftPrompt = `${task.taskBrief}\n\nDOCUMENT:\n${task.source}`;
   let rows = (await llmStructured(draftPrompt, rowSchema(task), { model: task.model, ledger: task.ledger })) as unknown[];
   task.log.push("### draft", fence("json", JSON.stringify(rows, null, 2)));
 
@@ -118,12 +117,6 @@ const ENV_RUNNERS: Record<StrategyKind, (task: BenchTask) => Promise<unknown[]>>
   "cheap-agent": (t) => envAgentLoop(t, "cheap-agent"),
 };
 
-function reportModel(project: Project): StructureModel {
-  const m = project.models.find((x) => x.name === "LegalConsiderations");
-  if (!m) throw new Error("project has no LegalConsiderations structure for the A/B task");
-  return m;
-}
-
 // AI : run one LLL environment over the pipeline task with real calls; logs are kept per outline.
 export async function runStrategy(
   strategy: Strategy,
@@ -136,7 +129,8 @@ export async function runStrategy(
   const ledger = new UsageLedger();
   const task: BenchTask = {
     source: (store.docContent(inputDocId) ?? "").slice(0, BENCH_DOC_CHARS),
-    out: reportModel(project),
+    taskBrief: pipelineTaskPrompt(project.modules),
+    out: pipelineOutputModel(project),
     models: project.models,
     model,
     ledger,
