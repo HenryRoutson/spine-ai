@@ -1,0 +1,11 @@
+{
+  "name": "stripe-billing-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=../.env stripe.js"
+  },
+  "dependencies": {
+    "stripe": "^18.0.0"
+  }
+}
