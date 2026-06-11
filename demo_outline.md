@@ -60,11 +60,22 @@ Please have a run button on each step which has a cached or has an input ready. 
 
 Test what approach works best in the pipeline. You might want to compare what works best between:
 
+
+LLL environment options :
+
 1. A single LLM call.
 2. An RLM call (Recursive Language Models).
 3. A full Claude Code instance tackling your problem.
 4. A Claude Code like system running on a cheap Chinese model for cost efficiency.
 
+using models from a selection : 
+
+1. Deepseek
+2. Sonnet 4.7 (if nothing else works well )
+
+Please run all the LLL environment options using a cheap model and if none work try with a single sonnet call.
+
+Ensure logs are kept for this AB testing, in particular, sytax highlighted code from the RLM, claude code systems.
 Which is the best choice will be evaluated by an LLM.
 
 ## 4. Inference
