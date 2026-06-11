@@ -149,7 +149,7 @@
     { "id": "s_cheap", "kind": "cheap-agent", "name": "Agent (Cheap Model)", "enabled": true, "model": "deepseek-v3", "accuracy": 84, "latencyMs": 18200, "costCents": 14, "passRate": 91 }
   ],
   "docs": [
-    { "name": "health_data_governance_agreement.pdf", "type": "pdf", "label": "inference", "file": "legal/legal_doc_text.pdf" },
-    { "name": "mediflow_ai_company_profile.pdf", "type": "pdf", "label": "inference", "file": "legal/company_for_assessment.pdf" }
+    { "name": "health_data_governance_agreement.pdf", "type": "text", "label": "inference", "file": "legal/legal_doc_text.txt" },
+    { "name": "mediflow_ai_company_profile.pdf", "type": "text", "label": "inference", "file": "legal/company_for_assessment.txt" }
   ]
 }

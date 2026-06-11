@@ -89,7 +89,13 @@ export async function ensureSeeded(store: Store): Promise<void> {
     const existing = store.project(seed.project.id);
     if (!existing) {
       store.saveProject(structuredClone(seed.project));
-      for (const spec of seed.docSpecs) store.addDoc(spec.name, spec.type, await seedDocContent(spec), spec.label);
+      for (const spec of seed.docSpecs) {
+        try {
+          store.addDoc(spec.name, spec.type, await seedDocContent(spec), spec.label);
+        } catch (err) {
+          console.error(`seed doc failed (${spec.name}):`, err);
+        }
+      }
       continue;
     }
     // AI : backfill seedDocNames + module labels from seeds/*.json on existing projects.
@@ -191,11 +197,19 @@ export class JsonStore implements Store {
 
 // AI : only PDFs need parsing — json/text seed docs are stored verbatim.
 async function seedDocContent(spec: SeedDocSpec): Promise<string> {
+  const txtSidecar = spec.path.replace(/\.pdf$/i, ".txt");
+  if (existsSync(txtSidecar)) return readFileSync(txtSidecar, "utf8");
   if (!existsSync(spec.path)) {
     console.warn(`seed doc missing: ${spec.path}`);
     return `[seed doc unavailable on this deploy: ${spec.name}]`;
   }
-  return spec.type === "pdf" ? pdfToText(spec.path) : readFileSync(spec.path, "utf8");
+  if (spec.type !== "pdf" || process.env.VERCEL) return readFileSync(spec.path, "utf8");
+  try {
+    return await pdfToText(spec.path);
+  } catch (err) {
+    console.error(`pdf seed parse failed (${spec.path}):`, err);
+    return readFileSync(spec.path, "utf8");
+  }
 }
 
 // AI : convenience — an initialised store for scripts/tests.
