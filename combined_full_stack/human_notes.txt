@@ -29,3 +29,25 @@ pipeline steps :
 
 works,
 as the input doesn't go into the output. you need to wrap the comany data (rename to company data input) with the combine inputs component so you can see how things work. the chain doesn't make sense. do the same thing for the CRM project.
+
+
+
+## Error Type
+Console Error
+
+## Error Message
+Could not find the table 'public.billing_accounts' in the schema cache
+
+
+    at api (lib/store.tsx:85:22)
+
+## Code Frame
+  83 | async function api<T>(url: string, init?: RequestInit): Promise<T> {
+  84 |   const res = await fetch(url, init)
+> 85 |   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `${url} → ${...
+     |                      ^
+  86 |   return res.json() as Promise<T>
+  87 | }
+  88 |
+
+Next.js version: 16.2.6 (Turbopack)

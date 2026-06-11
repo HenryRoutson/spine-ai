@@ -8,7 +8,7 @@ import {
   Zap,
   FileInput,
   Shuffle,
-  Brain,
+  Sparkle,
   FileOutput,
   ArrowUp,
   ArrowDown,
@@ -16,7 +16,7 @@ import {
   Merge,
   Code2,
   AlertTriangle,
-  Layers,
+  type LucideIcon,
 } from "lucide-react"
 import { useStore, uid } from "@/lib/store"
 import { computeInvalid } from "@/lib/validity"
@@ -46,11 +46,30 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-const KIND_ICON: Record<ModuleKind, typeof Brain> = {
+// AI : batch llm is a 2×2 sparkle grid so it reads as "many calls" vs single Sparkle.
+function BatchSparkleIcon({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-grid grid-cols-2 gap-px leading-none [&_svg]:size-[42%]",
+        className,
+      )}
+    >
+      <Sparkle />
+      <Sparkle />
+      <Sparkle />
+      <Sparkle />
+    </span>
+  )
+}
+
+type ModuleIcon = LucideIcon | typeof BatchSparkleIcon
+
+const KIND_ICON: Record<ModuleKind, ModuleIcon> = {
   input: FileInput,
   "doc-to-text": FileText,
-  llm: Brain,
-  "llm-batch": Layers,
+  llm: Sparkle,
+  "llm-batch": BatchSparkleIcon,
   transform: Shuffle,
   combine: Merge,
   "custom-code": Code2,
@@ -198,7 +217,7 @@ export function PipelineBuilder() {
                         <span className="font-mono text-[10px] text-muted-foreground">
                           {String(index + 1).padStart(2, "0")}
                         </span>
-                        <Merge className="h-4 w-4 shrink-0 text-chart-3" />
+                        <KindIcon kind="combine" />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium">{combine.label}</p>
                           <p className="truncate font-mono text-[10px] text-muted-foreground">
@@ -227,7 +246,7 @@ export function PipelineBuilder() {
                             : "border-border hover:border-muted-foreground/40",
                         )}
                       >
-                        <FileInput className="h-3.5 w-3.5 shrink-0 text-chart-2" />
+                        <KindIcon kind="input" size="sm" />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-xs font-medium">{input.label}</p>
                           <p className="truncate font-mono text-[10px] text-muted-foreground">
@@ -250,7 +269,6 @@ export function PipelineBuilder() {
 
               const m = seg.module
               const i = seg.index
-              const Icon = KIND_ICON[m.kind]
               const isInvalid = invalid.has(m.id)
               return (
                 <div key={m.id} className="flex flex-col items-center">
@@ -269,7 +287,7 @@ export function PipelineBuilder() {
                     <span className="font-mono text-[10px] text-muted-foreground">
                       {String(i + 1).padStart(2, "0")}
                     </span>
-                    <Icon className={cn("h-4 w-4 shrink-0", KIND_COLOR[m.kind])} />
+                    <KindIcon kind={m.kind} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{m.label}</p>
                       <p className="truncate font-mono text-[10px] text-muted-foreground">
@@ -302,7 +320,7 @@ export function PipelineBuilder() {
             <Connector />
             <PipelineNode label="End" subtle />
 
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+            <div className="mt-6 flex flex-wrap items-start justify-center gap-2">
               {ADDABLE.map((k) => {
                 const Icon = KIND_ICON[k]
                 return (
@@ -310,11 +328,13 @@ export function PipelineBuilder() {
                     key={k}
                     variant="outline"
                     size="sm"
-                    className="bg-transparent"
+                    className="h-auto flex-col gap-1 bg-transparent px-3 py-2"
                     onClick={() => addModule(k)}
                   >
-                    <Icon className={cn("mr-1.5 h-3.5 w-3.5", KIND_COLOR[k])} />
-                    {MODULE_META[k].label}
+                    <Icon className={cn("h-4 w-4", KIND_COLOR[k])} />
+                    <span className="max-w-16 text-center text-[10px] leading-tight">
+                      {MODULE_META[k].label}
+                    </span>
                   </Button>
                 )
               })}
@@ -488,6 +508,18 @@ export function PipelineBuilder() {
           )}
         </aside>
       </div>
+    </div>
+  )
+}
+
+function KindIcon({ kind, size = "md" }: { kind: ModuleKind; size?: "sm" | "md" }) {
+  const Icon = KIND_ICON[kind]
+  return (
+    <div className="flex w-14 shrink-0 flex-col items-center gap-0.5">
+      <Icon className={cn(size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4", KIND_COLOR[kind])} />
+      <span className="text-center text-[8px] leading-tight text-muted-foreground">
+        {MODULE_META[kind].label}
+      </span>
     </div>
   )
 }
