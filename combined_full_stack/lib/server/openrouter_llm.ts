@@ -30,6 +30,48 @@ export interface ChatOptions {
 // AI : Anthropic) against the account balance and 402s; 8k is plenty for every step we run.
 const DEFAULT_MAX_TOKENS = 8192;
 
+type HttpStatus = number;
+type RetryAfterSeconds = number;
+
+// AI : shared OpenRouter keys hit upstream 429s when llm-batch fires 4 parallel calls; cap in-flight.
+const MAX_IN_FLIGHT = 2;
+let inFlight = 0;
+const slotWaiters: (() => void)[] = [];
+
+async function acquireOpenRouterSlot(): Promise<() => void> {
+  if (inFlight < MAX_IN_FLIGHT) {
+    inFlight++;
+    return () => {
+      inFlight--;
+      slotWaiters.shift()?.();
+    };
+  }
+  await new Promise<void>((resolve) => slotWaiters.push(resolve));
+  inFlight++;
+  return () => {
+    inFlight--;
+    slotWaiters.shift()?.();
+  };
+}
+
+const RETRYABLE_STATUSES = new Set<HttpStatus>([429, 502, 503, 529]);
+const MAX_CHAT_ATTEMPTS = 6;
+const RETRY_BASE_MS = 2000;
+const RETRY_MAX_MS = 30000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelayMs(res: Response, attempt: number): number {
+  const retryAfter = res.headers.get("retry-after");
+  if (retryAfter) {
+    const seconds = Number(retryAfter) as RetryAfterSeconds;
+    if (Number.isFinite(seconds) && seconds > 0) return seconds * 1000;
+  }
+  return Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** attempt);
+}
+
 function apiKey(): ApiKey {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) throw new Error("OPENROUTER_API_KEY missing — set it in the repo root .env");
@@ -42,35 +84,53 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn): Pr
     ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
     { role: "user" as const, content: prompt },
   ];
-  const res = await fetch(OPENROUTER_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey()}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: opts.model ?? DEFAULT_MODEL,
-      messages,
-      temperature: opts.temperature ?? 0,
-      max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-      // AI : TODO bug/risk — json_object mode formally promises an OBJECT, yet every outIsList
-      // AI : schema expects a top-level ARRAY. deepseek happens to emit arrays; stricter providers
-      // AI : (openai) will wrap or refuse, leaving only the extractJson + retry path.
-      ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
-    }),
+  const body = JSON.stringify({
+    model: opts.model ?? DEFAULT_MODEL,
+    messages,
+    temperature: opts.temperature ?? 0,
+    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+    // AI : TODO bug/risk — json_object mode formally promises an OBJECT, yet every outIsList
+    // AI : schema expects a top-level ARRAY. deepseek happens to emit arrays; stricter providers
+    // AI : (openai) will wrap or refuse, leaving only the extractJson + retry path.
+    ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
   });
-  if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${await res.text()}`);
-  const data = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
-    usage?: { prompt_tokens?: number; completion_tokens?: number };
-  };
-  const content = data.choices?.[0]?.message?.content;
-  if (typeof content !== "string") throw new Error("OpenRouter returned no message content");
-  opts.onUsage?.({
-    promptTokens: data.usage?.prompt_tokens ?? 0,
-    completionTokens: data.usage?.completion_tokens ?? 0,
-  });
-  return content as RawReply;
+
+  const release = await acquireOpenRouterSlot();
+  try {
+    let lastError = "";
+    for (let attempt = 0; attempt < MAX_CHAT_ATTEMPTS; attempt++) {
+      const res = await fetch(OPENROUTER_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey()}`,
+          "Content-Type": "application/json",
+        },
+        body,
+      });
+      if (!res.ok) {
+        lastError = await res.text();
+        if (RETRYABLE_STATUSES.has(res.status) && attempt < MAX_CHAT_ATTEMPTS - 1) {
+          await sleep(retryDelayMs(res, attempt));
+          continue;
+        }
+        throw new Error(`OpenRouter ${res.status}: ${lastError}`);
+      }
+      const data = (await res.json()) as {
+        choices?: { message?: { content?: string } }[];
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
+      };
+      const content = data.choices?.[0]?.message?.content;
+      if (typeof content !== "string") throw new Error("OpenRouter returned no message content");
+      opts.onUsage?.({
+        promptTokens: data.usage?.prompt_tokens ?? 0,
+        completionTokens: data.usage?.completion_tokens ?? 0,
+      });
+      return content as RawReply;
+    }
+    throw new Error(`OpenRouter failed after ${MAX_CHAT_ATTEMPTS} attempts: ${lastError}`);
+  } finally {
+    release();
+  }
 }
 
 // 1. plain string response from openrouter

@@ -39,7 +39,8 @@ export async function llmBatchStructured<T>(
   promptFor: (item: unknown, index: number) => string,
   schema: ZodType<T>,
   ctx: CallContext,
-  concurrency = 4,
+  // AI : default 2 — matches openrouter_llm in-flight cap; 4 parallel calls routinely 429 DeepInfra.
+  concurrency = 2,
 ): Promise<T[]> {
   const out: T[] = new Array(items.length);
   let next = 0;
