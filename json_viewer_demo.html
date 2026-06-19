@@ -16,9 +16,7 @@
   --accent: #2563eb;
   --radius: 8px;
   --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
-  --shadow-md: 0 4px 14px rgba(0,0,0,.10);
 
-  /* JSON dark panel */
   --jbg:    #1a1a1a;
   --jkey:   #9cdcfe;
   --jstr:   #ce9178;
@@ -41,204 +39,170 @@ body {
   overflow: hidden;
 }
 
-/* ── Header ──────────────────────────────── */
+/* ── Header ───────────────────────────────────────────── */
 header {
   background: #111827;
-  display: flex;
-  align-items: center;
-  gap: 0;
-  padding: 0 14px;
-  height: 46px;
-  flex-shrink: 0;
+  display: flex; align-items: center; gap: 0;
+  padding: 0 14px; height: 46px; flex-shrink: 0;
 }
 .h-logo { display:flex; align-items:center; gap:8px; margin-right:16px; }
 .h-logo span { color:#f9fafb; font-size:14px; font-weight:600; letter-spacing:-.2px; }
 .ex-tabs { display:flex; gap:2px; flex:1; }
 .ex-tab {
-  padding: 5px 13px;
-  font-size: 12.5px;
-  color: #6b7280;
-  background: transparent;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all .15s;
-  font-family: inherit;
-  white-space: nowrap;
+  padding:5px 13px; font-size:12.5px; color:#6b7280; background:transparent;
+  border:none; border-radius:6px; cursor:pointer; transition:all .15s; font-family:inherit; white-space:nowrap;
 }
 .ex-tab:hover  { background:#1f2937; color:#e5e7eb; }
 .ex-tab.active { background:#2563eb; color:#fff; }
-.h-badge {
-  font-size:10.5px; font-weight:600; padding:3px 10px;
-  border-radius:999px; margin-left:8px; flex-shrink:0;
-}
+.h-badge { font-size:10.5px; font-weight:600; padding:3px 10px; border-radius:999px; margin-left:8px; flex-shrink:0; }
 .hb-schema { background:#4c1d95; color:#c4b5fd; }
 .hb-data   { background:#14532d; color:#86efac; }
 
-/* ── Breadcrumb ──────────────────────────── */
+/* ── Breadcrumb / Drill path ──────────────────────────── */
 #crumb {
   background:#0f172a; color:#475569;
   font-size:11.5px; font-family:"SF Mono","Fira Code",monospace;
   padding:6px 16px; min-height:30px; display:flex; align-items:center;
-  flex-shrink:0; border-bottom:1px solid #1e293b;
-  transition: opacity .15s;
+  flex-shrink:0; border-bottom:1px solid #1e293b; transition:opacity .15s;
 }
 #crumb.empty { opacity:.35; }
 .cr-seg      { color:#64748b; }
 .cr-seg.last { color:#94a3b8; }
+.cr-seg.link { color:#60a5fa; cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
 .cr-sep      { margin:0 6px; color:#1e3a5f; }
 
-/* ── Main split ──────────────────────────── */
-main {
-  display: grid;
-  grid-template-columns: 440px 1fr;
-  overflow: hidden;
-}
+/* ── Main split ───────────────────────────────────────── */
+main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
 
-/* ── JSON Panel (left) ───────────────────── */
+/* ── Structure Panel (left) ──────────────────────────── */
 #json-panel {
-  background: var(--jbg);
-  overflow: auto;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid #2d2d2d;
+  background:#181818; overflow:auto; display:flex;
+  flex-direction:column; border-right:1px solid #282828;
 }
 .jp-header {
-  padding: 7px 12px;
-  font-size: 10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em;
-  color: #4b5563;
-  border-bottom: 1px solid #262626;
-  position: sticky; top:0; background:#161616; z-index:1; flex-shrink:0;
+  padding:7px 14px; font-size:10px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.08em; color:#4b5563; border-bottom:1px solid #242424;
+  position:sticky; top:0; background:#141414; z-index:1; flex-shrink:0;
 }
 #json-code {
-  padding: 10px 0 16px 0;
-  font-family: "SF Mono","Fira Code","Cascadia Code",Consolas,monospace;
-  font-size: 12.5px;
-  line-height: 1.65;
-  flex: 1;
+  padding:10px 0 20px 0;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  font-size:13px; line-height:1.6; flex:1;
 }
 
-/* Each JSON line */
-.j-line {
-  display: flex;
-  align-items: flex-start;
-  min-height: 20px;
+/* Structure tree rows */
+.st-row {
+  display:flex; align-items:center; gap:8px;
+  padding:4px 14px 4px calc(16px + var(--d,0)*18px);
+  min-height:27px; position:relative;
 }
-.j-line:hover { background: rgba(255,255,255,.025); }
+.st-row:hover { background:rgba(255,255,255,.04); }
+.st-parent { cursor:pointer; }
+.st-toggle { font-size:9px; color:#4a4a4a; width:12px; text-align:center; flex-shrink:0; user-select:none; transition:color .12s; }
+.st-spacer { width:12px; flex-shrink:0; }
+.st-parent:hover .st-toggle { color:#888; }
+.st-label  { font-size:13px; color:#d0d0d0; font-weight:500; flex:1; white-space:nowrap; }
+.st-type   { font-size:10px; font-weight:600; white-space:nowrap; flex-shrink:0; }
 
-/* Gutter: holds ▼ keyname */
+/* Guide lines */
+.st-kids {
+  border-left:1px solid rgba(255,255,255,.07);
+  margin-left:calc(16px + var(--d,0)*18px + 5px);
+}
+.st-kids.st-closed { display:none; }
+
+/* Schema-mode extras */
+.st-req   { font-size:9px; padding:1px 5px; border-radius:999px; background:#2d0b0b; color:#f87171; margin-left:4px; flex-shrink:0; }
+.st-opt   { font-size:9px; padding:1px 5px; border-radius:999px; background:#1f2937; color:#6b7280; margin-left:4px; flex-shrink:0; }
+.st-desc  { font-size:11px; color:#4b5563; margin-left:4px; font-style:italic; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px; }
+
+/* ── Left panel mode toggle (Structure / JSON) ─────── */
+.jp-header { display:flex; align-items:center; }
+.jp-htitle { flex:1; }
+.jp-toggle { display:flex; gap:2px; }
+.jp-tbtn {
+  font-size:9px; padding:2px 7px; border-radius:4px;
+  border:1px solid #333; background:transparent; color:#4a4a4a;
+  cursor:pointer; font-family:inherit; text-transform:uppercase;
+  font-weight:700; letter-spacing:.06em; transition:all .12s;
+}
+.jp-tbtn:hover { color:#888; border-color:#555; }
+.jp-tbtn.active { background:#1f2937; border-color:#374151; color:#9ca3af; }
+
+/* ── JSON mode styles (restored for when JSON tab is active) ─ */
+#json-code.json-mode {
+  font-family:"SF Mono","Fira Code","Cascadia Code",Consolas,monospace;
+  font-size:12.5px; line-height:1.65;
+}
+.j-line { display:flex; align-items:flex-start; min-height:20px; }
+.j-line:hover { background:rgba(255,255,255,.025); }
 .j-gutter {
-  width: 92px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  padding-right: 8px;
-  padding-top: 1px;
-  gap: 3px;
-  user-select: none;
+  width:92px; flex-shrink:0; display:flex; align-items:center;
+  justify-content:flex-end; padding-right:8px; padding-top:1px; gap:3px; user-select:none;
 }
-.j-tag {
-  display: flex; align-items: center; gap: 3px;
-  cursor: pointer; padding: 1px 4px; border-radius: 3px;
-  transition: background .1s;
-}
-.j-tag:hover { background: rgba(255,255,255,.07); }
-.j-fa {
-  font-size: 9px; color: var(--jfa);
-  transition: color .1s; line-height: 1;
-}
-.j-fname {
-  font-size: 9px; color: rgba(200,200,200,.3);
-  font-style: italic; max-width: 56px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.j-tag:hover .j-fa, .j-tag:hover .j-fname { color: rgba(220,220,220,.7); }
+.j-tag { display:flex; align-items:center; gap:3px; cursor:pointer; padding:1px 4px; border-radius:3px; transition:background .1s; }
+.j-tag:hover { background:rgba(255,255,255,.07); }
+.j-fa    { font-size:9px; color:var(--jfa); transition:color .1s; line-height:1; }
+.j-fname { font-size:9px; color:rgba(200,200,200,.3); font-style:italic; max-width:56px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.j-tag:hover .j-fa, .j-tag:hover .j-fname { color:rgba(220,220,220,.7); }
+.j-content { flex:1; padding-left:calc(var(--d,0)*16px); padding-right:18px; white-space:pre; word-break:break-all; }
+.j-body   { border-left:2px solid transparent; margin-left:1px; }
+.j-key    { color:var(--jkey); }
+.j-str    { color:var(--jstr); }
+.j-num    { color:var(--jnum); }
+.j-bool   { color:var(--jbool); }
+.j-null   { color:var(--jnull); font-style:italic; }
+.j-date   { color:var(--jdate); }
+.j-p      { color:var(--jpunct); }
+.j-ell    { color:var(--jell); font-style:italic; letter-spacing:.05em; }
 
-/* Content area */
-.j-content {
-  flex: 1;
-  padding-left: calc(var(--d,0) * 16px);
-  padding-right: 18px;
-  white-space: pre;
-  word-break: break-all;
-}
+/* Highlight animation when jumping from human view → JSON */
+@keyframes jhl { 0%{background:rgba(234,179,8,.35)} 100%{background:transparent} }
+.j-highlight { animation:jhl 2s forwards; border-radius:2px; }
 
-/* Fold body — the colored container */
-.j-body {
-  border-left: 2px solid transparent;
-  margin-left: 1px;
-}
+/* ── Right Panel ──────────────────────────────────────── */
+#rendered-panel { overflow:hidden; display:flex; flex-direction:column; }
 
-/* Syntax colors */
-.j-key   { color: var(--jkey); }
-.j-str   { color: var(--jstr); }
-.j-num   { color: var(--jnum); }
-.j-bool  { color: var(--jbool); }
-.j-null  { color: var(--jnull); font-style: italic; }
-.j-date  { color: var(--jdate); }
-.j-p     { color: var(--jpunct); }
-.j-ell   { color: var(--jell); font-style: italic; letter-spacing: .05em; }
-
-/* ── Rendered Panel (right) ──────────────── */
-#rendered-panel {
-  overflow-y: auto;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-}
 .rp-header {
-  padding: 7px 16px;
-  font-size: 10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em;
-  color: var(--muted);
-  position: sticky; top:-16px; background:var(--bg); z-index:1;
-  margin: -16px -16px 12px -16px;
-  border-bottom: 1px solid var(--border);
+  padding:7px 14px; font-size:10px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.08em; color:var(--muted); background:var(--bg);
+  border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; flex-shrink:0;
 }
+.rp-header span { flex:1; }
+
+/* View toggle: Cards | Table */
+.view-toggle { display:flex; gap:2px; }
+.vbtn {
+  padding:3px 10px; font-size:11px; font-weight:500; border-radius:5px;
+  border:1px solid var(--border); background:var(--surface); cursor:pointer;
+  color:var(--muted); font-family:inherit; transition:all .12s;
+}
+.vbtn:hover  { border-color:var(--accent); color:var(--accent); }
+.vbtn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+#rp-content { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; }
+
+/* ── Cards view ───────────────────────────────────────── */
 .root-meta  { margin-bottom:14px; }
 .root-title { font-size:19px; font-weight:700; letter-spacing:-.3px; }
 .root-desc  { font-size:13px; color:var(--muted); margin-top:3px; }
 .node-group { display:flex; flex-direction:column; gap:6px; }
-
 .node-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-  box-shadow: var(--shadow);
-  transition: box-shadow .15s, border-color .15s;
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow);
 }
-.node-card:hover > .node-head { background: #fafaf8; }
-
-.node-head {
-  padding: 9px 12px 9px 10px;
-  display: flex; align-items: flex-start; gap: 8px;
-  user-select: none;
-  transition: background .1s;
-}
-.node-head.clickable { cursor: pointer; }
-.node-head.static    { cursor: default; }
-
-/* Code-fold chevron in right panel */
-.n-chev {
-  font-size: 10px; color: var(--muted);
-  line-height: 22px; flex-shrink: 0;
-  width: 14px; text-align: center;
-  font-family: monospace; transition: color .15s;
-}
-.n-chev.open { color: var(--accent); }
-.n-chev.leaf { opacity: 0; pointer-events: none; }
-
+.node-card:hover > .node-head { background:#fafaf8; }
+.node-head { padding:9px 12px 9px 10px; display:flex; align-items:flex-start; gap:8px; user-select:none; transition:background .1s; }
+.node-head.clickable { cursor:pointer; }
+.node-head.static    { cursor:default; }
+.n-chev { font-size:10px; color:var(--muted); line-height:22px; flex-shrink:0; width:14px; text-align:center; font-family:monospace; transition:color .15s; }
+.n-chev.open { color:var(--accent); }
+.n-chev.leaf { opacity:0; pointer-events:none; }
 .n-labels { flex:1; min-width:0; }
 .n-label  { font-size:13.5px; font-weight:600; line-height:1.3; }
 .n-desc   { font-size:11.5px; color:var(--muted); margin-top:2px; line-height:1.4; }
-
 .n-badges { display:flex; gap:4px; flex-wrap:wrap; flex-shrink:0; align-items:flex-start; padding-top:1px; }
-.badge {
-  font-size: 10.5px; font-weight:500;
-  padding: 2px 7px; border-radius:999px;
-  white-space: nowrap; line-height:1.5;
-}
+.badge { font-size:10.5px; font-weight:500; padding:2px 7px; border-radius:999px; white-space:nowrap; line-height:1.5; }
 .bt-text   { background:#f0fdf4; color:#15803d; }
 .bt-number { background:#eff6ff; color:#1d4ed8; }
 .bt-bool   { background:#fdf4ff; color:#9333ea; }
@@ -250,53 +214,259 @@ main {
 .bt-mixed  { background:#fdf2f8; color:#be185d; }
 .bt-req    { background:#fff1f2; color:#be123c; }
 .bt-opt    { background:#f9fafb; color:#9ca3af; border:1px solid #e5e7eb; }
-
-.n-value {
-  padding: 0 12px 9px calc(10px + 14px + 8px);
-  font-size: 12.5px;
-  font-family: "SF Mono","Fira Code",monospace;
-  word-break: break-all;
-}
+.n-value { padding:0 12px 9px calc(10px + 14px + 8px); font-size:12.5px; font-family:"SF Mono","Fira Code",monospace; word-break:break-all; }
 .v-str  { color:#15803d; }
 .v-num  { color:#2563eb; }
 .v-bool { color:#7c3aed; font-style:italic; }
 .v-null { color:#9ca3af; font-style:italic; }
 .v-date { color:#0369a1; }
-
-.n-constraints, .n-enum {
-  display:flex; flex-wrap:wrap; gap:4px;
-  padding: 0 12px 9px calc(10px + 14px + 8px);
-}
-.constraint {
-  font-size:10.5px; padding:2px 8px; border-radius:6px;
-  background:#fffbeb; color:#b45309; border:1px solid #fde68a;
-}
-.enum-chip {
-  font-size:10.5px; padding:2px 8px; border-radius:6px;
-  background:#fefce8; color:#92400e; border:1px solid #fde68a;
-  font-family:"SF Mono","Fira Code",monospace;
-}
-
-.n-children {
-  border-top:1px solid var(--border);
-  padding:8px; display:flex; flex-direction:column; gap:5px;
-  background:var(--bg);
-}
+.n-constraints, .n-enum { display:flex; flex-wrap:wrap; gap:4px; padding:0 12px 9px calc(10px + 14px + 8px); }
+.constraint { font-size:10.5px; padding:2px 8px; border-radius:6px; background:#fffbeb; color:#b45309; border:1px solid #fde68a; }
+.enum-chip  { font-size:10.5px; padding:2px 8px; border-radius:6px; background:#fefce8; color:#92400e; border:1px solid #fde68a; font-family:"SF Mono","Fira Code",monospace; }
+.n-children { border-top:1px solid var(--border); padding:8px; display:flex; flex-direction:column; gap:5px; background:var(--bg); }
 .n-children.closed { display:none; }
+.arr-idx { font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); padding:2px 0 3px calc(10px + 14px + 8px); }
 
-.arr-idx {
-  font-size:10px; font-weight:600; text-transform:uppercase;
-  letter-spacing:.05em; color:var(--muted);
-  padding:2px 0 3px calc(10px + 14px + 8px);
+/* ── Excel / Table view ───────────────────────────────── */
+.excel-nav {
+  display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-shrink:0;
 }
+.ex-back {
+  padding:4px 10px; font-size:12px; font-weight:500; border-radius:6px;
+  border:1px solid var(--border); background:var(--surface); cursor:pointer;
+  color:var(--text); font-family:inherit; transition:all .12s;
+}
+.ex-back:hover { border-color:var(--accent); color:var(--accent); }
+.ex-bc { font-size:12px; color:var(--muted); display:flex; align-items:center; gap:4px; }
+.ebc-link   { color:var(--accent); cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+.ebc-active { color:var(--text); font-weight:600; }
+.ebc-sep    { color:var(--border); }
+.ex-count   { margin-left:auto; font-size:11px; color:var(--muted); white-space:nowrap; }
+
+.excel-wrap {
+  overflow:auto; flex:1; border:1px solid #d0d0ce;
+  border-radius:var(--radius); background:white;
+}
+.excel-table {
+  border-collapse:collapse; min-width:100%;
+  font-size:12.5px; white-space:nowrap;
+}
+.excel-table thead { position:sticky; top:0; z-index:2; }
+
+.excel-table th {
+  background:#1e3a5f; color:#e2e8f0;
+  padding:0; text-align:left; font-weight:500; font-size:11px;
+  border-right:1px solid #2d4a6f; cursor:default; user-select:none; min-width:80px;
+}
+.th-inner { padding:5px 10px; display:flex; flex-direction:column; gap:1px; }
+.th-group { font-size:9px; color:#7fa8d4; font-weight:400; text-transform:uppercase; letter-spacing:.06em; }
+.th-name  { font-size:11.5px; color:#e2e8f0; font-weight:600; }
+.excel-table th.th-num { background:#172d47; min-width:36px; width:36px; }
+.excel-table th:hover { background:#1a3456; }
+.excel-table th.sorted { background:#1a3456; }
+.sort-arrow { margin-left:4px; font-size:9px; color:#7fa8d4; }
+
+.excel-table td {
+  padding:5px 10px; border-bottom:1px solid #f0f0ee; border-right:1px solid #f0f0ee;
+  vertical-align:middle; color:var(--text);
+}
+.excel-table tr:nth-child(even) td { background:#f9f9f7; }
+.excel-table tr:hover td { background:#eff6ff !important; }
+.td-num   { text-align:right; color:#1d4ed8; font-family:"SF Mono","Fira Code",monospace; font-size:12px; }
+.td-row#  { text-align:center; color:#aaa; font-size:11px; background:#f9f9f7 !important; }
+.td-null  { color:#ccc; font-style:italic; }
+.td-bool-y { color:#15803d; font-weight:600; }
+.td-bool-n { color:#9ca3af; }
+.td-date   { color:#0369a1; font-size:11.5px; }
+.td-long   { max-width:200px; overflow:hidden; text-overflow:ellipsis; }
+
+/* Reference / link cells */
+.ref-arr {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:3px 9px; background:#eff6ff; color:#1d4ed8;
+  border:1px solid #bfdbfe; border-radius:6px; font-size:11px; font-weight:500;
+  cursor:pointer; white-space:nowrap; transition:all .12s; font-family:inherit;
+}
+.ref-arr:hover { background:#dbeafe; border-color:#93c5fd; }
+.ref-obj {
+  display:inline-flex; align-items:center; gap:5px;
+  padding:3px 9px; background:#f5f3ff; color:#6d28d9;
+  border:1px solid #ddd6fe; border-radius:6px; font-size:11px; font-weight:500;
+  cursor:pointer; white-space:nowrap; transition:all .12s; font-family:inherit;
+}
+.ref-obj:hover { background:#ede9fe; border-color:#c4b5fd; }
+
+/* Schema-as-table */
+.schema-table th { background:#1e293b; }
+.schema-table th:hover { background:#1a2535; }
+.schema-table td.td-required { color:#be123c; font-weight:600; font-size:11px; }
+.schema-table td.td-optional { color:#9ca3af; font-size:11px; }
+.schema-table td.td-type     { font-family:"SF Mono","Fira Code",monospace; }
+.schema-table td.td-path     { color:#6b7280; font-size:11px; font-family:"SF Mono","Fira Code",monospace; }
+.chip-constraint { display:inline-block; padding:1px 6px; background:#fffbeb; color:#b45309; border:1px solid #fde68a; border-radius:4px; font-size:10px; margin:1px; }
+.chip-enum       { display:inline-block; padding:1px 6px; background:#fefce8; color:#92400e; border:1px solid #fde68a; border-radius:4px; font-size:10px; margin:1px; font-family:monospace; }
+
+/* ── Detail slide-over panel ──────────────────────────── */
+#detail-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:200;
+  display:flex; justify-content:flex-end; align-items:stretch;
+}
+.detail-panel {
+  background:#fff; width:360px; display:flex; flex-direction:column;
+  box-shadow:-4px 0 24px rgba(0,0,0,.15); overflow:hidden;
+}
+.dp-header {
+  padding:14px 16px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; gap:8px; flex-shrink:0;
+  background:#f8fafc;
+}
+.dp-title { font-size:14px; font-weight:600; flex:1; }
+.dp-close {
+  width:26px; height:26px; border-radius:6px; border:1px solid var(--border);
+  background:transparent; cursor:pointer; font-size:14px; color:var(--muted);
+  display:flex; align-items:center; justify-content:center;
+}
+.dp-close:hover { background:var(--bg); color:var(--text); }
+.dp-body { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:4px; }
+.dp-row  { display:flex; align-items:flex-start; gap:8px; padding:5px 8px; border-radius:6px; }
+.dp-row:hover { background:var(--bg); }
+.dp-key  { font-size:11.5px; font-weight:600; color:var(--muted); min-width:110px; flex-shrink:0; padding-top:1px; }
+.dp-val  { font-size:12.5px; color:var(--text); word-break:break-all; }
+.dp-val-date { font-size:12px; color:#0369a1; }
+.dp-val-num  { font-size:12px; color:#1d4ed8; font-family:monospace; }
+.dp-val-bool-t { font-size:12px; color:#15803d; font-weight:600; }
+.dp-val-bool-f { font-size:12px; color:#9ca3af; }
+.dp-val-null   { font-size:12px; color:#ccc; font-style:italic; }
+.dp-val-ref    { cursor:pointer; }
+.dp-section {
+  font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.07em;
+  color:var(--muted); padding:8px 8px 2px; margin-top:4px;
+}
+
+/* ── Tree view ────────────────────────────────────────── */
+/* AI: modelled after macOS Finder list view / Chrome DevTools JSON tree —
+   no JSON syntax at all, just indented human-readable rows */
+.tree-root { padding:6px 4px; }
+
+.tree-row {
+  display:flex; align-items:baseline; gap:0;
+  padding:3px 8px; border-radius:5px; min-height:25px;
+  position:relative;
+}
+.tree-row:hover { background:rgba(0,0,0,.035); }
+.tree-row.t-parent { cursor:pointer; }
+.tree-row.t-leaf   { cursor:default; }
+
+/* Jump-to-JSON button (hover reveal) */
+.t-jump {
+  opacity:0; font-size:9px; color:#9ca3af; cursor:pointer;
+  padding:2px 6px; border-radius:4px; margin-left:auto; flex-shrink:0;
+  border:1px solid transparent; transition:opacity .1s, color .1s, border-color .1s;
+  white-space:nowrap; user-select:none; line-height:1.4;
+}
+.tree-row:hover .t-jump { opacity:1; }
+.t-jump:hover { color:#3b82f6 !important; border-color:rgba(59,130,246,.3); background:rgba(59,130,246,.06); }
+
+/* Toggle arrow */
+.t-toggle {
+  width:18px; flex-shrink:0; font-size:9px; color:#aaa;
+  text-align:center; line-height:25px; transition:color .1s; user-select:none;
+}
+.t-toggle:hover { color:#555; }
+.t-spacer { width:18px; flex-shrink:0; }
+
+/* Node icon — folder / list / value dot */
+.t-icon { font-size:12px; margin-right:5px; flex-shrink:0; opacity:.7; }
+
+/* Key label */
+.t-key {
+  font-size:13px; font-weight:500; color:#374151;
+  white-space:nowrap; flex-shrink:0;
+}
+.t-key.t-key-parent { color:#1a1a1a; font-weight:600; }
+
+/* Separator between key and value */
+.t-sep { flex:1; min-width:12px; max-width:40px; }
+.t-dot { /* dotted leader line */
+  flex:1; min-width:8px; max-width:50px;
+  border-bottom:1px dotted #ddd; margin:0 6px; margin-bottom:4px;
+}
+
+/* Count badge (e.g. "3 items") */
+.t-count {
+  font-size:11px; color:#aaa; margin-left:8px;
+  white-space:nowrap; font-weight:400;
+}
+
+/* Type tag shown next to schema fields */
+.t-type-tag {
+  font-size:10px; padding:1px 6px; border-radius:999px;
+  margin-left:6px; flex-shrink:0; line-height:1.6;
+}
+
+/* Values */
+.t-val { font-size:13px; flex:0 0 auto; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.t-val.string  { color:#15803d; }
+.t-val.number  { color:#1d4ed8; font-family:"SF Mono","Fira Code",monospace; font-size:12.5px; }
+.t-val.boolean { color:#7c3aed; font-weight:600; }
+.t-val.null    { color:#9ca3af; font-style:italic; }
+.t-val.date    { color:#0369a1; }
+
+/* Children container — the vertical guide line */
+.t-children {
+  border-left:1.5px solid #e8e8e5;
+  margin-left:17px;
+  padding-left:4px;
+}
+.t-children.t-closed { display:none; }
+
+/* Schema-specific in tree */
+.t-req-badge { font-size:9.5px; padding:1px 5px; border-radius:999px; margin-left:5px; }
+.t-req  { background:#fff1f2; color:#be123c; }
+.t-opt  { background:#f9fafb; color:#9ca3af; border:1px solid #e5e7eb; }
+.t-desc { font-size:11.5px; color:#6b7280; margin-left:6px; font-style:italic; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:240px; }
+.t-constraint-row { padding:2px 8px 2px calc(18px + 18px + 5px); display:flex; flex-wrap:wrap; gap:4px; }
+
+/* ── Column-expand buttons ────────────────────────────── */
+.col-btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:18px; height:18px; border-radius:4px; font-size:12px; font-weight:700;
+  border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.12);
+  color:#fff; cursor:pointer; margin-left:5px; transition:background .12s;
+  line-height:1; flex-shrink:0; vertical-align:middle;
+}
+.col-btn:hover { background:rgba(255,255,255,.28); }
+.col-btn.expand  { color:#aee3ff; }
+.col-btn.collapse { color:#fbbf24; }
+
+/* Expanded group: top-bar header */
+.th-group-hdr {
+  text-align:center; padding:4px 8px !important;
+  border-bottom:none !important;
+}
+.th-group-hdr .th-inner { flex-direction:row; align-items:center; justify-content:center; gap:4px; }
+
+/* Sub-column header cells */
+.th-sub { border-top: 3px solid transparent; }
+
+/* Data cells belonging to an expanded group */
+.td-group { transition:background .1s; }
+.td-group-first { border-left-width:2px !important; }
+.td-group-last  { border-right-width:2px !important; }
 
 /* Scrollbars */
-#json-panel::-webkit-scrollbar,
-#rendered-panel::-webkit-scrollbar { width:6px; height:6px; }
-#json-panel::-webkit-scrollbar-track,
-#rendered-panel::-webkit-scrollbar-track { background:transparent; }
+#rp-content::-webkit-scrollbar,
+.excel-wrap::-webkit-scrollbar,
+.dp-body::-webkit-scrollbar,
+#json-panel::-webkit-scrollbar { width:6px; height:6px; }
+#rp-content::-webkit-scrollbar-track,
+.excel-wrap::-webkit-scrollbar-track,
+.dp-body::-webkit-scrollbar-track,
+#json-panel::-webkit-scrollbar-track { background:transparent; }
+#rp-content::-webkit-scrollbar-thumb,
+.excel-wrap::-webkit-scrollbar-thumb,
+.dp-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:99px; }
 #json-panel::-webkit-scrollbar-thumb { background:#333; border-radius:99px; }
-#rendered-panel::-webkit-scrollbar-thumb { background:var(--border); border-radius:99px; }
 </style>
 </head>
 <body>
@@ -323,40 +493,59 @@ main {
 
 <main>
   <div id="json-panel">
-    <div class="jp-header">Source JSON</div>
+    <div class="jp-header">
+      <span class="jp-htitle">Structure</span>
+      <div class="jp-toggle">
+        <button class="jp-tbtn active" id="jpt-structure" onclick="setLeftMode('structure')">Structure</button>
+        <button class="jp-tbtn" id="jpt-json" onclick="setLeftMode('json')">JSON</button>
+      </div>
+    </div>
     <div id="json-code"></div>
   </div>
   <div id="rendered-panel">
-    <div class="rp-header">Human View</div>
-    <div id="r-root"></div>
+    <div class="rp-header">
+      <span>Human View</span>
+      <div class="view-toggle">
+        <button class="vbtn active" id="vb-cards" onclick="setView('cards')">Cards</button>
+        <button class="vbtn"        id="vb-tree"  onclick="setView('tree')">Tree</button>
+        <button class="vbtn"        id="vb-table" onclick="setView('table')">Table</button>
+      </div>
+    </div>
+    <div id="rp-content"></div>
   </div>
 </main>
 
+<!-- Detail slide-over (hidden by default) -->
+<div id="detail-overlay" style="display:none" onclick="closeDetail(event)">
+  <div class="detail-panel" onclick="event.stopPropagation()">
+    <div class="dp-header">
+      <span class="dp-title" id="dp-title">Details</span>
+      <button class="dp-close" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="dp-body" id="dp-body"></div>
+  </div>
+</div>
+
 <script>
 // ── Color palette for fold blocks ─────────────────────────────────────────────
-// AI: each unique structure gets its own tinted region; colors cycle by fold ID
 const PALETTE = [
-  { bg:'rgba(56,132,255,0.09)',  bl:'rgba(56,132,255,0.45)'  },  // blue
-  { bg:'rgba(168,85,247,0.09)', bl:'rgba(168,85,247,0.45)'  },  // purple
-  { bg:'rgba(16,185,129,0.09)', bl:'rgba(16,185,129,0.45)'  },  // emerald
-  { bg:'rgba(245,158,11,0.09)', bl:'rgba(245,158,11,0.45)'  },  // amber
-  { bg:'rgba(239,68,68,0.09)',  bl:'rgba(239,68,68,0.45)'   },  // red
-  { bg:'rgba(20,184,166,0.09)', bl:'rgba(20,184,166,0.45)'  },  // teal
-  { bg:'rgba(251,113,133,0.09)',bl:'rgba(251,113,133,0.45)' },  // pink
-  { bg:'rgba(251,191,36,0.09)', bl:'rgba(251,191,36,0.45)'  },  // yellow
+  { bg:'rgba(56,132,255,0.09)',  bl:'rgba(56,132,255,0.45)'  },
+  { bg:'rgba(168,85,247,0.09)', bl:'rgba(168,85,247,0.45)'  },
+  { bg:'rgba(16,185,129,0.09)', bl:'rgba(16,185,129,0.45)'  },
+  { bg:'rgba(245,158,11,0.09)', bl:'rgba(245,158,11,0.45)'  },
+  { bg:'rgba(239,68,68,0.09)',  bl:'rgba(239,68,68,0.45)'   },
+  { bg:'rgba(20,184,166,0.09)', bl:'rgba(20,184,166,0.45)'  },
+  { bg:'rgba(251,113,133,0.09)',bl:'rgba(251,113,133,0.45)' },
+  { bg:'rgba(251,191,36,0.09)', bl:'rgba(251,191,36,0.45)'  },
 ];
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
-
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function humanize(key) {
-  return String(key)
-    .replace(/[-_]/g,' ').replace(/([a-z])([A-Z])/g,'$1 $2')
+  return String(key).replace(/[-_]/g,' ').replace(/([a-z])([A-Z])/g,'$1 $2')
     .replace(/\b\w/g,c=>c.toUpperCase()).trim();
 }
-function isDateStr(s) { return typeof s==='string' && /^\d{4}-\d{2}-\d{2}/.test(s); }
+function isDateStr(s) { return typeof s==='string'&&/^\d{4}-\d{2}-\d{2}/.test(s); }
 function inferType(val) {
   if (val===null) return 'null';
   if (typeof val==='boolean') return 'boolean';
@@ -394,17 +583,44 @@ function formatVal(val,type) {
 function valClass(type) {
   return {string:'v-str',number:'v-num',boolean:'v-bool',null:'v-null',date:'v-date'}[type]||'v-str';
 }
+// AI: smart number formatting — auto-detects monetary vs percentage vs plain by key name
+function formatNum(val, key='') {
+  if (typeof val !== 'number') return String(val);
+  const k = key.toLowerCase();
+  const isMoney = /usd|price|amount|revenue|raised|valuation|cost|fee|salary|total|subtotal|balance/.test(k);
+  const isPct   = /pct|percent|rate|growth/.test(k);
+  if (isMoney) {
+    if (Math.abs(val)>=1e9) return '$'+(val/1e9).toFixed(1)+'B';
+    if (Math.abs(val)>=1e6) return '$'+(val/1e6).toFixed(1)+'M';
+    if (Math.abs(val)>=1e3) return '$'+val.toLocaleString();
+    return '$'+val;
+  }
+  if (isPct) return val+'%';
+  if (Math.abs(val)>=10000) return val.toLocaleString();
+  return String(val);
+}
+function fmtDate(s) {
+  try { return new Date(s).toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'numeric'}); }
+  catch { return s; }
+}
 
 // ── Breadcrumb ────────────────────────────────────────────────────────────────
-
-function updateCrumb(path) {
-  const el = document.getElementById('crumb');
+function updateCrumb(path, clickHandlers) {
+  const el=document.getElementById('crumb');
   if (!path||!path.length) { clearCrumb(); return; }
   el.classList.remove('empty');
-  el.innerHTML = path.map((s,i)=>{
-    const sep = i>0?`<span class="cr-sep">›</span>`:'';
-    return `${sep}<span class="cr-seg${i===path.length-1?' last':''}">${esc(s)}</span>`;
+  el.innerHTML=path.map((s,i)=>{
+    const sep=i>0?`<span class="cr-sep">›</span>`:'';
+    const isLast=i===path.length-1;
+    const cls=isLast?'cr-seg last':(clickHandlers&&clickHandlers[i]?'cr-seg link':'cr-seg');
+    return `${sep}<span class="${cls}" ${clickHandlers&&clickHandlers[i]?`data-ci="${i}"`:''}>${esc(s)}</span>`;
   }).join('');
+  if (clickHandlers) {
+    el.querySelectorAll('[data-ci]').forEach(span=>{
+      const idx=parseInt(span.getAttribute('data-ci'));
+      if (clickHandlers[idx]) span.onclick=clickHandlers[idx];
+    });
+  }
 }
 function clearCrumb() {
   const el=document.getElementById('crumb');
@@ -412,193 +628,520 @@ function clearCrumb() {
   el.classList.add('empty');
 }
 
-// ── JSON Syntax Highlighter + Code Folding ────────────────────────────────────
+// ── JSON Panel: syntax highlight + code folding ───────────────────────────────
+// ── Structure Panel (left side) ──────────────────────────────────────────────
+// AI: auto-generates a field-map outline from data shape — NO raw values, NO JSON syntax
 
-let fId = 0;
-function resetFolds() { fId=0; }
+const ST = {
+  string:  { label:'Text',     color:'#86efac' },
+  date:    { label:'Date',     color:'#67e8f9' },
+  number:  { label:'Number',   color:'#93c5fd' },
+  boolean: { label:'Yes / No', color:'#c4b5fd' },
+  null:    { label:'Empty',    color:'#6b7280' },
+  object:  { label:'Group',    color:'#94a3b8' },
+  array:   { label:'List',     color:'#fdba74' },
+};
 
-function renderPrim(val) {
-  if (val===null)              return `<span class="j-null">null</span>`;
-  if (typeof val==='boolean')  return `<span class="j-bool">${val}</span>`;
-  if (typeof val==='number')   return `<span class="j-num">${val}</span>`;
-  if (typeof val==='string') {
-    return `<span class="${isDateStr(val)?'j-date':'j-str'}">"${esc(val)}"</span>`;
+function renderStructurePanel(val, mode) {
+  const container = document.getElementById('json-code');
+  container.innerHTML = '';
+  if (mode === 'schema') {
+    renderSchemaStructure(val, container);
+  } else {
+    renderDataStructure(val, container, 0);
   }
+}
+
+// Merge keys from all items in an array so every field is represented
+function unionSample(arr) {
+  const s = {};
+  arr.forEach(item => {
+    if (item && typeof item === 'object' && !Array.isArray(item))
+      Object.entries(item).forEach(([k,v]) => { if (!(k in s)) s[k]=v; });
+  });
+  return s;
+}
+
+// AI: depth controls auto-expand — first 2 levels open by default
+function renderDataStructure(val, container, depth) {
+  if (!val || typeof val !== 'object') return;
+  if (Array.isArray(val)) {
+    if (val.length && typeof val[0] === 'object') renderDataStructure(unionSample(val), container, depth);
+    return;
+  }
+  Object.entries(val).forEach(([k,v]) => renderStField(k, v, container, depth));
+}
+
+function renderStField(key, val, container, depth) {
+  const label = humanize(key);
+  const type  = inferType(val);
+
+  if (type === 'object') {
+    const node = document.createElement('div');
+    const row  = mkStRow(depth, label, ST.object, true);
+    const kids = mkStKids(depth);
+    Object.entries(val).forEach(([k,v]) => renderStField(k, v, kids, depth+1));
+    node.appendChild(row); node.appendChild(kids);
+    wireStToggle(row, kids);
+    container.appendChild(node); return;
+  }
+
+  if (type === 'array') {
+    const hasObj = val.some(i => i && typeof i === 'object' && !Array.isArray(i));
+    if (hasObj) {
+      const node = document.createElement('div');
+      const info = { label:`List  ·  ${val.length} item${val.length!==1?'s':''}`, color:'#fdba74' };
+      const row  = mkStRow(depth, label, info, true);
+      const kids = mkStKids(depth);
+      // Show the shape of each item
+      const sample = unionSample(val);
+      const eNode = document.createElement('div');
+      const eRow  = mkStRow(depth+1, 'each item', ST.object, true);
+      const eKids = mkStKids(depth+1);
+      Object.entries(sample).forEach(([k,v]) => renderStField(k, v, eKids, depth+2));
+      eNode.appendChild(eRow); eNode.appendChild(eKids);
+      wireStToggle(eRow, eKids);
+      kids.appendChild(eNode);
+      node.appendChild(row); node.appendChild(kids);
+      wireStToggle(row, kids);
+      container.appendChild(node);
+    } else {
+      const itemType = val.length ? (ST[inferType(val[0])]||ST.string) : ST.string;
+      container.appendChild(mkStRow(depth, label, { label:`List of ${itemType.label}`, color:'#fdba74' }, false));
+    }
+    return;
+  }
+
+  container.appendChild(mkStRow(depth, label, ST[type]||ST.string, false));
+}
+
+// Schema mode: show field names, types, required/optional
+function renderSchemaStructure(schema, container) {
+  if (schema.$ref) { const r=resolveRef(schema.$ref); if(r) schema={...r,...schema,$ref:undefined}; }
+  if (schema.title) {
+    const hdr = document.createElement('div');
+    hdr.style.cssText='padding:10px 16px 6px;font-size:14px;font-weight:700;color:#e2e8f0;border-bottom:1px solid #242424;margin-bottom:4px';
+    hdr.textContent = schema.title;
+    container.appendChild(hdr);
+  }
+  if (schema.properties) {
+    const reqSet = new Set(schema.required||[]);
+    Object.entries(schema.properties).forEach(([k,sub]) => renderSchemaStField(k, sub, container, 0, reqSet.has(k)));
+  }
+}
+
+function renderSchemaStField(key, schema, container, depth, required) {
+  if (schema.$ref) { const r=resolveRef(schema.$ref); if(r) schema={...r,...schema,$ref:undefined}; }
+  const type=schema.type, format=schema.format||null, enumVals=schema.enum||null;
+  const label=schema.title||humanize(key);
+  const typeName=friendlyTypeName(type, format, enumVals);
+  const typeColors={'Text':'#86efac','Number':'#93c5fd','Yes / No':'#c4b5fd','Date':'#67e8f9',
+    'Email':'#67e8f9','URL':'#67e8f9','List':'#fdba74','Group':'#94a3b8','Choice':'#fcd34d'};
+  const hasKids=(type==='object'||!!schema.properties)||(type==='array'&&!!schema.items);
+  const typeInfo={ label:typeName, color:typeColors[typeName]||'#aaa' };
+
+  const node=document.createElement('div');
+  const row=mkStRow(depth, label, typeInfo, hasKids);
+  // Add required/optional badge
+  const badge=document.createElement('span');
+  badge.className=required?'st-req':'st-opt';
+  badge.textContent=required?'req':'opt';
+  row.appendChild(badge);
+  // Add description if present
+  if (schema.description) {
+    const d=document.createElement('span'); d.className='st-desc';
+    d.textContent=schema.description; row.appendChild(d);
+  }
+  node.appendChild(row);
+
+  if (hasKids) {
+    const kids=mkStKids(depth);
+    if ((type==='object'||schema.properties)&&schema.properties) {
+      const reqSet=new Set(schema.required||[]);
+      Object.entries(schema.properties).forEach(([k,sub])=>renderSchemaStField(k,sub,kids,depth+1,reqSet.has(k)));
+    } else if (type==='array'&&schema.items) {
+      renderSchemaStField('(each item)', schema.items, kids, depth+1, false);
+    }
+    node.appendChild(kids);
+    wireStToggle(row, kids);
+  }
+  container.appendChild(node);
+}
+
+function mkStRow(depth, label, typeInfo, hasKids) {
+  const row=document.createElement('div');
+  row.className=`st-row${hasKids?' st-parent':''}`;
+  row.style.setProperty('--d', depth);
+  const tog=document.createElement('span');
+  tog.className=hasKids?'st-toggle':'st-spacer';
+  tog.textContent=hasKids?'▶':'';
+  const lbl=document.createElement('span'); lbl.className='st-label'; lbl.textContent=label;
+  const badge=document.createElement('span'); badge.className='st-type';
+  badge.textContent=typeInfo.label; badge.style.color=typeInfo.color;
+  row.appendChild(tog); row.appendChild(lbl); row.appendChild(badge);
+  return row;
+}
+
+// AI: depth <= 1 auto-expands, deeper levels start collapsed
+function mkStKids(depth) {
+  const k=document.createElement('div');
+  k.className=`st-kids${depth >= 2 ? ' st-closed' : ''}`;
+  k.style.setProperty('--d', depth);
+  return k;
+}
+
+function wireStToggle(row, kids) {
+  const t=row.querySelector('.st-toggle');
+  if (t && !kids.classList.contains('st-closed')) t.textContent='▼';
+  row.addEventListener('click', (e) => {
+    e.stopPropagation(); // AI: prevent bubbling to ancestor rows (fixes deep list expansion)
+    const closed=kids.classList.toggle('st-closed');
+    const t=row.querySelector('.st-toggle');
+    if (t) t.textContent=closed?'▶':'▼';
+  });
+}
+
+// ── Group color palette (for expanded columns) ────────────────────────────────
+const GROUP_COLORS = [
+  { dark:'#1a3d6b', bar:'#60a5fa', light:'rgba(59,130,246,0.07)',  border:'rgba(96,165,250,0.3)'   },
+  { dark:'#3d1a60', bar:'#a78bfa', light:'rgba(139,92,246,0.07)',  border:'rgba(167,139,250,0.3)'  },
+  { dark:'#0f4a30', bar:'#34d399', light:'rgba(16,185,129,0.07)',  border:'rgba(52,211,153,0.3)'   },
+  { dark:'#5a3010', bar:'#fbbf24', light:'rgba(245,158,11,0.07)',  border:'rgba(251,191,36,0.3)'   },
+  { dark:'#5a1020', bar:'#f87171', light:'rgba(239,68,68,0.07)',   border:'rgba(248,113,113,0.3)'  },
+  { dark:'#0f4050', bar:'#2dd4bf', light:'rgba(20,184,166,0.07)',  border:'rgba(45,212,191,0.3)'   },
+];
+
+let fId=0;
+function resetFolds() { fId=0; }
+function renderPrim(val) {
+  if (val===null)            return `<span class="j-null">null</span>`;
+  if (typeof val==='boolean') return `<span class="j-bool">${val}</span>`;
+  if (typeof val==='number')  return `<span class="j-num">${val}</span>`;
+  if (typeof val==='string')  return `<span class="${isDateStr(val)?'j-date':'j-str'}">"${esc(val)}"</span>`;
   return esc(String(val));
 }
-
-// AI: builds flat array of HTML strings for each "line" in the JSON view
-function buildLines(val, depth, keyName, isLast, out) {
-  const comma   = isLast?'':'<span class="j-p">,</span>';
-  const keyHtml = keyName!==null
-    ? `<span class="j-key">"${esc(String(keyName))}"</span><span class="j-p">: </span>`
-    : '';
-
-  if (val===null || typeof val!=='object') {
-    out.push(leaf(depth, `${keyHtml}${renderPrim(val)}${comma}`));
+// AI: path param threads dot-notation key path for click-to-jump feature
+function buildLines(val,depth,keyName,isLast,out,path) {
+  const myPath = keyName!==null
+    ? (path!=null ? `${path}.${String(keyName)}` : String(keyName))
+    : (path||'');
+  const comma=isLast?'':'<span class="j-p">,</span>';
+  const keyHtml=keyName!==null?`<span class="j-key">"${esc(String(keyName))}"</span><span class="j-p">: </span>`:'';
+  if (val===null||typeof val!=='object') {
+    out.push(jLeaf(depth,`${keyHtml}${renderPrim(val)}${comma}`,myPath));
     return;
   }
-
-  const isArr   = Array.isArray(val);
-  const open    = isArr?'[':'{';
-  const close   = isArr?']':'}';
-  const entries = isArr
-    ? val.map((v,i)=>({ k:null, v, last:i===val.length-1 }))
-    : Object.entries(val).map(([k,v],i,a)=>({ k, v, last:i===a.length-1 }));
-
-  if (entries.length===0) {
-    out.push(leaf(depth, `${keyHtml}<span class="j-p">${open}${close}</span>${comma}`));
-    return;
-  }
-
-  const id  = fId++;
-  const col = PALETTE[id % PALETTE.length];
-  // Display name for the fold gutter (the key name, or type if top-level)
-  const foldName = keyName!==null ? String(keyName) : (isArr?'array':'object');
-
-  const gutterOpen = `<span class="j-tag" onclick="tf(${id})">` +
-    `<span class="j-fa">▼</span>` +
-    `<span class="j-fname">${esc(foldName)}</span>` +
-    `</span>`;
-
-  const gutterClose = `<span class="j-tag" onclick="tf(${id})">` +
-    `<span class="j-fa">▶</span>` +
-    `<span class="j-fname">${esc(foldName)}</span>` +
-    `</span>`;
-
-  // Open line (visible when expanded)
-  out.push(
-    `<div class="j-line" id="jfo${id}" style="--d:${depth}">` +
-    `<span class="j-gutter">${gutterOpen}</span>` +
-    `<span class="j-content">${keyHtml}<span class="j-p">${open}</span></span>` +
-    `</div>`
-  );
-
-  // Summary line (visible when collapsed — entire block on one line)
-  out.push(
-    `<div class="j-line" id="jfs${id}" style="--d:${depth};display:none">` +
-    `<span class="j-gutter">${gutterClose}</span>` +
-    `<span class="j-content">${keyHtml}<span class="j-p">${open}</span> <span class="j-ell">…</span> <span class="j-p">${close}</span>${comma}</span>` +
-    `</div>`
-  );
-
-  // Body — colored container; includes children AND closing line
-  out.push(
-    `<div id="jfc${id}" class="j-body" ` +
-    `style="background:${col.bg};border-left-color:${col.bl}">`
-  );
-  entries.forEach(({ k, v, last }) => buildLines(v, depth+1, k, last, out));
-  // Close line lives inside the body so it shares the background color
-  out.push(leaf(depth, `<span class="j-p">${close}</span>${comma}`, `id="jfcl${id}"`));
+  const isArr=Array.isArray(val);
+  const open=isArr?'[':'{', close=isArr?']':'}';
+  const entries=isArr
+    ? val.map((v,i)=>({k:null,v,last:i===val.length-1,idx:i}))
+    : Object.entries(val).map(([k,v],i,a)=>({k,v,last:i===a.length-1,idx:null}));
+  if (entries.length===0) { out.push(jLeaf(depth,`${keyHtml}<span class="j-p">${open}${close}</span>${comma}`,myPath)); return; }
+  const id=fId++, col=PALETTE[id%PALETTE.length];
+  const foldName=keyName!==null?String(keyName):(isArr?'array':'object');
+  const gOpen =`<span class="j-tag" onclick="tf(${id})"><span class="j-fa">▼</span><span class="j-fname">${esc(foldName)}</span></span>`;
+  const gClose=`<span class="j-tag" onclick="tf(${id})"><span class="j-fa">▶</span><span class="j-fname">${esc(foldName)}</span></span>`;
+  const dp=myPath?` data-path="${esc(myPath)}"`:' ';
+  out.push(`<div class="j-line" id="jfo${id}"${dp}style="--d:${depth}"><span class="j-gutter">${gOpen}</span><span class="j-content">${keyHtml}<span class="j-p">${open}</span></span></div>`);
+  out.push(`<div class="j-line" id="jfs${id}" style="--d:${depth};display:none"><span class="j-gutter">${gClose}</span><span class="j-content">${keyHtml}<span class="j-p">${open}</span> <span class="j-ell">…</span> <span class="j-p">${close}</span>${comma}</span></div>`);
+  out.push(`<div id="jfc${id}" class="j-body" style="background:${col.bg};border-left-color:${col.bl}">`);
+  entries.forEach(({k,v,last,idx})=>{
+    const childPath=myPath ? (isArr?`${myPath}.${idx}`:`${myPath}.${k}`) : (isArr?String(idx):k);
+    buildLines(v,depth+1,k,last,out,childPath);
+  });
+  out.push(jLeaf(depth,`<span class="j-p">${close}</span>${comma}`,myPath,`id="jfcl${id}"`));
   out.push(`</div>`);
 }
-
-function leaf(depth, contentHtml, extraAttr='') {
-  return (
-    `<div class="j-line" style="--d:${depth}" ${extraAttr}>` +
-    `<span class="j-gutter"></span>` +
-    `<span class="j-content">${contentHtml}</span>` +
-    `</div>`
-  );
+function jLeaf(depth,content,path='',extra='') {
+  const dp=path?` data-path="${esc(path)}"`:' ';
+  return `<div class="j-line"${dp}style="--d:${depth}" ${extra}><span class="j-gutter"></span><span class="j-content">${content}</span></div>`;
 }
-
-// Toggle expand / collapse for a fold block
 function tf(id) {
-  const openEl = document.getElementById('jfo'+id);
-  const summEl = document.getElementById('jfs'+id);
-  const bodyEl = document.getElementById('jfc'+id);
-  if (!openEl||!summEl||!bodyEl) return;
-  const isOpen = summEl.style.display==='none';
-  openEl.style.display = isOpen?'none':'';
-  summEl.style.display = isOpen?'':'none';
-  bodyEl.style.display = isOpen?'none':'';
+  const o=document.getElementById('jfo'+id),s=document.getElementById('jfs'+id),b=document.getElementById('jfc'+id);
+  if(!o||!s||!b)return;
+  const isOpen=s.style.display==='none';
+  o.style.display=isOpen?'none':'';
+  s.style.display=isOpen?'':'none';
+  b.style.display=isOpen?'none':'';
 }
-
 function renderJsonPanel(val) {
   resetFolds();
   const lines=[];
-  buildLines(val, 0, null, true, lines);
-  document.getElementById('json-code').innerHTML=lines.join('');
+  buildLines(val,0,null,true,lines,null);
+  const el=document.getElementById('json-code');
+  el.innerHTML=lines.join('');
+  el.classList.add('json-mode');
 }
 
 // ── Schema detection ──────────────────────────────────────────────────────────
-
-function detectMode(obj, forced) {
-  if (forced!=='auto') return forced;
+function detectMode(obj) {
   if (!obj||typeof obj!=='object'||Array.isArray(obj)) return 'data';
-  if (obj.properties||obj.$schema||obj.$defs||obj.definitions||
-      obj.model_fields||(obj.type==='object'&&obj.properties)) return 'schema';
+  if (obj.properties||obj.$schema||obj.$defs||obj.definitions||obj.model_fields) return 'schema';
   return 'data';
 }
 
-// ── Rendered (right) panel ────────────────────────────────────────────────────
+// ── App state ─────────────────────────────────────────────────────────────────
+let _currentVal  = null;
+let _currentMode = 'data';
+let _viewMode    = 'cards'; // 'cards' | 'tree' | 'table'
+let _leftMode    = 'structure'; // 'structure' | 'json'
 
-let _rootSchema = null;
-
-function renderRight(val, mode) {
-  _rootSchema = null;
-  const root = document.getElementById('r-root');
-  root.innerHTML='';
-
-  if (mode==='schema'&&(val.title||val.description)) {
-    const meta=document.createElement('div');
-    meta.className='root-meta';
-    if (val.title)       meta.innerHTML+=`<div class="root-title">${esc(val.title)}</div>`;
-    if (val.description) meta.innerHTML+=`<div class="root-desc">${esc(val.description)}</div>`;
-    root.appendChild(meta);
-  }
-
-  const group=document.createElement('div');
-  group.className='node-group';
-  root.appendChild(group);
-
-  if (mode==='schema') {
-    _rootSchema=val;
-    renderSchemaObj(val,[],group);
+function setLeftMode(mode) {
+  _leftMode = mode;
+  ['structure','json'].forEach(m=>{
+    const btn=document.getElementById(`jpt-${m}`);
+    if (btn) btn.classList.toggle('active', m===mode);
+  });
+  const el=document.getElementById('json-code');
+  if (mode==='json') {
+    el.classList.add('json-mode');
+    renderJsonPanel(_currentVal);
   } else {
-    renderDataVal(val,[],group,null);
+    el.classList.remove('json-mode');
+    renderStructurePanel(_currentVal, _currentMode);
   }
 }
 
-// ── Schema renderer ───────────────────────────────────────────────────────────
+// AI: switch to JSON mode and scroll/highlight the line matching this dot-path
+function jumpToJson(path) {
+  setLeftMode('json');
+  // slight delay so renderJsonPanel finishes before querying DOM
+  setTimeout(()=>{
+    const target=document.querySelector(`#json-code [data-path="${CSS.escape(path)}"]`);
+    if (!target) return;
+    // expand any folded ancestors
+    let el=target;
+    while ((el=el.parentElement)) {
+      if (el.id&&el.id.startsWith('jfc')) {
+        const fid=el.id.slice(3);
+        const open=document.getElementById('jfo'+fid);
+        const summ=document.getElementById('jfs'+fid);
+        if (open&&summ&&summ.style.display!=='none') {
+          // currently folded — unfold it
+          open.style.display='';
+          summ.style.display='none';
+          el.style.display='';
+        }
+      }
+    }
+    target.scrollIntoView({behavior:'smooth',block:'center'});
+    target.classList.add('j-highlight');
+    setTimeout(()=>target.classList.remove('j-highlight'), 2000);
+  }, 80);
+}
 
+function setView(v) {
+  _viewMode=v;
+  ['cards','tree','table'].forEach(id=>document.getElementById('vb-'+id).classList.toggle('active',id===v));
+  renderRight();
+  closeDetail();
+}
+function renderRight() {
+  if (_viewMode==='cards') renderCards(_currentVal,_currentMode);
+  else if (_viewMode==='tree') renderTreeView(_currentVal,_currentMode);
+  else renderTable(_currentVal,_currentMode);
+}
+
+// ── Tree view renderer ────────────────────────────────────────────────────────
+// AI: zero JSON syntax — pure hierarchical outline like macOS Finder or Notion toggles
+
+// Try to find a display name inside an object (for labelling array items)
+function getNodeTitle(item) {
+  if (!item||typeof item!=='object'||Array.isArray(item)) return null;
+  for (const k of ['name','title','label','display_name','full_name','id','status']) {
+    if (item[k]&&typeof item[k]==='string'&&item[k].length<60) return item[k];
+  }
+  return null;
+}
+
+function formatTreeVal(val, key='') {
+  const type=inferType(val);
+  if (type==='null')    return { text:'—',    cls:'null' };
+  if (type==='boolean') return { text:val?'✓  Yes':'✗  No', cls:'boolean' };
+  if (type==='date')    return { text:fmtDate(val), cls:'date' };
+  if (type==='number')  return { text:formatNum(val,key), cls:'number' };
+  return { text:String(val), cls:'string' };
+}
+
+function renderTreeView(val, mode) {
+  const root=document.getElementById('rp-content');
+  root.innerHTML='';
+  const wrap=document.createElement('div'); wrap.className='tree-root';
+  root.appendChild(wrap);
+  if (mode==='schema') {
+    renderTreeSchema(val, wrap, []);
+  } else if (Array.isArray(val)) {
+    val.forEach((item,i)=>renderTreeNode(item, String(i+1), wrap, [String(i+1)], true, String(i)));
+  } else if (typeof val==='object'&&val) {
+    Object.entries(val).forEach(([k,v])=>renderTreeNode(v, k, wrap, [humanize(k)], false, k));
+  }
+}
+
+// AI: jsonPath = raw dot-notation key path used by jumpToJson; path = humanized array for breadcrumb
+function renderTreeNode(val, keyName, container, path, isArrayItem, jsonPath) {
+  const type=inferType(val);
+  const label=isArrayItem ? (getNodeTitle(val)||`Item ${keyName}`) : humanize(keyName);
+
+  if (type==='object'||type==='array') {
+    const isArr=type==='array';
+    const entries=isArr?val:Object.entries(val);
+    const count=isArr?val.length:entries.length;
+    const icon=isArr?'▤':'▦';
+
+    const node=document.createElement('div'); node.className='tree-node';
+
+    const row=document.createElement('div'); row.className='tree-row t-parent';
+    row.innerHTML=
+      `<span class="t-toggle">▶</span>` +
+      `<span class="t-icon" style="color:${isArr?'#c2410c':'#2563eb'}">${icon}</span>` +
+      `<span class="t-key t-key-parent">${esc(label)}</span>` +
+      `<span class="t-count">${count} ${isArr?'item':'field'}${count!==1?'s':''}</span>` +
+      (jsonPath?`<span class="t-jump" title="Show in JSON" onclick="event.stopPropagation();jumpToJson('${esc(jsonPath)}')">↗ JSON</span>`:'');
+
+    const kids=document.createElement('div'); kids.className='t-children t-closed';
+    if (isArr) {
+      val.forEach((item,i)=>renderTreeNode(item, String(i+1), kids,
+        path.concat(getNodeTitle(item)||String(i+1)), true,
+        jsonPath?`${jsonPath}.${i}`:String(i)));
+    } else {
+      Object.entries(val).forEach(([k,v])=>renderTreeNode(v, k, kids,
+        path.concat(humanize(k)), false,
+        jsonPath?`${jsonPath}.${k}`:k));
+    }
+
+    node.appendChild(row); node.appendChild(kids);
+    row.querySelector('.t-toggle').addEventListener('click', e=>{ e.stopPropagation(); toggleTree(row, kids); });
+    row.addEventListener('click', ()=>toggleTree(row, kids));
+    row.addEventListener('mouseenter',()=>updateCrumb(path));
+    row.addEventListener('mouseleave',clearCrumb);
+    container.appendChild(node);
+    return;
+  }
+
+  // Leaf node
+  const {text,cls}=formatTreeVal(val, keyName);
+  const row=document.createElement('div'); row.className='tree-row t-leaf';
+  const valHtml=cls==='string'
+    ? `<span class="t-val string">${esc(text)}</span>`
+    : `<span class="t-val ${cls}">${esc(text)}</span>`;
+  row.innerHTML=
+    `<span class="t-spacer"></span>` +
+    `<span class="t-key">${esc(label)}</span>` +
+    `<span class="t-dot"></span>` +
+    valHtml +
+    (jsonPath?`<span class="t-jump" title="Show in JSON" onclick="event.stopPropagation();jumpToJson('${esc(jsonPath)}')">↗ JSON</span>`:'');
+  row.addEventListener('mouseenter',()=>updateCrumb(path));
+  row.addEventListener('mouseleave',clearCrumb);
+  container.appendChild(row);
+}
+
+function toggleTree(row, kids) {
+  const closed=kids.classList.toggle('t-closed');
+  const tog=row.querySelector('.t-toggle');
+  if (tog) tog.textContent=closed?'▶':'▼';
+}
+
+// ── Tree view: schema mode ─────────────────────────────────────────────────────
+function renderTreeSchema(schema, container, path) {
+  if (schema.$ref) { const r=resolveRef(schema.$ref); if(r) schema={...r,...schema,$ref:undefined}; }
+
+  // Root title row
+  if (schema.title||schema.description) {
+    const hdr=document.createElement('div'); hdr.className='tree-row t-leaf';
+    hdr.style.marginBottom='6px';
+    hdr.innerHTML=`<span class="t-spacer"></span><span style="font-size:16px;font-weight:700;color:#1a1a1a">${esc(schema.title||'Schema')}</span>${schema.description?`<span class="t-desc" style="max-width:340px;font-size:12px">${esc(schema.description)}</span>`:''}`;
+    container.appendChild(hdr);
+  }
+  if (schema.properties) {
+    const reqSet=new Set(schema.required||[]);
+    Object.entries(schema.properties).forEach(([k,sub])=>renderTreeSchemaField(k,sub,container,path,reqSet.has(k)));
+  }
+}
+function renderTreeSchemaField(key, schema, container, path, required) {
+  if (schema.$ref) { const r=resolveRef(schema.$ref); if(r) schema={...r,...schema,$ref:undefined}; }
+  const type=schema.type, format=schema.format||null, enumVals=schema.enum||null;
+  const label=schema.title||humanize(key);
+  const isObj=type==='object'||!!schema.properties, isArr=type==='array';
+  const hasKids=isObj||isArr;
+  const typeName=friendlyTypeName(type,format,enumVals);
+  const typeColor={Text:'#15803d',Number:'#1d4ed8','Yes / No':'#7c3aed',List:'#c2410c',Group:'#475569',Date:'#0369a1',Email:'#0369a1',URL:'#0369a1',Choice:'#a16207'}[typeName]||'#888';
+  const node=document.createElement('div'); node.className='tree-node';
+  const row=document.createElement('div'); row.className=`tree-row ${hasKids?'t-parent':'t-leaf'}`;
+  const togSpan=hasKids?`<span class="t-toggle">▶</span>`:`<span class="t-spacer"></span>`;
+  row.innerHTML=
+    togSpan+
+    `<span class="t-key t-key-parent">${esc(label)}</span>`+
+    `<span class="t-type-tag" style="background:${typeColor}18;color:${typeColor}">${esc(typeName)}</span>`+
+    `<span class="t-req-badge ${required?'t-req':'t-opt'}">${required?'Required':'Optional'}</span>`+
+    (schema.description?`<span class="t-desc">${esc(schema.description)}</span>`:'');
+  node.appendChild(row);
+
+  // Constraints + enum as a sub-row
+  const cons=buildConstraints(schema);
+  if (cons.length||enumVals) {
+    const cRow=document.createElement('div'); cRow.className='t-constraint-row';
+    cons.forEach(c=>{const s=document.createElement('span');s.className='chip-constraint';s.textContent=c;cRow.appendChild(s);});
+    (enumVals||[]).forEach(v=>{const s=document.createElement('span');s.className='chip-enum';s.textContent=String(v);cRow.appendChild(s);});
+    node.appendChild(cRow);
+  }
+
+  if (hasKids) {
+    const kids=document.createElement('div'); kids.className='t-children t-closed';
+    if (isObj&&schema.properties) {
+      const reqSet=new Set(schema.required||[]);
+      Object.entries(schema.properties).forEach(([k,sub])=>renderTreeSchemaField(k,sub,kids,path.concat(humanize(k)),reqSet.has(k)));
+    } else if (isArr&&schema.items) {
+      renderTreeSchemaField('(each item)',schema.items,kids,path.concat('item'),false);
+    }
+    node.appendChild(kids);
+    row.addEventListener('click',()=>toggleTree(row,kids));
+  }
+  row.addEventListener('mouseenter',()=>updateCrumb(path.concat(label)));
+  row.addEventListener('mouseleave',clearCrumb);
+  container.appendChild(node);
+}
+
+// ── Cards renderer ─────────────────────────────────────────────────────────────
+function renderCards(val, mode) {
+  const root=document.getElementById('rp-content');
+  root.innerHTML='';
+  if (mode==='schema'&&(val.title||val.description)) {
+    const m=document.createElement('div'); m.className='root-meta';
+    if (val.title) m.innerHTML+=`<div class="root-title">${esc(val.title)}</div>`;
+    if (val.description) m.innerHTML+=`<div class="root-desc">${esc(val.description)}</div>`;
+    root.appendChild(m);
+  }
+  const g=document.createElement('div'); g.className='node-group'; root.appendChild(g);
+  if (mode==='schema') { _rootSchema=val; renderSchemaObj(val,[],g); }
+  else renderDataVal(val,[],g,null);
+}
+
+let _rootSchema=null;
 function resolveRef(ref) {
   if (!ref||!_rootSchema||!ref.startsWith('#/')) return null;
   return ref.slice(2).split('/').reduce((o,k)=>o?.[k],_rootSchema)||null;
 }
-function renderSchemaObj(schema, path, container) {
+function renderSchemaObj(schema,path,container) {
   if (schema.$ref) { const r=resolveRef(schema.$ref); if(r) schema={...r,...schema,$ref:undefined}; }
   if (schema.type==='object'||schema.properties) {
-    const props=schema.properties||{};
-    const reqSet=new Set(schema.required||[]);
-    Object.entries(props).forEach(([k,sub])=>
-      renderSchemaField(k,sub,path.concat(humanize(k)),container,reqSet.has(k))
-    );
+    const props=schema.properties||{}, reqSet=new Set(schema.required||[]);
+    Object.entries(props).forEach(([k,sub])=>renderSchemaField(k,sub,path.concat(humanize(k)),container,reqSet.has(k)));
   }
 }
-function renderSchemaField(key, schema, path, container, required) {
+function renderSchemaField(key,schema,path,container,required) {
   if (schema.$ref) { const r=resolveRef(schema.$ref); if(r) schema={...r,...schema,$ref:undefined}; }
-  const type=schema.type, format=schema.format||null, enumVals=schema.enum||null;
-  const label=schema.title||humanize(key), desc=schema.description||null;
-  const isObj=type==='object'||!!schema.properties, isArr=type==='array';
+  const type=schema.type,format=schema.format||null,enumVals=schema.enum||null;
+  const label=schema.title||humanize(key),desc=schema.description||null;
+  const isObj=type==='object'||!!schema.properties,isArr=type==='array';
   const hasKids=isObj||isArr;
-
-  const card=mkCard(), head=mkHead(hasKids);
-  const chev=mkChev(hasKids);
+  const card=mkCard(),head=mkHead(hasKids),chev=mkChev(hasKids);
   head.appendChild(chev);
-
-  const lbls=document.createElement('div');
-  lbls.className='n-labels';
+  const lbls=document.createElement('div'); lbls.className='n-labels';
   lbls.innerHTML=`<div class="n-label">${esc(label)}</div>${desc?`<div class="n-desc">${esc(desc)}</div>`:''}`;
   head.appendChild(lbls);
-
-  const bdgs=document.createElement('div');
-  bdgs.className='n-badges';
-  bdgs.innerHTML=`<span class="badge ${typeBadgeClass(type,format,enumVals)}">${friendlyTypeName(type,format,enumVals)}</span>
-    <span class="badge ${required?'bt-req':'bt-opt'}">${required?'Required':'Optional'}</span>`;
-  head.appendChild(bdgs);
-  card.appendChild(head);
-
+  const bdgs=document.createElement('div'); bdgs.className='n-badges';
+  bdgs.innerHTML=`<span class="badge ${typeBadgeClass(type,format,enumVals)}">${friendlyTypeName(type,format,enumVals)}</span><span class="badge ${required?'bt-req':'bt-opt'}">${required?'Required':'Optional'}</span>`;
+  head.appendChild(bdgs); card.appendChild(head);
   const cons=buildConstraints(schema);
   if (cons.length) {
     const row=document.createElement('div'); row.className='n-constraints';
@@ -610,23 +1153,17 @@ function renderSchemaField(key, schema, path, container, required) {
     enumVals.forEach(v=>{ const c=document.createElement('span'); c.className='enum-chip'; c.textContent=String(v); row.appendChild(c); });
     card.appendChild(row);
   }
-
   let childEl=null;
   if (hasKids) {
     childEl=document.createElement('div'); childEl.className='n-children closed';
     if (isObj) {
-      const props=schema.properties||{};
-      const reqSet=new Set(schema.required||[]);
-      Object.entries(props).forEach(([k,sub])=>
-        renderSchemaField(k,sub,path.concat(humanize(k)),childEl,reqSet.has(k))
-      );
+      const props=schema.properties||{},reqSet=new Set(schema.required||[]);
+      Object.entries(props).forEach(([k,sub])=>renderSchemaField(k,sub,path.concat(humanize(k)),childEl,reqSet.has(k)));
     } else if (isArr&&schema.items) {
       renderSchemaField('(each item)',schema.items,path.concat('item'),childEl,false);
       if ((schema.items.type==='object'||schema.items.properties)&&schema.items.properties) {
         const reqSet=new Set(schema.items.required||[]);
-        Object.entries(schema.items.properties).forEach(([k,sub])=>
-          renderSchemaField(k,sub,path.concat('item',humanize(k)),childEl,reqSet.has(k))
-        );
+        Object.entries(schema.items.properties).forEach(([k,sub])=>renderSchemaField(k,sub,path.concat('item',humanize(k)),childEl,reqSet.has(k)));
       }
     }
     card.appendChild(childEl);
@@ -634,88 +1171,66 @@ function renderSchemaField(key, schema, path, container, required) {
   wireNode(head,chev,childEl,path);
   container.appendChild(card);
 }
-
 function buildConstraints(s) {
   const o=[];
   if (s.minLength!=null) o.push(`At least ${s.minLength} char${s.minLength!==1?'s':''}`);
   if (s.maxLength!=null) o.push(`Up to ${s.maxLength} chars`);
   if (s.minimum  !=null) o.push(`Min ${s.minimum}`);
   if (s.maximum  !=null) o.push(`Max ${s.maximum}`);
-  if (s.exclusiveMinimum!=null) o.push(`Greater than ${s.exclusiveMinimum}`);
-  if (s.exclusiveMaximum!=null) o.push(`Less than ${s.exclusiveMaximum}`);
+  if (s.exclusiveMinimum!=null) o.push(`> ${s.exclusiveMinimum}`);
+  if (s.exclusiveMaximum!=null) o.push(`< ${s.exclusiveMaximum}`);
   if (s.minItems !=null) o.push(`At least ${s.minItems} item${s.minItems!==1?'s':''}`);
   if (s.maxItems !=null) o.push(`Up to ${s.maxItems} items`);
   if (s.pattern) o.push(`Pattern: ${s.pattern}`);
   if (s.format==='email') o.push('Valid email');
   if (s.format==='uri'||s.format==='url') o.push('Valid URL');
-  if (s.format==='date-time') o.push('Date & time (ISO 8601)');
+  if (s.format==='date-time') o.push('Date & time');
   if (s.format==='date') o.push('Date (YYYY-MM-DD)');
   return o;
 }
-
-// ── Data renderer ─────────────────────────────────────────────────────────────
-
-function renderDataVal(val, path, container, keyName) {
+function renderDataVal(val,path,container,keyName) {
   const type=inferType(val);
-
   if (type!=='object'&&type!=='array') {
     const label=keyName!==null?humanize(String(keyName)):'Value';
-    const card=mkCard(), head=mkHead(false);
-    head.appendChild(mkChev(false));
+    const card=mkCard(),head=mkHead(false),chev=mkChev(false);
+    head.appendChild(chev);
     const lbls=document.createElement('div'); lbls.className='n-labels';
-    lbls.innerHTML=`<div class="n-label">${esc(label)}</div>`;
-    head.appendChild(lbls);
+    lbls.innerHTML=`<div class="n-label">${esc(label)}</div>`; head.appendChild(lbls);
     const bdgs=document.createElement('div'); bdgs.className='n-badges';
-    const jsType=type==='date'?'string':type, fmt=type==='date'?'date':null;
+    const jsType=type==='date'?'string':type,fmt=type==='date'?'date':null;
     bdgs.innerHTML=`<span class="badge ${typeBadgeClass(jsType,fmt,null)}">${friendlyTypeName(jsType,fmt,null)}</span>`;
-    head.appendChild(bdgs);
-    card.appendChild(head);
+    head.appendChild(bdgs); card.appendChild(head);
     const vEl=document.createElement('div');
     vEl.className=`n-value ${valClass(type)}`; vEl.textContent=formatVal(val,type);
     card.appendChild(vEl);
-    wireNode(head,head.querySelector('.n-chev'),null,path);
-    container.appendChild(card);
-    return;
+    wireNode(head,chev,null,path); container.appendChild(card); return;
   }
-
   if (type==='object') {
     const entries=Object.entries(val);
-    if (keyName===null) {
-      entries.forEach(([k,v])=>renderDataVal(v,path.concat(humanize(k)),container,k));
-      return;
-    }
-    const label=humanize(String(keyName));
-    const card=mkCard(), head=mkHead(entries.length>0);
-    const chev=mkChev(entries.length>0); head.appendChild(chev);
+    if (keyName===null) { entries.forEach(([k,v])=>renderDataVal(v,path.concat(humanize(k)),container,k)); return; }
+    const label=humanize(String(keyName)),card=mkCard(),head=mkHead(entries.length>0),chev=mkChev(entries.length>0);
+    head.appendChild(chev);
     const lbls=document.createElement('div'); lbls.className='n-labels';
     lbls.innerHTML=`<div class="n-label">${esc(label)}</div><div class="n-desc">${entries.length} field${entries.length!==1?'s':''}</div>`;
     head.appendChild(lbls);
     const bdgs=document.createElement('div'); bdgs.className='n-badges';
-    bdgs.innerHTML=`<span class="badge bt-group">Group</span>`;
-    head.appendChild(bdgs);
-    card.appendChild(head);
+    bdgs.innerHTML=`<span class="badge bt-group">Group</span>`; head.appendChild(bdgs); card.appendChild(head);
     let childEl=null;
     if (entries.length) {
       childEl=document.createElement('div'); childEl.className='n-children closed';
       entries.forEach(([k,v])=>renderDataVal(v,path.concat(humanize(k)),childEl,k));
       card.appendChild(childEl);
     }
-    wireNode(head,chev,childEl,path);
-    container.appendChild(card);
-    return;
+    wireNode(head,chev,childEl,path); container.appendChild(card); return;
   }
-
-  // Array
   const label=keyName!==null?humanize(String(keyName)):'List';
-  const card=mkCard(), head=mkHead(val.length>0);
-  const chev=mkChev(val.length>0); head.appendChild(chev);
+  const card=mkCard(),head=mkHead(val.length>0),chev=mkChev(val.length>0);
+  head.appendChild(chev);
   const lbls=document.createElement('div'); lbls.className='n-labels';
   lbls.innerHTML=`<div class="n-label">${esc(label)}</div><div class="n-desc">${val.length} item${val.length!==1?'s':''}</div>`;
   head.appendChild(lbls);
   const bdgs=document.createElement('div'); bdgs.className='n-badges';
-  bdgs.innerHTML=`<span class="badge bt-list">List</span>`;
-  head.appendChild(bdgs);
-  card.appendChild(head);
+  bdgs.innerHTML=`<span class="badge bt-list">List</span>`; head.appendChild(bdgs); card.appendChild(head);
   let childEl=null;
   if (val.length) {
     childEl=document.createElement('div'); childEl.className='n-children closed';
@@ -726,256 +1241,593 @@ function renderDataVal(val, path, container, keyName) {
     });
     card.appendChild(childEl);
   }
-  wireNode(head,chev,childEl,path);
-  container.appendChild(card);
+  wireNode(head,chev,childEl,path); container.appendChild(card);
 }
-
-// ── Card helpers ──────────────────────────────────────────────────────────────
-
 function mkCard() { const d=document.createElement('div'); d.className='node-card'; return d; }
-function mkHead(clickable) {
-  const d=document.createElement('div');
-  d.className=`node-head ${clickable?'clickable':'static'}`;
-  return d;
-}
-function mkChev(hasKids) {
-  const s=document.createElement('span');
-  s.className=`n-chev${hasKids?'':' leaf'}`;
-  s.textContent='▶';
-  return s;
-}
-function wireNode(head, chev, childEl, path) {
+function mkHead(c) { const d=document.createElement('div'); d.className=`node-head ${c?'clickable':'static'}`; return d; }
+function mkChev(h) { const s=document.createElement('span'); s.className=`n-chev${h?'':' leaf'}`; s.textContent='▶'; return s; }
+function wireNode(head,chev,childEl,path) {
   head.addEventListener('mouseenter',()=>updateCrumb(path));
   head.addEventListener('mouseleave',clearCrumb);
   if (!childEl) return;
-  head.addEventListener('click',()=>{
-    const closed=childEl.classList.toggle('closed');
-    chev.textContent=closed?'▶':'▼';
-    chev.classList.toggle('open',!closed);
+  head.addEventListener('click',()=>{ const c=childEl.classList.toggle('closed'); chev.textContent=c?'▶':'▼'; chev.classList.toggle('open',!c); });
+}
+
+// ── Excel / Table renderer ────────────────────────────────────────────────────
+
+// AI: drill-down stack — each entry is { label, rows } for data tables
+let excelStack = [];
+// AI: which object-ref column keys have been expanded inline; Map key→colorIdx for stable colors
+let expandedRefCols = new Set();
+let groupColorMap   = new Map();
+let _colorCounter   = 0;
+
+function getGroupColor(key) {
+  if (!groupColorMap.has(key)) groupColorMap.set(key, _colorCounter++ % GROUP_COLORS.length);
+  return GROUP_COLORS[groupColorMap.get(key)];
+}
+function expandRefCol(key)  { expandedRefCols.add(key);    drawDataTable(); }
+function collapseRefCol(key){ expandedRefCols.delete(key); drawDataTable(); }
+
+// AI: flatten one level of nested objects into dotted-key columns; arrays/deep objects become reference cells
+function flattenRow(obj, depth=0, prefix='') {
+  const cols={};
+  if (!obj||typeof obj!=='object'||Array.isArray(obj)) return cols;
+  for (const [k,v] of Object.entries(obj)) {
+    const fullKey=prefix?`${prefix}.${k}`:k;
+    if (v===null||typeof v!=='object') {
+      cols[fullKey]=v;
+    } else if (Array.isArray(v)) {
+      cols[fullKey]={ $ref:'array',  $val:v, $count:v.length, $label:humanize(k) };
+    } else if (depth<1) {
+      Object.assign(cols, flattenRow(v, depth+1, fullKey));
+    } else {
+      cols[fullKey]={ $ref:'object', $val:v, $label:humanize(k) };
+    }
+  }
+  return cols;
+}
+
+function colLabel(key) {
+  const parts=key.split('.');
+  if (parts.length===1) return { group:null, name:humanize(parts[0]) };
+  return { group:parts.slice(0,-1).map(humanize).join(' / '), name:humanize(parts[parts.length-1]) };
+}
+
+// AI: builds column definitions respecting expandedRefCols — expands object refs inline
+function buildTableColDefs(rows) {
+  // Collect base flat keys and their ref types
+  const baseMap = new Map(); // key -> { isRef, refType, refLabel }
+  rows.forEach(row => {
+    if (!row||typeof row!=='object') return;
+    const flat = flattenRow(row);
+    Object.entries(flat).forEach(([k, v]) => {
+      if (baseMap.has(k)) return;
+      if (v&&typeof v==='object'&&v.$ref) baseMap.set(k,{isRef:true,refType:v.$ref,refLabel:v.$label});
+      else baseMap.set(k,{isRef:false});
+    });
+  });
+
+  const cols = [];
+  for (const [key, info] of baseMap) {
+    const lbl = colLabel(key);
+
+    if (info.isRef && info.refType==='object' && expandedRefCols.has(key)) {
+      // Expanded: add sub-columns for each primitive/ref inside the nested object
+      const subMap = new Map();
+      rows.forEach(row => {
+        if (!row||typeof row!=='object') return;
+        const flat = flattenRow(row);
+        const cell = flat[key];
+        if (cell&&cell.$ref==='object'&&cell.$val) {
+          const subFlat = flattenRow(cell.$val, 0, '');
+          Object.entries(subFlat).forEach(([sk, sv]) => {
+            if (subMap.has(sk)) return;
+            const isSR = sv&&typeof sv==='object'&&sv.$ref;
+            subMap.set(sk, { isRef:!!isSR, refType:isSR?sv.$ref:null, refLabel:isSR?sv.$label:null });
+          });
+        }
+      });
+      const color = getGroupColor(key);
+      const subArr = [...subMap.entries()];
+      subArr.forEach(([sk, sinfo], si) => {
+        const subLbl = colLabel(sk);
+        cols.push({
+          type: sinfo.isRef ? `ref-${sinfo.refType}` : 'sub-leaf',
+          key, subKey: sk,          // key = parent ref key, subKey = field inside it
+          name: subLbl.name,
+          groupKey: key, groupName: lbl.name, color,
+          isFirst: si===0, isLast: si===subArr.length-1,
+          refLabel: sinfo.refLabel, refType: sinfo.refType,
+        });
+      });
+    } else if (info.isRef && info.refType==='object') {
+      cols.push({ type:'ref-obj', key, name:lbl.name, group:lbl.group, refLabel:info.refLabel, groupKey:null });
+    } else if (info.isRef && info.refType==='array') {
+      cols.push({ type:'ref-arr', key, name:lbl.name, group:lbl.group, refLabel:info.refLabel, groupKey:null });
+    } else {
+      cols.push({ type:'leaf', key, name:lbl.name, group:lbl.group, groupKey:null });
+    }
+  }
+  return cols;
+}
+
+// AI: detect best array to use as primary table; prefer largest array of objects
+function detectPrimaryTable(val) {
+  if (Array.isArray(val)) return { label:'Items', rows:val };
+  if (typeof val==='object'&&val) {
+    let best=null;
+    for (const [k,v] of Object.entries(val)) {
+      if (Array.isArray(v)&&v.length>0&&v.some(i=>i&&typeof i==='object'&&!Array.isArray(i))) {
+        if (!best||v.length>best.rows.length) best={ label:humanize(k), rows:v };
+      }
+    }
+    if (best) return best;
+    return { label:'Record', rows:[val] };
+  }
+  return null;
+}
+
+function renderTable(val, mode) {
+  excelStack=[];
+  expandedRefCols.clear();
+  groupColorMap.clear();
+  _colorCounter=0;
+  const root=document.getElementById('rp-content');
+  root.innerHTML='';
+
+  if (mode==='schema') {
+    renderSchemaTable(val);
+    return;
+  }
+  const primary=detectPrimaryTable(val);
+  if (!primary) { root.innerHTML='<div style="color:var(--muted);padding:20px">Nothing to tabulate</div>'; return; }
+  excelStack.push(primary);
+  drawDataTable();
+}
+
+function drawDataTable() {
+  const root=document.getElementById('rp-content');
+  root.innerHTML='';
+  const { label, rows }=excelStack[excelStack.length-1];
+
+  // Navigation bar
+  const nav=document.createElement('div'); nav.className='excel-nav';
+  if (excelStack.length>1) {
+    const back=document.createElement('button'); back.className='ex-back'; back.textContent='← Back';
+    back.onclick=()=>{ excelStack.pop(); drawDataTable(); };
+    nav.appendChild(back);
+  }
+  const bc=document.createElement('div'); bc.className='ex-bc';
+  excelStack.forEach((t,i)=>{
+    if (i>0) { const sep=document.createElement('span'); sep.className='ebc-sep'; sep.textContent='›'; bc.appendChild(sep); }
+    const span=document.createElement('span');
+    span.textContent=t.label;
+    if (i<excelStack.length-1) {
+      span.className='ebc-link';
+      const ti=i; span.onclick=()=>{ excelStack.splice(ti+1); drawDataTable(); };
+    } else span.className='ebc-active';
+    bc.appendChild(span);
+  });
+  nav.appendChild(bc);
+  const cnt=document.createElement('span'); cnt.className='ex-count';
+  cnt.textContent=`${rows.length} row${rows.length!==1?'s':''}`;
+  nav.appendChild(cnt);
+  root.appendChild(nav);
+  updateCrumb(excelStack.map(t=>t.label));
+
+  if (!rows||rows.length===0) {
+    root.innerHTML+='<div style="color:var(--muted);padding:20px;font-size:13px">No rows.</div>'; return;
+  }
+
+  const cols = buildTableColDefs(rows);
+  const hasExpandedGroups = cols.some(c=>c.groupKey);
+
+  const wrap=document.createElement('div'); wrap.className='excel-wrap';
+  const table=document.createElement('table'); table.className='excel-table';
+  const thead=document.createElement('thead');
+
+  // ── Row 1: group headers + direct/ref columns ──────────────────────────────
+  const tr1=document.createElement('tr');
+
+  // # cell (rowspan=2 if there's a sub-row)
+  const th0=document.createElement('th');
+  th0.className='th-num';
+  if (hasExpandedGroups) th0.rowSpan=2;
+  th0.innerHTML='<div class="th-inner"><span class="th-name" style="color:#4b6080">#</span></div>';
+  tr1.appendChild(th0);
+
+  // Track group spans for the group header cells
+  let i=0;
+  while (i<cols.length) {
+    const col=cols[i];
+    if (col.groupKey) {
+      // Collect all cols in this group
+      const groupKey=col.groupKey;
+      const groupCols=[];
+      while (i<cols.length && cols[i].groupKey===groupKey) { groupCols.push(cols[i]); i++; }
+      const color=groupCols[0].color;
+
+      // Group header cell spans all sub-columns
+      const thg=document.createElement('th');
+      thg.colSpan=groupCols.length;
+      thg.style.cssText=`background:${color.dark};border-bottom:2px solid ${color.bar};text-align:center`;
+      const inner=document.createElement('div'); inner.className='th-inner';
+      inner.style.cssText='flex-direction:row;align-items:center;justify-content:center;gap:4px;padding:5px 8px';
+      inner.innerHTML=`<span class="th-name" style="color:${color.bar}">${esc(groupCols[0].groupName)}</span>`;
+      const colBtn=document.createElement('button');
+      colBtn.className='col-btn collapse'; colBtn.textContent='⊖';
+      colBtn.title=`Collapse ${groupCols[0].groupName} columns`;
+      const gk=groupKey; colBtn.onclick=()=>collapseRefCol(gk);
+      inner.appendChild(colBtn);
+      thg.appendChild(inner);
+      tr1.appendChild(thg);
+    } else {
+      // Direct or ref column — rowspan=2 if there's a sub-row
+      const th=document.createElement('th');
+      if (hasExpandedGroups) th.rowSpan=2;
+      const lbl=col.group?`<span class="th-group">${esc(col.group)}</span>`:'';
+      const inner=document.createElement('div'); inner.className='th-inner';
+
+      if (col.type==='ref-obj') {
+        // Object ref: show ⊕ expand button
+        inner.innerHTML=`${lbl}<span class="th-name">${esc(col.name)}</span>`;
+        const expBtn=document.createElement('button');
+        expBtn.className='col-btn expand'; expBtn.textContent='⊕';
+        expBtn.title=`Expand ${col.name} as columns`;
+        const ck=col.key; expBtn.onclick=()=>expandRefCol(ck);
+        inner.appendChild(expBtn);
+      } else if (col.type==='ref-arr') {
+        // Array ref: show drill-down indicator (no inline expand — would create extra rows)
+        inner.innerHTML=`${lbl}<span class="th-name">${esc(col.name)}</span><span style="color:#60a5fa;margin-left:4px;font-size:10px">▤ list</span>`;
+      } else {
+        inner.innerHTML=`${lbl}<span class="th-name">${esc(col.name)}</span>`;
+      }
+      th.appendChild(inner);
+      th.title=col.key;
+      tr1.appendChild(th);
+      i++;
+    }
+  }
+  thead.appendChild(tr1);
+
+  // ── Row 2: sub-column headers (only if any group is expanded) ─────────────
+  if (hasExpandedGroups) {
+    const tr2=document.createElement('tr');
+    cols.filter(c=>c.groupKey).forEach(col=>{
+      const th=document.createElement('th');
+      th.className='th-sub';
+      th.style.cssText=`background:${col.color.dark};border-top:2px solid ${col.color.bar}`;
+      th.innerHTML=`<div class="th-inner"><span class="th-name" style="font-weight:500;color:#d0e8ff">${esc(col.name)}</span></div>`;
+      tr2.appendChild(th);
+    });
+    thead.appendChild(tr2);
+  }
+
+  table.appendChild(thead);
+
+  // ── Body ──────────────────────────────────────────────────────────────────
+  const tbody=document.createElement('tbody');
+  rows.forEach((row,rowIdx)=>{
+    if (row===null||typeof row!=='object') return;
+    const tr=document.createElement('tr');
+    const td0=document.createElement('td');
+    td0.style.cssText='text-align:center;color:#bbb;font-size:11px;background:#f9f9f7;';
+    td0.textContent=rowIdx+1; tr.appendChild(td0);
+
+    const flat=flattenRow(row);
+    cols.forEach(col=>{
+      const td=document.createElement('td');
+
+      if (col.groupKey) {
+        // Sub-column of an expanded group — get value from nested object
+        const refCell=flat[col.key];
+        const subFlat=(refCell&&refCell.$ref==='object'&&refCell.$val)
+          ? flattenRow(refCell.$val, 0, '') : {};
+        const val=subFlat[col.subKey];
+
+        // Color the cell with the group tint
+        td.style.cssText=`background:${col.color.light}`;
+        if (col.isFirst)  td.style.borderLeft=`2px solid ${col.color.border}`;
+        if (col.isLast)   td.style.borderRight=`2px solid ${col.color.border}`;
+
+        // Handle sub-ref cells (nested array/object inside expanded group)
+        if (val&&typeof val==='object'&&val.$ref==='array') {
+          const btn=document.createElement('button'); btn.className='ref-arr';
+          btn.style.fontSize='10.5px';
+          btn.innerHTML=`📄 ${val.$count} ${val.$label} →`;
+          btn.onclick=()=>{ excelStack.push({label:val.$label,rows:val.$val}); drawDataTable(); };
+          td.appendChild(btn);
+        } else if (val&&typeof val==='object'&&val.$ref==='object') {
+          const btn=document.createElement('button'); btn.className='ref-obj';
+          btn.style.fontSize='10.5px';
+          btn.innerHTML=`🔗 ${val.$label} ↗`;
+          btn.onclick=()=>openDetailPanel(val.$label,val.$val);
+          td.appendChild(btn);
+        } else {
+          fillPrimCell(td, val, col.subKey);
+        }
+      } else {
+        fillCell(td, flat[col.key], col.key, col.name);
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  root.appendChild(wrap);
+}
+
+// Fill a primitive cell (shared by normal and sub-column cells)
+function fillPrimCell(td, val, key) {
+  if (val===null||val===undefined) { td.className='td-null'; td.textContent='—'; return; }
+  const type=inferType(val);
+  if (type==='boolean') { td.innerHTML=val?`<span class="td-bool-y">✓ Yes</span>`:`<span class="td-bool-n">✗ No</span>`; return; }
+  if (type==='date')    { td.className='td-date'; td.textContent=fmtDate(val); return; }
+  if (type==='number')  { td.className='td-num';  td.textContent=formatNum(val,key); return; }
+  const s=String(val); td.textContent=s; td.title=s;
+  if (s.length>30) td.style.maxWidth='180px';
+}
+
+function fillCell(td, val, key, label) {
+  if (val===null||val===undefined) { td.className='td-null'; td.textContent='—'; return; }
+
+  // Array ref → drill into sub-table
+  if (val&&typeof val==='object'&&val.$ref==='array') {
+    const btn=document.createElement('button'); btn.className='ref-arr';
+    btn.innerHTML=`📄 ${val.$count} ${val.$label} →`;
+    btn.title=`Open ${val.$label} as table (${val.$count} items)`;
+    btn.onclick=()=>{ excelStack.push({label:val.$label,rows:val.$val}); drawDataTable(); };
+    td.appendChild(btn); return;
+  }
+  // Object ref → ⊕ expand or ↗ slide-over (both shown)
+  if (val&&typeof val==='object'&&val.$ref==='object') {
+    const expBtn=document.createElement('button'); expBtn.className='ref-obj';
+    expBtn.style.marginRight='4px';
+    expBtn.innerHTML=`🔗 ${val.$label} ↗`;
+    expBtn.title=`View ${val.$label} details`;
+    expBtn.onclick=()=>openDetailPanel(val.$label,val.$val);
+    td.appendChild(expBtn); return;
+  }
+
+  fillPrimCell(td, val, key);
+}
+
+// ── Schema → Table view ────────────────────────────────────────────────────────
+// AI: extract all schema fields recursively into a flat reference table
+function renderSchemaTable(schema) {
+  const root=document.getElementById('rp-content');
+  root.innerHTML='';
+
+  const fields=[];
+  extractSchemaFields(schema, fields, '', 0);
+
+  const nav=document.createElement('div'); nav.className='excel-nav';
+  const bc=document.createElement('div'); bc.className='ex-bc';
+  const title=schema.title||'Schema';
+  bc.innerHTML=`<span class="ebc-active">${esc(title)}</span>`;
+  nav.appendChild(bc);
+  const count=document.createElement('span'); count.className='ex-count';
+  count.textContent=`${fields.length} field${fields.length!==1?'s':''}`;
+  nav.appendChild(count);
+  root.appendChild(nav);
+  updateCrumb([title, 'Field Reference']);
+
+  const wrap=document.createElement('div'); wrap.className='excel-wrap';
+  const table=document.createElement('table'); table.className='excel-table schema-table';
+  table.innerHTML=`<thead><tr>
+    <th><div class="th-inner"><span class="th-name">#</span></div></th>
+    <th><div class="th-inner"><span class="th-name">Field</span></div></th>
+    <th><div class="th-inner"><span class="th-name">Path</span></div></th>
+    <th><div class="th-inner"><span class="th-name">Type</span></div></th>
+    <th><div class="th-inner"><span class="th-name">Required</span></div></th>
+    <th><div class="th-inner"><span class="th-name">Description</span></div></th>
+    <th><div class="th-inner"><span class="th-name">Rules &amp; Options</span></div></th>
+  </tr></thead>`;
+  const tbody=document.createElement('tbody');
+  fields.forEach((f,i)=>{
+    const tr=document.createElement('tr');
+    const depth=f.path.split('.').length-1;
+    tr.innerHTML=`
+      <td style="text-align:center;color:#bbb;font-size:11px;background:#f9f9f7">${i+1}</td>
+      <td style="padding-left:${8+depth*12}px;font-weight:${depth===0?'600':'400'}">${esc(f.label)}</td>
+      <td class="td-path">${esc(f.path)}</td>
+      <td class="td-type"><span class="badge ${typeBadgeClass(f.jsType,f.format,f.enum)}" style="font-size:10px">${esc(f.typeName)}</span></td>
+      <td class="${f.required?'td-required':'td-optional'}">${f.required?'Required':'Optional'}</td>
+      <td style="color:#555;font-size:12px;max-width:220px">${esc(f.description)}</td>
+      <td>${f.chips}</td>`;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  root.appendChild(wrap);
+}
+
+function extractSchemaFields(schema, out, prefix, depth) {
+  if (schema.$ref) { const r=resolveRef(schema.$ref); if(r) schema={...r,...schema,$ref:undefined}; }
+  if (!schema.properties) return;
+  const reqSet=new Set(schema.required||[]);
+  Object.entries(schema.properties).forEach(([k,sub])=>{
+    if (sub.$ref) { const r=resolveRef(sub.$ref); if(r) sub={...r,...sub,$ref:undefined}; }
+    const path=prefix?`${prefix}.${k}`:k;
+    const cons=buildConstraints(sub);
+    const chips=[
+      ...cons.map(c=>`<span class="chip-constraint">${esc(c)}</span>`),
+      ...(sub.enum||[]).map(v=>`<span class="chip-enum">${esc(String(v))}</span>`)
+    ].join('');
+    out.push({
+      path, label:sub.title||humanize(k), depth,
+      jsType:sub.type, format:sub.format||null, enum:sub.enum||null,
+      typeName:friendlyTypeName(sub.type,sub.format,sub.enum),
+      required:reqSet.has(k), description:sub.description||'', chips
+    });
+    if (sub.properties||(sub.type==='object'&&sub.properties)) extractSchemaFields(sub,out,path,depth+1);
+    if (sub.type==='array'&&sub.items&&sub.items.properties) extractSchemaFields(sub.items,out,`${path}[]`,depth+1);
   });
 }
 
+// ── Detail slide-over ─────────────────────────────────────────────────────────
+function openDetailPanel(title, obj) {
+  document.getElementById('dp-title').textContent=title;
+  const body=document.getElementById('dp-body'); body.innerHTML='';
+
+  function addRow(key, val, indent=0) {
+    const type=inferType(val);
+    const row=document.createElement('div'); row.className='dp-row';
+    row.style.paddingLeft=(8+indent*12)+'px';
+    const keyEl=document.createElement('span'); keyEl.className='dp-key'; keyEl.textContent=humanize(key);
+    row.appendChild(keyEl);
+
+    if (type==='object'||type==='array') {
+      const btn=document.createElement('button');
+      btn.className=`${type==='array'?'ref-arr':'ref-obj'} dp-val-ref`;
+      btn.style.fontSize='11px';
+      if (type==='array') {
+        btn.innerHTML=`📄 ${val.length} items →`;
+        btn.onclick=()=>{ excelStack.push({label:humanize(key),rows:val}); drawDataTable(); closeDetail(); };
+      } else {
+        btn.innerHTML=`🔗 ${humanize(key)} ↗`;
+        btn.onclick=()=>openDetailPanel(humanize(key),val);
+      }
+      row.appendChild(btn);
+    } else {
+      const valEl=document.createElement('span');
+      if (val===null) { valEl.className='dp-val-null'; valEl.textContent='—'; }
+      else if (type==='boolean') { valEl.className=val?'dp-val-bool-t':'dp-val-bool-f'; valEl.textContent=val?'Yes':'No'; }
+      else if (type==='date')  { valEl.className='dp-val-date'; valEl.textContent=fmtDate(val); }
+      else if (type==='number'){ valEl.className='dp-val-num'; valEl.textContent=formatNum(val,key); }
+      else { valEl.className='dp-val'; valEl.textContent=String(val); }
+      row.appendChild(valEl);
+    }
+    body.appendChild(row);
+  }
+
+  Object.entries(obj).forEach(([k,v])=>addRow(k,v));
+  document.getElementById('detail-overlay').style.display='flex';
+}
+function closeDetail(e) {
+  if (!e||e.target===document.getElementById('detail-overlay'))
+    document.getElementById('detail-overlay').style.display='none';
+}
+
 // ── Examples ──────────────────────────────────────────────────────────────────
-
 const EXAMPLES = {
-
-  // AI: deeply nested VC portfolio report to show many structure colors
   portfolio: {
-    report: "Antler Portfolio — Sydney Cohort 2026",
-    generated_at: "2026-06-19T10:00:00Z",
-    fund: {
-      name: "Antler Fund III",
-      vintage_year: 2023,
-      size_usd: 250000000,
-      focus: {
-        geographies: ["Australia","Singapore","UK","US"],
-        stages: ["Pre-Seed","Seed"],
-        sectors: ["AI","Climate","FinTech","HealthTech"]
-      }
+    report:"Antler Portfolio — Sydney Cohort 2026",generated_at:"2026-06-19T10:00:00Z",
+    fund:{ name:"Antler Fund III",vintage_year:2023,size_usd:250000000,
+      focus:{ geographies:["Australia","Singapore","UK","US"],stages:["Pre-Seed","Seed"],sectors:["AI","Climate","FinTech","HealthTech"] }
     },
-    portfolio: [
-      {
-        id: "co_001",
-        name: "NeuralFlow",
-        sector: "AI Infrastructure",
-        stage: "Series B",
-        founded_at: "2021-03-10",
-        is_active: true,
-        metrics: {
-          headcount: 48,
-          arr_usd: 8500000,
-          mrr_growth_pct: 12.4,
-          nps_score: 71
-        },
-        funding: {
-          total_raised_usd: 42000000,
-          current_valuation_usd: 180000000,
-          runway_months: 24,
-          rounds: [
-            { name:"Seed",     amount_usd:2000000,  date:"2021-09-01", lead_investor:"Blackbird Ventures" },
-            { name:"Series A", amount_usd:15000000, date:"2022-11-15", lead_investor:"AirTree Ventures"  },
-            { name:"Series B", amount_usd:25000000, date:"2024-06-20", lead_investor:"Square Peg Capital" }
-          ]
-        },
-        team: {
-          ceo: { name:"Mia Torres",  background:"ex-Google Brain", linkedin:"linkedin.com/in/mia-torres" },
-          cto: { name:"Sam Park",    background:"ex-Canva",        linkedin:"linkedin.com/in/sam-park"   },
-          cpo: { name:"Lena Braun",  background:"ex-Atlassian",    linkedin:"linkedin.com/in/lena-braun" }
-        },
-        hq: { city:"Sydney", state:"NSW", country:"AU" }
+    portfolio:[
+      { id:"co_001",name:"NeuralFlow",sector:"AI Infrastructure",stage:"Series B",founded_at:"2021-03-10",is_active:true,
+        metrics:{ headcount:48,arr_usd:8500000,mrr_growth_pct:12.4,nps_score:71 },
+        funding:{ total_raised_usd:42000000,current_valuation_usd:180000000,runway_months:24,
+          rounds:[ {name:"Seed",amount_usd:2000000,date:"2021-09-01",lead_investor:"Blackbird Ventures"},
+                   {name:"Series A",amount_usd:15000000,date:"2022-11-15",lead_investor:"AirTree Ventures"},
+                   {name:"Series B",amount_usd:25000000,date:"2024-06-20",lead_investor:"Square Peg Capital"} ] },
+        team:{ ceo:{name:"Mia Torres",background:"ex-Google Brain",linkedin:"linkedin.com/in/mia-torres"},
+               cto:{name:"Sam Park",background:"ex-Canva",linkedin:"linkedin.com/in/sam-park"},
+               cpo:{name:"Lena Braun",background:"ex-Atlassian",linkedin:"linkedin.com/in/lena-braun"} },
+        hq:{ city:"Sydney",state:"NSW",country:"AU" }
       },
-      {
-        id: "co_002",
-        name: "CarbonLedger",
-        sector: "Climate Tech",
-        stage: "Series A",
-        founded_at: "2022-08-22",
-        is_active: true,
-        metrics: {
-          headcount: 21,
-          arr_usd: 2100000,
-          mrr_growth_pct: 18.7,
-          nps_score: 64
-        },
-        funding: {
-          total_raised_usd: 12000000,
-          current_valuation_usd: 55000000,
-          runway_months: 18,
-          rounds: [
-            { name:"Pre-Seed", amount_usd:500000,   date:"2022-10-01", lead_investor:"Antler"          },
-            { name:"Series A", amount_usd:11500000, date:"2024-02-14", lead_investor:"Main Sequence VC" }
-          ]
-        },
-        team: {
-          ceo: { name:"Anika Patel",  background:"ex-Commonwealth Bank", linkedin:"linkedin.com/in/anika-patel" },
-          cto: { name:"James Wu",     background:"ex-CSIRO",             linkedin:"linkedin.com/in/james-wu"    }
-        },
-        hq: { city:"Melbourne", state:"VIC", country:"AU" }
+      { id:"co_002",name:"CarbonLedger",sector:"Climate Tech",stage:"Series A",founded_at:"2022-08-22",is_active:true,
+        metrics:{ headcount:21,arr_usd:2100000,mrr_growth_pct:18.7,nps_score:64 },
+        funding:{ total_raised_usd:12000000,current_valuation_usd:55000000,runway_months:18,
+          rounds:[ {name:"Pre-Seed",amount_usd:500000,date:"2022-10-01",lead_investor:"Antler"},
+                   {name:"Series A",amount_usd:11500000,date:"2024-02-14",lead_investor:"Main Sequence VC"} ] },
+        team:{ ceo:{name:"Anika Patel",background:"ex-Commonwealth Bank",linkedin:"linkedin.com/in/anika-patel"},
+               cto:{name:"James Wu",background:"ex-CSIRO",linkedin:"linkedin.com/in/james-wu"} },
+        hq:{ city:"Melbourne",state:"VIC",country:"AU" }
+      },
+      { id:"co_003",name:"HealthPilot",sector:"HealthTech",stage:"Seed",founded_at:"2023-11-05",is_active:true,
+        metrics:{ headcount:9,arr_usd:380000,mrr_growth_pct:31.2,nps_score:88 },
+        funding:{ total_raised_usd:3200000,current_valuation_usd:16000000,runway_months:20,
+          rounds:[ {name:"Pre-Seed",amount_usd:700000,date:"2024-01-10",lead_investor:"Antler"},
+                   {name:"Seed",amount_usd:2500000,date:"2024-09-01",lead_investor:"Blackbird Ventures"} ] },
+        team:{ ceo:{name:"Priya Nair",background:"ex-Telstra Health",linkedin:"linkedin.com/in/priya-nair"},
+               cto:{name:"Omar Hassan",background:"ex-Microsoft",linkedin:"linkedin.com/in/omar-hassan"} },
+        hq:{ city:"Brisbane",state:"QLD",country:"AU" }
       }
     ],
-    summary: {
-      total_companies: 2,
-      total_funding_usd: 54000000,
-      avg_runway_months: 21,
-      top_sectors: ["AI Infrastructure","Climate Tech"]
-    }
+    summary:{ total_companies:3,total_funding_usd:57200000,avg_runway_months:21,top_sectors:["AI Infrastructure","Climate Tech","HealthTech"] }
   },
-
-  user: {
-    id: "usr_01HZXK7QP3",
-    first_name: "Sarah",
-    last_name: "Chen",
-    email: "sarah.chen@acme.com",
-    date_of_birth: "1990-04-15",
-    is_verified: true,
-    account_balance: 2340.50,
-    roles: ["admin","editor"],
-    address: {
-      street: "42 Harbour View Rd",
-      city: "Sydney",
-      postcode: "2000",
-      country: "AU"
-    },
-    preferences: {
-      theme: "dark",
-      notifications: { email: true, sms: false, push: true },
-      language: "en-AU"
-    },
-    last_login: "2026-06-18T14:32:00Z"
+  user:{
+    id:"usr_01HZXK7QP3",first_name:"Sarah",last_name:"Chen",email:"sarah.chen@acme.com",
+    date_of_birth:"1990-04-15",is_verified:true,account_balance:2340.50,roles:["admin","editor"],
+    address:{ street:"42 Harbour View Rd",city:"Sydney",postcode:"2000",country:"AU" },
+    preferences:{ theme:"dark",notifications:{email:true,sms:false,push:true},language:"en-AU" },
+    last_login:"2026-06-18T14:32:00Z"
   },
-
-  order: {
-    order_id: "ORD-20260619-00482",
-    status: "shipped",
-    placed_at: "2026-06-17T09:15:00Z",
-    estimated_delivery: "2026-06-21",
-    customer: { id:"usr_01HZXK7QP3", name:"Sarah Chen", email:"sarah.chen@acme.com" },
-    items: [
-      { sku:"PRD-001", name:"Wireless Keyboard", quantity:1, unit_price:129.00, tax:12.90 },
-      { sku:"PRD-042", name:"USB-C Hub",          quantity:2, unit_price:49.99,  tax:10.00 }
+  order:{
+    order_id:"ORD-20260619-00482",status:"shipped",placed_at:"2026-06-17T09:15:00Z",
+    estimated_delivery:"2026-06-21",
+    customer:{id:"usr_01HZXK7QP3",name:"Sarah Chen",email:"sarah.chen@acme.com"},
+    items:[
+      {sku:"PRD-001",name:"Wireless Keyboard",quantity:1,unit_price:129.00,tax:12.90},
+      {sku:"PRD-042",name:"USB-C Hub",quantity:2,unit_price:49.99,tax:10.00}
     ],
-    pricing: {
-      subtotal: 228.98,
-      shipping: 9.95,
-      tax: 22.90,
-      discount: 0,
-      total: 261.83
-    },
-    shipping_address: {
-      street: "42 Harbour View Rd",
-      city: "Sydney",
-      postcode: "2000",
-      country: "AU"
-    },
-    tracking: {
-      carrier: "Australia Post",
-      tracking_number: "AP1234567890AU",
-      events: [
-        { status:"Label created",   timestamp:"2026-06-17T10:00:00Z", location:"Sydney Warehouse" },
-        { status:"Picked up",       timestamp:"2026-06-17T15:30:00Z", location:"Sydney Warehouse" },
-        { status:"In transit",      timestamp:"2026-06-18T08:00:00Z", location:"Sydney Hub"        }
-      ]
+    pricing:{subtotal:228.98,shipping:9.95,tax:22.90,discount:0,total:261.83},
+    shipping_address:{street:"42 Harbour View Rd",city:"Sydney",postcode:"2000",country:"AU"},
+    tracking:{carrier:"Australia Post",tracking_number:"AP1234567890AU",
+      events:[
+        {status:"Label created",timestamp:"2026-06-17T10:00:00Z",location:"Sydney Warehouse"},
+        {status:"Picked up",timestamp:"2026-06-17T15:30:00Z",location:"Sydney Warehouse"},
+        {status:"In transit",timestamp:"2026-06-18T08:00:00Z",location:"Sydney Hub"}
+      ]}
+  },
+  pydantic:{
+    $schema:"http://json-schema.org/draft-07/schema#",title:"User Profile",
+    description:"A registered user account on the platform",type:"object",
+    required:["id","email","full_name"],
+    properties:{
+      id:{title:"User ID",description:"Assigned at registration",type:"string",minLength:10},
+      email:{title:"Email Address",description:"Must be unique across platform",type:"string",format:"email"},
+      full_name:{title:"Full Name",type:"string",minLength:2,maxLength:120},
+      age:{title:"Age",type:"integer",minimum:13,maximum:120},
+      role:{title:"Account Role",description:"Determines access level",type:"string",enum:["admin","editor","viewer","guest"]},
+      is_active:{title:"Active Account",description:"Inactive accounts cannot log in",type:"boolean"},
+      created_at:{title:"Joined On",type:"string",format:"date-time"},
+      tags:{title:"Tags",description:"Labels applied by admins",type:"array",items:{type:"string"},maxItems:20},
+      address:{title:"Mailing Address",type:"object",required:["street","city","country"],
+        properties:{street:{title:"Street",type:"string"},city:{title:"City",type:"string"},
+                    postcode:{title:"Postcode",type:"string"},country:{title:"Country",type:"string",minLength:2,maxLength:2}}}
     }
   },
-
-  pydantic: {
-    $schema: "http://json-schema.org/draft-07/schema#",
-    title: "User Profile",
-    description: "A registered user account on the platform",
-    type: "object",
-    required: ["id","email","full_name"],
-    properties: {
-      id:        { title:"User ID",       description:"Assigned at registration",        type:"string", minLength:10 },
-      email:     { title:"Email Address", description:"Must be unique across platform",  type:"string", format:"email" },
-      full_name: { title:"Full Name",                                                     type:"string", minLength:2, maxLength:120 },
-      age:       { title:"Age",                                                            type:"integer", minimum:13, maximum:120 },
-      role:      { title:"Account Role",  description:"Determines access level",         type:"string", enum:["admin","editor","viewer","guest"] },
-      is_active: { title:"Active Account",description:"Inactive accounts cannot log in", type:"boolean" },
-      created_at:{ title:"Joined On",                                                     type:"string", format:"date-time" },
-      tags:      { title:"Tags",          description:"Labels applied by admins",        type:"array", items:{type:"string"}, maxItems:20 },
-      address: {
-        title:"Mailing Address", type:"object", required:["street","city","country"],
-        properties: {
-          street:   {title:"Street",   type:"string"},
-          city:     {title:"City",     type:"string"},
-          postcode: {title:"Postcode", type:"string"},
-          country:  {title:"Country",  type:"string", minLength:2, maxLength:2}
-        }
-      }
-    }
-  },
-
-  zod: {
-    title: "Product Listing",
-    description: "A product available for purchase in the catalogue",
-    type: "object",
-    required: ["sku","name","price","category"],
-    properties: {
-      sku:         { title:"SKU",            description:"Unique product code",    type:"string",  pattern:"^PRD-[0-9]{3,6}$" },
-      name:        { title:"Product Name",                                          type:"string",  minLength:3, maxLength:200 },
-      description: { title:"Description",                                           type:"string",  maxLength:5000 },
-      price:       { title:"Price (AUD)",                                           type:"number",  minimum:0, exclusiveMinimum:0 },
-      category:    { title:"Category",                                              type:"string",  enum:["electronics","clothing","food","home","sports"] },
-      in_stock:    { title:"In Stock",                                              type:"boolean" },
-      stock_count: { title:"Units Available",                                       type:"integer", minimum:0 },
-      images: {
-        title:"Product Images", type:"array",
-        items: {
-          type:"object", title:"Image", required:["url"],
-          properties: {
-            url:        {title:"URL",           type:"string",  format:"uri"},
-            alt:        {title:"Alt Text",      type:"string"},
-            is_primary: {title:"Primary Image", type:"boolean"}
-          }
-        },
-        minItems:1, maxItems:10
-      }
+  zod:{
+    title:"Product Listing",description:"A product available for purchase in the catalogue",
+    type:"object",required:["sku","name","price","category"],
+    properties:{
+      sku:{title:"SKU",description:"Unique product code",type:"string",pattern:"^PRD-[0-9]{3,6}$"},
+      name:{title:"Product Name",type:"string",minLength:3,maxLength:200},
+      description:{title:"Description",type:"string",maxLength:5000},
+      price:{title:"Price (AUD)",type:"number",minimum:0,exclusiveMinimum:0},
+      category:{title:"Category",type:"string",enum:["electronics","clothing","food","home","sports"]},
+      in_stock:{title:"In Stock",type:"boolean"},
+      stock_count:{title:"Units Available",type:"integer",minimum:0},
+      images:{title:"Product Images",type:"array",items:{type:"object",title:"Image",required:["url"],
+        properties:{url:{title:"URL",type:"string",format:"uri"},alt:{title:"Alt Text",type:"string"},is_primary:{title:"Primary Image",type:"boolean"}}},
+        minItems:1,maxItems:10}
     }
   }
 };
 
-// ── Load & Tab selection ──────────────────────────────────────────────────────
-
-let _viewMode = 'auto';
-
+// ── Tab selection ─────────────────────────────────────────────────────────────
 function selectTab(name) {
   document.querySelectorAll('.ex-tab').forEach(b=>{
     const n=b.getAttribute('onclick').match(/selectTab\('(\w+)'\)/)?.[1];
-    b.classList.toggle('active', n===name);
+    b.classList.toggle('active',n===name);
   });
-
-  const val  = EXAMPLES[name];
-  const mode = detectMode(val, _viewMode);
-
+  _currentVal=EXAMPLES[name];
+  _currentMode=detectMode(_currentVal);
   const badge=document.getElementById('hbadge');
-  if (mode==='schema') { badge.className='h-badge hb-schema'; badge.textContent='Schema'; }
-  else                 { badge.className='h-badge hb-data';   badge.textContent='Data';   }
-
-  renderJsonPanel(val);
-  renderRight(val, mode);
-  clearCrumb();
+  if (_currentMode==='schema') { badge.className='h-badge hb-schema'; badge.textContent='Schema'; }
+  else                         { badge.className='h-badge hb-data';   badge.textContent='Data';   }
+  renderStructurePanel(_currentVal, _currentMode);
+  renderRight();
+  closeDetail();
 }
 
+setView('tree');
 selectTab('portfolio');
 </script>
 </body>
