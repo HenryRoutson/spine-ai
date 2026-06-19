@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>JSON Viewer — Human-Readable</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5f5f3;
+  --surface: #fff;
+  --border: #e4e4e1;
+  --text: #1a1a1a;
+  --muted: #888;
+  --accent: #2563eb;
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+  --shadow-md: 0 4px 14px rgba(0,0,0,.10);
+
+  /* JSON dark panel */
+  --jbg:    #1a1a1a;
+  --jkey:   #9cdcfe;
+  --jstr:   #ce9178;
+  --jnum:   #b5cea8;
+  --jbool:  #569cd6;
+  --jnull:  #9ca3af;
+  --jdate:  #4ec9b0;
+  --jpunct: #d4d4d4;
+  --jell:   #6a9955;
+  --jfa:    #666;
+}
+
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  overflow: hidden;
+}
+
+/* ── Header ──────────────────────────────── */
+header {
+  background: #111827;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 14px;
+  height: 46px;
+  flex-shrink: 0;
+}
+.h-logo { display:flex; align-items:center; gap:8px; margin-right:16px; }
+.h-logo span { color:#f9fafb; font-size:14px; font-weight:600; letter-spacing:-.2px; }
+.ex-tabs { display:flex; gap:2px; flex:1; }
+.ex-tab {
+  padding: 5px 13px;
+  font-size: 12.5px;
+  color: #6b7280;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.ex-tab:hover  { background:#1f2937; color:#e5e7eb; }
+.ex-tab.active { background:#2563eb; color:#fff; }
+.h-badge {
+  font-size:10.5px; font-weight:600; padding:3px 10px;
+  border-radius:999px; margin-left:8px; flex-shrink:0;
+}
+.hb-schema { background:#4c1d95; color:#c4b5fd; }
+.hb-data   { background:#14532d; color:#86efac; }
+
+/* ── Breadcrumb ──────────────────────────── */
+#crumb {
+  background:#0f172a; color:#475569;
+  font-size:11.5px; font-family:"SF Mono","Fira Code",monospace;
+  padding:6px 16px; min-height:30px; display:flex; align-items:center;
+  flex-shrink:0; border-bottom:1px solid #1e293b;
+  transition: opacity .15s;
+}
+#crumb.empty { opacity:.35; }
+.cr-seg      { color:#64748b; }
+.cr-seg.last { color:#94a3b8; }
+.cr-sep      { margin:0 6px; color:#1e3a5f; }
+
+/* ── Main split ──────────────────────────── */
+main {
+  display: grid;
+  grid-template-columns: 440px 1fr;
+  overflow: hidden;
+}
+
+/* ── JSON Panel (left) ───────────────────── */
+#json-panel {
+  background: var(--jbg);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #2d2d2d;
+}
+.jp-header {
+  padding: 7px 12px;
+  font-size: 10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em;
+  color: #4b5563;
+  border-bottom: 1px solid #262626;
+  position: sticky; top:0; background:#161616; z-index:1; flex-shrink:0;
+}
+#json-code {
+  padding: 10px 0 16px 0;
+  font-family: "SF Mono","Fira Code","Cascadia Code",Consolas,monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+  flex: 1;
+}
+
+/* Each JSON line */
+.j-line {
+  display: flex;
+  align-items: flex-start;
+  min-height: 20px;
+}
+.j-line:hover { background: rgba(255,255,255,.025); }
+
+/* Gutter: holds ▼ keyname */
+.j-gutter {
+  width: 92px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8px;
+  padding-top: 1px;
+  gap: 3px;
+  user-select: none;
+}
+.j-tag {
+  display: flex; align-items: center; gap: 3px;
+  cursor: pointer; padding: 1px 4px; border-radius: 3px;
+  transition: background .1s;
+}
+.j-tag:hover { background: rgba(255,255,255,.07); }
+.j-fa {
+  font-size: 9px; color: var(--jfa);
+  transition: color .1s; line-height: 1;
+}
+.j-fname {
+  font-size: 9px; color: rgba(200,200,200,.3);
+  font-style: italic; max-width: 56px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.j-tag:hover .j-fa, .j-tag:hover .j-fname { color: rgba(220,220,220,.7); }
+
+/* Content area */
+.j-content {
+  flex: 1;
+  padding-left: calc(var(--d,0) * 16px);
+  padding-right: 18px;
+  white-space: pre;
+  word-break: break-all;
+}
+
+/* Fold body — the colored container */
+.j-body {
+  border-left: 2px solid transparent;
+  margin-left: 1px;
+}
+
+/* Syntax colors */
+.j-key   { color: var(--jkey); }
+.j-str   { color: var(--jstr); }
+.j-num   { color: var(--jnum); }
+.j-bool  { color: var(--jbool); }
+.j-null  { color: var(--jnull); font-style: italic; }
+.j-date  { color: var(--jdate); }
+.j-p     { color: var(--jpunct); }
+.j-ell   { color: var(--jell); font-style: italic; letter-spacing: .05em; }
+
+/* ── Rendered Panel (right) ──────────────── */
+#rendered-panel {
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+.rp-header {
+  padding: 7px 16px;
+  font-size: 10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em;
+  color: var(--muted);
+  position: sticky; top:-16px; background:var(--bg); z-index:1;
+  margin: -16px -16px 12px -16px;
+  border-bottom: 1px solid var(--border);
+}
+.root-meta  { margin-bottom:14px; }
+.root-title { font-size:19px; font-weight:700; letter-spacing:-.3px; }
+.root-desc  { font-size:13px; color:var(--muted); margin-top:3px; }
+.node-group { display:flex; flex-direction:column; gap:6px; }
+
+.node-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: box-shadow .15s, border-color .15s;
+}
+.node-card:hover > .node-head { background: #fafaf8; }
+
+.node-head {
+  padding: 9px 12px 9px 10px;
+  display: flex; align-items: flex-start; gap: 8px;
+  user-select: none;
+  transition: background .1s;
+}
+.node-head.clickable { cursor: pointer; }
+.node-head.static    { cursor: default; }
+
+/* Code-fold chevron in right panel */
+.n-chev {
+  font-size: 10px; color: var(--muted);
+  line-height: 22px; flex-shrink: 0;
+  width: 14px; text-align: center;
+  font-family: monospace; transition: color .15s;
+}
+.n-chev.open { color: var(--accent); }
+.n-chev.leaf { opacity: 0; pointer-events: none; }
+
+.n-labels { flex:1; min-width:0; }
+.n-label  { font-size:13.5px; font-weight:600; line-height:1.3; }
+.n-desc   { font-size:11.5px; color:var(--muted); margin-top:2px; line-height:1.4; }
+
+.n-badges { display:flex; gap:4px; flex-wrap:wrap; flex-shrink:0; align-items:flex-start; padding-top:1px; }
+.badge {
+  font-size: 10.5px; font-weight:500;
+  padding: 2px 7px; border-radius:999px;
+  white-space: nowrap; line-height:1.5;
+}
+.bt-text   { background:#f0fdf4; color:#15803d; }
+.bt-number { background:#eff6ff; color:#1d4ed8; }
+.bt-bool   { background:#fdf4ff; color:#9333ea; }
+.bt-list   { background:#fff7ed; color:#c2410c; }
+.bt-group  { background:#f8fafc; color:#475569; border:1px solid #e2e8f0; }
+.bt-date   { background:#f0f9ff; color:#0369a1; }
+.bt-null   { background:#f9fafb; color:#9ca3af; border:1px solid #e5e7eb; }
+.bt-choice { background:#fefce8; color:#a16207; }
+.bt-mixed  { background:#fdf2f8; color:#be185d; }
+.bt-req    { background:#fff1f2; color:#be123c; }
+.bt-opt    { background:#f9fafb; color:#9ca3af; border:1px solid #e5e7eb; }
+
+.n-value {
+  padding: 0 12px 9px calc(10px + 14px + 8px);
+  font-size: 12.5px;
+  font-family: "SF Mono","Fira Code",monospace;
+  word-break: break-all;
+}
+.v-str  { color:#15803d; }
+.v-num  { color:#2563eb; }
+.v-bool { color:#7c3aed; font-style:italic; }
+.v-null { color:#9ca3af; font-style:italic; }
+.v-date { color:#0369a1; }
+
+.n-constraints, .n-enum {
+  display:flex; flex-wrap:wrap; gap:4px;
+  padding: 0 12px 9px calc(10px + 14px + 8px);
+}
+.constraint {
+  font-size:10.5px; padding:2px 8px; border-radius:6px;
+  background:#fffbeb; color:#b45309; border:1px solid #fde68a;
+}
+.enum-chip {
+  font-size:10.5px; padding:2px 8px; border-radius:6px;
+  background:#fefce8; color:#92400e; border:1px solid #fde68a;
+  font-family:"SF Mono","Fira Code",monospace;
+}
+
+.n-children {
+  border-top:1px solid var(--border);
+  padding:8px; display:flex; flex-direction:column; gap:5px;
+  background:var(--bg);
+}
+.n-children.closed { display:none; }
+
+.arr-idx {
+  font-size:10px; font-weight:600; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--muted);
+  padding:2px 0 3px calc(10px + 14px + 8px);
+}
+
+/* Scrollbars */
+#json-panel::-webkit-scrollbar,
+#rendered-panel::-webkit-scrollbar { width:6px; height:6px; }
+#json-panel::-webkit-scrollbar-track,
+#rendered-panel::-webkit-scrollbar-track { background:transparent; }
+#json-panel::-webkit-scrollbar-thumb { background:#333; border-radius:99px; }
+#rendered-panel::-webkit-scrollbar-thumb { background:var(--border); border-radius:99px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="h-logo">
+    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+      <rect width="22" height="22" rx="6" fill="#2563eb"/>
+      <path d="M7 8h8M7 11h5M7 14h7" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
+    </svg>
+    <span>JSON Viewer</span>
+  </div>
+  <div class="ex-tabs">
+    <button class="ex-tab" onclick="selectTab('portfolio')">Portfolio</button>
+    <button class="ex-tab" onclick="selectTab('user')">User</button>
+    <button class="ex-tab" onclick="selectTab('order')">Order</button>
+    <button class="ex-tab" onclick="selectTab('pydantic')">Pydantic Schema</button>
+    <button class="ex-tab" onclick="selectTab('zod')">Zod Schema</button>
+  </div>
+  <span class="h-badge" id="hbadge"></span>
+</header>
+
+<div id="crumb" class="empty">hover a field to trace its path</div>
+
+<main>
+  <div id="json-panel">
+    <div class="jp-header">Source JSON</div>
+    <div id="json-code"></div>
+  </div>
+  <div id="rendered-panel">
+    <div class="rp-header">Human View</div>
+    <div id="r-root"></div>
+  </div>
+</main>
+
+<script>
+// ── Color palette for fold blocks ─────────────────────────────────────────────
+// AI: each unique structure gets its own tinted region; colors cycle by fold ID
+const PALETTE = [
+  { bg:'rgba(56,132,255,0.09)',  bl:'rgba(56,132,255,0.45)'  },  // blue
+  { bg:'rgba(168,85,247,0.09)', bl:'rgba(168,85,247,0.45)'  },  // purple
+  { bg:'rgba(16,185,129,0.09)', bl:'rgba(16,185,129,0.45)'  },  // emerald
+  { bg:'rgba(245,158,11,0.09)', bl:'rgba(245,158,11,0.45)'  },  // amber
+  { bg:'rgba(239,68,68,0.09)',  bl:'rgba(239,68,68,0.45)'   },  // red
+  { bg:'rgba(20,184,166,0.09)', bl:'rgba(20,184,166,0.45)'  },  // teal
+  { bg:'rgba(251,113,133,0.09)',bl:'rgba(251,113,133,0.45)' },  // pink
+  { bg:'rgba(251,191,36,0.09)', bl:'rgba(251,191,36,0.45)'  },  // yellow
+];
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function humanize(key) {
+  return String(key)
+    .replace(/[-_]/g,' ').replace(/([a-z])([A-Z])/g,'$1 $2')
+    .replace(/\b\w/g,c=>c.toUpperCase()).trim();
+}
+function isDateStr(s) { return typeof s==='string' && /^\d{4}-\d{2}-\d{2}/.test(s); }
+function inferType(val) {
+  if (val===null) return 'null';
+  if (typeof val==='boolean') return 'boolean';
+  if (typeof val==='number') return 'number';
+  if (typeof val==='string') return isDateStr(val)?'date':'string';
+  if (Array.isArray(val)) return 'array';
+  return 'object';
+}
+function friendlyTypeName(jsType, format, hasEnum) {
+  if (hasEnum) return 'Choice';
+  if (format==='date-time'||format==='date') return 'Date';
+  if (format==='email') return 'Email';
+  if (format==='uri'||format==='url') return 'URL';
+  if (Array.isArray(jsType)) return jsType.map(t=>friendlyTypeName(t)).join(' or ');
+  return {string:'Text',number:'Number',integer:'Number',boolean:'Yes / No',
+          array:'List',object:'Group',null:'Empty',date:'Date'}[jsType]||jsType||'Value';
+}
+function typeBadgeClass(jsType, format, hasEnum) {
+  if (hasEnum) return 'bt-choice';
+  if (format==='date-time'||format==='date') return 'bt-date';
+  if (Array.isArray(jsType)) return 'bt-mixed';
+  return {string:'bt-text',number:'bt-number',integer:'bt-number',
+          boolean:'bt-bool',array:'bt-list',object:'bt-group',
+          null:'bt-null',date:'bt-date'}[jsType]||'bt-group';
+}
+function formatVal(val,type) {
+  if (type==='null') return 'empty';
+  if (type==='boolean') return val?'Yes':'No';
+  if (type==='date') {
+    try { return new Date(val).toLocaleString('en-AU',{dateStyle:'medium',timeStyle:'short'}); }
+    catch { return val; }
+  }
+  return String(val);
+}
+function valClass(type) {
+  return {string:'v-str',number:'v-num',boolean:'v-bool',null:'v-null',date:'v-date'}[type]||'v-str';
+}
+
+// ── Breadcrumb ────────────────────────────────────────────────────────────────
+
+function updateCrumb(path) {
+  const el = document.getElementById('crumb');
+  if (!path||!path.length) { clearCrumb(); return; }
+  el.classList.remove('empty');
+  el.innerHTML = path.map((s,i)=>{
+    const sep = i>0?`<span class="cr-sep">›</span>`:'';
+    return `${sep}<span class="cr-seg${i===path.length-1?' last':''}">${esc(s)}</span>`;
+  }).join('');
+}
+function clearCrumb() {
+  const el=document.getElementById('crumb');
+  el.innerHTML='hover a field to trace its path';
+  el.classList.add('empty');
+}
+
+// ── JSON Syntax Highlighter + Code Folding ────────────────────────────────────
+
+let fId = 0;
+function resetFolds() { fId=0; }
+
+function renderPrim(val) {
+  if (val===null)              return `<span class="j-null">null</span>`;
+  if (typeof val==='boolean')  return `<span class="j-bool">${val}</span>`;
+  if (typeof val==='number')   return `<span class="j-num">${val}</span>`;
+  if (typeof val==='string') {
+    return `<span class="${isDateStr(val)?'j-date':'j-str'}">"${esc(val)}"</span>`;
+  }
+  return esc(String(val));
+}
+
+// AI: builds flat array of HTML strings for each "line" in the JSON view
+function buildLines(val, depth, keyName, isLast, out) {
+  const comma   = isLast?'':'<span class="j-p">,</span>';
+  const keyHtml = keyName!==null
+    ? `<span class="j-key">"${esc(String(keyName))}"</span><span class="j-p">: </span>`
+    : '';
+
+  if (val===null || typeof val!=='object') {
+    out.push(leaf(depth, `${keyHtml}${renderPrim(val)}${comma}`));
+    return;
+  }
+
+  const isArr   = Array.isArray(val);
+  const open    = isArr?'[':'{';
+  const close   = isArr?']':'}';
+  const entries = isArr
+    ? val.map((v,i)=>({ k:null, v, last:i===val.length-1 }))
+    : Object.entries(val).map(([k,v],i,a)=>({ k, v, last:i===a.length-1 }));
+
+  if (entries.length===0) {
+    out.push(leaf(depth, `${keyHtml}<span class="j-p">${open}${close}</span>${comma}`));
+    return;
+  }
+
+  const id  = fId++;
+  const col = PALETTE[id % PALETTE.length];
+  // Display name for the fold gutter (the key name, or type if top-level)
+  const foldName = keyName!==null ? String(keyName) : (isArr?'array':'object');
+
+  const gutterOpen = `<span class="j-tag" onclick="tf(${id})">` +
+    `<span class="j-fa">▼</span>` +
+    `<span class="j-fname">${esc(foldName)}</span>` +
+    `</span>`;
+
+  const gutterClose = `<span class="j-tag" onclick="tf(${id})">` +
+    `<span class="j-fa">▶</span>` +
+    `<span class="j-fname">${esc(foldName)}</span>` +
+    `</span>`;
+
+  // Open line (visible when expanded)
+  out.push(
+    `<div class="j-line" id="jfo${id}" style="--d:${depth}">` +
+    `<span class="j-gutter">${gutterOpen}</span>` +
+    `<span class="j-content">${keyHtml}<span class="j-p">${open}</span></span>` +
+    `</div>`
+  );
+
+  // Summary line (visible when collapsed — entire block on one line)
+  out.push(
+    `<div class="j-line" id="jfs${id}" style="--d:${depth};display:none">` +
+    `<span class="j-gutter">${gutterClose}</span>` +
+    `<span class="j-content">${keyHtml}<span class="j-p">${open}</span> <span class="j-ell">…</span> <span class="j-p">${close}</span>${comma}</span>` +
+    `</div>`
+  );
+
+  // Body — colored container; includes children AND closing line
+  out.push(
+    `<div id="jfc${id}" class="j-body" ` +
+    `style="background:${col.bg};border-left-color:${col.bl}">`
+  );
+  entries.forEach(({ k, v, last }) => buildLines(v, depth+1, k, last, out));
+  // Close line lives inside the body so it shares the background color
+  out.push(leaf(depth, `<span class="j-p">${close}</span>${comma}`, `id="jfcl${id}"`));
+  out.push(`</div>`);
+}
+
+function leaf(depth, contentHtml, extraAttr='') {
+  return (
+    `<div class="j-line" style="--d:${depth}" ${extraAttr}>` +
+    `<span class="j-gutter"></span>` +
+    `<span class="j-content">${contentHtml}</span>` +
+    `</div>`
+  );
+}
+
+// Toggle expand / collapse for a fold block
+function tf(id) {
+  const openEl = document.getElementById('jfo'+id);
+  const summEl = document.getElementById('jfs'+id);
+  const bodyEl = document.getElementById('jfc'+id);
+  if (!openEl||!summEl||!bodyEl) return;
+  const isOpen = summEl.style.display==='none';
+  openEl.style.display = isOpen?'none':'';
+  summEl.style.display = isOpen?'':'none';
+  bodyEl.style.display = isOpen?'none':'';
+}
+
+function renderJsonPanel(val) {
+  resetFolds();
+  const lines=[];
+  buildLines(val, 0, null, true, lines);
+  document.getElementById('json-code').innerHTML=lines.join('');
+}
+
+// ── Schema detection ──────────────────────────────────────────────────────────
+
+function detectMode(obj, forced) {
+  if (forced!=='auto') return forced;
+  if (!obj||typeof obj!=='object'||Array.isArray(obj)) return 'data';
+  if (obj.properties||obj.$schema||obj.$defs||obj.definitions||
+      obj.model_fields||(obj.type==='object'&&obj.properties)) return 'schema';
+  return 'data';
+}
+
+// ── Rendered (right) panel ────────────────────────────────────────────────────
+
+let _rootSchema = null;
+
+function renderRight(val, mode) {
+  _rootSchema = null;
+  const root = document.getElementById('r-root');
+  root.innerHTML='';
+
+  if (mode==='schema'&&(val.title||val.description)) {
+    const meta=document.createElement('div');
+    meta.className='root-meta';
+    if (val.title)       meta.innerHTML+=`<div class="root-title">${esc(val.title)}</div>`;
+    if (val.description) meta.innerHTML+=`<div class="root-desc">${esc(val.description)}</div>`;
+    root.appendChild(meta);
+  }
+
+  const group=document.createElement('div');
+  group.className='node-group';
+  root.appendChild(group);
+
+  if (mode==='schema') {
+    _rootSchema=val;
+    renderSchemaObj(val,[],group);
+  } else {
+    renderDataVal(val,[],group,null);
+  }
+}
+
+// ── Schema renderer ───────────────────────────────────────────────────────────
+
+function resolveRef(ref) {
+  if (!ref||!_rootSchema||!ref.startsWith('#/')) return null;
+  return ref.slice(2).split('/').reduce((o,k)=>o?.[k],_rootSchema)||null;
+}
+function renderSchemaObj(schema, path, container) {
+  if (schema.$ref) { const r=resolveRef(schema.$ref); if(r) schema={...r,...schema,$ref:undefined}; }
+  if (schema.type==='object'||schema.properties) {
+    const props=schema.properties||{};
+    const reqSet=new Set(schema.required||[]);
+    Object.entries(props).forEach(([k,sub])=>
+      renderSchemaField(k,sub,path.concat(humanize(k)),container,reqSet.has(k))
+    );
+  }
+}
+function renderSchemaField(key, schema, path, container, required) {
+  if (schema.$ref) { const r=resolveRef(schema.$ref); if(r) schema={...r,...schema,$ref:undefined}; }
+  const type=schema.type, format=schema.format||null, enumVals=schema.enum||null;
+  const label=schema.title||humanize(key), desc=schema.description||null;
+  const isObj=type==='object'||!!schema.properties, isArr=type==='array';
+  const hasKids=isObj||isArr;
+
+  const card=mkCard(), head=mkHead(hasKids);
+  const chev=mkChev(hasKids);
+  head.appendChild(chev);
+
+  const lbls=document.createElement('div');
+  lbls.className='n-labels';
+  lbls.innerHTML=`<div class="n-label">${esc(label)}</div>${desc?`<div class="n-desc">${esc(desc)}</div>`:''}`;
+  head.appendChild(lbls);
+
+  const bdgs=document.createElement('div');
+  bdgs.className='n-badges';
+  bdgs.innerHTML=`<span class="badge ${typeBadgeClass(type,format,enumVals)}">${friendlyTypeName(type,format,enumVals)}</span>
+    <span class="badge ${required?'bt-req':'bt-opt'}">${required?'Required':'Optional'}</span>`;
+  head.appendChild(bdgs);
+  card.appendChild(head);
+
+  const cons=buildConstraints(schema);
+  if (cons.length) {
+    const row=document.createElement('div'); row.className='n-constraints';
+    cons.forEach(c=>{ const p=document.createElement('span'); p.className='constraint'; p.textContent=c; row.appendChild(p); });
+    card.appendChild(row);
+  }
+  if (enumVals) {
+    const row=document.createElement('div'); row.className='n-enum';
+    enumVals.forEach(v=>{ const c=document.createElement('span'); c.className='enum-chip'; c.textContent=String(v); row.appendChild(c); });
+    card.appendChild(row);
+  }
+
+  let childEl=null;
+  if (hasKids) {
+    childEl=document.createElement('div'); childEl.className='n-children closed';
+    if (isObj) {
+      const props=schema.properties||{};
+      const reqSet=new Set(schema.required||[]);
+      Object.entries(props).forEach(([k,sub])=>
+        renderSchemaField(k,sub,path.concat(humanize(k)),childEl,reqSet.has(k))
+      );
+    } else if (isArr&&schema.items) {
+      renderSchemaField('(each item)',schema.items,path.concat('item'),childEl,false);
+      if ((schema.items.type==='object'||schema.items.properties)&&schema.items.properties) {
+        const reqSet=new Set(schema.items.required||[]);
+        Object.entries(schema.items.properties).forEach(([k,sub])=>
+          renderSchemaField(k,sub,path.concat('item',humanize(k)),childEl,reqSet.has(k))
+        );
+      }
+    }
+    card.appendChild(childEl);
+  }
+  wireNode(head,chev,childEl,path);
+  container.appendChild(card);
+}
+
+function buildConstraints(s) {
+  const o=[];
+  if (s.minLength!=null) o.push(`At least ${s.minLength} char${s.minLength!==1?'s':''}`);
+  if (s.maxLength!=null) o.push(`Up to ${s.maxLength} chars`);
+  if (s.minimum  !=null) o.push(`Min ${s.minimum}`);
+  if (s.maximum  !=null) o.push(`Max ${s.maximum}`);
+  if (s.exclusiveMinimum!=null) o.push(`Greater than ${s.exclusiveMinimum}`);
+  if (s.exclusiveMaximum!=null) o.push(`Less than ${s.exclusiveMaximum}`);
+  if (s.minItems !=null) o.push(`At least ${s.minItems} item${s.minItems!==1?'s':''}`);
+  if (s.maxItems !=null) o.push(`Up to ${s.maxItems} items`);
+  if (s.pattern) o.push(`Pattern: ${s.pattern}`);
+  if (s.format==='email') o.push('Valid email');
+  if (s.format==='uri'||s.format==='url') o.push('Valid URL');
+  if (s.format==='date-time') o.push('Date & time (ISO 8601)');
+  if (s.format==='date') o.push('Date (YYYY-MM-DD)');
+  return o;
+}
+
+// ── Data renderer ─────────────────────────────────────────────────────────────
+
+function renderDataVal(val, path, container, keyName) {
+  const type=inferType(val);
+
+  if (type!=='object'&&type!=='array') {
+    const label=keyName!==null?humanize(String(keyName)):'Value';
+    const card=mkCard(), head=mkHead(false);
+    head.appendChild(mkChev(false));
+    const lbls=document.createElement('div'); lbls.className='n-labels';
+    lbls.innerHTML=`<div class="n-label">${esc(label)}</div>`;
+    head.appendChild(lbls);
+    const bdgs=document.createElement('div'); bdgs.className='n-badges';
+    const jsType=type==='date'?'string':type, fmt=type==='date'?'date':null;
+    bdgs.innerHTML=`<span class="badge ${typeBadgeClass(jsType,fmt,null)}">${friendlyTypeName(jsType,fmt,null)}</span>`;
+    head.appendChild(bdgs);
+    card.appendChild(head);
+    const vEl=document.createElement('div');
+    vEl.className=`n-value ${valClass(type)}`; vEl.textContent=formatVal(val,type);
+    card.appendChild(vEl);
+    wireNode(head,head.querySelector('.n-chev'),null,path);
+    container.appendChild(card);
+    return;
+  }
+
+  if (type==='object') {
+    const entries=Object.entries(val);
+    if (keyName===null) {
+      entries.forEach(([k,v])=>renderDataVal(v,path.concat(humanize(k)),container,k));
+      return;
+    }
+    const label=humanize(String(keyName));
+    const card=mkCard(), head=mkHead(entries.length>0);
+    const chev=mkChev(entries.length>0); head.appendChild(chev);
+    const lbls=document.createElement('div'); lbls.className='n-labels';
+    lbls.innerHTML=`<div class="n-label">${esc(label)}</div><div class="n-desc">${entries.length} field${entries.length!==1?'s':''}</div>`;
+    head.appendChild(lbls);
+    const bdgs=document.createElement('div'); bdgs.className='n-badges';
+    bdgs.innerHTML=`<span class="badge bt-group">Group</span>`;
+    head.appendChild(bdgs);
+    card.appendChild(head);
+    let childEl=null;
+    if (entries.length) {
+      childEl=document.createElement('div'); childEl.className='n-children closed';
+      entries.forEach(([k,v])=>renderDataVal(v,path.concat(humanize(k)),childEl,k));
+      card.appendChild(childEl);
+    }
+    wireNode(head,chev,childEl,path);
+    container.appendChild(card);
+    return;
+  }
+
+  // Array
+  const label=keyName!==null?humanize(String(keyName)):'List';
+  const card=mkCard(), head=mkHead(val.length>0);
+  const chev=mkChev(val.length>0); head.appendChild(chev);
+  const lbls=document.createElement('div'); lbls.className='n-labels';
+  lbls.innerHTML=`<div class="n-label">${esc(label)}</div><div class="n-desc">${val.length} item${val.length!==1?'s':''}</div>`;
+  head.appendChild(lbls);
+  const bdgs=document.createElement('div'); bdgs.className='n-badges';
+  bdgs.innerHTML=`<span class="badge bt-list">List</span>`;
+  head.appendChild(bdgs);
+  card.appendChild(head);
+  let childEl=null;
+  if (val.length) {
+    childEl=document.createElement('div'); childEl.className='n-children closed';
+    val.forEach((item,idx)=>{
+      const lbl=document.createElement('div'); lbl.className='arr-idx';
+      lbl.textContent=`Item ${idx+1}`; childEl.appendChild(lbl);
+      renderDataVal(item,path.concat(`Item ${idx+1}`),childEl,null);
+    });
+    card.appendChild(childEl);
+  }
+  wireNode(head,chev,childEl,path);
+  container.appendChild(card);
+}
+
+// ── Card helpers ──────────────────────────────────────────────────────────────
+
+function mkCard() { const d=document.createElement('div'); d.className='node-card'; return d; }
+function mkHead(clickable) {
+  const d=document.createElement('div');
+  d.className=`node-head ${clickable?'clickable':'static'}`;
+  return d;
+}
+function mkChev(hasKids) {
+  const s=document.createElement('span');
+  s.className=`n-chev${hasKids?'':' leaf'}`;
+  s.textContent='▶';
+  return s;
+}
+function wireNode(head, chev, childEl, path) {
+  head.addEventListener('mouseenter',()=>updateCrumb(path));
+  head.addEventListener('mouseleave',clearCrumb);
+  if (!childEl) return;
+  head.addEventListener('click',()=>{
+    const closed=childEl.classList.toggle('closed');
+    chev.textContent=closed?'▶':'▼';
+    chev.classList.toggle('open',!closed);
+  });
+}
+
+// ── Examples ──────────────────────────────────────────────────────────────────
+
+const EXAMPLES = {
+
+  // AI: deeply nested VC portfolio report to show many structure colors
+  portfolio: {
+    report: "Antler Portfolio — Sydney Cohort 2026",
+    generated_at: "2026-06-19T10:00:00Z",
+    fund: {
+      name: "Antler Fund III",
+      vintage_year: 2023,
+      size_usd: 250000000,
+      focus: {
+        geographies: ["Australia","Singapore","UK","US"],
+        stages: ["Pre-Seed","Seed"],
+        sectors: ["AI","Climate","FinTech","HealthTech"]
+      }
+    },
+    portfolio: [
+      {
+        id: "co_001",
+        name: "NeuralFlow",
+        sector: "AI Infrastructure",
+        stage: "Series B",
+        founded_at: "2021-03-10",
+        is_active: true,
+        metrics: {
+          headcount: 48,
+          arr_usd: 8500000,
+          mrr_growth_pct: 12.4,
+          nps_score: 71
+        },
+        funding: {
+          total_raised_usd: 42000000,
+          current_valuation_usd: 180000000,
+          runway_months: 24,
+          rounds: [
+            { name:"Seed",     amount_usd:2000000,  date:"2021-09-01", lead_investor:"Blackbird Ventures" },
+            { name:"Series A", amount_usd:15000000, date:"2022-11-15", lead_investor:"AirTree Ventures"  },
+            { name:"Series B", amount_usd:25000000, date:"2024-06-20", lead_investor:"Square Peg Capital" }
+          ]
+        },
+        team: {
+          ceo: { name:"Mia Torres",  background:"ex-Google Brain", linkedin:"linkedin.com/in/mia-torres" },
+          cto: { name:"Sam Park",    background:"ex-Canva",        linkedin:"linkedin.com/in/sam-park"   },
+          cpo: { name:"Lena Braun",  background:"ex-Atlassian",    linkedin:"linkedin.com/in/lena-braun" }
+        },
+        hq: { city:"Sydney", state:"NSW", country:"AU" }
+      },
+      {
+        id: "co_002",
+        name: "CarbonLedger",
+        sector: "Climate Tech",
+        stage: "Series A",
+        founded_at: "2022-08-22",
+        is_active: true,
+        metrics: {
+          headcount: 21,
+          arr_usd: 2100000,
+          mrr_growth_pct: 18.7,
+          nps_score: 64
+        },
+        funding: {
+          total_raised_usd: 12000000,
+          current_valuation_usd: 55000000,
+          runway_months: 18,
+          rounds: [
+            { name:"Pre-Seed", amount_usd:500000,   date:"2022-10-01", lead_investor:"Antler"          },
+            { name:"Series A", amount_usd:11500000, date:"2024-02-14", lead_investor:"Main Sequence VC" }
+          ]
+        },
+        team: {
+          ceo: { name:"Anika Patel",  background:"ex-Commonwealth Bank", linkedin:"linkedin.com/in/anika-patel" },
+          cto: { name:"James Wu",     background:"ex-CSIRO",             linkedin:"linkedin.com/in/james-wu"    }
+        },
+        hq: { city:"Melbourne", state:"VIC", country:"AU" }
+      }
+    ],
+    summary: {
+      total_companies: 2,
+      total_funding_usd: 54000000,
+      avg_runway_months: 21,
+      top_sectors: ["AI Infrastructure","Climate Tech"]
+    }
+  },
+
+  user: {
+    id: "usr_01HZXK7QP3",
+    first_name: "Sarah",
+    last_name: "Chen",
+    email: "sarah.chen@acme.com",
+    date_of_birth: "1990-04-15",
+    is_verified: true,
+    account_balance: 2340.50,
+    roles: ["admin","editor"],
+    address: {
+      street: "42 Harbour View Rd",
+      city: "Sydney",
+      postcode: "2000",
+      country: "AU"
+    },
+    preferences: {
+      theme: "dark",
+      notifications: { email: true, sms: false, push: true },
+      language: "en-AU"
+    },
+    last_login: "2026-06-18T14:32:00Z"
+  },
+
+  order: {
+    order_id: "ORD-20260619-00482",
+    status: "shipped",
+    placed_at: "2026-06-17T09:15:00Z",
+    estimated_delivery: "2026-06-21",
+    customer: { id:"usr_01HZXK7QP3", name:"Sarah Chen", email:"sarah.chen@acme.com" },
+    items: [
+      { sku:"PRD-001", name:"Wireless Keyboard", quantity:1, unit_price:129.00, tax:12.90 },
+      { sku:"PRD-042", name:"USB-C Hub",          quantity:2, unit_price:49.99,  tax:10.00 }
+    ],
+    pricing: {
+      subtotal: 228.98,
+      shipping: 9.95,
+      tax: 22.90,
+      discount: 0,
+      total: 261.83
+    },
+    shipping_address: {
+      street: "42 Harbour View Rd",
+      city: "Sydney",
+      postcode: "2000",
+      country: "AU"
+    },
+    tracking: {
+      carrier: "Australia Post",
+      tracking_number: "AP1234567890AU",
+      events: [
+        { status:"Label created",   timestamp:"2026-06-17T10:00:00Z", location:"Sydney Warehouse" },
+        { status:"Picked up",       timestamp:"2026-06-17T15:30:00Z", location:"Sydney Warehouse" },
+        { status:"In transit",      timestamp:"2026-06-18T08:00:00Z", location:"Sydney Hub"        }
+      ]
+    }
+  },
+
+  pydantic: {
+    $schema: "http://json-schema.org/draft-07/schema#",
+    title: "User Profile",
+    description: "A registered user account on the platform",
+    type: "object",
+    required: ["id","email","full_name"],
+    properties: {
+      id:        { title:"User ID",       description:"Assigned at registration",        type:"string", minLength:10 },
+      email:     { title:"Email Address", description:"Must be unique across platform",  type:"string", format:"email" },
+      full_name: { title:"Full Name",                                                     type:"string", minLength:2, maxLength:120 },
+      age:       { title:"Age",                                                            type:"integer", minimum:13, maximum:120 },
+      role:      { title:"Account Role",  description:"Determines access level",         type:"string", enum:["admin","editor","viewer","guest"] },
+      is_active: { title:"Active Account",description:"Inactive accounts cannot log in", type:"boolean" },
+      created_at:{ title:"Joined On",                                                     type:"string", format:"date-time" },
+      tags:      { title:"Tags",          description:"Labels applied by admins",        type:"array", items:{type:"string"}, maxItems:20 },
+      address: {
+        title:"Mailing Address", type:"object", required:["street","city","country"],
+        properties: {
+          street:   {title:"Street",   type:"string"},
+          city:     {title:"City",     type:"string"},
+          postcode: {title:"Postcode", type:"string"},
+          country:  {title:"Country",  type:"string", minLength:2, maxLength:2}
+        }
+      }
+    }
+  },
+
+  zod: {
+    title: "Product Listing",
+    description: "A product available for purchase in the catalogue",
+    type: "object",
+    required: ["sku","name","price","category"],
+    properties: {
+      sku:         { title:"SKU",            description:"Unique product code",    type:"string",  pattern:"^PRD-[0-9]{3,6}$" },
+      name:        { title:"Product Name",                                          type:"string",  minLength:3, maxLength:200 },
+      description: { title:"Description",                                           type:"string",  maxLength:5000 },
+      price:       { title:"Price (AUD)",                                           type:"number",  minimum:0, exclusiveMinimum:0 },
+      category:    { title:"Category",                                              type:"string",  enum:["electronics","clothing","food","home","sports"] },
+      in_stock:    { title:"In Stock",                                              type:"boolean" },
+      stock_count: { title:"Units Available",                                       type:"integer", minimum:0 },
+      images: {
+        title:"Product Images", type:"array",
+        items: {
+          type:"object", title:"Image", required:["url"],
+          properties: {
+            url:        {title:"URL",           type:"string",  format:"uri"},
+            alt:        {title:"Alt Text",      type:"string"},
+            is_primary: {title:"Primary Image", type:"boolean"}
+          }
+        },
+        minItems:1, maxItems:10
+      }
+    }
+  }
+};
+
+// ── Load & Tab selection ──────────────────────────────────────────────────────
+
+let _viewMode = 'auto';
+
+function selectTab(name) {
+  document.querySelectorAll('.ex-tab').forEach(b=>{
+    const n=b.getAttribute('onclick').match(/selectTab\('(\w+)'\)/)?.[1];
+    b.classList.toggle('active', n===name);
+  });
+
+  const val  = EXAMPLES[name];
+  const mode = detectMode(val, _viewMode);
+
+  const badge=document.getElementById('hbadge');
+  if (mode==='schema') { badge.className='h-badge hb-schema'; badge.textContent='Schema'; }
+  else                 { badge.className='h-badge hb-data';   badge.textContent='Data';   }
+
+  renderJsonPanel(val);
+  renderRight(val, mode);
+  clearCrumb();
+}
+
+selectTab('portfolio');
+</script>
+</body>
+</html>

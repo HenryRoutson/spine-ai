@@ -1,0 +1,44 @@
+[
+  {
+    "text": "CONSENT\n1.1 The Company shall not collect or process any personal data unless it has first obtained the\nexplicit, freely given, and informed consent of the Data Subject for each distinct purpose",
+    "doc_id": "sha_f765a19d526a0af8",
+    "start": 559,
+    "end": 753,
+    "href": "doc://sha_f765a19d526a0af8#559-753"
+  },
+  {
+    "text": "Where data is classified as health data, the Company must obtain a separate, affirmative\nopt-in consent that is recorded and time-stamped at the moment it is given.",
+    "doc_id": "sha_f765a19d526a0af8",
+    "start": 775,
+    "end": 939,
+    "href": "doc://sha_f765a19d526a0af8#775-939"
+  },
+  {
+    "text": "All personal data must be encrypted in transit using TLS 1.2 or higher, and encrypted at rest\nusing AES-256 or an equivalent industry-standard algorithm.",
+    "doc_id": "sha_f765a19d526a0af8",
+    "start": 1556,
+    "end": 1709,
+    "href": "doc://sha_f765a19d526a0af8#1556-1709"
+  },
+  {
+    "text": "Personal data belonging to residents of the European Economic Area must be stored and pro-\ncessed exclusively within the European Economic Area, unless an approved transfer mechanism\nis in",
+    "doc_id": "sha_f765a19d526a0af8",
+    "start": 2046,
+    "end": 2234,
+    "href": "doc://sha_f765a19d526a0af8#2046-2234"
+  },
+  {
+    "text": "Where the Company uses automated or AI-driven systems to make decisions that materially\naffect a Data Subject, it must provide a clear explanation of the logic involved and offer a route to\nhuman review.",
+    "doc_id": "sha_f765a19d526a0af8",
+    "start": 2444,
+    "end": 2647,
+    "href": "doc://sha_f765a19d526a0af8#2444-2647"
+  },
+  {
+    "text": "In the event of a personal data breach, the Company shall notify the relevant supervisory\nauthority without undue delay and in any case within seventy-two (72) hours of becoming aware\nof the breach.",
+    "doc_id": "sha_f765a19d526a0af8",
+    "start": 3393,
+    "end": 3591,
+    "href": "doc://sha_f765a19d526a0af8#3393-3591"
+  }
+]

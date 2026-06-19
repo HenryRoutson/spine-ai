@@ -38,16 +38,14 @@ Clear narrative · Polished delivery · Strong demo flow
 
 PROBLEM
 
-While tools like relevance.ai tools are relegated to small demos in real companies, proper AI engineering with python is incredibly expensive and costs thousands of dollars per project. 
-
-
+Proper AI engineering with python is incredibly expensive and costs thousands of dollars per project. 
 However, almost all project follow the same modular steps.
-
+The require, validation, caching, document loading, logging, and UI to help stakeholders.
 
 
 SOLUTION + BUILD
 
-I built 
+To solve this i built
 Autopipeline
 
 https://auto-pipeline-app.dev/

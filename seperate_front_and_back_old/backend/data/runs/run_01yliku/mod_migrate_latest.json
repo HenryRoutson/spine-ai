@@ -1,0 +1,107 @@
+{
+  "structure": {
+    "id": "m_user",
+    "name": "MigratedUser",
+    "description": "One record in the new schema, produced purely from the mapping spec.",
+    "fields": [
+      {
+        "id": "f_user_id",
+        "name": "user_id",
+        "type": "int",
+        "optional": false,
+        "description": "New primary key"
+      },
+      {
+        "id": "f_first",
+        "name": "first_name",
+        "type": "text",
+        "optional": false,
+        "description": "First word of FullName"
+      },
+      {
+        "id": "f_last",
+        "name": "last_name",
+        "type": "text",
+        "optional": false,
+        "description": "Last word of FullName"
+      },
+      {
+        "id": "f_mail",
+        "name": "email",
+        "type": "text",
+        "optional": false,
+        "description": "Lowercased email"
+      },
+      {
+        "id": "f_signed",
+        "name": "signed_up_at",
+        "type": "datetime",
+        "optional": false,
+        "description": "ISO date (YYYY-MM-DD)"
+      },
+      {
+        "id": "f_address",
+        "name": "address",
+        "type": "model",
+        "optional": false,
+        "description": "Nested address",
+        "ref": "m_addr"
+      },
+      {
+        "id": "f_active2",
+        "name": "active",
+        "type": "bool",
+        "optional": false,
+        "description": "Y/N → bool"
+      },
+      {
+        "id": "f_plan",
+        "name": "plan",
+        "type": "text",
+        "optional": false,
+        "description": "Defaulted when absent in legacy data"
+      }
+    ]
+  },
+  "value": [
+    {
+      "user_id": 101,
+      "first_name": "Ada",
+      "last_name": "Lovelace",
+      "email": "ada@example.com",
+      "signed_up_at": "2021-03-15",
+      "address": {
+        "street": "12 Byron St",
+        "city": "London"
+      },
+      "active": true,
+      "plan": "free"
+    },
+    {
+      "user_id": 102,
+      "first_name": "Grace",
+      "last_name": "Hopper",
+      "email": "grace@navy.mil",
+      "signed_up_at": "2019-12-01",
+      "address": {
+        "street": "3 Cobol Ave",
+        "city": "Arlington"
+      },
+      "active": false,
+      "plan": "free"
+    },
+    {
+      "user_id": 103,
+      "first_name": "Alan",
+      "last_name": "Turing",
+      "email": "alan@bletchley.org",
+      "signed_up_at": "2020-06-23",
+      "address": {
+        "street": "1 Enigma Rd",
+        "city": null
+      },
+      "active": true,
+      "plan": "free"
+    }
+  ]
+}

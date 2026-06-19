@@ -1,0 +1,95 @@
+{
+  "structure": {
+    "id": "m_legacy",
+    "name": "LegacyUser",
+    "description": "One messy legacy CRM record (string booleans, DD/MM/YYYY dates, deprecated fields).",
+    "fields": [
+      {
+        "id": "f_id",
+        "name": "ID",
+        "type": "int",
+        "optional": false,
+        "description": "Legacy primary key"
+      },
+      {
+        "id": "f_fullname",
+        "name": "FullName",
+        "type": "text",
+        "optional": false,
+        "description": "Full name in one field"
+      },
+      {
+        "id": "f_email",
+        "name": "EMAIL_ADDR",
+        "type": "text",
+        "optional": false,
+        "description": "Mixed-case email"
+      },
+      {
+        "id": "f_signup",
+        "name": "signup",
+        "type": "text",
+        "optional": false,
+        "description": "DD/MM/YYYY signup date"
+      },
+      {
+        "id": "f_street",
+        "name": "addr_street",
+        "type": "text",
+        "optional": false,
+        "description": "Street line"
+      },
+      {
+        "id": "f_city",
+        "name": "addr_city",
+        "type": "text",
+        "optional": true,
+        "description": "City (sometimes missing)"
+      },
+      {
+        "id": "f_active",
+        "name": "is_active",
+        "type": "text",
+        "optional": false,
+        "description": "Y/N flag"
+      },
+      {
+        "id": "f_fax",
+        "name": "fax",
+        "type": "text",
+        "optional": true,
+        "description": "Deprecated — dropped by the mapping"
+      }
+    ]
+  },
+  "value": [
+    {
+      "ID": 101,
+      "FullName": "Ada Lovelace",
+      "EMAIL_ADDR": "Ada@Example.COM",
+      "signup": "15/03/2021",
+      "addr_street": "12 Byron St",
+      "addr_city": "London",
+      "is_active": "Y",
+      "fax": "none"
+    },
+    {
+      "ID": 102,
+      "FullName": "Grace Brewster Hopper",
+      "EMAIL_ADDR": "GRACE@Navy.MIL",
+      "signup": "01/12/2019",
+      "addr_street": "3 Cobol Ave",
+      "addr_city": "Arlington",
+      "is_active": "N",
+      "fax": "555-0100"
+    },
+    {
+      "ID": 103,
+      "FullName": "Alan Turing",
+      "EMAIL_ADDR": "alan@bletchley.org",
+      "signup": "23/06/2020",
+      "addr_street": "1 Enigma Rd",
+      "is_active": "Y"
+    }
+  ]
+}

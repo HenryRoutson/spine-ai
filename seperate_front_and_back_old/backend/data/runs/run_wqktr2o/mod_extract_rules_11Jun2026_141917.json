@@ -1,0 +1,117 @@
+{
+  "structure": {
+    "id": "m_rule",
+    "name": "AtomicRule",
+    "description": "A single rule plus the verbatim quote it was sourced from.",
+    "fields": [
+      {
+        "id": "f_rule_id",
+        "name": "rule_id",
+        "type": "text",
+        "optional": false,
+        "description": "Stable identifier"
+      },
+      {
+        "id": "f_description",
+        "name": "description",
+        "type": "text",
+        "optional": false,
+        "description": "Plain-language obligation"
+      },
+      {
+        "id": "f_source",
+        "name": "source",
+        "type": "tuple[text,quote]",
+        "optional": false,
+        "description": "Rule text + originating quote"
+      },
+      {
+        "id": "f_severity",
+        "name": "severity",
+        "type": "int",
+        "optional": false,
+        "description": "1-5 risk weight"
+      }
+    ]
+  },
+  "value": [
+    {
+      "rule_id": "R-01",
+      "description": "Explicit consent must be obtained for each distinct purpose of personal data processing.",
+      "source": {
+        "text": "AND CONSENT\n1.1 The Company shall not collect or process any personal data unless it has first obtained the\nexplicit, freely given, and informed consent of the Data Subject for each distinct purpose",
+        "quote": {
+          "doc_id": "sha_f765a19d526a0af8",
+          "start": 555,
+          "end": 753
+        }
+      },
+      "severity": 5
+    },
+    {
+      "rule_id": "R-02",
+      "description": "Health data requires a separate, affirmative opt-in consent recorded and time-stamped at the moment it is given.",
+      "source": {
+        "text": "1.2 Where data is classified as health data, the Company must obtain a separate, affirmative\nopt-in consent that is recorded and time-stamped at the moment it is given.",
+        "quote": {
+          "doc_id": "sha_f765a19d526a0af8",
+          "start": 771,
+          "end": 939
+        }
+      },
+      "severity": 5
+    },
+    {
+      "rule_id": "R-03",
+      "description": "Personal data must be encrypted in transit using TLS 1.2 or higher and at rest using AES-256 or equivalent.",
+      "source": {
+        "text": "3.1 All personal data must be encrypted in transit using TLS 1.2 or higher, and encrypted at rest\nusing AES-256 or an equivalent industry-standard algorithm.",
+        "quote": {
+          "doc_id": "sha_f765a19d526a0af8",
+          "start": 1552,
+          "end": 1709
+        }
+      },
+      "severity": 5
+    },
+    {
+      "rule_id": "R-04",
+      "description": "Personal data of EEA residents must be stored and processed exclusively within the EEA unless an approved transfer mechanism is in place.",
+      "source": {
+        "text": "4.1 Personal data belonging to residents of the European Economic Area must be stored and pro-\ncessed exclusively within the European Economic Area, unless an approved transfer mechanism\nis in",
+        "quote": {
+          "doc_id": "sha_f765a19d526a0af8",
+          "start": 2042,
+          "end": 2234
+        }
+      },
+      "severity": 5
+    },
+    {
+      "rule_id": "R-05",
+      "description": "Automated systems must provide a clear explanation of logic and offer a route to human review for decisions materially affecting Data Subjects.",
+      "source": {
+        "text": "5.1 Where the Company uses automated or AI-driven systems to make decisions that materially\naffect a Data Subject, it must provide a clear explanation of the logic involved and offer a route to\nhuman review.",
+        "quote": {
+          "doc_id": "sha_f765a19d526a0af8",
+          "start": 2440,
+          "end": 2647
+        }
+      },
+      "severity": 4
+    },
+    {
+      "rule_id": "R-06",
+      "description": "In the event of a personal data breach, the Company must notify the supervisory authority within 72 hours of becoming aware of the breach.",
+      "source": {
+        "text": "7.1 In the event of a personal data breach, the Company shall notify the relevant supervisory\nauthority without undue delay and in any case within seventy-two (72) hours of becoming aware\nof the breach.",
+        "quote": {
+          "doc_id": "sha_f765a19d526a0af8",
+          "start": 3389,
+          "end": 3591
+        }
+      },
+      "severity": 5
+    }
+  ]
+}

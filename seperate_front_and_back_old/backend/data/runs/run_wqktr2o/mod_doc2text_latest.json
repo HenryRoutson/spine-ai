@@ -1,0 +1,28 @@
+{
+  "structure": {
+    "id": "m_doc",
+    "name": "SourceDocument",
+    "description": "Raw legal document annotated with its purpose.",
+    "fields": [
+      {
+        "id": "f_purpose",
+        "name": "purpose",
+        "type": "text",
+        "optional": false,
+        "description": "What this document governs"
+      },
+      {
+        "id": "f_body",
+        "name": "body",
+        "type": "text",
+        "optional": false,
+        "description": "Full extracted text"
+      }
+    ]
+  },
+  "value": {
+    "doc_id": "sha_f765a19d526a0af8",
+    "purpose": "Health Data Protection and AI Governance Agreement",
+    "body": "Health Data Protection and AI Governance Agreement\nOFFICE OF HEALTH DATA PROTECTION, Supervisory Authority, European Union\nThis Agreement sets out the binding obligations of the Data Controller (“the Company”) with respect to the\ncollection, processing, storage, and automated analysis of personal and health-related data of its end users\n(“Data Subjects”). It takes effect on 1 January 2026. Failure to comply with any clause below may expose the\nCompany to regulatory penalties, civil liability, and termination of its operating licence.\n1 LAWFUL BASIS AND CONSENT\n1.1 The Company shall not collect or process any personal data unless it has first obtained the\nexplicit, freely given, and informed consent of the Data Subject for each distinct purpose of pro-\ncessing.\n1.2 Where data is classified as health data, the Company must obtain a separate, affirmative\nopt-in consent that is recorded and time-stamped at the moment it is given.\n1.3 Consent must be as easy to withdraw as it is to give, and withdrawal must take effect within\nseventy-two (72) hours of the request.\n2 DATA MINIMISATION AND PURPOSE LIMITATION\n2.1 The Company shall collect only the personal data that is strictly necessary for the stated\npurpose, and shall not repurpose data for any use not disclosed at the time of collection.\n2.2 Personal data shall be retained for no longer than is necessary to fulfil its purpose. In no\nevent shall health data be retained for more than twenty-four (24) months after the Data Subject’s\naccount becomes inactive.\n3 SECURITY OF PROCESSING\n3.1 All personal data must be encrypted in transit using TLS 1.2 or higher, and encrypted at rest\nusing AES-256 or an equivalent industry-standard algorithm.\n3.2 The Company shall enforce role-based access control and multi-factor authentication for all\nemployees and contractors who can access personal data.\n3.3 The Company shall commission an independent third-party penetration test and security\naudit at least once every twelve (12) months.\n4 DATA RESIDENCY AND CROSS-BORDER TRANSFERS\n4.1 Personal data belonging to residents of the European Economic Area must be stored and pro-\ncessed exclusively within the European Economic Area, unless an approved transfer mechanism\nis in place.\n4.2 The Company shall not transfer personal data to any third country that has not been recog-\nnised as providing an adequate level of data protection.\n5 AUTOMATED DECISION-MAKING AND AI GOVERNANCE\n5.1 Where the Company uses automated or AI-driven systems to make decisions that materially\naffect a Data Subject, it must provide a clear explanation of the logic involved and offer a route to\nhuman review.\n5.2 The Company shall maintain a written record of every AI model used in production, includ-\ning its purpose, training data sources, and a documented bias assessment.\n\n-- 1 of 2 --\n\n2 Health Data Protection Agreement\n5.3 No automated system shall make a final decision concerning a Data Subject’s medical treat-\nment without the review and approval of a qualified human clinician.\n6 SUB-PROCESSORS AND THIRD PARTIES\n6.1 The Company shall not engage any sub-processor to handle personal data unless that sub-\nprocessor is bound by contractual obligations no less protective than those in this Agreement.\n6.2 The Company shall maintain and publish a current list of all sub-processors that have access\nto personal data.\n7 BREACH NOTIFICATION\n7.1 In the event of a personal data breach, the Company shall notify the relevant supervisory\nauthority without undue delay and in any case within seventy-two (72) hours of becoming aware\nof the breach.\n7.2 Where a breach is likely to result in a high risk to the rights of Data Subjects, the Company\nshall also notify the affected Data Subjects without undue delay.\n8 DATA SUBJECT RIGHTS\n8.1 The Company shall enable Data Subjects to access, rectify, and export their personal data,\nand shall fulfil any such request within thirty (30) days.\n8.2 The Company shall delete a Data Subject’s personal data within thirty (30) days of a valid\nerasure request, except where retention is required by law.\n9 ACCOUNTABILITY AND GOVERNANCE\n9.1 Where the Company processes the health data of more than ten thousand (10,000) Data\nSubjects, it shall appoint a Data Protection Officer responsible for compliance with this Agreement.\n9.2 The Company shall maintain a written record of all processing activities and make it available\nto the supervisory authority on request.\n\n-- 2 of 2 --"
+  }
+}
