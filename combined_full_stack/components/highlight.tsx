@@ -70,6 +70,72 @@ export function MarkdownView({ md }: { md: string }) {
   )
 }
 
+// Render prompt text with embedded JSON blobs syntax-highlighted inline.
+export function PromptText({ text }: { text: string }) {
+  const parts = splitJsonSegments(text)
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.isJson ? (
+          <span key={i} className="my-1 block rounded border border-border bg-[oklch(0.14_0.004_264)] p-2">
+            <JsonHighlight json={p.text} />
+          </span>
+        ) : (
+          <span key={i}>{p.text}</span>
+        ),
+      )}
+    </>
+  )
+}
+
+type TextSegment = { text: string; isJson: boolean }
+
+// Walk text finding balanced { } / [ ] that are valid JSON; split on them.
+function splitJsonSegments(text: string): TextSegment[] {
+  const result: TextSegment[] = []
+  let i = 0
+  let buf = ""
+  while (i < text.length) {
+    const c = text[i]
+    if (c === "{" || c === "[") {
+      const end = findJsonEnd(text, i)
+      if (end !== -1) {
+        const candidate = text.slice(i, end + 1)
+        try {
+          JSON.parse(candidate)
+          if (buf) { result.push({ text: buf, isJson: false }); buf = "" }
+          result.push({ text: candidate, isJson: true })
+          i = end + 1
+          continue
+        } catch { /* not valid JSON, fall through */ }
+      }
+    }
+    buf += c
+    i++
+  }
+  if (buf) result.push({ text: buf, isJson: false })
+  return result
+}
+
+// Return the index of the closing bracket matching text[start], or -1.
+function findJsonEnd(text: string, start: number): number {
+  const open = text[start]
+  const close = open === "{" ? "}" : "]"
+  let depth = 0
+  let inStr = false
+  let esc = false
+  for (let i = start; i < text.length; i++) {
+    const c = text[i]
+    if (esc) { esc = false; continue }
+    if (c === "\\" && inStr) { esc = true; continue }
+    if (c === '"') { inStr = !inStr; continue }
+    if (inStr) continue
+    if (c === open) depth++
+    else if (c === close) { if (--depth === 0) return i }
+  }
+  return -1
+}
+
 function inlineCode(s: string) {
   const parts = s.split(/(`[^`]+`)/g)
   return parts.map((p, i) =>

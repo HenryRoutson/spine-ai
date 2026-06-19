@@ -1,14 +1,16 @@
 "use client"
 
 import { useState } from "react"
+import { createPortal } from "react-dom"
 import { useStore } from "@/lib/store"
 import { WindowHeader } from "@/components/window-header"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { JsonHighlight } from "@/components/highlight"
+import { PromptText } from "@/components/highlight"
+import { JsonViewerEmbed } from "@/components/json-viewer"
 import { cn } from "@/lib/utils"
-import { Search, ChevronRight, Database, Cpu, Code2, Combine, FileCog, Zap } from "lucide-react"
+import { Search, ChevronRight, Database, Cpu, Code2, Combine, FileCog, Zap, Maximize2, X } from "lucide-react"
 import type { ModuleKind } from "@/lib/types"
 
 const KIND_ICON: Record<ModuleKind, typeof Cpu> = {
@@ -26,6 +28,7 @@ export function Logging() {
   const { runs, docs } = useStore()
   const [query, setQuery] = useState("")
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
+  const [popupJson, setPopupJson] = useState<string | null>(null)
 
   const docName = (id?: string) => docs.find((d) => d.id === id)?.name ?? id ?? "—"
 
@@ -169,12 +172,25 @@ export function Logging() {
                               ${(step.costCents / 100).toFixed(4)}
                             </span>
                           </div>
-                          <p className="mt-1 pl-7 font-mono text-[10px] text-muted-foreground">
-                            {step.inputPreview} <ChevronRight className="inline h-3 w-3" /> {step.outputPreview}
-                          </p>
+                          <div className="mt-1 pl-7 font-mono text-[10px] text-muted-foreground">
+                            <PromptText text={step.inputPreview} />
+                            <span className="inline-flex items-center gap-1">
+                              <ChevronRight className="inline h-3 w-3" /> {step.outputPreview}
+                            </span>
+                          </div>
                           {step.outputJson && (
-                            <div className="mt-2 rounded border border-border bg-[oklch(0.14_0.004_264)] p-2">
-                              <JsonHighlight json={step.outputJson} />
+                            <div className="relative mt-2">
+                              <JsonViewerEmbed
+                                json={step.outputJson}
+                                className="h-[300px] rounded border border-border"
+                              />
+                              <button
+                                onClick={() => setPopupJson(step.outputJson!)}
+                                className="absolute right-2 top-2 rounded bg-card/80 p-1 text-muted-foreground backdrop-blur-sm hover:text-foreground"
+                                title="Open in full-screen viewer"
+                              >
+                                <Maximize2 className="h-3.5 w-3.5" />
+                              </button>
                             </div>
                           )}
                         </li>
@@ -187,6 +203,29 @@ export function Logging() {
           )}
         </div>
       </div>
+
+      {popupJson && createPortal(
+        <div className="fixed inset-0 z-50 flex flex-col">
+          <button
+            aria-label="Close viewer"
+            className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+            onClick={() => setPopupJson(null)}
+          />
+          <div className="relative m-6 flex flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
+            <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+              <span className="font-mono text-xs text-muted-foreground">JSON output</span>
+              <button
+                onClick={() => setPopupJson(null)}
+                className="rounded p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <JsonViewerEmbed json={popupJson} className="min-h-0 flex-1" />
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }

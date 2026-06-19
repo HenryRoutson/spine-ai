@@ -527,6 +527,9 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
 </div>
 
 <script>
+// AI: lightweight structured logger — prefix all events for easy DevTools filtering
+const log = (event, detail={}) => console.log('[JSON Viewer]', event, detail);
+
 // ── Color palette for fold blocks ─────────────────────────────────────────────
 const PALETTE = [
   { bg:'rgba(56,132,255,0.09)',  bl:'rgba(56,132,255,0.45)'  },
@@ -931,6 +934,7 @@ function jumpToJson(path) {
 }
 
 function setView(v) {
+  log('view:change', { from: _viewMode, to: v });
   _viewMode=v;
   ['cards','tree','table'].forEach(id=>document.getElementById('vb-'+id).classList.toggle('active',id===v));
   renderRight();
@@ -1259,6 +1263,7 @@ function wireNode(head,chev,childEl,path) {
 let excelStack = [];
 // AI: which object-ref column keys have been expanded inline; Map key→colorIdx for stable colors
 let expandedRefCols = new Set();
+let expandedArrCols = new Set(); // AI: array columns expanded into duplicated rows (SQL JOIN style)
 let groupColorMap   = new Map();
 let _colorCounter   = 0;
 
@@ -1266,8 +1271,10 @@ function getGroupColor(key) {
   if (!groupColorMap.has(key)) groupColorMap.set(key, _colorCounter++ % GROUP_COLORS.length);
   return GROUP_COLORS[groupColorMap.get(key)];
 }
-function expandRefCol(key)  { expandedRefCols.add(key);    drawDataTable(); }
-function collapseRefCol(key){ expandedRefCols.delete(key); drawDataTable(); }
+function expandRefCol(key)   { log('col:expand-ref', { key }); expandedRefCols.add(key);    drawDataTable(); }
+function collapseRefCol(key) { log('col:collapse-ref', { key }); expandedRefCols.delete(key); drawDataTable(); }
+function expandArrCol(key)   { log('col:expand-arr', { key }); expandedArrCols.add(key);    drawDataTable(); }
+function collapseArrCol(key) { log('col:collapse-arr', { key }); expandedArrCols.delete(key); drawDataTable(); }
 
 // AI: flatten one level of nested objects into dotted-key columns; arrays/deep objects become reference cells
 function flattenRow(obj, depth=0, prefix='') {
@@ -1343,6 +1350,39 @@ function buildTableColDefs(rows) {
       });
     } else if (info.isRef && info.refType==='object') {
       cols.push({ type:'ref-obj', key, name:lbl.name, group:lbl.group, refLabel:info.refLabel, groupKey:null });
+    } else if (info.isRef && info.refType==='array' && expandedArrCols.has(key)) {
+      // AI: row-expanded array → sample all items to find sub-column structure
+      const subMap = new Map();
+      rows.forEach(row => {
+        if (!row||typeof row!=='object') return;
+        const flat = flattenRow(row);
+        const cell = flat[key];
+        if (cell&&cell.$ref==='array'&&Array.isArray(cell.$val)) {
+          cell.$val.forEach(item => {
+            if (item&&typeof item==='object') {
+              const sf = flattenRow(item, 0, '');
+              Object.entries(sf).forEach(([sk,sv]) => {
+                if (!subMap.has(sk)) {
+                  const isSR=sv&&typeof sv==='object'&&sv.$ref;
+                  subMap.set(sk,{ isRef:!!isSR, refType:isSR?sv.$ref:null });
+                }
+              });
+            }
+          });
+        }
+      });
+      const color = getGroupColor(key + '_arr');
+      const subArr = [...subMap.entries()];
+      subArr.forEach(([sk,sinfo],si) => {
+        cols.push({
+          type: sinfo.isRef ? `ref-${sinfo.refType}` : 'arr-leaf',
+          key, subKey: sk,
+          name: colLabel(sk).name,
+          groupKey: key, groupName: lbl.name, color,
+          isFirst: si===0, isLast: si===subArr.length-1,
+          isArrGroup: true,
+        });
+      });
     } else if (info.isRef && info.refType==='array') {
       cols.push({ type:'ref-arr', key, name:lbl.name, group:lbl.group, refLabel:info.refLabel, groupKey:null });
     } else {
@@ -1369,8 +1409,10 @@ function detectPrimaryTable(val) {
 }
 
 function renderTable(val, mode) {
+  log('table:render', { mode, isArray: Array.isArray(val), keys: val&&typeof val==='object'?Object.keys(val):[] });
   excelStack=[];
   expandedRefCols.clear();
+  expandedArrCols.clear();
   groupColorMap.clear();
   _colorCounter=0;
   const root=document.getElementById('rp-content');
@@ -1454,11 +1496,13 @@ function drawDataTable() {
       thg.style.cssText=`background:${color.dark};border-bottom:2px solid ${color.bar};text-align:center`;
       const inner=document.createElement('div'); inner.className='th-inner';
       inner.style.cssText='flex-direction:row;align-items:center;justify-content:center;gap:4px;padding:5px 8px';
+      const isArrGrp=groupCols[0].isArrGroup;
       inner.innerHTML=`<span class="th-name" style="color:${color.bar}">${esc(groupCols[0].groupName)}</span>`;
       const colBtn=document.createElement('button');
       colBtn.className='col-btn collapse'; colBtn.textContent='⊖';
-      colBtn.title=`Collapse ${groupCols[0].groupName} columns`;
-      const gk=groupKey; colBtn.onclick=()=>collapseRefCol(gk);
+      colBtn.title=`Collapse ${groupCols[0].groupName}`;
+      const gk=groupKey;
+      colBtn.onclick=()=>isArrGrp?collapseArrCol(gk):collapseRefCol(gk);
       inner.appendChild(colBtn);
       thg.appendChild(inner);
       tr1.appendChild(thg);
@@ -1478,8 +1522,13 @@ function drawDataTable() {
         const ck=col.key; expBtn.onclick=()=>expandRefCol(ck);
         inner.appendChild(expBtn);
       } else if (col.type==='ref-arr') {
-        // Array ref: show drill-down indicator (no inline expand — would create extra rows)
-        inner.innerHTML=`${lbl}<span class="th-name">${esc(col.name)}</span><span style="color:#60a5fa;margin-left:4px;font-size:10px">▤ list</span>`;
+        // AI: ⊕ expands array as duplicated rows (SQL JOIN); cell click still drills down
+        inner.innerHTML=`${lbl}<span class="th-name">${esc(col.name)}</span>`;
+        const expBtn=document.createElement('button');
+        expBtn.className='col-btn expand'; expBtn.textContent='⊕';
+        expBtn.title=`Expand ${col.name} as rows (one row per item)`;
+        const ck=col.key; expBtn.onclick=()=>expandArrCol(ck);
+        inner.appendChild(expBtn);
       } else {
         inner.innerHTML=`${lbl}<span class="th-name">${esc(col.name)}</span>`;
       }
@@ -1506,11 +1555,36 @@ function drawDataTable() {
 
   table.appendChild(thead);
 
+  // ── Compute effective rows (JOIN expand array cols into duplicated rows) ──────
+  // AI: for each expanded arr col, each parent row becomes N rows — one per array item
+  let effectiveRows = rows
+    .filter(r=>r!==null&&typeof r==='object')
+    .map((row,i)=>({ row, arrItems:{}, origIdx:i }));
+
+  for (const key of expandedArrCols) {
+    const next=[];
+    effectiveRows.forEach(er=>{
+      const flat=flattenRow(er.row);
+      const cell=flat[key];
+      if (cell&&cell.$ref==='array'&&Array.isArray(cell.$val)&&cell.$val.length>0) {
+        cell.$val.forEach((item,idx)=>{
+          next.push({ row:er.row, arrItems:{...er.arrItems,[key]:{item,idx}}, origIdx:er.origIdx });
+        });
+      } else {
+        next.push({ ...er, arrItems:{...er.arrItems,[key]:null} });
+      }
+    });
+    effectiveRows=next;
+  }
+
   // ── Body ──────────────────────────────────────────────────────────────────
   const tbody=document.createElement('tbody');
-  rows.forEach((row,rowIdx)=>{
-    if (row===null||typeof row!=='object') return;
+  effectiveRows.forEach((er,rowIdx)=>{
+    const {row, arrItems, origIdx}=er;
     const tr=document.createElement('tr');
+    // Alternate stripe per original parent row to visually group duplicated rows
+    if (origIdx%2===1) tr.style.background='rgba(0,0,0,.018)';
+
     const td0=document.createElement('td');
     td0.style.cssText='text-align:center;color:#bbb;font-size:11px;background:#f9f9f7;';
     td0.textContent=rowIdx+1; tr.appendChild(td0);
@@ -1519,28 +1593,33 @@ function drawDataTable() {
     cols.forEach(col=>{
       const td=document.createElement('td');
 
-      if (col.groupKey) {
-        // Sub-column of an expanded group — get value from nested object
+      if (col.groupKey && col.isArrGroup) {
+        // AI: cell from row-expanded array item
+        const entry=arrItems[col.key];
+        td.style.cssText=`background:${col.color.light}`;
+        if (col.isFirst) td.style.borderLeft=`2px solid ${col.color.border}`;
+        if (col.isLast)  td.style.borderRight=`2px solid ${col.color.border}`;
+        if (!entry) { td.className='td-null'; td.textContent='—'; }
+        else {
+          const subFlat=flattenRow(entry.item, 0, '');
+          fillPrimCell(td, subFlat[col.subKey], col.subKey);
+        }
+      } else if (col.groupKey) {
+        // Sub-column of expanded object ref
         const refCell=flat[col.key];
         const subFlat=(refCell&&refCell.$ref==='object'&&refCell.$val)
           ? flattenRow(refCell.$val, 0, '') : {};
         const val=subFlat[col.subKey];
-
-        // Color the cell with the group tint
         td.style.cssText=`background:${col.color.light}`;
-        if (col.isFirst)  td.style.borderLeft=`2px solid ${col.color.border}`;
-        if (col.isLast)   td.style.borderRight=`2px solid ${col.color.border}`;
-
-        // Handle sub-ref cells (nested array/object inside expanded group)
+        if (col.isFirst) td.style.borderLeft=`2px solid ${col.color.border}`;
+        if (col.isLast)  td.style.borderRight=`2px solid ${col.color.border}`;
         if (val&&typeof val==='object'&&val.$ref==='array') {
-          const btn=document.createElement('button'); btn.className='ref-arr';
-          btn.style.fontSize='10.5px';
+          const btn=document.createElement('button'); btn.className='ref-arr'; btn.style.fontSize='10.5px';
           btn.innerHTML=`📄 ${val.$count} ${val.$label} →`;
-          btn.onclick=()=>{ excelStack.push({label:val.$label,rows:val.$val}); drawDataTable(); };
+          btn.onclick=()=>{ log('table:drill-in', { label:val.$label, depth:excelStack.length+1, count:val.$count }); excelStack.push({label:val.$label,rows:val.$val}); drawDataTable(); };
           td.appendChild(btn);
         } else if (val&&typeof val==='object'&&val.$ref==='object') {
-          const btn=document.createElement('button'); btn.className='ref-obj';
-          btn.style.fontSize='10.5px';
+          const btn=document.createElement('button'); btn.className='ref-obj'; btn.style.fontSize='10.5px';
           btn.innerHTML=`🔗 ${val.$label} ↗`;
           btn.onclick=()=>openDetailPanel(val.$label,val.$val);
           td.appendChild(btn);
@@ -1578,7 +1657,7 @@ function fillCell(td, val, key, label) {
     const btn=document.createElement('button'); btn.className='ref-arr';
     btn.innerHTML=`📄 ${val.$count} ${val.$label} →`;
     btn.title=`Open ${val.$label} as table (${val.$count} items)`;
-    btn.onclick=()=>{ excelStack.push({label:val.$label,rows:val.$val}); drawDataTable(); };
+    btn.onclick=()=>{ log('table:drill-in', { label:val.$label, depth:excelStack.length+1, count:val.$count }); excelStack.push({label:val.$label,rows:val.$val}); drawDataTable(); };
     td.appendChild(btn); return;
   }
   // Object ref → ⊕ expand or ↗ slide-over (both shown)
@@ -1685,7 +1764,7 @@ function openDetailPanel(title, obj) {
       btn.style.fontSize='11px';
       if (type==='array') {
         btn.innerHTML=`📄 ${val.length} items →`;
-        btn.onclick=()=>{ excelStack.push({label:humanize(key),rows:val}); drawDataTable(); closeDetail(); };
+        btn.onclick=()=>{ log('table:drill-in', { label:humanize(key), depth:excelStack.length+1, count:val.length }); excelStack.push({label:humanize(key),rows:val}); drawDataTable(); closeDetail(); };
       } else {
         btn.innerHTML=`🔗 ${humanize(key)} ↗`;
         btn.onclick=()=>openDetailPanel(humanize(key),val);
@@ -1813,6 +1892,7 @@ const EXAMPLES = {
 
 // ── Tab selection ─────────────────────────────────────────────────────────────
 function selectTab(name) {
+  log('tab:select', { name });
   document.querySelectorAll('.ex-tab').forEach(b=>{
     const n=b.getAttribute('onclick').match(/selectTab\('(\w+)'\)/)?.[1];
     b.classList.toggle('active',n===name);
@@ -1827,8 +1907,40 @@ function selectTab(name) {
   closeDetail();
 }
 
-setView('tree');
-selectTab('portfolio');
+// AI: embed mode (?embed in URL) — hide demo tabs + accept JSON from parent via postMessage
+const _isEmbed = new URLSearchParams(location.search).has('embed');
+if (_isEmbed) {
+  const hdr = document.querySelector('header');
+  if (hdr) hdr.style.display = 'none';
+  document.body.style.gridTemplateRows = 'auto 1fr';
+  document.getElementById('rp-content').innerHTML =
+    '<div style="color:var(--muted);padding:24px;font-size:12px">Waiting for data…</div>';
+}
+
+window.addEventListener('message', (e) => {
+  if (!e.data || e.data.type !== 'json-viewer:load') return;
+  try {
+    const val = typeof e.data.json === 'string' ? JSON.parse(e.data.json) : e.data.json;
+    _currentVal  = val;
+    _currentMode = detectMode(val);
+    const badge = document.getElementById('hbadge');
+    if (badge) {
+      if (_currentMode === 'schema') { badge.className = 'h-badge hb-schema'; badge.textContent = 'Schema'; }
+      else                           { badge.className = 'h-badge hb-data';   badge.textContent = 'Data';   }
+    }
+    log('external:load', { mode: _currentMode, type: Array.isArray(val) ? 'array' : typeof val });
+    renderStructurePanel(_currentVal, _currentMode);
+    renderRight();
+    closeDetail();
+  } catch (err) {
+    console.warn('[JSON Viewer] postMessage load error:', err);
+  }
+});
+
+if (!_isEmbed) {
+  setView('tree');
+  selectTab('portfolio');
+}
 </script>
 </body>
 </html>
