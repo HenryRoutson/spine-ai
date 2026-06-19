@@ -9,6 +9,9 @@ add option for rlm and placeholder for claude code.
 One of the important steps i havent yet investigated is AB testing, comparing which algorithm is better for different steps. 
 
 
+
+Add a plot for the size of prompts and their breakdown in input down to json and what classes are being passed in.
+
 use claude desktop to develop slides
 https://claude.ai/design/p/e20d35ce-49e3-4b81-855e-2882c4a49147?file=Forge+Pitch.html&slide=4
 
