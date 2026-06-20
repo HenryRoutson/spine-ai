@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Boxes,
   GitBranch,
@@ -65,15 +65,20 @@ function ProjectSelector() {
   const { projects, project, setActiveProjectId, addProject, renameProject, deleteProject } = useStore()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
+  // AI : ref stays in sync on every keystroke — React state can lag behind when Enter/blur fires fast.
+  const draftRef = useRef(draft)
+  const skipBlurCommit = useRef(false)
   const canDelete = projects.length > 1
 
   function startRename(id: string, name: string) {
+    skipBlurCommit.current = false
+    draftRef.current = name
     setEditingId(id)
     setDraft(name)
   }
 
-  function commitRename(id: string) {
-    renameProject(id, draft)
+  function commitRename(id: string, value = draftRef.current) {
+    renameProject(id, value)
     setEditingId(null)
   }
 
@@ -102,13 +107,29 @@ function ProjectSelector() {
             {editingId === p.id ? (
               <Input
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
+                onChange={(e) => {
+                  draftRef.current = e.target.value
+                  setDraft(e.target.value)
+                }}
                 onKeyDown={(e) => {
                   e.stopPropagation()
-                  if (e.key === "Enter") commitRename(p.id)
-                  if (e.key === "Escape") setEditingId(null)
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    skipBlurCommit.current = true
+                    commitRename(p.id)
+                  }
+                  if (e.key === "Escape") {
+                    skipBlurCommit.current = true
+                    setEditingId(null)
+                  }
                 }}
-                onBlur={() => commitRename(p.id)}
+                onBlur={() => {
+                  if (skipBlurCommit.current) {
+                    skipBlurCommit.current = false
+                    return
+                  }
+                  commitRename(p.id)
+                }}
                 onClick={(e) => e.stopPropagation()}
                 autoFocus
                 className="h-7 text-xs"

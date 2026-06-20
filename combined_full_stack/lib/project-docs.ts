@@ -10,5 +10,12 @@ export function docsForProject(docs: DocRef[], project: Project): DocRef[] {
 
 export function defaultInferenceDoc(docs: DocRef[], project: Project): DocRef | undefined {
   const mine = docsForProject(docs, project);
-  return [...mine].reverse().find((d) => d.label === "inference") ?? mine[0];
+  const names = project.seedDocNames;
+  if (names?.length) {
+    for (const name of names) {
+      const doc = mine.find((d) => d.name === name && d.label === "inference");
+      if (doc) return doc;
+    }
+  }
+  return mine.find((d) => d.label === "inference") ?? mine[0];
 }

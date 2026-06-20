@@ -47,6 +47,9 @@ function leafSchema(
       return refSchema(ref, index, seen);
     case "list[model]":
       return z.array(refSchema(ref, index, seen));
+    default:
+      // AI : corrupt/partial field types (UI draft state, legacy persisted data) — never leave undefined in z.object().
+      return z.unknown();
   }
 }
 
@@ -70,6 +73,7 @@ function build(
   const next = new Set(seen).add(model.id);
   const shape: Record<string, ZodType> = {};
   for (const f of model.fields) {
+    if (!f.name.trim()) continue;
     const base = leafSchema(f.type, f.ref, index, next);
     // AI : optional ⇒ absent OR null — deterministic steps (db migration mapping) emit explicit
     // AI : nulls per spec; llmSchema keeps plain .optional() so models omit instead.
@@ -109,6 +113,7 @@ export function llmSchema(model: StructureModel, models: StructureModel[], isLis
   const index = byId(models);
   const shape: Record<string, ZodType> = {};
   for (const f of model.fields) {
+    if (!f.name.trim()) continue;
     let base: ZodType;
     if (f.type === "tuple[text,quote]") base = z.string();
     else if (f.type === "list[tuple[text,quote]]") base = z.array(z.string());
@@ -193,6 +198,8 @@ function coerceFieldValue(
       return ref ? materializeToModel({}, ref, models, hints) : {};
     case "list[model]":
       return [];
+    default:
+      return null;
   }
 }
 

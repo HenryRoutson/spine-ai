@@ -78,52 +78,51 @@ export interface Store {
 // AI : keep persisted seed projects aligned with seeds/*.json — merge new modules (e.g. Link Quotes)
 // AI : while preserving user cached/model/prompt overrides on steps they already had.
 function syncProjectFromSeed(existing: Project, seed: Project): Project {
-  let next = existing;
-  if (!existing.seedDocNames?.length && seed.seedDocNames?.length)
-    next = { ...next, seedDocNames: seed.seedDocNames };
+  const seedDocNames = seed.seedDocNames?.length ? seed.seedDocNames : existing.seedDocNames;
 
-  let modules: PipelineModule[];
-  if (existing.id === seed.id) {
-    const seedIds = new Set(seed.modules.map((m) => m.id));
-    // AI : keep the user's step order — don't append orphan steps after output (that flags
-    // AI : false I/O errors like SourceDocument after LegalConsiderations).
-    modules = existing.modules.map((em) => {
-      if (!seedIds.has(em.id)) return structuredClone(em);
-      const sm = seed.modules.find((m) => m.id === em.id)!;
-      return {
-        ...sm,
-        cached: em.cached,
-        model: em.model ?? sm.model,
-        prompt: em.prompt ?? sm.prompt,
-        code: em.code ?? sm.code,
-      };
-    });
-    for (let si = 0; si < seed.modules.length; si++) {
-      const sm = seed.modules[si];
-      if (modules.some((m) => m.id === sm.id)) continue;
-      const prevSeed = seed.modules[si - 1];
-      const insertAt = prevSeed ? modules.findIndex((m) => m.id === prevSeed.id) + 1 : 0;
-      modules.splice(Math.max(insertAt, 0), 0, structuredClone(sm));
-    }
-  } else {
-    modules = next.modules.map((m) => {
+  if (existing.id !== seed.id) {
+    let next = existing;
+    if (seedDocNames?.length && !existing.seedDocNames?.length)
+      next = { ...next, seedDocNames };
+    let modules = next.modules.map((m) => {
       const sm = seed.modules.find((s) => s.id === m.id);
       if (!sm || (m.label === sm.label && m.note === sm.note)) return m;
       return { ...m, label: sm.label, note: sm.note };
     });
+    modules = syncAutoQuoteSteps(modules, next.models);
+    const invalid = computeInvalid(modules);
+    if (invalid.size > 0) {
+      const seedIds = new Set(seed.modules.map((m) => m.id));
+      const drop = [...invalid.keys()].filter((id) => !seedIds.has(id));
+      if (drop.length) modules = modules.filter((m) => !drop.includes(m.id));
+    }
+    const changed =
+      seedDocNames !== existing.seedDocNames ||
+      modules.length !== next.modules.length ||
+      modules.some((m, i) => m !== next.modules[i]);
+    return changed ? { ...next, modules } : next;
   }
 
-  modules = syncAutoQuoteSteps(modules, next.models);
-  // AI : drop invalid user-added steps (often doc-to-text appended after output by old seed sync).
-  const invalid = computeInvalid(modules);
-  if (invalid.size > 0) {
-    const seedIds = new Set(seed.modules.map((m) => m.id));
-    const drop = [...invalid.keys()].filter((id) => !seedIds.has(id));
-    if (drop.length) modules = modules.filter((m) => !drop.includes(m.id));
-  }
-  const changed =
-    modules.length !== next.modules.length || modules.some((m, i) => m !== next.modules[i]);
-  return changed ? { ...next, modules } : next;
+  // AI : seed-owned project — reset models + linear step graph from seeds/*.json; keep runtime overrides only.
+  const models = structuredClone(seed.models);
+  let modules = seed.modules.map((sm) => {
+    const em = existing.modules.find((m) => m.id === sm.id);
+    if (!em) return structuredClone(sm);
+    return {
+      ...sm,
+      cached: em.cached,
+      model: em.model ?? sm.model,
+      prompt: em.prompt ?? sm.prompt,
+      code: em.code ?? sm.code,
+    };
+  });
+  modules = syncAutoQuoteSteps(modules, models);
+  const migrated = migrateProjectModules({ ...existing, seedDocNames, models, modules });
+  const same =
+    existing.seedDocNames?.join() === migrated.seedDocNames?.join() &&
+    JSON.stringify(existing.models) === JSON.stringify(migrated.models) &&
+    JSON.stringify(existing.modules) === JSON.stringify(migrated.modules);
+  return same ? existing : migrated;
 }
 
 // AI : idempotent — upsert every seeds/*.json project (+ ingest its source docs) that the
@@ -145,6 +144,16 @@ export async function ensureSeeded(store: Store): Promise<void> {
     // AI : backfill seedDocNames + module labels from seeds/*.json on existing projects.
     const synced = syncProjectFromSeed(existing, seed.project);
     if (synced !== existing) store.saveProject(synced);
+    // AI : ingest seed docs that were added after the project first landed (e.g. new gps_site_locations.json).
+    const existingNames = new Set(store.docs().map((d) => d.name));
+    for (const spec of seed.docSpecs) {
+      if (existingNames.has(spec.name)) continue;
+      try {
+        store.addDoc(spec.name, spec.type, await seedDocContent(spec), spec.label);
+      } catch (err) {
+        console.error(`seed doc failed (${spec.name}):`, err);
+      }
+    }
   }
   for (const p of store.projects()) {
     const migrated = migrateProjectModules(p);

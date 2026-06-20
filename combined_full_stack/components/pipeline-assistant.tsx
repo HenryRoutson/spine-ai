@@ -37,6 +37,7 @@ type ChatMessage = {
 }
 
 const STARTERS = [
+  "Build a pipeline to take in GPS site locations, profile their locations, and evaluate similarities — e.g. Russian sites, research labs, cold locations",
   "Build a pipeline from scratch for PDF legal doc analysis",
   "Add a Link Quotes step after the LLM extraction",
   "Simplify this pipeline — remove unnecessary steps",
