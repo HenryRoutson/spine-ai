@@ -17,10 +17,6 @@ export type MetricScatter = {
   max: number
 }
 
-function metricValues(calls: LlmCallRecord[], field: MetricField): number[] {
-  return calls.map((c) => c[field])
-}
-
 export function distributionStats(values: number[]): { mean: number; std: number } {
   const n = values.length
   if (n === 0) return { mean: 0, std: 0 }
@@ -37,19 +33,27 @@ function jitterY(index: number, total: number, xKey: number): number {
   return Math.min(0.96, Math.max(0.04, band + wobble))
 }
 
-export function buildMetricScatter(calls: LlmCallRecord[], field: MetricField): MetricScatter | null {
-  if (calls.length === 0) return null
-  const values = metricValues(calls, field)
+export function buildValueScatter(
+  items: { value: number; status: LlmCallRecord["status"] }[],
+): MetricScatter | null {
+  if (items.length === 0) return null
+  const values = items.map((i) => i.value)
   const { mean, std } = distributionStats(values)
   const min = Math.min(...values)
   const max = Math.max(...values)
-  const points = calls.map((call, index) => ({
-    x: call[field],
-    y: jitterY(index, calls.length, call[field] + index),
-    status: call.status,
+  const points = items.map((item, index) => ({
+    x: item.value,
+    y: jitterY(index, items.length, item.value + index),
+    status: item.status,
     index,
   }))
   return { points, mean, std, min, max }
+}
+
+export function buildMetricScatter(calls: LlmCallRecord[], field: MetricField): MetricScatter | null {
+  return buildValueScatter(
+    calls.map((call) => ({ value: call[field], status: call.status })),
+  )
 }
 
 // AI : normal PDF scaled to overlay height for the gray mean/std curve.
@@ -90,6 +94,11 @@ export function formatMs(n: number): string {
   if (n >= 60000) return `${(n / 60000).toFixed(1)}m`
   if (n >= 1000) return `${(n / 1000).toFixed(1)}s`
   return `${Math.round(n)}ms`
+}
+
+export function formatCostCents(n: number): string {
+  if (n >= 100) return `$${(n / 100).toFixed(2)}`
+  return `${n.toFixed(2)}c`
 }
 
 const METRIC_FORMAT: Record<MetricField, (n: number) => string> = {

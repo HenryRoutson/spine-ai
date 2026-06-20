@@ -11,6 +11,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { JsonHighlight, PromptText } from "@/components/highlight"
 import { JsonViewerEmbed } from "@/components/json-viewer"
 import { LlmCallDistribution } from "@/components/llm-call-distribution"
+import { StepProfiling } from "@/components/step-profiling"
 import { InputDocumentLink } from "@/components/input-document-link"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { QuoteLinks, quotesFromJson } from "@/components/quote-links"
@@ -576,6 +577,8 @@ export function Logging() {
                     </div>
                   </div>
                 )}
+
+                <StepProfiling runs={runs} stepOrder={active.steps} />
               </div>
             </ScrollArea>
           )}
