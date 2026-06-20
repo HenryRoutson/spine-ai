@@ -1,4 +1,4 @@
-import type { DocId, SourceQuote } from "./types";
+import type { DocId, SourceQuote, StructureModel } from "./types";
 
 type Normalized = string;
 
@@ -76,6 +76,44 @@ export function findQuote(quote: string, source: string, docId: DocId): QuoteMat
   const start = denormOffset(source, best.normStart);
   const end = denormOffset(source, best.normStart + best.normLen);
   return { text: source.slice(start, end), docId, start, end, exact: false, score: Math.max(0, best.score) };
+}
+
+// AI : convert one record's top-level quote fields from LLM strings → {text, quote:{doc_id,start,end}}.
+export function resolveQuotesInRecord(
+  value: unknown,
+  model: StructureModel,
+  sourceText: string,
+  docId: DocId,
+): unknown {
+  const obj = value as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...obj };
+  for (const f of model.fields) {
+    if (f.type === "tuple[text,quote]" && typeof obj[f.name] === "string") {
+      const m = findQuote(obj[f.name] as string, sourceText, docId);
+      out[f.name] = { text: m.text, quote: { doc_id: m.docId, start: m.start, end: m.end } };
+    }
+    if (f.type === "list[tuple[text,quote]]" && Array.isArray(obj[f.name])) {
+      out[f.name] = (obj[f.name] as string[]).map((q) => {
+        const m = findQuote(q, sourceText, docId);
+        return { text: m.text, quote: { doc_id: m.docId, start: m.start, end: m.end } };
+      });
+    }
+  }
+  return out;
+}
+
+// AI : resolve quote fields on a step output — handles list vs single-object out.
+export function resolveQuotesValue(
+  value: unknown,
+  model: StructureModel,
+  sourceText: string,
+  docId: DocId,
+  isList: boolean,
+): unknown {
+  if (isList && Array.isArray(value)) {
+    return value.map((row) => resolveQuotesInRecord(row, model, sourceText, docId));
+  }
+  return resolveQuotesInRecord(value, model, sourceText, docId);
 }
 
 // AI : canonical export link for a saved quote — the doc CONTENT HASH + index range survive

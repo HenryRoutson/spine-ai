@@ -4,7 +4,7 @@ import { dataDir } from "./config";
 import { runLogger } from "./server_logger";
 import { fileWriteHelper } from "./file_write_helper";
 import { llmBatchStructured, llmStructured } from "./llm";
-import { collectQuotes, findQuote } from "./quotation";
+import { collectQuotes, resolveQuotesValue } from "./quotation";
 import { runCustomFn } from "./custom_code";
 import { type LiveStep, progressHtml, runToHtml } from "./logging";
 import {
@@ -12,7 +12,7 @@ import {
   llmSchema,
   materializeToModel,
   structuredLlmPrompt,
-  validate,
+  validateStepOutput,
 } from "./structure";
 import type { Store } from "./store";
 import { computeInvalid } from "./validity";
@@ -91,25 +91,10 @@ function preview(s: string, n = 160): string {
   return flat.length > n ? flat.slice(0, n) + "…" : flat;
 }
 
-// AI : convert LLM-extracted quote strings into validated {text, quote:{doc_id,start,end}} links.
-// AI : TODO bug — only TOP-LEVEL quote fields are resolved; quote fields inside nested
-// AI : model/list[model] refs are left as-is (see the matching llmSchema TODO in structure.ts).
-function resolveQuotes(value: unknown, model: StructureModel, sourceText: string, docId: DocId): unknown {
-  const obj = value as Record<string, unknown>;
-  const out: Record<string, unknown> = { ...obj };
-  for (const f of model.fields) {
-    if (f.type === "tuple[text,quote]" && typeof obj[f.name] === "string") {
-      const m = findQuote(obj[f.name] as string, sourceText, docId);
-      out[f.name] = { text: m.text, quote: { doc_id: m.docId, start: m.start, end: m.end } };
-    }
-    if (f.type === "list[tuple[text,quote]]" && Array.isArray(obj[f.name])) {
-      out[f.name] = (obj[f.name] as string[]).map((q) => {
-        const m = findQuote(q, sourceText, docId);
-        return { text: m.text, quote: { doc_id: m.docId, start: m.start, end: m.end } };
-      });
-    }
-  }
-  return out;
+function sourceDocumentBlock(sourceText: string, docId: DocId, maxChars = 2400): string {
+  const body =
+    sourceText.length > maxChars ? `${sourceText.slice(0, maxChars)}\n… (${sourceText.length - maxChars} more chars)` : sourceText;
+  return `SOURCE DOCUMENT (${docId}, ${sourceText.length} chars):\n${body}`;
 }
 
 interface ExecResult {
@@ -216,13 +201,8 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       ctx.stepLlmCalls = [];
       const raw = await llmStructured(userPrompt, schema, { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls }, log.child("llm"));
       log.info(`llm response received`, { moduleId: m.id, items: Array.isArray(raw) ? raw.length : 1 });
-      // AI : resolve quote strings → validated source-linked spans.
-      let value: unknown = raw;
-      if (hasQuoteField(out)) {
-        value = Array.isArray(raw)
-          ? raw.map((r) => resolveQuotes(r, out, ctx.sourceText, ctx.sourceDocId))
-          : resolveQuotes(raw, out, ctx.sourceText, ctx.sourceDocId);
-      }
+      // AI : quote strings stay raw — a downstream Link Quotes step resolves offsets.
+      const value = raw;
       const count = Array.isArray(value) ? value.length : 1;
       return {
         value,
@@ -307,7 +287,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         (current, total) => ctx.reportSub?.({ label: "LLM calls", current, total }),
       );
       log.info(`llm-batch complete`, { moduleId: m.id, rows: rows.length });
-      const value = hasQuoteField(out) ? rows.map((r) => resolveQuotes(r, out, ctx.sourceText, ctx.sourceDocId)) : rows;
+      const value = rows;
       return {
         value,
         preview: `${items.length} items → ${value.length} ${out.name}`,
@@ -317,6 +297,32 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
             ? `${samplePrompt}\n\n… same prompt × ${items.length} items`
             : samplePrompt,
         llmCalls: ctx.stepLlmCalls,
+      };
+    }
+
+    case "quote": {
+      const out = modelById(project.models, m.outStructureId);
+      if (!out) throw new Error(`quote step ${m.id} has no output structure`);
+      if (!ctx.sourceText) {
+        throw new Error(`quote step ${m.id} needs source text from an upstream input or doc-to-text step`);
+      }
+      const data = ctx.byModel.get(m.inStructureId as StructureModelId) ?? ctx.outputs.get(ctx.prevModuleId!);
+      const isList = !!m.outIsList || Array.isArray(data);
+      log.info(`quote step`, {
+        moduleId: m.id,
+        sourceDocId: ctx.sourceDocId,
+        sourceChars: ctx.sourceText.length,
+        isList,
+      });
+      const value = resolveQuotesValue(data, out, ctx.sourceText, ctx.sourceDocId, isList);
+      const linked = collectQuotes(value).length;
+      const rawJson = JSON.stringify(data, null, 2);
+      return {
+        value,
+        preview: `linked ${linked} quote(s) → ${ctx.sourceDocId}`,
+        json: JSON.stringify(value, null, 2),
+        inputPreview: `${sourceDocumentBlock(ctx.sourceText, ctx.sourceDocId)}\n\n── RAW EXTRACTS ──\n${rawJson}`,
+        docId: ctx.sourceDocId,
       };
     }
 
@@ -495,17 +501,16 @@ export async function runPipeline(
         // AI : implicit validation — validate the step output against its declared out structure.
         const out = modelById(project.models, m.outStructureId);
         if (out) {
-          // AI : llm-batch always emits a list, regardless of the outIsList flag
           const isList = m.outIsList || m.kind === "llm-batch";
-          const toCheck = isList && Array.isArray(result.value) ? result.value : [result.value];
-          for (const v of toCheck) {
-            const check = validate(v, out, project.models);
-            if (!check.ok) {
-              log.error(`validation failed`, { moduleId: m.id, structure: out.name, error: check.error });
-              throw new Error(`output failed ${out.name} validation: ${check.error}`);
-            }
+          const rawQuotes =
+            (m.kind === "llm" || m.kind === "llm-batch") && hasQuoteField(out);
+          const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes });
+          if (!check.ok) {
+            log.error(`validation failed`, { moduleId: m.id, structure: out.name, error: check.error });
+            throw new Error(`output failed ${out.name} validation: ${check.error}`);
           }
-          log.debug(`validation ok`, { moduleId: m.id, structure: out.name, itemCount: toCheck.length });
+          const itemCount = isList && Array.isArray(result.value) ? result.value.length : 1;
+          log.debug(`validation ok`, { moduleId: m.id, structure: out.name, itemCount });
         }
         writeCache(key, result.value, result.json);
         log.debug(`cache written`, { key });

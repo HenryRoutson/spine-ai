@@ -18,10 +18,13 @@ import {
   AlertTriangle,
   Copy,
   Check,
+  Link2,
+  Lock,
   type LucideIcon,
 } from "lucide-react"
 import { useStore, uid } from "@/lib/store"
 import { computeInvalid, computeWarnings, invalidStepMessage } from "@/lib/validity"
+import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { llmSchemaJson } from "@/lib/structure"
 import { JsonHighlight } from "@/components/highlight"
 import { moduleMetrics } from "@/lib/billing"
@@ -35,6 +38,7 @@ import {
   type StructureModel,
 } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
+import { PipelineAssistant } from "@/components/pipeline-assistant"
 import { ModelSelector } from "@/components/model-selector"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -57,6 +61,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 // AI : batch llm is a 2×2 sparkle grid so it reads as "many calls" vs single Sparkle.
 function BatchSparkleIcon({ className }: { className?: string }) {
@@ -82,6 +87,7 @@ const KIND_ICON: Record<ModuleKind, ModuleIcon> = {
   "doc-to-text": FileText,
   llm: Sparkle,
   "llm-batch": BatchSparkleIcon,
+  quote: Link2,
   transform: Shuffle,
   combine: Merge,
   "custom-code": Code2,
@@ -93,6 +99,7 @@ const KIND_COLOR: Record<ModuleKind, string> = {
   "doc-to-text": "text-chart-3",
   llm: "text-primary",
   "llm-batch": "text-primary",
+  quote: "text-chart-2",
   transform: "text-chart-3",
   combine: "text-chart-3",
   "custom-code": "text-chart-1",
@@ -140,6 +147,14 @@ function makeModule(
   }
 }
 
+// AI : don't offer an insert slot between a quote-emitting LLM and its locked Link Quotes step.
+function blocksInsertBefore(modules: PipelineModule[], insertAt: number): boolean {
+  if (insertAt <= 0 || insertAt >= modules.length) return false
+  const prev = modules[insertAt - 1]
+  const next = modules[insertAt]
+  return LLM_KINDS.includes(prev.kind) && isAutoQuoteStep(next)
+}
+
 function insertBeforeIndex(seg: ReturnType<typeof segmentPipeline>[number]): number {
   return seg.kind === "combine" ? seg.index - 1 : seg.index
 }
@@ -148,16 +163,19 @@ function insertAfterIndex(seg: ReturnType<typeof segmentPipeline>[number]): numb
   return seg.index + 1
 }
 
+type AsideTab = "inspector" | "assistant"
+
 export function PipelineBuilder() {
   const { modules, setModules, models, model: globalModel, runs } = useStore()
   const [selectedId, setSelectedId] = useState<string>(modules[0]?.id ?? "")
   const [copied, setCopied] = useState(false)
+  const [asideTab, setAsideTab] = useState<AsideTab>("inspector")
 
   const selected = modules.find((m) => m.id === selectedId)
   // AI : de-mocked — invalid check is the shared server definition; latency/cost are
   // AI : recomputed from real run history (falls back to seeded avgs before any run).
   const invalid = computeInvalid(modules)
-  const warnings = computeWarnings(modules)
+  const warnings = computeWarnings(modules, models)
   const metrics = moduleMetrics(runs)
   const structureModelItems = useMemo(
     () => models.map((m) => ({ value: m.id, label: m.name })),
@@ -201,6 +219,8 @@ export function PipelineBuilder() {
   }
 
   function remove(id: string) {
+    const m = modules.find((x) => x.id === id)
+    if (m && isAutoQuoteStep(m)) return
     const drop = new Set(combinePairIds(modules, id))
     const next = modules.filter((m) => !drop.has(m.id))
     setModules(next)
@@ -208,6 +228,8 @@ export function PipelineBuilder() {
   }
 
   function move(id: string, dir: -1 | 1) {
+    const m = modules.find((x) => x.id === id)
+    if (m && isAutoQuoteStep(m)) return
     const ids = combinePairIds(modules, id)
     const block = ids.map((x) => modules.find((m) => m.id === x)!)
     const rest = modules.filter((m) => !ids.includes(m.id))
@@ -226,6 +248,7 @@ export function PipelineBuilder() {
   }
 
   return (
+    <TooltipProvider delay={200}>
     <div className="flex h-full flex-col">
       <WindowHeader
         step="02 / Pipeline"
@@ -346,17 +369,20 @@ export function PipelineBuilder() {
               const m = seg.module
               const i = seg.index
               const isInvalid = invalid.has(m.id)
+              const locked = isAutoQuoteStep(m)
+              const ioName = modelName(models, m.inStructureId)
               return (
                 <div key={m.id} className="flex flex-col items-center">
                   <button
                     onClick={() => setSelectedId(m.id)}
                     className={cn(
                       "group relative flex w-80 items-center gap-3 rounded-lg border bg-card px-3.5 py-3 text-left transition-colors",
+                      locked && "border-dashed border-chart-2/50 bg-chart-2/5",
                       isInvalid
                         ? "border-destructive/70"
                         : m.id === selectedId
                           ? "border-primary"
-                          : "border-border hover:border-muted-foreground/40",
+                          : !locked && "border-border hover:border-muted-foreground/40",
                     )}
                   >
                     <span className="font-mono text-[10px] text-muted-foreground">
@@ -368,13 +394,16 @@ export function PipelineBuilder() {
                       <p className="truncate font-mono text-[10px] text-muted-foreground">
                         {m.kind === "input"
                           ? `${modelName(models, m.outStructureId) ?? "·"} · ${m.inputType ?? "file"}`
-                          : <>
-                              {modelName(models, m.inStructureId) ?? "·"}
-                              <span className="text-muted-foreground/60"> → </span>
-                              {modelName(models, m.outStructureId) ?? "·"}
-                            </>}
+                          : locked
+                            ? <>{ioName ?? "·"}<span className="text-muted-foreground/60"> · same model in/out</span></>
+                            : <>
+                                {ioName ?? "·"}
+                                <span className="text-muted-foreground/60"> → </span>
+                                {modelName(models, m.outStructureId) ?? "·"}
+                              </>}
                       </p>
                     </div>
+                    {locked && <AutoQuoteLock />}
                     {m.kind === "llm" && m.model && (
                       <Badge variant="outline" className="shrink-0 font-mono text-[9px]">
                         {m.model}
@@ -396,6 +425,7 @@ export function PipelineBuilder() {
                     insertAt={insertAfterIndex(seg)}
                     onInsert={insertModule}
                     invalid={isInvalid}
+                    blocked={blocksInsertBefore(modules, insertAfterIndex(seg))}
                   />
                 </div>
               )
@@ -411,32 +441,96 @@ export function PipelineBuilder() {
           </div>
         </div>
 
-        {/* inspector */}
+        {/* inspector / assistant */}
         <aside className="flex w-80 shrink-0 flex-col border-l border-border">
-          {selected ? (
+          <div className="flex border-b border-border">
+            <button
+              type="button"
+              onClick={() => setAsideTab("inspector")}
+              className={cn(
+                "flex-1 px-3 py-2 font-mono text-[10px] uppercase tracking-wider transition-colors",
+                asideTab === "inspector"
+                  ? "border-b-2 border-primary text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Inspector
+            </button>
+            <button
+              type="button"
+              onClick={() => setAsideTab("assistant")}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-1.5 px-3 py-2 font-mono text-[10px] uppercase tracking-wider transition-colors",
+                asideTab === "assistant"
+                  ? "border-b-2 border-primary text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Sparkle className="h-3 w-3" />
+              Assistant
+            </button>
+          </div>
+
+          {asideTab === "assistant" ? (
+            <PipelineAssistant />
+          ) : selected ? (
             <div className="flex-1 overflow-y-auto p-4">
               <div className="mb-3 flex items-center justify-between">
                 <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                   {MODULE_META[selected.kind].label}
                 </span>
-                <div className="flex items-center gap-1">
-                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, -1)}>
-                    <ArrowUp className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, 1)}>
-                    <ArrowDown className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={() => remove(selected.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                {isAutoQuoteStep(selected) ? (
+                  <AutoQuoteLock />
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, -1)}>
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, 1)}>
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => remove(selected.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                )}
               </div>
 
+              {isAutoQuoteStep(selected) ? (
+                <>
+                  <p className="mb-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                    {AUTO_QUOTE_EXPLAINER}
+                  </p>
+                  <Field label="Structure">
+                    <p className="rounded-md border border-chart-2/30 bg-chart-2/5 px-2.5 py-2 font-mono text-xs">
+                      {modelName(models, selected.inStructureId) ?? "·"}
+                      <span className="text-muted-foreground"> → </span>
+                      {modelName(models, selected.outStructureId) ?? "·"}
+                      <span className="mt-1 block font-mono text-[10px] text-muted-foreground">
+                        same model — LLM emits strings, this step attaches source spans
+                      </span>
+                    </p>
+                  </Field>
+                  <div className="mt-4 flex items-center justify-between rounded-md border border-border bg-secondary/30 px-3 py-2.5">
+                    <div>
+                      <p className="text-xs font-medium">Cache results</p>
+                      <p className="font-mono text-[10px] text-muted-foreground">
+                        skip recompute &amp; billing
+                      </p>
+                    </div>
+                    <Switch
+                      checked={selected.cached}
+                      onCheckedChange={(v) => update(selected.id, { cached: v })}
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
               <p className="mb-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
                 {MODULE_META[selected.kind].description}
               </p>
@@ -603,7 +697,7 @@ export function PipelineBuilder() {
                       placeholder="Extra instruction (schema below also guides the model)…"
                       className="min-h-20 text-xs leading-relaxed"
                     />
-                    {warnings.has(selected.id) && (
+                    {warnings.has(selected.id) && warnings.get(selected.id)?.kind === "no-prompt" && (
                       <p className="mt-1 font-mono text-[9px] text-muted-foreground">
                         no custom text — JSON schema is sent as the structured output contract
                       </p>
@@ -667,17 +761,41 @@ export function PipelineBuilder() {
                   }
                 />
               </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="flex flex-1 items-center justify-center p-6 text-center">
               <p className="text-xs text-muted-foreground">
-                Add a module and select it to configure.
+                Add a module and select it to configure, or use the Assistant tab.
               </p>
             </div>
           )}
         </aside>
       </div>
     </div>
+    </TooltipProvider>
+  )
+}
+
+function AutoQuoteLock({ className }: { className?: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        type="button"
+        className={cn(
+          "inline-flex shrink-0 items-center gap-1 rounded-md border border-chart-2/40 bg-chart-2/10 px-1.5 py-0.5 text-chart-2",
+          className,
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Lock className="h-3 w-3" />
+        <span className="font-mono text-[9px]">auto</span>
+      </TooltipTrigger>
+      <TooltipContent side="left" className="max-w-xs text-left leading-relaxed">
+        {AUTO_QUOTE_EXPLAINER}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -699,12 +817,17 @@ function InsertSlot({
   onInsert,
   invalid,
   alwaysShow,
+  blocked,
 }: {
   insertAt: number
   onInsert: (kind: ModuleKind, at: number) => void
   invalid?: boolean
   alwaysShow?: boolean
+  blocked?: boolean
 }) {
+  if (blocked) {
+    return <div className="h-4 w-px bg-border/60" aria-hidden />
+  }
   return (
     <div className="group relative flex h-8 w-full items-center justify-center">
       <div

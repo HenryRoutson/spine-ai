@@ -53,6 +53,7 @@ export type ModuleKind =
   | "doc-to-text"
   | "llm"
   | "llm-batch" // AI : backend addition — one structured call per list item, merged typed list out
+  | "quote" // AI : deterministic — resolve LLM quote strings → source-linked spans
   | "transform"
   | "combine"
   | "custom-code"
@@ -74,6 +75,8 @@ export interface PipelineModule {
   cached: boolean;
   // AI : backend-only — llm/transform steps may emit a list of `outStructure` rather than one.
   outIsList?: boolean;
+  // AI : pipeline-managed step — auto-inserted Link Quotes; locked in the builder UI.
+  auto?: boolean;
   // metrics (real ones are recomputed from run history, see billing.ts)
   avgMs: number;
   avgCostCents: number;
@@ -235,6 +238,10 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   "doc-to-text": { label: "Doc → Text", description: "Prebuilt parser, document to text" },
   llm: { label: "LLM Call", description: "Run a model against a prompt + schema" },
   "llm-batch": { label: "Batch LLM", description: "list in → list out (one structured call per item). Wrap with Custom TS before/after when upstream/downstream is a single object." },
+  quote: {
+    label: "Link Quotes",
+    description: "Match verbatim LLM quote strings against the source document and attach byte offsets (zero LLM cost)",
+  },
   transform: { label: "Transform", description: "Reshape, chunk, or map data" },
   combine: { label: "Combine Inputs", description: "Merge a new input with the pipeline state" },
   "custom-code": { label: "Custom TS Function", description: "Saved (input) => output code step, no LLM cost" },

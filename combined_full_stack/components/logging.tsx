@@ -27,16 +27,20 @@ const KIND_ICON: Record<ModuleKind, typeof Cpu> = {
   "doc-to-text": FileCog,
   llm: Cpu,
   "llm-batch": Cpu,
+  quote: Link2,
   transform: Code2,
   combine: Combine,
   "custom-code": Code2,
   output: ChevronRight,
 }
 
-// AI : llm steps use prompt/response wording; others use input/output
+// AI : llm steps use prompt/response wording; quote step shows source + extracts → linked spans
 const LLM_KINDS: ModuleKind[] = ["llm", "llm-batch"]
 
 function stepIoLabels(kind: ModuleKind) {
+  if (kind === "quote") {
+    return { inTitle: "Source + extracts", outTitle: "Linked quotes" }
+  }
   const isLlm = LLM_KINDS.includes(kind)
   return {
     inTitle: isLlm ? "Prompt" : "Input",
@@ -289,7 +293,8 @@ export function Logging() {
                       const stepDocRef = stepDoc ? docs.find((d) => d.id === stepDoc) : undefined
                       const stepDocLinks = stepDocLinkLabels(stepDocRef)
                       const hasStepDocLink =
-                        !!stepDoc && (step.kind === "input" || step.kind === "doc-to-text")
+                        !!stepDoc &&
+                        (step.kind === "input" || step.kind === "doc-to-text" || step.kind === "quote")
                       return (
                         <li
                           key={step.moduleId}

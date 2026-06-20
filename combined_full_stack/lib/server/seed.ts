@@ -67,6 +67,7 @@ const SeedFileSchema = z.object({
       model: z.string().optional(),
       cached: z.boolean(),
       outIsList: z.boolean().optional(),
+      auto: z.boolean().optional(),
       avgMs: z.number(),
       avgCostCents: z.number(),
     }),

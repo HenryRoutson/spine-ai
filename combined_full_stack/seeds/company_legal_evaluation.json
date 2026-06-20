@@ -83,6 +83,19 @@
       "avgCostCents": 6
     },
     {
+      "id": "mod_link_quotes",
+      "kind": "quote",
+      "label": "Link Quotes",
+      "auto": true,
+      "note": "Auto · AtomicRule → AtomicRule · links LLM quote strings to source spans.",
+      "inStructureId": "m_rule",
+      "outStructureId": "m_rule",
+      "outIsList": true,
+      "cached": true,
+      "avgMs": 12,
+      "avgCostCents": 0
+    },
+    {
       "id": "mod_sort_rules",
       "kind": "custom-code",
       "label": "Sort Rules by Severity",

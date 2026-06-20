@@ -232,6 +232,23 @@ export function validate(value: unknown, model: StructureModel, models: Structur
     : { ok: false, error: parsed.error.toString() };
 }
 
+// AI : LLM steps emit plain quote strings; quote steps emit linked spans — pick the right schema.
+export function validateStepOutput(
+  value: unknown,
+  model: StructureModel,
+  models: StructureModel[],
+  opts: { isList?: boolean; rawQuotes?: boolean } = {},
+): ValidationResult {
+  const isList = opts.isList ?? false;
+  const schema = opts.rawQuotes ? llmSchema(model, models, isList) : zodFromModel(model, models);
+  const rows = isList && Array.isArray(value) ? value : [value];
+  for (const row of rows) {
+    const parsed = schema.safeParse(row);
+    if (!parsed.success) return { ok: false, error: parsed.error.toString() };
+  }
+  return { ok: true, value };
+}
+
 // ---- CRUD helpers (operate on a model list; persistence lives in store.ts) ----
 
 export function upsertModel(models: StructureModel[], model: StructureModel): StructureModel[] {

@@ -81,10 +81,45 @@ export function PromptText({ text }: { text: string }) {
             <JsonHighlight json={p.text} />
           </span>
         ) : (
-          <span key={i}>{p.text}</span>
+          <PlainPromptSegment key={i} text={p.text} />
         ),
       )}
     </>
+  )
+}
+
+// AI : highlight SOURCE DOCUMENT blocks in LLM prompts and Link Quotes step input.
+function PlainPromptSegment({ text }: { text: string }) {
+  const startMatch = text.match(/SOURCE DOCUMENT(?: \([^)]+\))?:\n/)
+  if (!startMatch || startMatch.index === undefined) return <span>{text}</span>
+
+  const start = startMatch.index
+  const headerEnd = start + startMatch[0].length
+  const header = startMatch[0].trimEnd()
+  const tailMarkers = ["\n\n── RAW EXTRACTS ──\n", "\n\nINPUT DATA:", "\n\nRespond with ONLY"]
+  let bodyEnd = text.length
+  for (const m of tailMarkers) {
+    const idx = text.indexOf(m, headerEnd)
+    if (idx !== -1) bodyEnd = Math.min(bodyEnd, idx)
+  }
+
+  const before = text.slice(0, start)
+  const body = text.slice(headerEnd, bodyEnd)
+  const after = text.slice(bodyEnd)
+
+  return (
+    <span>
+      {before}
+      <span className="my-1 block rounded border border-chart-2/40 bg-chart-2/10 p-2">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-chart-2">
+          {header}
+        </span>
+        <span className="mt-1 block whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">
+          {body.trimEnd()}
+        </span>
+      </span>
+      {after}
+    </span>
   )
 }
 

@@ -3,11 +3,13 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { join } from "node:path";
 import { dataDir } from "./config";
 import { allProjectSeeds, blankProject, type SeedDocSpec } from "./seed";
+import { insertMissingQuoteSteps, migrateProjectModules, syncAutoQuoteSteps } from "./validity";
 import type {
   DocId,
   DocLabel,
   DocRef,
   InputType,
+  PipelineModule,
   PipelineRun,
   Project,
   ProjectId,
@@ -72,17 +74,40 @@ export interface Store {
   flush(): Promise<void>;
 }
 
-// AI : keep persisted projects aligned with seeds/*.json label/note tweaks (no module reorder).
+// AI : keep persisted seed projects aligned with seeds/*.json — merge new modules (e.g. Link Quotes)
+// AI : while preserving user cached/model/prompt overrides on steps they already had.
 function syncProjectFromSeed(existing: Project, seed: Project): Project {
-  let next = existing
+  let next = existing;
   if (!existing.seedDocNames?.length && seed.seedDocNames?.length)
-    next = { ...next, seedDocNames: seed.seedDocNames }
-  const modules = next.modules.map((m) => {
-    const sm = seed.modules.find((s) => s.id === m.id)
-    if (!sm || (m.label === sm.label && m.note === sm.note)) return m
-    return { ...m, label: sm.label, note: sm.note }
-  })
-  return modules.some((m, i) => m !== next.modules[i]) ? { ...next, modules } : next
+    next = { ...next, seedDocNames: seed.seedDocNames };
+
+  let modules: PipelineModule[];
+  if (existing.id === seed.id) {
+    const seedIds = new Set(seed.modules.map((m) => m.id));
+    modules = seed.modules.map((sm) => {
+      const em = existing.modules.find((m) => m.id === sm.id);
+      if (!em) return structuredClone(sm);
+      return {
+        ...sm,
+        cached: em.cached,
+        model: em.model ?? sm.model,
+        prompt: em.prompt ?? sm.prompt,
+        code: em.code ?? sm.code,
+      };
+    });
+    modules = [...modules, ...existing.modules.filter((m) => !seedIds.has(m.id))];
+  } else {
+    modules = next.modules.map((m) => {
+      const sm = seed.modules.find((s) => s.id === m.id);
+      if (!sm || (m.label === sm.label && m.note === sm.note)) return m;
+      return { ...m, label: sm.label, note: sm.note };
+    });
+  }
+
+  modules = syncAutoQuoteSteps(modules, next.models);
+  const changed =
+    modules.length !== next.modules.length || modules.some((m, i) => m !== next.modules[i]);
+  return changed ? { ...next, modules } : next;
 }
 
 // AI : idempotent — upsert every seeds/*.json project (+ ingest its source docs) that the
@@ -91,7 +116,7 @@ export async function ensureSeeded(store: Store): Promise<void> {
   for (const seed of allProjectSeeds()) {
     const existing = store.project(seed.project.id);
     if (!existing) {
-      store.saveProject(structuredClone(seed.project));
+      store.saveProject(migrateProjectModules(structuredClone(seed.project)));
       for (const spec of seed.docSpecs) {
         try {
           store.addDoc(spec.name, spec.type, await seedDocContent(spec), spec.label);
@@ -104,6 +129,10 @@ export async function ensureSeeded(store: Store): Promise<void> {
     // AI : backfill seedDocNames + module labels from seeds/*.json on existing projects.
     const synced = syncProjectFromSeed(existing, seed.project);
     if (synced !== existing) store.saveProject(synced);
+  }
+  for (const p of store.projects()) {
+    const migrated = migrateProjectModules(p);
+    if (migrated !== p) store.saveProject(migrated);
   }
 }
 

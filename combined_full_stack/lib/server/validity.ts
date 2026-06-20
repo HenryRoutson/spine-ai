@@ -6,6 +6,7 @@ import type {
   StructureModel,
   StructureModelId,
 } from "./types";
+import { hasQuoteField } from "./structure";
 
 export type InvalidKind = "io-mismatch" | "no-output";
 
@@ -18,7 +19,7 @@ export interface InvalidStep {
 
 export interface PipelineWarning {
   moduleId: ModuleId;
-  kind: "no-prompt";
+  kind: "no-prompt" | "quote-no-fields";
 }
 
 const LLM_KINDS: ModuleKind[] = ["llm", "llm-batch"];
@@ -50,11 +51,20 @@ export function computeInvalid(modules: PipelineModule[]): Map<ModuleId, Invalid
 }
 
 // AI : warnings don't block runs — empty LLM prompts fall back at runtime but should be visible.
-export function computeWarnings(modules: PipelineModule[]): Map<ModuleId, PipelineWarning> {
+export function computeWarnings(
+  modules: PipelineModule[],
+  models: StructureModel[] = [],
+): Map<ModuleId, PipelineWarning> {
   const warnings = new Map<ModuleId, PipelineWarning>();
   for (const m of modules) {
     if (LLM_KINDS.includes(m.kind) && !m.prompt?.trim()) {
       warnings.set(m.id, { moduleId: m.id, kind: "no-prompt" });
+    }
+    if (m.kind === "quote" && !isAutoQuoteStep(m) && m.outStructureId) {
+      const out = models.find((x) => x.id === m.outStructureId);
+      if (out && !hasQuoteField(out)) {
+        warnings.set(m.id, { moduleId: m.id, kind: "quote-no-fields" });
+      }
     }
   }
   return warnings;
@@ -117,4 +127,71 @@ export function canRunStep(modules: PipelineModule[], moduleId: ModuleId, hasInp
 
 export function modelName(models: StructureModel[], id?: StructureModelId): string | undefined {
   return models.find((m) => m.id === id)?.name;
+}
+
+export const AUTO_QUOTE_EXPLAINER =
+  "Auto-inserted when an LLM output includes quote fields. Same model in and out (e.g. AtomicRule): the LLM returns verbatim strings; this step links them to document spans. If rules look wrong, inspect the LLM step; if quotes won't click, inspect this step.";
+
+function llmEmitsQuotes(m: PipelineModule, models: StructureModel[]): boolean {
+  if (!LLM_KINDS.includes(m.kind) || !m.outStructureId) return false;
+  const out = models.find((x) => x.id === m.outStructureId);
+  return !!out && hasQuoteField(out);
+}
+
+export function isAutoQuoteStep(m: PipelineModule): boolean {
+  return (
+    m.kind === "quote" &&
+    (m.auto === true || m.id.startsWith("mod_quote_") || m.id === "mod_link_quotes")
+  );
+}
+
+function existingQuoteForLlm(modules: PipelineModule[], llmId: ModuleId): PipelineModule | undefined {
+  const i = modules.findIndex((m) => m.id === llmId);
+  if (i < 0) return undefined;
+  const next = modules[i + 1];
+  if (next?.kind === "quote" && isAutoQuoteStep(next)) return next;
+  return modules.find((m) => m.id === (`mod_quote_${llmId}` as ModuleId));
+}
+
+function modulesEqual(a: PipelineModule[], b: PipelineModule[]): boolean {
+  return a.length === b.length && a.every((m, i) => m === b[i] || JSON.stringify(m) === JSON.stringify(b[i]));
+}
+
+// AI : strip managed Link Quotes steps and re-insert immediately after each quote-emitting LLM.
+export function syncAutoQuoteSteps(
+  modules: PipelineModule[],
+  models: StructureModel[],
+): PipelineModule[] {
+  const stripped = modules.filter((m) => !isAutoQuoteStep(m));
+  const out: PipelineModule[] = [];
+
+  for (const m of stripped) {
+    out.push(m);
+    if (!llmEmitsQuotes(m, models) || !m.outStructureId) continue;
+    const outModel = models.find((x) => x.id === m.outStructureId)!;
+    const existing = existingQuoteForLlm(modules, m.id);
+    out.push({
+      id: (existing?.id ?? (`mod_quote_${m.id}` as ModuleId)) as ModuleId,
+      kind: "quote",
+      label: "Link Quotes",
+      auto: true,
+      note: `Auto · ${outModel.name} → ${outModel.name} · links LLM quote strings to source spans.`,
+      inStructureId: m.outStructureId,
+      outStructureId: m.outStructureId,
+      outIsList: !!m.outIsList || m.kind === "llm-batch",
+      cached: existing?.cached ?? true,
+      avgMs: existing?.avgMs ?? 12,
+      avgCostCents: 0,
+    });
+  }
+
+  return modulesEqual(modules, out) ? modules : out;
+}
+
+// AI : alias — store migration and server init use the same sync.
+export const insertMissingQuoteSteps = syncAutoQuoteSteps;
+
+export function migrateProjectModules(project: Project): Project {
+  const modules = syncAutoQuoteSteps(project.modules, project.models);
+  return modules === project.modules ? project : { ...project, modules };
 }

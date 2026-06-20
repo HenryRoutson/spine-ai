@@ -27,6 +27,7 @@ import type {
 } from "@/lib/types"
 import { DEFAULT_MODEL } from "@/lib/types"
 import { billingSeries } from "@/lib/billing"
+import { syncAutoQuoteSteps } from "@/lib/quote-steps"
 
 export type BillingAccountView = {
   balanceCents: number
@@ -264,9 +265,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     deleteProject,
     project,
     models: project.models,
-    setModels: (m) => patchProject({ models: m }),
+    setModels: (m) =>
+      patchProject({ models: m, modules: syncAutoQuoteSteps(project.modules, m) }),
     modules: project.modules,
-    setModules: (m) => patchProject({ modules: m }),
+    setModules: (m) => patchProject({ modules: syncAutoQuoteSteps(m, project.models) }),
     strategies: project.strategies,
     setStrategies: (s) => patchProject({ strategies: s }),
     model,
