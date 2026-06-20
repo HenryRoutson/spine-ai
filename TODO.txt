@@ -9,6 +9,8 @@ add option for rlm and placeholder for claude code.
 One of the important steps i havent yet investigated is AB testing, comparing which algorithm is better for different steps. 
 
 
+how does SOURCE DOCUMENT: work?
+
 
 
 make input and output clear. also prompt and response

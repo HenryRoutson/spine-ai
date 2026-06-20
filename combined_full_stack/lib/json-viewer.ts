@@ -3,7 +3,7 @@
 export const JSON_VIEWER_DEFAULT_VIEW_KEY = "auto-pipeline:json-viewer-default-view" as const
 export const JSON_VIEWER_SYNTAX_THEME_KEY = "auto-pipeline:json-viewer-syntax-theme" as const
 
-export type JsonViewerHumanViewId = "tree" | "table"
+export type JsonViewerHumanViewId = "tree" | "table" | "json"
 export type JsonViewerSyntaxThemeId = "app" | "vscode"
 
 export const JSON_VIEWER_HUMAN_VIEWS: readonly {
@@ -13,6 +13,7 @@ export const JSON_VIEWER_HUMAN_VIEWS: readonly {
 }[] = [
   { id: "tree", label: "Tree", description: "Indented outline — expand fields in place" },
   { id: "table", label: "Table", description: "Spreadsheet-style rows for list-shaped data" },
+  { id: "json", label: "JSON", description: "Compact syntax view with foldable blocks" },
 ] as const
 
 export const DEFAULT_JSON_VIEWER_HUMAN_VIEW: JsonViewerHumanViewId = "tree"

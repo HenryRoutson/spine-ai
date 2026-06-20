@@ -7,9 +7,11 @@ import { WindowHeader } from "@/components/window-header"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { PromptText } from "@/components/highlight"
+import { JsonHighlight, PromptText } from "@/components/highlight"
 import { JsonViewerEmbed } from "@/components/json-viewer"
+import { LlmCallDistribution } from "@/components/llm-call-distribution"
 import { cn } from "@/lib/utils"
+import { collectRunLlmCalls, llmCallsFromStep } from "@/lib/llm-distribution"
 import { Search, ChevronRight, Database, Cpu, Code2, Combine, FileCog, Zap, Maximize2, X } from "lucide-react"
 import type { ModuleKind } from "@/lib/types"
 
@@ -24,11 +26,66 @@ const KIND_ICON: Record<ModuleKind, typeof Cpu> = {
   output: ChevronRight,
 }
 
+// AI : llm steps use prompt/response wording; others use input/output
+const LLM_KINDS: ModuleKind[] = ["llm", "llm-batch"]
+
+function stepIoLabels(kind: ModuleKind) {
+  const isLlm = LLM_KINDS.includes(kind)
+  return {
+    inTitle: isLlm ? "Prompt" : "Input",
+    outTitle: isLlm ? "Response" : "Output",
+  }
+}
+
+type PopupPayload = { json?: string; text?: string; title: string }
+
+function IoSection({
+  title,
+  qualifier,
+  summary,
+  children,
+  onExpand,
+}: {
+  title: string
+  qualifier: "input" | "output"
+  summary?: string
+  children?: React.ReactNode
+  onExpand?: () => void
+}) {
+  return (
+    <div className="mt-2 pl-7">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+          {title}{" "}
+          <span className="normal-case text-muted-foreground/70">({qualifier})</span>
+        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          {summary && (
+            <span className="max-w-[200px] truncate font-mono text-[10px] text-muted-foreground/80">
+              {summary}
+            </span>
+          )}
+          {onExpand && (
+            <button
+              onClick={onExpand}
+              className="rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              title="Open in full-screen viewer"
+            >
+              <Maximize2 className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+      </div>
+      {children}
+    </div>
+  )
+}
+
 export function Logging() {
   const { runs, docs } = useStore()
   const [query, setQuery] = useState("")
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
-  const [popupJson, setPopupJson] = useState<string | null>(null)
+  const [popup, setPopup] = useState<PopupPayload | null>(null)
 
   const docName = (id?: string) => docs.find((d) => d.id === id)?.name ?? id ?? "—"
 
@@ -43,6 +100,7 @@ export function Logging() {
   })
 
   const active = runs.find((r) => r.id === selectedRun) ?? null
+  const activeLlmCalls = active ? collectRunLlmCalls(active.steps) : []
 
   return (
     <div className="flex h-full flex-col">
@@ -138,6 +196,10 @@ export function Logging() {
                   ))}
                 </div>
 
+                {activeLlmCalls.length > 0 && (
+                  <LlmCallDistribution calls={activeLlmCalls} />
+                )}
+
                 <div>
                   <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Step trace
@@ -145,6 +207,8 @@ export function Logging() {
                   <ol className="space-y-1.5">
                     {active.steps.map((step, i) => {
                       const Icon = KIND_ICON[step.kind] ?? Cpu
+                      const { inTitle, outTitle } = stepIoLabels(step.kind)
+                      const stepLlmCalls = llmCallsFromStep(step)
                       return (
                         <li
                           key={step.moduleId}
@@ -172,27 +236,47 @@ export function Logging() {
                               ${(step.costCents / 100).toFixed(4)}
                             </span>
                           </div>
-                          <div className="mt-1 pl-7 font-mono text-[10px] text-muted-foreground">
-                            <PromptText text={step.inputPreview} />
-                            <span className="inline-flex items-center gap-1">
-                              <ChevronRight className="inline h-3 w-3" /> {step.outputPreview}
-                            </span>
-                          </div>
-                          {step.outputJson && (
-                            <div className="relative mt-2">
-                              <JsonViewerEmbed
-                                json={step.outputJson}
-                                className="h-[300px] rounded border border-border"
-                              />
-                              <button
-                                onClick={() => setPopupJson(step.outputJson!)}
-                                className="absolute right-2 top-2 rounded bg-card/80 p-1 text-muted-foreground backdrop-blur-sm hover:text-foreground"
-                                title="Open in full-screen viewer"
-                              >
-                                <Maximize2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
+
+                          {stepLlmCalls.length > 0 && (
+                            <LlmCallDistribution calls={stepLlmCalls} compact />
                           )}
+
+                          <IoSection
+                            title={inTitle}
+                            qualifier="input"
+                            summary={compactPreview(step.inputPreview)}
+                            onExpand={() =>
+                              setPopup({
+                                text: step.inputPreview,
+                                title: `${inTitle} (input) · ${step.label}`,
+                              })
+                            }
+                          >
+                            <div className="rounded border border-border bg-muted/20 p-2 font-mono text-[10px] leading-snug whitespace-pre-wrap text-muted-foreground">
+                              <PromptText text={step.inputPreview} />
+                            </div>
+                          </IoSection>
+
+                          <IoSection
+                            title={outTitle}
+                            qualifier="output"
+                            summary={step.outputPreview}
+                            onExpand={() =>
+                              setPopup(
+                                step.outputJson
+                                  ? { json: step.outputJson, title: `${outTitle} (output) · ${step.label}` }
+                                  : { text: step.outputPreview, title: `${outTitle} (output) · ${step.label}` },
+                              )
+                            }
+                          >
+                            {step.outputJson ? (
+                              <div className="rounded border border-border bg-muted/20 p-2">
+                                <JsonHighlight json={step.outputJson} />
+                              </div>
+                            ) : (
+                              <p className="font-mono text-[10px] text-muted-foreground">{step.outputPreview}</p>
+                            )}
+                          </IoSection>
                         </li>
                       )
                     })}
@@ -204,28 +288,39 @@ export function Logging() {
         </div>
       </div>
 
-      {popupJson && createPortal(
+      {popup && createPortal(
         <div className="fixed inset-0 z-50 flex flex-col">
           <button
             aria-label="Close viewer"
             className="absolute inset-0 bg-background/70 backdrop-blur-sm"
-            onClick={() => setPopupJson(null)}
+            onClick={() => setPopup(null)}
           />
           <div className="relative m-6 flex flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
             <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-              <span className="font-mono text-xs text-muted-foreground">JSON output</span>
+              <span className="font-mono text-xs text-muted-foreground">{popup.title}</span>
               <button
-                onClick={() => setPopupJson(null)}
+                onClick={() => setPopup(null)}
                 className="rounded p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <JsonViewerEmbed json={popupJson} className="min-h-0 flex-1" />
+            {popup.json ? (
+              <JsonViewerEmbed json={popup.json} className="min-h-0 flex-1" />
+            ) : (
+              <div className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground">
+                <PromptText text={popup.text ?? ""} />
+              </div>
+            )}
           </div>
         </div>,
         document.body,
       )}
     </div>
   )
+}
+
+function compactPreview(text: string, max = 100): string {
+  const one = text.replace(/\s+/g, " ").trim()
+  return one.length <= max ? one : `${one.slice(0, max)}…`
 }

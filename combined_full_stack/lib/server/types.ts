@@ -126,6 +126,15 @@ export interface SourceQuote {
 
 export type RunStepStatus = "ok" | "cached" | "error";
 
+export type LlmCallStatus = "ok" | "error";
+
+// AI : one OpenRouter round-trip — feeds Logging length distributions.
+export interface LlmCallRecord {
+  inputChars: number;
+  outputChars: number;
+  status: LlmCallStatus;
+}
+
 export interface RunStep {
   moduleId: ModuleId;
   kind: ModuleKind;
@@ -137,6 +146,7 @@ export interface RunStep {
   inputPreview: string;
   outputPreview: string;
   outputJson?: string;
+  llmCalls?: LlmCallRecord[];
 }
 
 export interface PipelineRun {

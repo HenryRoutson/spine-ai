@@ -21,6 +21,7 @@ import { UsageLedger } from "./usage";
 import {
   DEFAULT_MODEL,
   type DocId,
+  type LlmCallRecord,
   type ModelId,
   type ModuleId,
   type PipelineModule,
@@ -116,6 +117,7 @@ interface ExecResult {
   preview: string;
   json?: string;
   inputPreview?: string; // AI : full LLM prompt when applicable (for HTML logging)
+  llmCalls?: LlmCallRecord[];
 }
 
 // AI : the per-kind executors. Real where possible; placeholders are clearly marked.
@@ -132,6 +134,7 @@ interface RunCtx {
   sourceDocId: DocId;
   prevModuleId?: ModuleId;
   reportSub?: (sub: StepSubProgress) => void;
+  stepLlmCalls?: LlmCallRecord[];
 }
 
 function materializeHints(m: PipelineModule, ctx: RunCtx, docId?: DocId, sourceText?: string) {
@@ -208,7 +211,8 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       const prompt = structuredLlmPrompt(userPrompt, schema);
       log.debug(`llm prompt built`, { promptChars: prompt.length, hasQuoteField: hasQuoteField(out) });
       ctx.reportSub?.({ label: "LLM call", current: 0, total: 1 });
-      const raw = await llmStructured(userPrompt, schema, { model: stepModel, ledger: ctx.ledger }, log.child("llm"));
+      ctx.stepLlmCalls = [];
+      const raw = await llmStructured(userPrompt, schema, { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls }, log.child("llm"));
       log.info(`llm response received`, { moduleId: m.id, items: Array.isArray(raw) ? raw.length : 1 });
       // AI : resolve quote strings → validated source-linked spans.
       let value: unknown = raw;
@@ -223,6 +227,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         preview: `${count} ${out.name} item(s) produced`,
         json: JSON.stringify(value, null, 2),
         inputPreview: prompt,
+        llmCalls: ctx.stepLlmCalls,
       };
     }
 
@@ -289,11 +294,12 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       const sampleUser = `${m.prompt ?? "Process the item."}\n\nITEM:\n${JSON.stringify(sampleItem, null, 2)}`;
       const samplePrompt = structuredLlmPrompt(sampleUser, schema);
       ctx.reportSub?.({ label: "LLM calls", current: 0, total: items.length });
+      ctx.stepLlmCalls = [];
       const rows = await llmBatchStructured(
         items,
         (item) => `${m.prompt ?? "Process the item."}\n\nITEM:\n${JSON.stringify(item, null, 2)}`,
         schema,
-        { model: stepModel, ledger: ctx.ledger },
+        { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls },
         2,
         log.child("llm-batch"),
         (current, total) => ctx.reportSub?.({ label: "LLM calls", current, total }),
@@ -308,6 +314,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
           items.length > 1
             ? `${samplePrompt}\n\n… same prompt × ${items.length} items`
             : samplePrompt,
+        llmCalls: ctx.stepLlmCalls,
       };
     }
 
@@ -458,6 +465,7 @@ export async function runPipeline(
         sub,
       });
     };
+    ctx.stepLlmCalls = undefined;
 
     const defaultInputPreview =
       i === 0 ? `${m.inputType} document` : modelById(project.models, m.inStructureId)?.name ?? "Any";
@@ -502,7 +510,7 @@ export async function runPipeline(
       }
     } catch (err) {
       status = "error";
-      result = { value: null, preview: (err as Error).message };
+      result = { value: null, preview: (err as Error).message, llmCalls: ctx.stepLlmCalls };
       log.error(`step failed`, { moduleId: m.id, kind: m.kind, error: (err as Error).message, stack: (err as Error).stack });
     }
 
@@ -539,6 +547,7 @@ export async function runPipeline(
       inputPreview: result.inputPreview ?? defaultInputPreview,
       outputPreview: result.preview,
       outputJson: result.json,
+      llmCalls: result.llmCalls?.length ? result.llmCalls : undefined,
     });
     await opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status });
     ctx.reportSub = undefined;

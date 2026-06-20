@@ -28,6 +28,8 @@ export interface ChatOptions {
   maxTokens?: number;
   // AI : fired with token counts after every successful call (feeds Logging + Billing).
   onUsage?: (usage: RawUsage) => void;
+  // AI : fired after every HTTP round-trip (ok or failed) for length distributions.
+  onRoundTrip?: (inputChars: number, outputChars: number, ok: boolean) => void;
 }
 
 // AI : bug fix — without an explicit cap OpenRouter reserves the model's max output (64k for
@@ -131,10 +133,12 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn, log
         if (RETRYABLE_STATUSES.has(res.status) && attempt < MAX_CHAT_ATTEMPTS - 1) {
           const delay = retryDelayMs(res, attempt);
           log.info(`retrying after delay`, { delayMs: delay, status: res.status });
+          opts.onRoundTrip?.(prompt.length, 0, false);
           await sleep(delay);
           continue;
         }
         log.error(`chat failed permanently`, { status: res.status, attempts: attempt + 1 });
+        opts.onRoundTrip?.(prompt.length, 0, false);
         throw new Error(`OpenRouter ${res.status}: ${lastError}`);
       }
       const data = (await res.json()) as {
@@ -144,6 +148,7 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn, log
       const content = data.choices?.[0]?.message?.content;
       if (typeof content !== "string") {
         log.error(`no message content in response`);
+        opts.onRoundTrip?.(prompt.length, 0, false);
         throw new Error("OpenRouter returned no message content");
       }
       const usage = {
@@ -152,9 +157,11 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn, log
       };
       log.info(`chat success`, { model, ...usage, replyChars: content.length, attempt: attempt + 1 });
       opts.onUsage?.(usage);
+      opts.onRoundTrip?.(prompt.length, content.length, true);
       return content as RawReply;
     }
     log.error(`exhausted all attempts`, { attempts: MAX_CHAT_ATTEMPTS, lastError: lastError.slice(0, 200) });
+    opts.onRoundTrip?.(prompt.length, 0, false);
     throw new Error(`OpenRouter failed after ${MAX_CHAT_ATTEMPTS} attempts: ${lastError}`);
   } finally {
     release();

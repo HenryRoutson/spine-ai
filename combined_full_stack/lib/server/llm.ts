@@ -5,7 +5,7 @@ import {
   type ChatOptions,
 } from "./openrouter_llm";
 import { type ServerLogger } from "./server_logger";
-import { type ModelId, slugFor } from "./types";
+import { type LlmCallRecord, type ModelId, slugFor } from "./types";
 import { type UsageLedger } from "./usage";
 
 // AI : single place to call the LLM with a demo ModelId — maps id→slug and bills the ledger.
@@ -14,6 +14,7 @@ interface CallContext {
   model: ModelId;
   ledger: UsageLedger;
   system?: string;
+  llmCalls?: LlmCallRecord[];
 }
 
 function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
@@ -24,6 +25,13 @@ function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
     onUsage: (u) => {
       log?.info(`token usage`, { model: ctx.model, ...u });
       ctx.ledger.recordLlm({ model: ctx.model, ...u });
+    },
+    onRoundTrip: (inputChars, outputChars, ok) => {
+      ctx.llmCalls?.push({
+        inputChars,
+        outputChars,
+        status: ok ? "ok" : "error",
+      });
     },
   };
 }
