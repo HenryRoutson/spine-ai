@@ -24,7 +24,7 @@ export function runToMarkdown(run: PipelineRun): string {
     `- **Status:** ${run.status}`,
     `- **Model:** ${run.model}`,
     `- **Total:** ${run.totalMs}ms · billed ${run.billedCents.toFixed(2)}c · saved ${run.savedCents.toFixed(2)}c`,
-    ``,
+    ...(run.notes ? [`- **Notes:** ${run.notes}`, ``] : []),
     `## Steps`,
     ``,
   ];

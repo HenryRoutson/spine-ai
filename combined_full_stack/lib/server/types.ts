@@ -164,6 +164,7 @@ export interface PipelineRun {
   model: ModelId;
   steps: RunStep[];
   inputDocId?: DocId;
+  notes?: string; // AI : freeform context for this run — set before or after inference
 }
 
 export interface BillingPoint {

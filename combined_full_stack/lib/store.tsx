@@ -74,6 +74,7 @@ interface StoreState {
   // runs / logs
   runs: PipelineRun[]
   addRun: (r: PipelineRun) => void
+  updateRunNotes: (runId: PipelineRun["id"], notes: string | undefined) => Promise<void>
   // billing (computed from real run history only)
   billing: BillingPoint[]
   billingAccount: BillingAccountView | null
@@ -227,6 +228,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setState((prev) => (prev ? { ...prev, runs: [r, ...prev.runs] } : prev))
   }, [])
 
+  const updateRunNotes = useCallback(async (runId: PipelineRun["id"], notes: string | undefined) => {
+    await api("/api/runs/" + runId, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes: notes ?? null }),
+    })
+    setState((prev) => {
+      if (!prev) return prev
+      const i = prev.runs.findIndex((r) => r.id === runId)
+      if (i < 0) return prev
+      const next = notes?.trim() ? notes.trim() : undefined
+      if (prev.runs[i].notes === next) return prev
+      const runs = [...prev.runs]
+      runs[i] = { ...runs[i], notes: next }
+      return { ...prev, runs }
+    })
+  }, [])
+
   const runs = state?.runs ?? []
   const billing = useMemo(() => billingSeries(runs), [runs])
 
@@ -277,6 +296,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     addDoc,
     runs,
     addRun,
+    updateRunNotes,
     billing,
     billingAccount,
     refreshBilling,

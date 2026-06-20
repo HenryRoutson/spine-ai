@@ -32,8 +32,10 @@ import { cn } from "@/lib/utils"
 import { defaultInferenceDoc } from "@/lib/project-docs"
 import { InputDocumentLink } from "@/components/input-document-link"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
+import { useRunNotesFlushOnLeave } from "@/lib/run-notes-flush"
 import { segmentPipeline } from "@/lib/pipeline-layout"
 import { useCyclingWaitPhrase } from "@/lib/inference-wait-phrases"
+import { RunNotesPad } from "@/components/run-notes-pad"
 
 type Phase = "idle" | "running" | "done"
 
@@ -58,7 +60,7 @@ function pipelineRunError(run: PipelineRun): string | null {
 }
 
 export function Inference() {
-  const { project, modules, model, addDoc, addRun, docs, refreshBilling } = useStore()
+  const { project, modules, model, addDoc, addRun, updateRunNotes, docs, refreshBilling } = useStore()
   const { setActiveWindow } = useAppShell()
   const { open } = useDocViewer()
   const pipelineInvalid = computeInvalid(modules).size > 0
@@ -72,7 +74,14 @@ export function Inference() {
   const [run, setRun] = useState<PipelineRun | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [debugLogs, setDebugLogs] = useState<JobLogEntry[]>([])
+  const [runNotes, setRunNotes] = useState("")
+  const runNotesRef = useRef("")
+  const savedNotesRef = useRef<string | undefined>(undefined)
   const logEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    runNotesRef.current = runNotes
+  }, [runNotes])
 
   const inputModules = modules.filter((m) => m.kind === "input")
 
@@ -84,7 +93,20 @@ export function Inference() {
     setRun(null)
     setError(null)
     setDebugLogs([])
+    setRunNotes("")
+    savedNotesRef.current = undefined
   }, [project.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useRunNotesFlushOnLeave(
+    phase === "done" ? run?.id : undefined,
+    runNotes,
+    run?.notes,
+    updateRunNotes,
+    (id, next) => {
+      savedNotesRef.current = next
+      setRun((r) => (r?.id === id ? { ...r, notes: next } : r))
+    },
+  )
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -108,6 +130,10 @@ export function Inference() {
 
   async function start() {
     if (!inputDoc) return
+    if (phase === "done") {
+      setRunNotes("")
+      runNotesRef.current = ""
+    }
     setPhase("running")
     setError(null)
     setRun(null)
@@ -120,8 +146,12 @@ export function Inference() {
         onStep: (steps) => setStepStates((prev) => mergeStepStates(prev, steps)),
         onLogs: (logs) => setDebugLogs(logs),
       })
-      setRun(finished)
-      addRun(finished)
+      const notes = runNotesRef.current.trim() || undefined
+      const withNotes = notes ? { ...finished, notes } : finished
+      savedNotesRef.current = notes
+      setRun(withNotes)
+      addRun(withNotes)
+      if (notes) updateRunNotes(finished.id, notes).catch(console.error)
       const runErr = pipelineRunError(finished)
       if (runErr) setError(runErr)
       setPhase("done")
@@ -137,6 +167,8 @@ export function Inference() {
     setRun(null)
     setError(null)
     setDebugLogs([])
+    setRunNotes("")
+    savedNotesRef.current = undefined
   }
 
   const progressPct = useMemo(() => {
@@ -295,6 +327,18 @@ export function Inference() {
                 </div>
               )}
             </div>
+
+            <RunNotesPad
+              value={runNotes}
+              onChange={setRunNotes}
+              hint={
+                phase === "done"
+                  ? "Saved when you leave this window"
+                  : phase === "running"
+                    ? "Add notes while the run finishes"
+                    : "Describe what you're testing before you run"
+              }
+            />
 
             <Button className="w-full" disabled={!inputDoc || phase === "running"} onClick={start}>
               {phase === "running" ? (

@@ -160,6 +160,24 @@ export class SupabaseStore implements Store {
     );
   }
 
+  updateRunNotes(runId: PipelineRun["id"], notes: string | undefined): boolean {
+    const i = this.state.runs.findIndex((r) => r.id === runId);
+    if (i < 0) return false;
+    const next = notes?.trim() ? notes.trim() : undefined;
+    const prev = this.state.runs[i].notes;
+    if (prev === next) return true;
+    const run = { ...this.state.runs[i], notes: next };
+    this.state.runs[i] = run;
+    const projectId = this.state.runProjects[runId];
+    this.pending.push(
+      this.db.from("runs").upsert(
+        { id: run.id, project_id: projectId, started_at: run.startedAt, data: run },
+        { onConflict: "user_id,id" },
+      ),
+    );
+    return true;
+  }
+
   // AI : await all queued writes; routes call this once before (or right after) responding.
   async flush(): Promise<void> {
     const results = await Promise.all(this.pending);

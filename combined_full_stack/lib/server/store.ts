@@ -71,6 +71,7 @@ export interface Store {
   addDoc(name: string, type: InputType, content: string, label: DocLabel): DocRef;
   runs(projectId?: ProjectId): PipelineRun[];
   addRun(projectId: ProjectId, run: PipelineRun): void;
+  updateRunNotes(runId: PipelineRun["id"], notes: string | undefined): boolean;
   flush(): Promise<void>;
 }
 
@@ -256,6 +257,17 @@ export class JsonStore implements Store {
     this.state.runProjects[run.id] = projectId;
     this.state.runs = [run, ...this.state.runs].slice(0, 100);
     this.persist();
+  }
+
+  updateRunNotes(runId: PipelineRun["id"], notes: string | undefined): boolean {
+    const i = this.state.runs.findIndex((r) => r.id === runId);
+    if (i < 0) return false;
+    const next = notes?.trim() ? notes.trim() : undefined;
+    const prev = this.state.runs[i].notes;
+    if (prev === next) return true;
+    this.state.runs[i] = { ...this.state.runs[i], notes: next };
+    this.persist();
+    return true;
   }
 }
 
