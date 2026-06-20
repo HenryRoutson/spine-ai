@@ -10,10 +10,17 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { JsonHighlight, PromptText } from "@/components/highlight"
 import { JsonViewerEmbed } from "@/components/json-viewer"
 import { LlmCallDistribution } from "@/components/llm-call-distribution"
+import { InputDocumentLink } from "@/components/input-document-link"
+import { OpenInDocumentsLink } from "@/components/open-in-documents"
+import { QuoteLinks, quotesFromJson } from "@/components/quote-links"
 import { cn } from "@/lib/utils"
+import { useDocViewer, type DocViewMode } from "@/lib/doc-viewer"
+import { useAppShell } from "@/lib/app-shell"
+import { stepDocId, stepDocLinkLabels } from "@/lib/step-doc"
 import { collectRunLlmCalls, llmCallsFromStep } from "@/lib/llm-distribution"
-import { Search, ChevronRight, Database, Cpu, Code2, Combine, FileCog, Zap, Maximize2, X } from "lucide-react"
-import type { ModuleKind } from "@/lib/types"
+import { timeAgo } from "@/lib/time-ago"
+import { Search, ChevronRight, Database, Cpu, Code2, Combine, FileCog, Zap, Maximize2, X, Link2 } from "lucide-react"
+import type { DocId, ModuleKind } from "@/lib/types"
 
 const KIND_ICON: Record<ModuleKind, typeof Cpu> = {
   input: Database,
@@ -45,13 +52,22 @@ function IoSection({
   summary,
   children,
   onExpand,
+  docLink,
 }: {
   title: string
   qualifier: "input" | "output"
   summary?: string
   children?: React.ReactNode
   onExpand?: () => void
+  docLink?: { docId: DocId; mode: DocViewMode; label: string }
 }) {
+  const { open } = useDocViewer()
+
+  function openDoc() {
+    if (!docLink) return
+    open({ docId: docLink.docId, start: 0, end: 0, mode: docLink.mode })
+  }
+
   return (
     <div className="mt-2 pl-7">
       <div className="mb-1 flex items-center justify-between gap-2">
@@ -60,10 +76,33 @@ function IoSection({
           <span className="normal-case text-muted-foreground/70">({qualifier})</span>
         </span>
         <div className="flex shrink-0 items-center gap-2">
-          {summary && (
-            <span className="max-w-[200px] truncate font-mono text-[10px] text-muted-foreground/80">
-              {summary}
-            </span>
+          {summary &&
+            (docLink ? (
+              <button
+                type="button"
+                onClick={openDoc}
+                className="max-w-[220px] truncate font-mono text-[10px] text-primary hover:underline"
+                title={docLink.label}
+              >
+                {summary}
+              </button>
+            ) : (
+              <span className="max-w-[200px] truncate font-mono text-[10px] text-muted-foreground/80">
+                {summary}
+              </span>
+            ))}
+          {docLink && (
+            <>
+              <button
+                type="button"
+                onClick={openDoc}
+                className="inline-flex items-center gap-1 font-mono text-[10px] text-primary hover:underline"
+              >
+                <Link2 className="h-3 w-3" />
+                {docLink.label}
+              </button>
+              <OpenInDocumentsLink docId={docLink.docId} label="store" />
+            </>
           )}
           {onExpand && (
             <button
@@ -76,7 +115,26 @@ function IoSection({
           )}
         </div>
       </div>
-      {children}
+      {docLink ? (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={openDoc}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault()
+              openDoc()
+            }
+          }}
+          className="cursor-pointer rounded border border-border bg-muted/20 p-2 font-mono text-[10px] leading-snug whitespace-pre-wrap text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5"
+        >
+          {children}
+        </div>
+      ) : (
+        <div className="rounded border border-border bg-muted/20 p-2 font-mono text-[10px] leading-snug whitespace-pre-wrap text-muted-foreground">
+          {children}
+        </div>
+      )}
     </div>
   )
 }
@@ -100,7 +158,9 @@ export function Logging() {
   })
 
   const active = runs.find((r) => r.id === selectedRun) ?? null
+  const activeSourceDoc = active?.inputDocId ? docs.find((d) => d.id === active.inputDocId) : undefined
   const activeLlmCalls = active ? collectRunLlmCalls(active.steps) : []
+  const popupQuotes = popup?.json ? quotesFromJson(popup.json) : []
 
   return (
     <div className="flex h-full flex-col">
@@ -132,16 +192,28 @@ export function Logging() {
               <ul className="divide-y divide-border">
                 {filtered.map((run) => (
                   <li key={run.id}>
-                    <button
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() => setSelectedRun(run.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          setSelectedRun(run.id)
+                        }
+                      }}
                       className={cn(
-                        "flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors hover:bg-accent",
+                        "flex w-full cursor-pointer flex-col gap-1 px-3 py-2.5 text-left transition-colors hover:bg-accent",
                         active?.id === run.id && "bg-accent",
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate font-mono text-xs">{docName(run.inputDocId)}</span>
-                        <Badge
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {run.inputDocId && (
+                            <OpenInDocumentsLink docId={run.inputDocId} label="store" className="text-[9px]" />
+                          )}
+                          <Badge
                           variant="outline"
                           className={cn(
                             "shrink-0 font-mono text-[10px]",
@@ -149,9 +221,10 @@ export function Logging() {
                               ? "border-primary/40 text-primary"
                               : "border-destructive/40 text-destructive",
                           )}
-                        >
-                          {run.status}
-                        </Badge>
+                          >
+                            {run.status}
+                          </Badge>
+                        </div>
                       </div>
                       <div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground">
                         <span>{run.model}</span>
@@ -160,9 +233,9 @@ export function Logging() {
                         </span>
                       </div>
                       <span className="font-mono text-[10px] text-muted-foreground">
-                        {new Date(run.startedAt).toLocaleTimeString()} · {run.id}
+                        {new Date(run.startedAt).toLocaleString()} · {timeAgo(run.startedAt)} · {run.id}
                       </span>
-                    </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -179,6 +252,8 @@ export function Logging() {
           ) : (
             <ScrollArea className="h-full">
               <div className="space-y-4 p-4">
+                {activeSourceDoc && <InputDocumentLink doc={activeSourceDoc} />}
+
                 <div className="grid grid-cols-4 gap-2">
                   {[
                     { label: "Latency", value: `${(active.totalMs / 1000).toFixed(1)}s` },
@@ -209,6 +284,12 @@ export function Logging() {
                       const Icon = KIND_ICON[step.kind] ?? Cpu
                       const { inTitle, outTitle } = stepIoLabels(step.kind)
                       const stepLlmCalls = llmCallsFromStep(step)
+                      const stepQuotes = quotesFromJson(step.outputJson)
+                      const stepDoc = stepDocId(step)
+                      const stepDocRef = stepDoc ? docs.find((d) => d.id === stepDoc) : undefined
+                      const stepDocLinks = stepDocLinkLabels(stepDocRef)
+                      const hasStepDocLink =
+                        !!stepDoc && (step.kind === "input" || step.kind === "doc-to-text")
                       return (
                         <li
                           key={step.moduleId}
@@ -245,6 +326,11 @@ export function Logging() {
                             title={inTitle}
                             qualifier="input"
                             summary={compactPreview(step.inputPreview)}
+                            docLink={
+                              hasStepDocLink
+                                ? { docId: stepDoc, ...stepDocLinks.input }
+                                : undefined
+                            }
                             onExpand={() =>
                               setPopup({
                                 text: step.inputPreview,
@@ -252,15 +338,18 @@ export function Logging() {
                               })
                             }
                           >
-                            <div className="rounded border border-border bg-muted/20 p-2 font-mono text-[10px] leading-snug whitespace-pre-wrap text-muted-foreground">
-                              <PromptText text={step.inputPreview} />
-                            </div>
+                            <PromptText text={step.inputPreview} />
                           </IoSection>
 
                           <IoSection
                             title={outTitle}
                             qualifier="output"
                             summary={step.outputPreview}
+                            docLink={
+                              hasStepDocLink
+                                ? { docId: stepDoc, ...stepDocLinks.output }
+                                : undefined
+                            }
                             onExpand={() =>
                               setPopup(
                                 step.outputJson
@@ -270,13 +359,15 @@ export function Logging() {
                             }
                           >
                             {step.outputJson ? (
-                              <div className="rounded border border-border bg-muted/20 p-2">
-                                <JsonHighlight json={step.outputJson} />
-                              </div>
+                              <JsonHighlight json={step.outputJson} />
                             ) : (
-                              <p className="font-mono text-[10px] text-muted-foreground">{step.outputPreview}</p>
+                              step.outputPreview
                             )}
                           </IoSection>
+
+                          {stepQuotes.length > 0 && (
+                            <QuoteLinks quotes={stepQuotes} className="mt-2 pl-7" />
+                          )}
                         </li>
                       )
                     })}
@@ -306,7 +397,10 @@ export function Logging() {
               </button>
             </div>
             {popup.json ? (
-              <JsonViewerEmbed json={popup.json} className="min-h-0 flex-1" />
+              <div className="flex min-h-0 flex-1 flex-col">
+                {popupQuotes.length > 0 && <QuoteLinks quotes={popupQuotes} className="border-b border-border px-4 py-3" />}
+                <JsonViewerEmbed json={popup.json} className="min-h-0 flex-1" />
+              </div>
             ) : (
               <div className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground">
                 <PromptText text={popup.text ?? ""} />

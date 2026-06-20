@@ -1,6 +1,6 @@
 import type { LlmCallRecord, RunStep } from "@/lib/types"
 
-export type LengthField = "inputChars" | "outputChars"
+export type MetricField = "inputChars" | "outputChars" | "latencyMs"
 
 export type ScatterPoint = {
   x: number
@@ -9,7 +9,7 @@ export type ScatterPoint = {
   index: number
 }
 
-export type LengthScatter = {
+export type MetricScatter = {
   points: ScatterPoint[]
   mean: number
   std: number
@@ -17,7 +17,7 @@ export type LengthScatter = {
   max: number
 }
 
-function lengthValues(calls: LlmCallRecord[], field: LengthField): number[] {
+function metricValues(calls: LlmCallRecord[], field: MetricField): number[] {
   return calls.map((c) => c[field])
 }
 
@@ -37,9 +37,9 @@ function jitterY(index: number, total: number, xKey: number): number {
   return Math.min(0.96, Math.max(0.04, band + wobble))
 }
 
-export function buildLengthScatter(calls: LlmCallRecord[], field: LengthField): LengthScatter | null {
+export function buildMetricScatter(calls: LlmCallRecord[], field: MetricField): MetricScatter | null {
   if (calls.length === 0) return null
-  const values = lengthValues(calls, field)
+  const values = metricValues(calls, field)
   const { mean, std } = distributionStats(values)
   const min = Math.min(...values)
   const max = Math.max(...values)
@@ -86,6 +86,32 @@ export function formatChars(n: number): string {
   return String(Math.round(n))
 }
 
+export function formatMs(n: number): string {
+  if (n >= 60000) return `${(n / 60000).toFixed(1)}m`
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}s`
+  return `${Math.round(n)}ms`
+}
+
+const METRIC_FORMAT: Record<MetricField, (n: number) => string> = {
+  inputChars: formatChars,
+  outputChars: formatChars,
+  latencyMs: formatMs,
+}
+
+const METRIC_AXIS: Record<MetricField, string> = {
+  inputChars: "chars",
+  outputChars: "chars",
+  latencyMs: "latency",
+}
+
+export function formatMetric(field: MetricField, n: number): string {
+  return METRIC_FORMAT[field](n)
+}
+
+export function metricAxisLabel(field: MetricField): string {
+  return METRIC_AXIS[field]
+}
+
 // AI : older runs without per-call telemetry — synthesize one point from step previews.
 export function llmCallsFromStep(step: RunStep): LlmCallRecord[] {
   if (step.llmCalls?.length) return step.llmCalls
@@ -95,6 +121,7 @@ export function llmCallsFromStep(step: RunStep): LlmCallRecord[] {
     {
       inputChars: step.inputPreview.length,
       outputChars: (step.outputJson ?? step.outputPreview).length,
+      latencyMs: step.ms,
       status: failed ? "error" : "ok",
     },
   ]

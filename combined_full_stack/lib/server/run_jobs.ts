@@ -41,12 +41,6 @@ function queueSupabasePersist(id: RunJobId, db: JobDb): void {
         .then(async () => {
           const job = jobs().get(id);
           if (!job) return;
-          jobLog.debug(`persist job → supabase`, {
-            jobId: id,
-            stepCount: job.steps.length,
-            hasRun: !!job.run,
-            error: job.error,
-          });
           await supabasePersistJob(db, id, job);
         });
       supabasePersistChains.set(id, next);
@@ -73,12 +67,6 @@ async function flushPersistChain(id: RunJobId, db: JobDb): Promise<void> {
   if (!db) return;
   const prev = supabasePersistChains.get(id) ?? Promise.resolve();
   await prev.catch(() => {});
-  jobLog.debug(`persist job → supabase (flush)`, {
-    jobId: id,
-    stepCount: job.steps.length,
-    hasRun: !!job.run,
-    error: job.error,
-  });
   await supabasePersistJob(db, id, job);
   supabasePersistChains.delete(id);
 }
@@ -88,7 +76,9 @@ const activeJob = new AsyncLocalStorage<ActiveJobCtx>();
 const logPersistTimers = new Map<RunJobId, ReturnType<typeof setTimeout>>();
 
 // AI : any ServerLogger emit inside withJobLogging() is mirrored into job.logs for the browser.
+// AI : skip run-jobs — persist debug lines were re-appended and re-triggered Supabase upserts forever.
 installJobLogSink((entry) => {
+  if (entry.tag === "run-jobs") return;
   const ctx = activeJob.getStore();
   if (ctx) void appendJobLog(ctx.jobId, entry, ctx.db);
 });
@@ -188,6 +178,9 @@ async function appendJobLog(id: RunJobId, entry: JobLogEntry, db: JobDb): Promis
   job.logs.push(entry);
   if (job.logs.length > MAX_JOB_LOGS) job.logs.splice(0, job.logs.length - MAX_JOB_LOGS);
   setJob(id, job);
+
+  // AI : terminal jobs were already flushed — don't schedule more Supabase upserts from stray logs.
+  if (job.run || job.error) return;
 
   flushLogPersistTimer(id);
   logPersistTimers.set(

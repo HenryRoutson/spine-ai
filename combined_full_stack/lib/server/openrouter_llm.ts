@@ -13,7 +13,11 @@ type RawReply = string & { __brand: "RawReply" };
 type JsonModeOn = boolean;
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_AUTH_KEY_URL = "https://openrouter.ai/api/v1/auth/key";
 const DEFAULT_MODEL = "deepseek/deepseek-chat" as ModelSlug;
+
+// AI : /models is public — only /auth/key proves the key can run inference (not mgmt/provisioning).
+let inferenceKeyCheck: Promise<void> | null = null;
 
 // AI : raw OpenRouter token counts, surfaced so callers can bill per call.
 export interface RawUsage {
@@ -28,8 +32,8 @@ export interface ChatOptions {
   maxTokens?: number;
   // AI : fired with token counts after every successful call (feeds Logging + Billing).
   onUsage?: (usage: RawUsage) => void;
-  // AI : fired after every HTTP round-trip (ok or failed) for length distributions.
-  onRoundTrip?: (inputChars: number, outputChars: number, ok: boolean) => void;
+  // AI : fired after every HTTP round-trip (ok or failed) for length + latency distributions.
+  onRoundTrip?: (inputChars: number, outputChars: number, ok: boolean, latencyMs: number) => void;
 }
 
 // AI : bug fix — without an explicit cap OpenRouter reserves the model's max output (64k for
@@ -84,13 +88,52 @@ function retryDelayMs(res: Response, attempt: number): number {
 }
 
 function apiKey(): ApiKey {
-  const key = process.env.OPENROUTER_API_KEY;
+  const key = process.env.OPENROUTER_API_KEY?.trim();
   if (!key) throw new Error("OPENROUTER_API_KEY missing — set it in the repo root .env");
   return key as ApiKey;
 }
 
+function openRouterAuthError(status: HttpStatus, body: string): Error {
+  if (status === 401 && body.includes("User not found")) {
+    return new Error(
+      "OpenRouter 401: inference key required — OPENROUTER_API_KEY is missing, revoked, or a Management/Provisioning key. " +
+        "Create a regular API key at https://openrouter.ai/settings/keys (not Management API Keys) and set it in the repo root .env, then restart the dev server.",
+    );
+  }
+  return new Error(`OpenRouter ${status}: ${body}`);
+}
+
+async function assertInferenceKey(log = orLog): Promise<void> {
+  if (!inferenceKeyCheck) {
+    inferenceKeyCheck = (async () => {
+      const res = await fetch(OPENROUTER_AUTH_KEY_URL, {
+        headers: { Authorization: `Bearer ${apiKey()}` },
+      });
+      if (res.ok) {
+        log.debug(`inference key validated`);
+        return;
+      }
+      const body = await res.text();
+      log.error(`inference key rejected`, { status: res.status, bodyPreview: body.slice(0, 200) });
+      throw openRouterAuthError(res.status, body);
+    })();
+  }
+  return inferenceKeyCheck;
+}
+
+function openRouterHeaders(key: ApiKey): Record<string, string> {
+  return {
+    Authorization: `Bearer ${key}`,
+    "Content-Type": "application/json",
+    // AI : optional attribution — OpenRouter docs recommend these for app discovery.
+    "HTTP-Referer": process.env.OPENROUTER_SITE_URL ?? "http://localhost:3000",
+    "X-Title": process.env.OPENROUTER_APP_TITLE ?? "forge",
+  };
+}
+
 // AI : single low-level call; jsonMode forces the model into strict json output
 async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn, log = orLog): Promise<RawReply> {
+  await assertInferenceKey(log);
   const model = opts.model ?? DEFAULT_MODEL;
   log.info(`chat request`, {
     model,
@@ -119,27 +162,26 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn, log
     let lastError = "";
     for (let attempt = 0; attempt < MAX_CHAT_ATTEMPTS; attempt++) {
       log.debug(`fetch attempt`, { attempt: attempt + 1, max: MAX_CHAT_ATTEMPTS });
+      const t0 = Date.now();
       const res = await fetch(OPENROUTER_URL, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey()}`,
-          "Content-Type": "application/json",
-        },
+        headers: openRouterHeaders(apiKey()),
         body,
       });
+      const latencyMs = Date.now() - t0;
       if (!res.ok) {
         lastError = await res.text();
         log.warn(`chat HTTP error`, { status: res.status, attempt: attempt + 1, bodyPreview: lastError.slice(0, 200) });
         if (RETRYABLE_STATUSES.has(res.status) && attempt < MAX_CHAT_ATTEMPTS - 1) {
           const delay = retryDelayMs(res, attempt);
           log.info(`retrying after delay`, { delayMs: delay, status: res.status });
-          opts.onRoundTrip?.(prompt.length, 0, false);
+          opts.onRoundTrip?.(prompt.length, 0, false, latencyMs);
           await sleep(delay);
           continue;
         }
         log.error(`chat failed permanently`, { status: res.status, attempts: attempt + 1 });
-        opts.onRoundTrip?.(prompt.length, 0, false);
-        throw new Error(`OpenRouter ${res.status}: ${lastError}`);
+        opts.onRoundTrip?.(prompt.length, 0, false, latencyMs);
+        throw openRouterAuthError(res.status, lastError);
       }
       const data = (await res.json()) as {
         choices?: { message?: { content?: string } }[];
@@ -148,7 +190,7 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn, log
       const content = data.choices?.[0]?.message?.content;
       if (typeof content !== "string") {
         log.error(`no message content in response`);
-        opts.onRoundTrip?.(prompt.length, 0, false);
+        opts.onRoundTrip?.(prompt.length, 0, false, latencyMs);
         throw new Error("OpenRouter returned no message content");
       }
       const usage = {
@@ -157,11 +199,11 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn, log
       };
       log.info(`chat success`, { model, ...usage, replyChars: content.length, attempt: attempt + 1 });
       opts.onUsage?.(usage);
-      opts.onRoundTrip?.(prompt.length, content.length, true);
+      opts.onRoundTrip?.(prompt.length, content.length, true, latencyMs);
       return content as RawReply;
     }
     log.error(`exhausted all attempts`, { attempts: MAX_CHAT_ATTEMPTS, lastError: lastError.slice(0, 200) });
-    opts.onRoundTrip?.(prompt.length, 0, false);
+    opts.onRoundTrip?.(prompt.length, 0, false, 0);
     throw new Error(`OpenRouter failed after ${MAX_CHAT_ATTEMPTS} attempts: ${lastError}`);
   } finally {
     release();

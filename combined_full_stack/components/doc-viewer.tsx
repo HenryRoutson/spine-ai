@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react"
 import { X, FileText, Loader2 } from "lucide-react"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { useStore } from "@/lib/store"
+import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { cn } from "@/lib/utils"
 import { JsonViewerEmbed } from "@/components/json-viewer"
+import type { DocId } from "@/lib/types"
 
 // AI : de-mocked — source text comes from GET /api/docs/:id/text (the stored content-hash
 // AI : file), not the hardcoded LEGAL_SOURCE_TEXT. Offsets are validated with an indexOf
@@ -27,20 +29,33 @@ export function DocViewer() {
   const [text, setText] = useState<string | null>(null)
   const [view, setView] = useState<ViewMode>("text")
 
-  const docType = target ? docs.find((d) => d.id === target.docId)?.type : undefined
-  const isPdf  = docType === "pdf"
+  const docRef = target ? docs.find((d) => d.id === target.docId) : undefined
+  const docType = docRef?.type
   const isJson = docType === "json"
+  const [hasPdf, setHasPdf] = useState(false)
+
+  useEffect(() => {
+    if (!target) return
+    setHasPdf(false)
+    fetch(`/api/docs/${target.docId}/file`, { method: "HEAD" })
+      .then((r) => setHasPdf(r.ok))
+      .catch(() => setHasPdf(false))
+  }, [target?.docId])
 
   useEffect(() => {
     if (!target) return
     setText(null)
-    // AI: JSON docs default to the interactive viewer; PDFs open as PDF when no selection
-    setView(isJson ? "json" : isPdf && target.start === target.end ? "pdf" : "text")
+    // AI: explicit mode wins; otherwise JSON docs default to the viewer and full PDFs open as PDF.
+    const openFullDoc = target.start === target.end
+    const preferPdf = openFullDoc && (docType === "pdf" || hasPdf)
+    setView(
+      target.mode ?? (isJson ? "json" : preferPdf ? "pdf" : "text"),
+    )
     fetch(`/api/docs/${target.docId}/text`)
       .then((r) => (r.ok ? r.json() : { text: `⚠ source not found for ${target.docId}` }))
       .then((d) => setText(d.text))
       .catch(() => setText("⚠ failed to load source document"))
-  }, [target?.docId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [target?.docId, target?.mode, docType, hasPdf, docRef?.name]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (target && text !== null && markRef.current) {
@@ -80,14 +95,15 @@ export function DocViewer() {
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-primary" />
             <div className="leading-tight">
-              <p className="text-sm font-semibold">Source Document</p>
+              <p className="text-sm font-semibold">{docRef?.name ?? "Source Document"}</p>
               <p className="font-mono text-[10px] text-muted-foreground">
-                {target.docId} · offset {span.start}–{span.end}
+                {target.docId}
+                {span.start !== span.end ? ` · offset ${span.start}–${span.end}` : hasPdf ? " · original PDF" : ""}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {(isPdf || isJson) && (
+            {(hasPdf || isJson) && (
               <div className="flex rounded-md border border-border p-0.5">
                 {(isJson ? (["json", "text"] as const) : (["text", "pdf"] as const)).map((m) => (
                   <button
@@ -151,12 +167,15 @@ export function DocViewer() {
             )}
           </div>
         )}
-        <div className="border-t border-border px-5 py-2.5 font-mono text-[10px] text-muted-foreground">
-          {view === "pdf"
-            ? "original document — stored beside its content-hashed extracted text"
-            : view === "json"
-            ? "interactive JSON viewer — tree · table"
-            : "validated text — extracted span linked to source via langextract-style offsets"}
+        <div className="flex items-center justify-between border-t border-border px-5 py-2.5 font-mono text-[10px] text-muted-foreground">
+          <span>
+            {view === "pdf"
+              ? "original document — stored beside its content-hashed extracted text"
+              : view === "json"
+              ? "interactive JSON viewer — tree · table"
+              : "validated text — extracted span linked to source via langextract-style offsets"}
+          </span>
+          <OpenInDocumentsLink docId={target.docId as DocId} label="saved in documents" className="shrink-0" />
         </div>
       </aside>
     </div>

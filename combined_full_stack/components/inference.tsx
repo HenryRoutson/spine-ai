@@ -11,20 +11,26 @@ import {
   RotateCcw,
   Link2,
   AlertTriangle,
+  Copy,
+  Check,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { awaitRun, mergeStepStates, startRun, type JobLogEntry, type StepProgress, type StepSubProgress, type StepUiState } from "@/lib/run-engine"
-import { collectQuotes } from "@/lib/quotes"
+import { collectQuotes, quoteHref } from "@/lib/quotes"
 import type { DocId, DocRef, ModuleId, PipelineRun, ProjectId } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
 import { JsonHighlight } from "@/components/highlight"
+import { QuoteButton, QuoteLinks } from "@/components/quote-links"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import { defaultInferenceDoc } from "@/lib/project-docs"
+import { InputDocumentLink } from "@/components/input-document-link"
+import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { segmentPipeline } from "@/lib/pipeline-layout"
+import { useCyclingWaitPhrase } from "@/lib/inference-wait-phrases"
 
 type Phase = "idle" | "running" | "done"
 
@@ -138,6 +144,30 @@ export function Inference() {
     return Math.round((done / Math.max(1, modules.length)) * 100)
   }, [phase, stepStates, modules.length])
 
+  const runningHints = useMemo(() => {
+    const hints: string[] = []
+    for (const seg of segmentPipeline(modules)) {
+      if (seg.kind === "combine") {
+        const combineUi = stepStates.get(seg.combine.id)
+        const inputUi = stepStates.get(seg.input.id)
+        if (combineUi?.status === "running") {
+          hints.push(combineUi.sub?.label ?? seg.combine.label)
+        }
+        if (inputUi?.status === "running") {
+          hints.push(inputUi.sub?.label ?? seg.input.label)
+        }
+        continue
+      }
+      const moduleUi = stepStates.get(seg.module.id)
+      if (moduleUi?.status === "running") {
+        hints.push(moduleUi.sub?.label ?? seg.module.label)
+      }
+    }
+    return hints
+  }, [stepStates, modules])
+
+  const waitPhrase = useCyclingWaitPhrase(phase === "running", runningHints)
+
   // AI : real outputs — rule cards from the extraction step, plus the final step's JSON.
   const parsedSteps = useMemo(() => {
     return (run?.steps ?? []).map((s) => {
@@ -155,6 +185,10 @@ export function Inference() {
   )
   const finalStep = useMemo(() => [...(run?.steps ?? [])].reverse().find((s) => s.outputJson), [run])
   const runErr = useMemo(() => (run ? pipelineRunError(run) : null), [run])
+  const sourceDoc = useMemo(() => {
+    const id = run?.inputDocId ?? inputDoc?.id
+    return id ? docs.find((d) => d.id === id) ?? inputDoc : inputDoc
+  }, [run?.inputDocId, inputDoc, docs])
 
   return (
     <div className="flex h-full flex-col">
@@ -210,14 +244,24 @@ export function Inference() {
               />
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" className="bg-transparent" onClick={useSample}>
                 <FileText className="mr-1.5 h-3.5 w-3.5" /> Use sample
               </Button>
               {inputDoc && (
-                <Badge variant="outline" className="gap-1.5 font-mono text-[10px]">
-                  <FileText className="h-3 w-3 text-primary" /> {inputDoc.name}
-                </Badge>
+                <div className="inline-flex max-w-full items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => open({ docId: inputDoc.id, start: 0, end: 0 })}
+                    className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] transition-colors hover:border-primary/40 hover:bg-primary/5"
+                    title="Open the input document used for this run"
+                  >
+                    <Link2 className="h-3 w-3 shrink-0 text-primary" />
+                    <FileText className="h-3 w-3 shrink-0 text-primary" />
+                    <span className="truncate">{inputDoc.name}</span>
+                  </button>
+                  <OpenInDocumentsLink docId={inputDoc.id} label="store" className="shrink-0 px-1" />
+                </div>
               )}
             </div>
 
@@ -227,15 +271,10 @@ export function Inference() {
               ) : (
                 <Zap className="mr-1.5 h-4 w-4" />
               )}
-              {phase === "running" ? "Running…" : "Run pipeline"}
+              {phase === "running" ? `${waitPhrase}…` : "Run pipeline"}
             </Button>
 
-            {error && (
-              <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
-                <p className="font-mono text-[11px] text-destructive">{error}</p>
-              </div>
-            )}
+            {error && <ErrorBanner text={error} />}
 
             {/* high-level progress (mirrors the Logging high-level view) */}
             {phase !== "idle" && (
@@ -247,6 +286,9 @@ export function Inference() {
                   <span className="font-mono text-[11px] text-primary">{progressPct}%</span>
                 </div>
                 <Progress value={progressPct} className="h-1.5" />
+                {phase === "running" && (
+                  <CyclingWaitPhrase phrase={waitPhrase} className="mt-3" />
+                )}
                 <div className="mt-4 space-y-2.5">
                   {segmentPipeline(modules).map((seg) => {
                     if (seg.kind === "combine") {
@@ -339,16 +381,26 @@ export function Inference() {
         {/* right: validated output */}
         <div className="min-h-0 overflow-y-auto">
           <div className="p-5">
-            {phase !== "done" || !run ? (
+            {phase === "running" ? (
+              <div className="flex h-full min-h-64 flex-col items-center justify-center gap-4 text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <div className="space-y-1.5">
+                  <CyclingWaitPhrase phrase={waitPhrase} className="text-sm text-foreground" />
+                  <p className="font-mono text-[10px] tabular-nums text-muted-foreground">{progressPct}% complete</p>
+                </div>
+              </div>
+            ) : phase !== "done" || !run ? (
               <div className="flex h-full min-h-64 flex-col items-center justify-center gap-2 text-center">
                 <Link2 className="h-6 w-6 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Output appears here after a run.</p>
                 <p className="max-w-xs font-mono text-[10px] text-muted-foreground">
-                  extracted text is validated — click any quote to jump to its source in the document
+                  run a pipeline, then open the input document or click any quote to jump to its source span
                 </p>
               </div>
             ) : (
               <div className="space-y-4">
+                {sourceDoc && <InputDocumentLink doc={sourceDoc} />}
+
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold">Validated Output</h3>
                   <Badge
@@ -362,12 +414,7 @@ export function Inference() {
                   </Badge>
                 </div>
 
-                {runErr && (
-                  <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2">
-                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
-                    <p className="font-mono text-[11px] text-destructive">{runErr}</p>
-                  </div>
-                )}
+                {runErr && <ErrorBanner text={runErr} />}
 
                 {rules.length > 0 && (
                   <div>
@@ -389,20 +436,20 @@ export function Inference() {
                           </div>
                           {r.description && <p className="text-xs text-foreground">{r.description}</p>}
                           {r.source?.quote && (
-                            <button
-                              onClick={() =>
-                                open({
-                                  docId: r.source!.quote.doc_id,
-                                  start: r.source!.quote.start,
-                                  end: r.source!.quote.end,
-                                  text: r.source!.text,
-                                })
-                              }
+                            <QuoteButton
                               className="mt-1.5 inline-flex items-start gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-left font-mono text-[10px] text-primary ring-1 ring-primary/20 transition-colors hover:bg-primary/20"
-                            >
-                              <Link2 className="mt-0.5 h-3 w-3 shrink-0" />
-                              <span className="line-clamp-1">&ldquo;{r.source.text}&rdquo;</span>
-                            </button>
+                              quote={{
+                                text: r.source.text,
+                                doc_id: r.source.quote.doc_id as DocId,
+                                start: r.source.quote.start,
+                                end: r.source.quote.end,
+                                href: quoteHref({
+                                  docId: r.source.quote.doc_id as DocId,
+                                  start: r.source.quote.start,
+                                  end: r.source.quote.end,
+                                }),
+                              }}
+                            />
                           )}
                         </div>
                       ))}
@@ -411,23 +458,7 @@ export function Inference() {
                 )}
 
                 {rules.length === 0 && quotes.length > 0 && (
-                  <div>
-                    <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      source-linked quotes · click to verify
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {quotes.map((q) => (
-                        <button
-                          key={q.href}
-                          onClick={() => open({ docId: q.doc_id, start: q.start, end: q.end, text: q.text })}
-                          className="inline-flex items-start gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-left font-mono text-[10px] text-primary ring-1 ring-primary/20 transition-colors hover:bg-primary/20"
-                        >
-                          <Link2 className="mt-0.5 h-3 w-3 shrink-0" />
-                          <span className="line-clamp-1">&ldquo;{q.text}&rdquo;</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <QuoteLinks quotes={quotes} />
                 )}
 
                 {finalStep?.outputJson && (
@@ -445,6 +476,46 @@ export function Inference() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function CyclingWaitPhrase({ phrase, className }: { phrase: string; className?: string }) {
+  return (
+    <p
+      key={phrase}
+      className={cn(
+        "animate-in fade-in duration-500 font-mono text-[11px] text-muted-foreground",
+        className,
+      )}
+    >
+      {phrase}…
+    </p>
+  )
+}
+
+function ErrorBanner({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+
+  async function copyError() {
+    await navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+      <p className="min-w-0 flex-1 font-mono text-[11px] text-destructive">{text}</p>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-6 shrink-0 gap-1 bg-transparent px-2 text-[10px]"
+        onClick={() => void copyError()}
+      >
+        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        {copied ? "Copied" : "Copy error"}
+      </Button>
     </div>
   )
 }

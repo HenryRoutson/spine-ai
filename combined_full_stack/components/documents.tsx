@@ -1,14 +1,16 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useRef, useState, useEffect } from "react"
 import { useStore } from "@/lib/store"
 import { useDocViewer } from "@/lib/doc-viewer"
+import { useAppShell } from "@/lib/app-shell"
 import { WindowHeader } from "@/components/window-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
+import { timeAgo } from "@/lib/time-ago"
 import {
   UploadCloud,
   FileText,
@@ -35,11 +37,23 @@ const TYPE_ICON: Record<InputType, typeof FileText> = {
 export function Documents() {
   const { docs, addDoc } = useStore()
   const { open } = useDocViewer()
+  const { focusDocId, clearFocusDoc } = useAppShell()
   const fileRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<DocLabel | "all">("all")
   const [dragOver, setDragOver] = useState(false)
   const [lastDedup, setLastDedup] = useState<string | null>(null)
+
+  // AI : scroll to and highlight a doc when opened from Inference / Logging links.
+  useEffect(() => {
+    if (!focusDocId) return
+    setFilter("all")
+    setQuery("")
+    const t = window.setTimeout(() => {
+      document.getElementById(`doc-row-${focusDocId}`)?.scrollIntoView({ behavior: "smooth", block: "center" })
+    }, 50)
+    return () => window.clearTimeout(t)
+  }, [focusDocId])
 
   // AI : de-mocked — files go through POST /api/docs (server hashes + parses PDFs);
   // AI : dedup when the returned content hash already exists in the store.
@@ -140,7 +154,12 @@ export function Documents() {
             return (
               <li
                 key={doc.id + doc.name}
-                className="flex items-center gap-3 rounded-md px-2 py-2.5 hover:bg-accent"
+                id={`doc-row-${doc.id}`}
+                onClick={() => focusDocId === doc.id && clearFocusDoc()}
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-2 py-2.5 hover:bg-accent",
+                  focusDocId === doc.id && "bg-primary/10 ring-1 ring-primary/30",
+                )}
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-card">
                   <Icon className="h-4 w-4 text-primary" />
@@ -164,7 +183,9 @@ export function Documents() {
                       {doc.id}
                     </span>
                     <span>{doc.sizeKb} KB</span>
-                    <span>{new Date(doc.uploadedAt).toLocaleDateString()}</span>
+                    <span>
+                      {new Date(doc.uploadedAt).toLocaleString()} · {timeAgo(doc.uploadedAt)}
+                    </span>
                   </p>
                 </div>
                 <Button

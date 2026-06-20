@@ -6,11 +6,14 @@
 
 import { createContext, useContext, useState, type ReactNode } from "react"
 
+export type DocViewMode = "pdf" | "text" | "json"
+
 export interface DocJumpTarget {
   docId: string
   start: number
   end: number
   text?: string // expected quote text — guard rail for stale offsets
+  mode?: DocViewMode // AI : force original pdf vs converted text when opening a full doc
 }
 
 interface DocViewerState {

@@ -83,6 +83,24 @@ export class SupabaseStore implements Store {
     );
   }
 
+  deleteProject(id: ProjectId): boolean {
+    if (this.state.projects.length <= 1) return false;
+    const i = this.state.projects.findIndex((p) => p.id === id);
+    if (i === -1) return false;
+    this.state.projects.splice(i, 1);
+    const runIds = new Set(
+      Object.entries(this.state.runProjects)
+        .filter(([, pid]) => pid === id)
+        .map(([rid]) => rid),
+    );
+    this.state.runs = this.state.runs.filter((r) => !runIds.has(r.id));
+    for (const rid of runIds) delete this.state.runProjects[rid];
+    this.pending.push(this.db.from("projects").delete().eq("id", id));
+    if (runIds.size)
+      this.pending.push(this.db.from("runs").delete().eq("project_id", id));
+    return true;
+  }
+
   docs(): DocRef[] {
     return this.state.docs;
   }

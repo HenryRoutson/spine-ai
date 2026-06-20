@@ -35,7 +35,7 @@ export async function pdfFilePath(id: DocId): Promise<string | undefined> {
   if (existsSync(path)) return path;
   for (const seed of allProjectSeeds()) {
     for (const spec of seed.docSpecs) {
-      if (spec.type !== "pdf") continue;
+      // AI : match by extracted-text hash — seed docs may be typed "text" while still shipping a PDF sidecar.
       const txtSidecar = spec.path.replace(/\.pdf$/i, ".txt");
       if (!existsSync(txtSidecar)) continue;
       if (hashContent(readFileSync(txtSidecar, "utf8")) !== id) continue;
@@ -63,6 +63,7 @@ export interface Store {
   projects(): Project[];
   project(id: ProjectId): Project | undefined;
   saveProject(p: Project): void;
+  deleteProject(id: ProjectId): boolean;
   docs(): DocRef[];
   docContent(id: DocId): string | undefined;
   addDoc(name: string, type: InputType, content: string, label: DocLabel): DocRef;
@@ -166,6 +167,22 @@ export class JsonStore implements Store {
     if (i === -1) this.state.projects.push(p);
     else this.state.projects[i] = p;
     this.persist();
+  }
+
+  deleteProject(id: ProjectId): boolean {
+    if (this.state.projects.length <= 1) return false;
+    const i = this.state.projects.findIndex((p) => p.id === id);
+    if (i === -1) return false;
+    this.state.projects.splice(i, 1);
+    const runIds = new Set(
+      Object.entries(this.state.runProjects)
+        .filter(([, pid]) => pid === id)
+        .map(([rid]) => rid),
+    );
+    this.state.runs = this.state.runs.filter((r) => !runIds.has(r.id));
+    for (const rid of runIds) delete this.state.runProjects[rid];
+    this.persist();
+    return true;
   }
 
   docs(): DocRef[] {

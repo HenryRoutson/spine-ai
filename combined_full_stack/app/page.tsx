@@ -14,12 +14,14 @@ import {
   LogOut,
   UserRound,
   Pencil,
+  Trash2,
   ArrowLeft,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { StoreProvider, useStore } from "@/lib/store"
 import { createClient } from "@/utils/supabase/client"
 import { DocViewerProvider } from "@/lib/doc-viewer"
+import { AppShellProvider, useAppShell, type AppWindowId } from "@/lib/app-shell"
 import { ModelSelector } from "@/components/model-selector"
 import { DocViewer } from "@/components/doc-viewer"
 import { StructureBuilder } from "@/components/structure-builder"
@@ -46,14 +48,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 // AI : marketing site lives on a separate deploy from the app
 const LANDING_PAGE_URL = "https://auto-pipeline.dev/"
 
-type WindowId =
-  | "structure"
-  | "pipeline"
-  | "inference"
-  | "logging"
-  | "documents"
-  | "billing"
-  | "settings"
+type WindowId = AppWindowId
 
 const WINDOWS: { id: WindowId; label: string; hint: string; icon: typeof Boxes }[] = [
   { id: "structure", label: "Structure", hint: "01", icon: Boxes },
@@ -66,9 +61,10 @@ const WINDOWS: { id: WindowId; label: string; hint: string; icon: typeof Boxes }
 ]
 
 function ProjectSelector() {
-  const { projects, project, setActiveProjectId, addProject, renameProject } = useStore()
+  const { projects, project, setActiveProjectId, addProject, renameProject, deleteProject } = useStore()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
+  const canDelete = projects.length > 1
 
   function startRename(id: string, name: string) {
     setEditingId(id)
@@ -137,6 +133,22 @@ function ProjectSelector() {
                   >
                     <Pencil className="h-3 w-3" />
                   </Button>
+                  {canDelete && (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 text-destructive opacity-0 hover:text-destructive group-hover:opacity-100"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        deleteProject(p.id)
+                      }}
+                      aria-label={`Delete ${p.name}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  )}
                   {p.id === project.id && <Check className="h-3.5 w-3.5 text-primary" />}
                 </div>
               </>
@@ -195,13 +207,13 @@ function AccountMenu() {
 }
 
 function Shell() {
-  const [active, setActive] = useState<WindowId>("structure")
+  const { activeWindow, setActiveWindow } = useAppShell()
   const { model, setModel } = useStore()
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.has("session_id") || params.has("canceled")) setActive("billing")
-  }, [])
+    if (params.has("session_id") || params.has("canceled")) setActiveWindow("billing")
+  }, [setActiveWindow])
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
@@ -241,11 +253,11 @@ function Shell() {
         <nav className="flex w-14 flex-col items-center gap-1 border-r border-border py-3 lg:w-44 lg:items-stretch lg:px-2">
           {WINDOWS.map((w) => {
             const Icon = w.icon
-            const isActive = active === w.id
+            const isActive = activeWindow === w.id
             return (
               <button
                 key={w.id}
-                onClick={() => setActive(w.id)}
+                onClick={() => setActiveWindow(w.id)}
                 title={w.label}
                 className={cn(
                   "group flex items-center gap-3 rounded-md px-2.5 py-2 text-sm transition-colors",
@@ -276,13 +288,13 @@ function Shell() {
         </nav>
 
         <main className="flex-1 overflow-hidden">
-          {active === "structure" && <StructureBuilder />}
-          {active === "pipeline" && <PipelineBuilder />}
-          {active === "inference" && <Inference />}
-          {active === "logging" && <Logging />}
-          {active === "documents" && <Documents />}
-          {active === "billing" && <Billing />}
-          {active === "settings" && <SettingsPanel />}
+          {activeWindow === "structure" && <StructureBuilder />}
+          {activeWindow === "pipeline" && <PipelineBuilder />}
+          {activeWindow === "inference" && <Inference />}
+          {activeWindow === "logging" && <Logging />}
+          {activeWindow === "documents" && <Documents />}
+          {activeWindow === "billing" && <Billing />}
+          {activeWindow === "settings" && <SettingsPanel />}
         </main>
       </div>
 
@@ -295,7 +307,9 @@ export default function Page() {
   return (
     <StoreProvider>
       <DocViewerProvider>
-        <Shell />
+        <AppShellProvider>
+          <Shell />
+        </AppShellProvider>
       </DocViewerProvider>
     </StoreProvider>
   )

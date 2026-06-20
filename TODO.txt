@@ -11,6 +11,13 @@ One of the important steps i havent yet investigated is AB testing, comparing wh
 
 how does SOURCE DOCUMENT: work?
 
+SOURCE DOCUMENT: needs to be highlighted in logging.  need a quote step to add which handles stuff.
+
+
+setup as an agent API, decouple UI
+
+
+
 
 
 make input and output clear. also prompt and response

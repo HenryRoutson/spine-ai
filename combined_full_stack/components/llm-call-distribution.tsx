@@ -3,10 +3,11 @@
 import { useMemo } from "react"
 import type { LlmCallRecord } from "@/lib/types"
 import {
-  buildLengthScatter,
-  formatChars,
+  buildMetricScatter,
+  formatMetric,
+  metricAxisLabel,
   normalCurvePoints,
-  type LengthField,
+  type MetricField,
 } from "@/lib/llm-distribution"
 
 const W = 300
@@ -29,22 +30,23 @@ function yScale(v: number, plotH: number): number {
   return PAD.t + plotH - v * plotH
 }
 
-function LengthScatterChart({
+function MetricScatterChart({
   title,
   field,
   calls,
 }: {
   title: string
-  field: LengthField
+  field: MetricField
   calls: LlmCallRecord[]
 }) {
-  const scatter = useMemo(() => buildLengthScatter(calls, field), [calls, field])
+  const scatter = useMemo(() => buildMetricScatter(calls, field), [calls, field])
   if (!scatter) return null
 
   const plotW = W - PAD.l - PAD.r
   const plotH = H - PAD.t - PAD.b
   const curveH = plotH * 0.38
   const curve = normalCurvePoints(scatter.mean, scatter.std, scatter.min, scatter.max, 1, 40)
+  const fmt = (n: number) => formatMetric(field, n)
 
   const meanX = xScale(scatter.min, scatter.max, scatter.mean)
   const stdLo = xScale(scatter.min, scatter.max, scatter.mean - scatter.std)
@@ -59,7 +61,7 @@ function LengthScatterChart({
           {title}
         </span>
         <span className="font-mono text-[9px] text-muted-foreground">
-          μ={formatChars(scatter.mean)} · σ={formatChars(scatter.std)} · n={calls.length}
+          μ={fmt(scatter.mean)} · σ={fmt(scatter.std)} · n={calls.length}
         </span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="h-[120px] w-full text-border" aria-hidden>
@@ -138,7 +140,7 @@ function LengthScatterChart({
           )
         })}
         <text x={plotX + 2} y={H - 5} fill={STAT} fontSize={8} fontFamily="ui-monospace, monospace">
-          {formatChars(scatter.min)}
+          {fmt(scatter.min)}
         </text>
         <text
           x={plotX + plotW - 2}
@@ -148,7 +150,7 @@ function LengthScatterChart({
           fontFamily="ui-monospace, monospace"
           textAnchor="end"
         >
-          {formatChars(scatter.max)}
+          {fmt(scatter.max)}
         </text>
         <text
           x={W / 2}
@@ -158,7 +160,7 @@ function LengthScatterChart({
           fontFamily="ui-monospace, monospace"
           textAnchor="middle"
         >
-          chars
+          {metricAxisLabel(field)}
         </text>
       </svg>
     </div>
@@ -188,7 +190,7 @@ export function LlmCallDistribution({
       {!compact && (
         <div className="mb-3 flex items-center justify-between gap-2 border-b border-border pb-2">
           <h4 className="font-mono text-[10px] font-medium uppercase tracking-wide text-foreground">
-            LLM call lengths
+            LLM call distributions
           </h4>
           <span className="font-mono text-[9px] text-muted-foreground">
             <span className="text-[#22c55e]">{ok} ok</span>
@@ -203,7 +205,7 @@ export function LlmCallDistribution({
       )}
       {compact && (
         <p className="mb-2 font-mono text-[10px] text-muted-foreground">
-          Call lengths ·{" "}
+          Call distributions ·{" "}
           <span className="text-[#22c55e]">{ok} ok</span>
           {failed > 0 && (
             <>
@@ -213,9 +215,10 @@ export function LlmCallDistribution({
           )}
         </p>
       )}
-      <div className="flex flex-col gap-3 sm:flex-row sm:gap-3">
-        <LengthScatterChart title="Input (chars)" field="inputChars" calls={calls} />
-        <LengthScatterChart title="Output (chars)" field="outputChars" calls={calls} />
+      <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:gap-3">
+        <MetricScatterChart title="Input (chars)" field="inputChars" calls={calls} />
+        <MetricScatterChart title="Output (chars)" field="outputChars" calls={calls} />
+        <MetricScatterChart title="Response latency" field="latencyMs" calls={calls} />
       </div>
       <p className="mt-2 font-mono text-[9px] text-muted-foreground/70">
         Each dot = one call · green = ok · red = failed · gray = μ ± σ

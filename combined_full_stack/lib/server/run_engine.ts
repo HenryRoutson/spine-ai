@@ -117,6 +117,7 @@ interface ExecResult {
   preview: string;
   json?: string;
   inputPreview?: string; // AI : full LLM prompt when applicable (for HTML logging)
+  docId?: DocId;
   llmCalls?: LlmCallRecord[];
 }
 
@@ -173,7 +174,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       const hints = materializeHints(m, ctx, docId, content);
       const value = materializeStepOutput(m, project, { doc_id: docId, body: content }, hints);
       ctx.outputs.set(m.id, value);
-      return { value, preview: `loaded ${m.inputType} → ${docId ?? "(none)"}` };
+      return { value, preview: `loaded ${m.inputType} → ${docId ?? "(none)"}`, docId };
     }
 
     case "doc-to-text": {
@@ -193,6 +194,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         value,
         preview: `purpose: ${purpose}`,
         json: JSON.stringify({ doc_id: docId, purpose, chars: body.length }, null, 2),
+        docId,
       };
     }
 
@@ -547,6 +549,7 @@ export async function runPipeline(
       inputPreview: result.inputPreview ?? defaultInputPreview,
       outputPreview: result.preview,
       outputJson: result.json,
+      docId: result.docId,
       llmCalls: result.llmCalls?.length ? result.llmCalls : undefined,
     });
     await opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status });

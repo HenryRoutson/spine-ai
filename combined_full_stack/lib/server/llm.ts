@@ -26,10 +26,11 @@ function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
       log?.info(`token usage`, { model: ctx.model, ...u });
       ctx.ledger.recordLlm({ model: ctx.model, ...u });
     },
-    onRoundTrip: (inputChars, outputChars, ok) => {
+    onRoundTrip: (inputChars, outputChars, ok, latencyMs) => {
       ctx.llmCalls?.push({
         inputChars,
         outputChars,
+        latencyMs,
         status: ok ? "ok" : "error",
       });
     },

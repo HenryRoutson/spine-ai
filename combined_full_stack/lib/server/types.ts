@@ -128,10 +128,11 @@ export type RunStepStatus = "ok" | "cached" | "error";
 
 export type LlmCallStatus = "ok" | "error";
 
-// AI : one OpenRouter round-trip — feeds Logging length distributions.
+// AI : one OpenRouter round-trip — feeds Logging length + latency distributions.
 export interface LlmCallRecord {
   inputChars: number;
   outputChars: number;
+  latencyMs: number;
   status: LlmCallStatus;
 }
 
@@ -146,6 +147,7 @@ export interface RunStep {
   inputPreview: string;
   outputPreview: string;
   outputJson?: string;
+  docId?: DocId; // AI : source doc for input / doc-to-text steps — powers logging trace links
   llmCalls?: LlmCallRecord[];
 }
 
