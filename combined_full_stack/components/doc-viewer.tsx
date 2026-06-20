@@ -125,7 +125,7 @@ export function DocViewer() {
               <span className="font-mono text-[11px]">loading source…</span>
             </div>
           ) : (
-            // AI: full interactive viewer — tree / cards / table modes via the embedded iframe
+            // AI: full interactive viewer — tree / table modes via the embedded iframe
             <JsonViewerEmbed json={text} className="min-h-0 flex-1" />
           )
         ) : (
@@ -155,7 +155,7 @@ export function DocViewer() {
           {view === "pdf"
             ? "original document — stored beside its content-hashed extracted text"
             : view === "json"
-            ? "interactive JSON viewer — tree · cards · table"
+            ? "interactive JSON viewer — tree · table"
             : "validated text — extracted span linked to source via langextract-style offsets"}
         </div>
       </aside>

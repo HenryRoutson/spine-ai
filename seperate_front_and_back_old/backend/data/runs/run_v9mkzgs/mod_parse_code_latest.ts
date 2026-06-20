@@ -1,1 +1,0 @@
-(d) => JSON.parse(d.body)

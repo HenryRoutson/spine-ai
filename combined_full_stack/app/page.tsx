@@ -8,6 +8,7 @@ import {
   ScrollText,
   Files,
   CreditCard,
+  Settings,
   Plus,
   Check,
   LogOut,
@@ -28,6 +29,7 @@ import { Inference } from "@/components/inference"
 import { Logging } from "@/components/logging"
 import { Documents } from "@/components/documents"
 import { Billing } from "@/components/billing"
+import { Settings as SettingsPanel } from "@/components/settings"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,6 +53,7 @@ type WindowId =
   | "logging"
   | "documents"
   | "billing"
+  | "settings"
 
 const WINDOWS: { id: WindowId; label: string; hint: string; icon: typeof Boxes }[] = [
   { id: "structure", label: "Structure", hint: "01", icon: Boxes },
@@ -59,6 +62,7 @@ const WINDOWS: { id: WindowId; label: string; hint: string; icon: typeof Boxes }
   { id: "logging", label: "Logging", hint: "04", icon: ScrollText },
   { id: "documents", label: "Documents", hint: "05", icon: Files },
   { id: "billing", label: "Billing", hint: "06", icon: CreditCard },
+  { id: "settings", label: "Settings", hint: "07", icon: Settings },
 ]
 
 function ProjectSelector() {
@@ -278,6 +282,7 @@ function Shell() {
           {active === "logging" && <Logging />}
           {active === "documents" && <Documents />}
           {active === "billing" && <Billing />}
+          {active === "settings" && <SettingsPanel />}
         </main>
       </div>
 

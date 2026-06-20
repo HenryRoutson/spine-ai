@@ -8,25 +8,45 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #f5f5f3;
-  --surface: #fff;
-  --border: #e4e4e1;
-  --text: #1a1a1a;
-  --muted: #888;
-  --accent: #2563eb;
+  /* AI: aligned with app/globals.css (:root dark palette) */
+  --bg: #25262b;
+  --surface: #2d2e33;
+  --surface-2: #35363c;
+  --border: #3f4048;
+  --text: #f2f2f4;
+  --muted: #9a9aa6;
+  --accent: #6ee7a8;
+  --accent-fg: #1a1b1e;
   --radius: 8px;
-  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+  --shadow: 0 1px 3px rgba(0,0,0,.28), 0 1px 2px rgba(0,0,0,.18);
 
-  --jbg:    #1a1a1a;
-  --jkey:   #9cdcfe;
-  --jstr:   #ce9178;
-  --jnum:   #b5cea8;
-  --jbool:  #569cd6;
-  --jnull:  #9ca3af;
-  --jdate:  #4ec9b0;
-  --jpunct: #d4d4d4;
-  --jell:   #6a9955;
-  --jfa:    #666;
+  --th-bg: #2a3140;
+  --th-border: #3d4656;
+  --td-stripe: rgba(255,255,255,.025);
+  --td-hover: rgba(110,231,168,.07);
+
+  --jbg: #1e1f23;
+  --jkey: #9cdcfe;
+  --jstr: #ce9178;
+  --jnum: #b5cea8;
+  --jbool: #569cd6;
+  --jnull: #7a7f8a;
+  --jdate: #4ec9b0;
+  --jpunct: #808890;
+  --jell: #6a9955;
+  --jfa: #666;
+}
+
+/* AI: app theme — matches components/highlight.tsx (pipeline / log JSON output) */
+body[data-syntax-theme="app"] {
+  --jkey: oklch(0.65 0.16 230);
+  --jstr: oklch(0.72 0.15 162);
+  --jnum: oklch(0.74 0.16 60);
+  --jbool: oklch(0.62 0.21 25);
+  --jnull: oklch(0.62 0.21 25);
+  --jdate: oklch(0.65 0.16 230);
+  --jpunct: oklch(0.65 0.005 264);
+  --jell: oklch(0.65 0.005 264);
 }
 
 html, body { height: 100%; }
@@ -35,59 +55,94 @@ body {
   background: var(--bg);
   color: var(--text);
   display: grid;
-  grid-template-rows: auto auto 1fr;
+  grid-template-rows: auto 1fr;
   overflow: hidden;
 }
 
 /* ── Header ───────────────────────────────────────────── */
 header {
-  background: #111827;
+  background: var(--surface);
   display: flex; align-items: center; gap: 0;
   padding: 0 14px; height: 46px; flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
 }
-.h-logo { display:flex; align-items:center; gap:8px; margin-right:16px; }
-.h-logo span { color:#f9fafb; font-size:14px; font-weight:600; letter-spacing:-.2px; }
-.ex-tabs { display:flex; gap:2px; flex:1; }
+.h-logo span { color: var(--text); font-size:14px; font-weight:600; letter-spacing:-.2px; }
 .ex-tab {
-  padding:5px 13px; font-size:12.5px; color:#6b7280; background:transparent;
+  padding:5px 13px; font-size:12.5px; color:var(--muted); background:transparent;
   border:none; border-radius:6px; cursor:pointer; transition:all .15s; font-family:inherit; white-space:nowrap;
 }
-.ex-tab:hover  { background:#1f2937; color:#e5e7eb; }
-.ex-tab.active { background:#2563eb; color:#fff; }
+.ex-tab:hover  { background:var(--surface-2); color:var(--text); }
+.ex-tab.active { background:var(--accent); color:var(--accent-fg); }
+.h-logo { display:flex; align-items:center; gap:8px; margin-right:16px; }
+.ex-tabs { display:flex; gap:2px; flex:1; }
 .h-badge { font-size:10.5px; font-weight:600; padding:3px 10px; border-radius:999px; margin-left:8px; flex-shrink:0; }
 .hb-schema { background:#4c1d95; color:#c4b5fd; }
 .hb-data   { background:#14532d; color:#86efac; }
 
-/* ── Breadcrumb / Drill path ──────────────────────────── */
-#crumb {
-  background:#0f172a; color:#475569;
-  font-size:11.5px; font-family:"SF Mono","Fira Code",monospace;
-  padding:6px 16px; min-height:30px; display:flex; align-items:center;
-  flex-shrink:0; border-bottom:1px solid #1e293b; transition:opacity .15s;
+/* ── Main (single column — structure/json open on demand) ─ */
+main { display:grid; grid-template-columns:1fr; overflow:hidden; }
+
+/* ── Code panel popup (structure / JSON) ─────────────── */
+#code-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:140;
+  opacity:0; pointer-events:none; transition:opacity .2s;
 }
-#crumb.empty { opacity:.35; }
-.cr-seg      { color:#64748b; }
-.cr-seg.last { color:#94a3b8; }
-.cr-seg.link { color:#60a5fa; cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
-.cr-sep      { margin:0 6px; color:#1e3a5f; }
-
-/* ── Main split ───────────────────────────────────────── */
-main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
-
-/* ── Structure Panel (left) ──────────────────────────── */
+#code-overlay.open { opacity:1; pointer-events:auto; }
 #json-panel {
-  background:#181818; overflow:auto; display:flex;
-  flex-direction:column; border-right:1px solid #282828;
+  position:fixed; left:50%; top:50%;
+  width:90vw; height:90vh; max-width:90vw; max-height:90vh;
+  background:var(--jbg); display:flex; flex-direction:column;
+  border:1px solid var(--border); border-radius:12px; z-index:150;
+  transform:translate(-50%,-50%) scale(.96);
+  opacity:0; pointer-events:none;
+  transition:transform .22s ease, opacity .22s ease;
+  box-shadow:0 24px 80px rgba(0,0,0,.55);
+}
+#json-panel.open {
+  transform:translate(-50%,-50%) scale(1);
+  opacity:1; pointer-events:auto;
 }
 .jp-header {
+  display:flex; align-items:center; gap:8px;
   padding:7px 14px; font-size:10px; font-weight:700; text-transform:uppercase;
-  letter-spacing:.08em; color:#4b5563; border-bottom:1px solid #242424;
-  position:sticky; top:0; background:#141414; z-index:1; flex-shrink:0;
+  letter-spacing:.08em; color:var(--muted); border-bottom:1px solid var(--border);
+  background:var(--surface); z-index:1; flex-shrink:0;
+  border-radius:12px 12px 0 0;
+}
+#json-zoom-scroll {
+  flex:1; min-height:0; overflow:auto; position:relative;
+  touch-action:pan-x pan-y;
+}
+#json-zoom-viewport {
+  transform-origin:0 0;
+  will-change:transform;
+  min-width:100%;
+  box-sizing:border-box;
+}
+.jp-zoom-bar {
+  display:flex; align-items:center; gap:6px; margin-left:auto; flex-shrink:0;
+}
+.jp-zoom-btn {
+  width:22px; height:22px; border-radius:5px; border:1px solid #333;
+  background:transparent; cursor:pointer; font-size:13px; color:#888;
+  display:flex; align-items:center; justify-content:center; line-height:1;
+}
+.jp-zoom-btn:hover { background:#252525; color:#ccc; border-color:#555; }
+.jp-zoom-label {
+  font-size:10px; font-weight:600; color:var(--muted); min-width:38px; text-align:center;
+  font-variant-numeric:tabular-nums;
 }
 #json-code {
   padding:10px 0 20px 0;
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-  font-size:13px; line-height:1.6; flex:1;
+  font-size:13px; line-height:1.6;
+}
+#json-code.json-mode {
+  width:max-content;
+  min-width:100%;
+  box-sizing:border-box;
+  font-family:"SF Mono","Fira Code","Cascadia Code",Consolas,monospace;
+  font-size:12.5px; line-height:1.65;
 }
 
 /* Structure tree rows */
@@ -101,7 +156,7 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
 .st-toggle { font-size:9px; color:#4a4a4a; width:12px; text-align:center; flex-shrink:0; user-select:none; transition:color .12s; }
 .st-spacer { width:12px; flex-shrink:0; }
 .st-parent:hover .st-toggle { color:#888; }
-.st-label  { font-size:13px; color:#d0d0d0; font-weight:500; flex:1; white-space:nowrap; }
+.st-label  { font-size:13px; color:#d0d0d0; font-weight:500; flex:1; min-width:0; word-break:break-word; }
 .st-type   { font-size:10px; font-weight:600; white-space:nowrap; flex-shrink:0; }
 
 /* Guide lines */
@@ -117,8 +172,13 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
 .st-desc  { font-size:11px; color:#4b5563; margin-left:4px; font-style:italic; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px; }
 
 /* ── Left panel mode toggle (Structure / JSON) ─────── */
-.jp-header { display:flex; align-items:center; }
 .jp-htitle { flex:1; }
+.jp-close {
+  width:22px; height:22px; border-radius:5px; border:1px solid #333;
+  background:transparent; cursor:pointer; font-size:12px; color:#666;
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+}
+.jp-close:hover { background:#252525; color:#aaa; border-color:#555; }
 .jp-toggle { display:flex; gap:2px; }
 .jp-tbtn {
   font-size:9px; padding:2px 7px; border-radius:4px;
@@ -129,13 +189,13 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
 .jp-tbtn:hover { color:#888; border-color:#555; }
 .jp-tbtn.active { background:#1f2937; border-color:#374151; color:#9ca3af; }
 
-/* ── JSON mode styles (restored for when JSON tab is active) ─ */
-#json-code.json-mode {
-  font-family:"SF Mono","Fira Code","Cascadia Code",Consolas,monospace;
-  font-size:12.5px; line-height:1.65;
+/* ── JSON mode line styles ─ */
+.j-line { display:flex; align-items:flex-start; min-height:20px; position:relative; width:max-content; min-width:100%; }
+.j-gutter, .j-content { position:relative; z-index:1; }
+.j-line:hover:not(.j-highlight)::before {
+  content:''; position:absolute; inset:0; z-index:0; pointer-events:none;
+  background:rgba(255,255,255,.025);
 }
-.j-line { display:flex; align-items:flex-start; min-height:20px; }
-.j-line:hover { background:rgba(255,255,255,.025); }
 .j-gutter {
   width:92px; flex-shrink:0; display:flex; align-items:center;
   justify-content:flex-end; padding-right:8px; padding-top:1px; gap:3px; user-select:none;
@@ -145,7 +205,7 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
 .j-fa    { font-size:9px; color:var(--jfa); transition:color .1s; line-height:1; }
 .j-fname { font-size:9px; color:rgba(200,200,200,.3); font-style:italic; max-width:56px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .j-tag:hover .j-fa, .j-tag:hover .j-fname { color:rgba(220,220,220,.7); }
-.j-content { flex:1; padding-left:calc(var(--d,0)*16px); padding-right:18px; white-space:pre; word-break:break-all; }
+.j-content { flex:0 0 auto; padding-left:calc(var(--d,0)*16px); padding-right:18px; white-space:pre; word-break:break-all; }
 .j-body   { border-left:2px solid transparent; margin-left:1px; }
 .j-key    { color:var(--jkey); }
 .j-str    { color:var(--jstr); }
@@ -156,12 +216,16 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
 .j-p      { color:var(--jpunct); }
 .j-ell    { color:var(--jell); font-style:italic; letter-spacing:.05em; }
 
-/* Highlight animation when jumping from human view → JSON */
+/* Highlight animation when jumping from human view → JSON / structure */
 @keyframes jhl { 0%{background:rgba(234,179,8,.35)} 100%{background:transparent} }
-.j-highlight { animation:jhl 2s forwards; border-radius:2px; }
+.j-line.j-highlight::after {
+  content:''; position:absolute; inset:0; z-index:0; pointer-events:none;
+  border-radius:2px; animation:jhl 2s forwards;
+}
+.st-highlight { animation:jhl 2s forwards; border-radius:2px; }
 
 /* ── Right Panel ──────────────────────────────────────── */
-#rendered-panel { overflow:hidden; display:flex; flex-direction:column; }
+#rendered-panel { overflow:hidden; display:flex; flex-direction:column; background:var(--bg); }
 
 .rp-header {
   padding:7px 14px; font-size:10px; font-weight:700; text-transform:uppercase;
@@ -170,7 +234,7 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
 }
 .rp-header span { flex:1; }
 
-/* View toggle: Cards | Table */
+/* View toggle */
 .view-toggle { display:flex; gap:2px; }
 .vbtn {
   padding:3px 10px; font-size:11px; font-weight:500; border-radius:5px;
@@ -178,11 +242,11 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
   color:var(--muted); font-family:inherit; transition:all .12s;
 }
 .vbtn:hover  { border-color:var(--accent); color:var(--accent); }
-.vbtn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+.vbtn.active { background:var(--accent); border-color:var(--accent); color:var(--accent-fg); }
 
-#rp-content { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; }
+#rp-content { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; background:var(--bg); }
 
-/* ── Cards view ───────────────────────────────────────── */
+/* ── Cards view (legacy) ──────────────────────────────── */
 .root-meta  { margin-bottom:14px; }
 .root-title { font-size:19px; font-weight:700; letter-spacing:-.3px; }
 .root-desc  { font-size:13px; color:var(--muted); margin-top:3px; }
@@ -191,7 +255,7 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
   background:var(--surface); border:1px solid var(--border);
   border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow);
 }
-.node-card:hover > .node-head { background:#fafaf8; }
+.node-card:hover > .node-head { background:var(--surface-2); }
 .node-head { padding:9px 12px 9px 10px; display:flex; align-items:flex-start; gap:8px; user-select:none; transition:background .1s; }
 .node-head.clickable { cursor:pointer; }
 .node-head.static    { cursor:default; }
@@ -244,57 +308,76 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
 .ex-count   { margin-left:auto; font-size:11px; color:var(--muted); white-space:nowrap; }
 
 .excel-wrap {
-  overflow:auto; flex:1; border:1px solid #d0d0ce;
-  border-radius:var(--radius); background:white;
+  overflow:auto; flex:1; border:1px solid var(--border);
+  border-radius:var(--radius); background:var(--surface);
 }
 .excel-table {
   border-collapse:collapse; min-width:100%;
   font-size:12.5px; white-space:nowrap;
 }
 .excel-table thead { position:sticky; top:0; z-index:2; }
-
-.excel-table th {
-  background:#1e3a5f; color:#e2e8f0;
-  padding:0; text-align:left; font-weight:500; font-size:11px;
-  border-right:1px solid #2d4a6f; cursor:default; user-select:none; min-width:80px;
-}
 .th-inner { padding:5px 10px; display:flex; flex-direction:column; gap:1px; }
-.th-group { font-size:9px; color:#7fa8d4; font-weight:400; text-transform:uppercase; letter-spacing:.06em; }
-.th-name  { font-size:11.5px; color:#e2e8f0; font-weight:600; }
-.excel-table th.th-num { background:#172d47; min-width:36px; width:36px; }
-.excel-table th:hover { background:#1a3456; }
-.excel-table th.sorted { background:#1a3456; }
-.sort-arrow { margin-left:4px; font-size:9px; color:#7fa8d4; }
+.excel-table th {
+  background:var(--th-bg); color:var(--text);
+  padding:0; text-align:left; font-weight:500; font-size:11px;
+  border-right:1px solid var(--th-border); cursor:default; user-select:none; min-width:80px;
+}
+.th-group { font-size:9px; color:var(--muted); font-weight:400; text-transform:uppercase; letter-spacing:.06em; }
+.th-name  { font-size:11.5px; color:var(--text); font-weight:600; }
+.th-struct-link {
+  display:block; font-size:9px; color:var(--accent); cursor:pointer;
+  margin-top:2px; line-height:1.2; font-weight:500; opacity:.85;
+}
+.th-struct-link:hover { opacity:1; text-decoration:underline; text-underline-offset:2px; }
+.excel-table th.th-num { background:var(--surface-2); min-width:36px; width:36px; }
+.excel-table td.td-num-idx {
+  text-align:center; color:var(--muted); font-size:11px;
+  background:var(--surface-2) !important; border-right:1px solid var(--border);
+}
+.excel-table tr:hover td.td-num-idx { background:var(--surface-2) !important; }
+.excel-table th:hover { background:var(--surface-2); }
+.excel-table th.sorted { background:var(--surface-2); }
+.sort-arrow { margin-left:4px; font-size:9px; color:var(--muted); }
 
 .excel-table td {
-  padding:5px 10px; border-bottom:1px solid #f0f0ee; border-right:1px solid #f0f0ee;
+  padding:5px 10px; border-bottom:1px solid var(--border); border-right:1px solid var(--border);
   vertical-align:middle; color:var(--text);
 }
-.excel-table tr:nth-child(even) td { background:#f9f9f7; }
-.excel-table tr:hover td { background:#eff6ff !important; }
-.td-num   { text-align:right; color:#1d4ed8; font-family:"SF Mono","Fira Code",monospace; font-size:12px; }
-.td-row#  { text-align:center; color:#aaa; font-size:11px; background:#f9f9f7 !important; }
-.td-null  { color:#ccc; font-style:italic; }
-.td-bool-y { color:#15803d; font-weight:600; }
-.td-bool-n { color:#9ca3af; }
-.td-date   { color:#0369a1; font-size:11.5px; }
+.excel-table tr:nth-child(even) td { background:var(--td-stripe); }
+.excel-table tr:hover td { background:var(--td-hover) !important; }
+.td-num   { text-align:right; color:#93c5fd; font-family:"SF Mono","Fira Code",monospace; font-size:12px; }
+.td-null  { color:var(--muted); font-style:italic; }
+.td-bool-y { color:var(--accent); font-weight:600; }
+.td-bool-n { color:var(--muted); }
+.td-date   { color:#67e8f9; font-size:11.5px; }
 .td-long   { max-width:200px; overflow:hidden; text-overflow:ellipsis; }
+
+/* Cell jump links (JSON / structure) */
+.td-inner { display:flex; align-items:center; gap:6px; min-width:0; }
+.td-val   { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.td-jumps { display:flex; gap:2px; flex-shrink:0; opacity:0; transition:opacity .1s; }
+.excel-table tr:hover .td-jumps { opacity:1; }
+.cell-jump {
+  font-size:9px; color:var(--muted); cursor:pointer; padding:1px 5px; border-radius:4px;
+  border:1px solid transparent; white-space:nowrap; user-select:none; line-height:1.4;
+}
+.cell-jump:hover { color:var(--accent) !important; border-color:rgba(110,231,168,.35); background:rgba(110,231,168,.08); }
 
 /* Reference / link cells */
 .ref-arr {
   display:inline-flex; align-items:center; gap:5px;
-  padding:3px 9px; background:#eff6ff; color:#1d4ed8;
-  border:1px solid #bfdbfe; border-radius:6px; font-size:11px; font-weight:500;
+  padding:3px 9px; background:rgba(110,231,168,.12); color:var(--accent);
+  border:1px solid rgba(110,231,168,.28); border-radius:6px; font-size:11px; font-weight:500;
   cursor:pointer; white-space:nowrap; transition:all .12s; font-family:inherit;
 }
-.ref-arr:hover { background:#dbeafe; border-color:#93c5fd; }
+.ref-arr:hover { background:rgba(110,231,168,.2); border-color:rgba(110,231,168,.45); }
 .ref-obj {
   display:inline-flex; align-items:center; gap:5px;
-  padding:3px 9px; background:#f5f3ff; color:#6d28d9;
-  border:1px solid #ddd6fe; border-radius:6px; font-size:11px; font-weight:500;
+  padding:3px 9px; background:rgba(147,197,253,.1); color:#93c5fd;
+  border:1px solid rgba(147,197,253,.25); border-radius:6px; font-size:11px; font-weight:500;
   cursor:pointer; white-space:nowrap; transition:all .12s; font-family:inherit;
 }
-.ref-obj:hover { background:#ede9fe; border-color:#c4b5fd; }
+.ref-obj:hover { background:rgba(147,197,253,.18); border-color:rgba(147,197,253,.4); }
 
 /* Schema-as-table */
 .schema-table th { background:#1e293b; }
@@ -312,13 +395,13 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
   display:flex; justify-content:flex-end; align-items:stretch;
 }
 .detail-panel {
-  background:#fff; width:360px; display:flex; flex-direction:column;
-  box-shadow:-4px 0 24px rgba(0,0,0,.15); overflow:hidden;
+  background:var(--surface); width:360px; display:flex; flex-direction:column;
+  box-shadow:-4px 0 24px rgba(0,0,0,.45); overflow:hidden;
 }
 .dp-header {
   padding:14px 16px; border-bottom:1px solid var(--border);
   display:flex; align-items:center; gap:8px; flex-shrink:0;
-  background:#f8fafc;
+  background:var(--surface-2);
 }
 .dp-title { font-size:14px; font-weight:600; flex:1; }
 .dp-close {
@@ -353,26 +436,25 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
   padding:3px 8px; border-radius:5px; min-height:25px;
   position:relative;
 }
-.tree-row:hover { background:rgba(0,0,0,.035); }
+.tree-row:hover { background:rgba(255,255,255,.04); }
 .tree-row.t-parent { cursor:pointer; }
 .tree-row.t-leaf   { cursor:default; }
 
 /* Jump-to-JSON button (hover reveal) */
 .t-jump {
-  opacity:0; font-size:9px; color:#9ca3af; cursor:pointer;
+  opacity:0; font-size:9px; color:var(--muted); cursor:pointer;
   padding:2px 6px; border-radius:4px; margin-left:auto; flex-shrink:0;
   border:1px solid transparent; transition:opacity .1s, color .1s, border-color .1s;
   white-space:nowrap; user-select:none; line-height:1.4;
 }
 .tree-row:hover .t-jump { opacity:1; }
-.t-jump:hover { color:#3b82f6 !important; border-color:rgba(59,130,246,.3); background:rgba(59,130,246,.06); }
+.t-jump:hover { color:var(--accent) !important; border-color:rgba(110,231,168,.35); background:rgba(110,231,168,.08); }
 
-/* Toggle arrow */
 .t-toggle {
-  width:18px; flex-shrink:0; font-size:9px; color:#aaa;
+  width:18px; flex-shrink:0; font-size:9px; color:var(--muted);
   text-align:center; line-height:25px; transition:color .1s; user-select:none;
 }
-.t-toggle:hover { color:#555; }
+.t-toggle:hover { color:var(--text); }
 .t-spacer { width:18px; flex-shrink:0; }
 
 /* Node icon — folder / list / value dot */
@@ -380,22 +462,27 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
 
 /* Key label */
 .t-key {
-  font-size:13px; font-weight:500; color:#374151;
+  font-size:13px; font-weight:500; color:var(--muted);
   white-space:nowrap; flex-shrink:0;
 }
-.t-key.t-key-parent { color:#1a1a1a; font-weight:600; }
-
-/* Separator between key and value */
-.t-sep { flex:1; min-width:12px; max-width:40px; }
-.t-dot { /* dotted leader line */
+.t-key.t-key-parent { color:var(--text); font-weight:600; }
+.t-dot {
   flex:1; min-width:8px; max-width:50px;
-  border-bottom:1px dotted #ddd; margin:0 6px; margin-bottom:4px;
+  border-bottom:1px dotted var(--border); margin:0 6px; margin-bottom:4px;
 }
-
-/* Count badge (e.g. "3 items") */
 .t-count {
-  font-size:11px; color:#aaa; margin-left:8px;
+  font-size:11px; color:var(--muted); margin-left:8px;
   white-space:nowrap; font-weight:400;
+}
+.t-val.string  { color:#86efac; }
+.t-val.number  { color:#93c5fd; font-family:"SF Mono","Fira Code",monospace; font-size:12.5px; }
+.t-val.boolean { color:#c4b5fd; font-weight:600; }
+.t-val.null    { color:var(--muted); font-style:italic; }
+.t-val.date    { color:#67e8f9; }
+.t-children {
+  border-left:1.5px solid var(--border);
+  margin-left:17px;
+  padding-left:4px;
 }
 
 /* Type tag shown next to schema fields */
@@ -406,18 +493,7 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
 
 /* Values */
 .t-val { font-size:13px; flex:0 0 auto; max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.t-val.string  { color:#15803d; }
-.t-val.number  { color:#1d4ed8; font-family:"SF Mono","Fira Code",monospace; font-size:12.5px; }
-.t-val.boolean { color:#7c3aed; font-weight:600; }
-.t-val.null    { color:#9ca3af; font-style:italic; }
-.t-val.date    { color:#0369a1; }
-
-/* Children container — the vertical guide line */
-.t-children {
-  border-left:1.5px solid #e8e8e5;
-  margin-left:17px;
-  padding-left:4px;
-}
+.t-sep { flex:1; min-width:12px; max-width:40px; }
 .t-children.t-closed { display:none; }
 
 /* Schema-specific in tree */
@@ -458,15 +534,15 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
 #rp-content::-webkit-scrollbar,
 .excel-wrap::-webkit-scrollbar,
 .dp-body::-webkit-scrollbar,
-#json-panel::-webkit-scrollbar { width:6px; height:6px; }
+#json-zoom-scroll::-webkit-scrollbar { width:6px; height:6px; }
 #rp-content::-webkit-scrollbar-track,
 .excel-wrap::-webkit-scrollbar-track,
 .dp-body::-webkit-scrollbar-track,
-#json-panel::-webkit-scrollbar-track { background:transparent; }
+#json-zoom-scroll::-webkit-scrollbar-track { background:transparent; }
 #rp-content::-webkit-scrollbar-thumb,
 .excel-wrap::-webkit-scrollbar-thumb,
 .dp-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:99px; }
-#json-panel::-webkit-scrollbar-thumb { background:#333; border-radius:99px; }
+#json-zoom-scroll::-webkit-scrollbar-thumb { background:#333; border-radius:99px; }
 </style>
 </head>
 <body>
@@ -474,7 +550,7 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
 <header>
   <div class="h-logo">
     <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-      <rect width="22" height="22" rx="6" fill="#2563eb"/>
+      <rect width="22" height="22" rx="6" fill="#6ee7a8"/>
       <path d="M7 8h8M7 11h5M7 14h7" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
     </svg>
     <span>JSON Viewer</span>
@@ -489,7 +565,7 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
   <span class="h-badge" id="hbadge"></span>
 </header>
 
-<div id="crumb" class="empty">hover a field to trace its path</div>
+<div id="code-overlay" onclick="closeCodePanel()"></div>
 
 <main>
   <div id="json-panel">
@@ -499,15 +575,25 @@ main { display:grid; grid-template-columns:440px 1fr; overflow:hidden; }
         <button class="jp-tbtn active" id="jpt-structure" onclick="setLeftMode('structure')">Structure</button>
         <button class="jp-tbtn" id="jpt-json" onclick="setLeftMode('json')">JSON</button>
       </div>
+      <div class="jp-zoom-bar">
+        <button class="jp-zoom-btn" onclick="zoomStep(-1)" title="Zoom out">−</button>
+        <span class="jp-zoom-label" id="jp-zoom-label">100%</span>
+        <button class="jp-zoom-btn" onclick="zoomStep(1)" title="Zoom in">+</button>
+        <button class="jp-zoom-btn" onclick="resetZoom()" title="Reset zoom" style="font-size:10px">↺</button>
+      </div>
+      <button class="jp-close" onclick="closeCodePanel()" title="Close">✕</button>
     </div>
-    <div id="json-code"></div>
+    <div id="json-zoom-scroll">
+      <div id="json-zoom-viewport">
+        <div id="json-code"></div>
+      </div>
+    </div>
   </div>
   <div id="rendered-panel">
     <div class="rp-header">
       <span>Human View</span>
       <div class="view-toggle">
-        <button class="vbtn active" id="vb-cards" onclick="setView('cards')">Cards</button>
-        <button class="vbtn"        id="vb-tree"  onclick="setView('tree')">Tree</button>
+        <button class="vbtn active" id="vb-tree"  onclick="setView('tree')">Tree</button>
         <button class="vbtn"        id="vb-table" onclick="setView('table')">Table</button>
       </div>
     </div>
@@ -607,28 +693,148 @@ function fmtDate(s) {
   catch { return s; }
 }
 
-// ── Breadcrumb ────────────────────────────────────────────────────────────────
-function updateCrumb(path, clickHandlers) {
-  const el=document.getElementById('crumb');
-  if (!path||!path.length) { clearCrumb(); return; }
-  el.classList.remove('empty');
-  el.innerHTML=path.map((s,i)=>{
-    const sep=i>0?`<span class="cr-sep">›</span>`:'';
-    const isLast=i===path.length-1;
-    const cls=isLast?'cr-seg last':(clickHandlers&&clickHandlers[i]?'cr-seg link':'cr-seg');
-    return `${sep}<span class="${cls}" ${clickHandlers&&clickHandlers[i]?`data-ci="${i}"`:''}>${esc(s)}</span>`;
-  }).join('');
-  if (clickHandlers) {
-    el.querySelectorAll('[data-ci]').forEach(span=>{
-      const idx=parseInt(span.getAttribute('data-ci'));
-      if (clickHandlers[idx]) span.onclick=clickHandlers[idx];
-    });
-  }
+// ── Breadcrumb (removed — kept as no-ops for callers) ─────────────────────────
+function updateCrumb() {}
+function clearCrumb() {}
+
+// ── Code panel slide-over ─────────────────────────────────────────────────────
+function openCodePanel() {
+  document.getElementById('json-panel').classList.add('open');
+  document.getElementById('code-overlay').classList.add('open');
+  resetZoom();
 }
-function clearCrumb() {
-  const el=document.getElementById('crumb');
-  el.innerHTML='hover a field to trace its path';
-  el.classList.add('empty');
+function closeCodePanel() {
+  document.getElementById('json-panel').classList.remove('open');
+  document.getElementById('code-overlay').classList.remove('open');
+}
+
+// ── Side panel zoom (pinch + ctrl/wheel + buttons) ───────────────────────────
+const ZOOM_MIN = 0.5, ZOOM_MAX = 3, ZOOM_STEP = 0.1;
+let _panelZoom = 1;
+
+function applyPanelZoom() {
+  const vp = document.getElementById('json-zoom-viewport');
+  const lbl = document.getElementById('jp-zoom-label');
+  if (vp) vp.style.transform = `scale(${_panelZoom})`;
+  if (lbl) lbl.textContent = `${Math.round(_panelZoom * 100)}%`;
+}
+
+function setPanelZoom(next, anchorX, anchorY) {
+  const scroll = document.getElementById('json-zoom-scroll');
+  const prev = _panelZoom;
+  _panelZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+  if (!scroll) { applyPanelZoom(); return; }
+
+  const rect = scroll.getBoundingClientRect();
+  const ax = anchorX != null ? anchorX - rect.left : scroll.clientWidth / 2;
+  const ay = anchorY != null ? anchorY - rect.top : scroll.clientHeight / 2;
+  const ratio = _panelZoom / prev;
+  const sl = scroll.scrollLeft;
+  const st = scroll.scrollTop;
+
+  applyPanelZoom();
+  scroll.scrollLeft = (sl + ax) * ratio - ax;
+  scroll.scrollTop = (st + ay) * ratio - ay;
+}
+
+function zoomStep(dir) {
+  setPanelZoom(_panelZoom + dir * ZOOM_STEP);
+}
+
+function resetZoom() {
+  _panelZoom = 1;
+  applyPanelZoom();
+  const scroll = document.getElementById('json-zoom-scroll');
+  if (scroll) { scroll.scrollLeft = 0; scroll.scrollTop = 0; }
+}
+
+(function initPanelZoom() {
+  const scroll = document.getElementById('json-zoom-scroll');
+  if (!scroll) return;
+
+  scroll.addEventListener('wheel', (e) => {
+    if (!document.getElementById('json-panel').classList.contains('open')) return;
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+    setPanelZoom(_panelZoom + delta, e.clientX, e.clientY);
+  }, { passive: false });
+
+  let pinchStart = null;
+  scroll.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      pinchStart = {
+        dist: Math.hypot(
+          e.touches[0].clientX - e.touches[1].clientX,
+          e.touches[0].clientY - e.touches[1].clientY,
+        ),
+        zoom: _panelZoom,
+        midX: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        midY: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+      };
+    }
+  }, { passive: true });
+
+  scroll.addEventListener('touchmove', (e) => {
+    if (!pinchStart || e.touches.length !== 2) return;
+    e.preventDefault();
+    const dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY,
+    );
+    const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    setPanelZoom(pinchStart.zoom * (dist / pinchStart.dist), midX, midY);
+  }, { passive: false });
+
+  scroll.addEventListener('touchend', () => { pinchStart = null; }, { passive: true });
+  applyPanelZoom();
+})();
+
+function mkJumpLinks(path, stopProp) {
+  if (!path) return '';
+  const sp = stopProp ? 'event.stopPropagation();' : '';
+  return `<span class="t-jump" title="Show in JSON" onclick="${sp}jumpToJson('${esc(path)}')">↗ JSON</span>` +
+         `<span class="t-jump" title="Show in Structure" onclick="${sp}jumpToStructure('${esc(path)}')">↗ Structure</span>`;
+}
+function mkCellJumpLinks(path) {
+  if (!path) return null;
+  const el = document.createElement('span');
+  el.className = 'td-jumps';
+  el.innerHTML = `<span class="cell-jump" onclick="event.stopPropagation();jumpToJson('${esc(path)}')">↗ JSON</span>`;
+  return el;
+}
+function mkThStructureLink(path) {
+  const el = document.createElement('span');
+  el.className = 'th-struct-link';
+  el.textContent = '↗ Structure';
+  el.title = 'Show in Structure';
+  el.onclick = (e) => { e.stopPropagation(); jumpToStructure(path); };
+  return el;
+}
+function appendThStructureLink(inner, path) {
+  if (!path) return;
+  inner.appendChild(mkThStructureLink(path));
+}
+function joinJsonPath(base, key) {
+  if (!key) return base || '';
+  return base ? `${base}.${key}` : key;
+}
+function rowJsonPath(stackEntry, rowIdx) {
+  if (stackEntry.isArray) return joinJsonPath(stackEntry.jsonPath || '', String(rowIdx));
+  return stackEntry.jsonPath || '';
+}
+function appendCellJumps(td, path) {
+  const jumps = mkCellJumpLinks(path);
+  if (!jumps || td.querySelector('.td-inner')) return;
+  const inner = document.createElement('div');
+  inner.className = 'td-inner';
+  const val = document.createElement('span');
+  val.className = 'td-val';
+  while (td.firstChild) val.appendChild(td.firstChild);
+  inner.appendChild(val);
+  inner.appendChild(jumps);
+  td.appendChild(inner);
 }
 
 // ── JSON Panel: syntax highlight + code folding ───────────────────────────────
@@ -666,24 +872,27 @@ function unionSample(arr) {
 }
 
 // AI: depth controls auto-expand — first 2 levels open by default
-function renderDataStructure(val, container, depth) {
+function renderDataStructure(val, container, depth, pathPrefix) {
   if (!val || typeof val !== 'object') return;
   if (Array.isArray(val)) {
-    if (val.length && typeof val[0] === 'object') renderDataStructure(unionSample(val), container, depth);
+    if (val.length && typeof val[0] === 'object') renderDataStructure(unionSample(val), container, depth, pathPrefix);
     return;
   }
-  Object.entries(val).forEach(([k,v]) => renderStField(k, v, container, depth));
+  Object.entries(val).forEach(([k,v]) => {
+    const p = pathPrefix ? `${pathPrefix}.${k}` : k;
+    renderStField(k, v, container, depth, p);
+  });
 }
 
-function renderStField(key, val, container, depth) {
+function renderStField(key, val, container, depth, path) {
   const label = humanize(key);
   const type  = inferType(val);
 
   if (type === 'object') {
     const node = document.createElement('div');
-    const row  = mkStRow(depth, label, ST.object, true);
+    const row  = mkStRow(depth, label, ST.object, true, path);
     const kids = mkStKids(depth);
-    Object.entries(val).forEach(([k,v]) => renderStField(k, v, kids, depth+1));
+    Object.entries(val).forEach(([k,v]) => renderStField(k, v, kids, depth+1, `${path}.${k}`));
     node.appendChild(row); node.appendChild(kids);
     wireStToggle(row, kids);
     container.appendChild(node); return;
@@ -694,14 +903,13 @@ function renderStField(key, val, container, depth) {
     if (hasObj) {
       const node = document.createElement('div');
       const info = { label:`List  ·  ${val.length} item${val.length!==1?'s':''}`, color:'#fdba74' };
-      const row  = mkStRow(depth, label, info, true);
+      const row  = mkStRow(depth, label, info, true, path);
       const kids = mkStKids(depth);
-      // Show the shape of each item
       const sample = unionSample(val);
       const eNode = document.createElement('div');
-      const eRow  = mkStRow(depth+1, 'each item', ST.object, true);
+      const eRow  = mkStRow(depth+1, 'each item', ST.object, true, path);
       const eKids = mkStKids(depth+1);
-      Object.entries(sample).forEach(([k,v]) => renderStField(k, v, eKids, depth+2));
+      Object.entries(sample).forEach(([k,v]) => renderStField(k, v, eKids, depth+2, `${path}.${k}`));
       eNode.appendChild(eRow); eNode.appendChild(eKids);
       wireStToggle(eRow, eKids);
       kids.appendChild(eNode);
@@ -709,13 +917,12 @@ function renderStField(key, val, container, depth) {
       wireStToggle(row, kids);
       container.appendChild(node);
     } else {
-      const itemType = val.length ? (ST[inferType(val[0])]||ST.string) : ST.string;
-      container.appendChild(mkStRow(depth, label, { label:`List of ${itemType.label}`, color:'#fdba74' }, false));
+      container.appendChild(mkStRow(depth, label, { label:`List of ${(ST[inferType(val[0])]||ST.string).label}`, color:'#fdba74' }, false, path));
     }
     return;
   }
 
-  container.appendChild(mkStRow(depth, label, ST[type]||ST.string, false));
+  container.appendChild(mkStRow(depth, label, ST[type]||ST.string, false, path));
 }
 
 // Schema mode: show field names, types, required/optional
@@ -729,11 +936,11 @@ function renderSchemaStructure(schema, container) {
   }
   if (schema.properties) {
     const reqSet = new Set(schema.required||[]);
-    Object.entries(schema.properties).forEach(([k,sub]) => renderSchemaStField(k, sub, container, 0, reqSet.has(k)));
+    Object.entries(schema.properties).forEach(([k,sub]) => renderSchemaStField(k, sub, container, 0, reqSet.has(k), k));
   }
 }
 
-function renderSchemaStField(key, schema, container, depth, required) {
+function renderSchemaStField(key, schema, container, depth, required, path) {
   if (schema.$ref) { const r=resolveRef(schema.$ref); if(r) schema={...r,...schema,$ref:undefined}; }
   const type=schema.type, format=schema.format||null, enumVals=schema.enum||null;
   const label=schema.title||humanize(key);
@@ -744,7 +951,7 @@ function renderSchemaStField(key, schema, container, depth, required) {
   const typeInfo={ label:typeName, color:typeColors[typeName]||'#aaa' };
 
   const node=document.createElement('div');
-  const row=mkStRow(depth, label, typeInfo, hasKids);
+  const row=mkStRow(depth, label, typeInfo, hasKids, path);
   // Add required/optional badge
   const badge=document.createElement('span');
   badge.className=required?'st-req':'st-opt';
@@ -761,9 +968,9 @@ function renderSchemaStField(key, schema, container, depth, required) {
     const kids=mkStKids(depth);
     if ((type==='object'||schema.properties)&&schema.properties) {
       const reqSet=new Set(schema.required||[]);
-      Object.entries(schema.properties).forEach(([k,sub])=>renderSchemaStField(k,sub,kids,depth+1,reqSet.has(k)));
+      Object.entries(schema.properties).forEach(([k,sub])=>renderSchemaStField(k,sub,kids,depth+1,reqSet.has(k),`${path}.${k}`));
     } else if (type==='array'&&schema.items) {
-      renderSchemaStField('(each item)', schema.items, kids, depth+1, false);
+      renderSchemaStField('(each item)', schema.items, kids, depth+1, false, `${path}[]`);
     }
     node.appendChild(kids);
     wireStToggle(row, kids);
@@ -771,10 +978,11 @@ function renderSchemaStField(key, schema, container, depth, required) {
   container.appendChild(node);
 }
 
-function mkStRow(depth, label, typeInfo, hasKids) {
+function mkStRow(depth, label, typeInfo, hasKids, path) {
   const row=document.createElement('div');
   row.className=`st-row${hasKids?' st-parent':''}`;
   row.style.setProperty('--d', depth);
+  if (path) row.setAttribute('data-path', path);
   const tog=document.createElement('span');
   tog.className=hasKids?'st-toggle':'st-spacer';
   tog.textContent=hasKids?'▶':'';
@@ -883,10 +1091,52 @@ function detectMode(obj) {
   return 'data';
 }
 
+// AI : keep in sync with lib/json-viewer.ts
+const JV_SETTINGS_KEY = 'auto-pipeline:json-viewer-default-view';
+const JV_SYNTAX_KEY = 'auto-pipeline:json-viewer-syntax-theme';
+const JV_VALID_VIEWS = ['tree', 'table'];
+const JV_VALID_SYNTAX = ['app', 'vscode'];
+const JV_DEFAULT_VIEW = 'tree';
+const JV_DEFAULT_SYNTAX = 'app';
+
+function readDefaultView(fromMsg) {
+  if (fromMsg && JV_VALID_VIEWS.includes(fromMsg)) return fromMsg;
+  try {
+    const v = localStorage.getItem(JV_SETTINGS_KEY);
+    if (v && JV_VALID_VIEWS.includes(v)) return v;
+  } catch (_) {}
+  return JV_DEFAULT_VIEW;
+}
+
+function readSyntaxTheme(fromMsg) {
+  if (fromMsg && JV_VALID_SYNTAX.includes(fromMsg)) return fromMsg;
+  try {
+    const v = localStorage.getItem(JV_SYNTAX_KEY);
+    if (v && JV_VALID_SYNTAX.includes(v)) return v;
+  } catch (_) {}
+  return JV_DEFAULT_SYNTAX;
+}
+
+function applySyntaxTheme(theme) {
+  const t = JV_VALID_SYNTAX.includes(theme) ? theme : JV_DEFAULT_SYNTAX;
+  document.body.setAttribute('data-syntax-theme', t);
+}
+
+function applyDefaultView(mode) {
+  if (!mode || !JV_VALID_VIEWS.includes(mode)) return;
+  if (mode !== _viewMode) setView(mode);
+  else {
+    document.querySelectorAll('.view-toggle .vbtn').forEach(btn => {
+      const id = btn.id && btn.id.startsWith('vb-') ? btn.id.slice(3) : null;
+      if (id) btn.classList.toggle('active', id === mode);
+    });
+  }
+}
+
 // ── App state ─────────────────────────────────────────────────────────────────
 let _currentVal  = null;
 let _currentMode = 'data';
-let _viewMode    = 'cards'; // 'cards' | 'tree' | 'table'
+let _viewMode    = readDefaultView();
 let _leftMode    = 'structure'; // 'structure' | 'json'
 
 function setLeftMode(mode) {
@@ -905,44 +1155,113 @@ function setLeftMode(mode) {
   }
 }
 
-// AI: switch to JSON mode and scroll/highlight the line matching this dot-path
+// AI: open slide-over, switch to JSON mode, scroll/highlight matching line
+function findJsonLine(path) {
+  const root = document.getElementById('json-code');
+  if (!root || !path) return null;
+  let el = root.querySelector(`[data-path="${CSS.escape(path)}"]`);
+  if (el) return el;
+  const parts = path.split('.');
+  while (parts.length > 1) {
+    parts.pop();
+    el = root.querySelector(`[data-path="${CSS.escape(parts.join('.'))}"]`);
+    if (el) return el;
+  }
+  return null;
+}
+
+function scrollCodePanelTo(el) {
+  const scroll = document.getElementById('json-zoom-scroll');
+  if (!scroll || !el) return;
+  const sr = scroll.getBoundingClientRect();
+  const er = el.getBoundingClientRect();
+  scroll.scrollTo({
+    top: scroll.scrollTop + (er.top - sr.top) / _panelZoom - scroll.clientHeight / 2 + er.height / (2 * _panelZoom),
+    left: scroll.scrollLeft + (er.left - sr.left) / _panelZoom - scroll.clientWidth / 2 + er.width / (2 * _panelZoom),
+    behavior: 'smooth',
+  });
+}
+
 function jumpToJson(path) {
   setLeftMode('json');
-  // slight delay so renderJsonPanel finishes before querying DOM
-  setTimeout(()=>{
-    const target=document.querySelector(`#json-code [data-path="${CSS.escape(path)}"]`);
-    if (!target) return;
-    // expand any folded ancestors
-    let el=target;
-    while ((el=el.parentElement)) {
-      if (el.id&&el.id.startsWith('jfc')) {
-        const fid=el.id.slice(3);
-        const open=document.getElementById('jfo'+fid);
-        const summ=document.getElementById('jfs'+fid);
-        if (open&&summ&&summ.style.display!=='none') {
-          // currently folded — unfold it
-          open.style.display='';
-          summ.style.display='none';
-          el.style.display='';
-        }
+  openCodePanel();
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const target = findJsonLine(path);
+    if (!target) { log('json:jump-miss', { path }); return; }
+    expandJsonAncestors(target);
+    scrollCodePanelTo(target);
+    target.classList.add('j-highlight');
+    setTimeout(() => target.classList.remove('j-highlight'), 2000);
+  }));
+}
+
+function findStructureRow(path) {
+  let el = document.querySelector(`#json-code [data-path="${CSS.escape(path)}"]`);
+  if (el) return el;
+  const norm = path.replace(/\.\d+(?=\.|$)/g, '');
+  if (norm !== path) {
+    el = document.querySelector(`#json-code [data-path="${CSS.escape(norm)}"]`);
+    if (el) return el;
+  }
+  const parts = path.split('.');
+  while (parts.length > 1) {
+    parts.pop();
+    el = document.querySelector(`#json-code [data-path="${CSS.escape(parts.join('.'))}"]`);
+    if (el) return el;
+  }
+  return null;
+}
+
+function expandStructureAncestors(target) {
+  let el = target;
+  while ((el = el.parentElement)) {
+    if (el.classList && el.classList.contains('st-kids') && el.classList.contains('st-closed')) {
+      el.classList.remove('st-closed');
+      const row = el.previousElementSibling;
+      const t = row && row.querySelector('.st-toggle');
+      if (t) t.textContent = '▼';
+    }
+  }
+}
+
+function expandJsonAncestors(target) {
+  let el = target;
+  while ((el = el.parentElement)) {
+    if (el.id && el.id.startsWith('jfc')) {
+      const fid = el.id.slice(3);
+      const open = document.getElementById('jfo' + fid);
+      const summ = document.getElementById('jfs' + fid);
+      if (open && summ && summ.style.display !== 'none') {
+        open.style.display = '';
+        summ.style.display = 'none';
+        el.style.display = '';
       }
     }
-    target.scrollIntoView({behavior:'smooth',block:'center'});
-    target.classList.add('j-highlight');
-    setTimeout(()=>target.classList.remove('j-highlight'), 2000);
-  }, 80);
+  }
+}
+
+function jumpToStructure(path) {
+  setLeftMode('structure');
+  openCodePanel();
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const target = findStructureRow(path);
+    if (!target) { log('structure:jump-miss', { path }); return; }
+    expandStructureAncestors(target);
+    scrollCodePanelTo(target);
+    target.classList.add('st-highlight');
+    setTimeout(() => target.classList.remove('st-highlight'), 2000);
+  }));
 }
 
 function setView(v) {
   log('view:change', { from: _viewMode, to: v });
   _viewMode=v;
-  ['cards','tree','table'].forEach(id=>document.getElementById('vb-'+id).classList.toggle('active',id===v));
+  ['tree','table'].forEach(id=>document.getElementById('vb-'+id).classList.toggle('active',id===v));
   renderRight();
   closeDetail();
 }
 function renderRight() {
-  if (_viewMode==='cards') renderCards(_currentVal,_currentMode);
-  else if (_viewMode==='tree') renderTreeView(_currentVal,_currentMode);
+  if (_viewMode==='tree') renderTreeView(_currentVal,_currentMode);
   else renderTable(_currentVal,_currentMode);
 }
 
@@ -1000,7 +1319,7 @@ function renderTreeNode(val, keyName, container, path, isArrayItem, jsonPath) {
       `<span class="t-icon" style="color:${isArr?'#c2410c':'#2563eb'}">${icon}</span>` +
       `<span class="t-key t-key-parent">${esc(label)}</span>` +
       `<span class="t-count">${count} ${isArr?'item':'field'}${count!==1?'s':''}</span>` +
-      (jsonPath?`<span class="t-jump" title="Show in JSON" onclick="event.stopPropagation();jumpToJson('${esc(jsonPath)}')">↗ JSON</span>`:'');
+      (jsonPath ? mkJumpLinks(jsonPath, true) : '');
 
     const kids=document.createElement('div'); kids.className='t-children t-closed';
     if (isArr) {
@@ -1033,7 +1352,7 @@ function renderTreeNode(val, keyName, container, path, isArrayItem, jsonPath) {
     `<span class="t-key">${esc(label)}</span>` +
     `<span class="t-dot"></span>` +
     valHtml +
-    (jsonPath?`<span class="t-jump" title="Show in JSON" onclick="event.stopPropagation();jumpToJson('${esc(jsonPath)}')">↗ JSON</span>`:'');
+    (jsonPath ? mkJumpLinks(jsonPath, true) : '');
   row.addEventListener('mouseenter',()=>updateCrumb(path));
   row.addEventListener('mouseleave',clearCrumb);
   container.appendChild(row);
@@ -1358,16 +1677,16 @@ function buildTableColDefs(rows) {
 
 // AI: detect best array to use as primary table; prefer largest array of objects
 function detectPrimaryTable(val) {
-  if (Array.isArray(val)) return { label:'Items', rows:val };
+  if (Array.isArray(val)) return { label:'Items', rows:val, jsonPath:'', isArray:true };
   if (typeof val==='object'&&val) {
     let best=null;
     for (const [k,v] of Object.entries(val)) {
       if (Array.isArray(v)&&v.length>0&&v.some(i=>i&&typeof i==='object'&&!Array.isArray(i))) {
-        if (!best||v.length>best.rows.length) best={ label:humanize(k), rows:v };
+        if (!best||v.length>best.rows.length) best={ label:humanize(k), rows:v, jsonPath:k, isArray:true };
       }
     }
     if (best) return best;
-    return { label:'Record', rows:[val] };
+    return { label:'Record', rows:[val], jsonPath:'', isArray:false };
   }
   return null;
 }
@@ -1394,7 +1713,7 @@ function renderTable(val, mode) {
 function drawDataTable() {
   const root=document.getElementById('rp-content');
   root.innerHTML='';
-  const { label, rows }=excelStack[excelStack.length-1];
+  const { label, rows, jsonPath='', isArray=true }=excelStack[excelStack.length-1];
 
   // Navigation bar
   const nav=document.createElement('div'); nav.className='excel-nav';
@@ -1439,7 +1758,7 @@ function drawDataTable() {
   const th0=document.createElement('th');
   th0.className='th-num';
   if (hasExpandedGroups) th0.rowSpan=2;
-  th0.innerHTML='<div class="th-inner"><span class="th-name" style="color:#4b6080">#</span></div>';
+  th0.innerHTML='<div class="th-inner"><span class="th-name" style="color:var(--muted)">#</span></div>';
   tr1.appendChild(th0);
 
   // Track group spans for the group header cells
@@ -1475,18 +1794,19 @@ function drawDataTable() {
       const inner=document.createElement('div'); inner.className='th-inner';
 
       if (col.type==='ref-obj') {
-        // Object ref: show ⊕ expand button
         inner.innerHTML=`${lbl}<span class="th-name">${esc(col.name)}</span>`;
         const expBtn=document.createElement('button');
         expBtn.className='col-btn expand'; expBtn.textContent='⊕';
         expBtn.title=`Expand ${col.name} as columns`;
         const ck=col.key; expBtn.onclick=()=>expandRefCol(ck);
         inner.appendChild(expBtn);
+        appendThStructureLink(inner, col.key);
       } else if (col.type==='ref-arr') {
-        // Array ref: show drill-down indicator (no inline expand — would create extra rows)
         inner.innerHTML=`${lbl}<span class="th-name">${esc(col.name)}</span><span style="color:#60a5fa;margin-left:4px;font-size:10px">▤ list</span>`;
+        appendThStructureLink(inner, col.key);
       } else {
         inner.innerHTML=`${lbl}<span class="th-name">${esc(col.name)}</span>`;
+        appendThStructureLink(inner, col.key);
       }
       th.appendChild(inner);
       th.title=col.key;
@@ -1503,7 +1823,10 @@ function drawDataTable() {
       const th=document.createElement('th');
       th.className='th-sub';
       th.style.cssText=`background:${col.color.dark};border-top:2px solid ${col.color.bar}`;
-      th.innerHTML=`<div class="th-inner"><span class="th-name" style="font-weight:500;color:#d0e8ff">${esc(col.name)}</span></div>`;
+      const inner=document.createElement('div'); inner.className='th-inner';
+      inner.innerHTML=`<span class="th-name" style="font-weight:500;color:#d0e8ff">${esc(col.name)}</span>`;
+      appendThStructureLink(inner, joinJsonPath(col.key, col.subKey));
+      th.appendChild(inner);
       tr2.appendChild(th);
     });
     thead.appendChild(tr2);
@@ -1517,12 +1840,15 @@ function drawDataTable() {
     if (row===null||typeof row!=='object') return;
     const tr=document.createElement('tr');
     const td0=document.createElement('td');
-    td0.style.cssText='text-align:center;color:#bbb;font-size:11px;background:#f9f9f7;';
+    td0.className='td-num-idx';
     td0.textContent=rowIdx+1; tr.appendChild(td0);
 
     const flat=flattenRow(row);
+    const rowPath=rowJsonPath({ jsonPath, isArray }, rowIdx);
     cols.forEach(col=>{
       const td=document.createElement('td');
+      const colPath=col.groupKey ? joinJsonPath(col.key, col.subKey) : col.key;
+      const cellJsonPath=joinJsonPath(rowPath, colPath);
 
       if (col.groupKey) {
         // Sub-column of an expanded group — get value from nested object
@@ -1541,19 +1867,25 @@ function drawDataTable() {
           const btn=document.createElement('button'); btn.className='ref-arr';
           btn.style.fontSize='10.5px';
           btn.innerHTML=`📄 ${val.$count} ${val.$label} →`;
-          btn.onclick=()=>{ log('table:drill-in', { label:val.$label, depth:excelStack.length+1, count:val.$count }); excelStack.push({label:val.$label,rows:val.$val}); drawDataTable(); };
+          btn.onclick=()=>{
+            log('table:drill-in', { label:val.$label, depth:excelStack.length+1, count:val.$count });
+            excelStack.push({ label:val.$label, rows:val.$val, jsonPath:cellJsonPath, isArray:true });
+            drawDataTable();
+          };
           td.appendChild(btn);
+          appendCellJumps(td, cellJsonPath);
         } else if (val&&typeof val==='object'&&val.$ref==='object') {
           const btn=document.createElement('button'); btn.className='ref-obj';
           btn.style.fontSize='10.5px';
           btn.innerHTML=`🔗 ${val.$label} ↗`;
           btn.onclick=()=>openDetailPanel(val.$label,val.$val);
           td.appendChild(btn);
+          appendCellJumps(td, cellJsonPath);
         } else {
-          fillPrimCell(td, val, col.subKey);
+          fillPrimCell(td, val, col.subKey, cellJsonPath);
         }
       } else {
-        fillCell(td, flat[col.key], col.key, col.name);
+        fillCell(td, flat[col.key], col.key, col.name, cellJsonPath, rowPath);
       }
       tr.appendChild(td);
     });
@@ -1565,17 +1897,19 @@ function drawDataTable() {
 }
 
 // Fill a primitive cell (shared by normal and sub-column cells)
-function fillPrimCell(td, val, key) {
-  if (val===null||val===undefined) { td.className='td-null'; td.textContent='—'; return; }
+function fillPrimCell(td, val, key, jsonPath) {
+  const path = jsonPath || key;
+  if (val===null||val===undefined) { td.className='td-null'; td.textContent='—'; appendCellJumps(td, path); return; }
   const type=inferType(val);
-  if (type==='boolean') { td.innerHTML=val?`<span class="td-bool-y">✓ Yes</span>`:`<span class="td-bool-n">✗ No</span>`; return; }
-  if (type==='date')    { td.className='td-date'; td.textContent=fmtDate(val); return; }
-  if (type==='number')  { td.className='td-num';  td.textContent=formatNum(val,key); return; }
+  if (type==='boolean') { td.innerHTML=val?`<span class="td-bool-y">✓ Yes</span>`:`<span class="td-bool-n">✗ No</span>`; appendCellJumps(td, path); return; }
+  if (type==='date')    { td.className='td-date'; td.textContent=fmtDate(val); appendCellJumps(td, path); return; }
+  if (type==='number')  { td.className='td-num';  td.textContent=formatNum(val,key); appendCellJumps(td, path); return; }
   const s=String(val); td.textContent=s; td.title=s;
   if (s.length>30) td.style.maxWidth='180px';
+  appendCellJumps(td, path);
 }
 
-function fillCell(td, val, key, label) {
+function fillCell(td, val, key, label, cellJsonPath, rowPath) {
   if (val===null||val===undefined) { td.className='td-null'; td.textContent='—'; return; }
 
   // Array ref → drill into sub-table
@@ -1583,20 +1917,29 @@ function fillCell(td, val, key, label) {
     const btn=document.createElement('button'); btn.className='ref-arr';
     btn.innerHTML=`📄 ${val.$count} ${val.$label} →`;
     btn.title=`Open ${val.$label} as table (${val.$count} items)`;
-    btn.onclick=()=>{ log('table:drill-in', { label:val.$label, depth:excelStack.length+1, count:val.$count }); excelStack.push({label:val.$label,rows:val.$val}); drawDataTable(); };
-    td.appendChild(btn); return;
+    const drillPath=cellJsonPath || joinJsonPath(rowPath, key);
+    btn.onclick=()=>{
+      log('table:drill-in', { label:val.$label, depth:excelStack.length+1, count:val.$count });
+      excelStack.push({ label:val.$label, rows:val.$val, jsonPath:drillPath, isArray:true });
+      drawDataTable();
+    };
+    td.appendChild(btn);
+    appendCellJumps(td, drillPath);
+    return;
   }
-  // Object ref → ⊕ expand or ↗ slide-over (both shown)
+  // Object ref → slide-over details
   if (val&&typeof val==='object'&&val.$ref==='object') {
     const expBtn=document.createElement('button'); expBtn.className='ref-obj';
     expBtn.style.marginRight='4px';
     expBtn.innerHTML=`🔗 ${val.$label} ↗`;
     expBtn.title=`View ${val.$label} details`;
     expBtn.onclick=()=>openDetailPanel(val.$label,val.$val);
-    td.appendChild(expBtn); return;
+    td.appendChild(expBtn);
+    appendCellJumps(td, cellJsonPath || joinJsonPath(rowPath, key));
+    return;
   }
 
-  fillPrimCell(td, val, key);
+  fillPrimCell(td, val, key, cellJsonPath || joinJsonPath(rowPath, key));
 }
 
 // ── Schema → Table view ────────────────────────────────────────────────────────
@@ -1635,7 +1978,7 @@ function renderSchemaTable(schema) {
     const tr=document.createElement('tr');
     const depth=f.path.split('.').length-1;
     tr.innerHTML=`
-      <td style="text-align:center;color:#bbb;font-size:11px;background:#f9f9f7">${i+1}</td>
+      <td class="td-num-idx">${i+1}</td>
       <td style="padding-left:${8+depth*12}px;font-weight:${depth===0?'600':'400'}">${esc(f.label)}</td>
       <td class="td-path">${esc(f.path)}</td>
       <td class="td-type"><span class="badge ${typeBadgeClass(f.jsType,f.format,f.enum)}" style="font-size:10px">${esc(f.typeName)}</span></td>
@@ -1838,14 +2181,25 @@ const _isEmbed = new URLSearchParams(location.search).has('embed');
 if (_isEmbed) {
   const hdr = document.querySelector('header');
   if (hdr) hdr.style.display = 'none';
-  document.body.style.gridTemplateRows = 'auto 1fr';
-  // show a waiting state until postMessage arrives
+} else {
+  document.body.classList.add('has-header');
+}
+
+if (_isEmbed) {
   document.getElementById('rp-content').innerHTML =
     '<div style="color:var(--muted);padding:24px;font-size:12px">Waiting for data…</div>';
 }
 
 window.addEventListener('message', (e) => {
-  if (!e.data || e.data.type !== 'json-viewer:load') return;
+  if (!e.data) return;
+
+  if (e.data.type === 'json-viewer:settings') {
+    applyDefaultView(readDefaultView(e.data.defaultView));
+    applySyntaxTheme(readSyntaxTheme(e.data.syntaxTheme));
+    return;
+  }
+
+  if (e.data.type !== 'json-viewer:load') return;
   try {
     const val = typeof e.data.json === 'string' ? JSON.parse(e.data.json) : e.data.json;
     _currentVal  = val;
@@ -1856,6 +2210,8 @@ window.addEventListener('message', (e) => {
       else                           { badge.className = 'h-badge hb-data';   badge.textContent = 'Data';   }
     }
     log('external:load', { mode: _currentMode, type: Array.isArray(val) ? 'array' : typeof val });
+    applyDefaultView(readDefaultView(e.data.defaultView));
+    applySyntaxTheme(readSyntaxTheme(e.data.syntaxTheme));
     renderStructurePanel(_currentVal, _currentMode);
     renderRight();
     closeDetail();
@@ -1865,8 +2221,11 @@ window.addEventListener('message', (e) => {
 });
 
 if (!_isEmbed) {
-  setView('tree');
+  applyDefaultView(_viewMode);
+  applySyntaxTheme(readSyntaxTheme());
   selectTab('portfolio');
+} else {
+  applySyntaxTheme(readSyntaxTheme());
 }
 </script>
 </body>

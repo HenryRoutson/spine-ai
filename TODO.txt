@@ -10,6 +10,10 @@ One of the important steps i havent yet investigated is AB testing, comparing wh
 
 
 
+
+make input and output clear. also prompt and response
+
+
 Add a plot for the size of prompts and their breakdown in input down to json and what classes are being passed in.
 
 use claude desktop to develop slides
