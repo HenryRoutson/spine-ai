@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // AI : runPipeline & co accept this store unchanged. RLS scopes every row to the
 // AI : signed-in user behind `db`; no user_id handling anywhere in app code.
 import { ensureSeeded, hashContent, type Store } from "./store";
+import { migrateProjectModules } from "./validity";
 import type {
   DocId,
   DocLabel,
@@ -75,11 +76,12 @@ export class SupabaseStore implements Store {
   }
 
   saveProject(p: Project): void {
-    const i = this.state.projects.findIndex((x) => x.id === p.id);
-    if (i === -1) this.state.projects.push(p);
-    else this.state.projects[i] = p;
+    const migrated = migrateProjectModules(p);
+    const i = this.state.projects.findIndex((x) => x.id === migrated.id);
+    if (i === -1) this.state.projects.push(migrated);
+    else this.state.projects[i] = migrated;
     this.pending.push(
-      this.db.from("projects").upsert({ id: p.id, data: p }, { onConflict: "user_id,id" }),
+      this.db.from("projects").upsert({ id: migrated.id, data: migrated }, { onConflict: "user_id,id" }),
     );
   }
 

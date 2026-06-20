@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { StoreProvider, useStore } from "@/lib/store"
+import { computeInvalid } from "@/lib/validity"
 import { createClient } from "@/utils/supabase/client"
 import { DocViewerProvider } from "@/lib/doc-viewer"
 import { AppShellProvider, useAppShell, type AppWindowId } from "@/lib/app-shell"
@@ -208,7 +209,8 @@ function AccountMenu() {
 
 function Shell() {
   const { activeWindow, setActiveWindow } = useAppShell()
-  const { model, setModel } = useStore()
+  const { model, setModel, modules } = useStore()
+  const pipelineInvalid = computeInvalid(modules).size > 0
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -254,23 +256,37 @@ function Shell() {
           {WINDOWS.map((w) => {
             const Icon = w.icon
             const isActive = activeWindow === w.id
+            const isInferenceInvalid = w.id === "inference" && pipelineInvalid
             return (
               <button
                 key={w.id}
+                type="button"
                 onClick={() => setActiveWindow(w.id)}
-                title={w.label}
+                title={
+                  isInferenceInvalid
+                    ? "Fix pipeline errors before running inference"
+                    : w.label
+                }
                 className={cn(
                   "group flex items-center gap-3 rounded-md px-2.5 py-2 text-sm transition-colors",
                   "justify-center lg:justify-start",
-                  isActive
-                    ? "bg-secondary text-foreground"
-                    : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                  isInferenceInvalid
+                    ? isActive
+                      ? "bg-destructive/10 text-destructive"
+                      : "text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    : isActive
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
                 )}
               >
                 <Icon
                   className={cn(
                     "h-4 w-4 shrink-0",
-                    isActive ? "text-primary" : "text-muted-foreground",
+                    isInferenceInvalid
+                      ? "text-destructive"
+                      : isActive
+                        ? "text-primary"
+                        : "text-muted-foreground",
                   )}
                 />
                 <span className="hidden flex-1 text-left lg:inline">{w.label}</span>

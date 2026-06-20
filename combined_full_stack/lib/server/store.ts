@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { join } from "node:path";
 import { dataDir } from "./config";
 import { allProjectSeeds, blankProject, type SeedDocSpec } from "./seed";
-import { insertMissingQuoteSteps, migrateProjectModules, syncAutoQuoteSteps } from "./validity";
+import { computeInvalid, insertMissingQuoteSteps, migrateProjectModules, syncAutoQuoteSteps } from "./validity";
 import type {
   DocId,
   DocLabel,
@@ -84,9 +84,11 @@ function syncProjectFromSeed(existing: Project, seed: Project): Project {
   let modules: PipelineModule[];
   if (existing.id === seed.id) {
     const seedIds = new Set(seed.modules.map((m) => m.id));
-    modules = seed.modules.map((sm) => {
-      const em = existing.modules.find((m) => m.id === sm.id);
-      if (!em) return structuredClone(sm);
+    // AI : keep the user's step order — don't append orphan steps after output (that flags
+    // AI : false I/O errors like SourceDocument after LegalConsiderations).
+    modules = existing.modules.map((em) => {
+      if (!seedIds.has(em.id)) return structuredClone(em);
+      const sm = seed.modules.find((m) => m.id === em.id)!;
       return {
         ...sm,
         cached: em.cached,
@@ -95,7 +97,13 @@ function syncProjectFromSeed(existing: Project, seed: Project): Project {
         code: em.code ?? sm.code,
       };
     });
-    modules = [...modules, ...existing.modules.filter((m) => !seedIds.has(m.id))];
+    for (let si = 0; si < seed.modules.length; si++) {
+      const sm = seed.modules[si];
+      if (modules.some((m) => m.id === sm.id)) continue;
+      const prevSeed = seed.modules[si - 1];
+      const insertAt = prevSeed ? modules.findIndex((m) => m.id === prevSeed.id) + 1 : 0;
+      modules.splice(Math.max(insertAt, 0), 0, structuredClone(sm));
+    }
   } else {
     modules = next.modules.map((m) => {
       const sm = seed.modules.find((s) => s.id === m.id);
@@ -105,6 +113,13 @@ function syncProjectFromSeed(existing: Project, seed: Project): Project {
   }
 
   modules = syncAutoQuoteSteps(modules, next.models);
+  // AI : drop invalid user-added steps (often doc-to-text appended after output by old seed sync).
+  const invalid = computeInvalid(modules);
+  if (invalid.size > 0) {
+    const seedIds = new Set(seed.modules.map((m) => m.id));
+    const drop = [...invalid.keys()].filter((id) => !seedIds.has(id));
+    if (drop.length) modules = modules.filter((m) => !drop.includes(m.id));
+  }
   const changed =
     modules.length !== next.modules.length || modules.some((m, i) => m !== next.modules[i]);
   return changed ? { ...next, modules } : next;
@@ -192,9 +207,10 @@ export class JsonStore implements Store {
   }
 
   saveProject(p: Project): void {
-    const i = this.state.projects.findIndex((x) => x.id === p.id);
-    if (i === -1) this.state.projects.push(p);
-    else this.state.projects[i] = p;
+    const migrated = migrateProjectModules(p);
+    const i = this.state.projects.findIndex((x) => x.id === migrated.id);
+    if (i === -1) this.state.projects.push(migrated);
+    else this.state.projects[i] = migrated;
     this.persist();
   }
 

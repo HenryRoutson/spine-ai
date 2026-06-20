@@ -15,7 +15,7 @@ import {
   validateStepOutput,
 } from "./structure";
 import type { Store } from "./store";
-import { computeInvalid } from "./validity";
+import { computeInvalid, stepEmits } from "./validity";
 import { projectSeedDocNames } from "./seed";
 import { UsageLedger } from "./usage";
 import {
@@ -143,6 +143,19 @@ function materializeStepOutput(
   return materializeToModel(partial, out, project.models, hints);
 }
 
+// AI : strict linear spine — each step reads only the previous step's value, not stale byModel hits.
+function requireLinearInput(m: PipelineModule, ctx: RunCtx): unknown {
+  const prev = ctx.prevModuleId ? ctx.project.modules.find((x) => x.id === ctx.prevModuleId) : undefined;
+  const upstream = stepEmits(prev);
+  if (m.inStructureId !== upstream) {
+    throw new Error(
+      `step "${m.label}" expects ${m.inStructureId ?? "?"} but previous step emits ${upstream ?? "nothing"}`,
+    );
+  }
+  if (!ctx.prevModuleId) throw new Error(`step "${m.label}" has no previous step`);
+  return ctx.outputs.get(ctx.prevModuleId);
+}
+
 async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof runLogger>): Promise<ExecResult> {
   const { project, store } = ctx;
   log.debug(`execModule start`, { moduleId: m.id, kind: m.kind, label: m.label });
@@ -188,7 +201,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       if (!out) throw new Error(`llm step ${m.id} has no output structure`);
       const stepModel = m.model ?? ctx.model;
       log.info(`llm step`, { moduleId: m.id, model: stepModel, outStructure: out.name, outIsList: !!m.outIsList });
-      const inputData = ctx.byModel.get(m.inStructureId as StructureModelId) ?? ctx.outputs.get(ctx.prevModuleId!);
+      const inputData = requireLinearInput(m, ctx);
       const context =
         ctx.sourceText && hasQuoteField(out)
           ? `SOURCE DOCUMENT:\n${ctx.sourceText}`
@@ -268,7 +281,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       const out = modelById(project.models, m.outStructureId);
       if (!out) throw new Error(`llm-batch step ${m.id} has no output structure`);
       const stepModel = m.model ?? ctx.model;
-      const data = ctx.byModel.get(m.inStructureId as StructureModelId) ?? (ctx.prevModuleId ? ctx.outputs.get(ctx.prevModuleId) : undefined);
+      const data = requireLinearInput(m, ctx);
       const items = Array.isArray(data) ? data : [data];
       log.info(`llm-batch step`, { moduleId: m.id, model: stepModel, itemCount: items.length, outStructure: out.name });
       const schema = llmSchema(out, project.models, false); // per-item schema
@@ -306,7 +319,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       if (!ctx.sourceText) {
         throw new Error(`quote step ${m.id} needs source text from an upstream input or doc-to-text step`);
       }
-      const data = ctx.byModel.get(m.inStructureId as StructureModelId) ?? ctx.outputs.get(ctx.prevModuleId!);
+      const data = requireLinearInput(m, ctx);
       const isList = !!m.outIsList || Array.isArray(data);
       log.info(`quote step`, {
         moduleId: m.id,
@@ -327,9 +340,10 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
     }
 
     case "output": {
-      const report = ctx.byModel.get(m.inStructureId as StructureModelId) ?? ctx.outputs.get(ctx.prevModuleId!);
-      const name = modelById(project.models, m.outStructureId)?.name ?? "Output";
-      return { value: report, preview: `${name}.md emitted`, json: JSON.stringify(report, null, 2) };
+      const report = requireLinearInput(m, ctx);
+      const structId = m.outStructureId ?? m.inStructureId;
+      const name = modelById(project.models, structId)?.name ?? "Output";
+      return { value: report, preview: `${name} snapshot`, json: JSON.stringify(report, null, 2) };
     }
   }
 }
@@ -534,9 +548,14 @@ export async function runPipeline(
     // record flowing state for downstream steps
     if (status !== "error") {
       ctx.outputs.set(m.id, result.value);
-      if (m.outStructureId) ctx.byModel.set(m.outStructureId, result.value);
+      const structId = m.outStructureId ?? (m.kind === "output" ? m.inStructureId : undefined);
+      if (structId) ctx.byModel.set(structId, result.value);
       ctx.prevModuleId = m.id;
-      artifacts.push({ moduleId: m.id, structure: modelById(project.models, m.outStructureId), value: result.value });
+      artifacts.push({
+        moduleId: m.id,
+        structure: modelById(project.models, structId),
+        value: result.value,
+      });
     }
 
     steps.push({
@@ -602,7 +621,7 @@ export async function runPipeline(
 
   if (persist) {
     log.info(`persisting artifacts`, { artifactCount: artifacts.length });
-    persistArtifacts(runId, inputDocId, store, artifacts);
+    persistArtifacts(runId, inputDocId, store, artifacts, project.modules);
     // AI : save each custom step's code next to its input/output artifact (previous runs).
     for (const m of project.modules) {
       if (m.kind === "custom-code" && m.code) fileWriteHelper(join(dataDir(), "runs", runId), `${m.id}_code`, "ts", m.code);
@@ -621,6 +640,7 @@ function persistArtifacts(
   inputDocId: DocId,
   store: Store,
   artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[],
+  modules: PipelineModule[],
 ): void {
   const dir = join(dataDir(), "runs", runId);
   const inputText = store.docContent(inputDocId) ?? "";
@@ -638,11 +658,16 @@ function persistArtifacts(
   // AI : document after export, with no run context needed (resolve docs/<hash>.txt and slice).
   const quotes = [...new Map(artifacts.flatMap((a) => collectQuotes(a.value)).map((q) => [q.href, q])).values()];
   if (quotes.length) fileWriteHelper(dir, "quotes", "json", JSON.stringify(quotes, null, 2));
-  // AI : the final output module also emits a readable markdown document, named for its structure.
-  const final = artifacts.at(-1);
-  if (final) {
-    const name = final.structure?.name ?? "FinalOutput";
-    fileWriteHelper(dir, snakeCase(name), "md", renderReport(final.value, name.replace(/([a-z0-9])([A-Z])/g, "$1 $2")));
+  // AI : each output step emits a readable markdown snapshot — pipelines may have several.
+  const outputIds = new Set(modules.filter((m) => m.kind === "output").map((m) => m.id));
+  for (const a of artifacts.filter((x) => outputIds.has(x.moduleId))) {
+    const name = a.structure?.name ?? "Output";
+    fileWriteHelper(
+      dir,
+      `${a.moduleId}_${snakeCase(name)}`,
+      "md",
+      renderReport(a.value, name.replace(/([a-z0-9])([A-Z])/g, "$1 $2")),
+    );
   }
 }
 

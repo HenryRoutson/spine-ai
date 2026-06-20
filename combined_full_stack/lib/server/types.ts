@@ -245,7 +245,10 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   transform: { label: "Transform", description: "Reshape, chunk, or map data" },
   combine: { label: "Combine Inputs", description: "Merge a new input with the pipeline state" },
   "custom-code": { label: "Custom TS Function", description: "Saved (input) => output code step, no LLM cost" },
-  output: { label: "Output", description: "Emit the final structured document" },
+  output: {
+    label: "Output",
+    description: "Materialize a named snapshot of a structure — not the pipeline's only output; add one anywhere you want an artifact",
+  },
 };
 
 export const STRATEGY_META: Record<StrategyKind, { name: string; description: string }> = {

@@ -19,34 +19,98 @@ export interface InvalidStep {
 
 export interface PipelineWarning {
   moduleId: ModuleId;
-  kind: "no-prompt" | "quote-no-fields";
+  kind: "no-prompt" | "quote-no-fields" | "unused-output";
 }
 
 const LLM_KINDS: ModuleKind[] = ["llm", "llm-batch"];
 
-// AI : canonical I/O-validity check — mirrors the frontend `computeInvalid`.
-// AI : invalid = missing output model, or previous step's output model != this step's input model.
-// AI : `input` sources its own data and `combine` intentionally reshapes, so both are exempt from I/O mismatch.
+// AI : what structure a step puts on the linear spine for the *next* step (output passthrough).
+export function stepEmits(m: PipelineModule | undefined): StructureModelId | undefined {
+  if (!m) return undefined;
+  if (m.kind === "output") return m.inStructureId ?? m.outStructureId;
+  return m.outStructureId;
+}
+
+// AI : canonical I/O-validity check — strictly linear except combine (pipeline state + side doc).
+// AI : invalid = missing output model, or inStructureId ≠ previous step's emitted structure.
 export function computeInvalid(modules: PipelineModule[]): Map<ModuleId, InvalidStep> {
   const invalid = new Map<ModuleId, InvalidStep>();
   for (const m of modules) {
+    // AI : output steps only need inStructureId — they pass it through as a named artifact.
+    if (m.kind === "output") {
+      if (!m.inStructureId) invalid.set(m.id, { moduleId: m.id, kind: "no-output" });
+      continue;
+    }
     if (!m.outStructureId) invalid.set(m.id, { moduleId: m.id, kind: "no-output" });
   }
-  for (let i = 1; i < modules.length; i++) {
-    const prev = modules[i - 1];
-    const cur = modules[i];
-    if (cur.kind === "input") continue;
-    if (!cur.inStructureId) continue;
-    const upstream = prev.outStructureId;
-    if (upstream && cur.inStructureId && upstream !== cur.inStructureId && cur.kind !== "combine") {
-      invalid.set(cur.id, {
-        moduleId: cur.id,
+
+  let flow: StructureModelId | undefined;
+  const byModel = new Set<StructureModelId>();
+
+  for (let i = 0; i < modules.length; i++) {
+    const m = modules[i];
+    const prev = i > 0 ? modules[i - 1] : undefined;
+
+    if (m.kind === "input") {
+      if (modules[i + 1]?.kind === "combine") continue;
+      if (m.outStructureId) {
+        flow = m.outStructureId;
+        byModel.add(m.outStructureId);
+      }
+      continue;
+    }
+
+    if (m.kind === "combine") {
+      if (m.inStructureId && !byModel.has(m.inStructureId)) {
+        invalid.set(m.id, {
+          moduleId: m.id,
+          kind: "io-mismatch",
+          expects: m.inStructureId,
+          upstreamEmits: flow ?? prev?.outStructureId,
+        });
+      }
+      if (m.outStructureId) {
+        flow = m.outStructureId;
+        byModel.add(m.outStructureId);
+      }
+      continue;
+    }
+
+    if (m.kind === "output") {
+      if (invalid.has(m.id)) continue;
+      const upstream = stepEmits(prev) ?? flow;
+      if (!m.inStructureId || upstream !== m.inStructureId) {
+        invalid.set(m.id, {
+          moduleId: m.id,
+          kind: "io-mismatch",
+          expects: m.inStructureId,
+          upstreamEmits: upstream,
+        });
+      } else if (m.inStructureId) {
+        flow = m.inStructureId;
+      }
+      continue;
+    }
+
+    if (!m.inStructureId || invalid.has(m.id)) continue;
+
+    const upstream = stepEmits(prev) ?? flow;
+    if (upstream !== m.inStructureId) {
+      invalid.set(m.id, {
+        moduleId: m.id,
         kind: "io-mismatch",
-        expects: cur.inStructureId,
+        expects: m.inStructureId,
         upstreamEmits: upstream,
       });
+      continue;
+    }
+
+    if (m.outStructureId) {
+      flow = m.outStructureId;
+      byModel.add(m.outStructureId);
     }
   }
+
   return invalid;
 }
 
@@ -56,7 +120,8 @@ export function computeWarnings(
   models: StructureModel[] = [],
 ): Map<ModuleId, PipelineWarning> {
   const warnings = new Map<ModuleId, PipelineWarning>();
-  for (const m of modules) {
+  for (let i = 0; i < modules.length; i++) {
+    const m = modules[i];
     if (LLM_KINDS.includes(m.kind) && !m.prompt?.trim()) {
       warnings.set(m.id, { moduleId: m.id, kind: "no-prompt" });
     }
@@ -66,8 +131,27 @@ export function computeWarnings(
         warnings.set(m.id, { moduleId: m.id, kind: "quote-no-fields" });
       }
     }
+    const emitted = stepEmits(m);
+    if (!emitted || m.kind === "input" || m.kind === "output") continue;
+    const used = modules.slice(i + 1).some((down) => down.inStructureId === emitted);
+    if (!used) warnings.set(m.id, { moduleId: m.id, kind: "unused-output" });
   }
   return warnings;
+}
+
+export function warningStepMessage(
+  issue: PipelineWarning,
+  models: StructureModel[],
+  modules: PipelineModule[],
+): string {
+  if (issue.kind === "no-prompt") return "no prompt — schema-only call at runtime";
+  if (issue.kind === "quote-no-fields") return "output model has no quote fields";
+  if (issue.kind === "unused-output") {
+    const m = modules.find((x) => x.id === issue.moduleId);
+    const name = modelName(models, stepEmits(m)) ?? "output";
+    return `${name} is never consumed by a downstream step`;
+  }
+  return "warning";
 }
 
 export function invalidStepMessage(
@@ -75,11 +159,13 @@ export function invalidStepMessage(
   models: StructureModel[],
   modules: PipelineModule[],
 ): string {
-  if (issue.kind === "no-output") return "select an output model";
+  if (issue.kind === "no-output") {
+    const m = modules.find((x) => x.id === issue.moduleId);
+    return m?.kind === "output" ? "select a structure to materialize" : "select an output model";
+  }
   if (issue.kind === "io-mismatch") {
-    const i = modules.findIndex((m) => m.id === issue.moduleId);
     return `input expects ${modelName(models, issue.expects)}, upstream emits ${
-      modelName(models, modules[i - 1]?.outStructureId) ?? "?"
+      modelName(models, issue.upstreamEmits) ?? "?"
     }`;
   }
   return "invalid step";
@@ -87,7 +173,7 @@ export function invalidStepMessage(
 
 // AI : A/B strategies use the pipeline's own LLM prompt — not a hardcoded legal brief.
 export function pipelineTaskPrompt(modules: PipelineModule[]): string {
-  const outMod = modules.find((m) => m.kind === "output");
+  const outMod = [...modules].reverse().find((m) => m.kind === "output");
   const targetId = outMod?.inStructureId;
   if (targetId) {
     const direct = modules.find(
@@ -101,8 +187,8 @@ export function pipelineTaskPrompt(modules: PipelineModule[]): string {
 }
 
 export function pipelineOutputModel(project: Project): StructureModel {
-  const outMod = project.modules.find((m) => m.kind === "output");
-  if (!outMod?.inStructureId) throw new Error("pipeline has no output step with an output model");
+  const outMod = [...project.modules].reverse().find((m) => m.kind === "output");
+  if (!outMod?.inStructureId) throw new Error("pipeline has no output step with a structure to materialize");
   const m = project.models.find((x) => x.id === outMod.inStructureId);
   if (!m) throw new Error(`unknown output structure ${outMod.inStructureId}`);
   return m;

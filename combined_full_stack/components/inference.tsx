@@ -13,8 +13,11 @@ import {
   AlertTriangle,
   Copy,
   Check,
+  GitBranch,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
+import { useAppShell } from "@/lib/app-shell"
+import { computeInvalid } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { awaitRun, mergeStepStates, startRun, type JobLogEntry, type StepProgress, type StepSubProgress, type StepUiState } from "@/lib/run-engine"
 import { collectQuotes, quoteHref } from "@/lib/quotes"
@@ -56,7 +59,9 @@ function pipelineRunError(run: PipelineRun): string | null {
 
 export function Inference() {
   const { project, modules, model, addDoc, addRun, docs, refreshBilling } = useStore()
+  const { setActiveWindow } = useAppShell()
   const { open } = useDocViewer()
+  const pipelineInvalid = computeInvalid(modules).size > 0
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [dragOver, setDragOver] = useState(false)
@@ -168,7 +173,11 @@ export function Inference() {
 
   const waitPhrase = useCyclingWaitPhrase(phase === "running", runningHints)
 
-  // AI : real outputs — rule cards from the extraction step, plus the final step's JSON.
+  // AI : real outputs — rule cards from the extraction step, plus each output step's JSON.
+  const outputModuleIds = useMemo(
+    () => new Set(modules.filter((m) => m.kind === "output").map((m) => m.id)),
+    [modules],
+  )
   const parsedSteps = useMemo(() => {
     return (run?.steps ?? []).map((s) => {
       try {
@@ -183,7 +192,10 @@ export function Inference() {
     () => [...new Map(parsedSteps.flatMap((v) => collectQuotes(v)).map((q) => [q.href, q])).values()],
     [parsedSteps],
   )
-  const finalStep = useMemo(() => [...(run?.steps ?? [])].reverse().find((s) => s.outputJson), [run])
+  const outputSteps = useMemo(
+    () => (run?.steps ?? []).filter((s) => outputModuleIds.has(s.moduleId) && s.outputJson),
+    [run, outputModuleIds],
+  )
   const runErr = useMemo(() => (run ? pipelineRunError(run) : null), [run])
   const sourceDoc = useMemo(() => {
     const id = run?.inputDocId ?? inputDoc?.id
@@ -205,6 +217,25 @@ export function Inference() {
         }
       />
 
+      {pipelineInvalid ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-6 py-8 max-w-md">
+            <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
+            <p className="mt-4 text-sm font-medium text-destructive">
+              Fix pipeline errors before running inference.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4 gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setActiveWindow("pipeline")}
+            >
+              <GitBranch className="h-3.5 w-3.5" />
+              Go to Pipeline
+            </Button>
+          </div>
+        </div>
+      ) : (
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_1.1fr]">
         {/* left: input + run controls */}
         <div className="min-h-0 overflow-y-auto border-b border-border lg:border-b-0 lg:border-r">
@@ -461,21 +492,22 @@ export function Inference() {
                   <QuoteLinks quotes={quotes} />
                 )}
 
-                {finalStep?.outputJson && (
-                  <div>
+                {outputSteps.map((step) => (
+                  <div key={step.moduleId}>
                     <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      final output · {finalStep.label}
+                      output · {step.label}
                     </p>
                     <div className="rounded border border-border bg-[oklch(0.14_0.004_264)] p-2">
-                      <JsonHighlight json={finalStep.outputJson} />
+                      <JsonHighlight json={step.outputJson!} />
                     </div>
                   </div>
-                )}
+                ))}
               </div>
             )}
           </div>
         </div>
       </div>
+      )}
     </div>
   )
 }

@@ -190,13 +190,13 @@ Module kinds:
 ${kinds}
 
 Rules:
-- Pipelines are strictly linear. Each step (except input/combine) must have inStructureId matching the previous step's outStructureId.
+- Pipelines are strictly linear. Each step must consume ONLY the previous step's output — never an earlier structure with the same model name. combine is the exception: it reads pipeline state (by structure name) plus the document input immediately before it.
 - Every step needs an output structure (structureOut). Input steps only need structureOut.
 - Reference structures by exact name from the project's models list (e.g. "SourceDocument", "AtomicRule").
 - combine steps merge pipeline state with a new document — emit ONLY the combine step; a Document Input is auto-inserted before it.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
 - llm-batch consumes a list and emits a list — set outIsList: true.
-- End with an output step whose structureIn matches the final artifact model.
+- Add output steps wherever a named artifact snapshot is needed — pipelines may have several; each output's structureIn is the structure it materializes (not necessarily the last step).
 - Use model ids from: ${models}
 - Default LLM model: ${DEFAULT_MODEL}
 

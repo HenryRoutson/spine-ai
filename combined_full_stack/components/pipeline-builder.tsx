@@ -5,6 +5,7 @@ import {
   Plus,
   Trash2,
   ChevronRight,
+  ArrowRight,
   Zap,
   FileInput,
   Shuffle,
@@ -23,7 +24,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { useStore, uid } from "@/lib/store"
-import { computeInvalid, computeWarnings, invalidStepMessage } from "@/lib/validity"
+import { computeInvalid, computeWarnings, invalidStepMessage, warningStepMessage, type InvalidStep, type PipelineWarning } from "@/lib/validity"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { llmSchemaJson } from "@/lib/structure"
 import { JsonHighlight } from "@/components/highlight"
@@ -131,6 +132,7 @@ function makeModule(
   globalModel: string,
 ): PipelineModule {
   const isLlm = LLM_KINDS.includes(kind)
+  const defaultModel = models[0]?.id
   return {
     id: uid(),
     kind,
@@ -139,8 +141,8 @@ function makeModule(
     avgMs: 0,
     avgCostCents: 0,
     inputType: kind === "input" ? "pdf" : undefined,
-    outStructureId: models[0]?.id,
-    inStructureId: kind !== "input" ? models[0]?.id : undefined,
+    outStructureId: kind === "output" ? undefined : defaultModel,
+    inStructureId: kind !== "input" ? defaultModel : undefined,
     prompt: isLlm ? "" : undefined,
     code: kind === "custom-code" ? "(input) => input" : undefined,
     model: isLlm ? globalModel : undefined,
@@ -215,7 +217,16 @@ export function PipelineBuilder() {
   const segments = segmentPipeline(modules)
 
   function update(id: string, patch: Partial<PipelineModule>) {
-    setModules(modules.map((m) => (m.id === id ? { ...m, ...patch } : m)))
+    setModules(
+      modules.map((m) => {
+        if (m.id !== id) return m
+        const next = { ...m, ...patch }
+        if (next.kind === "output" && patch.inStructureId) {
+          next.outStructureId = patch.inStructureId
+        }
+        return next
+      }),
+    )
   }
 
   function remove(id: string) {
@@ -279,18 +290,25 @@ export function PipelineBuilder() {
                 <AlertTriangle className="h-3 w-3" /> {invalid.size} invalid
               </Badge>
             )}
+            {warnings.size > 0 && (
+              <Badge variant="outline" className="gap-1 border-amber-500/50 text-[10px] text-amber-600 dark:text-amber-500">
+                <AlertTriangle className="h-3 w-3" /> {warnings.size} warning{warnings.size === 1 ? "" : "s"}
+              </Badge>
+            )}
           </div>
         }
       />
 
-      <div className="flex min-h-0 flex-1">
+      <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(24rem,44%)]">
         {/* canvas */}
-        <div className="min-w-0 flex-1 overflow-auto">
-          <div className="flex min-h-full flex-col items-center gap-0 px-6 py-8">
-            <PipelineNode label="Start" subtle />
-            {segments.length > 0 && (
-              <InsertSlot insertAt={insertBeforeIndex(segments[0])} onInsert={insertModule} />
-            )}
+        <div className="min-w-0 overflow-auto">
+          <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col items-stretch gap-0 px-6 py-8">
+            <div className="mx-auto flex w-full max-w-xl flex-col items-center">
+              <PipelineNode label="Start" subtle />
+              {segments.length > 0 && (
+                <InsertSlot insertAt={insertBeforeIndex(segments[0])} onInsert={insertModule} />
+              )}
+            </div>
             {segments.map((seg) => {
               if (seg.kind === "combine") {
                 const { combine, input, index } = seg
@@ -299,10 +317,10 @@ export function PipelineBuilder() {
                 const outModel = modelName(models, combine.outStructureId)
                 const groupSelected = selectedId === combine.id || selectedId === input.id
                 return (
-                  <div key={combine.id} className="flex flex-col items-center">
+                  <div key={combine.id} className="mx-auto flex w-full max-w-xl flex-col items-center">
                     <div
                       className={cn(
-                        "w-80 rounded-lg border-2 border-dashed px-3.5 py-3 transition-colors",
+                        "w-full rounded-lg border-2 border-dashed px-3.5 py-3 transition-colors",
                         isInvalid
                           ? "border-destructive/70 bg-destructive/5"
                           : groupSelected
@@ -313,15 +331,15 @@ export function PipelineBuilder() {
                       <button
                         type="button"
                         onClick={() => setSelectedId(combine.id)}
-                        className="flex w-full items-center gap-2 text-left"
+                        className="flex w-full items-start gap-2 text-left"
                       >
                         <span className="font-mono text-[10px] text-muted-foreground">
                           {String(index + 1).padStart(2, "0")}
                         </span>
                         <KindIcon kind="combine" />
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium">{combine.label}</p>
-                          <p className="truncate font-mono text-[10px] text-muted-foreground">
+                          <p className="line-clamp-2 text-sm font-medium leading-snug">{combine.label}</p>
+                          <p className="line-clamp-2 font-mono text-[10px] leading-snug text-muted-foreground">
                             {pipelineModel ?? "pipeline"}
                             <span className="text-muted-foreground/60"> + </span>
                             document
@@ -341,7 +359,7 @@ export function PipelineBuilder() {
                         type="button"
                         onClick={() => setSelectedId(input.id)}
                         className={cn(
-                          "mt-2 flex w-full items-center gap-3 rounded-md border bg-card px-3 py-2.5 text-left transition-colors",
+                          "mt-2 flex w-full items-start gap-3 rounded-md border bg-card px-3 py-2.5 text-left transition-colors",
                           selectedId === input.id
                             ? "border-primary"
                             : "border-border hover:border-muted-foreground/40",
@@ -349,15 +367,15 @@ export function PipelineBuilder() {
                       >
                         <KindIcon kind="input" size="sm" />
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-xs font-medium">{input.label}</p>
-                          <p className="truncate font-mono text-[10px] text-muted-foreground">
+                          <p className="line-clamp-2 text-xs font-medium leading-snug">{input.label}</p>
+                          <p className="line-clamp-2 font-mono text-[10px] leading-snug text-muted-foreground">
                             {modelName(models, input.outStructureId) ?? "·"} · {input.inputType ?? "file"}
                           </p>
                         </div>
                       </button>
                     </div>
                     {isInvalid && (
-                      <p className="mt-1 max-w-80 text-center font-mono text-[10px] text-destructive">
+                      <p className="mt-1 text-center font-mono text-[10px] text-destructive">
                         {invalidStepMessage(invalid.get(combine.id)!, models, modules)}
                       </p>
                     )}
@@ -369,14 +387,35 @@ export function PipelineBuilder() {
               const m = seg.module
               const i = seg.index
               const isInvalid = invalid.has(m.id)
+              const stepWarning = warnings.get(m.id)
               const locked = isAutoQuoteStep(m)
               const ioName = modelName(models, m.inStructureId)
+
+              if (m.kind === "output") {
+                return (
+                  <OutputForkStep
+                    key={m.id}
+                    m={m}
+                    index={i}
+                    models={models}
+                    modules={modules}
+                    selectedId={selectedId}
+                    isInvalid={isInvalid}
+                    issue={invalid.get(m.id)}
+                    insertAt={insertAfterIndex(seg)}
+                    onSelect={setSelectedId}
+                    onInsert={insertModule}
+                    blocked={blocksInsertBefore(modules, insertAfterIndex(seg))}
+                  />
+                )
+              }
+
               return (
-                <div key={m.id} className="flex flex-col items-center">
+                <div key={m.id} className="mx-auto flex w-full max-w-xl flex-col items-center">
                   <button
                     onClick={() => setSelectedId(m.id)}
                     className={cn(
-                      "group relative flex w-80 items-center gap-3 rounded-lg border bg-card px-3.5 py-3 text-left transition-colors",
+                      "group relative flex w-full items-start gap-3 rounded-lg border bg-card px-3.5 py-3 text-left transition-colors",
                       locked && "border-dashed border-chart-2/50 bg-chart-2/5",
                       isInvalid
                         ? "border-destructive/70"
@@ -390,8 +429,8 @@ export function PipelineBuilder() {
                     </span>
                     <KindIcon kind={m.kind} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{m.label}</p>
-                      <p className="truncate font-mono text-[10px] text-muted-foreground">
+                      <p className="line-clamp-2 text-sm font-medium leading-snug">{m.label}</p>
+                      <p className="line-clamp-2 font-mono text-[10px] leading-snug text-muted-foreground">
                         {m.kind === "input"
                           ? `${modelName(models, m.outStructureId) ?? "·"} · ${m.inputType ?? "file"}`
                           : locked
@@ -417,8 +456,13 @@ export function PipelineBuilder() {
                     )}
                   </button>
                   {isInvalid && (
-                    <p className="mt-1 max-w-80 text-center font-mono text-[10px] text-destructive">
+                    <p className="mt-1 text-center font-mono text-[10px] text-destructive">
                       {invalidStepMessage(invalid.get(m.id)!, models, modules)}
+                    </p>
+                  )}
+                  {!isInvalid && stepWarning && (
+                    <p className="mt-1 text-center font-mono text-[10px] text-amber-600 dark:text-amber-500">
+                      {warningStepMessage(stepWarning, models, modules)}
                     </p>
                   )}
                   <InsertSlot
@@ -430,13 +474,14 @@ export function PipelineBuilder() {
                 </div>
               )
             })}
-            {segments.length === 0 && (
-              <InsertSlot insertAt={0} onInsert={insertModule} alwaysShow />
-            )}
-            <PipelineNode label="End" subtle />
-
-            <div className="mt-6">
-              <AddStepMenu insertAt={modules.length} onInsert={insertModule} variant="button" />
+            <div className="mx-auto flex w-full max-w-xl flex-col items-center">
+              {segments.length === 0 && (
+                <InsertSlot insertAt={0} onInsert={insertModule} alwaysShow />
+              )}
+              <PipelineNode label="End" subtle />
+              <div className="mt-6">
+                <AddStepMenu insertAt={modules.length} onInsert={insertModule} variant="button" />
+              </div>
             </div>
           </div>
         </div>
@@ -474,7 +519,7 @@ export function PipelineBuilder() {
           {asideTab === "assistant" ? (
             <PipelineAssistant />
           ) : selected ? (
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
               <div className="mb-3 flex items-center justify-between">
                 <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                   {MODULE_META[selected.kind].label}
@@ -534,6 +579,11 @@ export function PipelineBuilder() {
               <p className="mb-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
                 {MODULE_META[selected.kind].description}
               </p>
+              {warnings.has(selected.id) && (
+                <p className="mb-3 font-mono text-[10px] leading-relaxed text-amber-600 dark:text-amber-500">
+                  {warningStepMessage(warnings.get(selected.id)!, models, modules)}
+                </p>
+              )}
 
               <Field label="Label">
                 <Input
@@ -616,13 +666,37 @@ export function PipelineBuilder() {
               )}
 
               {selected.kind !== "input" && (
-                <Field label="Input model">
+                <Field
+                  label={selected.kind === "output" ? "Structure to materialize" : "Input model"}
+                  hint={
+                    selected.kind === "output" &&
+                    invalid.has(selected.id) &&
+                    invalid.get(selected.id)?.kind === "no-output"
+                      ? "required — pick the structure this step snapshots"
+                      : undefined
+                  }
+                  hintTone={
+                    selected.kind === "output" &&
+                    invalid.has(selected.id) &&
+                    invalid.get(selected.id)?.kind === "no-output"
+                      ? "error"
+                      : undefined
+                  }
+                >
                   <Select
                     value={selected.inStructureId ?? null}
                     onValueChange={(v) => update(selected.id, { inStructureId: v ?? undefined })}
                     items={structureModelItems}
                   >
-                    <SelectTrigger className="h-8 font-mono text-xs">
+                    <SelectTrigger
+                      className={cn(
+                        "h-8 font-mono text-xs",
+                        selected.kind === "output" &&
+                          invalid.has(selected.id) &&
+                          invalid.get(selected.id)?.kind === "no-output" &&
+                          "border-destructive/70",
+                      )}
+                    >
                       <SelectValue placeholder="Select model" />
                     </SelectTrigger>
                     <SelectContent>
@@ -636,7 +710,7 @@ export function PipelineBuilder() {
                 </Field>
               )}
 
-              {selected.kind !== "input" && (
+              {selected.kind !== "input" && selected.kind !== "output" && (
                 <Field
                   label="Output model"
                   hint={
@@ -695,11 +769,16 @@ export function PipelineBuilder() {
                       value={selected.prompt ?? ""}
                       onChange={(e) => update(selected.id, { prompt: e.target.value })}
                       placeholder="Extra instruction (schema below also guides the model)…"
-                      className="min-h-20 text-xs leading-relaxed"
+                      className="min-h-32 resize-y text-xs leading-relaxed"
                     />
                     {warnings.has(selected.id) && warnings.get(selected.id)?.kind === "no-prompt" && (
                       <p className="mt-1 font-mono text-[9px] text-muted-foreground">
                         no custom text — JSON schema is sent as the structured output contract
+                      </p>
+                    )}
+                    {warnings.has(selected.id) && warnings.get(selected.id)?.kind === "unused-output" && (
+                      <p className="mt-1 font-mono text-[9px] text-amber-600 dark:text-amber-500">
+                        {warningStepMessage(warnings.get(selected.id)!, models, modules)}
                       </p>
                     )}
                   </Field>
@@ -711,7 +790,7 @@ export function PipelineBuilder() {
                           : "Output schema · Zod → JSON Schema"
                       }
                     >
-                      <div className="max-h-48 overflow-auto rounded-md border border-border bg-[oklch(0.14_0.004_264)] p-2">
+                      <div className="max-h-64 min-w-0 overflow-auto rounded-md border border-border bg-[oklch(0.14_0.004_264)] p-2">
                         <JsonHighlight json={llmSchemaPreview} />
                       </div>
                     </Field>
@@ -782,7 +861,8 @@ function AutoQuoteLock({ className }: { className?: string }) {
   return (
     <Tooltip>
       <TooltipTrigger
-        type="button"
+        // AI : span avoids nested <button> when this badge sits inside a module row button
+        render={<span />}
         className={cn(
           "inline-flex shrink-0 items-center gap-1 rounded-md border border-chart-2/40 bg-chart-2/10 px-1.5 py-0.5 text-chart-2",
           className,
@@ -897,6 +977,82 @@ function AddStepMenu({
   )
 }
 
+function OutputForkStep({
+  m,
+  index,
+  models,
+  modules,
+  selectedId,
+  isInvalid,
+  issue,
+  insertAt,
+  onSelect,
+  onInsert,
+  blocked,
+}: {
+  m: PipelineModule
+  index: number
+  models: StructureModel[]
+  modules: PipelineModule[]
+  selectedId: string
+  isInvalid: boolean
+  issue?: InvalidStep
+  insertAt: number
+  onSelect: (id: string) => void
+  onInsert: (kind: ModuleKind, at: number) => void
+  blocked?: boolean
+}) {
+  const structName = modelName(models, m.inStructureId)
+  return (
+    <div className="mx-auto flex w-full max-w-xl flex-col items-center">
+      {/* AI : output sits on the spine — arrow exits right to signal materialization */}
+      <div className="flex w-full items-center justify-center">
+        <div className="relative w-full max-w-xs">
+          <button
+            type="button"
+            onClick={() => onSelect(m.id)}
+            className={cn(
+              "flex w-full flex-col items-center gap-1.5 rounded-lg border border-dashed px-4 py-3 text-center transition-colors",
+              "border-chart-4/50 bg-chart-4/5 shadow-sm",
+              isInvalid && "border-destructive/70 bg-destructive/5",
+              m.id === selectedId && "border-chart-4 ring-1 ring-chart-4/40",
+              m.id !== selectedId && !isInvalid && "hover:border-chart-4/80 hover:bg-chart-4/10",
+            )}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <span className="font-mono text-[10px] text-chart-4/80">{String(index + 1).padStart(2, "0")}</span>
+              <KindIcon kind="output" />
+            </div>
+            <div className="min-w-0 w-full">
+              <p className="line-clamp-2 text-sm font-medium leading-snug">{m.label}</p>
+              <p className="line-clamp-2 font-mono text-[10px] leading-snug text-muted-foreground">
+                {structName ?? "·"}
+                <span className="text-chart-4/80"> · snapshot</span>
+              </p>
+            </div>
+            {(m.cached || isInvalid) && (
+              <div className="flex items-center justify-center gap-1.5">
+                {m.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                {isInvalid && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />}
+              </div>
+            )}
+          </button>
+          <ArrowRight
+            className="pointer-events-none absolute left-full top-1/2 ml-2 h-4 w-4 -translate-y-1/2 text-chart-4"
+            aria-hidden
+          />
+        </div>
+      </div>
+      {isInvalid && issue && (
+        <p className="mt-1 max-w-xs text-center font-mono text-[10px] text-destructive">
+          {invalidStepMessage(issue, models, modules)}
+        </p>
+      )}
+      <InsertSlot insertAt={insertAt} onInsert={onInsert} invalid={isInvalid} blocked={blocked} />
+    </div>
+  )
+}
+
 function PipelineNode({ label, subtle }: { label: string; subtle?: boolean }) {
   return (
     <div
@@ -922,7 +1078,7 @@ function Field({
   children: React.ReactNode
 }) {
   return (
-    <div className="mb-3">
+    <div className="mb-3 min-w-0">
       <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
         {label}
       </label>
