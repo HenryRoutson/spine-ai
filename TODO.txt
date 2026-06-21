@@ -10,7 +10,23 @@ add option for rlm and placeholder for claude code.
 - rm china and us from chatbot selection
 - AB testing 
 
+input pdf to source doucment doesn't make sense and is implicit. 
+  should be to either text or json and that's it. then a step after that which validated what it is if json. use same lock techniqe to add this autoamaticcly if it's a json as link quotes.
 
+
+
+mediflow_ai_company_profile.pdf : {"error":"no pdf file for sha_8b4a33391ead33d7"}
+
+
+
+What is inference vs training?
+
+
+
+
+combine inputs i think is hard coded because idk how you rename the fields you're combining.
+  like company_data and company_legal_requirements. 
+  is it auto generated? should i add a link between things? 
  
 One of the important steps i havent yet investigated is AB testing, comparing which algorithm is better for different steps. 
 
