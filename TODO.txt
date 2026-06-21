@@ -22,6 +22,18 @@ mediflow_ai_company_profile.pdf : {"error":"no pdf file for sha_8b4a33391ead33d7
 are you prompting with the input schema in addition to output schema?
 
 
+combine inputs should be able to take in lots of inputs not just 1.
+
+
+
+
+add example field to the structure tab.
+
+
+
+i can change source doucment in weird ways and this never throws an error
+
+
 shoud have double prompting and seperate thinking and llm call step as an option or something which gets enabled if things fail.
 
 
