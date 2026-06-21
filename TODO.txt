@@ -15,6 +15,9 @@ add option for rlm and placeholder for claude code.
 One of the important steps i havent yet investigated is AB testing, comparing which algorithm is better for different steps. 
 
 
+
+structs need to include exampels, and for any custom code you should test and display the output of running the eample data through the function at "compile" time before infence
+
 how does SOURCE DOCUMENT: work?
 
 SOURCE DOCUMENT: needs to be highlighted in logging.  need a quote step to add which handles stuff.
