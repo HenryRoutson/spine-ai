@@ -189,7 +189,7 @@ function IoSection({
   docLink,
 }: {
   title: string
-  qualifier: "input" | "output"
+  qualifier: "input" | "output" | "error"
   summary?: string
   children?: React.ReactNode
   onExpand?: () => void
@@ -500,10 +500,32 @@ export function Logging() {
                             <PromptText text={step.inputPreview} />
                           </IoSection>
 
+                          {step.status === "error" && step.outputPreview && (
+                            <IoSection
+                              title="Validation errors"
+                              qualifier="error"
+                              summary={compactPreview(step.outputPreview)}
+                              onExpand={() =>
+                                setPopup({
+                                  text: step.outputPreview,
+                                  title: `Validation errors · ${step.label}`,
+                                })
+                              }
+                            >
+                              <p className="whitespace-pre-wrap text-destructive">{step.outputPreview}</p>
+                            </IoSection>
+                          )}
+
                           <IoSection
                             title={outTitle}
                             qualifier="output"
-                            summary={step.outputPreview}
+                            summary={
+                              step.outputJson
+                                ? compactPreview(step.outputJson.replace(/\s+/g, " "))
+                                : step.status === "error"
+                                  ? undefined
+                                  : step.outputPreview
+                            }
                             docLink={
                               hasStepDocLink
                                 ? { docId: stepDoc, ...stepDocLinks.output }
@@ -517,19 +539,13 @@ export function Logging() {
                               )
                             }
                           >
-                            {step.status === "error" && step.outputPreview && (
-                              <p className="mb-2 whitespace-pre-wrap text-destructive">{step.outputPreview}</p>
-                            )}
-                            {step.outputJson && step.status === "error" && (
-                              <p className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                                Actual json:
-                              </p>
-                            )}
                             {step.outputJson ? (
                               <JsonHighlight json={step.outputJson} />
                             ) : step.status !== "error" ? (
                               step.outputPreview
-                            ) : null}
+                            ) : (
+                              <span className="text-muted-foreground/70">No raw response captured</span>
+                            )}
                           </IoSection>
 
                           {stepQuotes.length > 0 && (

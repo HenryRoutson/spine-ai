@@ -210,6 +210,17 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn, log
   }
 }
 
+// AI : thrown when structured LLM output fails parse/validation — carries last raw reply for logging.
+export class StructuredResponseError extends Error {
+  readonly rawJson?: string;
+
+  constructor(message: string, rawJson?: string) {
+    super(message);
+    this.name = "StructuredResponseError";
+    this.rawJson = rawJson;
+  }
+}
+
 // 1. plain string response from openrouter
 export async function getStringResponse(prompt: string, opts: ChatOptions = {}): Promise<string> {
   return chat(prompt, opts, false);
@@ -233,6 +244,7 @@ export async function getStructuredResponse<T>(
 ): Promise<T> {
   const base = structuredLlmPrompt(prompt, schema);
   let lastError = "";
+  let lastRaw = "";
   for (let attempt = 0; attempt < 2; attempt++) {
     log.debug(`structured attempt`, { attempt: attempt + 1, correcting: attempt > 0 });
     const ask =
@@ -240,8 +252,9 @@ export async function getStructuredResponse<T>(
         ? base
         : `${base}\n\nYour previous reply failed validation:\n${lastError}\nReturn corrected JSON only.`;
     const raw = await chat(ask, opts, true, log);
+    lastRaw = extractJson(raw);
     try {
-      const result = schema.safeParse(JSON.parse(extractJson(raw)));
+      const result = schema.safeParse(JSON.parse(lastRaw));
       if (result.success) {
         log.info(`structured parse ok`, { attempt: attempt + 1 });
         return result.data;
@@ -254,5 +267,5 @@ export async function getStructuredResponse<T>(
     }
   }
   log.error(`structured response failed after retry`, { lastError: lastError.slice(0, 500) });
-  throw new Error(`structured response failed validation after retry:\n${lastError}`);
+  throw new StructuredResponseError(`structured response failed validation after retry:\n${lastError}`, lastRaw || undefined);
 }

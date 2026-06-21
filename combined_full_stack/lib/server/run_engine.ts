@@ -4,6 +4,7 @@ import { dataDir } from "./config";
 import { runLogger } from "./server_logger";
 import { fileWriteHelper } from "./file_write_helper";
 import { llmBatchStructured, llmStructured } from "./llm";
+import { StructuredResponseError } from "./openrouter_llm";
 import { collectQuotes, resolveQuotesValue } from "./quotation";
 import { ClientStepPendingError, PipelinePausedError, type RunCheckpoint } from "./run_checkpoint";
 import { type LiveStep, progressHtml, runToHtml } from "./logging";
@@ -105,6 +106,35 @@ interface ExecResult {
   inputPreview?: string; // AI : full LLM prompt when applicable (for HTML logging)
   docId?: DocId;
   llmCalls?: LlmCallRecord[];
+}
+
+// AI : always surface raw upstream / LLM JSON on failure — even when execModule throws mid-step.
+function failedJsonForStep(m: PipelineModule, ctx: RunCtx, prior?: ExecResult, err?: unknown): string | undefined {
+  if (prior?.json) return prior.json;
+  if (prior?.value != null) return JSON.stringify(prior.value, null, 2);
+  if (err instanceof StructuredResponseError && err.rawJson) {
+    try {
+      return JSON.stringify(JSON.parse(err.rawJson), null, 2);
+    } catch {
+      return err.rawJson;
+    }
+  }
+  if (ctx.prevModuleId) {
+    const upstream = ctx.outputs.get(ctx.prevModuleId);
+    if (upstream != null) return JSON.stringify(upstream, null, 2);
+  }
+  return undefined;
+}
+
+function failedStepResult(err: unknown, m: PipelineModule, ctx: RunCtx, prior?: ExecResult): ExecResult {
+  return {
+    value: null,
+    preview: (err as Error).message,
+    json: failedJsonForStep(m, ctx, prior, err),
+    inputPreview: prior?.inputPreview,
+    docId: prior?.docId,
+    llmCalls: prior?.llmCalls ?? ctx.stepLlmCalls,
+  };
 }
 
 // AI : the per-kind executors. Real where possible; placeholders are clearly marked.
@@ -611,22 +641,12 @@ export async function runPipeline(
         });
       }
       status = "error";
-      const prior = result;
-      const failedJson =
-        prior?.json ?? (prior?.value != null ? JSON.stringify(prior.value, null, 2) : undefined);
-      result = {
-        value: null,
-        preview: (err as Error).message,
-        json: failedJson,
-        inputPreview: prior?.inputPreview,
-        docId: prior?.docId,
-        llmCalls: ctx.stepLlmCalls,
-      };
+      result = failedStepResult(err, m, ctx, result);
       log.error(`step failed`, {
         moduleId: m.id,
         kind: m.kind,
         error: (err as Error).message,
-        failedJson,
+        failedJson: result.json,
         stack: (err as Error).stack,
       });
     }
@@ -784,7 +804,7 @@ export async function resumeRunPipeline(
   };
 
   let status: RunStepStatus = "ok";
-  let result: ExecResult;
+  let result: ExecResult | undefined;
   const t0 = Date.now();
   const beforeCents = ledger.totalCents();
   const defaultInputPreview = modelById(project.models, m.inStructureId)?.name ?? "Any";
@@ -801,8 +821,8 @@ export async function resumeRunPipeline(
     writeCache(key, result.value, result.json);
   } catch (err) {
     status = "error";
-    result = { value: null, preview: (err as Error).message, json: undefined };
-    log.error(`client step failed`, { moduleId: m.id, error: (err as Error).message });
+    result = failedStepResult(err, m, ctx, result);
+    log.error(`client step failed`, { moduleId: m.id, error: (err as Error).message, failedJson: result.json });
   }
 
   const ms = Date.now() - t0;
@@ -904,7 +924,7 @@ export async function resumeRunPipeline(
         });
       }
       stepStatus = "error";
-      stepResult = { value: null, preview: (err as Error).message, json: undefined };
+      stepResult = failedStepResult(err, stepMod, ctx, stepResult);
     }
 
     const stepMs = stepStatus === "cached" ? 0 : Date.now() - stepT0;

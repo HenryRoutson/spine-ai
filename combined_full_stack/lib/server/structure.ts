@@ -1,4 +1,4 @@
-import { z, type ZodType } from "zod";
+import { z, type ZodError, type ZodType } from "zod";
 import type { FieldType, ModelField, StructureModel, StructureModelId } from "./types";
 
 function isListFieldType(type: FieldType): boolean {
@@ -254,12 +254,17 @@ export function wrapListForOutputStructure(
   return { [target.name]: list };
 }
 
+// AI : zod issues as JSON — matches what Logging shows in the validation-errors box.
+function formatZodError(error: ZodError): string {
+  return JSON.stringify(error.issues, null, 2);
+}
+
 // AI : implicit validation reused by Pipeline/Inference on every step's I/O (no standalone step).
 export function validate(value: unknown, model: StructureModel, models: StructureModel[] = []): ValidationResult {
   const parsed = zodFromModel(model, models).safeParse(value);
   return parsed.success
     ? { ok: true, value: parsed.data }
-    : { ok: false, error: parsed.error.toString() };
+    : { ok: false, error: formatZodError(parsed.error) };
 }
 
 // AI : LLM steps emit plain quote strings; quote steps emit linked spans — pick the right schema.
@@ -274,7 +279,7 @@ export function validateStepOutput(
   const rows = isList && Array.isArray(value) ? value : [value];
   for (const row of rows) {
     const parsed = schema.safeParse(row);
-    if (!parsed.success) return { ok: false, error: parsed.error.toString() };
+    if (!parsed.success) return { ok: false, error: formatZodError(parsed.error) };
   }
   return { ok: true, value };
 }
