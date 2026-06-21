@@ -43,11 +43,12 @@ export function dataDir(): string {
 
 export const REPO_ROOT = resolve(here, "..");
 
-// AI : Vercel root is combined_full_stack/ — seed PDFs ship in-app; monorepo dev still uses ../documents.
+// AI : canonical seed docs live under combined_full_stack/documents/ (bundled on Vercel).
+// AI : monorepo dev falls back to repo-root documents/ only when the in-app folder is absent.
 function documentsDir(): string {
   const inApp = resolve(here, "documents");
-  const inRepo = resolve(REPO_ROOT, "documents");
-  return existsSync(inApp) ? inApp : inRepo;
+  if (process.env.VERCEL || existsSync(inApp)) return inApp;
+  return resolve(REPO_ROOT, "documents");
 }
 
 export const DOCUMENTS_DIR = documentsDir();

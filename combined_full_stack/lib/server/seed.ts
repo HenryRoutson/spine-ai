@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { z } from "zod";
 import { DOCUMENTS_DIR } from "./config";
@@ -105,6 +105,25 @@ export interface SeedDocSpec {
 export interface ProjectSeed {
   project: Project;
   docSpecs: SeedDocSpec[];
+}
+
+// AI : Vercel once persisted this placeholder when bundled seed files were missing — detect + replace.
+export function unavailableSeedDocMessage(name: string): string {
+  return `[seed doc unavailable on this deploy: ${name}]`;
+}
+
+export function isUnavailableSeedDoc(content: string, name: string): boolean {
+  return content === unavailableSeedDocMessage(name);
+}
+
+export async function readSeedDocContent(spec: SeedDocSpec): Promise<string> {
+  const txtSidecar = spec.path.replace(/\.pdf$/i, ".txt");
+  if (existsSync(txtSidecar)) return readFileSync(txtSidecar, "utf8");
+  if (!existsSync(spec.path)) {
+    console.warn(`seed doc missing: ${spec.path}`);
+    return unavailableSeedDocMessage(spec.name);
+  }
+  return readFileSync(spec.path, "utf8");
 }
 
 // AI : the generic entry point — any validated seed JSON becomes a project + its source docs.

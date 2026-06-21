@@ -1,8 +1,14 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "./config";
-import { allProjectSeeds, blankProject, type SeedDocSpec } from "./seed";
+import {
+  allProjectSeeds,
+  blankProject,
+  isUnavailableSeedDoc,
+  readSeedDocContent,
+  type SeedDocSpec,
+} from "./seed";
 import { computeInvalid, insertMissingQuoteSteps, migrateProjectModules, syncAutoQuoteSteps } from "./validity";
 import type {
   DocId,
@@ -69,6 +75,7 @@ export interface Store {
   docs(): DocRef[];
   docContent(id: DocId): string | undefined;
   addDoc(name: string, type: InputType, content: string, label: DocLabel): DocRef;
+  removeDoc(id: DocId): boolean;
   runs(projectId?: ProjectId): PipelineRun[];
   addRun(projectId: ProjectId, run: PipelineRun): void;
   updateRunNotes(runId: PipelineRun["id"], notes: string | undefined): boolean;
@@ -132,24 +139,13 @@ export async function ensureSeeded(store: Store): Promise<void> {
     const existing = store.project(seed.project.id);
     if (!existing) {
       store.saveProject(migrateProjectModules(structuredClone(seed.project)));
-      for (const spec of seed.docSpecs) {
-        try {
-          store.addDoc(spec.name, spec.type, await seedDocContent(spec), spec.label);
-        } catch (err) {
-          console.error(`seed doc failed (${spec.name}):`, err);
-        }
-      }
-      continue;
+    } else {
+      const synced = syncProjectFromSeed(existing, seed.project);
+      if (synced !== existing) store.saveProject(synced);
     }
-    // AI : backfill seedDocNames + module labels from seeds/*.json on existing projects.
-    const synced = syncProjectFromSeed(existing, seed.project);
-    if (synced !== existing) store.saveProject(synced);
-    // AI : ingest seed docs that were added after the project first landed (e.g. new gps_site_locations.json).
-    const existingNames = new Set(store.docs().map((d) => d.name));
     for (const spec of seed.docSpecs) {
-      if (existingNames.has(spec.name)) continue;
       try {
-        store.addDoc(spec.name, spec.type, await seedDocContent(spec), spec.label);
+        await ingestSeedDoc(store, spec);
       } catch (err) {
         console.error(`seed doc failed (${spec.name}):`, err);
       }
@@ -158,6 +154,25 @@ export async function ensureSeeded(store: Store): Promise<void> {
   for (const p of store.projects()) {
     const migrated = migrateProjectModules(p);
     if (migrated !== p) store.saveProject(migrated);
+  }
+}
+
+// AI : add missing seed docs; replace stale Vercel placeholder rows when real content is available.
+async function ingestSeedDoc(store: Store, spec: SeedDocSpec): Promise<void> {
+  const fresh = await readSeedDocContent(spec);
+  const existing = store.docs().find((d) => d.name === spec.name);
+  if (!existing) {
+    store.addDoc(spec.name, spec.type, fresh, spec.label);
+    return;
+  }
+  const content = store.docContent(existing.id);
+  if (
+    content &&
+    isUnavailableSeedDoc(content, spec.name) &&
+    !isUnavailableSeedDoc(fresh, spec.name)
+  ) {
+    store.removeDoc(existing.id);
+    store.addDoc(spec.name, spec.type, fresh, spec.label);
   }
 }
 
@@ -255,6 +270,16 @@ export class JsonStore implements Store {
     return doc;
   }
 
+  removeDoc(id: DocId): boolean {
+    const i = this.state.docs.findIndex((d) => d.id === id);
+    if (i === -1) return false;
+    this.state.docs.splice(i, 1);
+    const path = join(this.docsDir, `${id}.txt`);
+    if (existsSync(path)) unlinkSync(path);
+    this.persist();
+    return true;
+  }
+
   runs(projectId?: ProjectId): PipelineRun[] {
     if (!projectId) return this.state.runs;
     return this.state.runs.filter((r) => this.state.runProjects[r.id] === projectId);
@@ -278,17 +303,6 @@ export class JsonStore implements Store {
     this.persist();
     return true;
   }
-}
-
-// AI : seed docs ship as .txt sidecars — never pull pdf-parse into the store module graph.
-async function seedDocContent(spec: SeedDocSpec): Promise<string> {
-  const txtSidecar = spec.path.replace(/\.pdf$/i, ".txt");
-  if (existsSync(txtSidecar)) return readFileSync(txtSidecar, "utf8");
-  if (!existsSync(spec.path)) {
-    console.warn(`seed doc missing: ${spec.path}`);
-    return `[seed doc unavailable on this deploy: ${spec.name}]`;
-  }
-  return readFileSync(spec.path, "utf8");
 }
 
 // AI : convenience — an initialised store for scripts/tests.

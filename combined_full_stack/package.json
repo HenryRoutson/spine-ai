@@ -8,6 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "check-openrouter": "node scripts/check_openrouter_key.mjs",
+    "sync-seeds": "node scripts/sync_seeds_to_supabase.mjs",
     "sync-pricing": "node scripts/sync_openrouter_pricing.mjs"
   },
   "dependencies": {

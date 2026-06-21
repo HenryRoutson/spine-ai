@@ -144,6 +144,15 @@ export class SupabaseStore implements Store {
     return doc;
   }
 
+  removeDoc(id: DocId): boolean {
+    const i = this.state.docs.findIndex((d) => d.id === id);
+    if (i === -1) return false;
+    this.state.docs.splice(i, 1);
+    this.state.contents.delete(id);
+    this.pending.push(this.db.from("docs").delete().eq("id", id));
+    return true;
+  }
+
   runs(projectId?: ProjectId): PipelineRun[] {
     if (!projectId) return this.state.runs;
     return this.state.runs.filter((r) => this.state.runProjects[r.id] === projectId);
