@@ -2,12 +2,13 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { getSiteUrl } from "@/utils/supabase/site_url";
+import { sanitizeRedirectPath } from "@/utils/sanitize_redirect";
 
 // AI : OAuth redirect target — exchanges the provider code for a session cookie.
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
+  const next = sanitizeRedirectPath(searchParams.get("next"));
   const env = getSupabasePublicEnv();
   const siteUrl = getSiteUrl();
 

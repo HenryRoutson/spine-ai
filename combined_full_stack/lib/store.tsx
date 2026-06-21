@@ -80,7 +80,13 @@ interface StoreState {
   billingAccount: BillingAccountView | null
   refreshBilling: () => Promise<void>
   refresh: () => Promise<void>
+  prefetchProject: (id: string) => void
   projectLoading: boolean
+}
+
+type PrefetchEntry = {
+  promise: Promise<ServerState>
+  data?: ServerState
 }
 
 const StoreContext = createContext<StoreState | null>(null)
@@ -100,28 +106,77 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [projectLoading, setProjectLoading] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hydratedRef = useRef(false)
+  const prefetchCache = useRef(new Map<string, PrefetchEntry>())
 
   const refreshBilling = useCallback(async () => {
     setBillingAccount(await api<BillingAccountView>("/api/billing"))
   }, [])
 
-  const refresh = useCallback(async (projectId = activeProjectId) => {
+  const fetchState = useCallback(async (projectId: string) => {
     const q = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""
-    const data = await api<ServerState>(`/api/state${q}`)
-    setLoadError(null)
-    setState(data)
-    // AI : first load (or stale id) — pin to the first project so the selector stays in sync.
-    if (!projectId || !data.projects.some((p) => p.id === projectId))
-      setActiveProjectId(data.projects[0]?.id ?? "")
-    refreshBilling().catch(console.error) // AI : billing failure must not block pipeline UI
-  }, [activeProjectId, refreshBilling])
+    return api<ServerState>(`/api/state${q}`)
+  }, [])
+
+  const loadProjectState = useCallback(
+    async (projectId: string) => {
+      const cached = projectId ? prefetchCache.current.get(projectId) : undefined
+      if (cached?.data) {
+        prefetchCache.current.delete(projectId)
+        return cached.data
+      }
+      if (cached?.promise) {
+        const data = await cached.promise
+        prefetchCache.current.delete(projectId)
+        return data
+      }
+      return fetchState(projectId)
+    },
+    [fetchState],
+  )
+
+  const prefetchProject = useCallback(
+    (projectId: string) => {
+      if (!projectId || projectId === activeProjectId || prefetchCache.current.has(projectId)) return
+      const entry: PrefetchEntry = {
+        promise: undefined!,
+      }
+      // AI : warm /api/state on hover so the click reuses an in-flight or finished fetch.
+      entry.promise = fetchState(projectId).then((data) => {
+        entry.data = data
+        return data
+      })
+      prefetchCache.current.set(projectId, entry)
+    },
+    [activeProjectId, fetchState],
+  )
+
+  const applyState = useCallback(
+    (data: ServerState, projectId: string) => {
+      setLoadError(null)
+      setState(data)
+      // AI : first load (or stale id) — pin to the first project so the selector stays in sync.
+      if (!projectId || !data.projects.some((p) => p.id === projectId))
+        setActiveProjectId(data.projects[0]?.id ?? "")
+      refreshBilling().catch(console.error) // AI : billing failure must not block pipeline UI
+    },
+    [refreshBilling],
+  )
+
+  const refresh = useCallback(async (projectId = activeProjectId) => {
+    applyState(await fetchState(projectId), projectId)
+  }, [activeProjectId, applyState, fetchState])
 
   useEffect(() => {
     let alive = true
+    const cached = activeProjectId ? prefetchCache.current.get(activeProjectId) : undefined
     // AI : after first hydrate, swap main content for a loader while runs/docs re-scope.
-    if (hydratedRef.current && activeProjectId) setProjectLoading(true)
+    if (hydratedRef.current && activeProjectId && !cached?.data) setProjectLoading(true)
 
-    refresh()
+    loadProjectState(activeProjectId)
+      .then((data) => {
+        if (!alive) return
+        applyState(data, activeProjectId)
+      })
       .catch((err) => {
         if (alive) setLoadError(err instanceof Error ? err.message : "Failed to load store")
       })
@@ -321,6 +376,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     billingAccount,
     refreshBilling,
     refresh,
+    prefetchProject,
     projectLoading,
   }
 

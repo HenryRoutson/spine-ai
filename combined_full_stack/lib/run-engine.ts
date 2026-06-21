@@ -1,6 +1,7 @@
 // AI : client shim for the real server run engine — POST /api/runs starts the pipeline,
 // AI : then the Inference tab polls progress until the persisted PipelineRun arrives.
-// AI : type-only imports from lib/server are erased at compile time (no Node code bundled).
+// AI : user-authored transform/custom steps run here in the browser (never on the server).
+import { runCustomFn } from "@/lib/custom_code"
 import type { JobLogEntry, RunJob, RunJobId } from "@/lib/server/run_jobs"
 import type { StepProgress, StepSubProgress } from "@/lib/server/run_engine"
 import type { DocId, ModelId, ModuleId, PipelineRun, ProjectId, RunStepStatus } from "@/lib/types"
@@ -115,6 +116,19 @@ export interface AwaitRunCallbacks {
 }
 
 // AI : poll until the run finishes; callbacks stream progress + server logs to the UI / console.
+async function submitClientStep(jobId: RunJobId, output: unknown): Promise<void> {
+  const res = await fetch(`/api/runs/${jobId}/client-step`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ output }),
+  })
+  if (!res.ok) {
+    throw new Error(
+      formatApiError(`Client code step for job ${jobId} failed`, res, await readApiErrorBody(res)),
+    )
+  }
+}
+
 export async function awaitRun(
   jobId: RunJobId,
   callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
@@ -122,6 +136,7 @@ export async function awaitRun(
 ): Promise<PipelineRun> {
   const { onStep, onLogs } = typeof callbacks === "function" ? { onStep: callbacks } : callbacks
   let seenLogs = 0
+  let clientStepBusy = false
   for (;;) {
     const job = await runProgress(jobId)
     onStep?.(job.steps)
@@ -134,6 +149,16 @@ export async function awaitRun(
       }
       onLogs?.(logs, newLines)
       seenLogs = logs.length
+    }
+    if (job.clientStep && !job.run && !job.error && !clientStepBusy) {
+      clientStepBusy = true
+      try {
+        const output = await runCustomFn(job.clientStep.code, job.clientStep.input)
+        await submitClientStep(jobId, output)
+      } finally {
+        clientStepBusy = false
+      }
+      continue
     }
     if (job.error) throw new Error(`Pipeline run ${jobId} failed: ${job.error}`)
     if (job.run) return job.run

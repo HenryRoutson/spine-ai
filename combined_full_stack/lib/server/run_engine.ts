@@ -5,7 +5,7 @@ import { runLogger } from "./server_logger";
 import { fileWriteHelper } from "./file_write_helper";
 import { llmBatchStructured, llmStructured } from "./llm";
 import { collectQuotes, resolveQuotesValue } from "./quotation";
-import { runCustomFn } from "./custom_code";
+import { ClientStepPendingError, PipelinePausedError, type RunCheckpoint } from "./run_checkpoint";
 import { type LiveStep, progressHtml, runToHtml } from "./logging";
 import {
   hasQuoteField,
@@ -130,6 +130,45 @@ function materializeHints(m: PipelineModule, ctx: RunCtx, docId?: DocId, sourceT
     label: m.label,
     note: m.note,
     sourceText: sourceText ?? ctx.sourceText,
+  };
+}
+
+function serializeCtx(ctx: RunCtx): RunCheckpoint["ctx"] {
+  return {
+    inputQueue: [...ctx.inputQueue],
+    outputs: Object.fromEntries(ctx.outputs) as Record<ModuleId, unknown>,
+    byModel: Object.fromEntries(ctx.byModel) as Record<StructureModelId, unknown>,
+    sourceText: ctx.sourceText,
+    sourceDocId: ctx.sourceDocId,
+    prevModuleId: ctx.prevModuleId,
+  };
+}
+
+function restoreCtx(project: Project, store: Store, ledger: UsageLedger, model: ModelId, snap: RunCheckpoint["ctx"]): RunCtx {
+  return {
+    project,
+    store,
+    ledger,
+    model,
+    inputQueue: [...snap.inputQueue],
+    byModel: new Map(Object.entries(snap.byModel) as [StructureModelId, unknown][]),
+    outputs: new Map(Object.entries(snap.outputs) as [ModuleId, unknown][]),
+    sourceText: snap.sourceText,
+    sourceDocId: snap.sourceDocId,
+    prevModuleId: snap.prevModuleId,
+  };
+}
+
+function buildClientResult(m: PipelineModule, project: Project, ctx: RunCtx, value: unknown): ExecResult {
+  if (m.kind === "transform") {
+    const out = modelById(project.models, m.outStructureId);
+    const merged = out ? materializeStepOutput(m, project, value, materializeHints(m, ctx)) : value;
+    return { value: merged, preview: "reshaped", json: JSON.stringify(merged, null, 2) };
+  }
+  return {
+    value,
+    preview: `custom ts fn applied (${m.code?.split("\n")[0].slice(0, 60) ?? ""})`,
+    json: JSON.stringify(value, null, 2),
   };
 }
 
@@ -265,8 +304,8 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       let value: unknown = input;
 
       if (m.code) {
-        log.info(`transform code executing`, { moduleId: m.id });
-        value = await runCustomFn(m.code, input);
+        log.info(`transform code — deferring to browser`, { moduleId: m.id });
+        throw new ClientStepPendingError(m.code, input);
       } else if (out && !m.outIsList && Array.isArray(input)) {
         if (input.length === 1 && m.inStructureId === m.outStructureId) {
           value = input[0];
@@ -292,10 +331,8 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         log.warn(`custom-code passthrough (no code)`, { moduleId: m.id });
         return { value: input, preview: "custom step passthrough (no code set)", json: JSON.stringify(input, null, 2) };
       }
-      log.info(`custom-code executing`, { moduleId: m.id, codeLines: m.code.split("\n").length });
-      const value = await runCustomFn(m.code, input);
-      log.info(`custom-code done`, { moduleId: m.id });
-      return { value, preview: `custom ts fn applied (${m.code.split("\n")[0].slice(0, 60)})`, json: JSON.stringify(value, null, 2) };
+      log.info(`custom-code — deferring to browser`, { moduleId: m.id, codeLines: m.code.split("\n").length });
+      throw new ClientStepPendingError(m.code, input);
     }
 
     case "llm-batch": {
@@ -553,6 +590,26 @@ export async function runPipeline(
         log.debug(`cache written`, { key });
       }
     } catch (err) {
+      if (err instanceof ClientStepPendingError) {
+        throw new PipelinePausedError({
+          runId,
+          projectId,
+          inputDocId,
+          inputDocIds: opts.inputDocIds,
+          model,
+          stepIndex: i,
+          startedAt,
+          steps: [...steps],
+          ctx: serializeCtx(ctx),
+          clientStep: {
+            moduleId: m.id,
+            label: m.label,
+            kind: m.kind,
+            code: err.code,
+            input: err.input,
+          },
+        });
+      }
       status = "error";
       const prior = result;
       const failedJson =
@@ -668,6 +725,243 @@ export async function runPipeline(
     // AI : the same high-level HTML view, archived per run for the Logging tab.
     fileWriteHelper(join(dataDir(), "runs", runId), "run_high_level", "html", runToHtml(run));
     store.addRun(projectId, run);
+  }
+  return run;
+}
+
+// AI : browser POSTs user-code output — server validates and continues the linear run from the paused step.
+export async function resumeRunPipeline(
+  store: Store,
+  checkpoint: RunCheckpoint,
+  clientOutput: unknown,
+  opts: Omit<RunOptions, "model"> & { model?: ModelId } = {},
+): Promise<PipelineRun> {
+  const project = store.project(checkpoint.projectId);
+  if (!project) throw new Error(`unknown project ${checkpoint.projectId}`);
+
+  const model = checkpoint.model;
+  const persist = opts.persist ?? true;
+  const ledger = new UsageLedger();
+  const log = runLogger(checkpoint.runId);
+  const ctx = restoreCtx(project, store, ledger, model, checkpoint.ctx);
+  const steps: RunStep[] = [...checkpoint.steps];
+  const artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[] = steps
+    .filter((s) => s.status !== "error")
+    .flatMap((s) => {
+      const value = ctx.outputs.get(s.moduleId);
+      if (value === undefined) return [];
+      const m = project.modules.find((x) => x.id === s.moduleId);
+      const structId = m?.outStructureId ?? (m?.kind === "output" ? m.inStructureId : undefined);
+      return [{ moduleId: s.moduleId, structure: modelById(project.models, structId), value }];
+    });
+
+  const m = project.modules[checkpoint.stepIndex];
+  if (!m) throw new Error(`resume: invalid step index ${checkpoint.stepIndex}`);
+
+  const writeLive = (runningIndex: number) => {
+    if (!(opts.liveHtml ?? persist)) return;
+    const display: LiveStep[] = project.modules.map((mod, idx) => {
+      const done = steps.find((s) => s.moduleId === mod.id);
+      if (done) {
+        const inLabel = mod.kind === "llm" || mod.kind === "llm-batch" ? "prompt" : "in";
+        return {
+          label: mod.label,
+          kind: mod.kind,
+          status: done.status,
+          ms: done.ms,
+          costCents: done.costCents,
+          detail: [`${inLabel}: ${done.inputPreview}`, `out: ${done.outputJson ?? done.outputPreview}`],
+        };
+      }
+      return { label: mod.label, kind: mod.kind, status: idx === runningIndex ? "running" : "pending", ms: 0, costCents: 0 };
+    });
+    const at = Math.min(steps.length + 1, project.modules.length);
+    mkdirSync(join(dataDir(), "live"), { recursive: true });
+    writeFileSync(
+      LIVE_HTML_PATH,
+      progressHtml(`${project.name} — ${runningIndex === -1 ? "run finished" : "running"}`, `${model} · step ${at}/${project.modules.length}`, display, runningIndex !== -1),
+    );
+  };
+
+  let status: RunStepStatus = "ok";
+  let result: ExecResult;
+  const t0 = Date.now();
+  const beforeCents = ledger.totalCents();
+  const defaultInputPreview = modelById(project.models, m.inStructureId)?.name ?? "Any";
+
+  try {
+    result = buildClientResult(m, project, ctx, clientOutput);
+    const out = modelById(project.models, m.outStructureId);
+    if (out) {
+      const isList = m.outIsList || m.kind === "llm-batch";
+      const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes: false });
+      if (!check.ok) throw new Error(`output failed ${out.name} validation: ${check.error}`);
+    }
+    const key = cacheKey(checkpoint.projectId, m.id, m.model ?? model, checkpoint.inputDocId);
+    writeCache(key, result.value, result.json);
+  } catch (err) {
+    status = "error";
+    result = { value: null, preview: (err as Error).message, json: undefined };
+    log.error(`client step failed`, { moduleId: m.id, error: (err as Error).message });
+  }
+
+  const ms = Date.now() - t0;
+  const costCents = ledger.totalCents() - beforeCents;
+  if (status !== "error") {
+    ctx.outputs.set(m.id, result.value);
+    const structId = m.outStructureId ?? (m.kind === "output" ? m.inStructureId : undefined);
+    if (structId) ctx.byModel.set(structId, result.value);
+    ctx.prevModuleId = m.id;
+    artifacts.push({ moduleId: m.id, structure: modelById(project.models, structId), value: result.value });
+  }
+
+  steps.push({
+    moduleId: m.id,
+    kind: m.kind,
+    label: m.label,
+    model: m.kind === "llm" ? m.model ?? model : undefined,
+    status,
+    ms,
+    costCents,
+    inputPreview: defaultInputPreview,
+    outputPreview: result.preview,
+    outputJson: result.json,
+  });
+  await opts.onStep?.({ index: checkpoint.stepIndex, total: project.modules.length, moduleId: m.id, label: m.label, status });
+  if (status === "error") {
+    writeLive(-1);
+    const run: PipelineRun = {
+      id: checkpoint.runId,
+      startedAt: checkpoint.startedAt,
+      status: "error",
+      totalMs: steps.reduce((a, s) => a + s.ms, 0),
+      billedCents: +steps.reduce((a, s) => a + s.costCents, 0).toFixed(4),
+      savedCents: 0,
+      model,
+      steps,
+      inputDocId: checkpoint.inputDocId,
+    };
+    if (persist) {
+      persistArtifacts(checkpoint.runId, checkpoint.inputDocId, store, artifacts, project.modules);
+      store.addRun(checkpoint.projectId, run);
+    }
+    return run;
+  }
+
+  for (let i = checkpoint.stepIndex + 1; i < project.modules.length; i++) {
+    const stepMod = project.modules[i];
+    log.section(`step ${i + 1}/${project.modules.length}: ${stepMod.label}`);
+    await opts.onStep?.({ index: i, total: project.modules.length, moduleId: stepMod.id, label: stepMod.label, status: "running" });
+    writeLive(i);
+    ctx.reportSub = (sub) => {
+      void opts.onStep?.({ index: i, total: project.modules.length, moduleId: stepMod.id, label: stepMod.label, status: "running", sub });
+    };
+    ctx.stepLlmCalls = undefined;
+
+    const stepDefaultInputPreview =
+      i === 0 ? `${stepMod.inputType} document` : modelById(project.models, stepMod.inStructureId)?.name ?? "Any";
+    const stepBeforeCents = ledger.totalCents();
+    const stepT0 = Date.now();
+    let stepStatus: RunStepStatus = "ok";
+    let stepResult: ExecResult | undefined;
+    const stepKey = cacheKey(checkpoint.projectId, stepMod.id, stepMod.model ?? model, checkpoint.inputDocId);
+    const cached = stepMod.cached ? readCache(stepKey) : undefined;
+
+    try {
+      if (cached) {
+        stepStatus = "cached";
+        stepResult = { value: cached.value, preview: "(from cache)", json: cached.json };
+      } else {
+        stepResult = await execModule(stepMod, ctx, log);
+        const out = modelById(project.models, stepMod.outStructureId);
+        if (out) {
+          const isList = stepMod.outIsList || stepMod.kind === "llm-batch";
+          const rawQuotes = (stepMod.kind === "llm" || stepMod.kind === "llm-batch") && hasQuoteField(out);
+          const check = validateStepOutput(stepResult.value, out, project.models, { isList, rawQuotes });
+          if (!check.ok) throw new Error(`output failed ${out.name} validation: ${check.error}`);
+        }
+        writeCache(stepKey, stepResult.value, stepResult.json);
+      }
+    } catch (err) {
+      if (err instanceof ClientStepPendingError) {
+        throw new PipelinePausedError({
+          runId: checkpoint.runId,
+          projectId: checkpoint.projectId,
+          inputDocId: checkpoint.inputDocId,
+          inputDocIds: checkpoint.inputDocIds,
+          model,
+          stepIndex: i,
+          startedAt: checkpoint.startedAt,
+          steps: [...steps],
+          ctx: serializeCtx(ctx),
+          clientStep: {
+            moduleId: stepMod.id,
+            label: stepMod.label,
+            kind: stepMod.kind,
+            code: err.code,
+            input: err.input,
+          },
+        });
+      }
+      stepStatus = "error";
+      stepResult = { value: null, preview: (err as Error).message, json: undefined };
+    }
+
+    const stepMs = stepStatus === "cached" ? 0 : Date.now() - stepT0;
+    const stepCostCents = stepStatus === "cached" ? 0 : ledger.totalCents() - stepBeforeCents;
+    if (stepStatus !== "error") {
+      ctx.outputs.set(stepMod.id, stepResult!.value);
+      const structId = stepMod.outStructureId ?? (stepMod.kind === "output" ? stepMod.inStructureId : undefined);
+      if (structId) ctx.byModel.set(structId, stepResult!.value);
+      ctx.prevModuleId = stepMod.id;
+      artifacts.push({ moduleId: stepMod.id, structure: modelById(project.models, structId), value: stepResult!.value });
+    }
+
+    steps.push({
+      moduleId: stepMod.id,
+      kind: stepMod.kind,
+      label: stepMod.label,
+      model: stepMod.kind === "llm" ? stepMod.model ?? model : undefined,
+      status: stepStatus,
+      ms: stepMs,
+      costCents: stepCostCents,
+      inputPreview: stepResult?.inputPreview ?? stepDefaultInputPreview,
+      outputPreview: stepResult!.preview,
+      outputJson: stepResult!.json,
+      docId: stepResult?.docId,
+      llmCalls: stepResult?.llmCalls?.length ? stepResult.llmCalls : undefined,
+    });
+    await opts.onStep?.({ index: i, total: project.modules.length, moduleId: stepMod.id, label: stepMod.label, status: stepStatus });
+    ctx.reportSub = undefined;
+    if (stepStatus === "error") break;
+  }
+
+  const totalMs = steps.reduce((a, s) => a + s.ms, 0);
+  const billedCents = +steps.reduce((a, s) => a + s.costCents, 0).toFixed(4);
+  const savedCents = project.modules
+    .filter((mod) => steps.find((s) => s.moduleId === mod.id)?.status === "cached")
+    .reduce((a, mod) => a + mod.avgCostCents, 0);
+
+  const run: PipelineRun = {
+    id: checkpoint.runId,
+    startedAt: checkpoint.startedAt,
+    status: steps.some((s) => s.status === "error") ? "error" : "ok",
+    totalMs,
+    billedCents,
+    savedCents,
+    model,
+    steps,
+    inputDocId: checkpoint.inputDocId,
+  };
+
+  writeLive(-1);
+  if (persist) {
+    persistArtifacts(checkpoint.runId, checkpoint.inputDocId, store, artifacts, project.modules);
+    for (const mod of project.modules) {
+      if (mod.kind === "custom-code" && mod.code) fileWriteHelper(join(dataDir(), "runs", checkpoint.runId), `${mod.id}_code`, "ts", mod.code);
+    }
+    fileWriteHelper(join(dataDir(), "runs", checkpoint.runId), "run_high_level", "html", runToHtml(run));
+    store.addRun(checkpoint.projectId, run);
   }
   return run;
 }

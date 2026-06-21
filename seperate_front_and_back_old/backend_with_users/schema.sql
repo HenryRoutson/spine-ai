@@ -32,11 +32,13 @@ create table public.runs (
   primary key (user_id, id)
 );
 
--- AI : ephemeral pipeline progress — keyed by unguessable job_* id, shared across Vercel instances.
+-- AI : ephemeral pipeline progress — scoped to the signed-in user via RLS (user_id default auth.uid()).
 create table public.run_jobs (
-  id text primary key,
+  user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
+  id text not null,
   data jsonb not null,
-  updated_at bigint not null
+  updated_at bigint not null,
+  primary key (user_id, id)
 );
 
 alter table public.projects enable row level security;
@@ -51,8 +53,8 @@ create policy "own rows" on public.docs for all to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 create policy "own rows" on public.runs for all to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
-create policy "run_jobs by id" on public.run_jobs for all to authenticated, anon
-  using (true) with check (true);
+create policy "own rows" on public.run_jobs for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 
 -- AI : Stripe credit billing (stripe/stripe.js) — one row per user, RLS-scoped like projects/docs/runs.
 create table public.billing_accounts (
@@ -67,3 +69,7 @@ alter table public.billing_accounts enable row level security;
 
 create policy "own rows" on public.billing_accounts for all to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+-- AI : one-time migration if run_jobs was created with the old wide-open policy:
+-- drop table public.run_jobs cascade; then re-run the run_jobs block above.
+-- Or: alter table public.run_jobs add column if not exists user_id uuid ...; drop policy "run_jobs by id"; ...

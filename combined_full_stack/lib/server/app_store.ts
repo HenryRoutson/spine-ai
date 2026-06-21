@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { isProductionDeploy, isVercelWithoutSupabase } from "./require_auth";
 import { ensureSeeded, openStore, type JsonStore } from "./store";
 import type { Store } from "./store";
 import { logger } from "./server_logger";
@@ -30,10 +31,19 @@ async function getLocalStore(): Promise<Store> {
   return store;
 }
 
-// AI : todo §7 — signed-in requests get a per-user SupabaseStore (RLS isolation, survives
-// AI : Vercel's read-only fs); anonymous requests keep the shared local JsonStore so dev
-// AI : works without an account. Mutating routes must `await store.flush()` when done.
+// AI : signed-in requests get a per-user SupabaseStore (RLS isolation). Local dev without
+// AI : Supabase keeps the shared JsonStore; production deploys reject unauthenticated access.
 export async function getStore(): Promise<Store> {
+  if (isVercelWithoutSupabase()) throw new Error("Supabase env vars required on Vercel");
+  if (isProductionDeploy()) {
+    const supabase = await createClient();
+    const { data } = await supabase.auth.getClaims();
+    if (!data?.claims?.sub) throw new Error("Sign in required");
+    storeLog.info(`authenticated user — SupabaseStore`, { sub: data.claims.sub });
+    const store = await openUserStore(supabase);
+    return store;
+  }
+
   try {
     const supabase = await createClient();
     const { data } = await supabase.auth.getClaims();
@@ -45,14 +55,11 @@ export async function getStore(): Promise<Store> {
         return store;
       } catch (err) {
         storeLog.error(`SupabaseStore failed`, { error: storeErrorMessage(err) });
-        if (!isMissingSchemaError(err) && !process.env.VERCEL) throw err;
+        if (!isMissingSchemaError(err)) throw err;
       }
-    } else {
-      storeLog.debug(`no auth claims — falling back to local store`);
     }
   } catch (err) {
-    storeLog.error(`Supabase client failed`, { error: storeErrorMessage(err) });
-    if (!process.env.VERCEL) throw err;
+    storeLog.debug(`Supabase unavailable — local JsonStore`, { error: storeErrorMessage(err) });
   }
   storeLog.debug(`using local JsonStore`);
   return getLocalStore();

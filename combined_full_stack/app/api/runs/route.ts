@@ -1,8 +1,17 @@
 import { NextResponse, type NextRequest, after } from "next/server";
 import { getStore } from "@/lib/server/app_store";
 import { BillingError, chargeForRun, getBillingUserKey } from "@/lib/server/billing_account";
+import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
-import { createJob, finishJob, jobProgress, openJobDb, withJobLogging } from "@/lib/server/run_jobs";
+import {
+  createJob,
+  finishJob,
+  jobProgress,
+  openJobDb,
+  pauseJob,
+  withJobLogging,
+} from "@/lib/server/run_jobs";
+import { isAuthSession, requireAuth } from "@/lib/server/require_auth";
 import { logger } from "@/lib/server/server_logger";
 import type { DocId, ModelId, ProjectId } from "@/lib/server/types";
 
@@ -21,8 +30,11 @@ interface RunRequest {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth();
+  if (!isAuthSession(auth)) return auth;
+
   const { projectId, inputDocId, inputDocIds, model } = (await req.json()) as RunRequest;
-  apiLog.info(`POST /api/runs`, { projectId, inputDocId, inputDocIds, model });
+  apiLog.info(`POST /api/runs`, { projectId, inputDocId, inputDocIds, model, ownerId: auth.userId });
 
   const store = await getStore();
   if (!store.project(projectId)) {
@@ -49,11 +61,11 @@ export async function POST(req: NextRequest) {
   }
 
   const jobDb = await openJobDb();
-  const jobId = await createJob(jobDb);
-  apiLog.info(`job created — scheduling pipeline via after()`, { jobId });
+  const jobId = await createJob(auth.userId, jobDb);
+  apiLog.info(`job created — scheduling pipeline via after()`, { jobId, ownerId: auth.userId });
 
   after(async () => {
-    await withJobLogging(jobId, jobDb, async () => {
+    await withJobLogging(auth.userId, jobId, jobDb, async () => {
       apiLog.info(`after() pipeline starting`, { jobId, projectId, inputDocId, model });
       try {
         const run = await runPipeline(store, projectId, inputDocId, {
@@ -61,18 +73,23 @@ export async function POST(req: NextRequest) {
           inputDocIds,
           // AI : never block the pipeline on Supabase job upserts — progress is memory-hot during the run.
           onStep: (p) => {
-            void jobProgress(jobId, p, jobDb).catch((err) =>
+            void jobProgress(auth.userId, jobId, p, jobDb).catch((err) =>
               apiLog.error(`jobProgress failed`, { jobId, moduleId: p.moduleId, error: (err as Error).message }),
             );
           },
         });
         apiLog.info(`pipeline finished — flushing store`, { jobId, runId: run.id, status: run.status });
         await store.flush(); // AI : SupabaseStore queues addRun — persist before the job reports done
-        await finishJob(jobId, { run }, jobDb);
+        await finishJob(auth.userId, jobId, { run }, jobDb);
         apiLog.info(`job finished ok`, { jobId, runId: run.id });
       } catch (err) {
+        if (err instanceof PipelinePausedError) {
+          await pauseJob(auth.userId, jobId, err.checkpoint, jobDb);
+          apiLog.info(`pipeline paused for client code`, { jobId, moduleId: err.checkpoint.clientStep.moduleId });
+          return;
+        }
         apiLog.error(`pipeline threw`, { jobId, error: (err as Error).message, stack: (err as Error).stack });
-        await finishJob(jobId, { error: (err as Error).message }, jobDb);
+        await finishJob(auth.userId, jobId, { error: (err as Error).message }, jobDb);
       }
     });
   });

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -7,6 +8,8 @@ import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { dataDir } from "./config";
 import { installJobLogSink, type JobLogEntry } from "./job_log_sink";
 import type { StepProgress } from "./run_engine";
+import type { RunCheckpoint } from "./run_checkpoint";
+import type { user_id_string } from "./require_auth";
 import { logger } from "./server_logger";
 import type { PipelineRun } from "./types";
 
@@ -14,77 +17,90 @@ const jobLog = logger("run-jobs");
 
 export type { JobLogEntry };
 
+export type JobOwnerId = user_id_string;
+
 const MAX_JOB_LOGS = 400;
 const LOG_PERSIST_MS = 300;
 const SUPABASE_PERSIST_MS = 200;
 
 // AI : pipeline steps must not await Supabase — disk is sync + shared across Next dev bundles.
-const supabasePersistTimers = new Map<RunJobId, ReturnType<typeof setTimeout>>();
-const supabasePersistChains = new Map<RunJobId, Promise<void>>();
+const supabasePersistTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const supabasePersistChains = new Map<string, Promise<void>>();
 
-function setJob(id: RunJobId, job: RunJob): void {
-  jobs().set(id, job);
-  persistJobLocal(id, job);
+function cacheKey(ownerId: JobOwnerId, id: RunJobId): string {
+  return `${ownerId}:${id}`;
 }
 
-function queueSupabasePersist(id: RunJobId, db: JobDb): void {
+function setJob(ownerId: JobOwnerId, id: RunJobId, job: RunJob): void {
+  jobs().set(cacheKey(ownerId, id), job);
+  persistJobLocal(ownerId, id, job);
+}
+
+function queueSupabasePersist(ownerId: JobOwnerId, id: RunJobId, db: JobDb): void {
   if (!db) return;
-  const existing = supabasePersistTimers.get(id);
+  const key = cacheKey(ownerId, id);
+  const existing = supabasePersistTimers.get(key);
   if (existing) clearTimeout(existing);
   supabasePersistTimers.set(
-    id,
+    key,
     setTimeout(() => {
-      supabasePersistTimers.delete(id);
-      const prev = supabasePersistChains.get(id) ?? Promise.resolve();
+      supabasePersistTimers.delete(key);
+      const prev = supabasePersistChains.get(key) ?? Promise.resolve();
       const next = prev
         .catch(() => {})
         .then(async () => {
-          const job = jobs().get(id);
+          const job = jobs().get(key);
           if (!job) return;
           await supabasePersistJob(db, id, job);
         });
-      supabasePersistChains.set(id, next);
+      supabasePersistChains.set(key, next);
       void next.finally(() => {
-        if (supabasePersistChains.get(id) === next) supabasePersistChains.delete(id);
+        if (supabasePersistChains.get(key) === next) supabasePersistChains.delete(key);
       });
     }, SUPABASE_PERSIST_MS),
   );
 }
 
-function queuePersist(id: RunJobId, db: JobDb): void {
-  queueSupabasePersist(id, db);
+function queuePersist(ownerId: JobOwnerId, id: RunJobId, db: JobDb): void {
+  queueSupabasePersist(ownerId, id, db);
 }
 
-async function flushPersistChain(id: RunJobId, db: JobDb): Promise<void> {
-  flushLogPersistTimer(id);
-  const t = supabasePersistTimers.get(id);
+async function flushPersistChain(ownerId: JobOwnerId, id: RunJobId, db: JobDb): Promise<void> {
+  const key = cacheKey(ownerId, id);
+  flushLogPersistTimer(key);
+  const t = supabasePersistTimers.get(key);
   if (t) {
     clearTimeout(t);
-    supabasePersistTimers.delete(id);
+    supabasePersistTimers.delete(key);
   }
-  const job = jobs().get(id);
+  const job = jobs().get(key);
   if (!job) return;
   if (!db) return;
-  const prev = supabasePersistChains.get(id) ?? Promise.resolve();
+  const prev = supabasePersistChains.get(key) ?? Promise.resolve();
   await prev.catch(() => {});
   await supabasePersistJob(db, id, job);
-  supabasePersistChains.delete(id);
+  supabasePersistChains.delete(key);
 }
 
-type ActiveJobCtx = { jobId: RunJobId; db: JobDb };
+type ActiveJobCtx = { ownerId: JobOwnerId; jobId: RunJobId; db: JobDb };
 const activeJob = new AsyncLocalStorage<ActiveJobCtx>();
-const logPersistTimers = new Map<RunJobId, ReturnType<typeof setTimeout>>();
+const logPersistTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 // AI : any ServerLogger emit inside withJobLogging() is mirrored into job.logs for the browser.
 // AI : skip run-jobs — persist debug lines were re-appended and re-triggered Supabase upserts forever.
 installJobLogSink((entry) => {
   if (entry.tag === "run-jobs") return;
   const ctx = activeJob.getStore();
-  if (ctx) void appendJobLog(ctx.jobId, entry, ctx.db);
+  if (ctx) void appendJobLog(ctx.ownerId, ctx.jobId, entry, ctx.db);
 });
 
-export function withJobLogging<T>(jobId: RunJobId, db: JobDb, fn: () => Promise<T>): Promise<T> {
-  return activeJob.run({ jobId, db }, fn);
+export function withJobLogging<T>(
+  ownerId: JobOwnerId,
+  jobId: RunJobId,
+  db: JobDb,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return activeJob.run({ ownerId, jobId, db }, fn);
 }
 
 export type RunJobId = string & { __brand: "RunJobId" };
@@ -96,24 +112,34 @@ export interface RunJob {
   logs?: JobLogEntry[]; // streamed to browser via progress poll
   run?: PipelineRun; // set once the run finished (ok or error)
   error?: string; // set when runPipeline itself threw (e.g. invalid pipeline)
+  paused?: RunCheckpoint; // mid-run — waiting for browser to execute user code (server-only)
+  clientStep?: RunCheckpoint["clientStep"]; // convenience mirror for the progress UI
+}
+
+// AI : progress poll payload — never includes paused.ctx (sourceText, outputs, etc.).
+export type RunJobProgress = Omit<RunJob, "paused">;
+
+export function toProgressResponse(job: RunJob): RunJobProgress {
+  const { paused: _paused, ...safe } = job;
+  return safe;
 }
 
 export type JobDb = SupabaseClient | null;
 
-type JobsSlot = { __forgeRunJobs?: Map<RunJobId, RunJob> };
+type JobsSlot = { __forgeRunJobs?: Map<string, RunJob> };
 
-function jobs(): Map<RunJobId, RunJob> {
+function jobs(): Map<string, RunJob> {
   const g = globalThis as JobsSlot;
   g.__forgeRunJobs ??= new Map();
   return g.__forgeRunJobs;
 }
 
-function jobsDir(): string {
-  return join(dataDir(), "jobs");
+function jobsDir(ownerId: JobOwnerId): string {
+  return join(dataDir(), "jobs", ownerId);
 }
 
-function jobPath(id: RunJobId): string {
-  return join(jobsDir(), `${id}.json`);
+function jobPath(ownerId: JobOwnerId, id: RunJobId): string {
+  return join(jobsDir(ownerId), `${id}.json`);
 }
 
 // AI : Vercel /tmp is per serverless instance — Supabase is the shared backend when configured.
@@ -146,82 +172,139 @@ async function supabaseLoadJob(db: SupabaseClient, id: RunJobId): Promise<RunJob
 
 // AI : disk is source of truth locally — Next bundles route handlers separately in dev and
 // AI : after() can land on a different globalThis than POST / progress GET.
-function persistJobLocal(id: RunJobId, job: RunJob): void {
-  mkdirSync(jobsDir(), { recursive: true });
-  writeFileSync(jobPath(id), JSON.stringify(job), "utf8");
-  jobs().set(id, job);
+function persistJobLocal(ownerId: JobOwnerId, id: RunJobId, job: RunJob): void {
+  mkdirSync(jobsDir(ownerId), { recursive: true });
+  writeFileSync(jobPath(ownerId, id), JSON.stringify(job), "utf8");
+  jobs().set(cacheKey(ownerId, id), job);
 }
 
-function loadJobLocal(id: RunJobId): RunJob | undefined {
-  const cached = jobs().get(id);
+function loadJobLocal(ownerId: JobOwnerId, id: RunJobId): RunJob | undefined {
+  const key = cacheKey(ownerId, id);
+  const cached = jobs().get(key);
   if (cached) return cached;
-  const path = jobPath(id);
+  const path = jobPath(ownerId, id);
   if (!existsSync(path)) return undefined;
   const job = JSON.parse(readFileSync(path, "utf8")) as RunJob;
-  jobs().set(id, job);
+  jobs().set(key, job);
   return job;
 }
 
-function flushLogPersistTimer(id: RunJobId): void {
-  const t = logPersistTimers.get(id);
+function flushLogPersistTimer(key: string): void {
+  const t = logPersistTimers.get(key);
   if (t) {
     clearTimeout(t);
-    logPersistTimers.delete(id);
+    logPersistTimers.delete(key);
   }
 }
 
-async function appendJobLog(id: RunJobId, entry: JobLogEntry, db: JobDb): Promise<void> {
-  let job = jobs().get(id);
-  if (!job) job = await loadJob(id, db);
+async function appendJobLog(
+  ownerId: JobOwnerId,
+  id: RunJobId,
+  entry: JobLogEntry,
+  db: JobDb,
+): Promise<void> {
+  const key = cacheKey(ownerId, id);
+  let job = jobs().get(key);
+  if (!job) job = await loadJob(ownerId, id, db);
   if (!job) return;
   job.logs ??= [];
   job.logs.push(entry);
   if (job.logs.length > MAX_JOB_LOGS) job.logs.splice(0, job.logs.length - MAX_JOB_LOGS);
-  setJob(id, job);
+  setJob(ownerId, id, job);
 
   // AI : terminal jobs were already flushed — don't schedule more Supabase upserts from stray logs.
   if (job.run || job.error) return;
 
-  flushLogPersistTimer(id);
+  flushLogPersistTimer(key);
   logPersistTimers.set(
-    id,
+    key,
     setTimeout(() => {
-      logPersistTimers.delete(id);
-      queuePersist(id, db);
+      logPersistTimers.delete(key);
+      queuePersist(ownerId, id, db);
     }, LOG_PERSIST_MS),
   );
 }
 
-async function loadJob(id: RunJobId, db: JobDb): Promise<RunJob | undefined> {
-  const cached = jobs().get(id);
+async function loadJob(ownerId: JobOwnerId, id: RunJobId, db: JobDb): Promise<RunJob | undefined> {
+  const key = cacheKey(ownerId, id);
+  const cached = jobs().get(key);
   if (cached) return cached;
-  const onDisk = loadJobLocal(id);
+  const onDisk = loadJobLocal(ownerId, id);
   if (onDisk) return onDisk;
   if (!db) return undefined;
   const job = await supabaseLoadJob(db, id);
-  if (job) setJob(id, job);
+  if (job) setJob(ownerId, id, job);
   return job;
 }
 
-export async function createJob(db: JobDb): Promise<RunJobId> {
-  const id = ("job_" + Math.random().toString(36).slice(2, 9)) as RunJobId;
-  jobLog.info(`createJob`, { jobId: id, backend: db ? "supabase" : "local" });
+export async function pauseJob(
+  ownerId: JobOwnerId,
+  id: RunJobId,
+  checkpoint: RunCheckpoint,
+  db: JobDb,
+): Promise<void> {
+  const job = (await loadJob(ownerId, id, db)) ?? { steps: [], logs: [] };
+  job.paused = checkpoint;
+  job.clientStep = checkpoint.clientStep;
+  setJob(ownerId, id, job);
+  await flushPersistChain(ownerId, id, db);
+  jobLog.info(`pauseJob`, { jobId: id, ownerId, moduleId: checkpoint.clientStep.moduleId });
+}
+
+export async function clearJobPause(ownerId: JobOwnerId, id: RunJobId, db: JobDb): Promise<void> {
+  const job = await loadJob(ownerId, id, db);
+  if (!job) return;
+  delete job.paused;
+  delete job.clientStep;
+  setJob(ownerId, id, job);
+  await flushPersistChain(ownerId, id, db);
+}
+
+// AI : atomically claim a paused job for resume — clears paused in-memory before after() runs.
+export async function claimJobResume(
+  ownerId: JobOwnerId,
+  id: RunJobId,
+  db: JobDb,
+): Promise<RunCheckpoint | undefined> {
+  const key = cacheKey(ownerId, id);
+  let job = jobs().get(key) ?? loadJobLocal(ownerId, id);
+  if (!job) job = await loadJob(ownerId, id, db);
+  if (!job?.paused) return undefined;
+
+  const checkpoint = job.paused;
+  delete job.paused;
+  delete job.clientStep;
+  setJob(ownerId, id, job);
+  await flushPersistChain(ownerId, id, db);
+  jobLog.info(`claimJobResume`, { jobId: id, ownerId, moduleId: checkpoint.clientStep.moduleId });
+  return checkpoint;
+}
+
+export async function createJob(ownerId: JobOwnerId, db: JobDb): Promise<RunJobId> {
+  const id = (`job_${randomUUID()}`) as RunJobId;
+  jobLog.info(`createJob`, { jobId: id, ownerId, backend: db ? "supabase" : "local" });
   const job: RunJob = { steps: [], logs: [] };
-  setJob(id, job);
-  await flushPersistChain(id, db);
+  setJob(ownerId, id, job);
+  await flushPersistChain(ownerId, id, db);
   return id;
 }
 
-export async function jobProgress(id: RunJobId, p: StepProgress, db: JobDb): Promise<void> {
+export async function jobProgress(
+  ownerId: JobOwnerId,
+  id: RunJobId,
+  p: StepProgress,
+  db: JobDb,
+): Promise<void> {
   // AI : never reload from Supabase mid-run — a stale remote row would rewind in-memory progress.
-  let job = jobs().get(id) ?? loadJobLocal(id);
-  if (!job) job = await loadJob(id, db);
+  let job = jobs().get(cacheKey(ownerId, id)) ?? loadJobLocal(ownerId, id);
+  if (!job) job = await loadJob(ownerId, id, db);
   if (!job) {
-    jobLog.warn(`jobProgress — job not found`, { jobId: id, moduleId: p.moduleId });
+    jobLog.warn(`jobProgress — job not found`, { jobId: id, ownerId, moduleId: p.moduleId });
     return;
   }
   jobLog.info(`jobProgress`, {
     jobId: id,
+    ownerId,
     moduleId: p.moduleId,
     label: p.label,
     status: p.status,
@@ -231,22 +314,24 @@ export async function jobProgress(id: RunJobId, p: StepProgress, db: JobDb): Pro
   const i = job.steps.findIndex((s) => s.moduleId === p.moduleId);
   if (i === -1) job.steps.push(p);
   else job.steps[i] = p;
-  setJob(id, job);
-  queuePersist(id, db);
+  setJob(ownerId, id, job);
+  queuePersist(ownerId, id, db);
 }
 
 export async function finishJob(
+  ownerId: JobOwnerId,
   id: RunJobId,
   outcome: { run?: PipelineRun; error?: string },
   db: JobDb,
 ): Promise<void> {
-  const job = await loadJob(id, db);
+  const job = await loadJob(ownerId, id, db);
   if (!job) {
-    jobLog.warn(`finishJob — job not found`, { jobId: id });
+    jobLog.warn(`finishJob — job not found`, { jobId: id, ownerId });
     return;
   }
   jobLog.info(`finishJob`, {
     jobId: id,
+    ownerId,
     runId: outcome.run?.id,
     runStatus: outcome.run?.status,
     error: outcome.error,
@@ -254,18 +339,32 @@ export async function finishJob(
     billedCents: outcome.run?.billedCents,
   });
   Object.assign(job, outcome);
-  setJob(id, job);
-  await flushPersistChain(id, db);
+  setJob(ownerId, id, job);
+  await flushPersistChain(ownerId, id, db);
 }
 
-export async function getJob(id: RunJobId, db: JobDb): Promise<RunJob | undefined> {
-  const job = await loadJob(id, db);
-  jobLog.debug(`getJob`, { jobId: id, found: !!job, stepCount: job?.steps.length, done: !!(job?.run || job?.error) });
+export async function getJob(
+  ownerId: JobOwnerId,
+  id: RunJobId,
+  db: JobDb,
+): Promise<RunJob | undefined> {
+  const job = await loadJob(ownerId, id, db);
+  jobLog.debug(`getJob`, {
+    jobId: id,
+    ownerId,
+    found: !!job,
+    stepCount: job?.steps.length,
+    done: !!(job?.run || job?.error),
+  });
   return job;
 }
 
 // AI : extra context for progress 404s — helps distinguish cold-start races from lost jobs.
-export async function jobMissingDetail(id: RunJobId, db: JobDb): Promise<string> {
+export async function jobMissingDetail(
+  ownerId: JobOwnerId,
+  id: RunJobId,
+  db: JobDb,
+): Promise<string> {
   if (db) {
     try {
       const job = await supabaseLoadJob(db, id);
@@ -275,10 +374,10 @@ export async function jobMissingDetail(id: RunJobId, db: JobDb): Promise<string>
       return `Supabase run_jobs lookup failed: ${supabaseErrorMessage(err)}`;
     }
   }
-  const path = jobPath(id);
+  const path = jobPath(ownerId, id);
   const onDisk = existsSync(path);
-  const inMemory = jobs().has(id);
+  const inMemory = jobs().has(cacheKey(ownerId, id));
   if (onDisk) return `job file exists at ${path} but could not be loaded`;
   if (inMemory) return "job is in server memory but failed to load from cache";
-  return `no job file at ${path} — POST /api/runs may not have created this job, or the server restarted and cleared ${jobsDir()}`;
+  return `no job file at ${path} — POST /api/runs may not have created this job, or the server restarted and cleared ${jobsDir(ownerId)}`;
 }

@@ -3,6 +3,7 @@ auto pipeline — combined_full_stack specification
 === global shell (/) ===
 · single-page app; 7 sidebar tabs, linear left-to-right pipeline mental model
 · header: back to landing, project selector (create / rename / delete / switch), default LLM model picker, account menu (email + sign out)
+· project selector: prefetch project state on hover/focus (GET /api/state) so switch-on-click reuses in-flight or cached data and skips the loading overlay when ready
 · signed-in → per-user Supabase data; anonymous → local store
 · cross-tab navigation: open Documents with doc focus; open Structure with model focus
 · global doc viewer slide-over (text / PDF / JSON; quote span highlight; Esc to close)

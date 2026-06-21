@@ -114,7 +114,8 @@ function ProjectRenameInput({
 }
 
 function ProjectSelector() {
-  const { projects, project, setActiveProjectId, addProject, renameProject, deleteProject } = useStore()
+  const { projects, project, setActiveProjectId, prefetchProject, addProject, renameProject, deleteProject } =
+    useStore()
   const [editing, setEditing] = useState<{ id: string; initialName: string } | null>(null)
   const canDelete = projects.length > 1
 
@@ -153,6 +154,8 @@ function ProjectSelector() {
           ) : (
           <DropdownMenuItem
             key={p.id}
+            onMouseEnter={() => prefetchProject(p.id)}
+            onFocus={() => prefetchProject(p.id)}
             onClick={() => setActiveProjectId(p.id)}
             className="group flex items-center justify-between gap-2 text-xs"
           >

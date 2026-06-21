@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type Stripe from "stripe";
 import { createClient } from "@/utils/supabase/server";
 import { dataDir } from "./config";
+import { isProductionDeploy, isVercelWithoutSupabase } from "./require_auth";
 import { logger } from "./server_logger";
 import { getStripe } from "./stripe_client";
 
@@ -94,9 +95,21 @@ async function saveSupabaseAccount(userId: BillingUserKey, account: BillingAccou
 }
 
 export async function getBillingUserKey(): Promise<BillingUserKey> {
+  if (isVercelWithoutSupabase()) throw new Error("Supabase env vars required on Vercel");
+  if (!isProductionDeploy()) {
+    try {
+      const db = await createClient();
+      const { data } = await db.auth.getUser();
+      if (data.user?.id) return data.user.id as BillingUserKey;
+    } catch {
+      /* local dev without Supabase */
+    }
+    return "anon" as BillingUserKey;
+  }
   const db = await createClient();
-  const { data } = await db.auth.getUser();
-  return (data.user?.id ?? "anon") as BillingUserKey;
+  const { data, error } = await db.auth.getUser();
+  if (error || !data.user?.id) throw new Error("Sign in required");
+  return data.user.id as BillingUserKey;
 }
 
 export async function loadBillingAccount(key: BillingUserKey): Promise<BillingAccount> {
@@ -182,6 +195,10 @@ export async function createCheckoutSession(
     success_url: `${origin}/?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/?canceled=1`,
     client_reference_id: key,
+    metadata: { user_id: key },
+    ...(mode === "subscription"
+      ? { subscription_data: { metadata: { user_id: key } } }
+      : {}),
   });
   if (!session.id) throw new Error("Stripe checkout session missing id");
   return { sessionId: session.id, url: session.url };
@@ -215,7 +232,69 @@ export async function confirmCheckoutSession(
   return { account: next, creditedCents: session.amount_total };
 }
 
-// AI : monthly renewal credits need webhooks — placeholder hook for `stripe listen`.
-export async function handleStripeWebhook(_event: Stripe.Event): Promise<void> {
-  // TODO: invoice.paid → grant SUB_CENTS_PER_MONTH credit on renewal
+// AI : monthly renewal credits — invoice.paid webhook grants SUB_CENTS_PER_MONTH (idempotent per invoice id).
+type InvoiceWithSubscription = Stripe.Invoice & {
+  subscription?: string | Stripe.Subscription | null;
+};
+
+async function resolveInvoiceUserId(invoice: InvoiceWithSubscription): Promise<BillingUserKey | null> {
+  if (invoice.metadata?.user_id) return invoice.metadata.user_id as BillingUserKey;
+
+  const subId =
+    typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id;
+  if (subId) {
+    const sub = await getStripe().subscriptions.retrieve(subId);
+    if (sub.metadata?.user_id) return sub.metadata.user_id as BillingUserKey;
+  }
+
+  const custId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+  if (custId) {
+    const cust = await getStripe().customers.retrieve(custId);
+    if (!("deleted" in cust && cust.deleted) && cust.metadata?.user_id) {
+      return cust.metadata.user_id as BillingUserKey;
+    }
+  }
+  return null;
+}
+
+export async function handleStripeWebhook(event: Stripe.Event): Promise<void> {
+  if (event.type !== "invoice.paid") return;
+
+  const invoice = event.data.object as InvoiceWithSubscription;
+  if (!invoice.id || invoice.amount_paid <= 0) return;
+  // AI : first subscription payment is credited via confirmCheckoutSession — renewals only here.
+  if (invoice.billing_reason !== "subscription_cycle") return;
+
+  const userId = await resolveInvoiceUserId(invoice);
+  if (!userId) {
+    billLog.warn(`invoice.paid missing user reference`, { invoiceId: invoice.id });
+    return;
+  }
+
+  const account = await loadBillingAccount(userId);
+  const creditKey = `inv_${invoice.id}`;
+  if (account.creditedSessions.includes(creditKey)) return;
+
+  const creditCents =
+    invoice.amount_paid === SUB_CENTS_PER_MONTH ? invoice.amount_paid : SUB_CENTS_PER_MONTH;
+  if (!canBill(account, creditCents)) {
+    billLog.warn(`invoice.paid cap reached`, { invoiceId: invoice.id, userId });
+    return;
+  }
+
+  const next: BillingAccount = {
+    balanceCents: account.balanceCents + creditCents,
+    totalBilledCents: account.totalBilledCents + creditCents,
+    subscribed: true,
+    creditedSessions: [...account.creditedSessions, creditKey],
+  };
+  await saveBillingAccount(userId, next);
+  billLog.info(`invoice.paid credited`, { invoiceId: invoice.id, userId, creditCents });
+}
+
+export function verifyStripeWebhookPayload(body: string, signature: string | null): Stripe.Event {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) throw new Error("STRIPE_WEBHOOK_SECRET missing");
+  if (!signature) throw new Error("Missing stripe-signature header");
+  return getStripe().webhooks.constructEvent(body, signature, secret);
 }
