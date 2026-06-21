@@ -263,8 +263,8 @@ function ProjectSwitchLoading({ projectName }: { projectName: string }) {
 
 function Shell() {
   const { activeWindow, setActiveWindow } = useAppShell()
-  const { model, setModel, modules, project, projectLoading } = useStore()
-  const pipelineInvalid = computeInvalid(modules).size > 0
+  const { model, setModel, modules, models, project, projectLoading } = useStore()
+  const pipelineInvalid = computeInvalid(modules, models).size > 0
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)

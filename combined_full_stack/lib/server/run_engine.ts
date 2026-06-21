@@ -491,7 +491,7 @@ export async function runPipeline(
   });
 
   // AI : run button is dark when the pipeline is invalid — refuse to execute, mirror the UI.
-  const invalid = computeInvalid(project.modules);
+  const invalid = computeInvalid(project.modules, project.models);
   if (invalid.size > 0) {
     log.error(`pipeline invalid`, { invalidModules: [...invalid.keys()] });
     throw new Error(`pipeline invalid: ${[...invalid.keys()].join(", ")}`);

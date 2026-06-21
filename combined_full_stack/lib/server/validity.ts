@@ -6,9 +6,9 @@ import type {
   StructureModel,
   StructureModelId,
 } from "./types";
-import { hasQuoteField } from "./structure";
+import { hasQuoteField, listFieldsForWrap } from "./structure";
 
-export type InvalidKind = "io-mismatch" | "no-output";
+export type InvalidKind = "io-mismatch" | "no-output" | "transform-list-wrap";
 
 export interface InvalidStep {
   moduleId: ModuleId;
@@ -19,10 +19,32 @@ export interface InvalidStep {
 
 export interface PipelineWarning {
   moduleId: ModuleId;
-  kind: "no-prompt" | "quote-no-fields" | "unused-output";
+  kind: "no-prompt" | "quote-no-fields" | "unused-output" | "transform-multi-list";
 }
 
 const LLM_KINDS: ModuleKind[] = ["llm", "llm-batch"];
+
+// AI : mirrors run_engine transform — llm-batch and outIsList steps put a bare array on the spine.
+export function stepEmitsList(m: PipelineModule | undefined): boolean {
+  if (!m) return false;
+  if (m.kind === "llm-batch") return true;
+  return !!m.outIsList;
+}
+
+// AI : static check for bare transform list→object auto-wrap (same rules as wrapListForOutputStructure).
+export function transformListWrapInvalid(
+  m: PipelineModule,
+  prev: PipelineModule | undefined,
+  models: StructureModel[],
+): InvalidStep | undefined {
+  if (m.kind !== "transform" || m.code?.trim() || m.outIsList || !stepEmitsList(prev)) return undefined;
+  const out = models.find((x) => x.id === m.outStructureId);
+  if (!out) return undefined;
+  // AI : same in/out unwraps only when the upstream list has exactly one item — checked as a warning.
+  if (m.inStructureId === m.outStructureId) return undefined;
+  if (listFieldsForWrap(out).length > 0) return undefined;
+  return { moduleId: m.id, kind: "transform-list-wrap", expects: m.inStructureId, upstreamEmits: m.outStructureId };
+}
 
 // AI : what structure a step puts on the linear spine for the *next* step (output passthrough).
 export function stepEmits(m: PipelineModule | undefined): StructureModelId | undefined {
@@ -33,7 +55,7 @@ export function stepEmits(m: PipelineModule | undefined): StructureModelId | und
 
 // AI : canonical I/O-validity check — strictly linear except combine (pipeline state + side doc).
 // AI : invalid = missing output model, or inStructureId ≠ previous step's emitted structure.
-export function computeInvalid(modules: PipelineModule[]): Map<ModuleId, InvalidStep> {
+export function computeInvalid(modules: PipelineModule[], models: StructureModel[] = []): Map<ModuleId, InvalidStep> {
   const invalid = new Map<ModuleId, InvalidStep>();
   for (const m of modules) {
     // AI : output steps only need inStructureId — they pass it through as a named artifact.
@@ -109,6 +131,9 @@ export function computeInvalid(modules: PipelineModule[]): Map<ModuleId, Invalid
       flow = m.outStructureId;
       byModel.add(m.outStructureId);
     }
+
+    const transformIssue = transformListWrapInvalid(m, prev, models);
+    if (transformIssue) invalid.set(m.id, transformIssue);
   }
 
   return invalid;
@@ -135,6 +160,21 @@ export function computeWarnings(
     if (!emitted || m.kind === "input" || m.kind === "output") continue;
     const used = modules.slice(i + 1).some((down) => down.inStructureId === emitted);
     if (!used) warnings.set(m.id, { moduleId: m.id, kind: "unused-output" });
+
+    const prev = i > 0 ? modules[i - 1] : undefined;
+    if (
+      m.kind === "transform" &&
+      !m.code?.trim() &&
+      !m.outIsList &&
+      stepEmitsList(prev) &&
+      m.inStructureId === m.outStructureId &&
+      m.outStructureId
+    ) {
+      const out = models.find((x) => x.id === m.outStructureId);
+      if (out && listFieldsForWrap(out).length === 0) {
+        warnings.set(m.id, { moduleId: m.id, kind: "transform-multi-list" });
+      }
+    }
   }
   return warnings;
 }
@@ -150,6 +190,11 @@ export function warningStepMessage(
     const m = modules.find((x) => x.id === issue.moduleId);
     const name = modelName(models, stepEmits(m)) ?? "output";
     return `${name} is never consumed by a downstream step`;
+  }
+  if (issue.kind === "transform-multi-list") {
+    const m = modules.find((x) => x.id === issue.moduleId);
+    const name = modelName(models, m?.outStructureId) ?? "output";
+    return `upstream list → ${name} only auto-unwraps one item — add a list field or custom TS if batch size may exceed 1`;
   }
   return "warning";
 }
@@ -167,6 +212,12 @@ export function invalidStepMessage(
     return `input expects ${modelName(models, issue.expects)}, upstream emits ${
       modelName(models, issue.upstreamEmits) ?? "?"
     }`;
+  }
+  if (issue.kind === "transform-list-wrap") {
+    const m = modules.find((x) => x.id === issue.moduleId);
+    const inName = modelName(models, issue.expects) ?? "item";
+    const outName = modelName(models, issue.upstreamEmits) ?? "output";
+    return `list[${inName}] → ${outName} needs a list field (prefer list[model] ref ${inName}) or custom TS code`;
   }
   return "invalid step";
 }
@@ -194,8 +245,8 @@ export function pipelineOutputModel(project: Project): StructureModel {
   return m;
 }
 
-export function isPipelineValid(modules: PipelineModule[]): boolean {
-  return computeInvalid(modules).size === 0;
+export function isPipelineValid(modules: PipelineModule[], models: StructureModel[] = []): boolean {
+  return computeInvalid(modules, models).size === 0;
 }
 
 // AI : a step's run button is enabled only when the pipeline is valid AND the step is
@@ -204,8 +255,13 @@ export function isPipelineValid(modules: PipelineModule[]): boolean {
 // AI : actually exists for the step's key (run_engine readCache); a cached:true step with no
 // AI : cache file lights up with nothing to serve. Also: there is no per-step run entry point
 // AI : in the engine at all — only the whole-pipeline runPipeline (demo_outline §2/§4).
-export function canRunStep(modules: PipelineModule[], moduleId: ModuleId, hasInput: boolean): boolean {
-  if (!isPipelineValid(modules)) return false;
+export function canRunStep(
+  modules: PipelineModule[],
+  moduleId: ModuleId,
+  hasInput: boolean,
+  models: StructureModel[] = [],
+): boolean {
+  if (!isPipelineValid(modules, models)) return false;
   const m = modules.find((x) => x.id === moduleId);
   if (!m) return false;
   return m.cached || m.kind === "input" || hasInput;

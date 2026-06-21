@@ -176,7 +176,7 @@ export function PipelineBuilder() {
   const selected = modules.find((m) => m.id === selectedId)
   // AI : de-mocked — invalid check is the shared server definition; latency/cost are
   // AI : recomputed from real run history (falls back to seeded avgs before any run).
-  const invalid = computeInvalid(modules)
+  const invalid = computeInvalid(modules, models)
   const warnings = computeWarnings(modules, models)
   const metrics = moduleMetrics(runs)
   const structureModelItems = useMemo(
@@ -579,6 +579,11 @@ export function PipelineBuilder() {
               <p className="mb-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
                 {MODULE_META[selected.kind].description}
               </p>
+              {invalid.has(selected.id) && (
+                <p className="mb-3 font-mono text-[10px] leading-relaxed text-destructive">
+                  {invalidStepMessage(invalid.get(selected.id)!, models, modules)}
+                </p>
+              )}
               {warnings.has(selected.id) && (
                 <p className="mb-3 font-mono text-[10px] leading-relaxed text-amber-600 dark:text-amber-500">
                   {warningStepMessage(warnings.get(selected.id)!, models, modules)}

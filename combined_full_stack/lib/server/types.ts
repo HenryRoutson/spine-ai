@@ -243,7 +243,10 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     label: "Link Quotes",
     description: "Match verbatim LLM quote strings against the source document and attach byte offsets (zero LLM cost)",
   },
-  transform: { label: "Transform", description: "Reshape, chunk, or map data" },
+  transform: {
+    label: "Transform",
+    description: "Deterministic reshape — list→object wrap needs a list field on the output structure, or custom TS code",
+  },
   combine: { label: "Combine Inputs", description: "Merge a new input with the pipeline state" },
   "custom-code": { label: "Custom TS Function", description: "Saved (input) => output code step, no LLM cost" },
   output: {

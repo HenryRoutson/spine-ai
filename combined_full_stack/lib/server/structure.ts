@@ -5,6 +5,11 @@ function isListFieldType(type: FieldType): boolean {
   return type === "list[text]" || type === "list[model]" || type === "list[tuple[text,quote]]";
 }
 
+// AI : shared by run_engine wrap + pipeline validity — one definition for list-field detection.
+export function listFieldsForWrap(model: StructureModel): ModelField[] {
+  return model.fields.filter((f) => isListFieldType(f.type));
+}
+
 // AI : the Quote shape mirrors the pydantic `Quote` class — links extracted text to a source span.
 export const QuoteSchema = z.object({
   doc_id: z.string(),
@@ -241,7 +246,7 @@ export function wrapListForOutputStructure(
   out: StructureModel,
   inStructureId?: StructureModelId,
 ): Record<string, unknown> {
-  const listFields = out.fields.filter((f) => isListFieldType(f.type));
+  const listFields = listFieldsForWrap(out);
   if (listFields.length === 0) {
     throw new Error(
       `output structure "${out.name}" has no list field — add one or use custom-code to reshape the upstream list`,

@@ -78,7 +78,7 @@ export function Inference() {
   const { project, modules, models, model, addRun, updateRunNotes, docs, refreshBilling } = useStore()
   const { setActiveWindow } = useAppShell()
   const { open } = useDocViewer()
-  const pipelineInvalid = computeInvalid(modules).size > 0
+  const pipelineInvalid = computeInvalid(modules, models).size > 0
 
   const [inputDocs, setInputDocs] = useState<Partial<Record<ModuleId, DocRef>>>({})
   const [pickerModuleId, setPickerModuleId] = useState<ModuleId | null>(null)

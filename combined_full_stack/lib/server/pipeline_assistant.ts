@@ -279,7 +279,7 @@ export async function proposePipelineChange(
   const proposal: PipelineAssistantProposal | null =
     raw.modules === null ? null : { modules: modules ?? [], models };
 
-  const invalidCount = proposal ? computeInvalid(proposal.modules).size : 0;
+  const invalidCount = proposal ? computeInvalid(proposal.modules, models).size : 0;
 
   return { message: raw.message, proposal, invalidCount };
 }
