@@ -3,7 +3,7 @@
 // AI : shell navigation — lets Inference/Logging jump to Documents and focus a stored hash.
 
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react"
-import type { DocId } from "@/lib/types"
+import type { DocId, StructureModelId } from "@/lib/types"
 
 export type AppWindowId =
   | "structure"
@@ -20,6 +20,9 @@ interface AppShellState {
   focusDocId: DocId | null
   openDocuments: (docId?: DocId) => void
   clearFocusDoc: () => void
+  focusStructureId: StructureModelId | null
+  openStructure: (structureId?: StructureModelId) => void
+  clearFocusStructure: () => void
 }
 
 const AppShellContext = createContext<AppShellState | null>(null)
@@ -27,6 +30,7 @@ const AppShellContext = createContext<AppShellState | null>(null)
 export function AppShellProvider({ children }: { children: ReactNode }) {
   const [activeWindow, setActiveWindow] = useState<AppWindowId>("structure")
   const [focusDocId, setFocusDocId] = useState<DocId | null>(null)
+  const [focusStructureId, setFocusStructureId] = useState<StructureModelId | null>(null)
 
   const openDocuments = useCallback((docId?: DocId) => {
     setFocusDocId(docId ?? null)
@@ -35,9 +39,25 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
 
   const clearFocusDoc = useCallback(() => setFocusDocId(null), [])
 
+  const openStructure = useCallback((structureId?: StructureModelId) => {
+    setFocusStructureId(structureId ?? null)
+    setActiveWindow("structure")
+  }, [])
+
+  const clearFocusStructure = useCallback(() => setFocusStructureId(null), [])
+
   return (
     <AppShellContext.Provider
-      value={{ activeWindow, setActiveWindow, focusDocId, openDocuments, clearFocusDoc }}
+      value={{
+        activeWindow,
+        setActiveWindow,
+        focusDocId,
+        openDocuments,
+        clearFocusDoc,
+        focusStructureId,
+        openStructure,
+        clearFocusStructure,
+      }}
     >
       {children}
     </AppShellContext.Provider>

@@ -13,6 +13,7 @@ import {
   materializeToModel,
   structuredLlmPrompt,
   validateStepOutput,
+  wrapListForOutputStructure,
 } from "./structure";
 import type { Store } from "./store";
 import { computeInvalid, stepEmits } from "./validity";
@@ -258,9 +259,30 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
     }
 
     case "transform": {
-      // AI : deterministic reshape — identity pass-through for the demo.
-      const value = ctx.outputs.get(ctx.prevModuleId!) ?? null;
-      return { value, preview: "reshaped", json: JSON.stringify(value, null, 2) };
+      // AI : deterministic reshape — optional code, else list→object wrap when shapes mismatch.
+      const input = ctx.outputs.get(ctx.prevModuleId!) ?? null;
+      const out = modelById(project.models, m.outStructureId);
+      let value: unknown = input;
+
+      if (m.code) {
+        log.info(`transform code executing`, { moduleId: m.id });
+        value = await runCustomFn(m.code, input);
+      } else if (out && !m.outIsList && Array.isArray(input)) {
+        if (input.length === 1 && m.inStructureId === m.outStructureId) {
+          value = input[0];
+          log.debug(`transform unwrapped single-item list`, { moduleId: m.id });
+        } else {
+          value = wrapListForOutputStructure(input, out, m.inStructureId);
+          log.debug(`transform wrapped list into output structure`, {
+            moduleId: m.id,
+            structure: out.name,
+            count: input.length,
+          });
+        }
+      }
+
+      const merged = out ? materializeStepOutput(m, project, value, materializeHints(m, ctx)) : value;
+      return { value: merged, preview: "reshaped", json: JSON.stringify(merged, null, 2) };
     }
 
     case "custom-code": {
@@ -494,7 +516,7 @@ export async function runPipeline(
     const beforeCents = ledger.totalCents();
     const t0 = Date.now();
     let status: RunStepStatus = "ok";
-    let result: ExecResult;
+    let result: ExecResult | undefined;
 
     const key = cacheKey(projectId, m.id, m.model ?? model, inputDocId);
     log.debug(`cache lookup`, { key, cachedFlag: !!m.cached });
@@ -520,7 +542,8 @@ export async function runPipeline(
             (m.kind === "llm" || m.kind === "llm-batch") && hasQuoteField(out);
           const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes });
           if (!check.ok) {
-            log.error(`validation failed`, { moduleId: m.id, structure: out.name, error: check.error });
+            const failedJson = result.json ?? JSON.stringify(result.value, null, 2);
+            log.error(`validation failed`, { moduleId: m.id, structure: out.name, error: check.error, failedJson });
             throw new Error(`output failed ${out.name} validation: ${check.error}`);
           }
           const itemCount = isList && Array.isArray(result.value) ? result.value.length : 1;
@@ -531,8 +554,24 @@ export async function runPipeline(
       }
     } catch (err) {
       status = "error";
-      result = { value: null, preview: (err as Error).message, llmCalls: ctx.stepLlmCalls };
-      log.error(`step failed`, { moduleId: m.id, kind: m.kind, error: (err as Error).message, stack: (err as Error).stack });
+      const prior = result;
+      const failedJson =
+        prior?.json ?? (prior?.value != null ? JSON.stringify(prior.value, null, 2) : undefined);
+      result = {
+        value: null,
+        preview: (err as Error).message,
+        json: failedJson,
+        inputPreview: prior?.inputPreview,
+        docId: prior?.docId,
+        llmCalls: ctx.stepLlmCalls,
+      };
+      log.error(`step failed`, {
+        moduleId: m.id,
+        kind: m.kind,
+        error: (err as Error).message,
+        failedJson,
+        stack: (err as Error).stack,
+      });
     }
 
     const ms = status === "cached" ? 0 : Date.now() - t0;

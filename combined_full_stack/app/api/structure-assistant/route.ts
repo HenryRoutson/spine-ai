@@ -1,0 +1,45 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { getStore } from "@/lib/server/app_store";
+import { proposeStructureChange, type ChatTurn } from "@/lib/server/structure_assistant";
+import { logger } from "@/lib/server/server_logger";
+import { DEFAULT_MODEL, type ModelId, type ProjectId } from "@/lib/server/types";
+
+const apiLog = logger("api:structure-assistant");
+
+export const maxDuration = 120;
+
+export async function POST(req: NextRequest) {
+  const body = (await req.json()) as {
+    projectId: ProjectId;
+    message: string;
+    history?: ChatTurn[];
+    model?: ModelId;
+  };
+  const { projectId, message, history = [], model = DEFAULT_MODEL } = body;
+
+  if (!message?.trim()) {
+    return NextResponse.json({ error: "message required" }, { status: 400 });
+  }
+
+  const store = await getStore();
+  const project = store.project(projectId);
+  if (!project) {
+    apiLog.warn(`unknown project`, { projectId });
+    return NextResponse.json({ error: `unknown project ${projectId}` }, { status: 404 });
+  }
+
+  apiLog.info(`POST /api/structure-assistant`, {
+    projectId,
+    messageChars: message.length,
+    historyTurns: history.length,
+    model,
+  });
+
+  try {
+    const result = await proposeStructureChange(project, message.trim(), history.slice(-8), model);
+    return NextResponse.json(result);
+  } catch (err) {
+    apiLog.error(`assistant failed`, { projectId, error: (err as Error).message });
+    return NextResponse.json({ error: (err as Error).message }, { status: 422 });
+  }
+}

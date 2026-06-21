@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { JsonHighlight, PromptText } from "@/components/highlight"
-import { JsonViewerEmbed } from "@/components/json-viewer"
+import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { LlmCallDistribution } from "@/components/llm-call-distribution"
 import { StepProfiling } from "@/components/step-profiling"
 import { InputDocumentLink } from "@/components/input-document-link"
@@ -517,11 +517,19 @@ export function Logging() {
                               )
                             }
                           >
+                            {step.status === "error" && step.outputPreview && (
+                              <p className="mb-2 whitespace-pre-wrap text-destructive">{step.outputPreview}</p>
+                            )}
+                            {step.outputJson && step.status === "error" && (
+                              <p className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Actual json:
+                              </p>
+                            )}
                             {step.outputJson ? (
                               <JsonHighlight json={step.outputJson} />
-                            ) : (
+                            ) : step.status !== "error" ? (
                               step.outputPreview
-                            )}
+                            ) : null}
                           </IoSection>
 
                           {stepQuotes.length > 0 && (
@@ -650,7 +658,7 @@ export function Logging() {
             {popup.json ? (
               <div className="flex min-h-0 flex-1 flex-col">
                 {popupQuotes.length > 0 && <QuoteLinks quotes={popupQuotes} className="border-b border-border px-4 py-3" />}
-                <JsonViewerEmbed json={popup.json} className="min-h-0 flex-1" />
+                <JsonPreviewPanel json={popup.json} className="min-h-0 flex-1" />
               </div>
             ) : (
               <div className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground">

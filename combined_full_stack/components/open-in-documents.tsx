@@ -11,7 +11,7 @@ export function OpenInDocumentsLink({
   className,
   stopPropagation = true,
 }: {
-  docId: DocId
+  docId?: DocId
   label?: string
   className?: string
   stopPropagation?: boolean

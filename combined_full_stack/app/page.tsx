@@ -16,6 +16,7 @@ import {
   Pencil,
   Trash2,
   ArrowLeft,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { StoreProvider, useStore } from "@/lib/store"
@@ -61,25 +62,69 @@ const WINDOWS: { id: WindowId; label: string; hint: string; icon: typeof Boxes }
   { id: "settings", label: "Settings", hint: "07", icon: Settings },
 ]
 
+function ProjectRenameInput({
+  initialName,
+  onCommit,
+  onCancel,
+}: {
+  initialName: string
+  onCommit: (name: string) => void
+  onCancel: () => void
+}) {
+  const valueRef = useRef(initialName)
+  const skipBlurCommit = useRef(false)
+
+  return (
+    <div
+      className="px-1.5 py-1"
+      // AI : menu items steal focus / typeahead on pointer + keyboard — block both.
+      onPointerDown={(e) => e.preventDefault()}
+      onKeyDownCapture={(e) => e.stopPropagation()}
+      onKeyUpCapture={(e) => e.stopPropagation()}
+    >
+      <Input
+        defaultValue={initialName}
+        onChange={(e) => {
+          valueRef.current = e.target.value
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault()
+            skipBlurCommit.current = true
+            onCommit(valueRef.current)
+          }
+          if (e.key === "Escape") {
+            skipBlurCommit.current = true
+            onCancel()
+          }
+        }}
+        onBlur={() => {
+          if (skipBlurCommit.current) {
+            skipBlurCommit.current = false
+            return
+          }
+          onCommit(valueRef.current)
+        }}
+        onClick={(e) => e.stopPropagation()}
+        autoFocus
+        className="h-7 text-xs"
+      />
+    </div>
+  )
+}
+
 function ProjectSelector() {
   const { projects, project, setActiveProjectId, addProject, renameProject, deleteProject } = useStore()
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [draft, setDraft] = useState("")
-  // AI : ref stays in sync on every keystroke — React state can lag behind when Enter/blur fires fast.
-  const draftRef = useRef(draft)
-  const skipBlurCommit = useRef(false)
+  const [editing, setEditing] = useState<{ id: string; initialName: string } | null>(null)
   const canDelete = projects.length > 1
 
   function startRename(id: string, name: string) {
-    skipBlurCommit.current = false
-    draftRef.current = name
-    setEditingId(id)
-    setDraft(name)
+    setEditing({ id, initialName: name })
   }
 
-  function commitRename(id: string, value = draftRef.current) {
-    renameProject(id, value)
-    setEditingId(null)
+  function commitRename(id: string, name: string) {
+    renameProject(id, name)
+    setEditing(null)
   }
 
   return (
@@ -97,86 +142,62 @@ function ProjectSelector() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-        {projects.map((p) => (
+        {projects.map((p) =>
+          editing?.id === p.id ? (
+            <ProjectRenameInput
+              key={p.id}
+              initialName={editing.initialName}
+              onCommit={(name) => commitRename(p.id, name)}
+              onCancel={() => setEditing(null)}
+            />
+          ) : (
           <DropdownMenuItem
             key={p.id}
-            onClick={() => editingId !== p.id && setActiveProjectId(p.id)}
-            onSelect={(e) => editingId === p.id && e.preventDefault()}
+            onClick={() => setActiveProjectId(p.id)}
             className="group flex items-center justify-between gap-2 text-xs"
           >
-            {editingId === p.id ? (
-              <Input
-                value={draft}
-                onChange={(e) => {
-                  draftRef.current = e.target.value
-                  setDraft(e.target.value)
-                }}
-                onKeyDown={(e) => {
-                  e.stopPropagation()
-                  if (e.key === "Enter") {
+            <>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate font-medium">{p.name}</span>
+                <span className="font-mono text-[10px] text-muted-foreground">{p.kind}</span>
+              </span>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                  onClick={(e) => {
+                    e.stopPropagation()
                     e.preventDefault()
-                    skipBlurCommit.current = true
-                    commitRename(p.id)
-                  }
-                  if (e.key === "Escape") {
-                    skipBlurCommit.current = true
-                    setEditingId(null)
-                  }
-                }}
-                onBlur={() => {
-                  if (skipBlurCommit.current) {
-                    skipBlurCommit.current = false
-                    return
-                  }
-                  commitRename(p.id)
-                }}
-                onClick={(e) => e.stopPropagation()}
-                autoFocus
-                className="h-7 text-xs"
-              />
-            ) : (
-              <>
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate font-medium">{p.name}</span>
-                  <span className="font-mono text-[10px] text-muted-foreground">{p.kind}</span>
-                </span>
-                <div className="flex shrink-0 items-center gap-1">
+                    startRename(p.id, p.name)
+                  }}
+                  aria-label={`Rename ${p.name}`}
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
+                {canDelete && (
                   <Button
                     type="button"
                     size="icon"
                     variant="ghost"
-                    className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                    className="h-6 w-6 text-destructive opacity-0 hover:text-destructive group-hover:opacity-100"
                     onClick={(e) => {
                       e.stopPropagation()
                       e.preventDefault()
-                      startRename(p.id, p.name)
+                      deleteProject(p.id)
                     }}
-                    aria-label={`Rename ${p.name}`}
+                    aria-label={`Delete ${p.name}`}
                   >
-                    <Pencil className="h-3 w-3" />
+                    <Trash2 className="h-3 w-3" />
                   </Button>
-                  {canDelete && (
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6 text-destructive opacity-0 hover:text-destructive group-hover:opacity-100"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        e.preventDefault()
-                        deleteProject(p.id)
-                      }}
-                      aria-label={`Delete ${p.name}`}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  )}
-                  {p.id === project.id && <Check className="h-3.5 w-3.5 text-primary" />}
-                </div>
-              </>
-            )}
+                )}
+                {p.id === project.id && <Check className="h-3.5 w-3.5 text-primary" />}
+              </div>
+            </>
           </DropdownMenuItem>
-        ))}
+          ),
+        )}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
@@ -228,9 +249,18 @@ function AccountMenu() {
   )
 }
 
+function ProjectSwitchLoading({ projectName }: { projectName: string }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 bg-background">
+      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <p className="font-mono text-xs text-muted-foreground">loading {projectName}…</p>
+    </div>
+  )
+}
+
 function Shell() {
   const { activeWindow, setActiveWindow } = useAppShell()
-  const { model, setModel, modules } = useStore()
+  const { model, setModel, modules, project, projectLoading } = useStore()
   const pipelineInvalid = computeInvalid(modules).size > 0
 
   useEffect(() => {
@@ -325,13 +355,19 @@ function Shell() {
         </nav>
 
         <main className="flex-1 overflow-hidden">
-          {activeWindow === "structure" && <StructureBuilder />}
-          {activeWindow === "pipeline" && <PipelineBuilder />}
-          {activeWindow === "inference" && <Inference />}
-          {activeWindow === "logging" && <Logging />}
-          {activeWindow === "documents" && <Documents />}
-          {activeWindow === "billing" && <Billing />}
-          {activeWindow === "settings" && <SettingsPanel />}
+          {projectLoading ? (
+            <ProjectSwitchLoading projectName={project.name} />
+          ) : (
+            <>
+              {activeWindow === "structure" && <StructureBuilder />}
+              {activeWindow === "pipeline" && <PipelineBuilder />}
+              {activeWindow === "inference" && <Inference />}
+              {activeWindow === "logging" && <Logging />}
+              {activeWindow === "documents" && <Documents />}
+              {activeWindow === "billing" && <Billing />}
+              {activeWindow === "settings" && <SettingsPanel />}
+            </>
+          )}
         </main>
       </div>
 

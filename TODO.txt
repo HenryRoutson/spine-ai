@@ -5,6 +5,12 @@ add option for rlm and placeholder for claude code.
 
 
 
+
+- human to setup github and google sign in
+- rm china and us from chatbot selection
+- AB testing 
+
+
  
 One of the important steps i havent yet investigated is AB testing, comparing which algorithm is better for different steps. 
 
@@ -17,7 +23,13 @@ SOURCE DOCUMENT: needs to be highlighted in logging.  need a quote step to add w
 setup as an agent API, decouple UI
 
 
+load documents while processing the rest of the pipeline, make parallel but keep design simple with linear, make async autoamatic
 
+
+create a twitter for a help desk
+
+
+create a pipeline which takes in a will in plain text and an excel file containing name or relation to a person and their bank id, and then a breakdown of someones personal assets. produce a final document which flag inconsistencies like sold assets which are passed down, describes actual outcome for each person. 
 
 
 make input and output clear. also prompt and response

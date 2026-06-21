@@ -1,0 +1,71 @@
+auto pipeline — combined_full_stack specification
+
+=== global shell (/) ===
+· single-page app; 7 sidebar tabs, linear left-to-right pipeline mental model
+· header: back to landing, project selector (create / rename / delete / switch), default LLM model picker, account menu (email + sign out)
+· signed-in → per-user Supabase data; anonymous → local store
+· cross-tab navigation: open Documents with doc focus; open Structure with model focus
+· global doc viewer slide-over (text / PDF / JSON; quote span highlight; Esc to close)
+
+=== login (/login) ===
+· email + password sign-in / sign-up (Supabase)
+· redirects to app on success; sign out → /login
+
+=== 01 — structure ===
+· define pydantic output models used for LLM I/O + implicit schema validation
+· model list: add / select / delete
+· per-model editor (UI view): name, description, fields (name, type, description, optional)
+· field types: text, int, float, bool, datetime, document, lists, tuple[text,quote], nested model refs
+· code view: generated models.py
+· AI view: chat assistant proposes models → approve / reject
+· auto-generated models (from Combine Inputs) flagged read-only-ish
+· deep-link from JSON “validates as” links
+
+=== 02 — pipeline ===
+· linear step canvas: Start → steps → End; insert steps between any point
+· step kinds: Input, Doc→Text, LLM Call, Batch LLM, Link Quotes, Transform, Combine Inputs, Custom TS, Output
+· each step: label, in/out structure models, kind-specific config (prompt, input type, model override, cache toggle, notes…)
+· I/O model mismatches → invalid (blocks inference); warnings shown separately
+· combine-input groups: merge new document input with pipeline state
+· right panel tabs: Inspector (edit selected step, reorder, delete) | AI Assistant (propose pipeline + models)
+· header stats: avg latency, cost/run, cache count, invalid/warning counts; copy pipeline JSON
+
+=== 03 — inference ===
+· run pipeline against live models (OpenRouter) — blocked if pipeline invalid
+· assign a document per Input step (picker popup); “use samples” for project defaults
+· run notes pad (saved on leave when done)
+· run: progress bar, per-step status, server debug logs, latency/billed/saved stats
+· output panel: validated JSON, rule cards (legal seed), quote links → doc viewer spans
+· reset between runs
+
+=== 04 — logging ===
+· run history list: filter by model, step, run id, notes; status, cost, latency, input doc
+· run detail: input doc link, editable notes, latency/billed/cache stats
+· per-step trace: input/output previews, LLM call distribution, quote links, cached badge
+· pipeline-at-run-time canvas + inspector (same layout as Pipeline tab)
+· compare_logs: side-by-side two runs
+· step profiling across runs
+
+=== 05 — documents ===
+· content-addressed doc store (hash id); duplicate uploads dedupe
+· upload: drag-drop or file picker → POST /api/docs (PDF parse server-side)
+· filter: all / inference / training; search by name
+· stats: count, total size, unique hashes
+· view doc → global doc viewer; highlight when opened from Inference/Logging
+
+=== 06 — billing ===
+· credit balance; 50¢/run; monthly subscribe + top-ups (Stripe checkout)
+· billing cap; low-credit / cap warnings
+· daily spend chart by model (+ doc-parse svc)
+· totals: cheap vs frontier models, cache savings vs no cache
+· cost attribution breakdown per model/service
+· auto-opens after Stripe redirect (?session_id / ?canceled)
+
+=== 07 — settings ===
+· local browser prefs only
+· JSON reader default human view (tree / table / …)
+· JSON syntax theme for side panel (app / vscode)
+
+=== backend (supporting) ===
+· API: projects, docs, runs (+ progress), billing, pipeline-assistant, structure-assistant
+· run engine: linear execution, schema validation, caching, quote linking, custom TS steps

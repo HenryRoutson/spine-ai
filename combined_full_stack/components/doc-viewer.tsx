@@ -6,7 +6,7 @@ import { useDocViewer } from "@/lib/doc-viewer"
 import { useStore } from "@/lib/store"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { cn } from "@/lib/utils"
-import { JsonViewerEmbed } from "@/components/json-viewer"
+import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import type { DocId } from "@/lib/types"
 
 // AI : de-mocked — source text comes from GET /api/docs/:id/text (the stored content-hash
@@ -142,7 +142,7 @@ export function DocViewer() {
             </div>
           ) : (
             // AI: full interactive viewer — tree / table modes via the embedded iframe
-            <JsonViewerEmbed json={text} className="min-h-0 flex-1" />
+            <JsonPreviewPanel json={text} className="min-h-0 flex-1" />
           )
         ) : (
           <div className="flex-1 overflow-auto px-6 py-5">

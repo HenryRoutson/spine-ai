@@ -80,6 +80,7 @@ interface StoreState {
   billingAccount: BillingAccountView | null
   refreshBilling: () => Promise<void>
   refresh: () => Promise<void>
+  projectLoading: boolean
 }
 
 const StoreContext = createContext<StoreState | null>(null)
@@ -96,7 +97,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [billingAccount, setBillingAccount] = useState<BillingAccountView | null>(null)
   const [activeProjectId, setActiveProjectId] = useState<string>("")
   const [model, setModel] = useState<string>(DEFAULT_MODEL)
+  const [projectLoading, setProjectLoading] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const hydratedRef = useRef(false)
 
   const refreshBilling = useCallback(async () => {
     setBillingAccount(await api<BillingAccountView>("/api/billing"))
@@ -114,7 +117,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [activeProjectId, refreshBilling])
 
   useEffect(() => {
-    refresh().catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load store"))
+    let alive = true
+    // AI : after first hydrate, swap main content for a loader while runs/docs re-scope.
+    if (hydratedRef.current && activeProjectId) setProjectLoading(true)
+
+    refresh()
+      .catch((err) => {
+        if (alive) setLoadError(err instanceof Error ? err.message : "Failed to load store")
+      })
+      .finally(() => {
+        if (alive) {
+          setProjectLoading(false)
+          hydratedRef.current = true
+        }
+      })
+
+    return () => {
+      alive = false
+    }
     // AI : refetch on project switch so runs/billing re-scope to the active project.
   }, [activeProjectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -301,6 +321,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     billingAccount,
     refreshBilling,
     refresh,
+    projectLoading,
   }
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

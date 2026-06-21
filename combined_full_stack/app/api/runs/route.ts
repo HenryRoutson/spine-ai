@@ -16,12 +16,13 @@ export const dynamic = "force-dynamic";
 interface RunRequest {
   projectId: ProjectId;
   inputDocId: DocId;
+  inputDocIds?: DocId[];
   model?: ModelId;
 }
 
 export async function POST(req: NextRequest) {
-  const { projectId, inputDocId, model } = (await req.json()) as RunRequest;
-  apiLog.info(`POST /api/runs`, { projectId, inputDocId, model });
+  const { projectId, inputDocId, inputDocIds, model } = (await req.json()) as RunRequest;
+  apiLog.info(`POST /api/runs`, { projectId, inputDocId, inputDocIds, model });
 
   const store = await getStore();
   if (!store.project(projectId)) {
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
       try {
         const run = await runPipeline(store, projectId, inputDocId, {
           model,
+          inputDocIds,
           // AI : never block the pipeline on Supabase job upserts — progress is memory-hot during the run.
           onStep: (p) => {
             void jobProgress(jobId, p, jobDb).catch((err) =>

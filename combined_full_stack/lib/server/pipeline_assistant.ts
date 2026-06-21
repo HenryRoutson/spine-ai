@@ -196,11 +196,13 @@ Rules:
 - combine steps merge pipeline state with a new document — emit ONLY the combine step; a Document Input is auto-inserted before it.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
 - llm-batch consumes a list and emits a list — set outIsList: true.
+- transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically. For matrix/summary reshapes beyond auto-wrap, use custom-code with \`code\` or an llm step — not a bare transform.
 - Add output steps wherever a named artifact snapshot is needed — pipelines may have several; each output's structureIn is the structure it materializes (not necessarily the last step).
 - Use model ids from: ${models}
 - Default LLM model: ${DEFAULT_MODEL}
 
 When the user asks to create or change the pipeline, return a FULL replacement modules array (not a patch).
+To clear or remove all steps, return modules as an empty array [] — never null.
 When answering questions without pipeline changes, set modules to null.
 When new data structures are needed, return models array with field definitions; otherwise null.
 Keep prompts concise and task-specific. Be conversational in message.`;
@@ -268,13 +270,16 @@ export async function proposePipelineChange(
   );
 
   const models = materializeModels(raw.models, project.models);
-  const modules = raw.modules?.length
-    ? syncAutoQuoteSteps(expandModuleSpecs(raw.modules, models, globalModel), models)
-    : null;
+  // AI : [] means clear pipeline; null means no change — don't treat empty as null.
+  const modules =
+    raw.modules === null
+      ? null
+      : syncAutoQuoteSteps(expandModuleSpecs(raw.modules, models, globalModel), models);
 
-  const proposal: PipelineAssistantProposal | null = modules ? { modules, models } : null;
+  const proposal: PipelineAssistantProposal | null =
+    raw.modules === null ? null : { modules: modules ?? [], models };
 
-  const invalidCount = modules ? computeInvalid(modules).size : 0;
+  const invalidCount = proposal ? computeInvalid(proposal.modules).size : 0;
 
   return { message: raw.message, proposal, invalidCount };
 }

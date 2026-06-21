@@ -61,11 +61,16 @@ function formatApiError(context: string, res: Response, body: ApiErrorBody | nul
   return `${context} (HTTP ${res.status})${code}${suffix}`
 }
 
-export async function startRun(projectId: ProjectId, inputDocId: DocId, model: ModelId): Promise<RunJobId> {
+export async function startRun(
+  projectId: ProjectId,
+  inputDocId: DocId,
+  model: ModelId,
+  inputDocIds: DocId[] = [],
+): Promise<RunJobId> {
   const res = await fetch("/api/runs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ projectId, inputDocId, model }),
+    body: JSON.stringify({ projectId, inputDocId, inputDocIds, model }),
   })
   if (!res.ok) {
     throw new Error(

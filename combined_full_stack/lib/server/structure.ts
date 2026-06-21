@@ -1,6 +1,10 @@
 import { z, type ZodType } from "zod";
 import type { FieldType, ModelField, StructureModel, StructureModelId } from "./types";
 
+function isListFieldType(type: FieldType): boolean {
+  return type === "list[text]" || type === "list[model]" || type === "list[tuple[text,quote]]";
+}
+
 // AI : the Quote shape mirrors the pydantic `Quote` class — links extracted text to a source span.
 export const QuoteSchema = z.object({
   doc_id: z.string(),
@@ -229,6 +233,25 @@ export function materializeToModel(
     out[f.name] = coerceFieldValue(raw[f.name], f, models, hints, body, purpose, docId);
   }
   return out;
+}
+
+// AI : llm-batch emits a bare array; a single-object output needs that list in a list field.
+export function wrapListForOutputStructure(
+  list: unknown[],
+  out: StructureModel,
+  inStructureId?: StructureModelId,
+): Record<string, unknown> {
+  const listFields = out.fields.filter((f) => isListFieldType(f.type));
+  if (listFields.length === 0) {
+    throw new Error(
+      `output structure "${out.name}" has no list field — add one or use custom-code to reshape the upstream list`,
+    );
+  }
+  const matched =
+    inStructureId &&
+    listFields.find((f) => f.type === "list[model]" && f.ref === inStructureId);
+  const target = matched ?? listFields[0];
+  return { [target.name]: list };
 }
 
 // AI : implicit validation reused by Pipeline/Inference on every step's I/O (no standalone step).

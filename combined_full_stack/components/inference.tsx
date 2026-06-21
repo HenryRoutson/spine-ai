@@ -2,7 +2,6 @@
 
 import { useMemo, useRef, useState, useEffect } from "react"
 import {
-  UploadCloud,
   FileText,
   CheckCircle2,
   Loader2,
@@ -14,14 +13,15 @@ import {
   Copy,
   Check,
   GitBranch,
+  FolderOpen,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { useAppShell } from "@/lib/app-shell"
-import { computeInvalid } from "@/lib/validity"
+import { computeInvalid, modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { awaitRun, mergeStepStates, startRun, type JobLogEntry, type StepProgress, type StepSubProgress, type StepUiState } from "@/lib/run-engine"
 import { collectQuotes, quoteHref } from "@/lib/quotes"
-import type { DocId, DocRef, ModuleId, PipelineRun, ProjectId } from "@/lib/types"
+import type { DocId, DocRef, ModuleId, PipelineModule, PipelineRun, Project, ProjectId } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
 import { JsonHighlight } from "@/components/highlight"
 import { QuoteButton, QuoteLinks } from "@/components/quote-links"
@@ -30,8 +30,9 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import { defaultInferenceDoc } from "@/lib/project-docs"
+import { defaultDocForInputModule, inputTypeLabel, orderedInputModules } from "@/lib/inference-input"
+import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
 import { InputDocumentLink } from "@/components/input-document-link"
-import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { useRunNotesFlushOnLeave } from "@/lib/run-notes-flush"
 import { segmentPipeline } from "@/lib/pipeline-layout"
 import { useCyclingWaitPhrase } from "@/lib/inference-wait-phrases"
@@ -59,16 +60,28 @@ function pipelineRunError(run: PipelineRun): string | null {
   return step.outputPreview ? `${step.label}: ${step.outputPreview}` : `${step.label} failed`
 }
 
+function buildDefaultInputDocs(
+  docs: DocRef[],
+  project: Project,
+  inputModules: PipelineModule[],
+): Partial<Record<ModuleId, DocRef>> {
+  const out: Partial<Record<ModuleId, DocRef>> = {}
+  const preferred = defaultInferenceDoc(docs, project)
+  for (const m of inputModules) {
+    const doc = defaultDocForInputModule(docs, project, m, preferred)
+    if (doc) out[m.id] = doc
+  }
+  return out
+}
+
 export function Inference() {
-  const { project, modules, model, addDoc, addRun, updateRunNotes, docs, refreshBilling } = useStore()
+  const { project, modules, models, model, addRun, updateRunNotes, docs, refreshBilling } = useStore()
   const { setActiveWindow } = useAppShell()
   const { open } = useDocViewer()
   const pipelineInvalid = computeInvalid(modules).size > 0
-  const fileRef = useRef<HTMLInputElement>(null)
 
-  const [dragOver, setDragOver] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [inputDoc, setInputDoc] = useState<DocRef | null>(null)
+  const [inputDocs, setInputDocs] = useState<Partial<Record<ModuleId, DocRef>>>({})
+  const [pickerModuleId, setPickerModuleId] = useState<ModuleId | null>(null)
   const [phase, setPhase] = useState<Phase>("idle")
   const [stepStates, setStepStates] = useState<Map<ModuleId, StepUiState>>(new Map())
   const [run, setRun] = useState<PipelineRun | null>(null)
@@ -83,11 +96,14 @@ export function Inference() {
     runNotesRef.current = runNotes
   }, [runNotes])
 
-  const inputModules = modules.filter((m) => m.kind === "input")
+  const inputModules = useMemo(() => orderedInputModules(modules), [modules])
+  const pickerModule = pickerModuleId ? inputModules.find((m) => m.id === pickerModuleId) : undefined
+  const allInputsReady = inputModules.every((m) => inputDocs[m.id])
 
-  // AI : reset sample doc when switching projects so legal PDFs don't stick on the DB pipeline.
+  // AI : reset inputs when switching projects so legal PDFs don't stick on the DB pipeline.
   useEffect(() => {
-    setInputDoc(defaultInferenceDoc(docs, project) ?? null)
+    setInputDocs(buildDefaultInputDocs(docs, project, inputModules))
+    setPickerModuleId(null)
     setPhase("idle")
     setStepStates(new Map())
     setRun(null)
@@ -112,24 +128,19 @@ export function Inference() {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [debugLogs.length])
 
-  async function handleFiles(files: FileList | null) {
-    if (!files || files.length === 0) return
-    setUploading(true)
-    setError(null)
-    try {
-      setInputDoc(await addDoc(files[0], "inference"))
-    } catch (e) {
-      setError((e as Error).message)
-    }
-    setUploading(false)
+  function setInputDocForModule(moduleId: ModuleId, doc: DocRef) {
+    setInputDocs((prev) => ({ ...prev, [moduleId]: doc }))
+    setPickerModuleId(null)
   }
 
-  function useSample() {
-    setInputDoc(defaultInferenceDoc(docs, project) ?? null)
+  function useSamples() {
+    setInputDocs(buildDefaultInputDocs(docs, project, inputModules))
   }
 
   async function start() {
-    if (!inputDoc) return
+    if (!allInputsReady) return
+    const orderedIds = inputModules.map((m) => inputDocs[m.id]!.id as DocId)
+    const [primary, ...rest] = orderedIds
     if (phase === "done") {
       setRunNotes("")
       runNotesRef.current = ""
@@ -140,7 +151,7 @@ export function Inference() {
     setStepStates(new Map())
     setDebugLogs([])
     try {
-      const jobId = await startRun(project.id as ProjectId, inputDoc.id as DocId, model)
+      const jobId = await startRun(project.id as ProjectId, primary, model, rest)
       refreshBilling().catch(console.error)
       const finished = await awaitRun(jobId, {
         onStep: (steps) => setStepStates((prev) => mergeStepStates(prev, steps)),
@@ -230,16 +241,17 @@ export function Inference() {
   )
   const runErr = useMemo(() => (run ? pipelineRunError(run) : null), [run])
   const sourceDoc = useMemo(() => {
-    const id = run?.inputDocId ?? inputDoc?.id
-    return id ? docs.find((d) => d.id === id) ?? inputDoc : inputDoc
-  }, [run?.inputDocId, inputDoc, docs])
+    const primaryId = run?.inputDocId ?? (inputModules[0] ? inputDocs[inputModules[0].id]?.id : undefined)
+    if (!primaryId) return inputModules[0] ? inputDocs[inputModules[0].id] : undefined
+    return docs.find((d) => d.id === primaryId) ?? (inputModules[0] ? inputDocs[inputModules[0].id] : undefined)
+  }, [run?.inputDocId, inputDocs, inputModules, docs])
 
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
         step="04 / Inference"
         title="Run Pipeline"
-        description="Drag a document onto an input to run the live pipeline against real models via OpenRouter."
+        description="Assign a document to each pipeline input step, then run against live models via OpenRouter."
         actions={
           phase !== "idle" ? (
             <Button variant="outline" size="sm" className="bg-transparent" onClick={reset} disabled={phase === "running"}>
@@ -272,60 +284,25 @@ export function Inference() {
         {/* left: input + run controls */}
         <div className="min-h-0 overflow-y-auto border-b border-border lg:border-b-0 lg:border-r">
           <div className="space-y-4 p-5">
-            <div
-              onDragOver={(e) => {
-                e.preventDefault()
-                setDragOver(true)
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault()
-                setDragOver(false)
-                handleFiles(e.dataTransfer.files)
-              }}
-              onClick={() => fileRef.current?.click()}
-              className={cn(
-                "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-6 py-8 text-center transition-colors",
-                dragOver ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground/40",
-              )}
-            >
-              {uploading ? (
-                <Loader2 className="h-7 w-7 animate-spin text-primary" />
-              ) : (
-                <UploadCloud className={cn("h-7 w-7", dragOver ? "text-primary" : "text-muted-foreground")} />
-              )}
-              <p className="text-sm font-medium">{uploading ? "Parsing…" : "Drop a document to run"}</p>
-              <p className="font-mono text-[10px] text-muted-foreground">
-                pdf · word · excel · json · accepts {inputModules.length} input slot
-                {inputModules.length === 1 ? "" : "s"}
-              </p>
-              <input
-                ref={fileRef}
-                type="file"
-                className="hidden"
-                onChange={(e) => handleFiles(e.target.files)}
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" size="sm" className="bg-transparent" onClick={useSample}>
-                <FileText className="mr-1.5 h-3.5 w-3.5" /> Use sample
-              </Button>
-              {inputDoc && (
-                <div className="inline-flex max-w-full items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => open({ docId: inputDoc.id, start: 0, end: 0 })}
-                    className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] transition-colors hover:border-primary/40 hover:bg-primary/5"
-                    title="Open the input document used for this run"
-                  >
-                    <Link2 className="h-3 w-3 shrink-0 text-primary" />
-                    <FileText className="h-3 w-3 shrink-0 text-primary" />
-                    <span className="truncate">{inputDoc.name}</span>
-                  </button>
-                  <OpenInDocumentsLink docId={inputDoc.id} label="store" className="shrink-0 px-1" />
-                </div>
-              )}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                  pipeline inputs · {inputModules.length} slot{inputModules.length === 1 ? "" : "s"}
+                </p>
+                <Button variant="outline" size="sm" className="h-7 bg-transparent" onClick={useSamples}>
+                  <FileText className="mr-1.5 h-3.5 w-3.5" /> Use samples
+                </Button>
+              </div>
+              {inputModules.map((m) => (
+                <InferenceInputSlot
+                  key={m.id}
+                  inputModule={m}
+                  outModel={modelName(models, m.outStructureId)}
+                  doc={inputDocs[m.id]}
+                  onOpenPicker={() => setPickerModuleId(m.id)}
+                  onOpenDoc={(docId) => open({ docId, start: 0, end: 0 })}
+                />
+              ))}
             </div>
 
             <RunNotesPad
@@ -340,7 +317,7 @@ export function Inference() {
               }
             />
 
-            <Button className="w-full" disabled={!inputDoc || phase === "running"} onClick={start}>
+            <Button className="w-full" disabled={!allInputsReady || phase === "running"} onClick={start}>
               {phase === "running" ? (
                 <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
               ) : (
@@ -551,6 +528,65 @@ export function Inference() {
           </div>
         </div>
       </div>
+      )}
+      {pickerModule && (
+        <InferenceInputPickerPopup
+          inputModule={pickerModule}
+          selectedDocId={inputDocs[pickerModule.id]?.id}
+          onSelect={(doc) => setInputDocForModule(pickerModule.id, doc)}
+          onClose={() => setPickerModuleId(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function InferenceInputSlot({
+  inputModule,
+  outModel,
+  doc,
+  onOpenPicker,
+  onOpenDoc,
+}: {
+  inputModule: PipelineModule
+  outModel?: string
+  doc?: DocRef
+  onOpenPicker: () => void
+  onOpenDoc: (docId: DocId) => void
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-3">
+      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+        <span className="text-xs font-medium">{inputModule.label}</span>
+        <Badge variant="outline" className="font-mono text-[9px] capitalize">
+          {inputTypeLabel(inputModule.inputType)}
+        </Badge>
+        {outModel && (
+          <Badge variant="outline" className="font-mono text-[9px] text-muted-foreground">
+            → {outModel}
+          </Badge>
+        )}
+      </div>
+      {doc ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onOpenDoc(doc.id)}
+            className="inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border bg-secondary/30 px-2 py-1.5 font-mono text-[10px] transition-colors hover:border-primary/40 hover:bg-primary/5"
+            title="Preview selected document"
+          >
+            <Link2 className="h-3 w-3 shrink-0 text-primary" />
+            <FileText className="h-3 w-3 shrink-0 text-primary" />
+            <span className="truncate">{doc.name}</span>
+          </button>
+          <Button variant="outline" size="sm" className="h-8 bg-transparent" onClick={onOpenPicker}>
+            <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> Change
+          </Button>
+        </div>
+      ) : (
+        <Button variant="outline" size="sm" className="w-full bg-transparent" onClick={onOpenPicker}>
+          <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> Choose from store
+        </Button>
       )}
     </div>
   )
