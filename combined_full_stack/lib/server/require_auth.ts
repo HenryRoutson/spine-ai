@@ -9,6 +9,9 @@ export type AuthSession = {
   email: string | undefined;
 };
 
+// AI : shared local-dev identity — job ownership, billing, and JsonStore all use this key.
+export const LOCAL_DEV_USER_ID = "local-dev" as user_id_string;
+
 const MISCONFIGURED =
   "Server misconfigured — set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY on Vercel";
 
@@ -20,6 +23,23 @@ export function isProductionDeploy(): boolean {
   return !!process.env.VERCEL || !!getSupabasePublicEnv();
 }
 
+function emailFromClaims(claims: Record<string, unknown> | undefined): string | undefined {
+  if (!claims) return undefined;
+  const email = claims.email;
+  return typeof email === "string" ? email : undefined;
+}
+
+async function sessionFromClaims(): Promise<AuthSession | null> {
+  const db = await createClient();
+  const { data } = await db.auth.getClaims();
+  const sub = data?.claims?.sub;
+  if (!sub) return null;
+  return {
+    userId: sub as user_id_string,
+    email: emailFromClaims(data.claims as Record<string, unknown> | undefined),
+  };
+}
+
 // AI : production + Supabase-configured deploys require a signed-in session — no shared anon store.
 export async function requireAuth(): Promise<AuthSession | NextResponse> {
   if (isVercelWithoutSupabase()) {
@@ -27,21 +47,22 @@ export async function requireAuth(): Promise<AuthSession | NextResponse> {
   }
 
   if (!isProductionDeploy()) {
-    const db = await createClient().catch(() => null);
-    if (!db) return { userId: "local-dev" as user_id_string, email: undefined };
-    const { data } = await db.auth.getUser();
-    if (data.user?.id) {
-      return { userId: data.user.id as user_id_string, email: data.user.email ?? undefined };
+    try {
+      const session = await sessionFromClaims();
+      if (session) return session;
+    } catch {
+      /* local dev without Supabase */
     }
-    return { userId: "local-dev" as user_id_string, email: undefined };
+    return { userId: LOCAL_DEV_USER_ID, email: undefined };
   }
 
-  const db = await createClient();
-  const { data, error } = await db.auth.getUser();
-  if (error || !data.user?.id) {
-    return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+  try {
+    const session = await sessionFromClaims();
+    if (session) return session;
+  } catch {
+    /* fall through */
   }
-  return { userId: data.user.id as user_id_string, email: data.user.email ?? undefined };
+  return NextResponse.json({ error: "Sign in required" }, { status: 401 });
 }
 
 export function isAuthSession(v: AuthSession | NextResponse): v is AuthSession {

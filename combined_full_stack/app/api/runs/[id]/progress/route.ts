@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/server/api_context";
 import {
   getJob,
   jobMissingDetail,
@@ -24,7 +25,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   if (!job) {
     const detail = await jobMissingDetail(auth.userId, id as RunJobId, jobDb);
     apiLog.warn(`GET progress 404`, { jobId: id, ownerId: auth.userId, detail });
-    return NextResponse.json({ error: `unknown job ${id}`, detail }, { status: 404 });
+    return apiError(`unknown job ${id}`, 404);
   }
   apiLog.debug(`GET progress`, {
     jobId: id,

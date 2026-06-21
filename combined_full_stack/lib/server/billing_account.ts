@@ -3,7 +3,11 @@ import { join } from "node:path";
 import type Stripe from "stripe";
 import { createClient } from "@/utils/supabase/server";
 import { dataDir } from "./config";
-import { isProductionDeploy, isVercelWithoutSupabase } from "./require_auth";
+import {
+  isAuthSession,
+  LOCAL_DEV_USER_ID,
+  requireAuth,
+} from "./require_auth";
 import { logger } from "./server_logger";
 import { getStripe } from "./stripe_client";
 
@@ -94,26 +98,21 @@ async function saveSupabaseAccount(userId: BillingUserKey, account: BillingAccou
   if (error) throw error;
 }
 
+function isLocalJsonBillingKey(key: BillingUserKey): boolean {
+  return key === (LOCAL_DEV_USER_ID as unknown as BillingUserKey);
+}
+
 export async function getBillingUserKey(): Promise<BillingUserKey> {
-  if (isVercelWithoutSupabase()) throw new Error("Supabase env vars required on Vercel");
-  if (!isProductionDeploy()) {
-    try {
-      const db = await createClient();
-      const { data } = await db.auth.getUser();
-      if (data.user?.id) return data.user.id as BillingUserKey;
-    } catch {
-      /* local dev without Supabase */
-    }
-    return "anon" as BillingUserKey;
-  }
-  const db = await createClient();
-  const { data, error } = await db.auth.getUser();
-  if (error || !data.user?.id) throw new Error("Sign in required");
-  return data.user.id as BillingUserKey;
+  const auth = await requireAuth();
+  if (!isAuthSession(auth)) throw new Error("Sign in required");
+  return auth.userId as unknown as BillingUserKey;
 }
 
 export async function loadBillingAccount(key: BillingUserKey): Promise<BillingAccount> {
-  if (key === "anon") return loadJsonAccounts()[key] ?? { ...EMPTY };
+  if (isLocalJsonBillingKey(key)) {
+    const accounts = loadJsonAccounts();
+    return accounts[key] ?? accounts["anon" as BillingUserKey] ?? { ...EMPTY };
+  }
   const row = await loadSupabaseAccount(key);
   if (row) return row;
   // AI : no Supabase row yet, or billing_accounts table missing — reuse local JSON keyed by user id.
@@ -121,7 +120,7 @@ export async function loadBillingAccount(key: BillingUserKey): Promise<BillingAc
 }
 
 export async function saveBillingAccount(key: BillingUserKey, account: BillingAccount): Promise<void> {
-  if (key === "anon") {
+  if (isLocalJsonBillingKey(key)) {
     saveJsonAccount(key, account);
     return;
   }

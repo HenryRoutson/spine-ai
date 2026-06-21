@@ -82,6 +82,8 @@ interface StoreState {
   refresh: () => Promise<void>
   prefetchProject: (id: string) => void
   projectLoading: boolean
+  saveError: string | null
+  clearSaveError: () => void
 }
 
 type PrefetchEntry = {
@@ -104,9 +106,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [activeProjectId, setActiveProjectId] = useState<string>("")
   const [model, setModel] = useState<string>(DEFAULT_MODEL)
   const [projectLoading, setProjectLoading] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hydratedRef = useRef(false)
   const prefetchCache = useRef(new Map<string, PrefetchEntry>())
+
+  const clearSaveError = useCallback(() => setSaveError(null), [])
+
+  const persistProject = useCallback(async (id: string, body: string) => {
+    try {
+      const res = await fetch(`/api/projects/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body,
+        credentials: "same-origin",
+      })
+      if (!res.ok) {
+        const msg = (await res.json().catch(() => null))?.error ?? `save failed (${res.status})`
+        setSaveError(msg)
+        return
+      }
+      setSaveError(null)
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Save failed")
+    }
+  }, [])
 
   const refreshBilling = useCallback(async () => {
     setBillingAccount(await api<BillingAccountView>("/api/billing"))
@@ -233,13 +257,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (saveTimer.current) clearTimeout(saveTimer.current)
           const body = JSON.stringify(next)
           saveTimer.current = setTimeout(() => {
-            fetch(`/api/projects/${id}`, { method: "PUT", body }).catch(console.error)
+            void persistProject(id, body)
           }, 500)
         }
         return { ...prev, projects: nextProjects }
       })
     },
-    [activeProjectId],
+    [activeProjectId, persistProject],
   )
 
   const addProject = useCallback(() => {
@@ -248,7 +272,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setState((prev) => (prev ? { ...prev, projects: [...prev.projects, fresh] } : prev))
         setActiveProjectId(fresh.id)
       })
-      .catch(console.error)
+      .catch((err) => setSaveError(err instanceof Error ? err.message : "Failed to create project"))
   }, [])
 
   // AI : discrete rename — save immediately (not debounced like builder keystrokes).
@@ -260,14 +284,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const current = prev.projects.find((p) => p.id === id)
       if (!current || current.name === trimmed) return prev
       const next = { ...current, name: trimmed }
-      fetch(`/api/projects/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(next),
-      }).catch(console.error)
+      void persistProject(id, JSON.stringify(next))
       return { ...prev, projects: prev.projects.map((p) => (p.id === id ? next : p)) }
     })
-  }, [])
+  }, [persistProject])
 
   const deleteProject = useCallback(
     (id: string) => {
@@ -282,7 +302,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           })
           if (nextActiveId) setActiveProjectId(nextActiveId)
         })
-        .catch(console.error)
+        .catch((err) => setSaveError(err instanceof Error ? err.message : "Failed to delete project"))
     },
     [activeProjectId],
   )
@@ -378,9 +398,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     refresh,
     prefetchProject,
     projectLoading,
+    saveError,
+    clearSaveError,
   }
 
-  return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
+  return (
+    <>
+      {saveError && (
+        <div
+          role="alert"
+          className="fixed inset-x-0 top-0 z-50 flex items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive"
+        >
+          <span>Save failed: {saveError}</span>
+          <button type="button" onClick={clearSaveError} className="shrink-0 underline">
+            dismiss
+          </button>
+        </div>
+      )}
+      <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
+    </>
+  )
 }
 
 export function useStore() {

@@ -5,7 +5,7 @@ import { Play, Loader2, Trophy, Cpu, AlertTriangle } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { STRATEGY_META, type Strategy } from "@/lib/types"
 // AI : type-only — erased at compile time, no server code reaches the client bundle.
-import type { BenchmarkOutcome, JudgeVerdict } from "@/lib/server/strategies"
+import type { BenchmarkOutcome, JudgeVerdict } from "@/lib/strategies"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"

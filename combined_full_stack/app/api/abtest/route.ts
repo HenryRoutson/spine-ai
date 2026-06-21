@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getStore } from "@/lib/server/app_store";
-import { BillingError, chargeForRun, getBillingUserKey } from "@/lib/server/billing_account";
+import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
+import { chargeForRun, getBillingUserKey } from "@/lib/server/billing_account";
 import { runBenchmark } from "@/lib/server/strategies";
 import { logger } from "@/lib/server/server_logger";
 import type { DocId, ProjectId } from "@/lib/server/types";
@@ -12,25 +12,27 @@ const apiLog = logger("api:abtest");
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
+  const ctx = await requireAuthStore();
+  if (ctx instanceof NextResponse) return ctx;
+  const { store } = ctx;
+
   const { projectId, inputDocId } = (await req.json()) as { projectId: ProjectId; inputDocId?: DocId };
   apiLog.info(`POST /api/abtest`, { projectId, inputDocId });
-  const store = await getStore();
   const project = store.project(projectId);
   if (!project) {
     apiLog.warn(`unknown project`, { projectId });
-    return NextResponse.json({ error: `unknown project ${projectId}` }, { status: 404 });
+    return apiError(`unknown project ${projectId}`, 404);
   }
 
   // AI : default task input = the oldest inference doc (the seeded source document).
   const docId = inputDocId ?? [...store.docs()].reverse().find((d) => d.label === "inference")?.id;
-  if (!docId) return NextResponse.json({ error: "no inference document in the store" }, { status: 400 });
+  if (!docId) return apiError("no inference document in the store", 400);
 
   try {
     await chargeForRun(await getBillingUserKey());
   } catch (err) {
-    if (err instanceof BillingError) {
-      return NextResponse.json({ error: err.message, code: err.code }, { status: 402 });
-    }
+    const billed = billingResponse(err);
+    if (billed) return billed;
     throw err;
   }
 
@@ -41,6 +43,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (err) {
     apiLog.error(`benchmark failed`, { projectId, error: (err as Error).message });
-    return NextResponse.json({ error: (err as Error).message }, { status: 422 });
+    return apiError((err as Error).message, 422);
   }
 }

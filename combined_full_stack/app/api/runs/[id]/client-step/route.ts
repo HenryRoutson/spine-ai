@@ -1,5 +1,5 @@
 import { NextResponse, after, type NextRequest } from "next/server";
-import { getStore } from "@/lib/server/app_store";
+import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { resumeRunPipeline } from "@/lib/server/run_engine";
 import {
@@ -12,7 +12,6 @@ import {
   withJobLogging,
   type RunJobId,
 } from "@/lib/server/run_jobs";
-import { isAuthSession, requireAuth } from "@/lib/server/require_auth";
 import { logger } from "@/lib/server/server_logger";
 
 export const maxDuration = 300;
@@ -22,23 +21,23 @@ const apiLog = logger("api:runs:client-step");
 
 // AI : browser ran user-authored transform/custom code — resume the server pipeline from the checkpoint.
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const auth = await requireAuth();
-  if (!isAuthSession(auth)) return auth;
+  const authCtx = await requireAuthStore();
+  if (authCtx instanceof NextResponse) return authCtx;
+  const { auth, store } = authCtx;
 
   const { id } = await ctx.params;
   const { output } = (await req.json()) as { output?: unknown };
-  if (output === undefined) return NextResponse.json({ error: "output required" }, { status: 400 });
+  if (output === undefined) return apiError("output required", 400);
 
   const jobId = id as RunJobId;
   const jobDb = await openJobDb();
   const checkpoint = await claimJobResume(auth.userId, jobId, jobDb);
   if (!checkpoint) {
     const job = await getJob(auth.userId, jobId, jobDb);
-    if (!job) return NextResponse.json({ error: `unknown job ${id}` }, { status: 404 });
-    return NextResponse.json({ error: `job ${id} is not waiting for client code` }, { status: 409 });
+    if (!job) return apiError(`unknown job ${id}`, 404);
+    return apiError(`job ${id} is not waiting for client code`, 409);
   }
 
-  const store = await getStore();
   apiLog.info(`POST client-step — scheduling resume`, {
     jobId,
     ownerId: auth.userId,

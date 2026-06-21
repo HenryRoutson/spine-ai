@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest, after } from "next/server";
-import { getStore } from "@/lib/server/app_store";
-import { BillingError, chargeForRun, getBillingUserKey } from "@/lib/server/billing_account";
+import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
+import { chargeForRun, getBillingUserKey } from "@/lib/server/billing_account";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
 import {
@@ -11,7 +11,6 @@ import {
   pauseJob,
   withJobLogging,
 } from "@/lib/server/run_jobs";
-import { isAuthSession, requireAuth } from "@/lib/server/require_auth";
 import { logger } from "@/lib/server/server_logger";
 import type { DocId, ModelId, ProjectId } from "@/lib/server/types";
 
@@ -30,20 +29,20 @@ interface RunRequest {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireAuth();
-  if (!isAuthSession(auth)) return auth;
+  const ctx = await requireAuthStore();
+  if (ctx instanceof NextResponse) return ctx;
+  const { auth, store } = ctx;
 
   const { projectId, inputDocId, inputDocIds, model } = (await req.json()) as RunRequest;
   apiLog.info(`POST /api/runs`, { projectId, inputDocId, inputDocIds, model, ownerId: auth.userId });
 
-  const store = await getStore();
   if (!store.project(projectId)) {
     apiLog.warn(`unknown project`, { projectId });
-    return NextResponse.json({ error: `unknown project ${projectId}` }, { status: 404 });
+    return apiError(`unknown project ${projectId}`, 404);
   }
   if (store.docContent(inputDocId) === undefined) {
     apiLog.warn(`unknown doc`, { inputDocId });
-    return NextResponse.json({ error: `unknown doc ${inputDocId}` }, { status: 404 });
+    return apiError(`unknown doc ${inputDocId}`, 404);
   }
 
   try {
@@ -52,9 +51,10 @@ export async function POST(req: NextRequest) {
     await chargeForRun(billingKey);
     apiLog.info(`billing charge ok`);
   } catch (err) {
-    if (err instanceof BillingError) {
-      apiLog.warn(`billing rejected`, { code: err.code, message: err.message });
-      return NextResponse.json({ error: err.message, code: err.code }, { status: 402 });
+    const billed = billingResponse(err);
+    if (billed) {
+      apiLog.warn(`billing rejected`, { code: (err as { code?: string }).code, message: (err as Error).message });
+      return billed;
     }
     apiLog.error(`billing error`, { error: (err as Error).message });
     throw err;

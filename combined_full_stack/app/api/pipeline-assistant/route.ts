@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getStore } from "@/lib/server/app_store";
+import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { proposePipelineChange, type ChatTurn } from "@/lib/server/pipeline_assistant";
 import { logger } from "@/lib/server/server_logger";
 import { DEFAULT_MODEL, type ModelId, type ProjectId } from "@/lib/server/types";
@@ -17,15 +17,16 @@ export async function POST(req: NextRequest) {
   };
   const { projectId, message, history = [], model = DEFAULT_MODEL } = body;
 
-  if (!message?.trim()) {
-    return NextResponse.json({ error: "message required" }, { status: 400 });
-  }
+  if (!message?.trim()) return apiError("message required", 400);
 
-  const store = await getStore();
+  const ctx = await requireAuthStore();
+  if (ctx instanceof NextResponse) return ctx;
+  const { store } = ctx;
+
   const project = store.project(projectId);
   if (!project) {
     apiLog.warn(`unknown project`, { projectId });
-    return NextResponse.json({ error: `unknown project ${projectId}` }, { status: 404 });
+    return apiError(`unknown project ${projectId}`, 404);
   }
 
   apiLog.info(`POST /api/pipeline-assistant`, {
@@ -40,6 +41,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (err) {
     apiLog.error(`assistant failed`, { projectId, error: (err as Error).message });
-    return NextResponse.json({ error: (err as Error).message }, { status: 422 });
+    return apiError((err as Error).message, 422);
   }
 }

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getStore } from "@/lib/server/app_store";
+import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { savePdfBytes } from "@/lib/server/store";
 import { logger } from "@/lib/server/server_logger";
 import type { DocLabel, InputType } from "@/lib/server/types";
@@ -29,10 +29,10 @@ export async function POST(req: NextRequest) {
   const file = form.get("file");
   if (!(file instanceof File)) {
     apiLog.warn(`POST /api/docs — missing file`);
-    return NextResponse.json({ error: "missing file" }, { status: 400 });
+    return apiError("missing file", 400);
   }
   if (file.size > MAX_UPLOAD_BYTES) {
-    return NextResponse.json({ error: `file too large (max ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB)` }, { status: 413 });
+    return apiError(`file too large (max ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB)`, 413);
   }
   const label = (form.get("label") as DocLabel) ?? "inference";
   const type = EXT_TYPE[file.name.split(".").pop()?.toLowerCase() ?? ""] ?? "text";
@@ -51,10 +51,12 @@ export async function POST(req: NextRequest) {
     }
   } catch (err) {
     apiLog.error(`doc parse failed`, { name: file.name, error: (err as Error).message });
-    return NextResponse.json({ error: `could not parse ${file.name}: ${(err as Error).message}` }, { status: 422 });
+    return apiError(`could not parse ${file.name}: ${(err as Error).message}`, 422);
   }
 
-  const store = await getStore();
+  const ctx = await requireAuthStore();
+  if (ctx instanceof NextResponse) return ctx;
+  const { store } = ctx;
   const doc = store.addDoc(file.name, type, content, label);
   if (type === "pdf") savePdfBytes(doc.id, bytes); // AI : keep the original for the PDF viewer
   await store.flush();
