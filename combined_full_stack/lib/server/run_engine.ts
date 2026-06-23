@@ -335,13 +335,13 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       log.info(`llm step`, { moduleId: m.id, model: stepModel, outStructure: out.name, outIsList: !!m.outIsList });
       const inputData = requireLinearInput(m, ctx);
       const context =
-        ctx.sourceText && hasQuoteField(out)
+        ctx.sourceText && hasQuoteField(out, project.models)
           ? `SOURCE DOCUMENT:\n${ctx.sourceText}`
           : `INPUT DATA:\n${JSON.stringify(inputData, null, 2)}`;
       const userPrompt = `${m.prompt ?? "Process the input."}\n\n${context}`;
       const schema = llmSchema(out, project.models, !!m.outIsList);
       const prompt = structuredLlmPrompt(userPrompt, schema);
-      log.debug(`llm prompt built`, { promptChars: prompt.length, hasQuoteField: hasQuoteField(out) });
+      log.debug(`llm prompt built`, { promptChars: prompt.length, hasQuoteField: hasQuoteField(out, project.models) });
       ctx.reportSub?.({ label: "LLM call", current: 0, total: 1 });
       ctx.stepLlmCalls = [];
       const raw = await llmStructured(userPrompt, schema, { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls }, log.child("llm"));
@@ -477,8 +477,8 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         sourceChars: ctx.sourceText.length,
         isList,
       });
-      const value = resolveQuotesValue(data, out, ctx.sourceText, ctx.sourceDocId, isList);
-      const linked = collectQuotes(value).length;
+      const value = resolveQuotesValue(data, out, project.models, ctx.sourceText, ctx.sourceDocId, isList);
+      const linked = collectQuotes(value, [], out, project.models, isList).length;
       const rawJson = JSON.stringify(data, null, 2);
       return {
         value,
@@ -633,7 +633,7 @@ async function runLinearStepsFrom(
         const out = modelById(project.models, m.outStructureId);
         if (out) {
           const isList = m.outIsList || m.kind === "llm-batch";
-          const rawQuotes = isLlmKind(m.kind) && hasQuoteField(out);
+          const rawQuotes = isLlmKind(m.kind) && hasQuoteField(out, project.models);
           const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes });
           if (!check.ok) {
             const failedJson = result.json ?? JSON.stringify(result.value, null, 2);
@@ -878,7 +878,7 @@ export async function runPipeline(
 
   if (persist) {
     log.info(`persisting artifacts`, { artifactCount: artifacts.length });
-    persistArtifacts(runId, inputDocId, store, artifacts, project.modules);
+    persistArtifacts(runId, inputDocId, store, artifacts, project.modules, project.models);
     // AI : save each custom step's code next to its input/output artifact (previous runs).
     for (const m of project.modules) {
       if (m.kind === "custom-code" && m.code) fileWriteHelper(join(dataDir(), "runs", runId), `${m.id}_code`, "ts", m.code);
@@ -1000,7 +1000,7 @@ export async function resumeRunPipeline(
       fingerprint,
     };
     if (persist) {
-      persistArtifacts(checkpoint.runId, checkpoint.inputDocId, store, artifacts, project.modules);
+      persistArtifacts(checkpoint.runId, checkpoint.inputDocId, store, artifacts, project.modules, project.models);
       store.addRun(checkpoint.projectId, run);
     }
     return run;
@@ -1048,7 +1048,7 @@ export async function resumeRunPipeline(
 
   writeLive(-1);
   if (persist) {
-    persistArtifacts(checkpoint.runId, checkpoint.inputDocId, store, artifacts, project.modules);
+    persistArtifacts(checkpoint.runId, checkpoint.inputDocId, store, artifacts, project.modules, project.models);
     for (const mod of project.modules) {
       if (mod.kind === "custom-code" && mod.code) fileWriteHelper(join(dataDir(), "runs", checkpoint.runId), `${mod.id}_code`, "ts", mod.code);
     }
@@ -1066,10 +1066,12 @@ function persistArtifacts(
   store: Store,
   artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[],
   modules: PipelineModule[],
+  models: StructureModel[],
 ): void {
   const dir = join(dataDir(), "runs", runId);
   const inputText = store.docContent(inputDocId) ?? "";
   fileWriteHelper(dir, "document_input", "txt", inputText);
+  const modById = new Map(modules.map((m) => [m.id, m]));
   for (const a of artifacts) {
     fileWriteHelper(
       dir,
@@ -1078,10 +1080,18 @@ function persistArtifacts(
       JSON.stringify({ structure: a.structure, value: a.value }, null, 2),
     );
   }
-  // AI : quotes index — every resolved quote in this run (deduped by href), exported with the
-  // AI : doc CONTENT HASH + [start, end) index range so saved quotes link back to the source
-  // AI : document after export, with no run context needed (resolve docs/<hash>.txt and slice).
-  const quotes = [...new Map(artifacts.flatMap((a) => collectQuotes(a.value)).map((q) => [q.href, q])).values()];
+  // AI : quotes index — schema-guided collection when structure is known, else shape fallback.
+  const quotes = [
+    ...new Map(
+      artifacts
+        .flatMap((a) => {
+          const mod = modById.get(a.moduleId);
+          const isList = !!mod?.outIsList || mod?.kind === "llm-batch";
+          return collectQuotes(a.value, [], a.structure, models, isList);
+        })
+        .map((q) => [q.href, q]),
+    ).values(),
+  ];
   if (quotes.length) fileWriteHelper(dir, "quotes", "json", JSON.stringify(quotes, null, 2));
   // AI : each output step emits a readable markdown snapshot — pipelines may have several.
   const outputIds = new Set(modules.filter((m) => m.kind === "output").map((m) => m.id));

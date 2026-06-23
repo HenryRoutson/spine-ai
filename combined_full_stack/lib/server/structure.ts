@@ -1,4 +1,5 @@
 import { z, type ZodError, type ZodType } from "zod";
+import { modelHasQuoteFields } from "./quote_schema";
 import type { FieldType, ModelField, StructureModel, StructureModelId } from "./types";
 
 function isListFieldType(type: FieldType): boolean {
@@ -96,9 +97,9 @@ export function zodFromModel(model: StructureModel, models: StructureModel[] = [
   return build(model, byId(models), new Set());
 }
 
-// AI : true when a model carries a quote field — those need offset resolution after the LLM call.
-export function hasQuoteField(model: StructureModel): boolean {
-  return model.fields.some((f) => f.type === "tuple[text,quote]" || f.type === "list[tuple[text,quote]]");
+// AI : true when this model or any nested ref carries a quote field — drives LLM source + link steps.
+export function hasQuoteField(model: StructureModel, models: StructureModel[] = []): boolean {
+  return modelHasQuoteFields(model, models.length ? models : [model]);
 }
 
 // AI : LLM-facing schema — quote fields collapse to plain strings at every nesting depth.

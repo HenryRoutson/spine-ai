@@ -132,6 +132,7 @@ each input has a link back to the original document.
 there are graphs for llm calls of the distribution of the number of characters for each input prompt and output response, and a graph of the response latency. 
 
 Any source docments which are used for extraction of quotes, are highlighted in a color to seperate it. there is also a link back to that doucment and any quotes which are extracted can be clicked on to see the highlighted region of the text the quote is from with the ability to scroll. although the prompt or response might contain json that isn't noted, there should be an automatic json extractor which should sepearte json and add syntax highlighting.
+Quotes are validated in a method that is not brute force and doesn't look through the whole dictionary, but instead uses the structs to know where quotes to validate are located. 
 
 each step should be annoted with cost and latency
 

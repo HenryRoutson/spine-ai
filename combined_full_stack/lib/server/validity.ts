@@ -151,7 +151,7 @@ export function computeWarnings(
     }
     if (m.kind === "quote" && !isAutoQuoteStep(m) && m.outStructureId) {
       const out = models.find((x) => x.id === m.outStructureId);
-      if (out && !hasQuoteField(out)) {
+      if (out && !hasQuoteField(out, models)) {
         warnings.set(m.id, { moduleId: m.id, kind: "quote-no-fields" });
       }
     }
@@ -293,7 +293,7 @@ export const AUTO_QUOTE_EXPLAINER =
 function llmEmitsQuotes(m: PipelineModule, models: StructureModel[]): boolean {
   if (!isLlmKind(m.kind) || !m.outStructureId) return false;
   const out = models.find((x) => x.id === m.outStructureId);
-  return !!out && hasQuoteField(out);
+  return !!out && hasQuoteField(out, models);
 }
 
 export function isAutoQuoteStep(m: PipelineModule): boolean {

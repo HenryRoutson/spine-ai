@@ -1,4 +1,9 @@
 import type { DocId, SourceQuote, StructureModel } from "./types";
+import {
+  collectQuotesForModel,
+  resolveQuotesForModel,
+  type LinkedQuoteValue,
+} from "./quote_schema";
 
 type Normalized = string;
 
@@ -78,42 +83,35 @@ export function findQuote(quote: string, source: string, docId: DocId): QuoteMat
   return { text: source.slice(start, end), docId, start, end, exact: false, score: Math.max(0, best.score) };
 }
 
-// AI : convert one record's top-level quote fields from LLM strings → {text, quote:{doc_id,start,end}}.
+// AI : convert quote fields declared on this model (incl. nested refs) from LLM strings → linked spans.
 export function resolveQuotesInRecord(
   value: unknown,
   model: StructureModel,
+  models: StructureModel[],
   sourceText: string,
   docId: DocId,
 ): unknown {
-  const obj = value as Record<string, unknown>;
-  const out: Record<string, unknown> = { ...obj };
-  for (const f of model.fields) {
-    if (f.type === "tuple[text,quote]" && typeof obj[f.name] === "string") {
-      const m = findQuote(obj[f.name] as string, sourceText, docId);
-      out[f.name] = { text: m.text, quote: { doc_id: m.docId, start: m.start, end: m.end } };
-    }
-    if (f.type === "list[tuple[text,quote]]" && Array.isArray(obj[f.name])) {
-      out[f.name] = (obj[f.name] as string[]).map((q) => {
-        const m = findQuote(q, sourceText, docId);
-        return { text: m.text, quote: { doc_id: m.docId, start: m.start, end: m.end } };
-      });
-    }
-  }
-  return out;
+  const link = (verbatim: string): LinkedQuoteValue => {
+    const m = findQuote(verbatim, sourceText, docId);
+    return { text: m.text, quote: { doc_id: m.docId, start: m.start, end: m.end } };
+  };
+  return resolveQuotesForModel(value, model, models, link, false);
 }
 
 // AI : resolve quote fields on a step output — handles list vs single-object out.
 export function resolveQuotesValue(
   value: unknown,
   model: StructureModel,
+  models: StructureModel[],
   sourceText: string,
   docId: DocId,
   isList: boolean,
 ): unknown {
-  if (isList && Array.isArray(value)) {
-    return value.map((row) => resolveQuotesInRecord(row, model, sourceText, docId));
-  }
-  return resolveQuotesInRecord(value, model, sourceText, docId);
+  const link = (verbatim: string): LinkedQuoteValue => {
+    const m = findQuote(verbatim, sourceText, docId);
+    return { text: m.text, quote: { doc_id: m.docId, start: m.start, end: m.end } };
+  };
+  return resolveQuotesForModel(value, model, models, link, isList);
 }
 
 // AI : canonical export link for a saved quote — the doc CONTENT HASH + index range survive
@@ -137,14 +135,39 @@ export interface ExportedQuote {
 }
 
 // AI : walk any exported artifact value and collect every resolved {text, quote:{…}} span.
-export function collectQuotes(value: unknown, out: ExportedQuote[] = []): ExportedQuote[] {
+// AI : when model is known, follow the structure graph; otherwise fall back to shape detection.
+export function collectQuotes(
+  value: unknown,
+  out: ExportedQuote[] = [],
+  model?: StructureModel,
+  models: StructureModel[] = [],
+  isList = false,
+): ExportedQuote[] {
+  if (model && models.length) {
+    for (const q of collectQuotesForModel(value, model, models, isList)) {
+      out.push({
+        text: q.text,
+        doc_id: q.quote.doc_id,
+        start: q.quote.start,
+        end: q.quote.end,
+        href: quoteHref({ docId: q.quote.doc_id, start: q.quote.start, end: q.quote.end }),
+      });
+    }
+    return out;
+  }
+
   if (Array.isArray(value)) {
     for (const v of value) collectQuotes(v, out);
     return out;
   }
   if (!value || typeof value !== "object") return out;
   const o = value as { text?: unknown; quote?: { doc_id?: unknown; start?: unknown; end?: unknown } };
-  if (typeof o.text === "string" && typeof o.quote?.doc_id === "string" && typeof o.quote.start === "number" && typeof o.quote.end === "number") {
+  if (
+    typeof o.text === "string" &&
+    typeof o.quote?.doc_id === "string" &&
+    typeof o.quote.start === "number" &&
+    typeof o.quote.end === "number"
+  ) {
     const { doc_id, start, end } = o.quote as { doc_id: DocId; start: number; end: number };
     out.push({ text: o.text, doc_id, start, end, href: quoteHref({ docId: doc_id, start, end }) });
     return out;
