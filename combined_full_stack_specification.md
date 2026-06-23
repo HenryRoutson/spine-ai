@@ -1,0 +1,176 @@
+It's easy to regress if you forget about a feature.
+This is all of them.
+
+
+Tabs :
+projects 
+structure 
+pipeline 
+inference 
+logging
+documents 
+billing 
+settings
+
+
+# sign in out
+supabase implmented sign in and out at top of screen. 
+
+# projects 
+select from your active projects, with selected highlighted
+clone built in projects
+delete and rename projects
+a project selector is at the top of the screen and available no matter what tab you're on
+Create a blank project button
+
+# example projects
+
+  1. a company legal evaluation, where you provide a document about legal requirements for some type of company and then a document of what that company has done to comply with regulation. what is produced is an excel file which has broken down the atomic rules and if they are followed or not. use parallel llm calls by breaking down the legal requirements into atomic rules. accept diverse inputs.
+
+  2. Legacy SQL migration. Perform mapping of old table field names to new table field names and where data is likely to flow. include a field which gives python code for how to produce field if mapping is many to 1 or many to 1.
+
+  3. GPS site profiling. Provided some set of coordinates, using inherint knowledge of llms, profile the similarities in the sites and what the connecting feature like 'russian nuclear bases', 'scenic waterfalls', or 'towns named jeremy'. Use parallel llm calls.
+
+  4. Parallel llm example. Run llm calls in parallel. Simplest example where llms answer 10 trivia questions at the same time and return a list of answers.
+
+
+
+
+# description
+text editor and optional markdown preview for a description of a project
+
+# structure
+create new structure
+rename a structure 
+delete a structure
+For a structure field you can
+  rename
+  change type 
+  change description
+  delete
+  make optional
+  add a field
+  provide a doc string style comment on the whole structure
+  pick a type which is itself another model, and see errors for when a cyclic graph forms and nothing is optional in the graph
+preview code of structures with pydantic or zod and syntax highlighting
+ask an ai assistant to change the models for you
+
+
+# Pipeline
+
+A central visualisation of all steps of the pipeline with boxes for each step and a descrpition and associated icon.
+
+steps include 
+    input - select a any subset of input types like pdf, word not just 1. select doucment to be default.
+    PDF
+    Word
+    Excel
+    JSON
+    Text
+    Web
+    Image
+  custom function - typescript or python
+  single llm call
+  parallel llm call - ensuring this completes in a similar time to the single call.
+  doc to text
+  output (there can be multiple per pipeline)
+
+  transform which converts a list into a single pydantic / zod model with a field containing that list
+
+each step has input and output types.
+input is different because it accepts pdfs for example, but everything else is validated json against pydantic models / zod defined in the structures.
+if the input to one step doesn't match the output of the step previously, an error is raised.
+
+
+all llm steps include the option to enable a first response, not in json, to allow the model to think about it's response without thinking about formatting. https://arxiv.org/pdf/2604.03616, that's based on this paper.
+it should be automatically enabled on a step that fails validation and a retry is attempted.
+
+llms default to cheap models like deepseek.
+
+all inputs and outputs into llm models should be stored and cached.
+this may be used as training data later if the company is aquired and so is important for valuation.
+companies may have an option for their own deployments which will not store this data off their site.
+
+
+the pipeline is linear and has no forking.
+steps have access to all other previous steps in the form of a pydantic object where every step description is the key. this allows for more complex behaviours, but a simple graph.
+You also do not need 'combine input' steps after the first input, as input is implicitly combined with all the data from previous steps.
+arrows should be drawn based on dependencies if steps use other steps and errors should be raised if certain steps are not used or isolated parts of the tree disconnect. ideally the dependencies will be automatically dervied.
+
+ts functions are executed on client side and sent to the server for efficiency and security
+python functions ...
+
+there should be a visualisation option where the pipeline is shown in execution order, maximising parallel execution.
+
+there is an AI sidebar to make changes to the pipeline, which has acccess to validation errors, and needs approval before making changes.
+
+inputs have the option to only accept files which contain a certain term in their name in addition to the file type. for example, 'legal_regulations'. 
+This is to ensure that pipeline accept the correct files before anythign runs.
+
+if there is any validation errors, this should disable the run button in the inference tab.
+
+
+# inference
+
+All inputs are shown with the option to select documents.
+documents are filtered based on if they adhere to the restrictions of the input model like file type or json structure. 
+So you can either say, i only want pdfs or i only want json which is of this structure. 
+files are already uploaded into documents, and you can select from these, with filtering based on name and extension completed.
+there is a run button,
+when you click it a live server log appears. when the run is completed there is a button directing users to the logging tab.
+there is a text field to put a description of why you are doing this run which you can edit in logging and saerch for later to organiase your runs.
+if you do a run that has already been completed the same setup, there is a button that appears to go to the log and not to run.
+documents are selected from the documents tab to avoid repeat uplaods, latency in upload, and work in converting to text.
+
+if you do not have enough funds in billing, a button to direct you to the billing tab will appear.
+
+# logging
+The logging tab contains all the history. each log is either red or green depending on if it passed or failed.
+you can search for runs, based on descriptions provided and editable when selecting the run.
+logging for each run contains each steps input and output syntax highlghted, with the model linked that the json is formatted in. 
+each input has a link back to the original document.
+there are graphs for llm calls of the distribution of the number of characters for each input prompt and output response, and a graph of the response latency. 
+
+Any source docments which are used for extraction of quotes, are highlighted in a color to seperate it. there is also a link back to that doucment and any quotes which are extracted can be clicked on to see the highlighted region of the text the quote is from with the ability to scroll. although the prompt or response might contain json that isn't noted, there should be an automatic json extractor which should sepearte json and add syntax highlighting.
+
+each step should be annoted with cost and latency
+
+at the end there should be graphs of cost and latency across all steps to see which steps contribute the most.
+
+there is a copy of the pipeline at the time the run was completed which will not change if the pipeline is edited. it includes everythign to see all details of this pipeline.
+
+json can be viewed in excel popups for non techincal people. there is also a view of the json with collapsible sections.
+
+# documents
+
+the documents tab contains all documents and their size with the ability to view them. you can also view pdf documents markdown in raw text or as formatted or as the original pdf and the same for word and other more complex documents. 
+csv, excel, json can all be viewed as json, excel or in original text.
+
+# Billing 
+current credit.
+brekadown of spend between different models sorted by most spend. 
+the ability to top up or subscribe to add tokens and a refresh button.
+cache savings.
+graph of dates and spending to see when spending decreases or increasesm, including total and model breakdown.
+
+
+# Settings
+select which type of json syntax highlighting 
+  App
+  Pipeline / log output — green strings, blue keys, orange numbers
+
+  Editor
+  Classic code editor — peach strings, cyan keys
+
+select default json reader 
+JSON reader
+Default human view when opening JSON in the document viewer.
+
+  Tree
+  Indented outline — expand fields in place
+
+  Table
+  Spreadsheet-style rows for list-shaped data
+
+  JSON
+  Compact syntax view with foldable blocks

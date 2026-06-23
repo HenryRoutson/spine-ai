@@ -51,7 +51,8 @@
       "id": "mod_input_legal",
       "kind": "input",
       "label": "Legal Document",
-      "inputType": "pdf",
+      "inputType": ["text", "pdf"],
+      "inputNameContains": "legal_requirements",
       "outStructureId": "m_doc",
       "cached": false,
       "avgMs": 110,
@@ -112,7 +113,8 @@
       "id": "mod_input_company",
       "kind": "input",
       "label": "Company Data Input",
-      "inputType": "word",
+      "inputType": ["text", "word"],
+      "inputNameContains": "company_legal_compliance",
       "outStructureId": "m_doc",
       "cached": false,
       "avgMs": 90,
@@ -162,7 +164,7 @@
     { "id": "s_cheap", "kind": "cheap-agent", "name": "Agent (Cheap Model)", "enabled": true, "model": "deepseek-v3", "accuracy": 84, "latencyMs": 18200, "costCents": 14, "passRate": 91 }
   ],
   "docs": [
-    { "name": "health_data_governance_agreement.pdf", "type": "text", "label": "inference", "file": "legal/legal_doc_text.txt" },
-    { "name": "mediflow_ai_company_profile.pdf", "type": "text", "label": "inference", "file": "legal/company_for_assessment.txt" }
+    { "name": "health_data_legal_requirements.pdf", "type": "text", "label": "inference", "file": "legal/legal_doc_text.txt" },
+    { "name": "mediflow_company_legal_compliance.md", "type": "text", "label": "inference", "file": "legal/company_for_assessment.md" }
   ]
 }

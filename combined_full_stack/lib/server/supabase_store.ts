@@ -223,7 +223,10 @@ function storeErrorMessage(err: unknown): string {
 export async function openUserStore(db: SupabaseClient): Promise<SupabaseStore> {
   const s = new SupabaseStore(db);
   await s.init();
-  await ensureSeeded(s);
-  await s.flush();
+  // AI : only seed empty stores — ensureSeeded on every request was rewriting projects (syncProjectFromSeed) and busting run fingerprints.
+  if (s.projects().length === 0) {
+    await ensureSeeded(s);
+    await s.flush();
+  }
   return s;
 }

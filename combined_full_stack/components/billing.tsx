@@ -1,5 +1,6 @@
 "use client"
 
+import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { useMemo, useState } from "react"
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import { useStore } from "@/lib/store"
@@ -90,14 +91,15 @@ export function Billing() {
   const capReached = billingAccount
     ? billingAccount.totalBilledCents >= billingAccount.billingCapCents
     : false
-  const canRun = billingAccount ? billingAccount.balanceCents >= billingAccount.useCostCents : false
+  const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
+  const canRun = billingAccount ? billingAccount.balanceCents >= minRunBalanceCents : false
 
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
         step="07 / Billing"
         title="Spend & Inference Cost"
-        description="Credit-based billing — subscribe for monthly credit, top up when you run out. Each pipeline run costs 50¢."
+        description={`Credit-based billing — subscribe for monthly credit, top up when you run out. Actual run cost depends on models and pipeline length; you need at least ${dollars(minRunBalanceCents)} credit to start a run.`}
       />
 
       {billingAccount && (
@@ -112,7 +114,7 @@ export function Billing() {
               <p className="font-mono text-[10px] uppercase text-muted-foreground">Credit balance</p>
               <p className="font-mono text-3xl font-semibold">{dollars(billingAccount.balanceCents)}</p>
               <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                {dollars(billingAccount.useCostCents)} per run · billed {dollars(billingAccount.totalBilledCents)} of{" "}
+                {dollars(minRunBalanceCents)} minimum to run · billed {dollars(billingAccount.totalBilledCents)} of{" "}
                 {dollars(billingAccount.billingCapCents)} cap
                 {capReached ? " — cap reached" : ""}
               </p>

@@ -19,6 +19,7 @@ import {
 import { segmentPipeline } from "@/lib/pipeline-layout"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
 import { MODULE_META, type ModuleId, type ModuleKind, type PipelineModule, type RunStepStatus, type StructureModel } from "@/lib/types"
+import { inputTypeLabel } from "@/lib/inference-input"
 import { cn } from "@/lib/utils"
 
 // AI : batch llm is a 2×2 sparkle grid so it reads as "many calls" vs single Sparkle.
@@ -153,7 +154,7 @@ export function PipelineCanvas({
                   <div className="min-w-0 flex-1">
                     <p className="line-clamp-2 text-xs font-medium leading-snug">{input.label}</p>
                     <p className="line-clamp-2 font-mono text-[10px] leading-snug text-muted-foreground">
-                      {modelName(models, input.outStructureId) ?? "·"} · {input.inputType ?? "file"}
+                      {modelName(models, input.outStructureId) ?? "·"} · {inputTypeLabel(input.inputType)}
                     </p>
                   </div>
                   <RunStatusIcon status={inputStatus} />
@@ -236,7 +237,7 @@ export function PipelineCanvas({
                 <p className="line-clamp-2 text-sm font-medium leading-snug">{m.label}</p>
                 <p className="line-clamp-2 font-mono text-[10px] leading-snug text-muted-foreground">
                   {m.kind === "input"
-                    ? `${modelName(models, m.outStructureId) ?? "·"} · ${m.inputType ?? "file"}`
+                    ? `${modelName(models, m.outStructureId) ?? "·"} · ${inputTypeLabel(m.inputType)}`
                     : locked
                       ? <>{ioName ?? "·"}<span className="text-muted-foreground/60"> · same model in/out</span></>
                       : <>

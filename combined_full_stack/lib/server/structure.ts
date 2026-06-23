@@ -130,7 +130,22 @@ export function llmSchema(model: StructureModel, models: StructureModel[], isLis
     shape[f.name] = f.optional ? base.optional() : base;
   }
   const obj = z.object(shape);
-  return isList ? z.array(obj) : obj;
+  // AI : json_object mode returns a wrapper object — unwrap before validating the list.
+  return isList ? z.preprocess(coerceLlmListOutput, z.array(obj)) : obj;
+}
+
+const LIST_WRAPPER_KEYS = ["items", "rules", "results", "data", "output", "records"] as const;
+
+export function coerceLlmListOutput(value: unknown): unknown {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return value;
+  const rec = value as Record<string, unknown>;
+  for (const key of LIST_WRAPPER_KEYS) {
+    if (Array.isArray(rec[key])) return rec[key];
+  }
+  const arrays = Object.values(rec).filter(Array.isArray);
+  if (arrays.length === 1) return arrays[0];
+  return value;
 }
 
 export interface ValidationResult<T = unknown> {
@@ -280,13 +295,17 @@ export function validateStepOutput(
   opts: { isList?: boolean; rawQuotes?: boolean } = {},
 ): ValidationResult {
   const isList = opts.isList ?? false;
-  const schema = opts.rawQuotes ? llmSchema(model, models, isList) : zodFromModel(model, models);
-  const rows = isList && Array.isArray(value) ? value : [value];
-  for (const row of rows) {
-    const parsed = schema.safeParse(row);
-    if (!parsed.success) return { ok: false, error: formatZodError(parsed.error) };
+  const itemSchema = opts.rawQuotes ? llmSchema(model, models, false) : zodFromModel(model, models);
+  if (isList) {
+    const parsed = z.array(itemSchema).safeParse(coerceLlmListOutput(value));
+    return parsed.success
+      ? { ok: true, value: parsed.data }
+      : { ok: false, error: formatZodError(parsed.error) };
   }
-  return { ok: true, value };
+  const parsed = itemSchema.safeParse(value);
+  return parsed.success
+    ? { ok: true, value: parsed.data }
+    : { ok: false, error: formatZodError(parsed.error) };
 }
 
 // ---- CRUD helpers (operate on a model list; persistence lives in store.ts) ----

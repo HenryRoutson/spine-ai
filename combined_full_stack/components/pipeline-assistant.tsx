@@ -33,6 +33,7 @@ type ChatMessage = {
   content: string
   proposal?: PipelineProposal
   invalidCount?: number
+  retryCount?: number
   status?: "pending" | "approved" | "rejected"
 }
 
@@ -59,6 +60,7 @@ export function PipelineAssistant() {
   ])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
+  const [loadingPhase, setLoadingPhase] = useState<"designing" | "retrying">("designing")
   const [error, setError] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -66,7 +68,59 @@ export function PipelineAssistant() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, loading])
+  }, [messages, loading, loadingPhase])
+
+  async function readAssistantStream(res: Response): Promise<{
+    message: string
+    proposal?: PipelineProposal
+    invalidCount: number
+    retryCount: number
+  }> {
+    const reader = res.body?.getReader()
+    if (!reader) throw new Error("empty response body")
+
+    const decoder = new TextDecoder()
+    let buffer = ""
+    let result: {
+      message: string
+      proposal?: PipelineProposal
+      invalidCount: number
+      retryCount: number
+    } | null = null
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split("\n")
+      buffer = lines.pop() ?? ""
+      for (const line of lines) {
+        if (!line.trim()) continue
+        const evt = JSON.parse(line) as {
+          type: string
+          attempt?: number
+          error?: string
+          message?: string
+          proposal?: PipelineProposal
+          invalidCount?: number
+          retryCount?: number
+        }
+        if (evt.type === "retrying") setLoadingPhase("retrying")
+        if (evt.type === "error") throw new Error(evt.error ?? "Assistant request failed")
+        if (evt.type === "done") {
+          result = {
+            message: evt.message ?? "",
+            proposal: evt.proposal ?? undefined,
+            invalidCount: evt.invalidCount ?? 0,
+            retryCount: evt.retryCount ?? 0,
+          }
+        }
+      }
+    }
+
+    if (!result) throw new Error("Assistant stream ended without a result")
+    return result
+  }
 
   async function send(text: string) {
     const trimmed = text.trim()
@@ -84,6 +138,7 @@ export function PipelineAssistant() {
     setMessages((prev) => [...prev, userMsg])
     setInput("")
     setLoading(true)
+    setLoadingPhase("designing")
     setError(null)
 
     const history = [...messages, userMsg]
@@ -100,10 +155,15 @@ export function PipelineAssistant() {
           message: trimmed,
           history,
           model: globalModel,
+          stream: true,
         }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? `request failed (${res.status})`)
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error ?? `request failed (${res.status})`)
+      }
+
+      const data = await readAssistantStream(res)
 
       const assistantMsg: ChatMessage = {
         id: msgId(),
@@ -111,6 +171,7 @@ export function PipelineAssistant() {
         content: data.message as string,
         proposal: data.proposal ?? undefined,
         invalidCount: data.invalidCount ?? 0,
+        retryCount: data.retryCount ?? 0,
         status: data.proposal ? "pending" : undefined,
       }
       setMessages((prev) => [...prev, assistantMsg])
@@ -186,6 +247,11 @@ export function PipelineAssistant() {
                       <Badge variant="outline" className="font-mono text-[9px]">
                         {m.proposal.modules.length} steps
                       </Badge>
+                      {m.retryCount != null && m.retryCount > 0 && (
+                        <Badge variant="outline" className="font-mono text-[9px] text-muted-foreground">
+                          retried {m.retryCount}×
+                        </Badge>
+                      )}
                       {m.invalidCount != null && m.invalidCount > 0 && (
                         <Badge
                           variant="outline"
@@ -250,7 +316,7 @@ export function PipelineAssistant() {
           {loading && (
             <div className="flex items-center gap-2 px-2 font-mono text-[10px] text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              designing pipeline…
+              {loadingPhase === "retrying" ? "retrying…" : "designing pipeline…"}
             </div>
           )}
 

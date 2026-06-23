@@ -1,6 +1,7 @@
 "use client"
 
-import { Fragment } from "react"
+import ReactMarkdown, { type Components } from "react-markdown"
+import remarkGfm from "remark-gfm"
 
 // Lightweight JSON syntax highlighter for log/output views.
 export function JsonHighlight({ json }: { json: string }) {
@@ -31,41 +32,54 @@ export function JsonHighlight({ json }: { json: string }) {
   )
 }
 
-// Minimal markdown renderer with code/heading/bullet support + highlighting.
+const markdownComponents: Components = {
+  h1: ({ children }) => <h1 className="mb-2 text-base font-semibold text-foreground">{children}</h1>,
+  h2: ({ children }) => <h2 className="mb-1.5 mt-4 text-sm font-semibold text-foreground">{children}</h2>,
+  h3: ({ children }) => <h3 className="mb-1 mt-3 text-sm font-medium text-foreground">{children}</h3>,
+  h4: ({ children }) => <h4 className="mb-1 mt-2 text-xs font-medium text-foreground">{children}</h4>,
+  p: ({ children }) => <p className="mb-2 text-muted-foreground">{children}</p>,
+  strong: ({ children }) => <strong className="font-medium text-foreground">{children}</strong>,
+  ul: ({ children }) => <ul className="mb-2 list-disc space-y-1 pl-5 text-muted-foreground">{children}</ul>,
+  ol: ({ children }) => <ol className="mb-2 list-decimal space-y-1 pl-5 text-muted-foreground">{children}</ol>,
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  blockquote: ({ children }) => (
+    <blockquote className="mb-2 border-l-2 border-primary/40 pl-3 text-muted-foreground">{children}</blockquote>
+  ),
+  hr: () => <hr className="my-4 border-border" />,
+  a: ({ href, children }) => (
+    <a href={href} className="text-primary underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
+      {children}
+    </a>
+  ),
+  code: ({ className, children }) =>
+    className ? (
+      <code className="font-mono text-[11px] text-primary">{children}</code>
+    ) : (
+      <code className="rounded bg-secondary px-1 font-mono text-[11px] text-primary">{children}</code>
+    ),
+  pre: ({ children }) => (
+    <pre className="mb-2 overflow-x-auto rounded border border-border bg-secondary/50 p-2 font-mono text-[11px] text-primary">
+      {children}
+    </pre>
+  ),
+  table: ({ children }) => (
+    <div className="mb-3 overflow-x-auto">
+      <table className="w-full border-collapse text-[11px]">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="bg-secondary">{children}</thead>,
+  th: ({ children }) => (
+    <th className="border border-border px-2 py-1 text-left font-medium text-foreground">{children}</th>
+  ),
+  td: ({ children }) => <td className="border border-border px-2 py-1 text-muted-foreground">{children}</td>,
+}
+
 export function MarkdownView({ md }: { md: string }) {
-  const lines = md.split("\n")
   return (
-    <div className="space-y-1.5 text-xs leading-relaxed text-foreground">
-      {lines.map((line, i) => {
-        if (line.startsWith("# ")) {
-          return (
-            <h3 key={i} className="text-sm font-semibold">
-              {line.slice(2)}
-            </h3>
-          )
-        }
-        if (line.startsWith("## ")) {
-          return (
-            <h4 key={i} className="font-medium text-foreground">
-              {line.slice(3)}
-            </h4>
-          )
-        }
-        if (line.startsWith("- ")) {
-          return (
-            <div key={i} className="flex gap-2 pl-1 text-muted-foreground">
-              <span className="text-primary">·</span>
-              <span>{inlineCode(line.slice(2))}</span>
-            </div>
-          )
-        }
-        if (line.trim() === "") return <div key={i} className="h-1" />
-        return (
-          <p key={i} className="text-muted-foreground">
-            {inlineCode(line)}
-          </p>
-        )
-      })}
+    <div className="text-xs leading-relaxed text-foreground">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+        {md}
+      </ReactMarkdown>
     </div>
   )
 }
@@ -169,17 +183,4 @@ function findJsonEnd(text: string, start: number): number {
     else if (c === close) { if (--depth === 0) return i }
   }
   return -1
-}
-
-function inlineCode(s: string) {
-  const parts = s.split(/(`[^`]+`)/g)
-  return parts.map((p, i) =>
-    p.startsWith("`") && p.endsWith("`") ? (
-      <code key={i} className="rounded bg-secondary px-1 font-mono text-[11px] text-primary">
-        {p.slice(1, -1)}
-      </code>
-    ) : (
-      <Fragment key={i}>{p}</Fragment>
-    ),
-  )
 }

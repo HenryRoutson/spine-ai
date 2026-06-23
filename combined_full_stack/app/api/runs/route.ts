@@ -3,6 +3,7 @@ import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_co
 import { chargeForRun, getBillingUserKey } from "@/lib/server/billing_account";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
+import { computeRunFingerprintForRequest, findMatchingRun } from "@/lib/server/run_fingerprint";
 import {
   createJob,
   finishJob,
@@ -12,7 +13,12 @@ import {
   withJobLogging,
 } from "@/lib/server/run_jobs";
 import { logger } from "@/lib/server/server_logger";
-import type { DocId, ModelId, ProjectId } from "@/lib/server/types";
+import { orderedInputModules } from "@/lib/inference-input";
+import {
+  collectInferenceInputIssues,
+  inferenceInputIssueMessage,
+} from "@/lib/inference-validity";
+import type { DocId, DocRef, ModelId, ModuleId, ProjectId } from "@/lib/server/types";
 
 const apiLog = logger("api:runs");
 
@@ -40,9 +46,52 @@ export async function POST(req: NextRequest) {
     apiLog.warn(`unknown project`, { projectId });
     return apiError(`unknown project ${projectId}`, 404);
   }
-  if (store.docContent(inputDocId) === undefined) {
-    apiLog.warn(`unknown doc`, { inputDocId });
-    return apiError(`unknown doc ${inputDocId}`, 404);
+  const project = store.project(projectId)!;
+  const inputModules = orderedInputModules(project.modules);
+  const orderedDocIds = [inputDocId, ...(inputDocIds ?? [])];
+  const inputDocs: Partial<Record<ModuleId, DocRef>> = {};
+  const contentByDocId: Partial<Record<string, string>> = {};
+  for (let i = 0; i < inputModules.length; i++) {
+    const docId = orderedDocIds[i];
+    if (!docId) continue;
+    if (store.docContent(docId) === undefined) {
+      apiLog.warn(`unknown doc`, { docId });
+      return apiError(`unknown doc ${docId}`, 404);
+    }
+    const doc = store.docs().find((d) => d.id === docId);
+    if (!doc) return apiError(`unknown doc ${docId}`, 404);
+    inputDocs[inputModules[i].id] = doc;
+    contentByDocId[docId] = store.docContent(docId)!;
+  }
+  const inputIssues = collectInferenceInputIssues(inputModules, inputDocs, contentByDocId);
+  if (inputIssues.length) {
+    return apiError(inferenceInputIssueMessage(inputIssues), 400);
+  }
+
+  const { fingerprint, inputDocIds: fingerprintInputDocIds } = computeRunFingerprintForRequest(
+    store,
+    project,
+    model,
+    inputDocId,
+    inputDocIds,
+  );
+  const cachedRun = findMatchingRun(store, project, projectId, fingerprint);
+  if (cachedRun) {
+    apiLog.info(`run deduped — identical pipeline + inputs already completed`, {
+      fingerprint,
+      fingerprintInputDocIds,
+      cachedRunId: cachedRun.id,
+      projectId,
+    });
+    const jobDb = await openJobDb();
+    const jobId = await createJob(auth.userId, jobDb);
+    after(async () => {
+      await withJobLogging(auth.userId, jobId, jobDb, async () => {
+        apiLog.info(`deduped run — skipping pipeline`, { jobId, cachedRunId: cachedRun.id, fingerprint });
+        await finishJob(auth.userId, jobId, { run: cachedRun, deduped: true, cachedRunId: cachedRun.id }, jobDb);
+      });
+    });
+    return NextResponse.json({ jobId, deduped: true, cachedRunId: cachedRun.id, fingerprint });
   }
 
   try {
@@ -71,6 +120,8 @@ export async function POST(req: NextRequest) {
         const run = await runPipeline(store, projectId, inputDocId, {
           model,
           inputDocIds,
+          fingerprint,
+          fingerprintInputDocIds,
           // AI : never block the pipeline on Supabase job upserts — progress is memory-hot during the run.
           onStep: (p) => {
             void jobProgress(auth.userId, jobId, p, jobDb).catch((err) =>

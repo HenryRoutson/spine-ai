@@ -48,6 +48,9 @@ export interface StructureModel {
 
 export type InputType = "pdf" | "excel" | "word" | "json" | "text" | "web" | "image";
 
+// AI : input steps accept one type or a subset — e.g. ["word", "pdf"] for company filings.
+export type InputTypeSpec = InputType | InputType[];
+
 export type ModuleKind =
   | "input"
   | "doc-to-text"
@@ -68,7 +71,8 @@ export interface PipelineModule {
   inStructureId?: StructureModelId;
   outStructureId?: StructureModelId;
   // config
-  inputType?: InputType;
+  inputType?: InputTypeSpec;
+  inputNameContains?: string; // AI : optional filename substring — only matching docs can fill this input slot
   prompt?: string;
   code?: string; // for custom-code steps
   model?: ModelId; // per-step model override
@@ -154,6 +158,8 @@ export interface RunStep {
   llmCalls?: LlmCallRecord[];
 }
 
+export type RunFingerprint = string & { __brand: "RunFingerprint" };
+
 export interface PipelineRun {
   id: RunId;
   startedAt: number;
@@ -164,6 +170,8 @@ export interface PipelineRun {
   model: ModelId;
   steps: RunStep[];
   inputDocId?: DocId;
+  inputDocIds?: DocId[]; // AI : all inference inputs, in slot order — powers run dedup + logging
+  fingerprint?: RunFingerprint; // AI : hash of pipeline + inputs — identical reruns link here
   notes?: string; // AI : freeform context for this run — set before or after inference
 }
 

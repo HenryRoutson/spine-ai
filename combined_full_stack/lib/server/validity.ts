@@ -199,6 +199,23 @@ export function warningStepMessage(
   return "warning";
 }
 
+// AI : human-readable validation report for assistants and retry prompts.
+export function formatPipelineValidationErrors(
+  modules: PipelineModule[],
+  models: StructureModel[] = [],
+): string {
+  const invalid = computeInvalid(modules, models);
+  if (invalid.size === 0) return "";
+  const lines: string[] = [];
+  for (const issue of invalid.values()) {
+    const step = modules.find((m) => m.id === issue.moduleId);
+    const label = step?.label ?? issue.moduleId;
+    const kind = step?.kind ?? "?";
+    lines.push(`- "${label}" (${kind}): ${invalidStepMessage(issue, models, modules)}`);
+  }
+  return lines.join("\n");
+}
+
 export function invalidStepMessage(
   issue: InvalidStep,
   models: StructureModel[],

@@ -25,6 +25,7 @@ import {
 } from "lucide-react"
 import { useStore, uid } from "@/lib/store"
 import { computeInvalid, computeWarnings, invalidStepMessage, warningStepMessage, type InvalidStep, type PipelineWarning } from "@/lib/validity"
+import { inputTypeLabel, inputTypesForModule, inputNameRestrictionLabel } from "@/lib/inference-input"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { llmSchemaJson } from "@/lib/structure"
 import { JsonHighlight } from "@/components/highlight"
@@ -33,7 +34,6 @@ import { combinePairIds, segmentPipeline } from "@/lib/pipeline-layout"
 import {
   INPUT_TYPES,
   MODULE_META,
-  type InputType,
   type ModuleKind,
   type PipelineModule,
   type StructureModel,
@@ -369,7 +369,7 @@ export function PipelineBuilder() {
                         <div className="min-w-0 flex-1">
                           <p className="line-clamp-2 text-xs font-medium leading-snug">{input.label}</p>
                           <p className="line-clamp-2 font-mono text-[10px] leading-snug text-muted-foreground">
-                            {modelName(models, input.outStructureId) ?? "·"} · {input.inputType ?? "file"}
+                            {modelName(models, input.outStructureId) ?? "·"} · {inputTypeLabel(input.inputType)}
                           </p>
                         </div>
                       </button>
@@ -432,7 +432,7 @@ export function PipelineBuilder() {
                       <p className="line-clamp-2 text-sm font-medium leading-snug">{m.label}</p>
                       <p className="line-clamp-2 font-mono text-[10px] leading-snug text-muted-foreground">
                         {m.kind === "input"
-                          ? `${modelName(models, m.outStructureId) ?? "·"} · ${m.inputType ?? "file"}`
+                          ? `${modelName(models, m.outStructureId) ?? "·"} · ${inputTypeLabel(m.inputType)}`
                           : locked
                             ? <>{ioName ?? "·"}<span className="text-muted-foreground/60"> · same model in/out</span></>
                             : <>
@@ -613,22 +613,47 @@ export function PipelineBuilder() {
 
               {selected.kind === "input" && (
                 <>
-                  <Field label="Input type">
-                    <Select
-                      value={selected.inputType}
-                      onValueChange={(v) => update(selected.id, { inputType: v as InputType })}
-                    >
-                      <SelectTrigger className="h-8 text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {INPUT_TYPES.map((t) => (
-                          <SelectItem key={t.value} value={t.value}>
+                  <Field label="Input types">
+                    <div className="flex flex-wrap gap-1.5">
+                      {INPUT_TYPES.map((t) => {
+                        const active = inputTypesForModule(selected).includes(t.value)
+                        return (
+                          <button
+                            key={t.value}
+                            type="button"
+                            onClick={() => {
+                              const current = inputTypesForModule(selected)
+                              const next = active
+                                ? current.filter((v) => v !== t.value)
+                                : [...current, t.value]
+                              if (!next.length) return
+                              update(selected.id, { inputType: next.length === 1 ? next[0] : next })
+                            }}
+                            className={cn(
+                              "rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
+                              active
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border text-muted-foreground hover:border-muted-foreground/40",
+                            )}
+                          >
                             {t.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </Field>
+                  <Field
+                    label="Filename must contain"
+                    hint="optional — only documents whose name includes this text can be assigned to this input"
+                  >
+                    <Input
+                      value={selected.inputNameContains ?? ""}
+                      onChange={(e) =>
+                        update(selected.id, { inputNameContains: e.target.value.trim() || undefined })
+                      }
+                      placeholder='e.g. "legal_requirements", "company_legal_compliance"'
+                      className="h-8 font-mono text-xs"
+                    />
                   </Field>
                   <Field
                     label="I/O model"

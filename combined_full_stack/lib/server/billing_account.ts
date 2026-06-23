@@ -1,3 +1,4 @@
+import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type Stripe from "stripe";
@@ -14,7 +15,7 @@ import { getStripe } from "./stripe_client";
 const billLog = logger("billing");
 
 // AI : credit-based billing ported from stripe/stripe.js — $5/mo sub grants $5 credit,
-// AI : $1 / $10 / $20 top-up options, 50c per pipeline run, $20 hard cap; new accounts get $10 free credit.
+// AI : $1 / $10 / $20 top-up options, 10¢ minimum balance to start a run (actual cost varies), $300 hard cap; new accounts get $10 free credit.
 export type BillingUserKey = string & { __brand: "BillingUserKey" };
 
 export type BillingAccount = {
@@ -24,7 +25,7 @@ export type BillingAccount = {
   creditedSessions: string[];
 };
 
-export const USE_COST_CENTS = 50;
+export { MIN_RUN_BALANCE_CENTS };
 export const TOPUP_OPTIONS_CENTS = [100, 1000, 2000] as const;
 export const SUB_CENTS_PER_MONTH = 500;
 export const BILLING_CAP_CENTS = 30000; 
@@ -145,8 +146,8 @@ export function chargeCredit(account: BillingAccount, cents: number): BillingAcc
 // AI : deduct run credit before starting a pipeline — returns the updated account (caller saves).
 export async function chargeForRun(key: BillingUserKey): Promise<BillingAccount> {
   const account = await loadBillingAccount(key);
-  billLog.info(`chargeForRun`, { key, balanceBefore: account.balanceCents, cost: USE_COST_CENTS });
-  const next = chargeCredit(account, USE_COST_CENTS);
+  billLog.info(`chargeForRun`, { key, balanceBefore: account.balanceCents, minRequired: MIN_RUN_BALANCE_CENTS });
+  const next = chargeCredit(account, MIN_RUN_BALANCE_CENTS);
   await saveBillingAccount(key, next);
   billLog.info(`chargeForRun ok`, { key, balanceAfter: next.balanceCents });
   return next;

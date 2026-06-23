@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from "react"
 import { X, FileText, Loader2 } from "lucide-react"
-import { useDocViewer } from "@/lib/doc-viewer"
+import { useDocViewer, type DocViewMode } from "@/lib/doc-viewer"
 import { useStore } from "@/lib/store"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { cn } from "@/lib/utils"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
+import { MarkdownView } from "@/components/highlight"
+import { defaultDocViewMode, docViewerTabs, isPdfDoc } from "@/lib/doc-content"
 import type { DocId } from "@/lib/types"
 
 // AI : de-mocked — source text comes from GET /api/docs/:id/text (the stored content-hash
@@ -20,57 +22,65 @@ function resolveSpan(text: string, start: number, end: number, expected?: string
   return { start: 0, end: 0 } // offsets unrecoverable — show the doc un-highlighted
 }
 
-type ViewMode = "text" | "pdf" | "json"
+const TAB_LABEL: Record<DocViewMode, string> = {
+  text: "text",
+  formatted: "formatted",
+  pdf: "pdf",
+  json: "json",
+}
 
 export function DocViewer() {
   const { target, close } = useDocViewer()
   const { docs } = useStore()
   const markRef = useRef<HTMLSpanElement>(null)
   const [text, setText] = useState<string | null>(null)
-  const [view, setView] = useState<ViewMode>("text")
+  const [view, setView] = useState<DocViewMode>("text")
 
-  const docRef = target ? docs.find((d) => d.id === target.docId) : undefined
-  const docType = docRef?.type
-  const isJson = docType === "json"
+  const docId = target?.docId ?? null
+  const spanStart = target?.start ?? 0
+  const spanEnd = target?.end ?? 0
+  const requestedMode = target?.mode ?? null
+  const docRef = docId ? docs.find((d) => d.id === docId) : undefined
+  const docName = docRef?.name ?? null
+  const docType = docRef?.type ?? null
   const [hasPdf, setHasPdf] = useState(false)
+  const tabs = docViewerTabs(docRef, hasPdf)
+  const showPdf = isPdfDoc(docRef, hasPdf)
 
   useEffect(() => {
-    if (!target) return
+    if (!docId) return
     setHasPdf(false)
-    fetch(`/api/docs/${target.docId}/file`, { method: "HEAD" })
+    fetch(`/api/docs/${docId}/file`, { method: "HEAD" })
       .then((r) => setHasPdf(r.ok))
       .catch(() => setHasPdf(false))
-  }, [target?.docId])
+  }, [docId])
 
   useEffect(() => {
-    if (!target) return
+    if (!docId) return
     setText(null)
-    // AI: explicit mode wins; otherwise JSON docs default to the viewer and full PDFs open as PDF.
-    const openFullDoc = target.start === target.end
-    const preferPdf = openFullDoc && (docType === "pdf" || hasPdf)
+    const hasSpan = spanStart !== spanEnd
     setView(
-      target.mode ?? (isJson ? "json" : preferPdf ? "pdf" : "text"),
+      defaultDocViewMode(docRef, hasPdf, { hasSpan, requested: requestedMode ?? undefined }),
     )
-    fetch(`/api/docs/${target.docId}/text`)
-      .then((r) => (r.ok ? r.json() : { text: `⚠ source not found for ${target.docId}` }))
+    fetch(`/api/docs/${docId}/text`)
+      .then((r) => (r.ok ? r.json() : { text: `⚠ source not found for ${docId}` }))
       .then((d) => setText(d.text))
       .catch(() => setText("⚠ failed to load source document"))
-  }, [target?.docId, target?.mode, docType, hasPdf, docRef?.name]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [docId, requestedMode, spanStart, spanEnd, hasPdf, docName, docType])
 
   useEffect(() => {
-    if (target && text !== null && markRef.current) {
-      markRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
-    }
-  }, [target, text])
+    if (!docId || text === null || view !== "text" || !markRef.current) return
+    markRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
+  }, [docId, text, view])
 
   useEffect(() => {
-    if (!target) return
+    if (!docId) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") close()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [target, close])
+  }, [docId, close])
 
   if (!target) return null
   const span = text !== null ? resolveSpan(text, target.start, target.end, target.text) : { start: 0, end: 0 }
@@ -88,7 +98,7 @@ export function DocViewer() {
       <aside
         className={cn(
           "relative flex h-full w-full flex-col border-l border-border bg-card shadow-xl",
-          view === "pdf" ? "max-w-3xl" : view === "json" ? "max-w-5xl" : "max-w-xl",
+          view === "pdf" ? "max-w-3xl" : view === "json" ? "max-w-5xl" : view === "formatted" ? "max-w-2xl" : "max-w-xl",
         )}
       >
         <div className="flex items-center justify-between border-b border-border px-5 py-3.5">
@@ -98,23 +108,23 @@ export function DocViewer() {
               <p className="text-sm font-semibold">{docRef?.name ?? "Source Document"}</p>
               <p className="font-mono text-[10px] text-muted-foreground">
                 {target.docId}
-                {span.start !== span.end ? ` · offset ${span.start}–${span.end}` : hasPdf ? " · original PDF" : ""}
+                {span.start !== span.end ? ` · offset ${span.start}–${span.end}` : showPdf ? " · original PDF" : ""}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {(hasPdf || isJson) && (
+            {tabs.length > 0 && (
               <div className="flex rounded-md border border-border p-0.5">
-                {(isJson ? (["json", "text"] as const) : (["text", "pdf"] as const)).map((m) => (
+                {tabs.map((m) => (
                   <button
                     key={m}
-                    onClick={() => setView(m as ViewMode)}
+                    onClick={() => setView(m)}
                     className={cn(
                       "rounded px-2 py-1 font-mono text-[10px] transition-colors",
                       view === m ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {m}
+                    {TAB_LABEL[m]}
                   </button>
                 ))}
               </div>
@@ -144,6 +154,17 @@ export function DocViewer() {
             // AI: full interactive viewer — tree / table modes via the embedded iframe
             <JsonPreviewPanel json={text} className="min-h-0 flex-1" />
           )
+        ) : view === "formatted" ? (
+          <div className="flex-1 overflow-auto px-6 py-5">
+            {text === null ? (
+              <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="font-mono text-[11px]">loading source…</span>
+              </div>
+            ) : (
+              <MarkdownView md={text} />
+            )}
+          </div>
         ) : (
           <div className="flex-1 overflow-auto px-6 py-5">
             {text === null ? (
@@ -173,6 +194,8 @@ export function DocViewer() {
               ? "original document — stored beside its content-hashed extracted text"
               : view === "json"
               ? "interactive JSON viewer — tree · table"
+              : view === "formatted"
+              ? "formatted markdown — rendered via GFM (tables, lists, code, links)"
               : "validated text — extracted span linked to source via langextract-style offsets"}
           </span>
           <OpenInDocumentsLink docId={target.docId as DocId} label="saved in documents" className="shrink-0" />

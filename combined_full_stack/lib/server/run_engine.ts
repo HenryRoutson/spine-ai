@@ -17,8 +17,9 @@ import {
   wrapListForOutputStructure,
 } from "./structure";
 import type { Store } from "./store";
-import { computeInvalid, stepEmits } from "./validity";
-import { projectSeedDocNames } from "./seed";
+import { buildRunInputDocIds, computeRunFingerprint } from "./run_fingerprint";
+import { docMatchesInputModule, inputTypeLabel, orderedInputModules } from "../inference-input";
+import { computeInvalid, migrateProjectModules, stepEmits } from "./validity";
 import { UsageLedger } from "./usage";
 import {
   DEFAULT_MODEL,
@@ -30,6 +31,7 @@ import {
   type PipelineRun,
   type Project,
   type ProjectId,
+  type RunFingerprint,
   type RunId,
   type RunStep,
   type RunStepStatus,
@@ -57,6 +59,8 @@ export interface StepProgress {
 export interface RunOptions {
   model: ModelId; // global model (per-step `module.model` overrides for llm)
   inputDocIds?: DocId[]; // docs assigned to `input` modules in order; [0] is the dropped doc
+  fingerprint?: RunFingerprint; // AI : precomputed at POST gate — must match persisted run
+  fingerprintInputDocIds?: DocId[]; // AI : resolved slot docs paired with fingerprint
   onStep?: (p: StepProgress) => void | Promise<void>;
   persist?: boolean; // write run + artifacts to the store/disk (default true)
   liveHtml?: boolean; // write an auto-refreshing progress page during the run (default = persist)
@@ -242,7 +246,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       const hints = materializeHints(m, ctx, docId, content);
       const value = materializeStepOutput(m, project, { doc_id: docId, body: content }, hints);
       ctx.outputs.set(m.id, value);
-      return { value, preview: `loaded ${m.inputType} → ${docId ?? "(none)"}`, docId };
+      return { value, preview: `loaded ${inputTypeLabel(m.inputType)} → ${docId ?? "(none)"}`, docId };
     }
 
     case "doc-to-text": {
@@ -468,8 +472,9 @@ export async function runPipeline(
   inputDocId: DocId,
   opts: Omit<RunOptions, "model"> & { model?: ModelId } = {},
 ): Promise<PipelineRun> {
-  const project = store.project(projectId);
-  if (!project) throw new Error(`unknown project ${projectId}`);
+  const rawProject = store.project(projectId);
+  if (!rawProject) throw new Error(`unknown project ${projectId}`);
+  const project = migrateProjectModules(rawProject);
   // AI : bug fix — fallback used a hardcoded "qwen-2.5-72b" instead of DEFAULT_MODEL.
   const model = opts.model ?? project.modules.find((m) => m.kind === "llm")?.model ?? DEFAULT_MODEL;
   const persist = opts.persist ?? true;
@@ -496,23 +501,32 @@ export async function runPipeline(
     throw new Error(`pipeline invalid: ${[...invalid.keys()].join(", ")}`);
   }
 
-  // AI : assign docs to `input` modules in order; caller's dropped doc is first.
-  // AI : bug fix — previously appended EVERY store doc, so any unrelated upload could silently
-  // AI : become the second input. Now only explicit docs + inference-labelled fallbacks are used.
-  const explicit = [inputDocId, ...(opts.inputDocIds ?? [])].filter(Boolean);
-  const seedNames = new Set(projectSeedDocNames(project));
-  const fallbacks = store
-    .docs()
-    .filter((d) => d.label === "inference" && !explicit.includes(d.id) && (!seedNames.size || seedNames.has(d.name)))
-    .map((d) => d.id)
-    .reverse(); // docs() is newest-first; fall back in upload order (oldest seed first)
-  const inputQueue = [...explicit, ...fallbacks];
+  const inputQueue =
+    opts.fingerprintInputDocIds ??
+    buildRunInputDocIds(store, project, inputDocId, opts.inputDocIds);
+  const fingerprint =
+    opts.fingerprint ?? computeRunFingerprint(project, model, inputQueue);
   log.info(`input queue resolved`, {
-    explicit,
-    fallbackCount: fallbacks.length,
     inputQueue,
+    fingerprint,
     inputDocIds: opts.inputDocIds,
   });
+
+  const inputMods = orderedInputModules(project.modules);
+  for (let i = 0; i < inputMods.length; i++) {
+    const docId = inputQueue[i];
+    if (!docId) continue;
+    const mod = inputMods[i];
+    const doc = store.docs().find((d) => d.id === docId);
+    if (doc && !docMatchesInputModule(doc, mod)) {
+      const req = mod.inputNameContains?.trim();
+      throw new Error(
+        req
+          ? `input "${mod.label}" requires a filename containing "${req}", got "${doc.name}"`
+          : `input "${mod.label}" rejected "${doc.name}" (wrong type for this slot)`,
+      );
+    }
+  }
 
   const ctx: RunCtx = {
     project,
@@ -578,7 +592,7 @@ export async function runPipeline(
     ctx.stepLlmCalls = undefined;
 
     const defaultInputPreview =
-      i === 0 ? `${m.inputType} document` : modelById(project.models, m.inStructureId)?.name ?? "Any";
+      i === 0 ? `${inputTypeLabel(m.inputType)} document` : modelById(project.models, m.inStructureId)?.name ?? "Any";
     const beforeCents = ledger.totalCents();
     const t0 = Date.now();
     let status: RunStepStatus = "ok";
@@ -716,6 +730,8 @@ export async function runPipeline(
     model,
     steps,
     inputDocId,
+    inputDocIds: inputQueue,
+    fingerprint,
   };
 
   writeLive(-1); // final state, refresh meta dropped
@@ -755,13 +771,15 @@ export async function resumeRunPipeline(
   clientOutput: unknown,
   opts: Omit<RunOptions, "model"> & { model?: ModelId } = {},
 ): Promise<PipelineRun> {
-  const project = store.project(checkpoint.projectId);
-  if (!project) throw new Error(`unknown project ${checkpoint.projectId}`);
+  const rawProject = store.project(checkpoint.projectId);
+  if (!rawProject) throw new Error(`unknown project ${checkpoint.projectId}`);
+  const project = migrateProjectModules(rawProject);
 
   const model = checkpoint.model;
   const persist = opts.persist ?? true;
   const ledger = new UsageLedger();
   const log = runLogger(checkpoint.runId);
+  const fingerprint = computeRunFingerprint(project, model, checkpoint.ctx.inputQueue);
   const ctx = restoreCtx(project, store, ledger, model, checkpoint.ctx);
   const steps: RunStep[] = [...checkpoint.steps];
   const artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[] = steps
@@ -859,6 +877,8 @@ export async function resumeRunPipeline(
       model,
       steps,
       inputDocId: checkpoint.inputDocId,
+      inputDocIds: checkpoint.ctx.inputQueue,
+      fingerprint,
     };
     if (persist) {
       persistArtifacts(checkpoint.runId, checkpoint.inputDocId, store, artifacts, project.modules);
@@ -878,7 +898,7 @@ export async function resumeRunPipeline(
     ctx.stepLlmCalls = undefined;
 
     const stepDefaultInputPreview =
-      i === 0 ? `${stepMod.inputType} document` : modelById(project.models, stepMod.inStructureId)?.name ?? "Any";
+      i === 0 ? `${inputTypeLabel(stepMod.inputType)} document` : modelById(project.models, stepMod.inStructureId)?.name ?? "Any";
     const stepBeforeCents = ledger.totalCents();
     const stepT0 = Date.now();
     let stepStatus: RunStepStatus = "ok";
@@ -971,6 +991,8 @@ export async function resumeRunPipeline(
     model,
     steps,
     inputDocId: checkpoint.inputDocId,
+    inputDocIds: checkpoint.ctx.inputQueue,
+    fingerprint,
   };
 
   writeLive(-1);

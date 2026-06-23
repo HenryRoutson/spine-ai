@@ -6,6 +6,7 @@ import { createContext, useCallback, useContext, useState, type ReactNode } from
 import type { DocId, StructureModelId } from "@/lib/types"
 
 export type AppWindowId =
+  | "projects"
   | "structure"
   | "pipeline"
   | "inference"
@@ -20,6 +21,9 @@ interface AppShellState {
   focusDocId: DocId | null
   openDocuments: (docId?: DocId) => void
   clearFocusDoc: () => void
+  focusRunId: string | null
+  openLogging: (runId?: string) => void
+  clearFocusRun: () => void
   focusStructureId: StructureModelId | null
   openStructure: (structureId?: StructureModelId) => void
   clearFocusStructure: () => void
@@ -30,6 +34,7 @@ const AppShellContext = createContext<AppShellState | null>(null)
 export function AppShellProvider({ children }: { children: ReactNode }) {
   const [activeWindow, setActiveWindow] = useState<AppWindowId>("structure")
   const [focusDocId, setFocusDocId] = useState<DocId | null>(null)
+  const [focusRunId, setFocusRunId] = useState<string | null>(null)
   const [focusStructureId, setFocusStructureId] = useState<StructureModelId | null>(null)
 
   const openDocuments = useCallback((docId?: DocId) => {
@@ -38,6 +43,13 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const clearFocusDoc = useCallback(() => setFocusDocId(null), [])
+
+  const openLogging = useCallback((runId?: string) => {
+    setFocusRunId(runId ?? null)
+    setActiveWindow("logging")
+  }, [])
+
+  const clearFocusRun = useCallback(() => setFocusRunId(null), [])
 
   const openStructure = useCallback((structureId?: StructureModelId) => {
     setFocusStructureId(structureId ?? null)
@@ -54,6 +66,9 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         focusDocId,
         openDocuments,
         clearFocusDoc,
+        focusRunId,
+        openLogging,
+        clearFocusRun,
         focusStructureId,
         openStructure,
         clearFocusStructure,

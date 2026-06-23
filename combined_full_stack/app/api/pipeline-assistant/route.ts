@@ -14,8 +14,9 @@ export async function POST(req: NextRequest) {
     message: string;
     history?: ChatTurn[];
     model?: ModelId;
+    stream?: boolean;
   };
-  const { projectId, message, history = [], model = DEFAULT_MODEL } = body;
+  const { projectId, message, history = [], model = DEFAULT_MODEL, stream = false } = body;
 
   if (!message?.trim()) return apiError("message required", 400);
 
@@ -34,11 +35,37 @@ export async function POST(req: NextRequest) {
     messageChars: message.length,
     historyTurns: history.length,
     model,
+    stream,
   });
 
   try {
-    const result = await proposePipelineChange(project, message.trim(), history.slice(-8), model);
-    return NextResponse.json(result);
+    if (!stream) {
+      const result = await proposePipelineChange(project, message.trim(), history.slice(-8), model);
+      return NextResponse.json(result);
+    }
+
+    const encoder = new TextEncoder();
+    const bodyStream = new ReadableStream({
+      async start(controller) {
+        const push = (payload: unknown) => {
+          controller.enqueue(encoder.encode(`${JSON.stringify(payload)}\n`));
+        };
+        try {
+          const result = await proposePipelineChange(project, message.trim(), history.slice(-8), model, {
+            onRetry: (attempt) => push({ type: "retrying", attempt }),
+          });
+          push({ type: "done", ...result });
+        } catch (err) {
+          push({ type: "error", error: (err as Error).message });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(bodyStream, {
+      headers: { "Content-Type": "application/x-ndjson" },
+    });
   } catch (err) {
     apiLog.error(`assistant failed`, { projectId, error: (err as Error).message });
     return apiError((err as Error).message, 422);

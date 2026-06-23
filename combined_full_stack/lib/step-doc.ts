@@ -1,5 +1,6 @@
 import type { DocId, DocRef, RunStep } from "@/lib/types"
 import type { DocViewMode } from "@/lib/doc-viewer"
+import { isMarkdownDoc, isPdfDoc } from "@/lib/doc-content"
 
 // AI : resolve the source doc for an input / doc-to-text step — new runs store docId; older runs parse the preview.
 export function stepDocId(step: RunStep): DocId | undefined {
@@ -20,18 +21,22 @@ export function stepDocLinkLabels(doc?: DocRef): {
   input: { mode: DocViewMode; label: string }
   output: { mode: DocViewMode; label: string }
 } {
-  const isJson = doc?.type === "json"
-  const isPdf = doc?.type === "pdf" || doc?.name.toLowerCase().endsWith(".pdf")
-  if (isJson) {
+  if (doc?.type === "json") {
     return {
       input: { mode: "json", label: "source json" },
       output: { mode: "json", label: "stored json" },
     }
   }
-  if (isPdf) {
+  if (isMarkdownDoc(doc)) {
+    return {
+      input: { mode: "formatted", label: "formatted markdown" },
+      output: { mode: "formatted", label: "formatted markdown" },
+    }
+  }
+  if (isPdfDoc(doc)) {
     return {
       input: { mode: "pdf", label: "original pdf" },
-      output: { mode: "text", label: "converted text" },
+      output: { mode: "formatted", label: "converted markdown" },
     }
   }
   return {

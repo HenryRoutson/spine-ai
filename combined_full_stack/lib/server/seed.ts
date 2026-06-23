@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { z } from "zod";
-import { DOCUMENTS_DIR } from "./config";
+import { DOCUMENTS_DIR, REPO_ROOT } from "./config";
+import { isUnavailableSeedDoc, unavailableSeedDocMessage } from "../seed-doc";
 import {
   FIELD_TYPES,
   INPUT_TYPES,
@@ -61,7 +62,8 @@ const SeedFileSchema = z.object({
       note: z.string().optional(),
       inStructureId: z.string().optional(),
       outStructureId: z.string().optional(),
-      inputType: InputTypeSchema.optional(),
+      inputType: z.union([InputTypeSchema, z.array(InputTypeSchema).min(1)]).optional(),
+      inputNameContains: z.string().optional(),
       prompt: z.string().optional(),
       code: z.string().optional(),
       model: z.string().optional(),
@@ -107,21 +109,22 @@ export interface ProjectSeed {
   docSpecs: SeedDocSpec[];
 }
 
-// AI : Vercel once persisted this placeholder when bundled seed files were missing — detect + replace.
-export function unavailableSeedDocMessage(name: string): string {
-  return `[seed doc unavailable on this deploy: ${name}]`;
-}
+export { isUnavailableSeedDoc, unavailableSeedDocMessage } from "../seed-doc";
 
-export function isUnavailableSeedDoc(content: string, name: string): boolean {
-  return content === unavailableSeedDocMessage(name);
+// AI : in-app documents/ wins (Vercel bundle); monorepo dev falls back to repo-root documents/.
+export function resolveSeedDocPath(relativeFile: string): string {
+  const inApp = join(DOCUMENTS_DIR, relativeFile);
+  if (existsSync(inApp)) return inApp;
+  const atRepoRoot = join(REPO_ROOT, "documents", relativeFile);
+  if (existsSync(atRepoRoot)) return atRepoRoot;
+  return inApp;
 }
 
 export async function readSeedDocContent(spec: SeedDocSpec): Promise<string> {
   const txtSidecar = spec.path.replace(/\.pdf$/i, ".txt");
   if (existsSync(txtSidecar)) return readFileSync(txtSidecar, "utf8");
   if (!existsSync(spec.path)) {
-    console.warn(`seed doc missing: ${spec.path}`);
-    return unavailableSeedDocMessage(spec.name);
+    throw new Error(`seed doc missing: ${spec.path} (${spec.name})`);
   }
   return readFileSync(spec.path, "utf8");
 }
@@ -142,7 +145,12 @@ export function loadProjectSeed(path: string): ProjectSeed {
     },
     // AI : bug fix — seed `file` entries are now repo-/documents/-relative paths
     // AI : ("legal/legal_doc_text.pdf"), so a fresh seed no longer ENOENTs in openStore().
-    docSpecs: raw.docs.map((d) => ({ name: d.name, type: d.type, label: d.label, path: join(DOCUMENTS_DIR, d.file) })),
+    docSpecs: raw.docs.map((d) => ({
+      name: d.name,
+      type: d.type,
+      label: d.label,
+      path: resolveSeedDocPath(d.file),
+    })),
   };
 }
 
@@ -184,4 +192,42 @@ export function blankProject(id: ProjectId): Project {
     ],
     strategies: legalStrategies.map((s) => ({ ...s, id: `${s.id}_${id}` })),
   };
+}
+
+export type ProjectTemplateSummary = {
+  id: ProjectId;
+  name: string;
+  kind: string;
+  moduleCount: number;
+  inputCount: number;
+};
+
+export function projectTemplateSummaries(): ProjectTemplateSummary[] {
+  return allProjectSeeds().map((s) => ({
+    id: s.project.id,
+    name: s.project.name,
+    kind: s.project.kind,
+    moduleCount: s.project.modules.length,
+    inputCount: s.project.modules.filter((m) => m.kind === "input").length,
+  }));
+}
+
+// AI : clones are always numbered — "Company Legal Evaluation" → "Company Legal Evaluation 1", …
+export function nextNumberedCloneName(baseName: string, existingNames: Iterable<string>): string {
+  const names = new Set(existingNames);
+  let n = 1;
+  while (names.has(`${baseName} ${n}`)) n += 1;
+  return `${baseName} ${n}`;
+}
+
+export function cloneProject(source: Project, existingProjects: Project[]): Project {
+  const id = (`p_${Math.random().toString(36).slice(2, 9)}`) as ProjectId;
+  const name = nextNumberedCloneName(source.name, existingProjects.map((p) => p.name));
+  const cloned: Project = {
+    ...structuredClone(source),
+    id,
+    name,
+    strategies: source.strategies.map((s) => ({ ...s, id: `${s.id}_${id}` })),
+  };
+  return cloned;
 }

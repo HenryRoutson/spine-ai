@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { useStore } from "@/lib/store"
 import { WindowHeader } from "@/components/window-header"
@@ -275,6 +275,7 @@ function IoSection({
 
 export function Logging() {
   const { runs, docs, modules, models } = useStore()
+  const { focusRunId, clearFocusRun } = useAppShell()
   const [query, setQuery] = useState("")
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
   const [popup, setPopup] = useState<PopupPayload | null>(null)
@@ -284,6 +285,13 @@ export function Logging() {
   const [compareRunB, setCompareRunB] = useState<string>("")
   const [compareQueryA, setCompareQueryA] = useState("")
   const [compareQueryB, setCompareQueryB] = useState("")
+
+  useEffect(() => {
+    if (!focusRunId) return
+    setSelectedRun(focusRunId)
+    setSelectedPipelineModuleId(undefined)
+    clearFocusRun()
+  }, [focusRunId, clearFocusRun])
 
   const docName = (id?: string) => docs.find((d) => d.id === id)?.name ?? id ?? "—"
 
@@ -411,6 +419,16 @@ export function Logging() {
                 {activeSourceDoc && <InputDocumentLink doc={activeSourceDoc} />}
 
                 <RunNotesEditor runId={active.id} notes={active.notes} />
+
+                {active.fingerprint && (
+                  <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                    <p className="font-mono text-[10px] uppercase text-muted-foreground">Run fingerprint</p>
+                    <p className="mt-1 font-mono text-[11px] break-all">{active.fingerprint}</p>
+                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                      Hashes the full pipeline config and input documents — identical reruns skip compute and link here.
+                    </p>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-4 gap-2">
                   {[

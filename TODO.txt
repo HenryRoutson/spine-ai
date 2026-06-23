@@ -4,6 +4,10 @@
 - add an example of enrichment, where you keep the same format but just add things to it. do a test which would go over the context limit if you had to repeat the whole structure rather than just the new fields. 
 
 
+fix hashing bug with cached log
+
+
+add an explaintion section for each project for shared markdown documentation.
 
 instant parallel llm calls like azure foundry for 100 llm calls.
 need to limit number of connections to avoid limits.
@@ -17,6 +21,12 @@ avoid model spoofing, model bait-and-switch, or model downgrading.
 
 
 
+build and saturate benchmark
+compare to claude code
+
+
+cache all llm requests in a database, don't make per user if you end up sharing pipelines, just based on hash of input and model. attribute to user so they an look through and see all their prompts and reponses with models in a list view if they want, or search through this.
+
 
 
 - human to setup github and google sign in
@@ -26,6 +36,11 @@ avoid model spoofing, model bait-and-switch, or model downgrading.
 
 input pdf to source doucment doesn't make sense and is implicit. 
   should be to either text or json and that's it. then a step after that which validated what it is if json. use same lock techniqe to add this autoamaticcly if it's a json as link quotes.
+
+
+
+can remove combine input, and just use input and implicit combine
+
 
 
 

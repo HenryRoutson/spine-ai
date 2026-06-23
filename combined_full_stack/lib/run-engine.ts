@@ -45,6 +45,22 @@ export function mergeStepStates(
 
 type ApiErrorBody = { error?: string; detail?: string; code?: string }
 
+export class RunStartError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message)
+    this.name = "RunStartError"
+  }
+}
+
+// AI : 402 from POST /api/runs — insufficient credit or billing cap; Inference shows a Billing CTA.
+export function isRunBillingError(e: unknown): e is RunStartError {
+  return e instanceof RunStartError && e.status === 402
+}
+
 const MAX_PROGRESS_POLLS = 10
 
 async function readApiErrorBody(res: Response): Promise<ApiErrorBody | null> {
@@ -62,27 +78,41 @@ function formatApiError(context: string, res: Response, body: ApiErrorBody | nul
   return `${context} (HTTP ${res.status})${code}${suffix}`
 }
 
+function throwApiError(context: string, res: Response, body: ApiErrorBody | null): never {
+  throw new RunStartError(formatApiError(context, res, body), res.status, body?.code)
+}
+
+export type StartRunResult = {
+  jobId: RunJobId;
+  deduped?: boolean;
+  cachedRunId?: PipelineRun["id"];
+  fingerprint?: string;
+};
+
 export async function startRun(
   projectId: ProjectId,
   inputDocId: DocId,
   model: ModelId,
   inputDocIds: DocId[] = [],
-): Promise<RunJobId> {
+): Promise<StartRunResult> {
   const res = await fetch("/api/runs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ projectId, inputDocId, inputDocIds, model }),
   })
   if (!res.ok) {
-    throw new Error(
+    const body = await readApiErrorBody(res)
+    throw new RunStartError(
       formatApiError(
         `Failed to start pipeline for project ${projectId}, doc ${inputDocId}, model ${model}`,
         res,
-        await readApiErrorBody(res),
+        body,
       ),
+      res.status,
+      body?.code,
     )
   }
-  return (await res.json()).jobId as RunJobId
+  return (await res.json()) as StartRunResult
 }
 
 export async function runProgress(jobId: RunJobId): Promise<RunJob> {
@@ -97,9 +127,7 @@ export async function runProgress(jobId: RunJobId): Promise<RunJob> {
       continue
     }
     if (!res.ok) {
-      throw new Error(
-        formatApiError(`Progress poll for job ${jobId} failed`, res, await readApiErrorBody(res)),
-      )
+      throwApiError(`Progress poll for job ${jobId} failed`, res, await readApiErrorBody(res))
     }
     return res.json() as Promise<RunJob>
   }
@@ -115,6 +143,12 @@ export interface AwaitRunCallbacks {
   onLogs?: (logs: JobLogEntry[], newLines: JobLogEntry[]) => void
 }
 
+export type AwaitRunResult = {
+  run: PipelineRun
+  deduped?: boolean
+  cachedRunId?: PipelineRun["id"]
+}
+
 // AI : poll until the run finishes; callbacks stream progress + server logs to the UI / console.
 async function submitClientStep(jobId: RunJobId, output: unknown): Promise<void> {
   const res = await fetch(`/api/runs/${jobId}/client-step`, {
@@ -123,9 +157,7 @@ async function submitClientStep(jobId: RunJobId, output: unknown): Promise<void>
     body: JSON.stringify({ output }),
   })
   if (!res.ok) {
-    throw new Error(
-      formatApiError(`Client code step for job ${jobId} failed`, res, await readApiErrorBody(res)),
-    )
+    throwApiError(`Client code step for job ${jobId} failed`, res, await readApiErrorBody(res))
   }
 }
 
@@ -133,7 +165,7 @@ export async function awaitRun(
   jobId: RunJobId,
   callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
   intervalMs = 700,
-): Promise<PipelineRun> {
+): Promise<AwaitRunResult> {
   const { onStep, onLogs } = typeof callbacks === "function" ? { onStep: callbacks } : callbacks
   let seenLogs = 0
   let clientStepBusy = false
@@ -161,7 +193,13 @@ export async function awaitRun(
       continue
     }
     if (job.error) throw new Error(`Pipeline run ${jobId} failed: ${job.error}`)
-    if (job.run) return job.run
+    if (job.run) {
+      return {
+        run: job.run,
+        deduped: job.deduped,
+        cachedRunId: job.cachedRunId,
+      }
+    }
     await new Promise((r) => setTimeout(r, intervalMs))
   }
 }

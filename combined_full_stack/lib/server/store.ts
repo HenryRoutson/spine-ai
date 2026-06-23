@@ -84,7 +84,7 @@ export interface Store {
 
 // AI : keep persisted seed projects aligned with seeds/*.json — merge new modules (e.g. Link Quotes)
 // AI : while preserving user cached/model/prompt overrides on steps they already had.
-function syncProjectFromSeed(existing: Project, seed: Project): Project {
+export function syncProjectFromSeed(existing: Project, seed: Project): Project {
   const seedDocNames = seed.seedDocNames?.length ? seed.seedDocNames : existing.seedDocNames;
 
   if (existing.id !== seed.id) {
@@ -130,6 +130,21 @@ function syncProjectFromSeed(existing: Project, seed: Project): Project {
     JSON.stringify(existing.models) === JSON.stringify(migrated.models) &&
     JSON.stringify(existing.modules) === JSON.stringify(migrated.modules);
   return same ? existing : migrated;
+}
+
+// AI : pull latest seeds/*.json into built-in example project rows (same ids as templates).
+export function resyncSeedOwnedProjects(store: Store): number {
+  let updated = 0;
+  for (const seed of allProjectSeeds()) {
+    const existing = store.project(seed.project.id);
+    if (!existing) continue;
+    const synced = syncProjectFromSeed(existing, seed.project);
+    if (synced !== existing) {
+      store.saveProject(synced);
+      updated += 1;
+    }
+  }
+  return updated;
 }
 
 // AI : idempotent — upsert every seeds/*.json project (+ ingest its source docs) that the

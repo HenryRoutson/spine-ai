@@ -166,9 +166,7 @@ function buildChatBody(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn):
     max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
     // AI : block routing to a different model family — still allows DeepInfra/StreamLake hosts.
     provider: { allow_fallbacks: false },
-    // AI : TODO bug/risk — json_object mode formally promises an OBJECT, yet every outIsList
-    // AI : schema expects a top-level ARRAY. deepseek happens to emit arrays; stricter providers
-    // AI : (openai) will wrap or refuse, leaving only the extractJson + retry path.
+    // AI : json_object mode requires a top-level object — list steps unwrap via coerceLlmListOutput in llmSchema.
     ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
   });
 }

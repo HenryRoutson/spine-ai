@@ -6,13 +6,13 @@ import { JsonHighlight } from "@/components/highlight"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { llmSchemaJson } from "@/lib/structure"
 import {
-  INPUT_TYPES,
   MODEL_OPTIONS,
   MODULE_META,
   type ModuleKind,
   type PipelineModule,
   type StructureModel,
 } from "@/lib/types"
+import { inputTypeLabel, inputNameRestrictionLabel } from "@/lib/inference-input"
 import { cn } from "@/lib/utils"
 
 const LLM_KINDS: ModuleKind[] = ["llm", "llm-batch"]
@@ -23,10 +23,6 @@ function modelName(models: StructureModel[], id?: string) {
 
 function llmModelLabel(id?: string) {
   return MODEL_OPTIONS.find((m) => m.id === id)?.label ?? id ?? "—"
-}
-
-function inputTypeLabel(value?: string) {
-  return INPUT_TYPES.find((t) => t.value === value)?.label ?? value ?? "—"
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -128,9 +124,14 @@ export function PipelineInspector({ module: selected, models }: PipelineInspecto
 
           {selected.kind === "input" && (
             <>
-              <Field label="Input type">
+              <Field label="Input types">
                 <StaticValue>{inputTypeLabel(selected.inputType)}</StaticValue>
               </Field>
+              {inputNameRestrictionLabel(selected) && (
+                <Field label="Filename must contain">
+                  <StaticValue mono>{inputNameRestrictionLabel(selected)}</StaticValue>
+                </Field>
+              )}
               <Field label="I/O model">
                 <StaticValue mono>{modelName(models, selected.outStructureId)}</StaticValue>
               </Field>

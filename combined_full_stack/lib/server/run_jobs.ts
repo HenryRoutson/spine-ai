@@ -11,7 +11,7 @@ import type { StepProgress } from "./run_engine";
 import type { RunCheckpoint } from "./run_checkpoint";
 import type { user_id_string } from "./require_auth";
 import { logger } from "./server_logger";
-import type { PipelineRun } from "./types";
+import type { PipelineRun, RunId } from "./types";
 
 const jobLog = logger("run-jobs");
 
@@ -112,6 +112,8 @@ export interface RunJob {
   logs?: JobLogEntry[]; // streamed to browser via progress poll
   run?: PipelineRun; // set once the run finished (ok or error)
   error?: string; // set when runPipeline itself threw (e.g. invalid pipeline)
+  deduped?: boolean; // AI : true when an identical run was already completed — no compute used
+  cachedRunId?: RunId; // AI : the prior run this job returned instead of re-executing
   paused?: RunCheckpoint; // mid-run — waiting for browser to execute user code (server-only)
   clientStep?: RunCheckpoint["clientStep"]; // convenience mirror for the progress UI
 }
@@ -321,7 +323,7 @@ export async function jobProgress(
 export async function finishJob(
   ownerId: JobOwnerId,
   id: RunJobId,
-  outcome: { run?: PipelineRun; error?: string },
+  outcome: { run?: PipelineRun; error?: string; deduped?: boolean; cachedRunId?: RunId },
   db: JobDb,
 ): Promise<void> {
   const job = await loadJob(ownerId, id, db);

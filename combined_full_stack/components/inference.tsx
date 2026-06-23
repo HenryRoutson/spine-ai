@@ -8,50 +8,50 @@ import {
   Circle,
   Zap,
   RotateCcw,
-  Link2,
   AlertTriangle,
   Copy,
   Check,
   GitBranch,
   FolderOpen,
+  ScrollText,
+  Link2,
+  CreditCard,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
+import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { useAppShell } from "@/lib/app-shell"
 import { computeInvalid, modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
-import { awaitRun, mergeStepStates, startRun, type JobLogEntry, type StepProgress, type StepSubProgress, type StepUiState } from "@/lib/run-engine"
-import { collectQuotes, quoteHref } from "@/lib/quotes"
+import {
+  awaitRun,
+  isRunBillingError,
+  mergeStepStates,
+  startRun,
+  type JobLogEntry,
+  type StepProgress,
+  type StepSubProgress,
+  type StepUiState,
+} from "@/lib/run-engine"
 import type { DocId, DocRef, ModuleId, PipelineModule, PipelineRun, Project, ProjectId } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
-import { JsonHighlight } from "@/components/highlight"
-import { QuoteButton, QuoteLinks } from "@/components/quote-links"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import { defaultInferenceDoc } from "@/lib/project-docs"
-import { defaultDocForInputModule, inputTypeLabel, orderedInputModules } from "@/lib/inference-input"
+import { defaultInputDocsForModules, inputTypeLabel, inputNameRestrictionLabel, orderedInputModules } from "@/lib/inference-input"
+import {
+  collectInferenceInputIssues,
+  inferenceInputIssueMessage,
+  type InferenceInputIssue,
+} from "@/lib/inference-validity"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
-import { InputDocumentLink } from "@/components/input-document-link"
 import { useRunNotesFlushOnLeave } from "@/lib/run-notes-flush"
 import { segmentPipeline } from "@/lib/pipeline-layout"
 import { useCyclingWaitPhrase } from "@/lib/inference-wait-phrases"
 import { RunNotesPad } from "@/components/run-notes-pad"
 
 type Phase = "idle" | "running" | "done"
-
-// AI : the shape the legal seed's "Extract Atomic Rules" step emits — rendered as cards;
-// AI : anything else falls back to the generic quote list + final JSON.
-interface RuleRow {
-  rule_id: string
-  description?: string
-  severity?: number
-  source?: { text: string; quote: { doc_id: string; start: number; end: number } }
-}
-
-function isRuleRows(v: unknown): v is RuleRow[] {
-  return Array.isArray(v) && v.length > 0 && v.every((r) => r && typeof r === "object" && "rule_id" in r && "source" in r)
-}
 
 // AI : step errors are stored on RunStep.outputPreview — surface them instead of a generic "run error".
 function pipelineRunError(run: PipelineRun): string | null {
@@ -65,26 +65,55 @@ function buildDefaultInputDocs(
   project: Project,
   inputModules: PipelineModule[],
 ): Partial<Record<ModuleId, DocRef>> {
-  const out: Partial<Record<ModuleId, DocRef>> = {}
-  const preferred = defaultInferenceDoc(docs, project)
-  for (const m of inputModules) {
-    const doc = defaultDocForInputModule(docs, project, m, preferred)
-    if (doc) out[m.id] = doc
-  }
-  return out
+  return defaultInputDocsForModules(docs, project, inputModules, defaultInferenceDoc(docs, project))
+}
+
+// AI : client-side mirror of run dedup inputs — blocks re-run when pipeline + inputs unchanged.
+function inferenceConfigKey(
+  projectId: ProjectId,
+  model: string,
+  inputModules: PipelineModule[],
+  inputDocs: Partial<Record<ModuleId, DocRef>>,
+  modules: PipelineModule[],
+): string | null {
+  if (!inputModules.every((m) => inputDocs[m.id])) return null
+  return JSON.stringify({
+    projectId,
+    model,
+    inputs: inputModules.map((m) => inputDocs[m.id]!.id),
+    modules: modules.map((m) => ({
+      id: m.id,
+      kind: m.kind,
+      prompt: m.prompt,
+      code: m.code,
+      model: m.model,
+      inStructureId: m.inStructureId,
+      outStructureId: m.outStructureId,
+      inputType: m.inputType,
+      inputNameContains: m.inputNameContains,
+      outIsList: m.outIsList,
+    })),
+  })
 }
 
 export function Inference() {
-  const { project, modules, models, model, addRun, updateRunNotes, docs, refreshBilling } = useStore()
-  const { setActiveWindow } = useAppShell()
+  const { project, modules, models, model, addRun, updateRunNotes, docs, runs, billingAccount, refreshBilling } = useStore()
+  const { setActiveWindow, openLogging } = useAppShell()
   const { open } = useDocViewer()
   const pipelineInvalid = computeInvalid(modules, models).size > 0
+  const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
+  const insufficientCredit =
+    billingAccount != null && billingAccount.balanceCents < minRunBalanceCents
 
   const [inputDocs, setInputDocs] = useState<Partial<Record<ModuleId, DocRef>>>({})
+  const [inputIssues, setInputIssues] = useState<InferenceInputIssue[]>([])
+  const [validatingInputs, setValidatingInputs] = useState(false)
   const [pickerModuleId, setPickerModuleId] = useState<ModuleId | null>(null)
   const [phase, setPhase] = useState<Phase>("idle")
   const [stepStates, setStepStates] = useState<Map<ModuleId, StepUiState>>(new Map())
   const [run, setRun] = useState<PipelineRun | null>(null)
+  const [dedupedRunId, setDedupedRunId] = useState<string | null>(null)
+  const [completedConfigKey, setCompletedConfigKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [debugLogs, setDebugLogs] = useState<JobLogEntry[]>([])
   const [runNotes, setRunNotes] = useState("")
@@ -96,22 +125,132 @@ export function Inference() {
     runNotesRef.current = runNotes
   }, [runNotes])
 
+  // AI : balance gates Run — refresh when Inference opens so $0 shows Billing CTA without a failed run.
+  useEffect(() => {
+    refreshBilling().catch(console.error)
+  }, [refreshBilling])
+
   const inputModules = useMemo(() => orderedInputModules(modules), [modules])
   const pickerModule = pickerModuleId ? inputModules.find((m) => m.id === pickerModuleId) : undefined
   const allInputsReady = inputModules.every((m) => inputDocs[m.id])
+  const inputsInvalid = inputIssues.length > 0
+  const inputIssueByModule = useMemo(
+    () => new Map(inputIssues.map((issue) => [issue.moduleId, issue])),
+    [inputIssues],
+  )
+  const currentConfigKey = useMemo(
+    () => inferenceConfigKey(project.id as ProjectId, model, inputModules, inputDocs, modules),
+    [project.id, model, inputModules, inputDocs, modules],
+  )
+  const configAlreadyCompleted =
+    phase === "done" &&
+    run?.status === "ok" &&
+    completedConfigKey != null &&
+    currentConfigKey === completedConfigKey
+  const cachedLoggingRunId = dedupedRunId ?? (configAlreadyCompleted ? run?.id : null)
 
-  // AI : reset inputs when switching projects so legal PDFs don't stick on the DB pipeline.
+  // AI : Inference unmounts on tab switch — ask the server (same dedup logic as POST /api/runs) to restore completed state.
+  useEffect(() => {
+    if (!allInputsReady || !currentConfigKey || phase === "running") return
+    if (phase === "done" && completedConfigKey === currentConfigKey && run?.status === "ok") return
+
+    let cancelled = false
+    async function restoreCachedRun() {
+      const orderedIds = inputModules.map((m) => inputDocs[m.id]!.id as DocId)
+      const [primary, ...rest] = orderedIds
+      const res = await fetch("/api/runs/match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          inputDocId: primary,
+          inputDocIds: rest,
+          model,
+        }),
+      })
+      if (!res.ok || cancelled) return
+      const data = (await res.json()) as { cachedRunId?: string | null; run?: PipelineRun | null }
+      if (!data.cachedRunId) return
+      setRun(data.run ?? runs.find((r) => r.id === data.cachedRunId) ?? null)
+      setPhase("done")
+      setCompletedConfigKey(currentConfigKey)
+      setDedupedRunId(data.cachedRunId)
+    }
+    void restoreCachedRun()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    allInputsReady,
+    completedConfigKey,
+    currentConfigKey,
+    inputDocs,
+    inputModules,
+    model,
+    phase,
+    project.id,
+    run?.status,
+  ])
+
+  // AI : changing inputs or pipeline after a completed run should re-enable Run pipeline.
+  useEffect(() => {
+    if (phase !== "done" || !completedConfigKey || currentConfigKey === completedConfigKey) return
+    setPhase("idle")
+    setRun(null)
+    setDedupedRunId(null)
+    setCompletedConfigKey(null)
+  }, [phase, completedConfigKey, currentConfigKey])
+
+  // AI : validate assigned docs before run — catch seed placeholders + invalid JSON early.
+  useEffect(() => {
+    let cancelled = false
+    async function validateInputs() {
+      const assigned = inputModules.filter((m) => inputDocs[m.id])
+      if (!assigned.length) {
+        setInputIssues([])
+        return
+      }
+      setValidatingInputs(true)
+      const contentByDocId: Partial<Record<string, string>> = {}
+      try {
+        await Promise.all(
+          assigned.map(async (m) => {
+            const doc = inputDocs[m.id]!
+            const res = await fetch(`/api/docs/${doc.id}/text`)
+            if (res.ok) contentByDocId[doc.id] = await res.text()
+          }),
+        )
+      } finally {
+        if (!cancelled) setValidatingInputs(false)
+      }
+      if (cancelled) return
+      setInputIssues(collectInferenceInputIssues(inputModules, inputDocs, contentByDocId))
+    }
+    void validateInputs()
+    return () => {
+      cancelled = true
+    }
+  }, [inputModules, inputDocs])
+
+  // AI : seed input slots on mount / project switch — run UI state is restored separately via /api/runs/match.
   useEffect(() => {
     setInputDocs(buildDefaultInputDocs(docs, project, inputModules))
+    setInputIssues([])
     setPickerModuleId(null)
     setPhase("idle")
     setStepStates(new Map())
     setRun(null)
+    setDedupedRunId(null)
+    setCompletedConfigKey(null)
     setError(null)
     setDebugLogs([])
     setRunNotes("")
     savedNotesRef.current = undefined
   }, [project.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [debugLogs.length])
 
   useRunNotesFlushOnLeave(
     phase === "done" ? run?.id : undefined,
@@ -124,10 +263,6 @@ export function Inference() {
     },
   )
 
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [debugLogs.length])
-
   function setInputDocForModule(moduleId: ModuleId, doc: DocRef) {
     setInputDocs((prev) => ({ ...prev, [moduleId]: doc }))
     setPickerModuleId(null)
@@ -138,7 +273,7 @@ export function Inference() {
   }
 
   async function start() {
-    if (!allInputsReady) return
+    if (!allInputsReady || inputsInvalid || insufficientCredit) return
     const orderedIds = inputModules.map((m) => inputDocs[m.id]!.id as DocId)
     const [primary, ...rest] = orderedIds
     if (phase === "done") {
@@ -148,12 +283,13 @@ export function Inference() {
     setPhase("running")
     setError(null)
     setRun(null)
+    setDedupedRunId(null)
     setStepStates(new Map())
     setDebugLogs([])
     try {
-      const jobId = await startRun(project.id as ProjectId, primary, model, rest)
+      const { jobId } = await startRun(project.id as ProjectId, primary, model, rest)
       refreshBilling().catch(console.error)
-      const finished = await awaitRun(jobId, {
+      const { run: finished, deduped, cachedRunId } = await awaitRun(jobId, {
         onStep: (steps) => setStepStates((prev) => mergeStepStates(prev, steps)),
         onLogs: (logs) => setDebugLogs(logs),
       })
@@ -161,13 +297,21 @@ export function Inference() {
       const withNotes = notes ? { ...finished, notes } : finished
       savedNotesRef.current = notes
       setRun(withNotes)
-      addRun(withNotes)
-      if (notes) updateRunNotes(finished.id, notes).catch(console.error)
+      setDedupedRunId(deduped ? (cachedRunId ?? finished.id) : null)
+      if (finished.status === "ok" && currentConfigKey) setCompletedConfigKey(currentConfigKey)
+      if (!deduped) {
+        addRun(withNotes)
+        if (notes) updateRunNotes(finished.id, notes).catch(console.error)
+      }
       const runErr = pipelineRunError(finished)
       if (runErr) setError(runErr)
       setPhase("done")
     } catch (e) {
-      setError((e as Error).message)
+      if (isRunBillingError(e)) {
+        refreshBilling().catch(console.error)
+      } else {
+        setError((e as Error).message)
+      }
       setPhase("idle")
     }
   }
@@ -176,6 +320,8 @@ export function Inference() {
     setPhase("idle")
     setStepStates(new Map())
     setRun(null)
+    setDedupedRunId(null)
+    setCompletedConfigKey(null)
     setError(null)
     setDebugLogs([])
     setRunNotes("")
@@ -215,43 +361,14 @@ export function Inference() {
   }, [stepStates, modules])
 
   const waitPhrase = useCyclingWaitPhrase(phase === "running", runningHints)
-
-  // AI : real outputs — rule cards from the extraction step, plus each output step's JSON.
-  const outputModuleIds = useMemo(
-    () => new Set(modules.filter((m) => m.kind === "output").map((m) => m.id)),
-    [modules],
-  )
-  const parsedSteps = useMemo(() => {
-    return (run?.steps ?? []).map((s) => {
-      try {
-        return s.outputJson ? (JSON.parse(s.outputJson) as unknown) : undefined
-      } catch {
-        return undefined
-      }
-    })
-  }, [run])
-  const rules = useMemo(() => parsedSteps.find(isRuleRows) ?? [], [parsedSteps])
-  const quotes = useMemo(
-    () => [...new Map(parsedSteps.flatMap((v) => collectQuotes(v)).map((q) => [q.href, q])).values()],
-    [parsedSteps],
-  )
-  const outputSteps = useMemo(
-    () => (run?.steps ?? []).filter((s) => outputModuleIds.has(s.moduleId) && s.outputJson),
-    [run, outputModuleIds],
-  )
   const runErr = useMemo(() => (run ? pipelineRunError(run) : null), [run])
-  const sourceDoc = useMemo(() => {
-    const primaryId = run?.inputDocId ?? (inputModules[0] ? inputDocs[inputModules[0].id]?.id : undefined)
-    if (!primaryId) return inputModules[0] ? inputDocs[inputModules[0].id] : undefined
-    return docs.find((d) => d.id === primaryId) ?? (inputModules[0] ? inputDocs[inputModules[0].id] : undefined)
-  }, [run?.inputDocId, inputDocs, inputModules, docs])
 
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
         step="04 / Inference"
         title="Run Pipeline"
-        description="Assign a document to each pipeline input step, then run against live models via OpenRouter."
+        description="Assign inputs and run the pipeline. Full output and traces live in Logging."
         actions={
           phase !== "idle" ? (
             <Button variant="outline" size="sm" className="bg-transparent" onClick={reset} disabled={phase === "running"}>
@@ -280,10 +397,8 @@ export function Inference() {
           </div>
         </div>
       ) : (
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_1.1fr]">
-        {/* left: input + run controls */}
-        <div className="min-h-0 overflow-y-auto border-b border-border lg:border-b-0 lg:border-r">
-          <div className="space-y-4 p-5">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-2xl space-y-4 p-5">
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -299,6 +414,7 @@ export function Inference() {
                   inputModule={m}
                   outModel={modelName(models, m.outStructureId)}
                   doc={inputDocs[m.id]}
+                  issue={inputIssueByModule.get(m.id)}
                   onOpenPicker={() => setPickerModuleId(m.id)}
                   onOpenDoc={(docId) => open({ docId, start: 0, end: 0 })}
                 />
@@ -317,19 +433,72 @@ export function Inference() {
               }
             />
 
-            <Button className="w-full" disabled={!allInputsReady || phase === "running"} onClick={start}>
+            {insufficientCredit && phase !== "running" ? (
+              <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-5 text-center">
+                <AlertTriangle className="mx-auto h-8 w-8 text-destructive" />
+                <p className="mt-3 text-sm font-medium text-destructive">
+                  Not enough credit to run a pipeline
+                </p>
+                <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                  Balance ${(billingAccount!.balanceCents / 100).toFixed(2)} ·{" "}
+                  ${(minRunBalanceCents / 100).toFixed(2)} minimum to run
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4 gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setActiveWindow("billing")}
+                >
+                  <CreditCard className="h-3.5 w-3.5" />
+                  Go to Billing
+                </Button>
+              </div>
+            ) : (
+            <>
+            <Button
+              className="w-full"
+              disabled={
+                !allInputsReady ||
+                inputsInvalid ||
+                validatingInputs ||
+                phase === "running" ||
+                insufficientCredit
+              }
+              onClick={
+                configAlreadyCompleted && cachedLoggingRunId
+                  ? () => openLogging(cachedLoggingRunId)
+                  : start
+              }
+            >
               {phase === "running" ? (
                 <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : configAlreadyCompleted ? (
+                <ScrollText className="mr-1.5 h-4 w-4" />
               ) : (
                 <Zap className="mr-1.5 h-4 w-4" />
               )}
-              {phase === "running" ? `${waitPhrase}…` : "Run pipeline"}
+              {phase === "running"
+                ? `${waitPhrase}…`
+                : configAlreadyCompleted
+                  ? "View cached run in Logging"
+                  : "Run pipeline"}
             </Button>
 
-            {error && <ErrorBanner text={error} />}
+            {configAlreadyCompleted && (
+              <p className="text-center font-mono text-[10px] text-muted-foreground">
+                Identical pipeline and inputs — no compute needed. Change an input or edit the pipeline to run again.
+              </p>
+            )}
+            </>
+            )}
 
-            {/* high-level progress (mirrors the Logging high-level view) */}
-            {phase !== "idle" && (
+            {inputsInvalid && !validatingInputs && (
+              <ErrorBanner text={inferenceInputIssueMessage(inputIssues)} />
+            )}
+
+            {error && phase !== "done" && <ErrorBanner text={error} />}
+
+            {phase === "running" && (
               <div className="rounded-lg border border-border p-4">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -338,9 +507,7 @@ export function Inference() {
                   <span className="font-mono text-[11px] text-primary">{progressPct}%</span>
                 </div>
                 <Progress value={progressPct} className="h-1.5" />
-                {phase === "running" && (
-                  <CyclingWaitPhrase phrase={waitPhrase} className="mt-3" />
-                )}
+                <CyclingWaitPhrase phrase={waitPhrase} className="mt-3" />
                 <div className="mt-4 space-y-2.5">
                   {segmentPipeline(modules).map((seg) => {
                     if (seg.kind === "combine") {
@@ -364,28 +531,24 @@ export function Inference() {
                             label={seg.combine.label}
                             state={state}
                             sub={combineUi?.sub}
-                            errorMessage={run?.steps.find((s) => s.moduleId === seg.combine.id && s.status === "error")?.outputPreview}
                           />
                           <StepRow
                             label={seg.input.label}
                             state={inputState}
                             sub={inputUi?.sub}
                             nested
-                            errorMessage={run?.steps.find((s) => s.moduleId === seg.input.id && s.status === "error")?.outputPreview}
                           />
                         </div>
                       )
                     }
                     const moduleUi = stepStates.get(seg.module.id)
                     const moduleState = moduleUi?.status ?? "idle"
-                    const failedStep = run?.steps.find((s) => s.moduleId === seg.module.id && s.status === "error")
                     return (
                       <StepRow
                         key={seg.module.id}
                         label={seg.module.label}
                         state={moduleState}
                         sub={moduleUi?.sub}
-                        errorMessage={failedStep?.outputPreview}
                       />
                     )
                   })}
@@ -393,19 +556,11 @@ export function Inference() {
               </div>
             )}
 
-            {run && phase === "done" && (
-              <div className="grid grid-cols-3 gap-2">
-                <Stat label="latency" value={`${(run.totalMs / 1000).toFixed(1)}s`} />
-                <Stat label="billed" value={`$${(run.billedCents / 100).toFixed(2)}`} />
-                <Stat label="saved" value={`$${(run.savedCents / 100).toFixed(2)}`} accent />
-              </div>
-            )}
-
             {debugLogs.length > 0 && (
               <div className="rounded-lg border border-border">
                 <div className="border-b border-border px-3 py-2">
                   <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    server logs · 
+                    server logs · live
                   </span>
                 </div>
                 <div className="max-h-48 overflow-y-auto p-2 font-mono text-[10px] leading-relaxed">
@@ -427,106 +582,40 @@ export function Inference() {
                 </div>
               </div>
             )}
-          </div>
-        </div>
 
-        {/* right: validated output */}
-        <div className="min-h-0 overflow-y-auto">
-          <div className="p-5">
-            {phase === "running" ? (
-              <div className="flex h-full min-h-64 flex-col items-center justify-center gap-4 text-center">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <div className="space-y-1.5">
-                  <CyclingWaitPhrase phrase={waitPhrase} className="text-sm text-foreground" />
-                  <p className="font-mono text-[10px] tabular-nums text-muted-foreground">{progressPct}% complete</p>
-                </div>
-              </div>
-            ) : phase !== "done" || !run ? (
-              <div className="flex h-full min-h-64 flex-col items-center justify-center gap-2 text-center">
-                <Link2 className="h-6 w-6 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Output appears here after a run.</p>
-                <p className="max-w-xs font-mono text-[10px] text-muted-foreground">
-                  run a pipeline, then open the input document or click any quote to jump to its source span
+            {run && phase === "done" && (
+              <div className="rounded-lg border border-border bg-card px-6 py-8 text-center">
+                {dedupedRunId ? (
+                  <Zap className="mx-auto h-10 w-10 text-primary" />
+                ) : run.status === "ok" ? (
+                  <CheckCircle2 className="mx-auto h-10 w-10 text-primary" />
+                ) : (
+                  <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
+                )}
+                <p className="mt-4 text-sm font-medium">
+                  {dedupedRunId
+                    ? "Identical run already completed"
+                    : run.status === "ok"
+                      ? "Pipeline finished"
+                      : "Pipeline finished with errors"}
                 </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {sourceDoc && <InputDocumentLink doc={sourceDoc} />}
-
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold">Validated Output</h3>
-                  <Badge
-                    className={cn(
-                      run.status === "ok"
-                        ? "bg-primary/15 text-primary hover:bg-primary/15"
-                        : "bg-destructive/15 text-destructive hover:bg-destructive/15",
-                    )}
-                  >
-                    {run.status === "ok" ? "schema valid" : "run error"}
-                  </Badge>
-                </div>
-
-                {runErr && <ErrorBanner text={runErr} />}
-
-                {rules.length > 0 && (
-                  <div>
-                    <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      extracted rules · click a quote to verify
-                    </p>
-                    <div className="space-y-2">
-                      {rules.map((r) => (
-                        <div key={r.rule_id} className="rounded-md border border-border bg-card p-3">
-                          <div className="mb-1 flex items-center gap-2">
-                            <Badge variant="outline" className="font-mono text-[9px]">
-                              {r.rule_id}
-                            </Badge>
-                            {r.severity !== undefined && (
-                              <span className="font-mono text-[10px] text-muted-foreground">
-                                severity {r.severity}
-                              </span>
-                            )}
-                          </div>
-                          {r.description && <p className="text-xs text-foreground">{r.description}</p>}
-                          {r.source?.quote && (
-                            <QuoteButton
-                              className="mt-1.5 inline-flex items-start gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-left font-mono text-[10px] text-primary ring-1 ring-primary/20 transition-colors hover:bg-primary/20"
-                              quote={{
-                                text: r.source.text,
-                                doc_id: r.source.quote.doc_id as DocId,
-                                start: r.source.quote.start,
-                                end: r.source.quote.end,
-                                href: quoteHref({
-                                  docId: r.source.quote.doc_id as DocId,
-                                  start: r.source.quote.start,
-                                  end: r.source.quote.end,
-                                }),
-                              }}
-                            />
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                  {dedupedRunId
+                    ? "Pipeline and inputs match a previous run — no compute was used."
+                    : "Output, step traces, and costs are in Logging."}
+                </p>
+                {runErr && (
+                  <div className="mt-4 text-left">
+                    <ErrorBanner text={runErr} />
                   </div>
                 )}
-
-                {rules.length === 0 && quotes.length > 0 && (
-                  <QuoteLinks quotes={quotes} />
-                )}
-
-                {outputSteps.map((step) => (
-                  <div key={step.moduleId}>
-                    <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      output · {step.label}
-                    </p>
-                    <div className="rounded border border-border bg-[oklch(0.14_0.004_264)] p-2">
-                      <JsonHighlight json={step.outputJson!} />
-                    </div>
-                  </div>
-                ))}
+                <Button className="mt-5 gap-1.5" onClick={() => openLogging(dedupedRunId ?? run.id)}>
+                  <ScrollText className="h-3.5 w-3.5" />
+                  {dedupedRunId ? "View cached run in Logging" : "Go to logging"}
+                </Button>
               </div>
             )}
           </div>
-        </div>
       </div>
       )}
       {pickerModule && (
@@ -545,22 +634,29 @@ function InferenceInputSlot({
   inputModule,
   outModel,
   doc,
+  issue,
   onOpenPicker,
   onOpenDoc,
 }: {
   inputModule: PipelineModule
   outModel?: string
   doc?: DocRef
+  issue?: InferenceInputIssue
   onOpenPicker: () => void
   onOpenDoc: (docId: DocId) => void
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-3">
+    <div className={cn("rounded-lg border bg-card p-3", issue ? "border-destructive/50" : "border-border")}>
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span className="text-xs font-medium">{inputModule.label}</span>
         <Badge variant="outline" className="font-mono text-[9px] capitalize">
           {inputTypeLabel(inputModule.inputType)}
         </Badge>
+        {inputNameRestrictionLabel(inputModule) && (
+          <Badge variant="outline" className="font-mono text-[9px] text-muted-foreground">
+            name ∋ "{inputNameRestrictionLabel(inputModule)}"
+          </Badge>
+        )}
         {outModel && (
           <Badge variant="outline" className="font-mono text-[9px] text-muted-foreground">
             → {outModel}
@@ -587,6 +683,11 @@ function InferenceInputSlot({
         <Button variant="outline" size="sm" className="w-full bg-transparent" onClick={onOpenPicker}>
           <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> Choose from store
         </Button>
+      )}
+      {issue && (
+        <p className="mt-2 font-mono text-[10px] text-destructive">
+          {issue.message}
+        </p>
       )}
     </div>
   )
@@ -637,13 +738,11 @@ function StepRow({
   state,
   nested,
   sub,
-  errorMessage,
 }: {
   label: string
   state: StepProgress["status"] | "idle"
   nested?: boolean
   sub?: StepSubProgress
-  errorMessage?: string
 }) {
   return (
     <div className={cn(nested && "pl-5")}>
@@ -677,18 +776,6 @@ function StepRow({
           )}
         </div>
       )}
-      {state === "error" && errorMessage && (
-        <p className="mt-1 pl-7 font-mono text-[10px] text-destructive">{errorMessage}</p>
-      )}
-    </div>
-  )
-}
-
-function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <div className="rounded-md border border-border px-3 py-2">
-      <p className="font-mono text-[10px] text-muted-foreground">{label}</p>
-      <p className={cn("font-mono text-sm", accent && "text-primary")}>{value}</p>
     </div>
   )
 }

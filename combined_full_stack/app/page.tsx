@@ -17,6 +17,8 @@ import {
   Trash2,
   ArrowLeft,
   Loader2,
+  FolderKanban,
+  LayoutGrid,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { StoreProvider, useStore } from "@/lib/store"
@@ -34,6 +36,7 @@ import { Logging } from "@/components/logging"
 import { Documents } from "@/components/documents"
 import { Billing } from "@/components/billing"
 import { Settings as SettingsPanel } from "@/components/settings"
+import { Projects } from "@/components/projects"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,6 +56,7 @@ const LANDING_PAGE_URL = "https://auto-pipeline.dev/"
 type WindowId = AppWindowId
 
 const WINDOWS: { id: WindowId; label: string; hint: string; icon: typeof Boxes }[] = [
+  { id: "projects", label: "Projects", hint: "·", icon: FolderKanban },
   { id: "structure", label: "Structure", hint: "01", icon: Boxes },
   { id: "pipeline", label: "Pipeline", hint: "02", icon: GitBranch },
   { id: "inference", label: "Inference", hint: "03", icon: Play },
@@ -116,6 +120,7 @@ function ProjectRenameInput({
 function ProjectSelector() {
   const { projects, project, setActiveProjectId, prefetchProject, addProject, renameProject, deleteProject } =
     useStore()
+  const { setActiveWindow } = useAppShell()
   const [editing, setEditing] = useState<{ id: string; initialName: string } | null>(null)
   const canDelete = projects.length > 1
 
@@ -204,6 +209,10 @@ function ProjectSelector() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
+        <DropdownMenuItem onClick={() => setActiveWindow("projects")} className="gap-2 text-xs">
+          <LayoutGrid className="h-3.5 w-3.5" />
+          Manage projects…
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={addProject} className="gap-2 text-xs text-primary">
           <Plus className="h-3.5 w-3.5" />
           New project
@@ -362,6 +371,7 @@ function Shell() {
             <ProjectSwitchLoading projectName={project.name} />
           ) : (
             <>
+              {activeWindow === "projects" && <Projects />}
               {activeWindow === "structure" && <StructureBuilder />}
               {activeWindow === "pipeline" && <PipelineBuilder />}
               {activeWindow === "inference" && <Inference />}

@@ -33,7 +33,7 @@ export type BillingAccountView = {
   balanceCents: number
   totalBilledCents: number
   subscribed: boolean
-  useCostCents: number
+  minRunBalanceCents: number
   topupOptionsCents: number[]
   subCentsPerMonth: number
   billingCapCents: number
@@ -55,6 +55,9 @@ interface StoreState {
   activeProjectId: string
   setActiveProjectId: (id: string) => void
   addProject: () => void
+  cloneFromTemplate: (templateId: string) => Promise<Project>
+  cloneProject: (projectId: string) => Promise<Project>
+  resyncExamples: () => Promise<number>
   renameProject: (id: string, name: string) => void
   deleteProject: (id: string) => void
   project: Project
@@ -275,6 +278,52 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .catch((err) => setSaveError(err instanceof Error ? err.message : "Failed to create project"))
   }, [])
 
+  const cloneFromTemplate = useCallback((templateId: string) => {
+    return api<Project>("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ templateId }),
+    })
+      .then((fresh) => {
+        setState((prev) => (prev ? { ...prev, projects: [...prev.projects, fresh] } : prev))
+        setActiveProjectId(fresh.id)
+        return fresh
+      })
+      .catch((err) => {
+        setSaveError(err instanceof Error ? err.message : "Failed to clone template")
+        throw err
+      })
+  }, [])
+
+  const cloneProjectById = useCallback((cloneFrom: string) => {
+    return api<Project>("/api/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cloneFrom }),
+    })
+      .then((fresh) => {
+        setState((prev) => (prev ? { ...prev, projects: [...prev.projects, fresh] } : prev))
+        setActiveProjectId(fresh.id)
+        return fresh
+      })
+      .catch((err) => {
+        setSaveError(err instanceof Error ? err.message : "Failed to clone project")
+        throw err
+      })
+  }, [])
+
+  const resyncExamples = useCallback(() => {
+    return api<{ updated: number }>("/api/projects/resync-examples", { method: "POST" })
+      .then(async ({ updated }) => {
+        await refresh()
+        return updated
+      })
+      .catch((err) => {
+        setSaveError(err instanceof Error ? err.message : "Failed to refresh examples")
+        throw err
+      })
+  }, [refresh])
+
   // AI : discrete rename — save immediately (not debounced like builder keystrokes).
   const renameProject = useCallback((id: string, name: string) => {
     const trimmed = name.trim()
@@ -375,6 +424,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     activeProjectId: project.id,
     setActiveProjectId,
     addProject,
+    cloneFromTemplate,
+    cloneProject: cloneProjectById,
+    resyncExamples,
     renameProject,
     deleteProject,
     project,
