@@ -16,8 +16,10 @@ import {
 } from "react"
 import type {
   BillingPoint,
+  DocId,
   DocLabel,
   DocRef,
+  ModuleId,
   PipelineModule,
   PipelineRun,
   Project,
@@ -78,6 +80,9 @@ interface StoreState {
   runs: PipelineRun[]
   addRun: (r: PipelineRun) => void
   updateRunNotes: (runId: PipelineRun["id"], notes: string | undefined) => Promise<void>
+  // AI : survives Inference tab unmount — doc ids only, resolved against hydrated docs on restore.
+  inferenceInputDocIds: Partial<Record<ModuleId, DocId>>
+  setInferenceInputDocIds: (docs: Partial<Record<ModuleId, DocId>>) => void
   // billing (computed from real run history only)
   billing: BillingPoint[]
   billingAccount: BillingAccountView | null
@@ -110,6 +115,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [model, setModel] = useState<string>(DEFAULT_MODEL)
   const [projectLoading, setProjectLoading] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const [inferenceInputsByProject, setInferenceInputsByProject] = useState<
+    Record<string, Partial<Record<ModuleId, DocId>>>
+  >({})
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hydratedRef = useRef(false)
   const prefetchCache = useRef(new Map<string, PrefetchEntry>())
@@ -372,6 +380,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setState((prev) => (prev ? { ...prev, runs: [r, ...prev.runs] } : prev))
   }, [])
 
+  const setInferenceInputDocIds = useCallback(
+    (projectId: string, docs: Partial<Record<ModuleId, DocId>>) => {
+      setInferenceInputsByProject((prev) => ({ ...prev, [projectId]: docs }))
+    },
+    [],
+  )
+
   const updateRunNotes = useCallback(async (runId: PipelineRun["id"], notes: string | undefined) => {
     await api("/api/runs/" + runId, {
       method: "PATCH",
@@ -444,6 +459,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     runs,
     addRun,
     updateRunNotes,
+    inferenceInputDocIds: inferenceInputsByProject[project.id] ?? {},
+    setInferenceInputDocIds: (docs) => setInferenceInputDocIds(project.id, docs),
     billing,
     billingAccount,
     refreshBilling,

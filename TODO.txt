@@ -3,6 +3,13 @@
 
 - add an example of enrichment, where you keep the same format but just add things to it. do a test which would go over the context limit if you had to repeat the whole structure rather than just the new fields. 
 
+add mcp connections
+add skills?
+
+similar runs
+
+
+flag uploads if they contain 'confidential'
 
 fix hashing bug with cached log
 

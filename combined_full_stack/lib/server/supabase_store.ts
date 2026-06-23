@@ -12,7 +12,15 @@ import type {
   PipelineRun,
   Project,
   ProjectId,
+  RunFingerprint,
 } from "./types";
+
+interface RunRow {
+  project_id: string;
+  started_at: number;
+  data: PipelineRun;
+  fingerprint?: string | null;
+}
 
 interface DocRow {
   id: string;
@@ -37,16 +45,37 @@ export class SupabaseStore implements Store {
     runProjects: {} as Record<string, ProjectId>,
   };
   private pending: PromiseLike<{ error: unknown }>[] = [];
+  // AI : 002_run_fingerprint.sql may not be applied yet — fingerprint still lives in runs.data jsonb.
+  private hasFingerprintColumn = false;
 
   constructor(private db: SupabaseClient) {}
 
   async init(): Promise<void> {
-    const [projects, docs, runs] = await Promise.all([
+    const [projects, docs] = await Promise.all([
       this.db.from("projects").select("data"),
       this.db.from("docs").select("*").order("uploaded_at", { ascending: false }),
-      this.db.from("runs").select("project_id, data").order("started_at", { ascending: false }),
     ]);
-    for (const r of [projects, docs, runs]) if (r.error) throw r.error;
+    for (const r of [projects, docs]) if (r.error) throw r.error;
+
+    let runRows: RunRow[] = [];
+    const runsWithFp = await this.db
+      .from("runs")
+      .select("project_id, started_at, data, fingerprint")
+      .order("started_at", { ascending: false });
+    if (runsWithFp.error?.message?.includes("fingerprint")) {
+      this.hasFingerprintColumn = false;
+      const runsLegacy = await this.db
+        .from("runs")
+        .select("project_id, started_at, data")
+        .order("started_at", { ascending: false });
+      if (runsLegacy.error) throw runsLegacy.error;
+      runRows = (runsLegacy.data ?? []) as RunRow[];
+    } else {
+      if (runsWithFp.error) throw runsWithFp.error;
+      this.hasFingerprintColumn = true;
+      runRows = (runsWithFp.data ?? []) as RunRow[];
+    }
+
     this.state.projects = (projects.data ?? []).map((row) => row.data as Project);
     for (const row of (docs.data ?? []) as DocRow[]) {
       this.state.docs.push({
@@ -60,11 +89,29 @@ export class SupabaseStore implements Store {
       });
       this.state.contents.set(row.id as DocId, row.content);
     }
-    for (const row of runs.data ?? []) {
+    for (const row of runRows) {
       const run = row.data as PipelineRun;
+      const fingerprint = (row.fingerprint ?? run.fingerprint) as RunFingerprint | undefined;
+      if (fingerprint) run.fingerprint = fingerprint;
       this.state.runs.push(run);
       this.state.runProjects[run.id] = row.project_id as ProjectId;
+      if (this.hasFingerprintColumn && fingerprint && !row.fingerprint) {
+        this.pending.push(
+          this.db.from("runs").update({ fingerprint }).eq("id", run.id),
+        );
+      }
     }
+  }
+
+  private runRow(projectId: ProjectId, run: PipelineRun): Record<string, unknown> {
+    const row: Record<string, unknown> = {
+      id: run.id,
+      project_id: projectId,
+      started_at: run.startedAt,
+      data: run,
+    };
+    if (this.hasFingerprintColumn) row.fingerprint = run.fingerprint ?? null;
+    return row;
   }
 
   projects(): Project[] {
@@ -158,14 +205,15 @@ export class SupabaseStore implements Store {
     return this.state.runs.filter((r) => this.state.runProjects[r.id] === projectId);
   }
 
+  findRunByFingerprint(projectId: ProjectId, fingerprint: RunFingerprint): PipelineRun | undefined {
+    return this.runs(projectId).find((r) => r.status === "ok" && r.fingerprint === fingerprint);
+  }
+
   addRun(projectId: ProjectId, run: PipelineRun): void {
     this.state.runProjects[run.id] = projectId;
     this.state.runs = [run, ...this.state.runs];
     this.pending.push(
-      this.db.from("runs").upsert(
-        { id: run.id, project_id: projectId, started_at: run.startedAt, data: run },
-        { onConflict: "user_id,id" },
-      ),
+      this.db.from("runs").upsert(this.runRow(projectId, run), { onConflict: "user_id,id" }),
     );
   }
 
@@ -179,10 +227,7 @@ export class SupabaseStore implements Store {
     this.state.runs[i] = run;
     const projectId = this.state.runProjects[runId];
     this.pending.push(
-      this.db.from("runs").upsert(
-        { id: run.id, project_id: projectId, started_at: run.startedAt, data: run },
-        { onConflict: "user_id,id" },
-      ),
+      this.db.from("runs").upsert(this.runRow(projectId, run), { onConflict: "user_id,id" }),
     );
     return true;
   }

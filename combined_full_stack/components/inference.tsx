@@ -25,6 +25,7 @@ import { useDocViewer } from "@/lib/doc-viewer"
 import {
   awaitRun,
   isRunBillingError,
+  matchRun,
   mergeStepStates,
   startRun,
   type JobLogEntry,
@@ -39,7 +40,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 import { defaultInferenceDoc } from "@/lib/project-docs"
-import { defaultInputDocsForModules, inputTypeLabel, inputNameRestrictionLabel, orderedInputModules } from "@/lib/inference-input"
+import { defaultInputDocsForModules, docMatchesInputModule, inputTypeLabel, inputNameRestrictionLabel, orderedInputModules } from "@/lib/inference-input"
 import {
   collectInferenceInputIssues,
   inferenceInputIssueMessage,
@@ -68,36 +69,62 @@ function buildDefaultInputDocs(
   return defaultInputDocsForModules(docs, project, inputModules, defaultInferenceDoc(docs, project))
 }
 
-// AI : client-side mirror of run dedup inputs — blocks re-run when pipeline + inputs unchanged.
-function inferenceConfigKey(
-  projectId: ProjectId,
-  model: string,
+function resolveInputDocs(
+  docs: DocRef[],
+  project: Project,
+  inputModules: PipelineModule[],
+  savedDocIds: Partial<Record<ModuleId, DocId>>,
+): Partial<Record<ModuleId, DocRef>> {
+  const defaults = buildDefaultInputDocs(docs, project, inputModules)
+  if (!Object.keys(savedDocIds).length) return defaults
+  const out: Partial<Record<ModuleId, DocRef>> = { ...defaults }
+  for (const m of inputModules) {
+    const savedId = savedDocIds[m.id]
+    if (!savedId) continue
+    const doc = docs.find((d) => d.id === savedId)
+    if (doc && docMatchesInputModule(doc, m)) out[m.id] = doc
+  }
+  return out
+}
+
+function inputDocIdsForModules(
   inputModules: PipelineModule[],
   inputDocs: Partial<Record<ModuleId, DocRef>>,
-  modules: PipelineModule[],
-): string | null {
-  if (!inputModules.every((m) => inputDocs[m.id])) return null
-  return JSON.stringify({
-    projectId,
-    model,
-    inputs: inputModules.map((m) => inputDocs[m.id]!.id),
-    modules: modules.map((m) => ({
-      id: m.id,
-      kind: m.kind,
-      prompt: m.prompt,
-      code: m.code,
-      model: m.model,
-      inStructureId: m.inStructureId,
-      outStructureId: m.outStructureId,
-      inputType: m.inputType,
-      inputNameContains: m.inputNameContains,
-      outIsList: m.outIsList,
-    })),
+): DocId[] {
+  return inputModules.map((m) => inputDocs[m.id]!.id as DocId)
+}
+
+// AI : match hydrated runs by stored inputDocIds — same slot docs the server hashed.
+function findCachedRunByInputs(
+  runs: PipelineRun[],
+  inputModules: PipelineModule[],
+  inputDocs: Partial<Record<ModuleId, DocRef>>,
+): PipelineRun | undefined {
+  if (!inputModules.every((m) => inputDocs[m.id])) return undefined
+  const slotIds = inputDocIdsForModules(inputModules, inputDocs)
+  return runs.find((r) => {
+    if (r.status !== "ok") return false
+    const runIds = r.inputDocIds ?? (r.inputDocId ? [r.inputDocId] : [])
+    if (runIds.length !== slotIds.length) return false
+    return runIds.every((id, i) => id === slotIds[i])
   })
 }
 
 export function Inference() {
-  const { project, modules, models, model, addRun, updateRunNotes, docs, runs, billingAccount, refreshBilling } = useStore()
+  const {
+    project,
+    modules,
+    models,
+    model,
+    addRun,
+    updateRunNotes,
+    docs,
+    runs,
+    billingAccount,
+    refreshBilling,
+    inferenceInputDocIds,
+    setInferenceInputDocIds,
+  } = useStore()
   const { setActiveWindow, openLogging } = useAppShell()
   const { open } = useDocViewer()
   const pipelineInvalid = computeInvalid(modules, models).size > 0
@@ -108,18 +135,22 @@ export function Inference() {
   const [inputDocs, setInputDocs] = useState<Partial<Record<ModuleId, DocRef>>>({})
   const [inputIssues, setInputIssues] = useState<InferenceInputIssue[]>([])
   const [validatingInputs, setValidatingInputs] = useState(false)
+  const [probingCache, setProbingCache] = useState(false)
   const [pickerModuleId, setPickerModuleId] = useState<ModuleId | null>(null)
   const [phase, setPhase] = useState<Phase>("idle")
   const [stepStates, setStepStates] = useState<Map<ModuleId, StepUiState>>(new Map())
   const [run, setRun] = useState<PipelineRun | null>(null)
-  const [dedupedRunId, setDedupedRunId] = useState<string | null>(null)
-  const [completedConfigKey, setCompletedConfigKey] = useState<string | null>(null)
+  const [cachedRunId, setCachedRunId] = useState<string | null>(null)
+  const [wasDeduped, setWasDeduped] = useState(false)
+  const [dbFingerprint, setDbFingerprint] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [debugLogs, setDebugLogs] = useState<JobLogEntry[]>([])
   const [runNotes, setRunNotes] = useState("")
   const runNotesRef = useRef("")
   const savedNotesRef = useRef<string | undefined>(undefined)
   const logEndRef = useRef<HTMLDivElement>(null)
+  const prevProjectIdRef = useRef<ProjectId | null>(null)
+  const confirmedProbeKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     runNotesRef.current = runNotes
@@ -138,68 +169,97 @@ export function Inference() {
     () => new Map(inputIssues.map((issue) => [issue.moduleId, issue])),
     [inputIssues],
   )
-  const currentConfigKey = useMemo(
-    () => inferenceConfigKey(project.id as ProjectId, model, inputModules, inputDocs, modules),
-    [project.id, model, inputModules, inputDocs, modules],
-  )
-  const configAlreadyCompleted =
-    phase === "done" &&
-    run?.status === "ok" &&
-    completedConfigKey != null &&
-    currentConfigKey === completedConfigKey
-  const cachedLoggingRunId = dedupedRunId ?? (configAlreadyCompleted ? run?.id : null)
+  const configAlreadyCompleted = phase === "done" && run?.status === "ok" && cachedRunId != null
+  const loggingRunId = cachedRunId ?? run?.id
 
-  // AI : Inference unmounts on tab switch — ask the server (same dedup logic as POST /api/runs) to restore completed state.
+  const inputDocIdsKey = inputModules.map((m) => inputDocs[m.id]?.id ?? "").join(",")
+  const moduleIdsKey = modules.map((m) => m.id).join(",")
+  const probeKey = `${project.id}:${model}:${inputDocIdsKey}:${moduleIdsKey}`
+
+  const phaseRef = useRef(phase)
+  phaseRef.current = phase
+  const runsRef = useRef(runs)
+  runsRef.current = runs
+  const inputModulesRef = useRef(inputModules)
+  inputModulesRef.current = inputModules
+  const inputDocsRef = useRef(inputDocs)
+  inputDocsRef.current = inputDocs
+  const prevProbeKeyRef = useRef(probeKey)
+
+  // AI : restore completed-run UI from hydrated runs + DB fingerprint — keyed only on probeKey to avoid render loops.
   useEffect(() => {
-    if (!allInputsReady || !currentConfigKey || phase === "running") return
-    if (phase === "done" && completedConfigKey === currentConfigKey && run?.status === "ok") return
+    if (!allInputsReady || phaseRef.current === "running") return
+    if (prevProbeKeyRef.current !== probeKey) {
+      prevProbeKeyRef.current = probeKey
+      confirmedProbeKeyRef.current = null
+    }
+    if (confirmedProbeKeyRef.current === probeKey) return
+
+    const inputMods = inputModulesRef.current
+    const docsByModule = inputDocsRef.current
+    const local = findCachedRunByInputs(runsRef.current, inputMods, docsByModule)
+    if (local) {
+      confirmedProbeKeyRef.current = probeKey
+      setRun(local)
+      setCachedRunId(local.id)
+      setWasDeduped(true)
+      setPhase("done")
+    }
 
     let cancelled = false
-    async function restoreCachedRun() {
-      const orderedIds = inputModules.map((m) => inputDocs[m.id]!.id as DocId)
+    async function probeDbMatch() {
+      setProbingCache(true)
+      const orderedIds = inputDocIdsForModules(inputMods, docsByModule)
       const [primary, ...rest] = orderedIds
-      const res = await fetch("/api/runs/match", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: project.id,
-          inputDocId: primary,
-          inputDocIds: rest,
+      try {
+        const { fingerprint, cachedRunId: matchedId, run: matchedRun } = await matchRun(
+          project.id as ProjectId,
+          primary,
           model,
-        }),
-      })
-      if (!res.ok || cancelled) return
-      const data = (await res.json()) as { cachedRunId?: string | null; run?: PipelineRun | null }
-      if (!data.cachedRunId) return
-      setRun(data.run ?? runs.find((r) => r.id === data.cachedRunId) ?? null)
-      setPhase("done")
-      setCompletedConfigKey(currentConfigKey)
-      setDedupedRunId(data.cachedRunId)
+          rest,
+        )
+        if (cancelled) return
+        setDbFingerprint(fingerprint)
+        if (matchedId && matchedRun?.status === "ok") {
+          confirmedProbeKeyRef.current = probeKey
+          setRun(matchedRun)
+          setCachedRunId(matchedId)
+          setWasDeduped(true)
+          setPhase("done")
+          return
+        }
+        if (local?.status === "ok") {
+          confirmedProbeKeyRef.current = probeKey
+          return
+        }
+        confirmedProbeKeyRef.current = null
+        setCachedRunId(null)
+        setWasDeduped(false)
+        setPhase("idle")
+        setRun(null)
+      } catch (e) {
+        console.error(e)
+        if (local?.status === "ok") confirmedProbeKeyRef.current = probeKey
+      } finally {
+        if (!cancelled) setProbingCache(false)
+      }
     }
-    void restoreCachedRun()
+    void probeDbMatch()
     return () => {
       cancelled = true
     }
-  }, [
-    allInputsReady,
-    completedConfigKey,
-    currentConfigKey,
-    inputDocs,
-    inputModules,
-    model,
-    phase,
-    project.id,
-    run?.status,
-  ])
+  }, [probeKey, allInputsReady, project.id, model])
 
-  // AI : changing inputs or pipeline after a completed run should re-enable Run pipeline.
+  // AI : remember input slot picks across Inference tab unmounts (in-memory store, not browser storage).
   useEffect(() => {
-    if (phase !== "done" || !completedConfigKey || currentConfigKey === completedConfigKey) return
-    setPhase("idle")
-    setRun(null)
-    setDedupedRunId(null)
-    setCompletedConfigKey(null)
-  }, [phase, completedConfigKey, currentConfigKey])
+    if (!allInputsReady) return
+    const ids = Object.fromEntries(
+      inputModules.filter((m) => inputDocs[m.id]).map((m) => [m.id, inputDocs[m.id]!.id as DocId]),
+    ) as Partial<Record<ModuleId, DocId>>
+    const unchanged = inputModules.every((m) => inferenceInputDocIds[m.id] === ids[m.id])
+    if (unchanged) return
+    setInferenceInputDocIds(ids)
+  }, [probeKey, allInputsReady, inferenceInputDocIds, setInferenceInputDocIds])
 
   // AI : validate assigned docs before run — catch seed placeholders + invalid JSON early.
   useEffect(() => {
@@ -216,8 +276,12 @@ export function Inference() {
         await Promise.all(
           assigned.map(async (m) => {
             const doc = inputDocs[m.id]!
-            const res = await fetch(`/api/docs/${doc.id}/text`)
-            if (res.ok) contentByDocId[doc.id] = await res.text()
+            try {
+              const res = await fetch(`/api/docs/${doc.id}/text`)
+              if (res.ok) contentByDocId[doc.id] = await res.text()
+            } catch {
+              // AI : dev HMR / tab churn can abort fetches — treat as missing content for validation.
+            }
           }),
         )
       } finally {
@@ -230,22 +294,29 @@ export function Inference() {
     return () => {
       cancelled = true
     }
-  }, [inputModules, inputDocs])
+  }, [probeKey, inputModules, inputDocs])
 
-  // AI : seed input slots on mount / project switch — run UI state is restored separately via /api/runs/match.
+  // AI : seed input slots on mount / project switch — restore saved picks from the app store when present.
   useEffect(() => {
-    setInputDocs(buildDefaultInputDocs(docs, project, inputModules))
+    const switched = prevProjectIdRef.current != null && prevProjectIdRef.current !== project.id
+    prevProjectIdRef.current = project.id as ProjectId
+    setInputDocs(resolveInputDocs(docs, project, inputModules, inferenceInputDocIds))
     setInputIssues([])
     setPickerModuleId(null)
-    setPhase("idle")
-    setStepStates(new Map())
-    setRun(null)
-    setDedupedRunId(null)
-    setCompletedConfigKey(null)
-    setError(null)
-    setDebugLogs([])
-    setRunNotes("")
-    savedNotesRef.current = undefined
+    if (switched) {
+      confirmedProbeKeyRef.current = null
+      setPhase("idle")
+      setStepStates(new Map())
+      setRun(null)
+      setCachedRunId(null)
+      setWasDeduped(false)
+      setDbFingerprint(null)
+      setProbingCache(false)
+      setError(null)
+      setDebugLogs([])
+      setRunNotes("")
+      savedNotesRef.current = undefined
+    }
   }, [project.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -280,10 +351,12 @@ export function Inference() {
       setRunNotes("")
       runNotesRef.current = ""
     }
+    confirmedProbeKeyRef.current = null
     setPhase("running")
     setError(null)
     setRun(null)
-    setDedupedRunId(null)
+    setCachedRunId(null)
+    setWasDeduped(false)
     setStepStates(new Map())
     setDebugLogs([])
     try {
@@ -297,8 +370,17 @@ export function Inference() {
       const withNotes = notes ? { ...finished, notes } : finished
       savedNotesRef.current = notes
       setRun(withNotes)
-      setDedupedRunId(deduped ? (cachedRunId ?? finished.id) : null)
-      if (finished.status === "ok" && currentConfigKey) setCompletedConfigKey(currentConfigKey)
+      const logId = deduped ? (cachedRunId ?? finished.id) : finished.id
+      setCachedRunId(finished.status === "ok" ? logId : null)
+      setWasDeduped(deduped ?? false)
+      if (finished.status === "ok") {
+        confirmedProbeKeyRef.current = probeKey
+        const orderedIds = inputDocIdsForModules(inputModules, inputDocs)
+        const [primary, ...rest] = orderedIds
+        matchRun(project.id as ProjectId, primary, model, rest)
+          .then(({ fingerprint }) => setDbFingerprint(fingerprint))
+          .catch(console.error)
+      }
       if (!deduped) {
         addRun(withNotes)
         if (notes) updateRunNotes(finished.id, notes).catch(console.error)
@@ -317,11 +399,13 @@ export function Inference() {
   }
 
   function reset() {
+    confirmedProbeKeyRef.current = null
     setPhase("idle")
     setStepStates(new Map())
     setRun(null)
-    setDedupedRunId(null)
-    setCompletedConfigKey(null)
+    setCachedRunId(null)
+    setWasDeduped(false)
+    setDbFingerprint(null)
     setError(null)
     setDebugLogs([])
     setRunNotes("")
@@ -362,6 +446,17 @@ export function Inference() {
 
   const waitPhrase = useCyclingWaitPhrase(phase === "running", runningHints)
   const runErr = useMemo(() => (run ? pipelineRunError(run) : null), [run])
+  const runButtonBusy = phase === "running" || validatingInputs || probingCache
+  const runButtonLabel =
+    phase === "running"
+      ? `${waitPhrase}…`
+      : validatingInputs
+        ? "Validating inputs…"
+        : probingCache
+          ? "Checking for cached run…"
+          : configAlreadyCompleted
+            ? "View cached run in Logging"
+            : "Run pipeline"
 
   return (
     <div className="flex h-full flex-col">
@@ -461,27 +556,24 @@ export function Inference() {
                 !allInputsReady ||
                 inputsInvalid ||
                 validatingInputs ||
+                probingCache ||
                 phase === "running" ||
                 insufficientCredit
               }
               onClick={
-                configAlreadyCompleted && cachedLoggingRunId
-                  ? () => openLogging(cachedLoggingRunId)
+                configAlreadyCompleted && loggingRunId
+                  ? () => openLogging(loggingRunId)
                   : start
               }
             >
-              {phase === "running" ? (
+              {runButtonBusy ? (
                 <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
               ) : configAlreadyCompleted ? (
                 <ScrollText className="mr-1.5 h-4 w-4" />
               ) : (
                 <Zap className="mr-1.5 h-4 w-4" />
               )}
-              {phase === "running"
-                ? `${waitPhrase}…`
-                : configAlreadyCompleted
-                  ? "View cached run in Logging"
-                  : "Run pipeline"}
+              {runButtonLabel}
             </Button>
 
             {configAlreadyCompleted && (
@@ -585,7 +677,7 @@ export function Inference() {
 
             {run && phase === "done" && (
               <div className="rounded-lg border border-border bg-card px-6 py-8 text-center">
-                {dedupedRunId ? (
+                {wasDeduped ? (
                   <Zap className="mx-auto h-10 w-10 text-primary" />
                 ) : run.status === "ok" ? (
                   <CheckCircle2 className="mx-auto h-10 w-10 text-primary" />
@@ -593,14 +685,14 @@ export function Inference() {
                   <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
                 )}
                 <p className="mt-4 text-sm font-medium">
-                  {dedupedRunId
+                  {wasDeduped
                     ? "Identical run already completed"
                     : run.status === "ok"
                       ? "Pipeline finished"
                       : "Pipeline finished with errors"}
                 </p>
                 <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                  {dedupedRunId
+                  {wasDeduped
                     ? "Pipeline and inputs match a previous run — no compute was used."
                     : "Output, step traces, and costs are in Logging."}
                 </p>
@@ -609,9 +701,9 @@ export function Inference() {
                     <ErrorBanner text={runErr} />
                   </div>
                 )}
-                <Button className="mt-5 gap-1.5" onClick={() => openLogging(dedupedRunId ?? run.id)}>
+                <Button className="mt-5 gap-1.5" onClick={() => openLogging(loggingRunId ?? run.id)}>
                   <ScrollText className="h-3.5 w-3.5" />
-                  {dedupedRunId ? "View cached run in Logging" : "Go to logging"}
+                  {wasDeduped ? "View cached run in Logging" : "Go to logging"}
                 </Button>
               </div>
             )}

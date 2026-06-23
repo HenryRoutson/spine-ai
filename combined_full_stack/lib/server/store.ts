@@ -19,6 +19,7 @@ import type {
   PipelineRun,
   Project,
   ProjectId,
+  RunFingerprint,
 } from "./types";
 
 // AI : content hash == doc id, so identical uploads dedupe to one ref (Documents tab).
@@ -77,6 +78,7 @@ export interface Store {
   addDoc(name: string, type: InputType, content: string, label: DocLabel): DocRef;
   removeDoc(id: DocId): boolean;
   runs(projectId?: ProjectId): PipelineRun[];
+  findRunByFingerprint(projectId: ProjectId, fingerprint: RunFingerprint): PipelineRun | undefined;
   addRun(projectId: ProjectId, run: PipelineRun): void;
   updateRunNotes(runId: PipelineRun["id"], notes: string | undefined): boolean;
   flush(): Promise<void>;
@@ -298,6 +300,10 @@ export class JsonStore implements Store {
   runs(projectId?: ProjectId): PipelineRun[] {
     if (!projectId) return this.state.runs;
     return this.state.runs.filter((r) => this.state.runProjects[r.id] === projectId);
+  }
+
+  findRunByFingerprint(projectId: ProjectId, fingerprint: RunFingerprint): PipelineRun | undefined {
+    return this.runs(projectId).find((r) => r.status === "ok" && r.fingerprint === fingerprint);
   }
 
   addRun(projectId: ProjectId, run: PipelineRun): void {

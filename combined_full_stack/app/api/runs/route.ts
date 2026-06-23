@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     inputDocId,
     inputDocIds,
   );
-  const cachedRun = findMatchingRun(store, project, projectId, fingerprint);
+  const cachedRun = findMatchingRun(store, project, projectId, fingerprint, model);
   if (cachedRun) {
     apiLog.info(`run deduped — identical pipeline + inputs already completed`, {
       fingerprint,

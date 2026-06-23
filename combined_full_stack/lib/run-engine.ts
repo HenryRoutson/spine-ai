@@ -89,6 +89,35 @@ export type StartRunResult = {
   fingerprint?: string;
 };
 
+export type MatchRunResult = {
+  fingerprint: string;
+  cachedRunId: string | null;
+  run: PipelineRun | null;
+};
+
+export async function matchRun(
+  projectId: ProjectId,
+  inputDocId: DocId,
+  model: ModelId,
+  inputDocIds: DocId[] = [],
+): Promise<MatchRunResult> {
+  const res = await fetch("/api/runs/match", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ projectId, inputDocId, inputDocIds, model }),
+  });
+  if (!res.ok) {
+    throw new Error(
+      formatApiError(
+        `Failed to match run for project ${projectId}, doc ${inputDocId}, model ${model}`,
+        res,
+        await readApiErrorBody(res),
+      ),
+    );
+  }
+  return (await res.json()) as MatchRunResult;
+}
+
 export async function startRun(
   projectId: ProjectId,
   inputDocId: DocId,

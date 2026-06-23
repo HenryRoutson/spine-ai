@@ -170,13 +170,18 @@ export function findMatchingRun(
   project: Project,
   projectId: ProjectId,
   fingerprint: RunFingerprint,
+  model?: ModelId,
 ): PipelineRun | undefined {
+  const byColumn = store.findRunByFingerprint(projectId, fingerprint);
+  if (byColumn) return byColumn;
+
   const migrated = fingerprintProject(project);
+  const resolvedModel = resolveRunModel(migrated, model);
   for (const r of store.runs(projectId)) {
     if (r.status !== "ok") continue;
-    if (r.fingerprint === fingerprint) return r;
     const ids = inputDocIdsForRun(store, migrated, r);
     if (!ids.length) continue;
+    if (computeRunFingerprint(migrated, resolvedModel, ids) === fingerprint) return r;
     if (computeRunFingerprint(migrated, r.model, ids) === fingerprint) return r;
   }
   return undefined;

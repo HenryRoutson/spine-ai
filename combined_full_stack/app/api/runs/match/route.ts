@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
   const project = store.project(projectId)!;
   const { fingerprint } = computeRunFingerprintForRequest(store, project, model, inputDocId, inputDocIds);
-  const cachedRun = findMatchingRun(store, project, projectId, fingerprint);
+  const cachedRun = findMatchingRun(store, project, projectId, fingerprint, model);
 
   return NextResponse.json({
     fingerprint,
