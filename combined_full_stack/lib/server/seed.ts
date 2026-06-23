@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { uid } from "../id";
 import { z } from "zod";
 import { DOCUMENTS_DIR, REPO_ROOT } from "./config";
 import { isUnavailableSeedDoc, unavailableSeedDocMessage } from "../seed-doc";
@@ -221,7 +222,7 @@ export function nextNumberedCloneName(baseName: string, existingNames: Iterable<
 }
 
 export function cloneProject(source: Project, existingProjects: Project[]): Project {
-  const id = (`p_${Math.random().toString(36).slice(2, 9)}`) as ProjectId;
+  const id = uid<ProjectId>("p_");
   const name = nextNumberedCloneName(source.name, existingProjects.map((p) => p.name));
   const cloned: Project = {
     ...structuredClone(source),

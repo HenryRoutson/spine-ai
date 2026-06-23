@@ -1,8 +1,8 @@
 "use client"
 
-import { Lock } from "lucide-react"
 import { MODULE_META, type PipelineModule, type StructureModel } from "@/lib/types"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
+import { AutoQuoteLock } from "@/lib/module-ui"
 import { PipelineModuleFields } from "@/components/pipeline-module-fields"
 
 type PipelineInspectorProps = {
@@ -27,12 +27,7 @@ export function PipelineInspector({ module: selected, models, modules = [] }: Pi
         <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           {MODULE_META[selected.kind].label}
         </span>
-        {isAutoQuoteStep(selected) && (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-chart-2/40 bg-chart-2/10 px-1.5 py-0.5 text-chart-2">
-            <Lock className="h-3 w-3" />
-            <span className="font-mono text-[9px]">auto</span>
-          </span>
-        )}
+        {isAutoQuoteStep(selected) && <AutoQuoteLock />}
       </div>
       <PipelineModuleFields module={selected} models={models} modules={modules} mode="view" />
     </div>

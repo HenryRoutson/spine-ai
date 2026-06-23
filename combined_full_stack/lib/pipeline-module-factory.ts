@@ -1,5 +1,6 @@
 import type { ModelId, ModuleId, ModuleKind, PipelineModule, StructureModel, StructureModelId } from "@/lib/types"
 import { MODULE_META } from "@/lib/types"
+import { uid } from "@/lib/id"
 import { isLlmKind } from "@/lib/module-kinds"
 
 export type ModuleFactoryOpts = {
@@ -16,10 +17,6 @@ export type ModuleFactoryOpts = {
   prompt?: string
   code?: string
   model?: ModelId
-}
-
-function uid<T extends string = string>(): T {
-  return Math.random().toString(36).slice(2, 9) as T
 }
 
 // AI : shared defaults for UI "add step" and pipeline-assistant materialization.

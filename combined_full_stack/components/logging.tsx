@@ -25,34 +25,11 @@ import { enrichRunModules, modulesFromRunSteps } from "@/lib/pipeline-run-diff"
 import { PipelineCanvas } from "@/components/pipeline-canvas"
 import { PipelineInspector } from "@/components/pipeline-inspector"
 import { RunNotesEditor } from "@/components/run-notes-editor"
-import { Search, ChevronRight, Database, Cpu, Code2, Combine, FileCog, Zap, Maximize2, X, Link2, GitCompareArrows } from "lucide-react"
-import type { DocId, ModuleId, ModuleKind, PipelineRun, RunStepStatus } from "@/lib/types"
-
-const KIND_ICON: Record<ModuleKind, typeof Cpu> = {
-  input: Database,
-  "doc-to-text": FileCog,
-  llm: Cpu,
-  "llm-batch": Cpu,
-  quote: Link2,
-  transform: Code2,
-  combine: Combine,
-  "custom-code": Code2,
-  output: ChevronRight,
-}
-
-// AI : llm steps use prompt/response wording; quote step shows source + extracts → linked spans
-import { isLlmKind } from "@/lib/module-kinds"
-
-function stepIoLabels(kind: ModuleKind) {
-  if (kind === "quote") {
-    return { inTitle: "Source + extracts", outTitle: "Linked quotes" }
-  }
-  const isLlm = isLlmKind(kind)
-  return {
-    inTitle: isLlm ? "Prompt" : "Input",
-    outTitle: isLlm ? "Response" : "Output",
-  }
-}
+import { KIND_ICON } from "@/lib/module-ui"
+import { Search, Cpu, Maximize2, X, GitCompareArrows, Zap, Link2 } from "lucide-react"
+import { resolveRunInputDocIds, runInputDocsSummary } from "@/lib/inference-input"
+import { stepIoLabels } from "@/lib/module-kinds"
+import type { DocId, DocRef, ModuleId, PipelineRun, RunStepStatus } from "@/lib/types"
 
 type PopupPayload = { json?: string; text?: string; title: string }
 
@@ -87,7 +64,8 @@ function RunNotesPreview({ notes }: { notes: string }) {
 function RunPickerColumn({
   label,
   runs,
-  docName,
+  runInputLabel,
+  runInputDocIds,
   selectedId,
   onSelect,
   query,
@@ -95,7 +73,8 @@ function RunPickerColumn({
 }: {
   label: string
   runs: PipelineRun[]
-  docName: (id?: string) => string
+  runInputLabel: (run: PipelineRun) => string
+  runInputDocIds: (run: PipelineRun) => DocId[]
   selectedId: string
   onSelect: (id: string) => void
   query: string
@@ -142,11 +121,11 @@ function RunPickerColumn({
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-xs">{docName(run.inputDocId)}</span>
+                    <span className="truncate font-mono text-xs">{runInputLabel(run)}</span>
                     <div className="flex shrink-0 items-center gap-1.5">
-                      {run.inputDocId && (
-                        <OpenInDocumentsLink docId={run.inputDocId} label="store" className="text-[9px]" />
-                      )}
+                      {runInputDocIds(run).map((docId) => (
+                        <OpenInDocumentsLink key={docId} docId={docId} label="store" className="text-[9px]" />
+                      ))}
                       <Badge
                         variant="outline"
                         className={cn(
@@ -274,7 +253,7 @@ function IoSection({
 }
 
 export function Logging() {
-  const { runs, docs, modules, models } = useStore()
+  const { runs, docs, modules, models, project } = useStore()
   const { focusRunId, clearFocusRun } = useAppShell()
   const [query, setQuery] = useState("")
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
@@ -293,12 +272,18 @@ export function Logging() {
     clearFocusRun()
   }, [focusRunId, clearFocusRun])
 
-  const docName = (id?: string) => docs.find((d) => d.id === id)?.name ?? id ?? "—"
+  const runInputDocIds = (run: PipelineRun) => resolveRunInputDocIds(docs, project, run)
+  const runInputLabel = (run: PipelineRun) => runInputDocsSummary(docs, project, run)
 
   const filtered = useMemo(() => filterRuns(runs, query), [runs, query])
 
   const active = runs.find((r) => r.id === selectedRun) ?? null
-  const activeSourceDoc = active?.inputDocId ? docs.find((d) => d.id === active.inputDocId) : undefined
+  const activeSourceDocs = useMemo(() => {
+    if (!active) return []
+    return runInputDocIds(active)
+      .map((id) => docs.find((d) => d.id === id))
+      .filter((d): d is DocRef => d != null)
+  }, [active, docs, project])
   const activeLlmCalls = active ? collectRunLlmCalls(active.steps) : []
   const popupQuotes = popup?.json ? quotesFromJson(popup.json) : []
 
@@ -371,11 +356,11 @@ export function Logging() {
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <span className="truncate font-mono text-xs">{docName(run.inputDocId)}</span>
+                        <span className="truncate font-mono text-xs">{runInputLabel(run)}</span>
                         <div className="flex shrink-0 items-center gap-1.5">
-                          {run.inputDocId && (
-                            <OpenInDocumentsLink docId={run.inputDocId} label="store" className="text-[9px]" />
-                          )}
+                          {runInputDocIds(run).map((docId) => (
+                            <OpenInDocumentsLink key={docId} docId={docId} label="store" className="text-[9px]" />
+                          ))}
                           <Badge
                           variant="outline"
                           className={cn(
@@ -416,7 +401,9 @@ export function Logging() {
           ) : (
             <ScrollArea className="h-full">
               <div className="space-y-4 p-4">
-                {activeSourceDoc && <InputDocumentLink doc={activeSourceDoc} />}
+                {activeSourceDocs.map((doc) => (
+                  <InputDocumentLink key={doc.id} doc={doc} />
+                ))}
 
                 <RunNotesEditor runId={active.id} notes={active.notes} />
 
@@ -614,7 +601,11 @@ export function Logging() {
                             Inspector
                           </span>
                         </div>
-                        <PipelineInspector module={selectedPipelineModule} models={models} />
+                        <PipelineInspector
+                          module={selectedPipelineModule}
+                          models={models}
+                          modules={runPipeline.modules}
+                        />
                       </aside>
                     </div>
                   </div>
@@ -648,7 +639,8 @@ export function Logging() {
               <RunPickerColumn
                 label="Pipeline A"
                 runs={runs}
-                docName={docName}
+                runInputLabel={runInputLabel}
+                runInputDocIds={runInputDocIds}
                 selectedId={compareRunA}
                 onSelect={setCompareRunA}
                 query={compareQueryA}
@@ -657,7 +649,8 @@ export function Logging() {
               <RunPickerColumn
                 label="Pipeline B"
                 runs={runs}
-                docName={docName}
+                runInputLabel={runInputLabel}
+                runInputDocIds={runInputDocIds}
                 selectedId={compareRunB}
                 onSelect={setCompareRunB}
                 query={compareQueryB}

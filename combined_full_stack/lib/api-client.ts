@@ -32,6 +32,11 @@ export async function apiText(url: string, init?: RequestInit): Promise<string> 
     const body = await readApiErrorBody(res);
     throw new Error(formatApiError(url, res, body));
   }
+  const type = res.headers.get("content-type") ?? "";
+  if (type.includes("application/json")) {
+    const data = (await res.json()) as { text?: string };
+    if (typeof data.text === "string") return data.text;
+  }
   return res.text();
 }
 

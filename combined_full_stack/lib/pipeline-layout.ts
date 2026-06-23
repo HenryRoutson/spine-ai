@@ -1,3 +1,4 @@
+import type { StepUiState } from "@/lib/run-engine"
 import type { PipelineModule } from "@/lib/types"
 import { isLlmKind } from "@/lib/module-kinds"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
@@ -46,4 +47,18 @@ export function blocksInsertBefore(modules: PipelineModule[], insertAt: number):
   const prev = modules[insertAt - 1]
   const next = modules[insertAt]
   return isLlmKind(prev.kind) && isAutoQuoteStep(next)
+}
+
+type StepUiStatus = StepUiState["status"]
+
+// AI : combine rows show merged status on the combine step; input keeps its own state.
+export function mergeCombineSegmentStatus(
+  combineStatus: StepUiStatus,
+  inputStatus: StepUiStatus,
+): StepUiStatus {
+  if (combineStatus === "error" || inputStatus === "error") return "error"
+  if (combineStatus === "running" || inputStatus === "running") return "running"
+  if (combineStatus === "cached" || inputStatus === "cached") return "cached"
+  if (combineStatus !== "idle" || inputStatus !== "idle") return "ok"
+  return "idle"
 }

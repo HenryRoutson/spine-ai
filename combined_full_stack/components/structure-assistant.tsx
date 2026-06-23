@@ -10,6 +10,7 @@ import {
   User,
   X,
 } from "lucide-react"
+import { uid } from "@/lib/id"
 import { useStore } from "@/lib/store"
 import type { StructureModel } from "@/lib/types"
 import { Button } from "@/components/ui/button"
@@ -39,15 +40,11 @@ const STARTERS = [
   "Simplify these models — merge redundant fields",
 ]
 
-function msgId() {
-  return Math.random().toString(36).slice(2, 9)
-}
-
 export function StructureAssistant() {
   const { project, models, model: globalModel, setModels } = useStore()
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
-      id: msgId(),
+      id: uid(),
       role: "assistant",
       content:
         "Describe the output structures you need — I'll propose pydantic models you can approve or reject.",
@@ -76,7 +73,7 @@ export function StructureAssistant() {
       )
     }
 
-    const userMsg: ChatMessage = { id: msgId(), role: "user", content: trimmed }
+    const userMsg: ChatMessage = { id: uid(), role: "user", content: trimmed }
     setMessages((prev) => [...prev, userMsg])
     setInput("")
     setLoading(true)
@@ -102,7 +99,7 @@ export function StructureAssistant() {
       if (!res.ok) throw new Error(data.error ?? `request failed (${res.status})`)
 
       const assistantMsg: ChatMessage = {
-        id: msgId(),
+        id: uid(),
         role: "assistant",
         content: data.message as string,
         proposal: data.proposal ?? undefined,

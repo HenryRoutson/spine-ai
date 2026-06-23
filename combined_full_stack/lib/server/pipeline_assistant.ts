@@ -1,12 +1,18 @@
 import { z } from "zod";
 import { llmStructured } from "./llm";
 import {
+  ChatTurn,
+  resolveStructureIdFromModels,
+  structureModelSpecSchema,
+} from "./assistant-shared";
+import {
   computeInvalid,
   formatPipelineValidationErrors,
   syncAutoQuoteSteps,
 } from "./validity";
 import { UsageLedger } from "./usage";
 import { createPipelineModule } from "@/lib/pipeline-module-factory";
+import { uid } from "@/lib/id";
 import {
   DEFAULT_MODEL,
   INPUT_TYPES,
@@ -50,19 +56,7 @@ const moduleSpecSchema = z.object({
   cached: z.boolean().optional(),
 });
 
-const modelSpecSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  fields: z.array(
-    z.object({
-      name: z.string(),
-      type: z.string(),
-      optional: z.boolean(),
-      description: z.string(),
-      ref: z.string().optional(),
-    }),
-  ),
-});
+const modelSpecSchema = structureModelSpecSchema;
 
 const assistantResponseSchema = z.object({
   message: z.string(),
@@ -94,23 +88,7 @@ export type PipelineAssistantOpts = {
 
 const MAX_VALIDATION_RETRIES = 2;
 
-export type ChatTurn = { role: "user" | "assistant"; content: string };
-
-function uid<T extends string = string>(): T {
-  return Math.random().toString(36).slice(2, 9) as T;
-}
-
-function resolveStructureId(
-  hint: string | undefined,
-  models: StructureModel[],
-): StructureModelId | undefined {
-  if (!hint?.trim()) return undefined;
-  const key = hint.trim().toLowerCase();
-  const byId = models.find((m) => m.id.toLowerCase() === key);
-  if (byId) return byId.id;
-  const byName = models.find((m) => m.name.toLowerCase() === key);
-  return byName?.id;
-}
+export type { ChatTurn };
 
 function defaultOutForKind(_kind: ModuleKind, models: StructureModel[]): StructureModelId | undefined {
   return models[0]?.id;
@@ -121,8 +99,8 @@ function makeModuleFromSpec(
   models: StructureModel[],
   globalModel: ModelId,
 ): PipelineModule {
-  const inId = resolveStructureId(spec.structureIn, models);
-  const outId = resolveStructureId(spec.structureOut, models) ?? defaultOutForKind(spec.kind, models);
+  const inId = resolveStructureIdFromModels(spec.structureIn, models);
+  const outId = resolveStructureIdFromModels(spec.structureOut, models) ?? defaultOutForKind(spec.kind, models);
   const modelOpt = MODEL_OPTIONS.find((m) => m.id === spec.model);
   return createPipelineModule(
     {
@@ -188,7 +166,7 @@ function materializeModels(
       type: f.type as ModelField["type"],
       optional: f.optional,
       description: f.description,
-      ref: f.ref as StructureModelId | undefined,
+      ref: resolveStructureIdFromModels(f.ref, next),
     }));
     const model: StructureModel = { id, name: spec.name, description: spec.description, fields };
     next.push(model);

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   FileText,
   CheckCircle2,
@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils"
 import { inputTypeLabel, inputNameRestrictionLabel } from "@/lib/inference-input"
 import { inferenceInputIssueMessage } from "@/lib/inference-validity"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
-import { segmentPipeline } from "@/lib/pipeline-layout"
+import { segmentPipeline, mergeCombineSegmentStatus } from "@/lib/pipeline-layout"
 import { useInferenceRun } from "@/lib/use-inference-run"
 import { RunNotesPad } from "@/components/run-notes-pad"
 
@@ -45,6 +45,7 @@ export function Inference() {
     addRun,
     updateRunNotes,
     docs,
+    runs,
     billingAccount,
     refreshBilling,
     inferenceInputDocIds,
@@ -62,6 +63,7 @@ export function Inference() {
     modules,
     model,
     docs,
+    runs,
     inferenceInputDocIds,
     setInferenceInputDocIds,
     addRun,
@@ -220,18 +222,11 @@ export function Inference() {
                     if (seg.kind === "combine") {
                       const combineUi = run.stepStates.get(seg.combine.id)
                       const inputUi = run.stepStates.get(seg.input.id)
-                      const combineState = combineUi?.status ?? "idle"
                       const inputState = inputUi?.status ?? "idle"
-                      const state =
-                        combineState === "error" || inputState === "error"
-                          ? "error"
-                          : combineState === "running" || inputState === "running"
-                            ? "running"
-                            : combineState === "cached" && inputState === "cached"
-                              ? "cached"
-                              : combineState !== "idle" || inputState !== "idle"
-                                ? "ok"
-                                : "idle"
+                      const state = mergeCombineSegmentStatus(
+                        combineUi?.status ?? "idle",
+                        inputState,
+                      )
                       return (
                         <div key={seg.combine.id} className="space-y-1">
                           <StepRow label={seg.combine.label} state={state} sub={combineUi?.sub} />
@@ -404,11 +399,19 @@ function CyclingWaitPhrase({ phrase, className }: { phrase: string; className?: 
 
 function ErrorBanner({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+    }
+  }, [])
 
   async function copyError() {
     await navigator.clipboard.writeText(text)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+    copyTimerRef.current = setTimeout(() => setCopied(false), 2000)
   }
 
   return (

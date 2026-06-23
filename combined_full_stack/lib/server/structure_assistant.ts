@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { llmStructured } from "./llm";
+import {
+  ChatTurn,
+  resolveStructureIdFromMap,
+  structureModelSpecSchema,
+} from "./assistant-shared";
+import { uid } from "@/lib/id";
 import { UsageLedger } from "./usage";
 import {
   DEFAULT_MODEL,
@@ -12,21 +18,7 @@ import {
   type StructureModelId,
 } from "./types";
 
-const fieldTypeValues = FIELD_TYPES as [FieldType, ...FieldType[]];
-
-const modelSpecSchema = z.object({
-  name: z.string(),
-  description: z.string(),
-  fields: z.array(
-    z.object({
-      name: z.string(),
-      type: z.enum(fieldTypeValues),
-      optional: z.boolean(),
-      description: z.string(),
-      ref: z.string().optional(),
-    }),
-  ),
-});
+const modelSpecSchema = structureModelSpecSchema;
 
 const assistantResponseSchema = z.object({
   message: z.string(),
@@ -44,20 +36,7 @@ export type StructureAssistantResult = {
   proposal: StructureAssistantProposal | null;
 };
 
-export type ChatTurn = { role: "user" | "assistant"; content: string };
-
-function uid<T extends string = string>(): T {
-  return Math.random().toString(36).slice(2, 9) as T;
-}
-
-function resolveStructureId(
-  hint: string | undefined,
-  byName: Map<string, StructureModelId>,
-): StructureModelId | undefined {
-  if (!hint?.trim()) return undefined;
-  const key = hint.trim().toLowerCase();
-  return byName.get(key);
-}
+export type { ChatTurn };
 
 function materializeStructures(
   specs: StructureAssistantModelSpec[],
@@ -79,10 +58,10 @@ function materializeStructures(
     const fields: ModelField[] = spec.fields.map((f) => ({
       id: prevFieldsByName.get(f.name.toLowerCase())?.id ?? uid(),
       name: f.name,
-      type: f.type,
+      type: f.type as FieldType,
       optional: f.optional,
       description: f.description,
-      ref: resolveStructureId(f.ref, byName),
+      ref: resolveStructureIdFromMap(f.ref, byName, existing),
     }));
 
     return {
@@ -160,9 +139,8 @@ export async function proposeStructureChange(
     },
   );
 
-  const proposal: StructureAssistantProposal | null = raw.models?.length
-    ? { models: materializeStructures(raw.models, project.models) }
-    : null;
+  const proposal: StructureAssistantProposal | null =
+    raw.models == null ? null : { models: materializeStructures(raw.models, project.models) };
 
   return { message: raw.message, proposal };
 }

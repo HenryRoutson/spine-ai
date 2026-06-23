@@ -15,6 +15,7 @@ import {
   type ReactNode,
 } from "react"
 import { confidentialUploadWarning } from "@/lib/confidential-upload"
+import { uid } from "@/lib/id"
 import type {
   BillingPoint,
   DocId,
@@ -41,11 +42,6 @@ export type BillingAccountView = {
   topupOptionsCents: number[]
   subCentsPerMonth: number
   billingCapCents: number
-}
-
-// AI : generic so `id: uid()` infers branded ids (ModuleId, StructureModelId, …) in place.
-function uid<T extends string = string>(): T {
-  return Math.random().toString(36).slice(2, 9) as T
 }
 
 interface ServerState {
@@ -189,9 +185,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let alive = true
-    const cached = activeProjectId ? prefetchCache.current.get(activeProjectId) : undefined
-    // AI : after first hydrate, swap main content for a loader while runs/docs re-scope.
-    if (hydratedRef.current && activeProjectId && !cached?.data) setProjectLoading(true)
+    // AI : always gate the main shell on project switch — prefetched data still needs applyState.
+    if (hydratedRef.current && activeProjectId) setProjectLoading(true)
 
     loadProjectState(activeProjectId)
       .then((data) => {
@@ -213,6 +208,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     // AI : refetch on project switch so runs/billing re-scope to the active project.
   }, [activeProjectId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+    }
+  }, [])
 
   // AI : Stripe Checkout success redirect — confirm session once, then strip query params.
   useEffect(() => {
@@ -272,11 +273,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .catch((err) => setSaveError(err instanceof Error ? err.message : "Failed to create project"))
   }, [])
 
-  const cloneFromTemplate = useCallback((templateId: string) => {
+  const postNewProject = useCallback((body: { templateId?: string; cloneFrom?: string }) => {
     return apiJson<Project>("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ templateId }),
+      body: JSON.stringify(body),
     })
       .then((fresh) => {
         setState((prev) => (prev ? { ...prev, projects: [...prev.projects, fresh] } : prev))
@@ -284,27 +285,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return fresh
       })
       .catch((err) => {
-        setSaveError(err instanceof Error ? err.message : "Failed to clone template")
+        setSaveError(err instanceof Error ? err.message : "Failed to create project")
         throw err
       })
   }, [])
 
-  const cloneProjectById = useCallback((cloneFrom: string) => {
-    return apiJson<Project>("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cloneFrom }),
-    })
-      .then((fresh) => {
-        setState((prev) => (prev ? { ...prev, projects: [...prev.projects, fresh] } : prev))
-        setActiveProjectId(fresh.id)
-        return fresh
-      })
-      .catch((err) => {
-        setSaveError(err instanceof Error ? err.message : "Failed to clone project")
-        throw err
-      })
-  }, [])
+  const cloneFromTemplate = useCallback(
+    (templateId: string) => postNewProject({ templateId }),
+    [postNewProject],
+  )
+
+  const cloneProjectById = useCallback(
+    (cloneFrom: string) => postNewProject({ cloneFrom }),
+    [postNewProject],
+  )
 
   const resyncExamples = useCallback(() => {
     return apiJson<{ updated: number }>("/api/projects/resync-examples", { method: "POST" })

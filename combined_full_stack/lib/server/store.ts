@@ -9,7 +9,7 @@ import {
   readSeedDocContent,
   type SeedDocSpec,
 } from "./seed";
-import { computeInvalid, insertMissingQuoteSteps, migrateProjectModules, syncAutoQuoteSteps } from "./validity";
+import { computeInvalid, migrateProjectModules, syncAutoQuoteSteps } from "./validity";
 import type {
   DocId,
   DocLabel,
@@ -20,6 +20,7 @@ import type {
   Project,
   ProjectId,
   RunFingerprint,
+  RunId,
 } from "./types";
 
 // AI : content hash == doc id, so identical uploads dedupe to one ref (Documents tab).
@@ -307,10 +308,12 @@ export class JsonStore implements Store {
   }
 
   addRun(projectId: ProjectId, run: PipelineRun): void {
-    // AI : TODO bug — runs are capped at 100 but runProjects entries for evicted runs are never
-    // AI : pruned, so the map grows unbounded in store.json.
     this.state.runProjects[run.id] = projectId;
     this.state.runs = [run, ...this.state.runs].slice(0, 100);
+    const kept = new Set(this.state.runs.map((r) => r.id));
+    for (const id of Object.keys(this.state.runProjects)) {
+      if (!kept.has(id as RunId)) delete this.state.runProjects[id as RunId];
+    }
     this.persist();
   }
 

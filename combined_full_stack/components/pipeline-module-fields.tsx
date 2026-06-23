@@ -22,6 +22,7 @@ import {
   MODULE_META,
   type PipelineModule,
   type StructureModel,
+  type StructureModelId,
 } from "@/lib/types"
 import { inputTypeLabel, inputNameRestrictionLabel, inputTypesForModule } from "@/lib/inference-input"
 import {
@@ -92,6 +93,38 @@ export function StaticValue({ children, mono, pre }: { children?: React.ReactNod
   )
 }
 
+function StructureModelSelect({
+  models,
+  value,
+  onValueChange,
+  invalid,
+}: {
+  models: StructureModel[]
+  value: StructureModelId | undefined
+  onValueChange: (v: StructureModelId | undefined) => void
+  invalid?: boolean
+}) {
+  const items = useMemo(() => models.map((m) => ({ value: m.id, label: m.name })), [models])
+  return (
+    <Select
+      value={value ?? null}
+      onValueChange={(v) => onValueChange((v ?? undefined) as StructureModelId | undefined)}
+      items={items}
+    >
+      <SelectTrigger className={cn("h-8 font-mono text-xs", invalid && "border-destructive/70")}>
+        <SelectValue placeholder="Select model" />
+      </SelectTrigger>
+      <SelectContent>
+        {models.map((m) => (
+          <SelectItem key={m.id} value={m.id} label={m.name} className="font-mono text-xs">
+            {m.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
 type PipelineModuleFieldsProps = {
   module: PipelineModule
   models: StructureModel[]
@@ -115,7 +148,6 @@ export function PipelineModuleFields({
   onUpdate,
 }: PipelineModuleFieldsProps) {
   const llmSchemaPreview = useLlmSchemaPreview(selected, models)
-  const structureModelItems = useMemo(() => models.map((m) => ({ value: m.id, label: m.name })), [models])
   const edit = mode === "edit" && onUpdate
 
   if (isAutoQuoteStep(selected)) {
@@ -259,24 +291,12 @@ export function PipelineModuleFields({
             hintTone={invalid?.kind === "no-output" ? "error" : "warning"}
           >
             {edit ? (
-              <Select
-                value={selected.outStructureId ?? null}
-                onValueChange={(v) => onUpdate!({ outStructureId: v ?? undefined })}
-                items={structureModelItems}
-              >
-                <SelectTrigger
-                  className={cn("h-8 font-mono text-xs", invalid?.kind === "no-output" && "border-destructive/70")}
-                >
-                  <SelectValue placeholder="Select model" />
-                </SelectTrigger>
-                <SelectContent>
-                  {models.map((m) => (
-                    <SelectItem key={m.id} value={m.id} label={m.name} className="font-mono text-xs">
-                      {m.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <StructureModelSelect
+                models={models}
+                value={selected.outStructureId}
+                onValueChange={(v) => onUpdate!({ outStructureId: v })}
+                invalid={invalid?.kind === "no-output"}
+              />
             ) : (
               <StaticValue mono>{modelName(models, selected.outStructureId)}</StaticValue>
             )}
@@ -295,27 +315,12 @@ export function PipelineModuleFields({
           hintTone={selected.kind === "output" && invalid?.kind === "no-output" ? "error" : "warning"}
         >
           {edit ? (
-            <Select
-              value={selected.inStructureId ?? null}
-              onValueChange={(v) => onUpdate!({ inStructureId: v ?? undefined })}
-              items={structureModelItems}
-            >
-              <SelectTrigger
-                className={cn(
-                  "h-8 font-mono text-xs",
-                  selected.kind === "output" && invalid?.kind === "no-output" && "border-destructive/70",
-                )}
-              >
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent>
-                {models.map((m) => (
-                  <SelectItem key={m.id} value={m.id} label={m.name} className="font-mono text-xs">
-                    {m.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <StructureModelSelect
+              models={models}
+              value={selected.inStructureId}
+              onValueChange={(v) => onUpdate!({ inStructureId: v })}
+              invalid={selected.kind === "output" && invalid?.kind === "no-output"}
+            />
           ) : (
             <StaticValue mono>{modelName(models, selected.inStructureId)}</StaticValue>
           )}
@@ -329,24 +334,12 @@ export function PipelineModuleFields({
           hintTone={invalid?.kind === "no-output" ? "error" : "warning"}
         >
           {edit ? (
-            <Select
-              value={selected.outStructureId ?? null}
-              onValueChange={(v) => onUpdate!({ outStructureId: v ?? undefined })}
-              items={structureModelItems}
-            >
-              <SelectTrigger
-                className={cn("h-8 font-mono text-xs", invalid?.kind === "no-output" && "border-destructive/70")}
-              >
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent>
-                {models.map((m) => (
-                  <SelectItem key={m.id} value={m.id} label={m.name} className="font-mono text-xs">
-                    {m.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <StructureModelSelect
+              models={models}
+              value={selected.outStructureId}
+              onValueChange={(v) => onUpdate!({ outStructureId: v })}
+              invalid={invalid?.kind === "no-output"}
+            />
           ) : (
             <StaticValue mono>{modelName(models, selected.outStructureId)}</StaticValue>
           )}

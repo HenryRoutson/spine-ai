@@ -22,6 +22,8 @@ export function useRunNotesFlushOnLeave(
       if (!leavingRunId) return
       const trimmed = draftRef.current.trim()
       const next = trimmed || undefined
+      // AI : cache-hit loads run.notes but draft stays "" — never wipe persisted notes on leave.
+      if (!trimmed && leavingSaved) return
       if (trimmed === (leavingSaved ?? "")) return
       void updateRunNotes(leavingRunId, next)
         .then(() => onSaved?.(leavingRunId, next))

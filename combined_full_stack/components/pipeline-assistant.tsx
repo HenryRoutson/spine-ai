@@ -11,6 +11,7 @@ import {
   X,
   AlertTriangle,
 } from "lucide-react"
+import { uid } from "@/lib/id"
 import { useStore } from "@/lib/store"
 import type { PipelineModule, StructureModel } from "@/lib/types"
 import { MODULE_META } from "@/lib/types"
@@ -44,15 +45,11 @@ const STARTERS = [
   "Simplify this pipeline — remove unnecessary steps",
 ]
 
-function msgId() {
-  return Math.random().toString(36).slice(2, 9)
-}
-
 export function PipelineAssistant() {
   const { project, modules, models, model: globalModel, setModules, setModels } = useStore()
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
-      id: msgId(),
+      id: uid(),
       role: "assistant",
       content:
         "Describe the pipeline you want — I'll propose steps you can approve or reject. Reference your structure models by name.",
@@ -134,7 +131,7 @@ export function PipelineAssistant() {
       )
     }
 
-    const userMsg: ChatMessage = { id: msgId(), role: "user", content: trimmed }
+    const userMsg: ChatMessage = { id: uid(), role: "user", content: trimmed }
     setMessages((prev) => [...prev, userMsg])
     setInput("")
     setLoading(true)
@@ -166,7 +163,7 @@ export function PipelineAssistant() {
       const data = await readAssistantStream(res)
 
       const assistantMsg: ChatMessage = {
-        id: msgId(),
+        id: uid(),
         role: "assistant",
         content: data.message as string,
         proposal: data.proposal ?? undefined,

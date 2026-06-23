@@ -1,5 +1,5 @@
 import { docsForProject } from "@/lib/project-docs"
-import { INPUT_TYPES, type DocId, type DocRef, type InputType, type InputTypeSpec, type ModuleId, type PipelineModule, type Project } from "@/lib/types"
+import { INPUT_TYPES, type DocId, type DocRef, type InputType, type InputTypeSpec, type ModuleId, type PipelineModule, type PipelineRun, type Project } from "@/lib/types"
 
 export function inputTypesForModule(inputModule: PipelineModule): InputType[] {
   if (!inputModule.inputType) return []
@@ -157,4 +157,72 @@ export function inputDocIdsForModules(
   inputDocs: Partial<Record<ModuleId, DocRef>>,
 ): DocId[] {
   return inputModules.map((m) => inputDocs[m.id]!.id as DocId)
+}
+
+
+// AI : resolve every input slot for dedup (incl. legacy runs with only inputDocId).
+export function buildRunInputDocIds(
+  docs: DocRef[],
+  project: Project,
+  inputDocId: DocId,
+  extraInputDocIds: DocId[] = [],
+  seedDocNames?: string[],
+): DocId[] {
+  const inputMods = orderedInputModules(project.modules)
+  const explicit = [inputDocId, ...extraInputDocIds].filter(Boolean) as DocId[]
+  const names = seedDocNames ?? project.seedDocNames
+  const scoped = names?.length ? docs.filter((d) => new Set(names).has(d.name)) : docs
+  const inputQueue: DocId[] = []
+  const used = new Set<DocId>()
+  for (let i = 0; i < inputMods.length; i++) {
+    const mod = inputMods[i]
+    const explicitId = explicit[i]
+    if (explicitId) {
+      inputQueue.push(explicitId)
+      used.add(explicitId)
+      continue
+    }
+    const fallback = scoped
+      .filter(
+        (d) =>
+          d.label === "inference" &&
+          !used.has(d.id) &&
+          docMatchesInputModule(d, mod),
+      )
+      .reverse()[0]?.id
+    if (fallback) {
+      inputQueue.push(fallback)
+      used.add(fallback)
+    }
+  }
+  return inputQueue
+}
+
+export function resolveRunInputDocIds(docs: DocRef[], project: Project, run: PipelineRun): DocId[] {
+  if (run.inputDocIds?.length) return run.inputDocIds
+  if (!run.inputDocId) return []
+  return buildRunInputDocIds(docs, project, run.inputDocId, [])
+}
+
+export function runInputDocIdsMatch(
+  docs: DocRef[],
+  project: Project,
+  run: PipelineRun,
+  orderedInputDocIds: DocId[],
+): boolean {
+  const resolved = resolveRunInputDocIds(docs, project, run)
+  if (resolved.length !== orderedInputDocIds.length) return false
+  return resolved.every((id, i) => id === orderedInputDocIds[i])
+}
+
+export function docLabel(docs: DocRef[], docId?: DocId): string {
+  if (!docId) return "—"
+  return docs.find((d) => d.id === docId)?.name ?? docId
+}
+
+export function runInputDocsSummary(docs: DocRef[], project: Project, run: PipelineRun): string {
+  const ids = resolveRunInputDocIds(docs, project, run)
+  if (!ids.length) return "—"
+  if (ids.length === 1) return docLabel(docs, ids[0])
+  return ids.map((id) => docLabel(docs, id)).join(", ")
 }

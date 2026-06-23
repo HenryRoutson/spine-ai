@@ -74,7 +74,7 @@ export type StartRunResult = {
 
 export type MatchRunResult = {
   fingerprint: string;
-  cachedRunId: string | null;
+  cachedRunId: PipelineRun["id"] | null;
   run: PipelineRun | null;
 };
 

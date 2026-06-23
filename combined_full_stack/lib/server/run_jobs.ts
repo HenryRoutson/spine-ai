@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { uid } from "@/lib/id";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -273,7 +273,7 @@ export async function claimJobResume(
 }
 
 export async function createJob(ownerId: JobOwnerId, db: JobDb): Promise<RunJobId> {
-  const id = (`job_${randomUUID()}`) as RunJobId;
+  const id = uid<RunJobId>("job_");
   jobLog.info(`createJob`, { jobId: id, ownerId, backend: db ? "supabase" : "local" });
   const job: RunJob = { steps: [], logs: [] };
   setJob(ownerId, id, job);

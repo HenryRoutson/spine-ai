@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { uid } from "@/lib/id";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { allProjectSeeds, blankProject, cloneProject } from "@/lib/server/seed";
 import { migrateProjectModules } from "@/lib/server/validity";
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
     project = migrateProjectModules(cloneProject(source, existing));
     apiLog.info(`POST /api/projects — clone project`, { cloneFrom: body.cloneFrom, projectId: project.id });
   } else {
-    project = blankProject(("p_" + Math.random().toString(36).slice(2, 9)) as ProjectId);
+    project = blankProject(uid<ProjectId>("p_"));
     apiLog.info(`POST /api/projects — blank project`, { projectId: project.id });
   }
 

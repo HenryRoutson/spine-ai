@@ -17,6 +17,7 @@ import {
   wrapListForOutputStructure,
 } from "./structure";
 import type { Store } from "./store";
+import { uid } from "../id";
 import { buildRunInputDocIds, computeRunFingerprint, stepCacheKey } from "./run_fingerprint";
 import { docMatchesInputModule, inputTypeLabel, orderedInputModules } from "../inference-input";
 import { isLlmKind } from "@/lib/module-kinds";
@@ -145,6 +146,32 @@ function materializeHints(m: PipelineModule, ctx: RunCtx, docId?: DocId, sourceT
     note: m.note,
     sourceText: sourceText ?? ctx.sourceText,
   };
+}
+
+// AI : cache hits skip execModule — still run queue/source side effects input and doc-to-text rely on.
+function applyModuleSideEffects(
+  m: PipelineModule,
+  ctx: RunCtx,
+  store: Store,
+  log: ReturnType<typeof runLogger>,
+): void {
+  if (m.kind === "input") {
+    const docId = ctx.inputQueue.shift();
+    const content = docId ? store.docContent(docId) ?? "" : "";
+    log.info(`input module side effects`, { docId, chars: content.length, queueRemaining: ctx.inputQueue.length, cached: true });
+    if (!ctx.sourceText) {
+      ctx.sourceText = content;
+      ctx.sourceDocId = docId ?? ("none" as DocId);
+    }
+    return;
+  }
+  if (m.kind === "doc-to-text") {
+    const upstream = (ctx.prevModuleId && ctx.outputs.get(ctx.prevModuleId)) as { doc_id?: DocId; body?: string } | undefined;
+    const body = upstream?.body ?? ctx.sourceText;
+    const docId = upstream?.doc_id ?? ctx.sourceDocId;
+    ctx.sourceText = body;
+    ctx.sourceDocId = docId;
+  }
 }
 
 function serializeCtx(ctx: RunCtx): RunCheckpoint["ctx"] {
@@ -539,12 +566,11 @@ async function runLinearStepsFrom(
 
     const key = stepCacheKey(projectId, m, m.model ?? model, ctx.inputQueue);
     log.debug(`cache lookup`, { key, cachedFlag: !!m.cached });
-    // AI : TODO bug — a cache hit bypasses execModule, so its side effects never run:
-    // AI : `input` skips inputQueue.shift() and never sets ctx.sourceText/sourceDocId.
     const cached = m.cached ? readCache(key) : undefined;
 
     try {
       if (cached) {
+        applyModuleSideEffects(m, ctx, ctx.store, log);
         status = "cached";
         result = { value: cached.value, preview: "(from cache)", json: cached.json };
         log.info(`cache HIT`, { moduleId: m.id, key });
@@ -659,7 +685,7 @@ export async function runPipeline(
   const persist = opts.persist ?? true;
 
   const ledger = new UsageLedger();
-  const runId = ("run_" + Math.random().toString(36).slice(2, 9)) as RunId;
+  const runId = uid<RunId>("run_");
   const log = runLogger(runId);
   const startedAt = Date.now();
 
