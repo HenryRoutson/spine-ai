@@ -1,14 +1,10 @@
 
-build demo in v0
-use open router to get demo working
-add option for rlm and placeholder for claude code.
-
-
 
 
 - human to setup github and google sign in
 - rm china and us from chatbot selection
 - AB testing 
+- setup claude code as a step option
 
 input pdf to source doucment doesn't make sense and is implicit. 
   should be to either text or json and that's it. then a step after that which validated what it is if json. use same lock techniqe to add this autoamaticcly if it's a json as link quotes.
