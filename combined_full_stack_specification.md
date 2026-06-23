@@ -175,3 +175,10 @@ Default human view when opening JSON in the document viewer.
 
   JSON
   Compact syntax view with foldable blocks
+
+
+
+
+
+# other features
+backend supabase should contain profit per user as a virtual table or concrete table. main expense is llm calls, ensure no user is arbitraging some mispriced llm calls. block account if value goes below -10$. ensure safegard.
