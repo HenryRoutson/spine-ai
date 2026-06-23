@@ -2,6 +2,7 @@ import { type ZodType } from "zod";
 import {
   getStringResponse,
   getStructuredResponse,
+  getStructuredResponsesParallel,
   type ChatOptions,
 } from "./openrouter_llm";
 import { type ServerLogger } from "./server_logger";
@@ -51,34 +52,20 @@ export function llmStructured<T>(
   return getStructuredResponse(prompt, schema, chatOpts(ctx, log), log);
 }
 
-// AI : batch llm — one structured (zod-validated) call per list item with bounded concurrency,
-// AI : merged back into a typed list in input order. Powers the "llm-batch" pipeline step.
+// AI : batch llm — fires all items in one http1-burst parallel round (see openrouter_llm.parallelChat).
 export async function llmBatchStructured<T>(
   items: unknown[],
   promptFor: (item: unknown, index: number) => string,
   schema: ZodType<T>,
   ctx: CallContext,
-  // AI : default 2 — matches openrouter_llm in-flight cap; 4 parallel calls routinely 429 DeepInfra.
-  concurrency = 2,
   log?: ServerLogger,
   onProgress?: (current: number, total: number) => void,
 ): Promise<T[]> {
-  log?.info(`llmBatchStructured start`, { itemCount: items.length, concurrency, model: ctx.model });
-  const out: T[] = new Array(items.length);
-  let next = 0;
-  let completed = 0;
+  log?.info(`llmBatchStructured start`, { itemCount: items.length, model: ctx.model });
   onProgress?.(0, items.length);
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++;
-      log?.debug(`batch item start`, { index: i, total: items.length });
-      out[i] = await llmStructured(promptFor(items[i], i), schema, ctx, log);
-      completed++;
-      onProgress?.(completed, items.length);
-      log?.info(`batch item done`, { index: i, completed, total: items.length });
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+  const prompts = items.map((item, i) => promptFor(item, i));
+  const rows = await getStructuredResponsesParallel(prompts, schema, chatOpts(ctx, log), log);
+  onProgress?.(items.length, items.length);
   log?.info(`llmBatchStructured complete`, { itemCount: items.length });
-  return out;
+  return rows;
 }

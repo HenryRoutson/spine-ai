@@ -384,7 +384,6 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         (item) => `${m.prompt ?? "Process the item."}\n\nITEM:\n${JSON.stringify(item, null, 2)}`,
         schema,
         { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls },
-        2,
         log.child("llm-batch"),
         (current, total) => ctx.reportSub?.({ label: "LLM calls", current, total }),
       );

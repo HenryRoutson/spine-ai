@@ -1,4 +1,5 @@
-import { z, type ZodType } from "zod";
+import { type ZodType } from "zod";
+import { Agent, fetch as undiciFetch, type Dispatcher } from "undici";
 import { structuredLlmPrompt } from "./structure";
 import { type ServerLogger, logger } from "./server_logger";
 // AI : env loading is centralised in ./config (cwd-anchored) — importing it for the
@@ -15,6 +16,13 @@ type JsonModeOn = boolean;
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_AUTH_KEY_URL = "https://openrouter.ai/api/v1/auth/key";
 const DEFAULT_MODEL = "deepseek/deepseek-chat" as ModelSlug;
+
+export type ParallelStrategy = "http1-burst" | "http1-pooled";
+
+// AI : macOS/Linux — burst wins (scripts/benchmark_parallel_openrouter.mjs). Windows ~64 socket cap → pool.
+export function defaultParallelStrategy(): ParallelStrategy {
+  return process.platform === "win32" ? "http1-pooled" : "http1-burst";
+}
 
 // AI : /models is public — only /auth/key proves the key can run inference (not mgmt/provisioning).
 let inferenceKeyCheck: Promise<void> | null = null;
@@ -36,6 +44,12 @@ export interface ChatOptions {
   onRoundTrip?: (inputChars: number, outputChars: number, ok: boolean, latencyMs: number) => void;
 }
 
+export interface ParallelChatResult {
+  index: number;
+  content: RawReply;
+  latencyMs: number;
+}
+
 // AI : bug fix — without an explicit cap OpenRouter reserves the model's max output (64k for
 // AI : Anthropic) against the account balance and 402s; 8k is plenty for every step we run.
 const DEFAULT_MAX_TOKENS = 8192;
@@ -43,7 +57,7 @@ const DEFAULT_MAX_TOKENS = 8192;
 type HttpStatus = number;
 type RetryAfterSeconds = number;
 
-// AI : shared OpenRouter keys hit upstream 429s when llm-batch fires 4 parallel calls; cap in-flight.
+// AI : single pipeline steps only — llm-batch bypasses this via parallelChat.
 const MAX_IN_FLIGHT = 2;
 let inFlight = 0;
 const slotWaiters: (() => void)[] = [];
@@ -73,6 +87,7 @@ const RETRYABLE_STATUSES = new Set<HttpStatus>([429, 502, 503, 529]);
 const MAX_CHAT_ATTEMPTS = 6;
 const RETRY_BASE_MS = 2000;
 const RETRY_MAX_MS = 30000;
+const POOLED_CONNECTIONS = 8;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -131,6 +146,100 @@ function openRouterHeaders(key: ApiKey): Record<string, string> {
   };
 }
 
+// AI : response slug may differ (deepseek-chat → deepseek-chat-v3) but must stay same model family.
+export function assertResponseModel(responseModel: string, requested: ModelSlug): void {
+  const family = requested.split("/")[0].toLowerCase();
+  if (!responseModel.toLowerCase().startsWith(`${family}/`)) {
+    throw new Error(`model mismatch: requested ${requested}, got ${responseModel}`);
+  }
+}
+
+function buildChatBody(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn): string {
+  const messages = [
+    ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
+    { role: "user" as const, content: prompt },
+  ];
+  return JSON.stringify({
+    model: opts.model ?? DEFAULT_MODEL,
+    messages,
+    temperature: opts.temperature ?? 0,
+    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+    // AI : block routing to a different model family — still allows DeepInfra/StreamLake hosts.
+    provider: { allow_fallbacks: false },
+    // AI : TODO bug/risk — json_object mode formally promises an OBJECT, yet every outIsList
+    // AI : schema expects a top-level ARRAY. deepseek happens to emit arrays; stricter providers
+    // AI : (openai) will wrap or refuse, leaving only the extractJson + retry path.
+    ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
+  });
+}
+
+async function httpPost(
+  body: string,
+  dispatcher?: Dispatcher,
+): Promise<{ res: Response; latencyMs: number }> {
+  const t0 = Date.now();
+  const res = dispatcher
+    ? await undiciFetch(OPENROUTER_URL, {
+        method: "POST",
+        headers: openRouterHeaders(apiKey()),
+        body,
+        dispatcher,
+      })
+    : await fetch(OPENROUTER_URL, {
+        method: "POST",
+        headers: openRouterHeaders(apiKey()),
+        body,
+      });
+  return { res: res as unknown as Response, latencyMs: Date.now() - t0 };
+}
+
+async function fetchChat(
+  prompt: string,
+  opts: ChatOptions,
+  jsonMode: JsonModeOn,
+  log: ServerLogger,
+  dispatcher?: Dispatcher,
+): Promise<RawReply> {
+  const model = opts.model ?? DEFAULT_MODEL;
+  const body = buildChatBody(prompt, opts, jsonMode);
+  let lastError = "";
+  for (let attempt = 0; attempt < MAX_CHAT_ATTEMPTS; attempt++) {
+    log.debug(`fetch attempt`, { attempt: attempt + 1, max: MAX_CHAT_ATTEMPTS });
+    const { res, latencyMs } = await httpPost(body, dispatcher);
+    if (!res.ok) {
+      lastError = await res.text();
+      log.warn(`chat HTTP error`, { status: res.status, attempt: attempt + 1, bodyPreview: lastError.slice(0, 200) });
+      if (RETRYABLE_STATUSES.has(res.status) && attempt < MAX_CHAT_ATTEMPTS - 1) {
+        opts.onRoundTrip?.(prompt.length, 0, false, latencyMs);
+        await sleep(retryDelayMs(res, attempt));
+        continue;
+      }
+      opts.onRoundTrip?.(prompt.length, 0, false, latencyMs);
+      throw openRouterAuthError(res.status, lastError);
+    }
+    const data = (await res.json()) as {
+      model?: string;
+      choices?: { message?: { content?: string } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+    };
+    if (data.model) assertResponseModel(data.model, model);
+    const content = data.choices?.[0]?.message?.content;
+    if (typeof content !== "string") {
+      opts.onRoundTrip?.(prompt.length, 0, false, latencyMs);
+      throw new Error("OpenRouter returned no message content");
+    }
+    opts.onUsage?.({
+      promptTokens: data.usage?.prompt_tokens ?? 0,
+      completionTokens: data.usage?.completion_tokens ?? 0,
+    });
+    opts.onRoundTrip?.(prompt.length, content.length, true, latencyMs);
+    log.info(`chat success`, { model, replyChars: content.length, attempt: attempt + 1 });
+    return content as RawReply;
+  }
+  opts.onRoundTrip?.(prompt.length, 0, false, 0);
+  throw new Error(`OpenRouter failed after ${MAX_CHAT_ATTEMPTS} attempts: ${lastError}`);
+}
+
 // AI : single low-level call; jsonMode forces the model into strict json output
 async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn, log = orLog): Promise<RawReply> {
   await assertInferenceKey(log);
@@ -142,71 +251,41 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn, log
     temperature: opts.temperature ?? 0,
     maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
   });
-  const messages = [
-    ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
-    { role: "user" as const, content: prompt },
-  ];
-  const body = JSON.stringify({
-    model: opts.model ?? DEFAULT_MODEL,
-    messages,
-    temperature: opts.temperature ?? 0,
-    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-    // AI : TODO bug/risk — json_object mode formally promises an OBJECT, yet every outIsList
-    // AI : schema expects a top-level ARRAY. deepseek happens to emit arrays; stricter providers
-    // AI : (openai) will wrap or refuse, leaving only the extractJson + retry path.
-    ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
-  });
-
   const release = await acquireOpenRouterSlot(log);
   try {
-    let lastError = "";
-    for (let attempt = 0; attempt < MAX_CHAT_ATTEMPTS; attempt++) {
-      log.debug(`fetch attempt`, { attempt: attempt + 1, max: MAX_CHAT_ATTEMPTS });
-      const t0 = Date.now();
-      const res = await fetch(OPENROUTER_URL, {
-        method: "POST",
-        headers: openRouterHeaders(apiKey()),
-        body,
-      });
-      const latencyMs = Date.now() - t0;
-      if (!res.ok) {
-        lastError = await res.text();
-        log.warn(`chat HTTP error`, { status: res.status, attempt: attempt + 1, bodyPreview: lastError.slice(0, 200) });
-        if (RETRYABLE_STATUSES.has(res.status) && attempt < MAX_CHAT_ATTEMPTS - 1) {
-          const delay = retryDelayMs(res, attempt);
-          log.info(`retrying after delay`, { delayMs: delay, status: res.status });
-          opts.onRoundTrip?.(prompt.length, 0, false, latencyMs);
-          await sleep(delay);
-          continue;
-        }
-        log.error(`chat failed permanently`, { status: res.status, attempts: attempt + 1 });
-        opts.onRoundTrip?.(prompt.length, 0, false, latencyMs);
-        throw openRouterAuthError(res.status, lastError);
-      }
-      const data = (await res.json()) as {
-        choices?: { message?: { content?: string } }[];
-        usage?: { prompt_tokens?: number; completion_tokens?: number };
-      };
-      const content = data.choices?.[0]?.message?.content;
-      if (typeof content !== "string") {
-        log.error(`no message content in response`);
-        opts.onRoundTrip?.(prompt.length, 0, false, latencyMs);
-        throw new Error("OpenRouter returned no message content");
-      }
-      const usage = {
-        promptTokens: data.usage?.prompt_tokens ?? 0,
-        completionTokens: data.usage?.completion_tokens ?? 0,
-      };
-      log.info(`chat success`, { model, ...usage, replyChars: content.length, attempt: attempt + 1 });
-      opts.onUsage?.(usage);
-      opts.onRoundTrip?.(prompt.length, content.length, true, latencyMs);
-      return content as RawReply;
-    }
-    log.error(`exhausted all attempts`, { attempts: MAX_CHAT_ATTEMPTS, lastError: lastError.slice(0, 200) });
-    opts.onRoundTrip?.(prompt.length, 0, false, 0);
-    throw new Error(`OpenRouter failed after ${MAX_CHAT_ATTEMPTS} attempts: ${lastError}`);
+    return await fetchChat(prompt, opts, jsonMode, log);
   } finally {
     release();
+  }
+}
+
+// AI : fire N prompts at once — http1-burst on macOS/Linux, pooled on Windows; skips slot limiter.
+export async function parallelChat(
+  prompts: readonly string[],
+  opts: ChatOptions = {},
+  jsonMode: JsonModeOn = false,
+  log: ServerLogger = orLog,
+  strategy: ParallelStrategy = defaultParallelStrategy(),
+): Promise<ParallelChatResult[]> {
+  await assertInferenceKey(log);
+  const model = opts.model ?? DEFAULT_MODEL;
+  log.info(`parallelChat`, { count: prompts.length, model, jsonMode, strategy });
+
+  let dispatcher: Dispatcher | undefined;
+  if (strategy === "http1-pooled") {
+    dispatcher = new Agent({ connections: POOLED_CONNECTIONS, pipelining: 1 });
+  }
+
+  try {
+    return Promise.all(
+      prompts.map(async (prompt, index) => {
+        const t0 = Date.now();
+        const content = await fetchChat(prompt, opts, jsonMode, log, dispatcher);
+        return { index, content, latencyMs: Date.now() - t0 };
+      }),
+    );
+  } finally {
+    if (dispatcher instanceof Agent) await dispatcher.close();
   }
 }
 
@@ -235,6 +314,17 @@ function extractJson(raw: RawReply): string {
   return start !== -1 && end > start ? body.slice(start, end + 1) : body;
 }
 
+function parseStructured<T>(raw: RawReply, schema: ZodType<T>): { ok: true; data: T } | { ok: false; error: string } {
+  const json = extractJson(raw);
+  try {
+    const result = schema.safeParse(JSON.parse(json));
+    if (result.success) return { ok: true, data: result.data };
+    return { ok: false, error: result.error.toString() };
+  } catch (e) {
+    return { ok: false, error: `not valid JSON: ${(e as Error).message}` };
+  }
+}
+
 // 2. formatted response validated against a zod schema, with one self-correcting retry
 export async function getStructuredResponse<T>(
   prompt: string,
@@ -253,19 +343,46 @@ export async function getStructuredResponse<T>(
         : `${base}\n\nYour previous reply failed validation:\n${lastError}\nReturn corrected JSON only.`;
     const raw = await chat(ask, opts, true, log);
     lastRaw = extractJson(raw);
-    try {
-      const result = schema.safeParse(JSON.parse(lastRaw));
-      if (result.success) {
-        log.info(`structured parse ok`, { attempt: attempt + 1 });
-        return result.data;
-      }
-      lastError = result.error.toString();
-      log.warn(`zod validation failed`, { attempt: attempt + 1, error: lastError.slice(0, 300) });
-    } catch (e) {
-      lastError = `not valid JSON: ${(e as Error).message}\nraw: ${raw}`;
-      log.warn(`json parse failed`, { attempt: attempt + 1, error: (e as Error).message, rawPreview: raw.slice(0, 200) });
+    const parsed = parseStructured(raw, schema);
+    if (parsed.ok) {
+      log.info(`structured parse ok`, { attempt: attempt + 1 });
+      return parsed.data;
     }
+    lastError = parsed.error;
+    log.warn(`structured validation failed`, { attempt: attempt + 1, error: lastError.slice(0, 300) });
   }
   log.error(`structured response failed after retry`, { lastError: lastError.slice(0, 500) });
   throw new StructuredResponseError(`structured response failed validation after retry:\n${lastError}`, lastRaw || undefined);
+}
+
+// AI : llm-batch path — all items in one parallel burst, per-item retry via getStructuredResponse on failure.
+export async function getStructuredResponsesParallel<T>(
+  prompts: string[],
+  schema: ZodType<T>,
+  opts: ChatOptions = {},
+  log: ServerLogger = orLog,
+): Promise<T[]> {
+  if (prompts.length === 0) return [];
+  if (prompts.length === 1) return [await getStructuredResponse(prompts[0], schema, opts, log)];
+
+  const bases = prompts.map((p) => structuredLlmPrompt(p, schema));
+  const raws = await parallelChat(bases, opts, true, log);
+  const out: T[] = new Array(prompts.length);
+  const retry: number[] = [];
+
+  for (const { index, content } of raws) {
+    const parsed = parseStructured(content, schema);
+    if (parsed.ok) out[index] = parsed.data;
+    else retry.push(index);
+  }
+
+  await Promise.all(
+    retry.map(async (index) => {
+      log.warn(`parallel item retry`, { index, total: prompts.length });
+      out[index] = await getStructuredResponse(prompts[index], schema, opts, log);
+    }),
+  );
+
+  log.info(`getStructuredResponsesParallel complete`, { count: prompts.length, retried: retry.length });
+  return out;
 }
