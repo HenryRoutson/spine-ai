@@ -4,7 +4,18 @@
 - add an example of enrichment, where you keep the same format but just add things to it. do a test which would go over the context limit if you had to repeat the whole structure rather than just the new fields. 
 
 
-use REQUESTLY_LLM_PARALLEL_CALLS_API_KEY
+
+instant parallel llm calls like azure
+To answer your first question: asyncio.gather itself does not have a hardcoded limit, but the underlying Windows operating system and your network libraries do.
+If you are using aiohttp or older versions of Python, Windows uses a networking method called select(), which has a hardcoded limit of exactly 64 concurrent sockets (connections). If you throw 100 tasks at asyncio.gather, Python tries to open 100 TCP sockets at the exact same millisecond, Windows panics, and you get a ValueError: too many file descriptors in select() or a dropped connection limit error.
+need to send off a bunch of requests to openrouter at the same time with a single connection.
+By default, standard Python libraries (requests, aiohttp, standard urllib) use HTTP/1.1. In HTTP/1.1, 100 parallel requests require 100 separate physical TCP connections.
+HTTP/2, however, natively supports multiplexing. This means you open one single TCP connection to OpenRouter, and you stream all 100 of your parallel requests and responses simultaneously back and forth inside that single pipe.  
+
+
+
+
+
 
 - human to setup github and google sign in
 - rm china and us from chatbot selection
@@ -17,7 +28,7 @@ input pdf to source doucment doesn't make sense and is implicit.
 
 
 
-parallel llm calls like azure, but with open router selector. LiteLLM or Requesty or Portkey. 
+
 
 
 
