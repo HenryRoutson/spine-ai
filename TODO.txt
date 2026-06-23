@@ -142,3 +142,31 @@ https://auto-pipeline.dev/
 https://auto-pipeline-app.dev/login?next=%2F
 
 
+
+
+Combine pipelines to make higher level, like a web search plus something elss
+Build web search
+Put into cursor 
+Prompt cursor from phone
+Add a chatbot option where the input is something and the output is that plus a chat. How to prompt, no chat
+CLI batch 
+Claude code instance as strategy
+LLM filter
+Add export to excel.
+Add load excel to json and pydantic 
+Allow editing schema in JSON
+Allow json export 
+Allow pdf export from markdown, generate on client side 
+Export other file types make general
+Enrichment, how to handle adding more to an existing model without getting everything in the response again?
+How to handle something you use repeatedly?  Need parallel pipelines? Avoid having field in every model to pass through 
+KIMI swarm - maybe? expensive and propriety. Could be good?
+Maybe LLM clustering
+PAdd group by from SQL
+Hallucination detector - duplicates in name key and valued 
+How are generics handled? Tree node generic
+Include LLM call option in custom lambda 
+I like the idea of each step being named and accumulating all the data from previous, but could make prompting complex
+For the custom functions, give access to the input model and the json to make it easier ?
+Compare on benchmark to Claude code in accuracy, time, lines of code, and cost
+Marketplace to buy and sell pipelines
