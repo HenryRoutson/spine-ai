@@ -330,6 +330,16 @@ export async function finishJob(
     totalMs: outcome.run?.totalMs,
     billedCents: outcome.run?.billedCents,
   });
+  // AI : deduped jobs skip onStep — hydrate progress from the cached run so the UI doesn't flash 0%.
+  if (outcome.run?.steps.length && !job.steps.length) {
+    job.steps = outcome.run.steps.map((s, index) => ({
+      index,
+      total: outcome.run!.steps.length,
+      moduleId: s.moduleId,
+      label: s.label,
+      status: s.status,
+    }));
+  }
   Object.assign(job, outcome);
   setJob(ownerId, id, job);
   await flushPersistChain(ownerId, id, db);

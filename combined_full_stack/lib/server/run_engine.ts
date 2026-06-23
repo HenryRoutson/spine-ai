@@ -527,7 +527,7 @@ type LinearStepParams = {
   runId: RunId;
   startedAt: number;
   inputDocId: DocId;
-  inputDocIds?: DocId[];
+  fingerprintInputDocIds: DocId[];
 };
 
 // AI : shared linear step loop — runPipeline and resumeRunPipeline both call this.
@@ -535,7 +535,7 @@ async function runLinearStepsFrom(
   params: LinearStepParams,
   startIndex: number,
 ): Promise<"ok" | "error" | "paused"> {
-  const { project, projectId, model, ctx, steps, artifacts, ledger, log, opts, writeLive, runId, startedAt, inputDocId, inputDocIds } =
+  const { project, projectId, model, ctx, steps, artifacts, ledger, log, opts, writeLive, runId, startedAt, inputDocId, fingerprintInputDocIds } =
     params;
 
   for (let i = startIndex; i < project.modules.length; i++) {
@@ -564,7 +564,7 @@ async function runLinearStepsFrom(
     let status: RunStepStatus = "ok";
     let result: ExecResult | undefined;
 
-    const key = stepCacheKey(projectId, m, m.model ?? model, ctx.inputQueue);
+    const key = stepCacheKey(projectId, m, m.model ?? model, fingerprintInputDocIds);
     log.debug(`cache lookup`, { key, cachedFlag: !!m.cached });
     const cached = m.cached ? readCache(key) : undefined;
 
@@ -589,8 +589,10 @@ async function runLinearStepsFrom(
           const itemCount = isList && Array.isArray(result.value) ? result.value.length : 1;
           log.debug(`validation ok`, { moduleId: m.id, structure: out.name, itemCount });
         }
-        writeCache(key, result.value, result.json);
-        log.debug(`cache written`, { key });
+        if (m.cached) {
+          writeCache(key, result.value, result.json);
+          log.debug(`cache written`, { key });
+        }
       }
     } catch (err) {
       if (err instanceof ClientStepPendingError) {
@@ -598,7 +600,8 @@ async function runLinearStepsFrom(
           runId,
           projectId,
           inputDocId,
-          inputDocIds,
+          inputDocIds: fingerprintInputDocIds,
+          fingerprintInputDocIds,
           model,
           stepIndex: i,
           startedAt,
@@ -706,20 +709,20 @@ export async function runPipeline(
     throw new Error(`pipeline invalid: ${[...invalid.keys()].join(", ")}`);
   }
 
-  const inputQueue =
+  const fingerprintInputDocIds =
     opts.fingerprintInputDocIds ??
     buildRunInputDocIds(store, project, inputDocId, opts.inputDocIds);
   const fingerprint =
-    opts.fingerprint ?? computeRunFingerprint(project, model, inputQueue);
+    opts.fingerprint ?? computeRunFingerprint(project, model, fingerprintInputDocIds);
   log.info(`input queue resolved`, {
-    inputQueue,
+    fingerprintInputDocIds,
     fingerprint,
     inputDocIds: opts.inputDocIds,
   });
 
   const inputMods = orderedInputModules(project.modules);
   for (let i = 0; i < inputMods.length; i++) {
-    const docId = inputQueue[i];
+    const docId = fingerprintInputDocIds[i];
     if (!docId) continue;
     const mod = inputMods[i];
     const doc = store.docs().find((d) => d.id === docId);
@@ -738,7 +741,7 @@ export async function runPipeline(
     store,
     ledger,
     model,
-    inputQueue,
+    inputQueue: [...fingerprintInputDocIds],
     byModel: new Map(),
     outputs: new Map(),
     sourceText: "",
@@ -764,7 +767,7 @@ export async function runPipeline(
       runId,
       startedAt,
       inputDocId,
-      inputDocIds: opts.inputDocIds,
+      fingerprintInputDocIds,
     },
     0,
   );
@@ -786,7 +789,7 @@ export async function runPipeline(
     model,
     steps,
     inputDocId,
-    inputDocIds: inputQueue,
+    inputDocIds: fingerprintInputDocIds,
     fingerprint,
   };
 
@@ -835,7 +838,11 @@ export async function resumeRunPipeline(
   const persist = opts.persist ?? true;
   const ledger = new UsageLedger();
   const log = runLogger(checkpoint.runId);
-  const fingerprint = computeRunFingerprint(project, model, checkpoint.ctx.inputQueue);
+  const fingerprintInputDocIds =
+    checkpoint.fingerprintInputDocIds ??
+    checkpoint.inputDocIds ??
+    checkpoint.ctx.inputQueue;
+  const fingerprint = computeRunFingerprint(project, model, fingerprintInputDocIds);
   const ctx = restoreCtx(project, store, ledger, model, checkpoint.ctx);
   const steps: RunStep[] = [...checkpoint.steps];
   const artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[] = steps
@@ -867,8 +874,8 @@ export async function resumeRunPipeline(
       const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes: false });
       if (!check.ok) throw new Error(`output failed ${out.name} validation: ${check.error}`);
     }
-    const key = stepCacheKey(checkpoint.projectId, m, m.model ?? model, checkpoint.ctx.inputQueue);
-    writeCache(key, result.value, result.json);
+    const key = stepCacheKey(checkpoint.projectId, m, m.model ?? model, fingerprintInputDocIds);
+    if (m.cached) writeCache(key, result.value, result.json);
   } catch (err) {
     status = "error";
     result = failedStepResult(err, m, ctx, result);
@@ -910,7 +917,7 @@ export async function resumeRunPipeline(
       model,
       steps,
       inputDocId: checkpoint.inputDocId,
-      inputDocIds: checkpoint.ctx.inputQueue,
+      inputDocIds: fingerprintInputDocIds,
       fingerprint,
     };
     if (persist) {
@@ -935,7 +942,7 @@ export async function resumeRunPipeline(
       runId: checkpoint.runId,
       startedAt: checkpoint.startedAt,
       inputDocId: checkpoint.inputDocId,
-      inputDocIds: checkpoint.inputDocIds,
+      fingerprintInputDocIds,
     },
     checkpoint.stepIndex + 1,
   );
@@ -956,7 +963,7 @@ export async function resumeRunPipeline(
     model,
     steps,
     inputDocId: checkpoint.inputDocId,
-    inputDocIds: checkpoint.ctx.inputQueue,
+    inputDocIds: fingerprintInputDocIds,
     fingerprint,
   };
 

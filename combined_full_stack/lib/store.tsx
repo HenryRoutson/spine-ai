@@ -360,7 +360,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // AI : the server already persisted the run (run engine) — just mirror it locally.
   const addRun = useCallback((r: PipelineRun) => {
-    setState((prev) => (prev ? { ...prev, runs: [r, ...prev.runs] } : prev))
+    setState((prev) => {
+      if (!prev || prev.runs.some((x) => x.id === r.id)) return prev
+      return { ...prev, runs: [r, ...prev.runs] }
+    })
   }, [])
 
   const setInferenceInputDocIds = useCallback(

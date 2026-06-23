@@ -94,24 +94,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ jobId, deduped: true, cachedRunId: cachedRun.id, fingerprint });
   }
 
+  const billingKey = await getBillingUserKey();
+  const jobDb = await openJobDb();
+  const jobId = await createJob(auth.userId, jobDb);
+  apiLog.info(`job created — charging then scheduling pipeline`, { jobId, ownerId: auth.userId });
+
   try {
-    const billingKey = await getBillingUserKey();
     apiLog.info(`charging for run`, { billingKey });
     await chargeForRun(billingKey);
     apiLog.info(`billing charge ok`);
   } catch (err) {
     const billed = billingResponse(err);
+    const message = (err as Error).message;
     if (billed) {
-      apiLog.warn(`billing rejected`, { code: (err as { code?: string }).code, message: (err as Error).message });
+      apiLog.warn(`billing rejected`, { code: (err as { code?: string }).code, message });
+      await finishJob(auth.userId, jobId, { error: message }, jobDb);
       return billed;
     }
-    apiLog.error(`billing error`, { error: (err as Error).message });
+    apiLog.error(`billing error`, { error: message });
+    await finishJob(auth.userId, jobId, { error: message }, jobDb);
     throw err;
   }
-
-  const jobDb = await openJobDb();
-  const jobId = await createJob(auth.userId, jobDb);
-  apiLog.info(`job created — scheduling pipeline via after()`, { jobId, ownerId: auth.userId });
 
   after(async () => {
     await withJobLogging(auth.userId, jobId, jobDb, async () => {

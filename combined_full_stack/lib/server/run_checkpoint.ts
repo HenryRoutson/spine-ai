@@ -16,6 +16,7 @@ export type RunCheckpoint = {
   projectId: ProjectId;
   inputDocId: DocId;
   inputDocIds?: DocId[];
+  fingerprintInputDocIds?: DocId[]; // AI : full slot list — ctx.inputQueue is depleted after input steps
   model: ModelId;
   stepIndex: number;
   startedAt: number;

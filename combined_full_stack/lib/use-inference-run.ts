@@ -132,7 +132,7 @@ export function useInferenceRun({
   const inputDocIdsKey = inputModules.map((m) => inputDocs[m.id]?.id ?? "").join(",")
   const configKey = useMemo(
     () => runConfigStableKey(project, model as ModelId),
-    [project, model, modules],
+    [project, model],
   )
   const probeKey = `${project.id}:${configKey}:${inputDocIdsKey}`
   const runsFingerprintKey = useMemo(
@@ -168,6 +168,7 @@ export function useInferenceRun({
     }
 
     const probeGen = ++probeGenRef.current
+    const probeProjectId = project.id as ProjectId
     const cacheSetters = {
       setRun,
       setCachedRunId,
@@ -177,7 +178,9 @@ export function useInferenceRun({
       savedNotesRef,
     }
     const probeStillValid = () =>
-      probeGen === probeGenRef.current && phaseRef.current === "idle"
+      probeGen === probeGenRef.current &&
+      phaseRef.current === "idle" &&
+      projectRef.current.id === probeProjectId
     async function probeDbMatch() {
       const inputMods = inputModulesRef.current
       const docsByModule = inputDocsRef.current
@@ -185,7 +188,7 @@ export function useInferenceRun({
       const storeRuns = runsRef.current
       const storeProject = projectRef.current
       const resolvedModel = model as ModelId
-      const projectId = project.id as ProjectId
+      const projectId = probeProjectId
 
       try {
         const localOutcome = await probeLocalInferenceCache({
@@ -202,10 +205,36 @@ export function useInferenceRun({
         setDbFingerprint(localOutcome.fingerprint)
 
         if (localOutcome.kind === "session-hint") {
-          confirmedProbeKeyRef.current = probeKey
-          setCachedRunId(localOutcome.runId)
-          setWasDeduped(true)
-          setPhase("done")
+          setProbingCache(true)
+          const serverOutcome = await probeServerInferenceCache({
+            projectId,
+            project: storeProject,
+            model: resolvedModel,
+            inputModules: inputMods,
+            inputDocs: docsByModule,
+            fingerprint: localOutcome.fingerprint,
+          })
+          if (!probeStillValid()) return
+          setDbFingerprint(serverOutcome.fingerprint)
+          if (serverOutcome.kind === "hit") {
+            applyCachedRun(
+              serverOutcome.run,
+              serverOutcome.runId,
+              probeKey,
+              confirmedProbeKeyRef,
+              storeRuns,
+              addRun,
+              cacheSetters,
+            )
+            writeInferenceSessionCache(projectId, probeKey, serverOutcome.runId)
+            return
+          }
+          confirmedProbeKeyRef.current = null
+          if (phaseRef.current !== "idle") return
+          setCachedRunId(null)
+          setWasDeduped(false)
+          setPhase("idle")
+          setRun(null)
           return
         }
 
@@ -354,6 +383,8 @@ export function useInferenceRun({
       resolveInputDocs(docs, project, inputModules, inferenceInputDocIds, defaultInferenceDoc(docs, project)),
     )
     if (switched) {
+      activeJobGenRef.current++
+      probeGenRef.current++
       docTextCacheRef.current.clear()
       confirmedProbeKeyRef.current = null
       setPhase("idle")
@@ -474,11 +505,8 @@ export function useInferenceRun({
       setPhase("done")
     } catch (e) {
       if (jobGen !== activeJobGenRef.current) return
-      if (isRunBillingError(e)) {
-        refreshBilling().catch(console.error)
-      } else {
-        setError((e as Error).message)
-      }
+      if (isRunBillingError(e)) refreshBilling().catch(console.error)
+      setError((e as Error).message)
       setPhase("idle")
     }
   }
