@@ -14,6 +14,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { confidentialUploadWarning } from "@/lib/confidential-upload"
 import type {
   BillingPoint,
   DocId,
@@ -29,7 +30,7 @@ import type {
 } from "@/lib/types"
 import { DEFAULT_MODEL } from "@/lib/types"
 import { billingSeries } from "@/lib/billing"
-import { apiJson } from "@/lib/api-client"
+import { apiJson, apiPut } from "@/lib/api-client"
 import { migrateProjectModules, syncAutoQuoteSteps } from "@/lib/quote-steps"
 
 export type BillingAccountView = {
@@ -120,22 +121,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const clearSaveError = useCallback(() => setSaveError(null), [])
 
   const persistProject = useCallback(async (id: string, body: string) => {
-    try {
-      const res = await fetch(`/api/projects/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body,
-        credentials: "same-origin",
-      })
-      if (!res.ok) {
-        const msg = (await res.json().catch(() => null))?.error ?? `save failed (${res.status})`
-        setSaveError(msg)
-        return
-      }
-      setSaveError(null)
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Save failed")
+    const result = await apiPut(`/api/projects/${id}`, body)
+    if (!result.ok) {
+      setSaveError(result.error)
+      return
     }
+    setSaveError(null)
   }, [])
 
   const refreshBilling = useCallback(async () => {
@@ -360,6 +351,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const addDoc = useCallback(async (file: File, label: DocLabel) => {
+    const blocked = confidentialUploadWarning(file.name)
+    if (blocked) throw new Error(blocked)
+
     const form = new FormData()
     form.append("file", file)
     form.append("label", label)

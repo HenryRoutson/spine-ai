@@ -41,13 +41,13 @@ const KIND_ICON: Record<ModuleKind, typeof Cpu> = {
 }
 
 // AI : llm steps use prompt/response wording; quote step shows source + extracts → linked spans
-const LLM_KINDS: ModuleKind[] = ["llm", "llm-batch"]
+import { isLlmKind } from "@/lib/module-kinds"
 
 function stepIoLabels(kind: ModuleKind) {
   if (kind === "quote") {
     return { inTitle: "Source + extracts", outTitle: "Linked quotes" }
   }
-  const isLlm = LLM_KINDS.includes(kind)
+  const isLlm = isLlmKind(kind)
   return {
     inTitle: isLlm ? "Prompt" : "Input",
     outTitle: isLlm ? "Response" : "Output",

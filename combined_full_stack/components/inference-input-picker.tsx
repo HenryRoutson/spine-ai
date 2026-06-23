@@ -15,6 +15,7 @@ import {
   UploadCloud,
   Check,
   Ban,
+  TriangleAlert,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { useDocViewer } from "@/lib/doc-viewer"
@@ -31,6 +32,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { confidentialUploadWarning } from "@/lib/confidential-upload"
 import { cn } from "@/lib/utils"
 import { timeAgo } from "@/lib/time-ago"
 import type { DocId, DocRef, InputType, PipelineModule } from "@/lib/types"
@@ -61,6 +63,7 @@ export function InferenceInputPickerPopup({
   const fileRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState("")
   const [uploading, setUploading] = useState(false)
+  const [uploadWarning, setUploadWarning] = useState<string | null>(null)
 
   const passable = useMemo(
     () => passableDocsForInputModule(docs, project, inputModule),
@@ -89,6 +92,12 @@ export function InferenceInputPickerPopup({
 
   async function ingest(files: FileList | null) {
     if (!files?.length) return
+    const blocked = confidentialUploadWarning(files[0].name)
+    if (blocked) {
+      setUploadWarning(blocked)
+      setTimeout(() => setUploadWarning(null), 6000)
+      return
+    }
     setUploading(true)
     try {
       const doc = await addDoc(files[0], "inference")
@@ -96,7 +105,13 @@ export function InferenceInputPickerPopup({
         onSelect(doc)
       }
     } catch (e) {
-      console.error(e)
+      const msg = e instanceof Error ? e.message : null
+      if (msg && confidentialUploadWarning(files[0].name)) {
+        setUploadWarning(msg)
+        setTimeout(() => setUploadWarning(null), 6000)
+      } else {
+        console.error(e)
+      }
     } finally {
       setUploading(false)
     }
@@ -177,6 +192,11 @@ export function InferenceInputPickerPopup({
               onChange={(e) => void ingest(e.target.files)}
             />
           </div>
+          {uploadWarning && (
+            <p className="mt-2 flex items-center gap-1.5 font-mono text-[10px] text-destructive">
+              <TriangleAlert className="h-3 w-3 shrink-0" /> {uploadWarning}
+            </p>
+          )}
         </div>
 
         <ScrollArea className="min-h-0 flex-1">

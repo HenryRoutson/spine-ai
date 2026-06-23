@@ -1,4 +1,6 @@
 import type { PipelineModule } from "@/lib/types"
+import { isLlmKind } from "@/lib/module-kinds"
+import { isAutoQuoteStep } from "@/lib/quote-steps"
 
 export type PipelineSegment =
   | { kind: "step"; module: PipelineModule; index: number }
@@ -28,4 +30,20 @@ export function combinePairIds(modules: PipelineModule[], id: string): string[] 
   if (m.kind === "input" && modules[i + 1]?.kind === "combine") return [m.id, modules[i + 1].id]
   if (m.kind === "combine" && modules[i - 1]?.kind === "input") return [modules[i - 1].id, m.id]
   return [id]
+}
+
+export function insertBeforeIndex(seg: PipelineSegment): number {
+  return seg.kind === "combine" ? seg.index - 1 : seg.index
+}
+
+export function insertAfterIndex(seg: PipelineSegment): number {
+  return seg.index + 1
+}
+
+// AI : don't offer an insert slot between a quote-emitting LLM and its locked Link Quotes step.
+export function blocksInsertBefore(modules: PipelineModule[], insertAt: number): boolean {
+  if (insertAt <= 0 || insertAt >= modules.length) return false
+  const prev = modules[insertAt - 1]
+  const next = modules[insertAt]
+  return isLlmKind(prev.kind) && isAutoQuoteStep(next)
 }

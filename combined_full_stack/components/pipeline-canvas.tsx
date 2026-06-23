@@ -4,16 +4,33 @@ import {
   ArrowRight,
   ChevronRight,
   AlertTriangle,
-  Lock,
   Zap,
 } from "lucide-react"
-import { segmentPipeline } from "@/lib/pipeline-layout"
+import {
+  blocksInsertBefore,
+  insertAfterIndex,
+  insertBeforeIndex,
+  segmentPipeline,
+  type PipelineSegment,
+} from "@/lib/pipeline-layout"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
-import { KIND_COLOR, KIND_ICON } from "@/lib/module-ui"
-import { MODULE_META, type ModuleId, type ModuleKind, type PipelineModule, type RunStepStatus, type StructureModel } from "@/lib/types"
+import {
+  AutoQuoteLock,
+  KindIcon,
+  PipelineConnector,
+  PipelineNode,
+} from "@/lib/module-ui"
+import type { ModuleId, PipelineModule, RunStepStatus, StructureModel } from "@/lib/types"
 import { inputTypeLabel } from "@/lib/inference-input"
-import { modelName } from "@/lib/validity"
+import {
+  invalidStepMessage,
+  modelName,
+  warningStepMessage,
+  type InvalidStep,
+  type PipelineWarning,
+} from "@/lib/validity"
 import { cn } from "@/lib/utils"
+import { Badge } from "@/components/ui/badge"
 
 type PipelineCanvasProps = {
   modules: PipelineModule[]
@@ -21,196 +38,365 @@ type PipelineCanvasProps = {
   selectedId?: ModuleId
   onSelect?: (id: ModuleId) => void
   stepStatus?: Map<ModuleId, RunStepStatus>
+  invalid?: Map<ModuleId, InvalidStep>
+  warnings?: Map<ModuleId, PipelineWarning>
+  renderInsertBefore?: (insertAt: number) => React.ReactNode
+  renderInsertAfter?: (insertAt: number, opts: { blocked?: boolean; invalid?: boolean }) => React.ReactNode
+  renderFooter?: () => React.ReactNode
   className?: string
 }
 
-// AI : read-only mirror of the Pipeline tab canvas — shared visual for Logging run context.
+// AI : shared linear pipeline canvas — Logging (read-only) and Pipeline builder (edit + inserts).
 export function PipelineCanvas({
   modules,
   models,
   selectedId,
   onSelect,
   stepStatus,
+  invalid,
+  warnings,
+  renderInsertBefore,
+  renderInsertAfter,
+  renderFooter,
   className,
 }: PipelineCanvasProps) {
   const segments = segmentPipeline(modules)
+  const editMode = Boolean(renderInsertAfter ?? renderInsertBefore ?? renderFooter)
 
   return (
     <div className={cn("mx-auto flex w-full max-w-xl flex-col items-stretch gap-0", className)}>
       <div className="mx-auto flex w-full flex-col items-center">
         <PipelineNode label="Start" subtle />
-        {segments.length > 0 && <Connector />}
+        {segments.length > 0 && renderInsertBefore?.(insertBeforeIndex(segments[0]))}
+        {segments.length > 0 && !renderInsertBefore && <PipelineConnector />}
       </div>
-      {segments.map((seg) => {
-        if (seg.kind === "combine") {
-          const { combine, input, index } = seg
-          const combineStatus = stepStatus?.get(combine.id)
-          const inputStatus = stepStatus?.get(input.id)
-          const groupSelected = selectedId === combine.id || selectedId === input.id
-          const pipelineModel = modelName(models, combine.inStructureId)
-          const outModel = modelName(models, combine.outStructureId)
-          return (
-            <div key={combine.id} className="mx-auto flex w-full flex-col items-center">
-              <div
-                className={cn(
-                  "w-full rounded-lg border-2 border-dashed px-3.5 py-3 transition-colors",
-                  statusBorder(combineStatus) ?? (
-                    groupSelected ? "border-primary bg-primary/5" : "border-chart-3/40 bg-chart-3/5"
-                  ),
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={() => onSelect?.(combine.id)}
-                  className="flex w-full items-start gap-2 text-left"
-                >
-                  <span className="font-mono text-[10px] text-muted-foreground">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <KindIcon kind="combine" />
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-sm font-medium leading-snug">{combine.label}</p>
-                    <p className="line-clamp-2 font-mono text-[10px] leading-snug text-muted-foreground">
-                      {pipelineModel ?? "pipeline"}
-                      <span className="text-muted-foreground/60"> + </span>
-                      document
-                      <span className="text-muted-foreground/60"> → </span>
-                      {outModel ?? "·"}
-                    </p>
-                  </div>
-                  {combine.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                  <RunStatusIcon status={combineStatus} />
-                </button>
-                {combine.note && (
-                  <p className="mt-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
-                    {combine.note}
-                  </p>
-                )}
-                <button
-                  type="button"
-                  onClick={() => onSelect?.(input.id)}
-                  className={cn(
-                    "mt-2 flex w-full items-start gap-3 rounded-md border bg-card px-3 py-2.5 text-left transition-colors",
-                    selectedId === input.id
-                      ? "border-primary"
-                      : statusBorder(inputStatus) ?? "border-border hover:border-muted-foreground/40",
-                  )}
-                >
-                  <KindIcon kind="input" size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-2 text-xs font-medium leading-snug">{input.label}</p>
-                    <p className="line-clamp-2 font-mono text-[10px] leading-snug text-muted-foreground">
-                      {modelName(models, input.outStructureId) ?? "·"} · {inputTypeLabel(input.inputType)}
-                    </p>
-                  </div>
-                  <RunStatusIcon status={inputStatus} />
-                </button>
-              </div>
-              <Connector />
-            </div>
-          )
-        }
-
-        const m = seg.module
-        const i = seg.index
-        const locked = isAutoQuoteStep(m)
-        const ioName = modelName(models, m.inStructureId)
-        const status = stepStatus?.get(m.id)
-
-        if (m.kind === "output") {
-          return (
-            <div key={m.id} className="mx-auto flex w-full flex-col items-center">
-              <div className="flex w-full items-center justify-center">
-                <div className="relative w-full max-w-xs">
-                  <button
-                    type="button"
-                    onClick={() => onSelect?.(m.id)}
-                    className={cn(
-                      "flex w-full flex-col items-center gap-1.5 rounded-lg border border-dashed px-4 py-3 text-center transition-colors",
-                      "border-chart-4/50 bg-chart-4/5 shadow-sm",
-                      statusBorder(status),
-                      m.id === selectedId && "border-chart-4 ring-1 ring-chart-4/40",
-                      m.id !== selectedId && !status && "hover:border-chart-4/80 hover:bg-chart-4/10",
-                    )}
-                  >
-                    <div className="flex items-center justify-center gap-2">
-                      <span className="font-mono text-[10px] text-chart-4/80">{String(i + 1).padStart(2, "0")}</span>
-                      <KindIcon kind="output" />
-                    </div>
-                    <div className="min-w-0 w-full">
-                      <p className="line-clamp-2 text-sm font-medium leading-snug">{m.label}</p>
-                      <p className="line-clamp-2 font-mono text-[10px] leading-snug text-muted-foreground">
-                        {modelName(models, m.inStructureId) ?? "·"}
-                        <span className="text-chart-4/80"> · snapshot</span>
-                      </p>
-                    </div>
-                    <div className="flex items-center justify-center gap-1.5">
-                      {m.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                      <RunStatusIcon status={status} />
-                    </div>
-                  </button>
-                  <ArrowRight
-                    className="pointer-events-none absolute left-full top-1/2 ml-2 h-4 w-4 -translate-y-1/2 text-chart-4"
-                    aria-hidden
-                  />
-                </div>
-              </div>
-              <Connector />
-            </div>
-          )
-        }
-
-        return (
-          <div key={m.id} className="mx-auto flex w-full flex-col items-center">
-            <button
-              type="button"
-              onClick={() => onSelect?.(m.id)}
-              className={cn(
-                "group relative flex w-full items-start gap-3 rounded-lg border bg-card px-3.5 py-3 text-left transition-colors",
-                locked && "border-dashed border-chart-2/50 bg-chart-2/5",
-                statusBorder(status) ?? (
-                  m.id === selectedId
-                    ? "border-primary"
-                    : !locked && "border-border hover:border-muted-foreground/40"
-                ),
-              )}
-            >
-              <span className="font-mono text-[10px] text-muted-foreground">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <KindIcon kind={m.kind} />
-              <div className="min-w-0 flex-1">
-                <p className="line-clamp-2 text-sm font-medium leading-snug">{m.label}</p>
-                <p className="line-clamp-2 font-mono text-[10px] leading-snug text-muted-foreground">
-                  {m.kind === "input"
-                    ? `${modelName(models, m.outStructureId) ?? "·"} · ${inputTypeLabel(m.inputType)}`
-                    : locked
-                      ? <>{ioName ?? "·"}<span className="text-muted-foreground/60"> · same model in/out</span></>
-                      : <>
-                          {ioName ?? "·"}
-                          <span className="text-muted-foreground/60"> → </span>
-                          {modelName(models, m.outStructureId) ?? "·"}
-                        </>}
-                </p>
-              </div>
-              {locked && <AutoQuoteLock />}
-              {m.kind === "llm" && m.model && (
-                <span className="shrink-0 rounded border border-border px-1.5 py-0.5 font-mono text-[9px]">
-                  {m.model}
-                </span>
-              )}
-              {m.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
-              <RunStatusIcon status={status} />
-            </button>
-            <Connector />
-          </div>
-        )
-      })}
+      {segments.map((seg) => (
+        <SegmentRow
+          key={seg.kind === "combine" ? seg.combine.id : seg.module.id}
+          seg={seg}
+          modules={modules}
+          models={models}
+          selectedId={selectedId}
+          onSelect={onSelect}
+          stepStatus={stepStatus}
+          invalid={invalid}
+          warnings={warnings}
+          editMode={editMode}
+          renderInsertAfter={renderInsertAfter}
+        />
+      ))}
       <div className="mx-auto flex w-full flex-col items-center">
+        {segments.length === 0 && renderInsertAfter?.(0, {})}
         <PipelineNode label="End" subtle />
+        {renderFooter?.()}
       </div>
     </div>
   )
+}
+
+function SegmentRow({
+  seg,
+  modules,
+  models,
+  selectedId,
+  onSelect,
+  stepStatus,
+  invalid,
+  warnings,
+  editMode,
+  renderInsertAfter,
+}: {
+  seg: PipelineSegment
+  modules: PipelineModule[]
+  models: StructureModel[]
+  selectedId?: ModuleId
+  onSelect?: (id: ModuleId) => void
+  stepStatus?: Map<ModuleId, RunStepStatus>
+  invalid?: Map<ModuleId, InvalidStep>
+  warnings?: Map<ModuleId, PipelineWarning>
+  editMode: boolean
+  renderInsertAfter?: (insertAt: number, opts: { blocked?: boolean; invalid?: boolean }) => React.ReactNode
+}) {
+  const insertAt = insertAfterIndex(seg)
+  const blocked = blocksInsertBefore(modules, insertAt)
+
+  if (seg.kind === "combine") {
+    const { combine, input, index } = seg
+    const combineInvalid = invalid?.has(combine.id)
+    const combineStatus = stepStatus?.get(combine.id)
+    const inputStatus = stepStatus?.get(input.id)
+    const groupSelected = selectedId === combine.id || selectedId === input.id
+    const pipelineModel = modelName(models, combine.inStructureId)
+    const outModel = modelName(models, combine.outStructureId)
+    return (
+      <div className="mx-auto flex w-full flex-col items-center">
+        <div
+          className={cn(
+            "w-full rounded-lg border-2 border-dashed px-3.5 py-3 transition-colors",
+            combineInvalid
+              ? "border-destructive/70 bg-destructive/5"
+              : statusBorder(combineStatus) ?? (
+                  groupSelected ? "border-primary bg-primary/5" : "border-chart-3/40 bg-chart-3/5"
+                ),
+          )}
+        >
+          <StepButton onClick={() => onSelect?.(combine.id)} className="flex w-full items-start gap-2 text-left">
+            <StepIndex index={index} />
+            <KindIcon kind="combine" />
+            <StepBody
+              label={combine.label}
+              detail={
+                <>
+                  {pipelineModel ?? "pipeline"}
+                  <span className="text-muted-foreground/60"> + </span>
+                  document
+                  <span className="text-muted-foreground/60"> → </span>
+                  {outModel ?? "·"}
+                </>
+              }
+            />
+            {combine.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
+            <StepTrailingIcon invalid={combineInvalid} status={combineStatus} editMode={editMode} />
+          </StepButton>
+          {combine.note && (
+            <p className="mt-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">{combine.note}</p>
+          )}
+          <StepButton
+            onClick={() => onSelect?.(input.id)}
+            className={cn(
+              "mt-2 flex w-full items-start gap-3 rounded-md border bg-card px-3 py-2.5 text-left transition-colors",
+              selectedId === input.id
+                ? "border-primary"
+                : statusBorder(inputStatus) ?? "border-border hover:border-muted-foreground/40",
+            )}
+          >
+            <KindIcon kind="input" size="sm" />
+            <StepBody
+              label={input.label}
+              labelClass="text-xs"
+              detail={
+                <>
+                  {modelName(models, input.outStructureId) ?? "·"} · {inputTypeLabel(input.inputType)}
+                </>
+              }
+            />
+            {!editMode && <RunStatusIcon status={inputStatus} />}
+          </StepButton>
+        </div>
+        <InvalidMessage
+          show={combineInvalid}
+          message={combineInvalid ? invalidStepMessage(invalid!.get(combine.id)!, models, modules) : undefined}
+        />
+        {renderInsertAfter?.(insertAt, { blocked, invalid: combineInvalid }) ?? <PipelineConnector />}
+      </div>
+    )
+  }
+
+  const m = seg.module
+  const i = seg.index
+  const isInvalid = invalid?.has(m.id)
+  const stepWarning = warnings?.get(m.id)
+  const locked = isAutoQuoteStep(m)
+  const ioName = modelName(models, m.inStructureId)
+  const status = stepStatus?.get(m.id)
+
+  if (m.kind === "output") {
+    return (
+      <div className="mx-auto flex w-full flex-col items-center">
+        <div className="flex w-full items-center justify-center">
+          <div className="relative w-full max-w-xs">
+            <StepButton
+              onClick={() => onSelect?.(m.id)}
+              className={cn(
+                "flex w-full flex-col items-center gap-1.5 rounded-lg border border-dashed px-4 py-3 text-center transition-colors",
+                "border-chart-4/50 bg-chart-4/5 shadow-sm",
+                isInvalid && "border-destructive/70 bg-destructive/5",
+                statusBorder(status),
+                m.id === selectedId && "border-chart-4 ring-1 ring-chart-4/40",
+                m.id !== selectedId && !isInvalid && !status && "hover:border-chart-4/80 hover:bg-chart-4/10",
+              )}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <StepIndex index={i} className="text-chart-4/80" />
+                <KindIcon kind="output" />
+              </div>
+              <StepBody
+                label={m.label}
+                centered
+                detail={
+                  <>
+                    {modelName(models, m.inStructureId) ?? "·"}
+                    <span className="text-chart-4/80"> · snapshot</span>
+                  </>
+                }
+              />
+              <div className="flex items-center justify-center gap-1.5">
+                {m.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                {(isInvalid || status) && (
+                  <StepTrailingIcon invalid={isInvalid} status={status} editMode={editMode} />
+                )}
+              </div>
+            </StepButton>
+            <ArrowRight
+              className="pointer-events-none absolute left-full top-1/2 ml-2 h-4 w-4 -translate-y-1/2 text-chart-4"
+              aria-hidden
+            />
+          </div>
+        </div>
+        <InvalidMessage
+          show={isInvalid}
+          message={isInvalid ? invalidStepMessage(invalid!.get(m.id)!, models, modules) : undefined}
+          className="max-w-xs"
+        />
+        {renderInsertAfter?.(insertAt, { blocked, invalid: isInvalid }) ?? <PipelineConnector />}
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto flex w-full flex-col items-center">
+      <StepButton
+        onClick={() => onSelect?.(m.id)}
+        className={cn(
+          "group relative flex w-full items-start gap-3 rounded-lg border bg-card px-3.5 py-3 text-left transition-colors",
+          locked && "border-dashed border-chart-2/50 bg-chart-2/5",
+          isInvalid
+            ? "border-destructive/70"
+            : statusBorder(status) ?? (
+                m.id === selectedId
+                  ? "border-primary"
+                  : !locked && "border-border hover:border-muted-foreground/40"
+              ),
+        )}
+      >
+        <StepIndex index={i} />
+        <KindIcon kind={m.kind} />
+        <StepBody
+          label={m.label}
+          detail={
+            m.kind === "input"
+              ? `${modelName(models, m.outStructureId) ?? "·"} · ${inputTypeLabel(m.inputType)}`
+              : locked
+                ? (
+                    <>
+                      {ioName ?? "·"}
+                      <span className="text-muted-foreground/60"> · same model in/out</span>
+                    </>
+                  )
+                : (
+                    <>
+                      {ioName ?? "·"}
+                      <span className="text-muted-foreground/60"> → </span>
+                      {modelName(models, m.outStructureId) ?? "·"}
+                    </>
+                  )
+          }
+        />
+        {locked && <AutoQuoteLock />}
+        {m.kind === "llm" && m.model && (
+          editMode ? (
+            <Badge variant="outline" className="shrink-0 font-mono text-[9px]">
+              {m.model}
+            </Badge>
+          ) : (
+            <span className="shrink-0 rounded border border-border px-1.5 py-0.5 font-mono text-[9px]">
+              {m.model}
+            </span>
+          )
+        )}
+        {m.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
+        <StepTrailingIcon invalid={isInvalid} status={status} editMode={editMode} />
+      </StepButton>
+      <InvalidMessage
+        show={isInvalid}
+        message={isInvalid ? invalidStepMessage(invalid!.get(m.id)!, models, modules) : undefined}
+      />
+      {!isInvalid && stepWarning && (
+        <p className="mt-1 text-center font-mono text-[10px] text-amber-600 dark:text-amber-500">
+          {warningStepMessage(stepWarning, models, modules)}
+        </p>
+      )}
+      {renderInsertAfter?.(insertAt, { blocked, invalid: isInvalid }) ?? <PipelineConnector />}
+    </div>
+  )
+}
+
+function StepButton({
+  onClick,
+  className,
+  children,
+}: {
+  onClick?: () => void
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <button type="button" onClick={onClick} className={className}>
+      {children}
+    </button>
+  )
+}
+
+function StepIndex({ index, className }: { index: number; className?: string }) {
+  return (
+    <span className={cn("font-mono text-[10px] text-muted-foreground", className)}>
+      {String(index + 1).padStart(2, "0")}
+    </span>
+  )
+}
+
+function StepBody({
+  label,
+  detail,
+  labelClass,
+  centered,
+}: {
+  label: string
+  detail: React.ReactNode
+  labelClass?: string
+  centered?: boolean
+}) {
+  return (
+    <div className={cn("min-w-0 flex-1", centered && "w-full")}>
+      <p className={cn("line-clamp-2 text-sm font-medium leading-snug", labelClass, centered && "text-center")}>
+        {label}
+      </p>
+      <p className={cn("line-clamp-2 font-mono text-[10px] leading-snug text-muted-foreground", centered && "text-center")}>
+        {detail}
+      </p>
+    </div>
+  )
+}
+
+function InvalidMessage({
+  show,
+  message,
+  className,
+}: {
+  show?: boolean
+  message?: string
+  className?: string
+}) {
+  if (!show || !message) return null
+  return (
+    <p className={cn("mt-1 text-center font-mono text-[10px] text-destructive", className)}>
+      {message}
+    </p>
+  )
+}
+
+function StepTrailingIcon({
+  invalid,
+  status,
+  editMode,
+}: {
+  invalid?: boolean
+  status?: RunStepStatus
+  editMode: boolean
+}) {
+  if (invalid) return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+  if (!editMode) return <RunStatusIcon status={status} />
+  return <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
 }
 
 function statusBorder(status?: RunStepStatus): string | undefined {
@@ -223,48 +409,5 @@ function statusBorder(status?: RunStepStatus): string | undefined {
 function RunStatusIcon({ status }: { status?: RunStepStatus }) {
   if (status === "cached") return <Zap className="h-3.5 w-3.5 shrink-0 text-chart-3" />
   if (status === "error") return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
-  if (status === "ok") return <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
   return <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-}
-
-function AutoQuoteLock() {
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-chart-2/40 bg-chart-2/10 px-1.5 py-0.5 text-chart-2">
-      <Lock className="h-3 w-3" />
-      <span className="font-mono text-[9px]">auto</span>
-    </span>
-  )
-}
-
-function KindIcon({ kind, size = "md" }: { kind: ModuleKind; size?: "sm" | "md" }) {
-  const Icon = KIND_ICON[kind]
-  return (
-    <div className="flex w-14 shrink-0 flex-col items-center gap-0.5">
-      <Icon className={cn(size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4", KIND_COLOR[kind])} />
-      <span className="text-center text-[8px] leading-tight text-muted-foreground">
-        {MODULE_META[kind].label}
-      </span>
-    </div>
-  )
-}
-
-function Connector() {
-  return (
-    <div className="flex h-8 w-full items-center justify-center">
-      <div className="h-full w-px bg-border" />
-    </div>
-  )
-}
-
-function PipelineNode({ label, subtle }: { label: string; subtle?: boolean }) {
-  return (
-    <div
-      className={cn(
-        "rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-wider",
-        subtle ? "border-border text-muted-foreground" : "border-primary text-primary",
-      )}
-    >
-      {label}
-    </div>
-  )
 }

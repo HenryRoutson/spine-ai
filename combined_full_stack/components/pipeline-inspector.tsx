@@ -1,65 +1,18 @@
 "use client"
 
-import { useMemo } from "react"
 import { Lock } from "lucide-react"
-import { JsonHighlight } from "@/components/highlight"
-import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
-import { llmSchemaJson } from "@/lib/structure"
-import {
-  MODEL_OPTIONS,
-  MODULE_META,
-  type ModuleKind,
-  type PipelineModule,
-  type StructureModel,
-} from "@/lib/types"
-import { inputTypeLabel, inputNameRestrictionLabel } from "@/lib/inference-input"
-import { modelName } from "@/lib/validity"
-import { cn } from "@/lib/utils"
-
-const LLM_KINDS: ModuleKind[] = ["llm", "llm-batch"]
-
-function llmModelLabel(id?: string) {
-  return MODEL_OPTIONS.find((m) => m.id === id)?.label ?? id ?? "—"
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="mb-3">
-      <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
-      {children}
-    </div>
-  )
-}
-
-function StaticValue({ children, mono, pre }: { children?: React.ReactNode; mono?: boolean; pre?: boolean }) {
-  return (
-    <div
-      className={cn(
-        "rounded-md border border-border bg-secondary/30 px-2.5 py-2 text-sm",
-        mono && "font-mono text-xs",
-        pre && "whitespace-pre-wrap leading-relaxed",
-      )}
-    >
-      {children ?? <span className="text-muted-foreground">—</span>}
-    </div>
-  )
-}
+import { MODULE_META, type PipelineModule, type StructureModel } from "@/lib/types"
+import { isAutoQuoteStep } from "@/lib/quote-steps"
+import { PipelineModuleFields } from "@/components/pipeline-module-fields"
 
 type PipelineInspectorProps = {
   module: PipelineModule | undefined
   models: StructureModel[]
+  modules?: PipelineModule[]
 }
 
 // AI : read-only mirror of the Pipeline tab inspector — prompts, I/O, code, schema.
-export function PipelineInspector({ module: selected, models }: PipelineInspectorProps) {
-  const llmSchemaPreview = useMemo(() => {
-    if (!selected || !LLM_KINDS.includes(selected.kind) || !selected.outStructureId) return null
-    const out = models.find((m) => m.id === selected.outStructureId)
-    if (!out) return null
-    const isList = selected.outIsList || selected.kind === "llm-batch"
-    return llmSchemaJson(out, models, isList)
-  }, [selected, models])
-
+export function PipelineInspector({ module: selected, models, modules = [] }: PipelineInspectorProps) {
   if (!selected) {
     return (
       <div className="flex h-full min-h-48 items-center justify-center p-6 text-center">
@@ -81,111 +34,7 @@ export function PipelineInspector({ module: selected, models }: PipelineInspecto
           </span>
         )}
       </div>
-
-      {isAutoQuoteStep(selected) ? (
-        <>
-          <p className="mb-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
-            {AUTO_QUOTE_EXPLAINER}
-          </p>
-          <Field label="Structure">
-            <StaticValue mono>
-              {modelName(models, selected.inStructureId) ?? "·"}
-              <span className="text-muted-foreground"> → </span>
-              {modelName(models, selected.outStructureId) ?? "·"}
-              <span className="mt-1 block font-mono text-[10px] text-muted-foreground">
-                same model — LLM emits strings, this step attaches source spans
-              </span>
-            </StaticValue>
-          </Field>
-          <Field label="Cache results">
-            <StaticValue>{selected.cached ? "On" : "Off"}</StaticValue>
-          </Field>
-        </>
-      ) : (
-        <>
-          <p className="mb-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
-            {MODULE_META[selected.kind].description}
-          </p>
-
-          <Field label="Label">
-            <StaticValue>{selected.label}</StaticValue>
-          </Field>
-
-          {(selected.kind === "doc-to-text" ||
-            selected.kind === "combine" ||
-            LLM_KINDS.includes(selected.kind)) && (
-            <Field label="Annotation / purpose">
-              <StaticValue>{selected.note}</StaticValue>
-            </Field>
-          )}
-
-          {selected.kind === "input" && (
-            <>
-              <Field label="Input types">
-                <StaticValue>{inputTypeLabel(selected.inputType)}</StaticValue>
-              </Field>
-              {inputNameRestrictionLabel(selected) && (
-                <Field label="Filename must contain">
-                  <StaticValue mono>{inputNameRestrictionLabel(selected)}</StaticValue>
-                </Field>
-              )}
-              <Field label="I/O model">
-                <StaticValue mono>{modelName(models, selected.outStructureId)}</StaticValue>
-              </Field>
-            </>
-          )}
-
-          {selected.kind !== "input" && (
-            <Field label={selected.kind === "output" ? "Structure to materialize" : "Input model"}>
-              <StaticValue mono>{modelName(models, selected.inStructureId)}</StaticValue>
-            </Field>
-          )}
-
-          {selected.kind !== "input" && selected.kind !== "output" && (
-            <Field label="Output model">
-              <StaticValue mono>{modelName(models, selected.outStructureId)}</StaticValue>
-            </Field>
-          )}
-
-          {LLM_KINDS.includes(selected.kind) && (
-            <>
-              <Field label="Model">
-                <StaticValue mono>{llmModelLabel(selected.model)}</StaticValue>
-              </Field>
-              <Field label="Prompt">
-                <StaticValue mono pre>
-                  {selected.prompt?.trim() ? selected.prompt : "—"}
-                </StaticValue>
-              </Field>
-              {llmSchemaPreview && (
-                <Field
-                  label={
-                    selected.kind === "llm-batch"
-                      ? "Output schema · per item"
-                      : "Output schema · Zod → JSON Schema"
-                  }
-                >
-                  <div className="max-h-64 min-w-0 overflow-auto rounded-md border border-border bg-[oklch(0.14_0.004_264)] p-2">
-                    <JsonHighlight json={llmSchemaPreview} />
-                  </div>
-                </Field>
-              )}
-            </>
-          )}
-
-          {selected.kind === "custom-code" && (
-            <Field label="TypeScript · (input) => output">
-              <StaticValue mono pre>
-                {selected.code}
-              </StaticValue>
-            </Field>
-          )}
-
-          <Field label="Cache results">
-            <StaticValue>{selected.cached ? "On" : "Off"}</StaticValue>
-          </Field>
-        </>
-      )}
+      <PipelineModuleFields module={selected} models={models} modules={modules} mode="view" />
     </div>
   )
 }

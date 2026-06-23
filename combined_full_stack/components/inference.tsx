@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import {
   FileText,
   CheckCircle2,
@@ -22,77 +22,19 @@ import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { useAppShell } from "@/lib/app-shell"
 import { computeInvalid, modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
-import {
-  awaitRun,
-  isRunBillingError,
-  matchRun,
-  mergeStepStates,
-  startRun,
-  type JobLogEntry,
-  type StepProgress,
-  type StepSubProgress,
-  type StepUiState,
-} from "@/lib/run-engine"
-import type { DocId, DocRef, ModuleId, PipelineModule, PipelineRun, Project, ProjectId } from "@/lib/types"
+import type { DocId, DocRef, ModuleId, PipelineModule } from "@/lib/types"
+import type { StepProgress, StepSubProgress } from "@/lib/run-engine"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
-import { defaultInferenceDoc } from "@/lib/project-docs"
-import { defaultInputDocsForModules, docMatchesInputModule, inputTypeLabel, inputNameRestrictionLabel, orderedInputModules } from "@/lib/inference-input"
-import {
-  collectInferenceInputIssues,
-  inferenceInputIssueMessage,
-  type InferenceInputIssue,
-} from "@/lib/inference-validity"
+import { inputTypeLabel, inputNameRestrictionLabel } from "@/lib/inference-input"
+import { inferenceInputIssueMessage } from "@/lib/inference-validity"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
-import { useRunNotesFlushOnLeave } from "@/lib/run-notes-flush"
 import { segmentPipeline } from "@/lib/pipeline-layout"
-import { useCyclingWaitPhrase } from "@/lib/inference-wait-phrases"
+import { useInferenceRun } from "@/lib/use-inference-run"
 import { RunNotesPad } from "@/components/run-notes-pad"
-
-type Phase = "idle" | "running" | "done"
-
-// AI : step errors are stored on RunStep.outputPreview — surface them instead of a generic "run error".
-function pipelineRunError(run: PipelineRun): string | null {
-  const step = run.steps.find((s) => s.status === "error")
-  if (!step) return run.status === "error" ? "Pipeline failed" : null
-  return step.outputPreview ? `${step.label}: ${step.outputPreview}` : `${step.label} failed`
-}
-
-function buildDefaultInputDocs(
-  docs: DocRef[],
-  project: Project,
-  inputModules: PipelineModule[],
-): Partial<Record<ModuleId, DocRef>> {
-  return defaultInputDocsForModules(docs, project, inputModules, defaultInferenceDoc(docs, project))
-}
-
-function resolveInputDocs(
-  docs: DocRef[],
-  project: Project,
-  inputModules: PipelineModule[],
-  savedDocIds: Partial<Record<ModuleId, DocId>>,
-): Partial<Record<ModuleId, DocRef>> {
-  const defaults = buildDefaultInputDocs(docs, project, inputModules)
-  if (!Object.keys(savedDocIds).length) return defaults
-  const out: Partial<Record<ModuleId, DocRef>> = { ...defaults }
-  for (const m of inputModules) {
-    const savedId = savedDocIds[m.id]
-    if (!savedId) continue
-    const doc = docs.find((d) => d.id === savedId)
-    if (doc && docMatchesInputModule(doc, m)) out[m.id] = doc
-  }
-  return out
-}
-
-function inputDocIdsForModules(
-  inputModules: PipelineModule[],
-  inputDocs: Partial<Record<ModuleId, DocRef>>,
-): DocId[] {
-  return inputModules.map((m) => inputDocs[m.id]!.id as DocId)
-}
 
 export function Inference() {
   const {
@@ -103,7 +45,6 @@ export function Inference() {
     addRun,
     updateRunNotes,
     docs,
-    runs,
     billingAccount,
     refreshBilling,
     inferenceInputDocIds,
@@ -116,315 +57,21 @@ export function Inference() {
   const insufficientCredit =
     billingAccount != null && billingAccount.balanceCents < minRunBalanceCents
 
-  const [inputDocs, setInputDocs] = useState<Partial<Record<ModuleId, DocRef>>>({})
-  const [inputIssues, setInputIssues] = useState<InferenceInputIssue[]>([])
-  const [validatingInputs, setValidatingInputs] = useState(false)
-  const [probingCache, setProbingCache] = useState(false)
-  const [pickerModuleId, setPickerModuleId] = useState<ModuleId | null>(null)
-  const [phase, setPhase] = useState<Phase>("idle")
-  const [stepStates, setStepStates] = useState<Map<ModuleId, StepUiState>>(new Map())
-  const [run, setRun] = useState<PipelineRun | null>(null)
-  const [cachedRunId, setCachedRunId] = useState<string | null>(null)
-  const [wasDeduped, setWasDeduped] = useState(false)
-  const [dbFingerprint, setDbFingerprint] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [debugLogs, setDebugLogs] = useState<JobLogEntry[]>([])
-  const [runNotes, setRunNotes] = useState("")
-  const runNotesRef = useRef("")
-  const savedNotesRef = useRef<string | undefined>(undefined)
-  const logEndRef = useRef<HTMLDivElement>(null)
-  const prevProjectIdRef = useRef<ProjectId | null>(null)
-  const confirmedProbeKeyRef = useRef<string | null>(null)
+  const run = useInferenceRun({
+    project,
+    modules,
+    model,
+    docs,
+    inferenceInputDocIds,
+    setInferenceInputDocIds,
+    addRun,
+    updateRunNotes,
+    refreshBilling,
+  })
 
-  useEffect(() => {
-    runNotesRef.current = runNotes
-  }, [runNotes])
-
-  // AI : balance gates Run — refresh when Inference opens so $0 shows Billing CTA without a failed run.
   useEffect(() => {
     refreshBilling().catch(console.error)
   }, [refreshBilling])
-
-  const inputModules = useMemo(() => orderedInputModules(modules), [modules])
-  const pickerModule = pickerModuleId ? inputModules.find((m) => m.id === pickerModuleId) : undefined
-  const allInputsReady = inputModules.every((m) => inputDocs[m.id])
-  const inputsInvalid = inputIssues.length > 0
-  const inputIssueByModule = useMemo(
-    () => new Map(inputIssues.map((issue) => [issue.moduleId, issue])),
-    [inputIssues],
-  )
-  const configAlreadyCompleted = phase === "done" && run?.status === "ok" && cachedRunId != null
-  const loggingRunId = cachedRunId ?? run?.id
-
-  const inputDocIdsKey = inputModules.map((m) => inputDocs[m.id]?.id ?? "").join(",")
-  const moduleIdsKey = modules.map((m) => m.id).join(",")
-  const probeKey = `${project.id}:${model}:${inputDocIdsKey}:${moduleIdsKey}`
-
-  const phaseRef = useRef(phase)
-  phaseRef.current = phase
-  const inputModulesRef = useRef(inputModules)
-  inputModulesRef.current = inputModules
-  const inputDocsRef = useRef(inputDocs)
-  inputDocsRef.current = inputDocs
-  const prevProbeKeyRef = useRef(probeKey)
-
-  // AI : restore completed-run UI via server fingerprint — single source of truth for dedup.
-  useEffect(() => {
-    if (!allInputsReady || phaseRef.current === "running") return
-    if (prevProbeKeyRef.current !== probeKey) {
-      prevProbeKeyRef.current = probeKey
-      confirmedProbeKeyRef.current = null
-    }
-    if (confirmedProbeKeyRef.current === probeKey) return
-
-    let cancelled = false
-    async function probeDbMatch() {
-      setProbingCache(true)
-      const inputMods = inputModulesRef.current
-      const docsByModule = inputDocsRef.current
-      const orderedIds = inputDocIdsForModules(inputMods, docsByModule)
-      const [primary, ...rest] = orderedIds
-      try {
-        const { fingerprint, cachedRunId: matchedId, run: matchedRun } = await matchRun(
-          project.id as ProjectId,
-          primary,
-          model,
-          rest,
-        )
-        if (cancelled) return
-        setDbFingerprint(fingerprint)
-        if (matchedId && matchedRun?.status === "ok") {
-          confirmedProbeKeyRef.current = probeKey
-          setRun(matchedRun)
-          setCachedRunId(matchedId)
-          setWasDeduped(true)
-          setPhase("done")
-          return
-        }
-        confirmedProbeKeyRef.current = null
-        setCachedRunId(null)
-        setWasDeduped(false)
-        setPhase("idle")
-        setRun(null)
-      } catch (e) {
-        console.error(e)
-      } finally {
-        if (!cancelled) setProbingCache(false)
-      }
-    }
-    void probeDbMatch()
-    return () => {
-      cancelled = true
-    }
-  }, [probeKey, allInputsReady, project.id, model])
-
-  // AI : remember input slot picks across Inference tab unmounts (in-memory store, not browser storage).
-  useEffect(() => {
-    if (!allInputsReady) return
-    const ids = Object.fromEntries(
-      inputModules.filter((m) => inputDocs[m.id]).map((m) => [m.id, inputDocs[m.id]!.id as DocId]),
-    ) as Partial<Record<ModuleId, DocId>>
-    const unchanged = inputModules.every((m) => inferenceInputDocIds[m.id] === ids[m.id])
-    if (unchanged) return
-    setInferenceInputDocIds(ids)
-  }, [probeKey, allInputsReady, inferenceInputDocIds, setInferenceInputDocIds])
-
-  // AI : validate assigned docs before run — catch seed placeholders + invalid JSON early.
-  useEffect(() => {
-    let cancelled = false
-    async function validateInputs() {
-      const assigned = inputModules.filter((m) => inputDocs[m.id])
-      if (!assigned.length) {
-        setInputIssues([])
-        return
-      }
-      setValidatingInputs(true)
-      const contentByDocId: Partial<Record<string, string>> = {}
-      try {
-        await Promise.all(
-          assigned.map(async (m) => {
-            const doc = inputDocs[m.id]!
-            try {
-              const res = await fetch(`/api/docs/${doc.id}/text`)
-              if (res.ok) contentByDocId[doc.id] = await res.text()
-            } catch {
-              // AI : dev HMR / tab churn can abort fetches — treat as missing content for validation.
-            }
-          }),
-        )
-      } finally {
-        if (!cancelled) setValidatingInputs(false)
-      }
-      if (cancelled) return
-      setInputIssues(collectInferenceInputIssues(inputModules, inputDocs, contentByDocId))
-    }
-    void validateInputs()
-    return () => {
-      cancelled = true
-    }
-  }, [probeKey, inputModules, inputDocs])
-
-  // AI : seed input slots on mount / project switch — restore saved picks from the app store when present.
-  useEffect(() => {
-    const switched = prevProjectIdRef.current != null && prevProjectIdRef.current !== project.id
-    prevProjectIdRef.current = project.id as ProjectId
-    setInputDocs(resolveInputDocs(docs, project, inputModules, inferenceInputDocIds))
-    setInputIssues([])
-    setPickerModuleId(null)
-    if (switched) {
-      confirmedProbeKeyRef.current = null
-      setPhase("idle")
-      setStepStates(new Map())
-      setRun(null)
-      setCachedRunId(null)
-      setWasDeduped(false)
-      setDbFingerprint(null)
-      setProbingCache(false)
-      setError(null)
-      setDebugLogs([])
-      setRunNotes("")
-      savedNotesRef.current = undefined
-    }
-  }, [project.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [debugLogs.length])
-
-  useRunNotesFlushOnLeave(
-    phase === "done" ? run?.id : undefined,
-    runNotes,
-    run?.notes,
-    updateRunNotes,
-    (id, next) => {
-      savedNotesRef.current = next
-      setRun((r) => (r?.id === id ? { ...r, notes: next } : r))
-    },
-  )
-
-  function setInputDocForModule(moduleId: ModuleId, doc: DocRef) {
-    setInputDocs((prev) => ({ ...prev, [moduleId]: doc }))
-    setPickerModuleId(null)
-  }
-
-  function useSamples() {
-    setInputDocs(buildDefaultInputDocs(docs, project, inputModules))
-  }
-
-  async function start() {
-    if (!allInputsReady || inputsInvalid || insufficientCredit) return
-    const orderedIds = inputModules.map((m) => inputDocs[m.id]!.id as DocId)
-    const [primary, ...rest] = orderedIds
-    if (phase === "done") {
-      setRunNotes("")
-      runNotesRef.current = ""
-    }
-    confirmedProbeKeyRef.current = null
-    setPhase("running")
-    setError(null)
-    setRun(null)
-    setCachedRunId(null)
-    setWasDeduped(false)
-    setStepStates(new Map())
-    setDebugLogs([])
-    try {
-      const { jobId } = await startRun(project.id as ProjectId, primary, model, rest)
-      refreshBilling().catch(console.error)
-      const { run: finished, deduped, cachedRunId } = await awaitRun(jobId, {
-        onStep: (steps) => setStepStates((prev) => mergeStepStates(prev, steps)),
-        onLogs: (logs) => setDebugLogs(logs),
-      })
-      const notes = runNotesRef.current.trim() || undefined
-      const withNotes = notes ? { ...finished, notes } : finished
-      savedNotesRef.current = notes
-      setRun(withNotes)
-      const logId = deduped ? (cachedRunId ?? finished.id) : finished.id
-      setCachedRunId(finished.status === "ok" ? logId : null)
-      setWasDeduped(deduped ?? false)
-      if (finished.status === "ok") {
-        confirmedProbeKeyRef.current = probeKey
-        const orderedIds = inputDocIdsForModules(inputModules, inputDocs)
-        const [primary, ...rest] = orderedIds
-        matchRun(project.id as ProjectId, primary, model, rest)
-          .then(({ fingerprint }) => setDbFingerprint(fingerprint))
-          .catch(console.error)
-      }
-      if (!deduped) {
-        addRun(withNotes)
-        if (notes) updateRunNotes(finished.id, notes).catch(console.error)
-      }
-      const runErr = pipelineRunError(finished)
-      if (runErr) setError(runErr)
-      setPhase("done")
-    } catch (e) {
-      if (isRunBillingError(e)) {
-        refreshBilling().catch(console.error)
-      } else {
-        setError((e as Error).message)
-      }
-      setPhase("idle")
-    }
-  }
-
-  function reset() {
-    confirmedProbeKeyRef.current = null
-    setPhase("idle")
-    setStepStates(new Map())
-    setRun(null)
-    setCachedRunId(null)
-    setWasDeduped(false)
-    setDbFingerprint(null)
-    setError(null)
-    setDebugLogs([])
-    setRunNotes("")
-    savedNotesRef.current = undefined
-  }
-
-  const progressPct = useMemo(() => {
-    if (phase === "idle") return 0
-    if (phase === "done") return 100
-    const done = modules.filter((m) => {
-      const s = stepStates.get(m.id)?.status
-      return s !== undefined && s !== "idle" && s !== "running"
-    }).length
-    return Math.round((done / Math.max(1, modules.length)) * 100)
-  }, [phase, stepStates, modules.length])
-
-  const runningHints = useMemo(() => {
-    const hints: string[] = []
-    for (const seg of segmentPipeline(modules)) {
-      if (seg.kind === "combine") {
-        const combineUi = stepStates.get(seg.combine.id)
-        const inputUi = stepStates.get(seg.input.id)
-        if (combineUi?.status === "running") {
-          hints.push(combineUi.sub?.label ?? seg.combine.label)
-        }
-        if (inputUi?.status === "running") {
-          hints.push(inputUi.sub?.label ?? seg.input.label)
-        }
-        continue
-      }
-      const moduleUi = stepStates.get(seg.module.id)
-      if (moduleUi?.status === "running") {
-        hints.push(moduleUi.sub?.label ?? seg.module.label)
-      }
-    }
-    return hints
-  }, [stepStates, modules])
-
-  const waitPhrase = useCyclingWaitPhrase(phase === "running", runningHints)
-  const runErr = useMemo(() => (run ? pipelineRunError(run) : null), [run])
-  const runButtonBusy = phase === "running" || validatingInputs || probingCache
-  const runButtonLabel =
-    phase === "running"
-      ? `${waitPhrase}…`
-      : validatingInputs
-        ? "Validating inputs…"
-        : probingCache
-          ? "Checking for cached run…"
-          : configAlreadyCompleted
-            ? "View cached run in Logging"
-            : "Run pipeline"
 
   return (
     <div className="flex h-full flex-col">
@@ -433,8 +80,8 @@ export function Inference() {
         title="Run Pipeline"
         description="Assign inputs and run the pipeline. Full output and traces live in Logging."
         actions={
-          phase !== "idle" ? (
-            <Button variant="outline" size="sm" className="bg-transparent" onClick={reset} disabled={phase === "running"}>
+          run.phase !== "idle" ? (
+            <Button variant="outline" size="sm" className="bg-transparent" onClick={run.reset} disabled={run.phase === "running"}>
               <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
             </Button>
           ) : undefined
@@ -465,38 +112,38 @@ export function Inference() {
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  pipeline inputs · {inputModules.length} slot{inputModules.length === 1 ? "" : "s"}
+                  pipeline inputs · {run.inputModules.length} slot{run.inputModules.length === 1 ? "" : "s"}
                 </p>
-                <Button variant="outline" size="sm" className="h-7 bg-transparent" onClick={useSamples}>
+                <Button variant="outline" size="sm" className="h-7 bg-transparent" onClick={run.useSamples}>
                   <FileText className="mr-1.5 h-3.5 w-3.5" /> Use samples
                 </Button>
               </div>
-              {inputModules.map((m) => (
+              {run.inputModules.map((m) => (
                 <InferenceInputSlot
                   key={m.id}
                   inputModule={m}
                   outModel={modelName(models, m.outStructureId)}
-                  doc={inputDocs[m.id]}
-                  issue={inputIssueByModule.get(m.id)}
-                  onOpenPicker={() => setPickerModuleId(m.id)}
+                  doc={run.inputDocs[m.id]}
+                  issue={run.inputIssueByModule.get(m.id)}
+                  onOpenPicker={() => run.setPickerModuleId(m.id)}
                   onOpenDoc={(docId) => open({ docId, start: 0, end: 0 })}
                 />
               ))}
             </div>
 
             <RunNotesPad
-              value={runNotes}
-              onChange={setRunNotes}
+              value={run.runNotes}
+              onChange={run.setRunNotes}
               hint={
-                phase === "done"
+                run.phase === "done"
                   ? "Saved when you leave this window"
-                  : phase === "running"
+                  : run.phase === "running"
                     ? "Add notes while the run finishes"
                     : "Describe what you're testing before you run"
               }
             />
 
-            {insufficientCredit && phase !== "running" ? (
+            {insufficientCredit && run.phase !== "running" ? (
               <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-5 text-center">
                 <AlertTriangle className="mx-auto h-8 w-8 text-destructive" />
                 <p className="mt-3 text-sm font-medium text-destructive">
@@ -521,30 +168,30 @@ export function Inference() {
             <Button
               className="w-full"
               disabled={
-                !allInputsReady ||
-                inputsInvalid ||
-                validatingInputs ||
-                probingCache ||
-                phase === "running" ||
+                !run.allInputsReady ||
+                run.inputsInvalid ||
+                run.validatingInputs ||
+                run.probingCache ||
+                run.phase === "running" ||
                 insufficientCredit
               }
               onClick={
-                configAlreadyCompleted && loggingRunId
-                  ? () => openLogging(loggingRunId)
-                  : start
+                run.configAlreadyCompleted && run.loggingRunId
+                  ? () => openLogging(run.loggingRunId!)
+                  : run.start
               }
             >
-              {runButtonBusy ? (
+              {run.runButtonBusy ? (
                 <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : configAlreadyCompleted ? (
+              ) : run.configAlreadyCompleted ? (
                 <ScrollText className="mr-1.5 h-4 w-4" />
               ) : (
                 <Zap className="mr-1.5 h-4 w-4" />
               )}
-              {runButtonLabel}
+              {run.runButtonLabel}
             </Button>
 
-            {configAlreadyCompleted && (
+            {run.configAlreadyCompleted && (
               <p className="text-center font-mono text-[10px] text-muted-foreground">
                 Identical pipeline and inputs — no compute needed. Change an input or edit the pipeline to run again.
               </p>
@@ -552,27 +199,27 @@ export function Inference() {
             </>
             )}
 
-            {inputsInvalid && !validatingInputs && (
-              <ErrorBanner text={inferenceInputIssueMessage(inputIssues)} />
+            {run.inputsInvalid && !run.validatingInputs && (
+              <ErrorBanner text={inferenceInputIssueMessage(run.inputIssues)} />
             )}
 
-            {error && phase !== "done" && <ErrorBanner text={error} />}
+            {run.error && run.phase !== "done" && <ErrorBanner text={run.error} />}
 
-            {phase === "running" && (
+            {run.phase === "running" && (
               <div className="rounded-lg border border-border p-4">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                     progress
                   </span>
-                  <span className="font-mono text-[11px] text-primary">{progressPct}%</span>
+                  <span className="font-mono text-[11px] text-primary">{run.progressPct}%</span>
                 </div>
-                <Progress value={progressPct} className="h-1.5" />
-                <CyclingWaitPhrase phrase={waitPhrase} className="mt-3" />
+                <Progress value={run.progressPct} className="h-1.5" />
+                <CyclingWaitPhrase phrase={run.waitPhrase} className="mt-3" />
                 <div className="mt-4 space-y-2.5">
                   {segmentPipeline(modules).map((seg) => {
                     if (seg.kind === "combine") {
-                      const combineUi = stepStates.get(seg.combine.id)
-                      const inputUi = stepStates.get(seg.input.id)
+                      const combineUi = run.stepStates.get(seg.combine.id)
+                      const inputUi = run.stepStates.get(seg.input.id)
                       const combineState = combineUi?.status ?? "idle"
                       const inputState = inputUi?.status ?? "idle"
                       const state =
@@ -587,27 +234,17 @@ export function Inference() {
                                 : "idle"
                       return (
                         <div key={seg.combine.id} className="space-y-1">
-                          <StepRow
-                            label={seg.combine.label}
-                            state={state}
-                            sub={combineUi?.sub}
-                          />
-                          <StepRow
-                            label={seg.input.label}
-                            state={inputState}
-                            sub={inputUi?.sub}
-                            nested
-                          />
+                          <StepRow label={seg.combine.label} state={state} sub={combineUi?.sub} />
+                          <StepRow label={seg.input.label} state={inputState} sub={inputUi?.sub} nested />
                         </div>
                       )
                     }
-                    const moduleUi = stepStates.get(seg.module.id)
-                    const moduleState = moduleUi?.status ?? "idle"
+                    const moduleUi = run.stepStates.get(seg.module.id)
                     return (
                       <StepRow
                         key={seg.module.id}
                         label={seg.module.label}
-                        state={moduleState}
+                        state={moduleUi?.status ?? "idle"}
                         sub={moduleUi?.sub}
                       />
                     )
@@ -616,7 +253,7 @@ export function Inference() {
               </div>
             )}
 
-            {debugLogs.length > 0 && (
+            {run.debugLogs.length > 0 && (
               <div className="rounded-lg border border-border">
                 <div className="border-b border-border px-3 py-2">
                   <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -624,7 +261,7 @@ export function Inference() {
                   </span>
                 </div>
                 <div className="max-h-48 overflow-y-auto p-2 font-mono text-[10px] leading-relaxed">
-                  {debugLogs.map((l, i) => (
+                  {run.debugLogs.map((l, i) => (
                     <div
                       key={`${l.at}-${i}`}
                       className={cn(
@@ -638,52 +275,52 @@ export function Inference() {
                       {l.line}
                     </div>
                   ))}
-                  <div ref={logEndRef} />
+                  <div ref={run.logEndRef} />
                 </div>
               </div>
             )}
 
-            {run && phase === "done" && (
+            {run.run && run.phase === "done" && (
               <div className="rounded-lg border border-border bg-card px-6 py-8 text-center">
-                {wasDeduped ? (
+                {run.wasDeduped ? (
                   <Zap className="mx-auto h-10 w-10 text-primary" />
-                ) : run.status === "ok" ? (
+                ) : run.run.status === "ok" ? (
                   <CheckCircle2 className="mx-auto h-10 w-10 text-primary" />
                 ) : (
                   <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
                 )}
                 <p className="mt-4 text-sm font-medium">
-                  {wasDeduped
+                  {run.wasDeduped
                     ? "Identical run already completed"
-                    : run.status === "ok"
+                    : run.run.status === "ok"
                       ? "Pipeline finished"
                       : "Pipeline finished with errors"}
                 </p>
                 <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                  {wasDeduped
+                  {run.wasDeduped
                     ? "Pipeline and inputs match a previous run — no compute was used."
                     : "Output, step traces, and costs are in Logging."}
                 </p>
-                {runErr && (
+                {run.runErr && (
                   <div className="mt-4 text-left">
-                    <ErrorBanner text={runErr} />
+                    <ErrorBanner text={run.runErr} />
                   </div>
                 )}
-                <Button className="mt-5 gap-1.5" onClick={() => openLogging(loggingRunId ?? run.id)}>
+                <Button className="mt-5 gap-1.5" onClick={() => openLogging(run.loggingRunId ?? run.run!.id)}>
                   <ScrollText className="h-3.5 w-3.5" />
-                  {wasDeduped ? "View cached run in Logging" : "Go to logging"}
+                  {run.wasDeduped ? "View cached run in Logging" : "Go to logging"}
                 </Button>
               </div>
             )}
           </div>
       </div>
       )}
-      {pickerModule && (
+      {run.pickerModule && (
         <InferenceInputPickerPopup
-          inputModule={pickerModule}
-          selectedDocId={inputDocs[pickerModule.id]?.id}
-          onSelect={(doc) => setInputDocForModule(pickerModule.id, doc)}
-          onClose={() => setPickerModuleId(null)}
+          inputModule={run.pickerModule}
+          selectedDocId={run.inputDocs[run.pickerModule.id]?.id}
+          onSelect={(doc) => run.setInputDocForModule(run.pickerModule!.id, doc)}
+          onClose={() => run.setPickerModuleId(null)}
         />
       )}
     </div>
@@ -701,7 +338,7 @@ function InferenceInputSlot({
   inputModule: PipelineModule
   outModel?: string
   doc?: DocRef
-  issue?: InferenceInputIssue
+  issue?: { message: string }
   onOpenPicker: () => void
   onOpenDoc: (docId: DocId) => void
 }) {
@@ -745,9 +382,7 @@ function InferenceInputSlot({
         </Button>
       )}
       {issue && (
-        <p className="mt-2 font-mono text-[10px] text-destructive">
-          {issue.message}
-        </p>
+        <p className="mt-2 font-mono text-[10px] text-destructive">{issue.message}</p>
       )}
     </div>
   )

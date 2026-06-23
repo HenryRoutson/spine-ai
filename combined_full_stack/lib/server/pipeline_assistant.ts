@@ -6,6 +6,7 @@ import {
   syncAutoQuoteSteps,
 } from "./validity";
 import { UsageLedger } from "./usage";
+import { createPipelineModule } from "@/lib/pipeline-module-factory";
 import {
   DEFAULT_MODEL,
   INPUT_TYPES,
@@ -120,27 +121,28 @@ function makeModuleFromSpec(
   models: StructureModel[],
   globalModel: ModelId,
 ): PipelineModule {
-  const isLlm = spec.kind === "llm" || spec.kind === "llm-batch";
   const inId = resolveStructureId(spec.structureIn, models);
   const outId = resolveStructureId(spec.structureOut, models) ?? defaultOutForKind(spec.kind, models);
   const modelOpt = MODEL_OPTIONS.find((m) => m.id === spec.model);
-  return {
-    id: uid<ModuleId>(),
-    kind: spec.kind,
-    label: spec.label,
-    note: spec.note,
-    cached: spec.cached ?? true,
-    avgMs: 0,
-    avgCostCents: 0,
-    inputType: spec.kind === "input" ? (spec.inputType as PipelineModule["inputType"]) ?? "pdf" : undefined,
-    inputNameContains: spec.kind === "input" ? spec.inputNameContains?.trim() || undefined : undefined,
-    inStructureId: spec.kind !== "input" ? inId ?? defaultOutForKind(spec.kind, models) : undefined,
-    outStructureId: outId,
-    outIsList: spec.outIsList,
-    prompt: isLlm ? spec.prompt ?? "" : undefined,
-    code: spec.kind === "custom-code" ? spec.code ?? "(input) => input" : undefined,
-    model: isLlm ? (modelOpt?.id ?? globalModel) : undefined,
-  };
+  return createPipelineModule(
+    {
+      id: uid<ModuleId>(),
+      kind: spec.kind,
+      label: spec.label,
+      note: spec.note,
+      cached: spec.cached,
+      inputType: spec.kind === "input" ? (spec.inputType as PipelineModule["inputType"]) ?? "pdf" : undefined,
+      inputNameContains: spec.inputNameContains,
+      inStructureId: spec.kind !== "input" ? inId ?? defaultOutForKind(spec.kind, models) : undefined,
+      outStructureId: outId,
+      outIsList: spec.outIsList,
+      prompt: spec.prompt,
+      code: spec.code,
+      model: modelOpt?.id,
+    },
+    models,
+    globalModel,
+  );
 }
 
 function expandModuleSpecs(

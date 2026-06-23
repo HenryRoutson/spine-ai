@@ -25,3 +25,34 @@ export async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
   }
   return res.json() as Promise<T>;
 }
+
+export async function apiText(url: string, init?: RequestInit): Promise<string> {
+  const res = await fetch(url, { credentials: "same-origin", ...init });
+  if (!res.ok) {
+    const body = await readApiErrorBody(res);
+    throw new Error(formatApiError(url, res, body));
+  }
+  return res.text();
+}
+
+// AI : PUT with soft failure — store surfaces saveError instead of throwing.
+export async function apiPut(
+  url: string,
+  body: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body,
+      credentials: "same-origin",
+    });
+    if (!res.ok) {
+      const parsed = await readApiErrorBody(res);
+      return { ok: false, error: parsed?.error ?? `save failed (${res.status})` };
+    }
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Save failed" };
+  }
+}

@@ -7,6 +7,7 @@ import type {
   StructureModelId,
 } from "./types";
 import { hasQuoteField, listFieldsForWrap } from "./structure";
+import { isLlmKind } from "@/lib/module-kinds";
 
 export type InvalidKind = "io-mismatch" | "no-output" | "transform-list-wrap";
 
@@ -21,8 +22,6 @@ export interface PipelineWarning {
   moduleId: ModuleId;
   kind: "no-prompt" | "quote-no-fields" | "unused-output" | "transform-multi-list";
 }
-
-const LLM_KINDS: ModuleKind[] = ["llm", "llm-batch"];
 
 // AI : mirrors run_engine transform — llm-batch and outIsList steps put a bare array on the spine.
 export function stepEmitsList(m: PipelineModule | undefined): boolean {
@@ -147,7 +146,7 @@ export function computeWarnings(
   const warnings = new Map<ModuleId, PipelineWarning>();
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i];
-    if (LLM_KINDS.includes(m.kind) && !m.prompt?.trim()) {
+    if (isLlmKind(m.kind) && !m.prompt?.trim()) {
       warnings.set(m.id, { moduleId: m.id, kind: "no-prompt" });
     }
     if (m.kind === "quote" && !isAutoQuoteStep(m) && m.outStructureId) {
@@ -245,11 +244,11 @@ export function pipelineTaskPrompt(modules: PipelineModule[]): string {
   const targetId = outMod?.inStructureId;
   if (targetId) {
     const direct = modules.find(
-      (m) => LLM_KINDS.includes(m.kind) && m.outStructureId === targetId && m.prompt?.trim(),
+      (m) => isLlmKind(m.kind) && m.outStructureId === targetId && m.prompt?.trim(),
     );
     if (direct?.prompt) return direct.prompt.trim();
   }
-  const withPrompt = modules.filter((m) => LLM_KINDS.includes(m.kind) && m.prompt?.trim());
+  const withPrompt = modules.filter((m) => isLlmKind(m.kind) && m.prompt?.trim());
   if (withPrompt.length) return withPrompt[withPrompt.length - 1].prompt!.trim();
   throw new Error("pipeline has no LLM prompt for benchmark — add a prompt to an LLM step");
 }
@@ -292,7 +291,7 @@ export const AUTO_QUOTE_EXPLAINER =
   "Auto-inserted when an LLM output includes quote fields. Same model in and out (e.g. AtomicRule): the LLM returns verbatim strings; this step links them to document spans. If rules look wrong, inspect the LLM step; if quotes won't click, inspect this step.";
 
 function llmEmitsQuotes(m: PipelineModule, models: StructureModel[]): boolean {
-  if (!LLM_KINDS.includes(m.kind) || !m.outStructureId) return false;
+  if (!isLlmKind(m.kind) || !m.outStructureId) return false;
   const out = models.find((x) => x.id === m.outStructureId);
   return !!out && hasQuoteField(out);
 }

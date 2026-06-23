@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
+import { confidentialUploadWarning } from "@/lib/confidential-upload"
 import { timeAgo } from "@/lib/time-ago"
 import {
   UploadCloud,
@@ -21,6 +22,7 @@ import {
   Hash,
   Eye,
   Search,
+  TriangleAlert,
 } from "lucide-react"
 import type { DocLabel, InputType } from "@/lib/types"
 
@@ -43,6 +45,7 @@ export function Documents() {
   const [filter, setFilter] = useState<DocLabel | "all">("all")
   const [dragOver, setDragOver] = useState(false)
   const [lastDedup, setLastDedup] = useState<string | null>(null)
+  const [uploadWarning, setUploadWarning] = useState<string | null>(null)
 
   // AI : scroll to and highlight a doc when opened from Inference / Logging links.
   useEffect(() => {
@@ -60,6 +63,12 @@ export function Documents() {
   async function ingest(files: FileList | null, label: DocLabel) {
     if (!files) return
     for (const f of Array.from(files)) {
+      const blocked = confidentialUploadWarning(f.name)
+      if (blocked) {
+        setUploadWarning(blocked)
+        setTimeout(() => setUploadWarning(null), 6000)
+        continue
+      }
       try {
         const doc = await addDoc(f, label)
         if (docs.some((d) => d.id === doc.id)) {
@@ -68,7 +77,13 @@ export function Documents() {
         }
       } catch (e) {
         setLastDedup(null)
-        console.error(e)
+        const msg = e instanceof Error ? e.message : null
+        if (msg && confidentialUploadWarning(f.name)) {
+          setUploadWarning(msg)
+          setTimeout(() => setUploadWarning(null), 6000)
+        } else {
+          console.error(e)
+        }
       }
     }
   }
@@ -140,6 +155,11 @@ export function Documents() {
           <p className="text-xs font-medium">Drop files to add to the store</p>
           <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => ingest(e.target.files, "inference")} />
         </div>
+        {uploadWarning && (
+          <p className="mt-2 flex items-center gap-1.5 font-mono text-[10px] text-destructive">
+            <TriangleAlert className="h-3 w-3 shrink-0" /> {uploadWarning}
+          </p>
+        )}
         {lastDedup && (
           <p className="mt-2 flex items-center gap-1.5 font-mono text-[10px] text-chart-3">
             <Hash className="h-3 w-3" /> {lastDedup} already exists — deduped to the same hash, no reprocessing.

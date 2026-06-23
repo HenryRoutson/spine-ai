@@ -1,5 +1,5 @@
 import { docsForProject } from "@/lib/project-docs"
-import { INPUT_TYPES, type DocRef, type InputType, type InputTypeSpec, type PipelineModule, type Project } from "@/lib/types"
+import { INPUT_TYPES, type DocId, type DocRef, type InputType, type InputTypeSpec, type ModuleId, type PipelineModule, type Project } from "@/lib/types"
 
 export function inputTypesForModule(inputModule: PipelineModule): InputType[] {
   if (!inputModule.inputType) return []
@@ -122,4 +122,39 @@ export function inputTypeAccept(type?: InputTypeSpec): string | undefined {
   const types = !type ? [] : Array.isArray(type) ? type : [type]
   const exts = types.map((t) => FILE_ACCEPT[t]).filter(Boolean)
   return exts.length ? exts.join(",") : undefined
+}
+
+export function buildDefaultInputDocs(
+  docs: DocRef[],
+  project: Project,
+  inputModules: PipelineModule[],
+  preferred?: DocRef | null,
+): Partial<Record<ModuleId, DocRef>> {
+  return defaultInputDocsForModules(docs, project, inputModules, preferred ?? null)
+}
+
+export function resolveInputDocs(
+  docs: DocRef[],
+  project: Project,
+  inputModules: PipelineModule[],
+  savedDocIds: Partial<Record<ModuleId, DocId>>,
+  preferred?: DocRef | null,
+): Partial<Record<ModuleId, DocRef>> {
+  const defaults = buildDefaultInputDocs(docs, project, inputModules, preferred)
+  if (!Object.keys(savedDocIds).length) return defaults
+  const out: Partial<Record<ModuleId, DocRef>> = { ...defaults }
+  for (const m of inputModules) {
+    const savedId = savedDocIds[m.id]
+    if (!savedId) continue
+    const doc = docs.find((d) => d.id === savedId)
+    if (doc && docMatchesInputModule(doc, m)) out[m.id] = doc
+  }
+  return out
+}
+
+export function inputDocIdsForModules(
+  inputModules: PipelineModule[],
+  inputDocs: Partial<Record<ModuleId, DocRef>>,
+): DocId[] {
+  return inputModules.map((m) => inputDocs[m.id]!.id as DocId)
 }

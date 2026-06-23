@@ -44,7 +44,7 @@ export function validateInferenceDocContent(
       message: `seed doc missing on deploy — run sync-seeds or upload ${doc.name}`,
     };
   }
-  if (inputTypesForModule(inputModule).includes("json")) {
+  if (doc.type === "json" && inputTypesForModule(inputModule).includes("json")) {
     try {
       JSON.parse(content);
     } catch (err) {
@@ -70,6 +70,10 @@ export function validateInferenceDocPreview(
     };
   }
   return undefined;
+}
+
+export function inferenceDocNeedsFullContent(inputModule: PipelineModule, doc: DocRef): boolean {
+  return doc.type === "json" && inputTypesForModule(inputModule).includes("json");
 }
 
 export function collectInferenceInputIssues(
