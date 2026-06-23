@@ -1,6 +1,11 @@
 
 
 
+- add an example of enrichment, where you keep the same format but just add things to it. do a test which would go over the context limit if you had to repeat the whole structure rather than just the new fields. 
+
+
+use REQUESTLY_LLM_PARALLEL_CALLS_API_KEY
+
 - human to setup github and google sign in
 - rm china and us from chatbot selection
 - AB testing 
@@ -10,6 +15,9 @@ input pdf to source doucment doesn't make sense and is implicit.
   should be to either text or json and that's it. then a step after that which validated what it is if json. use same lock techniqe to add this autoamaticcly if it's a json as link quotes.
 
 
+
+
+parallel llm calls like azure, but with open router selector. LiteLLM or Requesty or Portkey. 
 
 
 
@@ -29,6 +37,7 @@ mediflow_ai_company_profile.pdf : {"error":"no pdf file for sha_8b4a33391ead33d7
 
 
 are you prompting with the input schema in addition to output schema?
+Allow option to view full prompt
 
 
 combine inputs should be able to take in lots of inputs not just 1.
