@@ -6,7 +6,8 @@ import { resumeRunPipeline } from "@/lib/server/run_engine";
 import {
   claimJobResume,
   finishJob,
-  getJob,
+  getJobForProgress,
+  isJobResuming,
   jobProgress,
   openJobDb,
   pauseJob,
@@ -34,8 +35,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const jobDb = await openJobDb();
   const checkpoint = await claimJobResume(auth.userId, jobId, jobDb);
   if (!checkpoint) {
-    const job = await getJob(auth.userId, jobId, jobDb);
+    const job = await getJobForProgress(auth.userId, jobId, jobDb);
     if (!job) return apiError(`unknown job ${id}`, 404);
+    // AI : race fix — duplicate POST after another instance claimed; not an error, keep polling.
+    if (isJobResuming(job)) return NextResponse.json({ ok: true, alreadyClaimed: true });
     return apiError(`job ${id} is not waiting for client code`, 409);
   }
 

@@ -168,9 +168,11 @@ async function submitClientStep(jobId: RunJobId, output: unknown): Promise<void>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ output }),
   })
-  if (!res.ok) {
-    throwApiError(`Client code step for job ${jobId} failed`, res, await readApiErrorBody(res))
-  }
+  if (res.ok) return
+  const body = await readApiErrorBody(res)
+  // AI : race fix — stale progress can trigger a second POST after claim; 409 is harmless, keep polling.
+  if (res.status === 409 && body?.error?.includes("not waiting for client code")) return
+  throwApiError(`Client code step for job ${jobId} failed`, res, body)
 }
 
 export async function awaitRun(
@@ -181,6 +183,7 @@ export async function awaitRun(
   const { onStep, onLogs } = typeof callbacks === "function" ? { onStep: callbacks } : callbacks
   let seenLogs = 0
   let clientStepBusy = false
+  let clientStepSubmittedFor: ModuleId | undefined
   for (;;) {
     const job = await runProgress(jobId)
     onStep?.(job.steps)
@@ -194,11 +197,21 @@ export async function awaitRun(
       onLogs?.(logs, newLines)
       seenLogs = logs.length
     }
-    if (job.clientStep && !job.run && !job.error && !clientStepBusy) {
+    if (!job.clientStep) clientStepSubmittedFor = undefined
+    // AI : race fix — track per moduleId so a stale poll can't re-fire the same client-step POST.
+    if (
+      job.clientStep &&
+      !job.run &&
+      !job.error &&
+      !clientStepBusy &&
+      clientStepSubmittedFor !== job.clientStep.moduleId
+    ) {
+      const { moduleId, code, input } = job.clientStep
       clientStepBusy = true
       try {
-        const output = await runCustomFn(job.clientStep.code, job.clientStep.input)
+        const output = await runCustomFn(code, input)
         await submitClientStep(jobId, output)
+        clientStepSubmittedFor = moduleId
       } finally {
         clientStepBusy = false
       }

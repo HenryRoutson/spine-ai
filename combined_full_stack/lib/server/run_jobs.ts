@@ -54,7 +54,7 @@ function queueSupabasePersist(ownerId: JobOwnerId, id: RunJobId, db: JobDb): voi
         .then(async () => {
           const job = jobs().get(key);
           if (!job) return;
-          await supabasePersistJob(db, id, job);
+          await supabaseMergePersist(db, id, job);
         });
       supabasePersistChains.set(key, next);
       void next.finally(() => {
@@ -68,7 +68,12 @@ function queuePersist(ownerId: JobOwnerId, id: RunJobId, db: JobDb): void {
   queueSupabasePersist(ownerId, id, db);
 }
 
-async function flushPersistChain(ownerId: JobOwnerId, id: RunJobId, db: JobDb): Promise<void> {
+async function flushPersistChain(
+  ownerId: JobOwnerId,
+  id: RunJobId,
+  db: JobDb,
+  jobOverride?: RunJob,
+): Promise<void> {
   const key = cacheKey(ownerId, id);
   flushLogPersistTimer(key);
   const t = supabasePersistTimers.get(key);
@@ -76,7 +81,7 @@ async function flushPersistChain(ownerId: JobOwnerId, id: RunJobId, db: JobDb): 
     clearTimeout(t);
     supabasePersistTimers.delete(key);
   }
-  const job = jobs().get(key);
+  const job = jobOverride ?? jobs().get(key);
   if (!job) return;
   if (!db) return;
   const prev = supabasePersistChains.get(key) ?? Promise.resolve();
@@ -112,7 +117,10 @@ export type JobOwnerId = user_id_string;
 export type RunJobProgress = Omit<RunJob, "paused">;
 
 export function toProgressResponse(job: RunJob): RunJobProgress {
-  const { paused: _paused, ...safe } = job;
+  const { paused, ...safe } = job;
+  // AI : race fix — clientStep without paused means a stale replica (claim cleared paused on
+  // AI : another Vercel instance but this one's memory still had clientStep). Never signal run.
+  if (!paused) delete safe.clientStep;
   return safe;
 }
 
@@ -155,6 +163,43 @@ async function supabasePersistJob(db: SupabaseClient, id: RunJobId, job: RunJob)
   const { error } = await db.from("run_jobs").upsert({ id, data: job, updated_at: Date.now() });
   if (error) throw new Error(`run_jobs upsert failed: ${supabaseErrorMessage(error)}`);
 }
+
+// AI : prod race — Vercel runs each route in a separate instance with its own jobs() map.
+// AI : Instance A (after()) pauses; progress GET on A can show clientStep from warm memory while
+// AI : POST client-step on cold instance B reads Supabase before pause landed → 409.
+// AI : Worse: debounced jobProgress on A can upsert stale paused/clientStep after B claimed.
+// AI : mergeJobForPersist keeps pause/terminal fields from Supabase so step upserts can't resurrect them.
+function mergeJobForPersist(remote: RunJob, local: RunJob): RunJob {
+  const merged: RunJob = {
+    ...local,
+    steps: local.steps.length >= remote.steps.length ? local.steps : remote.steps,
+    logs: (local.logs?.length ?? 0) >= (remote.logs?.length ?? 0) ? local.logs : remote.logs,
+  };
+  if (remote.paused) {
+    merged.paused = remote.paused;
+    merged.clientStep = remote.clientStep;
+  } else {
+    delete merged.paused;
+    delete merged.clientStep;
+  }
+  if (remote.run) merged.run = remote.run;
+  if (remote.error) merged.error = remote.error;
+  merged.deduped = remote.deduped ?? local.deduped;
+  merged.cachedRunId = remote.cachedRunId ?? local.cachedRunId;
+  return merged;
+}
+
+async function supabaseMergePersist(db: SupabaseClient, id: RunJobId, local: RunJob): Promise<void> {
+  try {
+    const remote = await supabaseLoadJob(db, id);
+    await supabasePersistJob(db, id, remote ? mergeJobForPersist(remote, local) : local);
+  } catch (err) {
+    jobLog.warn(`supabaseMergePersist failed — writing local`, { jobId: id, error: supabaseErrorMessage(err) });
+    await supabasePersistJob(db, id, local);
+  }
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 async function supabaseLoadJob(db: SupabaseClient, id: RunJobId): Promise<RunJob | undefined> {
   const { data, error } = await db.from("run_jobs").select("data").eq("id", id).maybeSingle();
@@ -238,8 +283,11 @@ export async function pauseJob(
   const job = (await loadJob(ownerId, id, db)) ?? { steps: [], logs: [] };
   job.paused = checkpoint;
   job.clientStep = checkpoint.clientStep;
+  // AI : race fix — flush Supabase before setJob writes local memory/disk, so a cold instance
+  // AI : handling POST /client-step can load paused and claim even if progress already ran on A.
+  if (db) await flushPersistChain(ownerId, id, db, job);
   setJob(ownerId, id, job);
-  await flushPersistChain(ownerId, id, db);
+  if (!db) await flushPersistChain(ownerId, id, db, job);
   jobLog.info(`pauseJob`, { jobId: id, ownerId, moduleId: checkpoint.clientStep.moduleId });
 }
 
@@ -252,24 +300,59 @@ export async function clearJobPause(ownerId: JobOwnerId, id: RunJobId, db: JobDb
   await flushPersistChain(ownerId, id, db);
 }
 
-// AI : atomically claim a paused job for resume — clears paused in-memory before after() runs.
-export async function claimJobResume(
+async function loadJobForClaim(
+  ownerId: JobOwnerId,
+  id: RunJobId,
+  db: JobDb,
+): Promise<RunJob | undefined> {
+  // AI : race fix — claim must read Supabase, not warm instance memory; local paused can be stale.
+  const key = cacheKey(ownerId, id);
+  let job = jobs().get(key) ?? loadJobLocal(ownerId, id);
+  if (!db) return job ?? (await loadJob(ownerId, id, db));
+  const remote = await supabaseLoadJob(db, id);
+  if (!remote) return job;
+  if (!job) return remote;
+  return mergeJobForPersist(remote, job);
+}
+
+async function tryClaimJobResume(
   ownerId: JobOwnerId,
   id: RunJobId,
   db: JobDb,
 ): Promise<RunCheckpoint | undefined> {
-  const key = cacheKey(ownerId, id);
-  let job = jobs().get(key) ?? loadJobLocal(ownerId, id);
-  if (!job) job = await loadJob(ownerId, id, db);
+  const job = await loadJobForClaim(ownerId, id, db);
   if (!job?.paused) return undefined;
 
   const checkpoint = job.paused;
   delete job.paused;
   delete job.clientStep;
+  // AI : race fix — clear paused in Supabase before local setJob, same ordering as pauseJob.
+  if (db) await flushPersistChain(ownerId, id, db, job);
   setJob(ownerId, id, job);
-  await flushPersistChain(ownerId, id, db);
+  if (!db) await flushPersistChain(ownerId, id, db, job);
   jobLog.info(`claimJobResume`, { jobId: id, ownerId, moduleId: checkpoint.clientStep.moduleId });
   return checkpoint;
+}
+
+// AI : race fix — browser may POST before pause is visible on Supabase; retry ~1.2s before 409.
+export async function claimJobResume(
+  ownerId: JobOwnerId,
+  id: RunJobId,
+  db: JobDb,
+): Promise<RunCheckpoint | undefined> {
+  const CLAIM_RETRIES = 8;
+  const CLAIM_RETRY_MS = 150;
+  for (let attempt = 0; attempt < CLAIM_RETRIES; attempt++) {
+    const checkpoint = await tryClaimJobResume(ownerId, id, db);
+    if (checkpoint) return checkpoint;
+    if (attempt < CLAIM_RETRIES - 1) await sleep(CLAIM_RETRY_MS);
+  }
+  return undefined;
+}
+
+// AI : race fix — after claim, job has no paused/clientStep/run/error while resume runs in after().
+export function isJobResuming(job: RunJob): boolean {
+  return !job.paused && !job.clientStep && !job.run && !job.error;
 }
 
 export async function createJob(ownerId: JobOwnerId, db: JobDb): Promise<RunJobId> {
@@ -358,6 +441,34 @@ export async function getJob(
     stepCount: job?.steps.length,
     done: !!(job?.run || job?.error),
   });
+  return job;
+}
+
+// AI : race fix — progress GET must sync pause/claim state from Supabase; warm memory lags behind
+// AI : what client-step wrote, otherwise browser keeps seeing clientStep and double-submits.
+export async function getJobForProgress(
+  ownerId: JobOwnerId,
+  id: RunJobId,
+  db: JobDb,
+): Promise<RunJob | undefined> {
+  const job = await loadJob(ownerId, id, db);
+  if (!job || !db || job.run || job.error) return job;
+  try {
+    const remote = await supabaseLoadJob(db, id);
+    if (!remote) return job;
+    if (!remote.paused) {
+      delete job.paused;
+      delete job.clientStep;
+    } else {
+      job.paused = remote.paused;
+      job.clientStep = remote.clientStep;
+    }
+    if (remote.run) job.run = remote.run;
+    if (remote.error) job.error = remote.error;
+    if (remote.steps.length > job.steps.length) job.steps = remote.steps;
+  } catch (err) {
+    jobLog.warn(`getJobForProgress remote merge failed`, { jobId: id, error: supabaseErrorMessage(err) });
+  }
   return job;
 }
 

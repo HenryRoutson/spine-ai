@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { apiError } from "@/lib/server/api_context";
 import {
-  getJob,
+  getJobForProgress,
   jobMissingDetail,
   openJobDb,
   toProgressResponse,
@@ -21,7 +21,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   const { id } = await ctx.params;
   const jobDb = await openJobDb();
-  const job = await getJob(auth.userId, id as RunJobId, jobDb);
+  // AI : race fix — use getJobForProgress (Supabase-synced) not getJob, so polls don't flash stale clientStep.
+  const job = await getJobForProgress(auth.userId, id as RunJobId, jobDb);
   if (!job) {
     const detail = await jobMissingDetail(auth.userId, id as RunJobId, jobDb);
     apiLog.warn(`GET progress 404`, { jobId: id, ownerId: auth.userId, detail });
