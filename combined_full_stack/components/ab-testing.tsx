@@ -47,7 +47,7 @@ export function AbTesting() {
       const outcome = (await res.json()) as BenchmarkOutcome
       setStrategies(
         strategies.map((s) => {
-          const r = outcome.results.find((x) => x.kind === s.kind)
+          const r = outcome.results.find((x) => x.strategyId === s.id && !x.isFallback)
           return r
             ? { ...s, model: r.model, accuracy: r.accuracy, passRate: r.passRate, latencyMs: r.latencyMs, costCents: r.costCents }
             : s
@@ -62,7 +62,10 @@ export function AbTesting() {
   }
 
   // AI : prefer the real judge's pick; fall back to the local heuristic for seeded values.
-  const best = (verdict && enabled.find((s) => s.kind === verdict.winnerKind)) ?? bestStrategy(enabled)
+  const best =
+    (verdict &&
+      enabled.find((s) => strategyIdFromResultKey(verdict.winnerResultKey) === s.id)) ??
+    bestStrategy(enabled)
 
   return (
     <div className="flex h-full flex-col">
@@ -295,6 +298,11 @@ function MetricChart({
       </div>
     </div>
   )
+}
+
+function strategyIdFromResultKey(resultKey: string): string | undefined {
+  const m = resultKey.match(/^(?:fallback:)?([^@]+)@/)
+  return m?.[1]
 }
 
 function bestStrategy(list: Strategy[]): Strategy | undefined {

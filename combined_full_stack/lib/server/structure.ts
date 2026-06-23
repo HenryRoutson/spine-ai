@@ -101,12 +101,7 @@ export function hasQuoteField(model: StructureModel): boolean {
   return model.fields.some((f) => f.type === "tuple[text,quote]" || f.type === "list[tuple[text,quote]]");
 }
 
-// AI : LLM-facing schema — the model can't know byte offsets, so quote fields collapse to a plain
-// AI : string (the verbatim quote). run-engine resolves those strings into {text, quote:{...}} after.
-// AI : TODO bug — only TOP-LEVEL quote fields collapse; a quote field inside a nested
-// AI : model/list[model] ref keeps the full {text, quote:{doc_id,start,end}} shape, asking the
-// AI : LLM for byte offsets it cannot know. Latent: the seed never nests a quote-carrying model
-// AI : under an llm step's output, but any user structure that does will fail validation.
+// AI : LLM-facing schema — quote fields collapse to plain strings at every nesting depth.
 // AI : the exact suffix appended to every structured LLM call (logging + OpenRouter).
 export function structuredLlmPrompt(userPrompt: string, schema: ZodType): string {
   const jsonSchema = JSON.stringify(z.toJSONSchema(schema), null, 2);
@@ -118,18 +113,69 @@ export function llmSchemaJson(model: StructureModel, models: StructureModel[], i
   return JSON.stringify(z.toJSONSchema(llmSchema(model, models, isList)), null, 2);
 }
 
-export function llmSchema(model: StructureModel, models: StructureModel[], isList: boolean): ZodType {
-  const index = byId(models);
+function llmRefSchema(
+  ref: StructureModelId | undefined,
+  index: Map<StructureModelId, StructureModel>,
+  seen: Set<StructureModelId>,
+): ZodType {
+  const model = ref ? index.get(ref) : undefined;
+  if (!model) return z.record(z.string(), z.unknown());
+  return llmBuild(model, index, seen);
+}
+
+function llmLeafSchema(
+  type: FieldType,
+  ref: StructureModelId | undefined,
+  index: Map<StructureModelId, StructureModel>,
+  seen: Set<StructureModelId>,
+): ZodType {
+  switch (type) {
+    case "text":
+      return z.string();
+    case "int":
+      return z.number().int();
+    case "float":
+      return z.number();
+    case "bool":
+      return z.boolean();
+    case "datetime":
+      return z.string();
+    case "document":
+      return DocumentSchema;
+    case "list[text]":
+      return z.array(z.string());
+    case "tuple[text,quote]":
+      return z.string();
+    case "list[tuple[text,quote]]":
+      return z.array(z.string());
+    case "model":
+      return llmRefSchema(ref, index, seen);
+    case "list[model]":
+      return z.array(llmRefSchema(ref, index, seen));
+    default:
+      return z.unknown();
+  }
+}
+
+function llmBuild(
+  model: StructureModel,
+  index: Map<StructureModelId, StructureModel>,
+  seen: Set<StructureModelId>,
+): ZodType {
+  if (seen.has(model.id)) return z.record(z.string(), z.unknown());
+  const next = new Set(seen).add(model.id);
   const shape: Record<string, ZodType> = {};
   for (const f of model.fields) {
     if (!f.name.trim()) continue;
-    let base: ZodType;
-    if (f.type === "tuple[text,quote]") base = z.string();
-    else if (f.type === "list[tuple[text,quote]]") base = z.array(z.string());
-    else base = leafSchema(f.type, f.ref, index, new Set([model.id]));
+    const base = llmLeafSchema(f.type, f.ref, index, next);
     shape[f.name] = f.optional ? base.optional() : base;
   }
-  const obj = z.object(shape);
+  return z.object(shape);
+}
+
+export function llmSchema(model: StructureModel, models: StructureModel[], isList: boolean): ZodType {
+  const index = byId(models);
+  const obj = llmBuild(model, index, new Set());
   // AI : json_object mode returns a wrapper object — unwrap before validating the list.
   return isList ? z.preprocess(coerceLlmListOutput, z.array(obj)) : obj;
 }

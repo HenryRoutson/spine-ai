@@ -1,4 +1,4 @@
-import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config";
+import { MIN_ACCOUNT_BALANCE_CENTS, MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type Stripe from "stripe";
@@ -143,13 +143,40 @@ export function chargeCredit(account: BillingAccount, cents: number): BillingAcc
   return { ...account, balanceCents: account.balanceCents - cents };
 }
 
-// AI : deduct run credit before starting a pipeline — returns the updated account (caller saves).
-export async function chargeForRun(key: BillingUserKey): Promise<BillingAccount> {
+// AI : pre-run gate — requires minimum balance; does not deduct (actual LLM cost billed after the run).
+export async function assertCanStartRun(key: BillingUserKey): Promise<BillingAccount> {
   const account = await loadBillingAccount(key);
-  billLog.info(`chargeForRun`, { key, balanceBefore: account.balanceCents, minRequired: MIN_RUN_BALANCE_CENTS });
-  const next = chargeCredit(account, MIN_RUN_BALANCE_CENTS);
+  billLog.info(`assertCanStartRun`, {
+    key,
+    balanceCents: account.balanceCents,
+    minRequired: MIN_RUN_BALANCE_CENTS,
+    floor: MIN_ACCOUNT_BALANCE_CENTS,
+  });
+  if (account.balanceCents < MIN_ACCOUNT_BALANCE_CENTS) {
+    throw new BillingError("insufficient_funds");
+  }
+  if (account.balanceCents < MIN_RUN_BALANCE_CENTS) {
+    throw new BillingError("insufficient_funds");
+  }
+  return account;
+}
+
+/** @deprecated use assertCanStartRun — kept for call-site clarity during migration */
+export const chargeForRun = assertCanStartRun;
+
+// AI : deduct measured LLM / service cost after a run completes (skipped when billedCents is 0).
+export async function billRunUsage(key: BillingUserKey, cents: number): Promise<BillingAccount> {
+  const billed = +Math.max(0, cents).toFixed(4);
+  if (billed <= 0) return loadBillingAccount(key);
+  const account = await loadBillingAccount(key);
+  const balanceAfter = +(account.balanceCents - billed).toFixed(4);
+  if (balanceAfter < MIN_ACCOUNT_BALANCE_CENTS) {
+    billLog.warn(`billRunUsage floor breached`, { key, balanceAfter, billed, floor: MIN_ACCOUNT_BALANCE_CENTS });
+    throw new BillingError("insufficient_funds");
+  }
+  const next: BillingAccount = { ...account, balanceCents: balanceAfter };
   await saveBillingAccount(key, next);
-  billLog.info(`chargeForRun ok`, { key, balanceAfter: next.balanceCents });
+  billLog.info(`billRunUsage ok`, { key, billed, balanceAfter });
   return next;
 }
 

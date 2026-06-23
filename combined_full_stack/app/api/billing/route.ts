@@ -1,4 +1,4 @@
-import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config";
+import { MIN_ACCOUNT_BALANCE_CENTS, MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config";
 import { NextResponse } from "next/server";
 import {
   BILLING_CAP_CENTS,
@@ -20,6 +20,7 @@ export async function GET() {
     totalBilledCents: account.totalBilledCents,
     subscribed: account.subscribed,
     minRunBalanceCents: MIN_RUN_BALANCE_CENTS,
+    minAccountBalanceCents: MIN_ACCOUNT_BALANCE_CENTS,
     topupOptionsCents: [...TOPUP_OPTIONS_CENTS],
     subCentsPerMonth: SUB_CENTS_PER_MONTH,
     billingCapCents: BILLING_CAP_CENTS,

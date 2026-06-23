@@ -1,5 +1,6 @@
 import { NextResponse, after, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { resumeRunPipeline } from "@/lib/server/run_engine";
 import {
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     await withJobLogging(auth.userId, jobId, jobDb, async () => {
       try {
         const run = await resumeRunPipeline(store, checkpoint, output, {
+          cacheOwnerId: checkpoint.cacheOwnerId ?? auth.userId,
           onStep: (p) => {
             void jobProgress(auth.userId, jobId, p, jobDb).catch((err) =>
               apiLog.error(`jobProgress failed`, { jobId, error: (err as Error).message }),
@@ -55,6 +57,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           },
         });
         await store.flush();
+        if (run.billedCents > 0) {
+          try {
+            const billingKey = await getBillingUserKey();
+            await billRunUsage(billingKey, run.billedCents);
+          } catch (billErr) {
+            apiLog.warn(`resume billing failed`, { jobId, error: (billErr as Error).message });
+          }
+        }
         await finishJob(auth.userId, jobId, { run }, jobDb);
         apiLog.info(`resume finished`, { jobId, runId: run.id, status: run.status });
       } catch (err) {

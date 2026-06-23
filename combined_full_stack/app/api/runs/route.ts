@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest, after } from "next/server";
 import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
-import { chargeForRun, getBillingUserKey } from "@/lib/server/billing_account";
+import { assertCanStartRun, billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
 import { computeRunFingerprintForRequest, findMatchingRun } from "@/lib/server/run_fingerprint";
@@ -100,9 +100,9 @@ export async function POST(req: NextRequest) {
   apiLog.info(`job created — charging then scheduling pipeline`, { jobId, ownerId: auth.userId });
 
   try {
-    apiLog.info(`charging for run`, { billingKey });
-    await chargeForRun(billingKey);
-    apiLog.info(`billing charge ok`);
+    apiLog.info(`billing gate`, { billingKey });
+    await assertCanStartRun(billingKey);
+    apiLog.info(`billing gate ok`);
   } catch (err) {
     const billed = billingResponse(err);
     const message = (err as Error).message;
@@ -125,6 +125,7 @@ export async function POST(req: NextRequest) {
           inputDocIds,
           fingerprint,
           fingerprintInputDocIds,
+          cacheOwnerId: auth.userId,
           // AI : never block the pipeline on Supabase job upserts — progress is memory-hot during the run.
           onStep: (p) => {
             void jobProgress(auth.userId, jobId, p, jobDb).catch((err) =>
@@ -134,6 +135,13 @@ export async function POST(req: NextRequest) {
         });
         apiLog.info(`pipeline finished — flushing store`, { jobId, runId: run.id, status: run.status });
         await store.flush(); // AI : SupabaseStore queues addRun — persist before the job reports done
+        if (run.billedCents > 0) {
+          try {
+            await billRunUsage(billingKey, run.billedCents);
+          } catch (billErr) {
+            apiLog.warn(`post-run billing failed`, { jobId, runId: run.id, error: (billErr as Error).message });
+          }
+        }
         await finishJob(auth.userId, jobId, { run }, jobDb);
         apiLog.info(`job finished ok`, { jobId, runId: run.id });
       } catch (err) {

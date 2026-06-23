@@ -49,6 +49,7 @@ export interface RunOptions {
   inputDocIds?: DocId[]; // docs assigned to `input` modules in order; [0] is the dropped doc
   fingerprint?: RunFingerprint; // AI : precomputed at POST gate — must match persisted run
   fingerprintInputDocIds?: DocId[]; // AI : resolved slot docs paired with fingerprint
+  cacheOwnerId?: string; // AI : scopes per-step disk cache to the signed-in user
   onStep?: (p: StepProgress) => void | Promise<void>;
   persist?: boolean; // write run + artifacts to the store/disk (default true)
   liveHtml?: boolean; // write an auto-refreshing progress page during the run (default = persist)
@@ -61,16 +62,66 @@ function modelById(models: StructureModel[], id?: StructureModelId): StructureMo
   return models.find((m) => m.id === id);
 }
 
-// AI : per-step cache keyed by project+module+all input slots+model+module config — honours `module.cached`.
+// AI : per-step cache keyed by owner+project+module+all input slots+model+module config — honours `module.cached`.
 const cacheDir = join(dataDir(), "cache");
-function readCache(key: string): { value: unknown; json?: string } | undefined {
+
+type StepCacheArtifact = {
+  value: unknown;
+  json?: string;
+  docId?: DocId;
+  inputPreview?: string;
+  costCents?: number;
+};
+
+function readCache(key: string): StepCacheArtifact | undefined {
   const path = join(cacheDir, key);
   if (!existsSync(path)) return undefined;
-  return JSON.parse(readFileSync(path, "utf8"));
+  const raw = JSON.parse(readFileSync(path, "utf8")) as StepCacheArtifact;
+  if (raw && typeof raw === "object" && "value" in raw) return raw;
+  return undefined;
 }
-function writeCache(key: string, value: unknown, json?: string): void {
+
+function writeCache(key: string, artifact: StepCacheArtifact): void {
   mkdirSync(cacheDir, { recursive: true });
-  writeFileSync(join(cacheDir, key), JSON.stringify({ value, json }, null, 2), "utf8");
+  writeFileSync(join(cacheDir, key), JSON.stringify(artifact, null, 2), "utf8");
+}
+
+function resultFromCache(m: PipelineModule, cached: StepCacheArtifact, ctx: RunCtx): ExecResult {
+  const valueDocId =
+    cached.docId ??
+    (() => {
+      const v = cached.value as { doc_id?: DocId } | undefined;
+      return v?.doc_id;
+    })();
+  const docId =
+    valueDocId ??
+    (m.kind === "input" || m.kind === "doc-to-text" || m.kind === "quote" ? ctx.sourceDocId : undefined);
+
+  let preview = "(from cache)";
+  if (m.kind === "input" && docId) {
+    preview = `loaded ${inputTypeLabel(m.inputType)} → ${docId}`;
+  } else if (m.kind === "doc-to-text" && docId) {
+    try {
+      const o = cached.json ? (JSON.parse(cached.json) as { purpose?: string }) : {};
+      preview = `purpose: ${o.purpose ?? m.label}`;
+    } catch {
+      preview = `purpose: ${m.label}`;
+    }
+  } else if (m.kind === "quote" && docId) {
+    preview = `linked quote(s) → ${docId}`;
+  }
+
+  const json =
+    cached.json ??
+    (docId && m.kind === "input" ? JSON.stringify({ doc_id: docId }, null, 2) : undefined);
+
+  return {
+    value: cached.value,
+    preview,
+    json,
+    docId,
+    inputPreview: cached.inputPreview,
+  };
 }
 
 function preview(s: string, n = 160): string {
@@ -517,6 +568,7 @@ type LinearStepParams = {
   project: Project;
   projectId: ProjectId;
   model: ModelId;
+  cacheOwnerId: string;
   ctx: RunCtx;
   steps: RunStep[];
   artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[];
@@ -528,6 +580,7 @@ type LinearStepParams = {
   startedAt: number;
   inputDocId: DocId;
   fingerprintInputDocIds: DocId[];
+  savedCentsAcc: { value: number };
 };
 
 // AI : shared linear step loop — runPipeline and resumeRunPipeline both call this.
@@ -535,7 +588,7 @@ async function runLinearStepsFrom(
   params: LinearStepParams,
   startIndex: number,
 ): Promise<"ok" | "error" | "paused"> {
-  const { project, projectId, model, ctx, steps, artifacts, ledger, log, opts, writeLive, runId, startedAt, inputDocId, fingerprintInputDocIds } =
+  const { project, projectId, model, cacheOwnerId, ctx, steps, artifacts, ledger, log, opts, writeLive, runId, startedAt, inputDocId, fingerprintInputDocIds, savedCentsAcc } =
     params;
 
   for (let i = startIndex; i < project.modules.length; i++) {
@@ -564,7 +617,7 @@ async function runLinearStepsFrom(
     let status: RunStepStatus = "ok";
     let result: ExecResult | undefined;
 
-    const key = stepCacheKey(projectId, m, m.model ?? model, fingerprintInputDocIds);
+    const key = stepCacheKey(cacheOwnerId, projectId, m, m.model ?? model, fingerprintInputDocIds);
     log.debug(`cache lookup`, { key, cachedFlag: !!m.cached });
     const cached = m.cached ? readCache(key) : undefined;
 
@@ -572,8 +625,9 @@ async function runLinearStepsFrom(
       if (cached) {
         applyModuleSideEffects(m, ctx, ctx.store, log);
         status = "cached";
-        result = { value: cached.value, preview: "(from cache)", json: cached.json };
-        log.info(`cache HIT`, { moduleId: m.id, key });
+        savedCentsAcc.value += cached.costCents ?? 0;
+        result = resultFromCache(m, cached, ctx);
+        log.info(`cache HIT`, { moduleId: m.id, key, savedCents: cached.costCents ?? 0 });
       } else {
         result = await execModule(m, ctx, log);
         const out = modelById(project.models, m.outStructureId);
@@ -590,8 +644,19 @@ async function runLinearStepsFrom(
           log.debug(`validation ok`, { moduleId: m.id, structure: out.name, itemCount });
         }
         if (m.cached) {
-          writeCache(key, result.value, result.json);
-          log.debug(`cache written`, { key });
+          const stepCost = +(ledger.totalCents() - beforeCents).toFixed(4);
+          writeCache(key, {
+            value: result.value,
+            json:
+              result.json ??
+              (result.docId && m.kind === "input"
+                ? JSON.stringify({ doc_id: result.docId }, null, 2)
+                : undefined),
+            docId: result.docId,
+            inputPreview: result.inputPreview,
+            costCents: stepCost,
+          });
+          log.debug(`cache written`, { key, costCents: stepCost });
         }
       }
     } catch (err) {
@@ -599,6 +664,7 @@ async function runLinearStepsFrom(
         throw new PipelinePausedError({
           runId,
           projectId,
+          cacheOwnerId,
           inputDocId,
           inputDocIds: fingerprintInputDocIds,
           fingerprintInputDocIds,
@@ -750,6 +816,8 @@ export async function runPipeline(
 
   const steps: RunStep[] = [];
   const artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[] = [];
+  const cacheOwnerId = opts.cacheOwnerId ?? "local";
+  const savedCentsAcc = { value: 0 };
 
   const writeLive = createWriteLive(project, model, steps, opts.liveHtml ?? persist);
   await runLinearStepsFrom(
@@ -757,6 +825,7 @@ export async function runPipeline(
       project,
       projectId,
       model,
+      cacheOwnerId,
       ctx,
       steps,
       artifacts,
@@ -768,16 +837,14 @@ export async function runPipeline(
       startedAt,
       inputDocId,
       fingerprintInputDocIds,
+      savedCentsAcc,
     },
     0,
   );
 
   const totalMs = steps.reduce((a, s) => a + s.ms, 0);
   const billedCents = +steps.reduce((a, s) => a + s.costCents, 0).toFixed(4);
-  // AI : savings = avg cost of every cached step (re-billing avoided), cross-checked by Billing.
-  const savedCents = project.modules
-    .filter((m) => steps.find((s) => s.moduleId === m.id)?.status === "cached")
-    .reduce((a, m) => a + m.avgCostCents, 0);
+  const savedCents = +savedCentsAcc.value.toFixed(4);
 
   const run: PipelineRun = {
     id: runId,
@@ -859,6 +926,10 @@ export async function resumeRunPipeline(
   if (!m) throw new Error(`resume: invalid step index ${checkpoint.stepIndex}`);
 
   const writeLive = createWriteLive(project, model, steps, opts.liveHtml ?? persist);
+  const cacheOwnerId = opts.cacheOwnerId ?? checkpoint.cacheOwnerId ?? "local";
+  const savedCentsAcc = {
+    value: steps.filter((s) => s.status === "cached").reduce((a, s) => a + s.costCents, 0),
+  };
 
   let status: RunStepStatus = "ok";
   let result: ExecResult | undefined;
@@ -874,8 +945,6 @@ export async function resumeRunPipeline(
       const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes: false });
       if (!check.ok) throw new Error(`output failed ${out.name} validation: ${check.error}`);
     }
-    const key = stepCacheKey(checkpoint.projectId, m, m.model ?? model, fingerprintInputDocIds);
-    if (m.cached) writeCache(key, result.value, result.json);
   } catch (err) {
     status = "error";
     result = failedStepResult(err, m, ctx, result);
@@ -884,6 +953,16 @@ export async function resumeRunPipeline(
 
   const ms = Date.now() - t0;
   const costCents = ledger.totalCents() - beforeCents;
+  if (status !== "error" && m.cached && result) {
+    const key = stepCacheKey(cacheOwnerId, checkpoint.projectId, m, m.model ?? model, fingerprintInputDocIds);
+    writeCache(key, {
+      value: result.value,
+      json: result.json,
+      docId: result.docId,
+      inputPreview: result.inputPreview,
+      costCents: +costCents.toFixed(4),
+    });
+  }
   if (status !== "error") {
     ctx.outputs.set(m.id, result.value);
     const structId = m.outStructureId ?? (m.kind === "output" ? m.inStructureId : undefined);
@@ -932,6 +1011,7 @@ export async function resumeRunPipeline(
       project,
       projectId: checkpoint.projectId,
       model,
+      cacheOwnerId,
       ctx,
       steps,
       artifacts,
@@ -943,15 +1023,14 @@ export async function resumeRunPipeline(
       startedAt: checkpoint.startedAt,
       inputDocId: checkpoint.inputDocId,
       fingerprintInputDocIds,
+      savedCentsAcc,
     },
     checkpoint.stepIndex + 1,
   );
 
   const totalMs = steps.reduce((a, s) => a + s.ms, 0);
   const billedCents = +steps.reduce((a, s) => a + s.costCents, 0).toFixed(4);
-  const savedCents = project.modules
-    .filter((mod) => steps.find((s) => s.moduleId === mod.id)?.status === "cached")
-    .reduce((a, mod) => a + mod.avgCostCents, 0);
+  const savedCents = +savedCentsAcc.value.toFixed(4);
 
   const run: PipelineRun = {
     id: checkpoint.runId,

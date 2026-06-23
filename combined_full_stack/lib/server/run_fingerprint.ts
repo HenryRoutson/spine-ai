@@ -20,8 +20,9 @@ import {
   type RunFingerprint,
 } from "./types";
 
-// AI : per-step disk cache key — all input slot docs + execution-affecting module config.
+// AI : per-step disk cache key — owner + project + module + inputs + config (isolates users on shared hosts).
 export function stepCacheKey(
+  cacheOwnerId: string,
   projectId: ProjectId,
   module: PipelineModule,
   model: ModelId,
@@ -33,7 +34,8 @@ export function stepCacheKey(
     .digest("hex")
     .slice(0, 12);
   const stepModel = module.model ?? model;
-  return `${projectId}__${module.id}__${stepModel}__${inputs}__${cfg}.json`;
+  const owner = createHash("sha256").update(cacheOwnerId).digest("hex").slice(0, 12);
+  return `${owner}__${projectId}__${module.id}__${stepModel}__${inputs}__${cfg}.json`;
 }
 
 function fingerprintProject(project: Project): Project {

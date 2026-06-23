@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
-import { chargeForRun, getBillingUserKey } from "@/lib/server/billing_account";
-import { runBenchmark } from "@/lib/server/strategies";
+import { assertCanStartRun, billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
+import { mergeBenchmarkStrategies, runBenchmark } from "@/lib/server/strategies";
 import { logger } from "@/lib/server/server_logger";
 import type { DocId, ProjectId } from "@/lib/server/types";
 
@@ -28,8 +28,9 @@ export async function POST(req: NextRequest) {
   const docId = inputDocId ?? [...store.docs()].reverse().find((d) => d.label === "inference")?.id;
   if (!docId) return apiError("no inference document in the store", 400);
 
+  const billingKey = await getBillingUserKey();
   try {
-    await chargeForRun(await getBillingUserKey());
+    await assertCanStartRun(billingKey);
   } catch (err) {
     const billed = billingResponse(err);
     if (billed) return billed;
@@ -39,7 +40,16 @@ export async function POST(req: NextRequest) {
   try {
     apiLog.info(`benchmark starting`, { projectId, docId });
     const result = await runBenchmark(project, store, docId);
-    apiLog.info(`benchmark complete`, { projectId, docId });
+    if (result.totalCostCents > 0) {
+      try {
+        await billRunUsage(billingKey, result.totalCostCents);
+      } catch (billErr) {
+        apiLog.warn(`benchmark billing failed`, { projectId, error: (billErr as Error).message });
+      }
+    }
+    store.saveProject({ ...project, strategies: mergeBenchmarkStrategies(project, result.results) });
+    await store.flush();
+    apiLog.info(`benchmark complete`, { projectId, docId, totalCostCents: result.totalCostCents });
     return NextResponse.json(result);
   } catch (err) {
     apiLog.error(`benchmark failed`, { projectId, error: (err as Error).message });

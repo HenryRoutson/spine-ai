@@ -26,6 +26,8 @@ export const BENCH_FALLBACK_MODEL: ModelId = "sonnet-4.7";
 const BENCH_DOC_CHARS = 4000;
 
 export interface StrategyResult {
+  strategyId: string;
+  resultKey: string;
   kind: StrategyKind;
   name: string;
   model: ModelId;
@@ -35,6 +37,7 @@ export interface StrategyResult {
   costCents: number;
   worked: boolean; // produced ≥1 schema-valid row
   log: string; // markdown trace with fenced code blocks (syntax-highlighted in the UI)
+  isFallback?: boolean;
 }
 
 interface BenchTask {
@@ -58,6 +61,10 @@ function rowSchema(task: BenchTask): ZodType {
 function validRows(task: BenchTask, rows: unknown): unknown[] {
   if (!Array.isArray(rows)) return [];
   return rows.filter((r) => validate(r, task.out, task.models).ok);
+}
+
+function resultKeyFor(strategy: Strategy, model: ModelId, isFallback = false): string {
+  return isFallback ? `fallback:${strategy.id}@${model}` : `${strategy.id}@${model}`;
 }
 
 // ---- the four LLL environments ----
@@ -123,9 +130,10 @@ export async function runStrategy(
   project: Project,
   store: Store,
   inputDocId: DocId,
-  opts: { model?: ModelId; persistLog?: boolean } = {},
+  opts: { model?: ModelId; persistLog?: boolean; isFallback?: boolean } = {},
 ): Promise<StrategyResult> {
   const model = opts.model ?? strategy.model;
+  const isFallback = opts.isFallback ?? false;
   const ledger = new UsageLedger();
   const task: BenchTask = {
     source: (store.docContent(inputDocId) ?? "").slice(0, BENCH_DOC_CHARS),
@@ -154,6 +162,8 @@ export async function runStrategy(
   }
 
   return {
+    strategyId: strategy.id,
+    resultKey: resultKeyFor(strategy, model, isFallback),
     kind: strategy.kind,
     name: strategy.name,
     model,
@@ -163,48 +173,75 @@ export async function runStrategy(
     costCents: +ledger.totalCents().toFixed(4),
     worked: ok.length > 0,
     log,
+    isFallback,
   };
 }
 
 export interface JudgeVerdict {
+  winnerResultKey: string;
   winnerKind: StrategyKind;
   rationale: string;
-  scores: { kind: StrategyKind; accuracy: number }[];
+  scores: { resultKey: string; kind: StrategyKind; accuracy: number }[];
 }
 
 const KINDS = ["single-llm", "rlm", "claude-code", "cheap-agent"] as const;
 
 // AI : LLM judge — scores each environment's output quality (accuracy 0-100) and picks the winner.
-// AI : TODO bug — this ledger is created and billed but never read; the judge call's cost is
-// AI : silently dropped from every benchmark total.
-export async function judgeStrategies(results: StrategyResult[]): Promise<JudgeVerdict> {
+export async function judgeStrategies(
+  results: StrategyResult[],
+): Promise<{ verdict: JudgeVerdict; costCents: number }> {
   const ledger = new UsageLedger();
   const schema = z.object({
-    winnerKind: z.enum(KINDS),
+    winnerResultKey: z.string(),
     rationale: z.string(),
-    scores: z.array(z.object({ kind: z.enum(KINDS), accuracy: z.number().min(0).max(100) })),
+    scores: z.array(
+      z.object({
+        resultKey: z.string(),
+        kind: z.enum(KINDS),
+        accuracy: z.number().min(0).max(100),
+      }),
+    ),
   });
   const table = results
     .map(
       (r) =>
-        `### ${r.kind} (${r.model}) — schema pass ${r.passRate}%, ${r.latencyMs}ms, ${r.costCents.toFixed(2)}c, worked: ${r.worked}\n` +
+        `### ${r.resultKey} (${r.kind} on ${r.model}) — schema pass ${r.passRate}%, ${r.latencyMs}ms, ${r.costCents.toFixed(2)}c, worked: ${r.worked}\n` +
         `Output sample:\n${r.log.slice(-1200)}`,
     )
     .join("\n\n");
-  const prompt = `Judge these strategies for a production legal-compliance pipeline. Score each one's output quality (accuracy 0-100) from its sample, then pick the best overall balancing accuracy, schema reliability, latency and cost.\n\n${table}`;
-  return llmStructured(prompt, schema, { model: BENCH_CHEAP_MODEL, ledger }) as Promise<JudgeVerdict>;
+  const prompt = `Judge these strategies for a production legal-compliance pipeline. Each section has a unique resultKey — score and pick winners by resultKey (not kind alone). Score each one's output quality (accuracy 0-100) from its sample, then pick the best overall balancing accuracy, schema reliability, latency and cost.\n\n${table}`;
+  const raw = (await llmStructured(prompt, schema, { model: BENCH_CHEAP_MODEL, ledger })) as z.infer<typeof schema>;
+  const winner = results.find((r) => r.resultKey === raw.winnerResultKey) ?? results[0];
+  return {
+    verdict: {
+      winnerResultKey: raw.winnerResultKey,
+      winnerKind: winner?.kind ?? raw.scores[0]?.kind ?? "single-llm",
+      rationale: raw.rationale,
+      scores: raw.scores,
+    },
+    costCents: +ledger.totalCents().toFixed(4),
+  };
 }
 
 export interface BenchmarkOutcome {
   results: StrategyResult[];
   verdict: JudgeVerdict;
   usedFallback: boolean; // true when no cheap-model environment worked and Sonnet was called
+  judgeCostCents: number;
+  totalCostCents: number;
+}
+
+export function mergeBenchmarkStrategies(project: Project, results: StrategyResult[]): Strategy[] {
+  return project.strategies.map((s) => {
+    const r = results.find((x) => x.strategyId === s.id && !x.isFallback);
+    return r
+      ? { ...s, model: r.model, accuracy: r.accuracy, passRate: r.passRate, latencyMs: r.latencyMs, costCents: r.costCents }
+      : s;
+  });
 }
 
 // AI : full benchmark per outline — all enabled environments on the cheap model; if none work,
 // AI : one single Sonnet call as fallback; the judge evaluates; all logs persisted.
-// AI : TODO bug — results are never written back to project.strategies, so the A/B tab keeps
-// AI : showing the seeded static numbers (accuracy 94 etc.) after a real benchmark has run.
 export async function runBenchmark(project: Project, store: Store, inputDocId: DocId): Promise<BenchmarkOutcome> {
   const enabled = project.strategies.filter((s) => s.enabled);
   const results = await Promise.all(
@@ -215,22 +252,33 @@ export async function runBenchmark(project: Project, store: Store, inputDocId: D
   if (!results.some((r) => r.worked)) {
     usedFallback = true;
     const single = enabled.find((s) => s.kind === "single-llm") ?? enabled[0];
-    results.push(await runStrategy(single, project, store, inputDocId, { model: BENCH_FALLBACK_MODEL }));
+    results.push(
+      await runStrategy(single, project, store, inputDocId, {
+        model: BENCH_FALLBACK_MODEL,
+        isFallback: true,
+      }),
+    );
   }
 
-  // AI : TODO bug — the fallback row reuses an existing `kind`, and results/scores are keyed by
-  // AI : kind: the judge sees two sections under the same kind, both rows get the SAME accuracy
-  // AI : below, and `verdict.winnerKind` can't distinguish the cheap run from the Sonnet fallback.
-  const verdict = await judgeStrategies(results);
-  for (const r of results) r.accuracy = verdict.scores.find((s) => s.kind === r.kind)?.accuracy ?? r.accuracy;
+  const { verdict, costCents: judgeCostCents } = await judgeStrategies(results);
+  for (const r of results) {
+    r.accuracy = verdict.scores.find((s) => s.resultKey === r.resultKey)?.accuracy ?? r.accuracy;
+  }
+
+  const totalCostCents = +(
+    results.reduce((a, r) => a + r.costCents, 0) + judgeCostCents
+  ).toFixed(4);
 
   const summary = [
     `# A/B benchmark — ${project.name}`,
     `Cheap model: ${BENCH_CHEAP_MODEL} · fallback used: ${usedFallback}`,
     "",
-    ...results.map((r) => `- **${r.kind}** (${r.model}): accuracy ${r.accuracy}%, pass ${r.passRate}%, ${r.latencyMs}ms, ${r.costCents.toFixed(2)}c`),
+    ...results.map(
+      (r) =>
+        `- **${r.resultKey}** (${r.kind} / ${r.model}): accuracy ${r.accuracy}%, pass ${r.passRate}%, ${r.latencyMs}ms, ${r.costCents.toFixed(2)}c`,
+    ),
     "",
-    `**Winner:** ${verdict.winnerKind}`,
+    `**Winner:** ${verdict.winnerResultKey} (${verdict.winnerKind})`,
     verdict.rationale,
     "",
     "---",
@@ -239,5 +287,5 @@ export async function runBenchmark(project: Project, store: Store, inputDocId: D
   ].join("\n");
   fileWriteHelper(join(dataDir(), "ab_tests"), "benchmark", "md", summary);
 
-  return { results, verdict, usedFallback };
+  return { results, verdict, usedFallback, judgeCostCents, totalCostCents };
 }
