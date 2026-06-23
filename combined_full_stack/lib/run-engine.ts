@@ -2,9 +2,9 @@
 // AI : then the Inference tab polls progress until the persisted PipelineRun arrives.
 // AI : user-authored transform/custom steps run here in the browser (never on the server).
 import { runCustomFn } from "@/lib/custom_code"
-import type { JobLogEntry, RunJob, RunJobId } from "@/lib/server/run_jobs"
-import type { StepProgress, StepSubProgress } from "@/lib/server/run_engine"
+import { readApiErrorBody, formatApiError } from "@/lib/api-client"
 import type { DocId, ModelId, ModuleId, PipelineRun, ProjectId, RunStepStatus } from "@/lib/types"
+import type { JobLogEntry, RunJob, RunJobId, StepProgress, StepSubProgress } from "@/lib/types"
 
 export type { JobLogEntry, RunJob, RunJobId, StepProgress, StepSubProgress }
 
@@ -43,8 +43,6 @@ export function mergeStepStates(
   return next
 }
 
-type ApiErrorBody = { error?: string; detail?: string; code?: string }
-
 export class RunStartError extends Error {
   constructor(
     message: string,
@@ -63,22 +61,7 @@ export function isRunBillingError(e: unknown): e is RunStartError {
 
 const MAX_PROGRESS_POLLS = 10
 
-async function readApiErrorBody(res: Response): Promise<ApiErrorBody | null> {
-  try {
-    return (await res.json()) as ApiErrorBody
-  } catch {
-    return null
-  }
-}
-
-function formatApiError(context: string, res: Response, body: ApiErrorBody | null): string {
-  const parts = [body?.error, body?.detail].filter(Boolean)
-  const suffix = parts.length > 0 ? `: ${parts.join(" — ")}` : ""
-  const code = body?.code ? ` [${body.code}]` : ""
-  return `${context} (HTTP ${res.status})${code}${suffix}`
-}
-
-function throwApiError(context: string, res: Response, body: ApiErrorBody | null): never {
+function throwApiError(context: string, res: Response, body: Awaited<ReturnType<typeof readApiErrorBody>>): never {
   throw new RunStartError(formatApiError(context, res, body), res.status, body?.code)
 }
 

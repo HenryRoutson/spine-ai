@@ -3,71 +3,17 @@
 import {
   ArrowRight,
   ChevronRight,
-  FileInput,
-  FileOutput,
-  FileText,
-  Merge,
-  Shuffle,
-  Sparkle,
-  Code2,
-  Link2,
-  Zap,
   AlertTriangle,
   Lock,
-  type LucideIcon,
+  Zap,
 } from "lucide-react"
 import { segmentPipeline } from "@/lib/pipeline-layout"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
+import { KIND_COLOR, KIND_ICON } from "@/lib/module-ui"
 import { MODULE_META, type ModuleId, type ModuleKind, type PipelineModule, type RunStepStatus, type StructureModel } from "@/lib/types"
 import { inputTypeLabel } from "@/lib/inference-input"
+import { modelName } from "@/lib/validity"
 import { cn } from "@/lib/utils"
-
-// AI : batch llm is a 2×2 sparkle grid so it reads as "many calls" vs single Sparkle.
-function BatchSparkleIcon({ className }: { className?: string }) {
-  return (
-    <span
-      className={cn(
-        "inline-grid grid-cols-2 gap-px leading-none [&_svg]:size-[42%]",
-        className,
-      )}
-    >
-      <Sparkle />
-      <Sparkle />
-      <Sparkle />
-      <Sparkle />
-    </span>
-  )
-}
-
-type ModuleIcon = LucideIcon | typeof BatchSparkleIcon
-
-const KIND_ICON: Record<ModuleKind, ModuleIcon> = {
-  input: FileInput,
-  "doc-to-text": FileText,
-  llm: Sparkle,
-  "llm-batch": BatchSparkleIcon,
-  quote: Link2,
-  transform: Shuffle,
-  combine: Merge,
-  "custom-code": Code2,
-  output: FileOutput,
-}
-
-const KIND_COLOR: Record<ModuleKind, string> = {
-  input: "text-chart-2",
-  "doc-to-text": "text-chart-3",
-  llm: "text-primary",
-  "llm-batch": "text-primary",
-  quote: "text-chart-2",
-  transform: "text-chart-3",
-  combine: "text-chart-3",
-  "custom-code": "text-chart-1",
-  output: "text-chart-4",
-}
-
-function modelName(models: StructureModel[], id?: string) {
-  return models.find((m) => m.id === id)?.name
-}
 
 type PipelineCanvasProps = {
   modules: PipelineModule[]

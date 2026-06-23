@@ -40,6 +40,26 @@ function moduleForFingerprint(m: PipelineModule) {
   };
 }
 
+function moduleConfigForStepCache(m: PipelineModule) {
+  return moduleForFingerprint(m) ?? { id: m.id, kind: m.kind };
+}
+
+// AI : per-step disk cache key — all input slot docs + execution-affecting module config.
+export function stepCacheKey(
+  projectId: ProjectId,
+  module: PipelineModule,
+  model: ModelId,
+  inputDocIds: DocId[],
+): string {
+  const inputs = inputDocIds.length ? inputDocIds.join("__") : "none";
+  const cfg = createHash("sha256")
+    .update(stableJson(moduleConfigForStepCache(module)))
+    .digest("hex")
+    .slice(0, 12);
+  const stepModel = module.model ?? model;
+  return `${projectId}__${module.id}__${stepModel}__${inputs}__${cfg}.json`;
+}
+
 function modelForFingerprint(m: StructureModel) {
   return {
     id: m.id,

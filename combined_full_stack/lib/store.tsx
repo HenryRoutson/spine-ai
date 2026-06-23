@@ -29,6 +29,7 @@ import type {
 } from "@/lib/types"
 import { DEFAULT_MODEL } from "@/lib/types"
 import { billingSeries } from "@/lib/billing"
+import { apiJson } from "@/lib/api-client"
 import { migrateProjectModules, syncAutoQuoteSteps } from "@/lib/quote-steps"
 
 export type BillingAccountView = {
@@ -101,12 +102,6 @@ type PrefetchEntry = {
 
 const StoreContext = createContext<StoreState | null>(null)
 
-async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { credentials: "same-origin", ...init })
-  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `${url} → ${res.status}`)
-  return res.json() as Promise<T>
-}
-
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ServerState | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -144,12 +139,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refreshBilling = useCallback(async () => {
-    setBillingAccount(await api<BillingAccountView>("/api/billing"))
+    setBillingAccount(await apiJson<BillingAccountView>("/api/billing"))
   }, [])
 
   const fetchState = useCallback(async (projectId: string) => {
     const q = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""
-    return api<ServerState>(`/api/state${q}`)
+    return apiJson<ServerState>(`/api/state${q}`)
   }, [])
 
   const loadProjectState = useCallback(
@@ -240,7 +235,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clean()
       return
     }
-    api<{ creditedCents: number }>("/api/billing/confirm", {
+    apiJson<{ creditedCents: number }>("/api/billing/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId }),
@@ -278,7 +273,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const addProject = useCallback(() => {
-    api<Project>("/api/projects", { method: "POST" })
+    apiJson<Project>("/api/projects", { method: "POST" })
       .then((fresh) => {
         setState((prev) => (prev ? { ...prev, projects: [...prev.projects, fresh] } : prev))
         setActiveProjectId(fresh.id)
@@ -287,7 +282,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const cloneFromTemplate = useCallback((templateId: string) => {
-    return api<Project>("/api/projects", {
+    return apiJson<Project>("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ templateId }),
@@ -304,7 +299,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const cloneProjectById = useCallback((cloneFrom: string) => {
-    return api<Project>("/api/projects", {
+    return apiJson<Project>("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cloneFrom }),
@@ -321,7 +316,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const resyncExamples = useCallback(() => {
-    return api<{ updated: number }>("/api/projects/resync-examples", { method: "POST" })
+    return apiJson<{ updated: number }>("/api/projects/resync-examples", { method: "POST" })
       .then(async ({ updated }) => {
         await refresh()
         return updated
@@ -348,7 +343,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const deleteProject = useCallback(
     (id: string) => {
-      api<{ ok: true }>(`/api/projects/${id}`, { method: "DELETE" })
+      apiJson<{ ok: true }>(`/api/projects/${id}`, { method: "DELETE" })
         .then(() => {
           let nextActiveId: string | undefined
           setState((prev) => {
@@ -368,7 +363,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const form = new FormData()
     form.append("file", file)
     form.append("label", label)
-    const doc = await api<DocRef>("/api/docs", { method: "POST", body: form })
+    const doc = await apiJson<DocRef>("/api/docs", { method: "POST", body: form })
     setState((prev) =>
       prev && !prev.docs.some((d) => d.id === doc.id) ? { ...prev, docs: [doc, ...prev.docs] } : prev,
     )
@@ -388,7 +383,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const updateRunNotes = useCallback(async (runId: PipelineRun["id"], notes: string | undefined) => {
-    await api("/api/runs/" + runId, {
+    await apiJson("/api/runs/" + runId, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ notes: notes ?? null }),

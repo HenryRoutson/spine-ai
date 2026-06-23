@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // AI : runPipeline & co accept this store unchanged. RLS scopes every row to the
 // AI : signed-in user behind `db`; no user_id handling anywhere in app code.
 import { ensureSeeded, hashContent, type Store } from "./store";
+import { storeErrorMessage } from "./errors";
 import { migrateProjectModules } from "./validity";
 import type {
   DocId,
@@ -243,7 +244,7 @@ export class SupabaseStore implements Store {
 
 // AI : schema.sql may not be applied yet — detect missing tables and fall back to local JSON.
 export function isMissingSchemaError(error: unknown): boolean {
-  const msg = storeErrorMessage(error);
+  const msg = storeErrorMessage(error, String(error));
   const code =
     typeof error === "object" && error !== null && "code" in error
       ? String((error as { code: unknown }).code)
@@ -254,13 +255,6 @@ export function isMissingSchemaError(error: unknown): boolean {
     msg.includes("Could not find the table") ||
     (msg.includes("relation") && msg.includes("does not exist"))
   );
-}
-
-function storeErrorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  if (typeof err === "object" && err !== null && "message" in err)
-    return String((err as { message: unknown }).message);
-  return String(err);
 }
 
 // AI : a ready store for one signed-in user — first sign-in gets the seed projects + docs,

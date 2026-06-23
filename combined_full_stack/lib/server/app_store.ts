@@ -4,6 +4,7 @@ import { ensureSeeded, openStore, type JsonStore } from "./store";
 import type { Store } from "./store";
 import { logger } from "./server_logger";
 import { isMissingSchemaError, openUserStore } from "./supabase_store";
+import { storeErrorMessage } from "./errors";
 
 const storeLog = logger("app-store");
 
@@ -11,13 +12,6 @@ const storeLog = logger("app-store");
 // AI : bundled separately in dev, so a plain module-level singleton is not enough, and
 // AI : two independent stores would clobber each other's store.json on flush.
 type StoreSlot = { __forgeStore?: Promise<JsonStore> };
-
-function storeErrorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  if (typeof err === "object" && err !== null && "message" in err)
-    return String((err as { message: unknown }).message);
-  return "Store load failed";
-}
 
 function getJsonStore(): Promise<JsonStore> {
   const g = globalThis as StoreSlot;
@@ -54,12 +48,12 @@ export async function getStore(): Promise<Store> {
         storeLog.info(`using SupabaseStore`);
         return store;
       } catch (err) {
-        storeLog.error(`SupabaseStore failed`, { error: storeErrorMessage(err) });
+        storeLog.error(`SupabaseStore failed`, { error: storeErrorMessage(err, "Store load failed") });
         if (!isMissingSchemaError(err)) throw err;
       }
     }
   } catch (err) {
-    storeLog.debug(`Supabase unavailable — local JsonStore`, { error: storeErrorMessage(err) });
+    storeLog.debug(`Supabase unavailable — local JsonStore`, { error: storeErrorMessage(err, "Store load failed") });
   }
   storeLog.debug(`using local JsonStore`);
   return getLocalStore();

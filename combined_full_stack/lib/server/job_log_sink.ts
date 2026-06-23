@@ -1,12 +1,6 @@
-import type { LogLevel } from "./server_logger";
+import type { JobLogEntry } from "@/lib/run-types";
 
-// AI : decouples ServerLogger from run_jobs — avoids circular imports; run_jobs installs the sink.
-export interface JobLogEntry {
-  at: number;
-  level: LogLevel;
-  tag: string;
-  line: string;
-}
+export type { JobLogEntry };
 
 type JobLogSink = (entry: JobLogEntry) => void;
 

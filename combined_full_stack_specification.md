@@ -145,6 +145,7 @@ json can be viewed in excel popups for non techincal people. there is also a vie
 
 the documents tab contains all documents and their size with the ability to view them. you can also view pdf documents markdown in raw text or as formatted or as the original pdf and the same for word and other more complex documents. 
 csv, excel, json can all be viewed as json, excel or in original text.
+flag and block uploads if they contain 'confidential' until you click approve
 
 # Billing 
 current credit.

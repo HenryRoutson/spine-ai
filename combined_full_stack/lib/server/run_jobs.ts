@@ -7,7 +7,7 @@ import { createClient } from "@/utils/supabase/server";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { dataDir } from "./config";
 import { installJobLogSink, type JobLogEntry } from "./job_log_sink";
-import type { StepProgress } from "./run_engine";
+import type { RunJob as RunJobBase, RunJobId, StepProgress } from "@/lib/run-types";
 import type { RunCheckpoint } from "./run_checkpoint";
 import type { user_id_string } from "./require_auth";
 import { logger } from "./server_logger";
@@ -15,9 +15,12 @@ import type { PipelineRun, RunId } from "./types";
 
 const jobLog = logger("run-jobs");
 
-export type { JobLogEntry };
+export type { JobLogEntry, RunJobId };
 
-export type JobOwnerId = user_id_string;
+// AI : server-only fields layered on the client-safe RunJob DTO.
+export interface RunJob extends RunJobBase {
+  paused?: RunCheckpoint;
+}
 
 const MAX_JOB_LOGS = 400;
 const LOG_PERSIST_MS = 300;
@@ -103,20 +106,7 @@ export function withJobLogging<T>(
   return activeJob.run({ ownerId, jobId, db }, fn);
 }
 
-export type RunJobId = string & { __brand: "RunJobId" };
-
-// AI : what /api/runs/[id]/progress serves — the Inference tab polls this while the
-// AI : pipeline executes server-side after the POST /api/runs response was sent.
-export interface RunJob {
-  steps: StepProgress[]; // latest progress event per module, in pipeline order
-  logs?: JobLogEntry[]; // streamed to browser via progress poll
-  run?: PipelineRun; // set once the run finished (ok or error)
-  error?: string; // set when runPipeline itself threw (e.g. invalid pipeline)
-  deduped?: boolean; // AI : true when an identical run was already completed — no compute used
-  cachedRunId?: RunId; // AI : the prior run this job returned instead of re-executing
-  paused?: RunCheckpoint; // mid-run — waiting for browser to execute user code (server-only)
-  clientStep?: RunCheckpoint["clientStep"]; // convenience mirror for the progress UI
-}
+export type JobOwnerId = user_id_string;
 
 // AI : progress poll payload — never includes paused.ctx (sourceText, outputs, etc.).
 export type RunJobProgress = Omit<RunJob, "paused">;

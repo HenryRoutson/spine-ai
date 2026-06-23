@@ -13,13 +13,10 @@ import {
   type StructureModel,
 } from "@/lib/types"
 import { inputTypeLabel, inputNameRestrictionLabel } from "@/lib/inference-input"
+import { modelName } from "@/lib/validity"
 import { cn } from "@/lib/utils"
 
 const LLM_KINDS: ModuleKind[] = ["llm", "llm-batch"]
-
-function modelName(models: StructureModel[], id?: string) {
-  return models.find((m) => m.id === id)?.name
-}
 
 function llmModelLabel(id?: string) {
   return MODEL_OPTIONS.find((m) => m.id === id)?.label ?? id ?? "—"

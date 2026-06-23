@@ -7,30 +7,23 @@ import {
   ChevronRight,
   ArrowRight,
   Zap,
-  FileInput,
-  Shuffle,
-  Sparkle,
-  FileOutput,
   ArrowUp,
   ArrowDown,
-  FileText,
-  Merge,
-  Code2,
   AlertTriangle,
   Copy,
   Check,
-  Link2,
   Lock,
-  type LucideIcon,
+  Sparkle,
 } from "lucide-react"
 import { useStore, uid } from "@/lib/store"
-import { computeInvalid, computeWarnings, invalidStepMessage, warningStepMessage, type InvalidStep, type PipelineWarning } from "@/lib/validity"
+import { computeInvalid, computeWarnings, invalidStepMessage, modelName, warningStepMessage, type InvalidStep, type PipelineWarning } from "@/lib/validity"
 import { inputTypeLabel, inputTypesForModule, inputNameRestrictionLabel } from "@/lib/inference-input"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { llmSchemaJson } from "@/lib/structure"
 import { JsonHighlight } from "@/components/highlight"
 import { moduleMetrics } from "@/lib/billing"
 import { combinePairIds, segmentPipeline } from "@/lib/pipeline-layout"
+import { KIND_COLOR, KIND_ICON } from "@/lib/module-ui"
 import {
   INPUT_TYPES,
   MODULE_META,
@@ -64,49 +57,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
-// AI : batch llm is a 2×2 sparkle grid so it reads as "many calls" vs single Sparkle.
-function BatchSparkleIcon({ className }: { className?: string }) {
-  return (
-    <span
-      className={cn(
-        "inline-grid grid-cols-2 gap-px leading-none [&_svg]:size-[42%]",
-        className,
-      )}
-    >
-      <Sparkle />
-      <Sparkle />
-      <Sparkle />
-      <Sparkle />
-    </span>
-  )
-}
-
-type ModuleIcon = LucideIcon | typeof BatchSparkleIcon
-
-const KIND_ICON: Record<ModuleKind, ModuleIcon> = {
-  input: FileInput,
-  "doc-to-text": FileText,
-  llm: Sparkle,
-  "llm-batch": BatchSparkleIcon,
-  quote: Link2,
-  transform: Shuffle,
-  combine: Merge,
-  "custom-code": Code2,
-  output: FileOutput,
-}
-
-const KIND_COLOR: Record<ModuleKind, string> = {
-  input: "text-chart-2",
-  "doc-to-text": "text-chart-3",
-  llm: "text-primary",
-  "llm-batch": "text-primary",
-  quote: "text-chart-2",
-  transform: "text-chart-3",
-  combine: "text-chart-3",
-  "custom-code": "text-chart-1",
-  output: "text-chart-4",
-}
-
 const ADDABLE: ModuleKind[] = [
   "input",
   "doc-to-text",
@@ -120,10 +70,6 @@ const ADDABLE: ModuleKind[] = [
 
 // AI : llm + llm-batch share the prompt/model inspector fields and add-defaults.
 const LLM_KINDS: ModuleKind[] = ["llm", "llm-batch"]
-
-function modelName(models: StructureModel[], id?: string) {
-  return models.find((m) => m.id === id)?.name
-}
 
 // AI : factory for a fresh module — shared by append + colab-style insert slots.
 function makeModule(

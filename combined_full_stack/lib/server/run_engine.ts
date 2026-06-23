@@ -17,7 +17,7 @@ import {
   wrapListForOutputStructure,
 } from "./structure";
 import type { Store } from "./store";
-import { buildRunInputDocIds, computeRunFingerprint } from "./run_fingerprint";
+import { buildRunInputDocIds, computeRunFingerprint, stepCacheKey } from "./run_fingerprint";
 import { docMatchesInputModule, inputTypeLabel, orderedInputModules } from "../inference-input";
 import { computeInvalid, migrateProjectModules, stepEmits } from "./validity";
 import { UsageLedger } from "./usage";
@@ -38,23 +38,9 @@ import {
   type StructureModel,
   type StructureModelId,
 } from "./types";
+import type { StepProgress, StepSubProgress } from "@/lib/run-types";
 
-// AI : finer-grained progress inside a step — shown as a smaller bar under the step row (LLM calls, etc.).
-export interface StepSubProgress {
-  label: string;
-  current: number;
-  total: number;
-}
-
-// AI : streamed to the Inference progress bar + Logging high-level HTML view.
-export interface StepProgress {
-  index: number;
-  total: number;
-  moduleId: ModuleId;
-  label: string;
-  status: "running" | RunStepStatus;
-  sub?: StepSubProgress;
-}
+export type { StepProgress, StepSubProgress };
 
 export interface RunOptions {
   model: ModelId; // global model (per-step `module.model` overrides for llm)
@@ -73,15 +59,8 @@ function modelById(models: StructureModel[], id?: StructureModelId): StructureMo
   return models.find((m) => m.id === id);
 }
 
-// AI : per-step cache keyed by project+module+input+model — honours `module.cached` & saves re-billing.
-// AI : bug fix — the model is part of the key, else switching models served stale cached output.
-// AI : TODO bug — the key only carries the PRIMARY inputDocId; secondary docs (opts.inputDocIds,
-// AI : e.g. the company doc) and the module prompt are not in it, so swapping the company doc or
-// AI : editing a step's prompt serves stale cached output.
+// AI : per-step cache keyed by project+module+all input slots+model+module config — honours `module.cached`.
 const cacheDir = join(dataDir(), "cache");
-function cacheKey(projectId: ProjectId, moduleId: ModuleId, model: ModelId, inputDocId?: DocId): string {
-  return `${projectId}__${moduleId}__${model}__${inputDocId ?? "none"}.json`;
-}
 function readCache(key: string): { value: unknown; json?: string } | undefined {
   const path = join(cacheDir, key);
   if (!existsSync(path)) return undefined;
@@ -598,7 +577,7 @@ export async function runPipeline(
     let status: RunStepStatus = "ok";
     let result: ExecResult | undefined;
 
-    const key = cacheKey(projectId, m.id, m.model ?? model, inputDocId);
+    const key = stepCacheKey(projectId, m, m.model ?? model, inputQueue);
     log.debug(`cache lookup`, { key, cachedFlag: !!m.cached });
     // AI : TODO bug — a cache hit bypasses execModule, so its side effects never run:
     // AI : `input` skips inputQueue.shift() (the NEXT input module then consumes the wrong doc)
@@ -834,7 +813,7 @@ export async function resumeRunPipeline(
       const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes: false });
       if (!check.ok) throw new Error(`output failed ${out.name} validation: ${check.error}`);
     }
-    const key = cacheKey(checkpoint.projectId, m.id, m.model ?? model, checkpoint.inputDocId);
+    const key = stepCacheKey(checkpoint.projectId, m, m.model ?? model, checkpoint.ctx.inputQueue);
     writeCache(key, result.value, result.json);
   } catch (err) {
     status = "error";
@@ -903,7 +882,7 @@ export async function resumeRunPipeline(
     const stepT0 = Date.now();
     let stepStatus: RunStepStatus = "ok";
     let stepResult: ExecResult | undefined;
-    const stepKey = cacheKey(checkpoint.projectId, stepMod.id, stepMod.model ?? model, checkpoint.inputDocId);
+    const stepKey = stepCacheKey(checkpoint.projectId, stepMod, stepMod.model ?? model, checkpoint.ctx.inputQueue);
     const cached = stepMod.cached ? readCache(stepKey) : undefined;
 
     try {

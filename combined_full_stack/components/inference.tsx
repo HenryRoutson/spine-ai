@@ -94,22 +94,6 @@ function inputDocIdsForModules(
   return inputModules.map((m) => inputDocs[m.id]!.id as DocId)
 }
 
-// AI : match hydrated runs by stored inputDocIds — same slot docs the server hashed.
-function findCachedRunByInputs(
-  runs: PipelineRun[],
-  inputModules: PipelineModule[],
-  inputDocs: Partial<Record<ModuleId, DocRef>>,
-): PipelineRun | undefined {
-  if (!inputModules.every((m) => inputDocs[m.id])) return undefined
-  const slotIds = inputDocIdsForModules(inputModules, inputDocs)
-  return runs.find((r) => {
-    if (r.status !== "ok") return false
-    const runIds = r.inputDocIds ?? (r.inputDocId ? [r.inputDocId] : [])
-    if (runIds.length !== slotIds.length) return false
-    return runIds.every((id, i) => id === slotIds[i])
-  })
-}
-
 export function Inference() {
   const {
     project,
@@ -178,15 +162,13 @@ export function Inference() {
 
   const phaseRef = useRef(phase)
   phaseRef.current = phase
-  const runsRef = useRef(runs)
-  runsRef.current = runs
   const inputModulesRef = useRef(inputModules)
   inputModulesRef.current = inputModules
   const inputDocsRef = useRef(inputDocs)
   inputDocsRef.current = inputDocs
   const prevProbeKeyRef = useRef(probeKey)
 
-  // AI : restore completed-run UI from hydrated runs + DB fingerprint — keyed only on probeKey to avoid render loops.
+  // AI : restore completed-run UI via server fingerprint — single source of truth for dedup.
   useEffect(() => {
     if (!allInputsReady || phaseRef.current === "running") return
     if (prevProbeKeyRef.current !== probeKey) {
@@ -195,20 +177,11 @@ export function Inference() {
     }
     if (confirmedProbeKeyRef.current === probeKey) return
 
-    const inputMods = inputModulesRef.current
-    const docsByModule = inputDocsRef.current
-    const local = findCachedRunByInputs(runsRef.current, inputMods, docsByModule)
-    if (local) {
-      confirmedProbeKeyRef.current = probeKey
-      setRun(local)
-      setCachedRunId(local.id)
-      setWasDeduped(true)
-      setPhase("done")
-    }
-
     let cancelled = false
     async function probeDbMatch() {
       setProbingCache(true)
+      const inputMods = inputModulesRef.current
+      const docsByModule = inputDocsRef.current
       const orderedIds = inputDocIdsForModules(inputMods, docsByModule)
       const [primary, ...rest] = orderedIds
       try {
@@ -228,10 +201,6 @@ export function Inference() {
           setPhase("done")
           return
         }
-        if (local?.status === "ok") {
-          confirmedProbeKeyRef.current = probeKey
-          return
-        }
         confirmedProbeKeyRef.current = null
         setCachedRunId(null)
         setWasDeduped(false)
@@ -239,7 +208,6 @@ export function Inference() {
         setRun(null)
       } catch (e) {
         console.error(e)
-        if (local?.status === "ok") confirmedProbeKeyRef.current = probeKey
       } finally {
         if (!cancelled) setProbingCache(false)
       }

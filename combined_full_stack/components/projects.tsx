@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { apiJson } from "@/lib/api-client"
 import type { Project, ProjectId } from "@/lib/types"
 
 type ProjectTemplateSummary = {
@@ -26,12 +27,6 @@ type ProjectTemplateSummary = {
   kind: string
   moduleCount: number
   inputCount: number
-}
-
-async function api<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { credentials: "same-origin", ...init })
-  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `${url} → ${res.status}`)
-  return res.json() as Promise<T>
 }
 
 function isBuiltInExample(project: Project, templateIds: Set<string>): boolean {
@@ -63,7 +58,7 @@ export function Projects() {
 
   useEffect(() => {
     let cancelled = false
-    void api<{ templates: ProjectTemplateSummary[] }>("/api/project-templates")
+    void apiJson<{ templates: ProjectTemplateSummary[] }>("/api/project-templates")
       .then((data) => {
         if (!cancelled) setTemplates(data.templates)
       })

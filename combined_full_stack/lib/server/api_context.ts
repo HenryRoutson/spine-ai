@@ -1,18 +1,12 @@
 import { NextResponse } from "next/server";
 import { getStore } from "./app_store";
 import { BillingError } from "./billing_account";
+import { storeErrorMessage } from "./errors";
 import { isAuthSession, requireAuth, type AuthSession } from "./require_auth";
 import type { Store } from "./store";
 
 export function apiError(message: string, status: number, code?: string): NextResponse {
   return NextResponse.json(code ? { error: message, code } : { error: message }, { status });
-}
-
-function storeErrorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  if (typeof err === "object" && err !== null && "message" in err)
-    return String((err as { message: unknown }).message);
-  return "Store unavailable";
 }
 
 export function storeAuthError(err: unknown): NextResponse {
