@@ -1,8 +1,11 @@
 "use client"
 
 import { useMemo } from "react"
+import { Plus, Trash2 } from "lucide-react"
+import { CustomCodeEditor } from "@/components/custom-code-editor"
 import { JsonHighlight } from "@/components/highlight"
 import { ModelSelector } from "@/components/model-selector"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
@@ -20,10 +23,12 @@ import {
   INPUT_TYPES,
   MODEL_OPTIONS,
   MODULE_META,
+  type CustomCodeLanguage,
   type PipelineModule,
   type StructureModel,
   type StructureModelId,
 } from "@/lib/types"
+import { codeOfEntry, languageOfEntry, makeCustomCodeEntry } from "@/lib/custom_code_entries"
 import { inputTypeLabel, inputNameRestrictionLabel, inputTypesForModule } from "@/lib/inference-input"
 import {
   invalidStepMessage,
@@ -401,19 +406,96 @@ export function PipelineModuleFields({
       )}
 
       {selected.kind === "custom-code" && (
-        // AI : TODO(spec) — label → "(input, state) => output"; state is prior outputs keyed by step label.
-        <PipelineField label="TypeScript · (input) => output">
+        <PipelineField label="Code list · tried in order (first is primary)">
           {edit ? (
-            <Textarea
-              value={selected.code ?? ""}
-              onChange={(e) => onUpdate!({ code: e.target.value })}
-              className="min-h-32 bg-[oklch(0.14_0.004_264)] font-mono text-[11px] leading-relaxed"
-              spellCheck={false}
-            />
+            <div className="space-y-2">
+              {(selected.fallbackList ?? []).map((fb, i) => {
+                const lang = languageOfEntry(fb)
+                const code = codeOfEntry(fb)
+                return (
+                  <div key={i} className="space-y-1.5 rounded-md border border-border bg-secondary/20 p-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] text-muted-foreground">
+                        {i === 0 ? "primary" : `fallback ${i}`}
+                      </span>
+                      <Select
+                        value={lang}
+                        onValueChange={(v) => {
+                          const next = [...(selected.fallbackList ?? [])]
+                          next[i] = makeCustomCodeEntry(v as CustomCodeLanguage, code)
+                          onUpdate!({ fallbackList: next })
+                        }}
+                      >
+                        <SelectTrigger className="h-8 w-36 bg-[oklch(0.14_0.004_264)] text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="typescript">TypeScript</SelectItem>
+                          <SelectItem value="python">Python</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="ml-auto h-8 w-8 text-muted-foreground"
+                        disabled={(selected.fallbackList?.length ?? 0) <= 1}
+                        onClick={() => {
+                          const next = (selected.fallbackList ?? []).filter((_, j) => j !== i)
+                          onUpdate!({ fallbackList: next })
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <p className="font-mono text-[10px] text-muted-foreground">
+                      {lang === "python" ? "def transform(input, state=None)" : "(input, state) => output"}
+                    </p>
+                    <CustomCodeEditor
+                      value={code}
+                      language={lang}
+                      label={i === 0 ? "primary" : `fallback ${i}`}
+                      onChange={(nextCode) => {
+                        const next = [...(selected.fallbackList ?? [])]
+                        next[i] = makeCustomCodeEntry(lang, nextCode)
+                        onUpdate!({ fallbackList: next })
+                      }}
+                    />
+                  </div>
+                )
+              })}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => {
+                  onUpdate!({
+                    fallbackList: [...(selected.fallbackList ?? []), makeCustomCodeEntry("typescript", "")],
+                  })
+                }}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                Add fallback
+              </Button>
+            </div>
+          ) : (selected.fallbackList?.length ?? 0) > 0 ? (
+            <div className="space-y-2">
+              {selected.fallbackList!.map((fb, i) => (
+                <div key={i} className="rounded-md border border-border bg-secondary/20 p-2">
+                  <p className="mb-1 font-mono text-[10px] text-muted-foreground">
+                    {i === 0 ? "primary" : `fallback ${i}`} · {languageOfEntry(fb)}
+                  </p>
+                  <CustomCodeEditor
+                    value={codeOfEntry(fb)}
+                    language={languageOfEntry(fb)}
+                    readOnly
+                  />
+                </div>
+              ))}
+            </div>
           ) : (
-            <StaticValue mono pre>
-              {selected.code}
-            </StaticValue>
+            <StaticValue>None</StaticValue>
           )}
         </PipelineField>
       )}

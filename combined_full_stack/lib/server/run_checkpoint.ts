@@ -1,3 +1,4 @@
+import type { ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
 import type {
   DocId,
   ModelId,
@@ -36,15 +37,16 @@ export type RunCheckpoint = {
     label: string;
     kind: PipelineModule["kind"];
     code: string;
+    entries: ParsedCustomCodeEntry[];
     input: unknown;
+    pipelineState?: import("../run-types").PipelineState;
   };
 };
 
 export class ClientStepPendingError extends Error {
   constructor(
-    readonly code: string,
+    readonly entries: ParsedCustomCodeEntry[],
     readonly input: unknown,
-    // AI : TODO(spec) — pass accumulated PipelineState keyed by label.
     readonly pipelineState?: import("../run-types").PipelineState,
   ) {
     super("client code step pending");

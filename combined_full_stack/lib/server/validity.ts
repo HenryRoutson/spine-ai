@@ -6,6 +6,7 @@ import type {
   StructureModel,
   StructureModelId,
 } from "./types";
+import { migrateCustomCodeModule } from "@/lib/custom_code_entries";
 import { hasQuoteField, listFieldsForWrap } from "./structure";
 import { isLlmKind } from "@/lib/module-kinds";
 
@@ -384,6 +385,9 @@ export function syncAutoQuoteSteps(
 export const insertMissingQuoteSteps = syncAutoQuoteSteps;
 
 export function migrateProjectModules(project: Project): Project {
-  const modules = syncAutoQuoteSteps(project.modules, project.models);
-  return modules === project.modules ? project : { ...project, modules };
+  const synced = syncAutoQuoteSteps(project.modules, project.models);
+  const migrated = synced.map(migrateCustomCodeModule);
+  const changed = synced !== project.modules || migrated.some((m, i) => m !== synced[i]);
+  if (!changed) return project;
+  return { ...project, modules: migrated };
 }

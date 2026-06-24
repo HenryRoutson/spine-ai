@@ -1,4 +1,5 @@
-import type { ModelId, ModuleId, ModuleKind, PipelineModule, StructureModel, StructureModelId } from "@/lib/types"
+import type { CustomCodeEntry, ModelId, ModuleId, ModuleKind, PipelineModule, StructureModel, StructureModelId } from "@/lib/types"
+import { makeCustomCodeEntry } from "@/lib/custom_code_entries"
 import { MODULE_META } from "@/lib/types"
 import { uid } from "@/lib/id"
 import { isLlmKind } from "@/lib/module-kinds"
@@ -16,6 +17,7 @@ export type ModuleFactoryOpts = {
   outIsList?: boolean
   prompt?: string
   code?: string
+  fallbackList?: CustomCodeEntry[]
   model?: ModelId
 }
 
@@ -42,7 +44,10 @@ export function createPipelineModule(
     outStructureId: kind === "output" ? undefined : opts.outStructureId ?? defaultModel,
     outIsList: opts.outIsList,
     prompt: isLlm ? opts.prompt ?? "" : undefined,
-    code: kind === "custom-code" ? opts.code ?? "(input) => input" : undefined,
+    fallbackList:
+      kind === "custom-code"
+        ? (opts.fallbackList ?? [makeCustomCodeEntry("typescript", opts.code ?? "(input) => input")])
+        : undefined,
     model: isLlm ? opts.model ?? globalModel : undefined,
   }
 }

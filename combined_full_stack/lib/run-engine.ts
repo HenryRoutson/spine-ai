@@ -1,7 +1,11 @@
 // AI : client shim for the real server run engine — POST /api/runs starts the pipeline,
 // AI : then the Inference tab polls progress until the persisted PipelineRun arrives.
 // AI : user-authored transform/custom steps run here in the browser (never on the server).
-import { runCustomFn } from "@/lib/custom_code"
+import {
+  CustomCodeExhaustedError,
+  formatCustomCodeFailureLog,
+  runCustomCodeWithFallbacks,
+} from "@/lib/custom_code"
 import { readApiErrorBody, formatApiError } from "@/lib/api-client"
 import type { DocId, ModelId, ModuleId, PipelineRun, ProjectId, RunStepStatus } from "@/lib/types"
 import type { JobLogEntry, RunJob, RunJobId, StepProgress, StepSubProgress } from "@/lib/types"
@@ -162,11 +166,14 @@ export type AwaitRunResult = {
 }
 
 // AI : poll until the run finishes; callbacks stream progress + server logs to the UI / console.
-async function submitClientStep(jobId: RunJobId, output: unknown): Promise<void> {
+async function submitClientStep(
+  jobId: RunJobId,
+  payload: { output?: unknown; error?: string; clientLogs?: JobLogEntry[] },
+): Promise<void> {
   const res = await fetch(`/api/runs/${jobId}/client-step`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ output }),
+    body: JSON.stringify(payload),
   })
   if (res.ok) return
   const body = await readApiErrorBody(res)
@@ -206,12 +213,65 @@ export async function awaitRun(
       !clientStepBusy &&
       clientStepSubmittedFor !== job.clientStep.moduleId
     ) {
-      const { moduleId, code, input, pipelineState } = job.clientStep
+      const { moduleId, entries, input, pipelineState } = job.clientStep
       clientStepBusy = true
+      const clientLogs: JobLogEntry[] = []
       try {
-        // AI : TODO(spec) — pass pipelineState once run_engine populates byLabel on checkpoints.
-        const output = await runCustomFn(code, input, pipelineState)
-        await submitClientStep(jobId, output)
+        const { output, failures, attemptIndex, language } = await runCustomCodeWithFallbacks(
+          entries,
+          input,
+          pipelineState,
+        )
+        for (const f of failures) {
+          clientLogs.push({
+            at: Date.now(),
+            level: "warn",
+            tag: "custom-code",
+            line: formatCustomCodeFailureLog(f),
+          })
+        }
+        if (failures.length) {
+          clientLogs.push({
+            at: Date.now(),
+            level: "info",
+            tag: "custom-code",
+            line: `custom-code succeeded on attempt ${attemptIndex + 1} (${language}) after ${failures.length} fallback(s)`,
+          })
+        }
+        await submitClientStep(jobId, { output, clientLogs })
+        clientStepSubmittedFor = moduleId
+      } catch (err) {
+        const failures =
+          err instanceof CustomCodeExhaustedError
+            ? err.failures
+            : [
+                {
+                  attemptIndex: 0,
+                  language: entries[0]?.language ?? "typescript",
+                  code: entries[0]?.code ?? "",
+                  error: (err as Error).message,
+                  stack: (err as Error).stack,
+                  input,
+                },
+              ]
+        for (const f of failures) {
+          clientLogs.push({
+            at: Date.now(),
+            level: "error",
+            tag: "custom-code",
+            line: formatCustomCodeFailureLog(f),
+          })
+        }
+        clientLogs.push({
+          at: Date.now(),
+          level: "error",
+          tag: "custom-code",
+          line: `custom-code exhausted all ${entries.length} attempt(s)`,
+        })
+        await submitClientStep(jobId, {
+          error: (err as Error).message,
+          clientLogs,
+        })
         clientStepSubmittedFor = moduleId
       } finally {
         clientStepBusy = false

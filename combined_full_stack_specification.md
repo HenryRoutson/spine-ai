@@ -117,6 +117,14 @@ fallback_list : [
     ("python") : "def ...",
     ("typescript") : "..."
   ]
+or 
+{
+  "fallbackList": [
+    { "typescript": "(input) => JSON.parse(input.body)" },
+    { "language": "python", "code": "import json\nreturn json.loads(input['body'])" },
+    { "language": "typescript", "code": "(input) => input" }
+  ]
+}
 
 Need dynamic scehmas. If you have a task to mark homework, you're provided with a doc to text conversion of homework to text. from this you need to create an output schema of what the marking should check like question 7 should have fields a, b, c maybe, and the question descriptoins and marking criteria is inside each of those fields. you can't hardcode this for every homework sheet. Allow the option to request llm calls to output in a dynamic format and validate in same way. Maybe a format that adheres to a certain generic structure.
 

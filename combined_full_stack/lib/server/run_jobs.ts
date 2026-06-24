@@ -274,6 +274,15 @@ async function loadJob(ownerId: JobOwnerId, id: RunJobId, db: JobDb): Promise<Ru
   return job;
 }
 
+export async function appendJobLogs(
+  ownerId: JobOwnerId,
+  id: RunJobId,
+  entries: JobLogEntry[],
+  db: JobDb,
+): Promise<void> {
+  for (const entry of entries) await appendJobLog(ownerId, id, entry, db);
+}
+
 export async function pauseJob(
   ownerId: JobOwnerId,
   id: RunJobId,

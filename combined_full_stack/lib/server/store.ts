@@ -127,6 +127,7 @@ export function syncProjectFromSeed(existing: Project, seed: Project): Project {
       cached: em.cached,
       model: em.model ?? sm.model,
       prompt: em.prompt ?? sm.prompt,
+      fallbackList: em.fallbackList ?? sm.fallbackList,
       code: em.code ?? sm.code,
     };
   });

@@ -63,6 +63,11 @@ export type ModuleKind =
   | "custom-code"
   | "output";
 
+export type CustomCodeLanguage = "typescript" | "python";
+
+// AI : one language key per entry — e.g. { "typescript": "(input) => input" } or { "python": "..." }.
+export type CustomCodeEntry = { typescript?: string; python?: string };
+
 export interface PipelineModule {
   id: ModuleId;
   kind: ModuleKind;
@@ -75,7 +80,8 @@ export interface PipelineModule {
   inputType?: InputTypeSpec;
   inputNameContains?: string; // AI : optional filename substring — only matching docs can fill this input slot
   prompt?: string;
-  code?: string; // for custom-code steps
+  code?: string; // AI : transform steps with custom code only
+  fallbackList?: CustomCodeEntry[]; // AI : custom-code — ordered attempts, first is primary
   model?: ModelId; // per-step model override
   cached: boolean;
   // AI : backend-only — llm/transform steps may emit a list of `outStructure` rather than one.
@@ -257,7 +263,10 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     description: "Deterministic reshape — list→object wrap needs a list field on the output structure, or custom TS code",
   },
   combine: { label: "Combine Inputs", description: "Merge a new input with the pipeline state" },
-  "custom-code": { label: "Custom TS Function", description: "Saved (input) => output code step, no LLM cost" },
+  "custom-code": {
+    label: "Custom Code",
+    description: "TypeScript or Python (input) => output with ordered fallbacks on failure",
+  },
   output: {
     label: "Output",
     description: "Materialize a named snapshot of a structure — not the pipeline's only output; add one anywhere you want an artifact",

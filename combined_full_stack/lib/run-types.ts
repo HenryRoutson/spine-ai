@@ -1,5 +1,6 @@
 // AI : client-safe run progress / job DTOs — no server imports (fs, Supabase, etc.).
 import type { ModuleId, ModuleKind, PipelineRun, RunId, RunStepStatus } from "./types";
+import type { ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
 
 // AI : spec vision — accumulated step outputs keyed by module.label (see lib/server/pipeline_state.ts TODO).
 export type StepLabel = string;
@@ -36,8 +37,8 @@ export type ClientStepSpec = {
   label: string;
   kind: ModuleKind;
   code: string;
+  entries: ParsedCustomCodeEntry[];
   input: unknown;
-  // AI : TODO(spec) — full label-keyed state for custom TS: `(input, state) => output`.
   pipelineState?: PipelineState;
 };
 

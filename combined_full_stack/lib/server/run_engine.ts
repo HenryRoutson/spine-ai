@@ -6,6 +6,7 @@ import { fileWriteHelper } from "./file_write_helper";
 import { llmBatchStructured, llmStructured } from "./llm";
 import { StructuredResponseError } from "./openrouter_llm";
 import { collectQuotes, resolveQuotesValue } from "./quotation";
+import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { ClientStepPendingError, PipelinePausedError, type RunCheckpoint } from "./run_checkpoint";
 import { type LiveStep, progressHtml, runToHtml } from "./logging";
 import {
@@ -253,15 +254,28 @@ function restoreCtx(project: Project, store: Store, ledger: UsageLedger, model: 
   };
 }
 
+function persistCustomCodeArtifacts(runId: string, m: PipelineModule): void {
+  if (m.kind !== "custom-code" && !(m.kind === "transform" && m.code?.trim())) return;
+  const entries = customCodeEntriesForModule(m);
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i]!;
+    const ext = e.language === "python" ? "py" : "ts";
+    const suffix = i === 0 ? "code" : `fallback_${i}`;
+    fileWriteHelper(join(dataDir(), "runs", runId), `${m.id}_${suffix}`, ext, e.code);
+  }
+}
+
 function buildClientResult(m: PipelineModule, project: Project, ctx: RunCtx, value: unknown): ExecResult {
   if (m.kind === "transform") {
     const out = modelById(project.models, m.outStructureId);
     const merged = out ? materializeStepOutput(m, project, value, materializeHints(m, ctx)) : value;
     return { value: merged, preview: "reshaped", json: JSON.stringify(merged, null, 2) };
   }
+  const entries = customCodeEntriesForModule(m);
+  const primary = entries[0];
   return {
     value,
-    preview: `custom ts fn applied (${m.code?.split("\n")[0].slice(0, 60) ?? ""})`,
+    preview: `custom ${primary?.language ?? "typescript"} fn applied (${primary?.code.split("\n")[0].slice(0, 60) ?? ""})`,
     json: JSON.stringify(value, null, 2),
   };
 }
@@ -399,8 +413,13 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       let value: unknown = input;
 
       if (m.code) {
-        log.info(`transform code — deferring to browser`, { moduleId: m.id });
-        throw new ClientStepPendingError(m.code, input);
+        const entries = customCodeEntriesForModule(m);
+        log.info(`transform code — deferring to browser`, {
+          moduleId: m.id,
+          attempts: entries.length,
+          fallbacks: Math.max(0, entries.length - 1),
+        });
+        throw new ClientStepPendingError(entries, input);
       } else if (out && !m.outIsList && Array.isArray(input)) {
         if (input.length === 1 && m.inStructureId === m.outStructureId) {
           value = input[0];
@@ -420,14 +439,20 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
     }
 
     case "custom-code": {
-      // AI : custom TS function — saved `code` compiled to (input) => output and applied.
+      // AI : custom TS/Python — fallbackList tried in order in the browser.
       const input = (ctx.prevModuleId && ctx.outputs.get(ctx.prevModuleId)) ?? null;
-      if (!m.code) {
+      const entries = customCodeEntriesForModule(m);
+      if (!entries.length) {
         log.warn(`custom-code passthrough (no code)`, { moduleId: m.id });
         return { value: input, preview: "custom step passthrough (no code set)", json: JSON.stringify(input, null, 2) };
       }
-      log.info(`custom-code — deferring to browser`, { moduleId: m.id, codeLines: m.code.split("\n").length });
-      throw new ClientStepPendingError(m.code, input);
+      log.info(`custom-code — deferring to browser`, {
+        moduleId: m.id,
+        primaryLanguage: entries[0]!.language,
+        attempts: entries.length,
+        fallbacks: Math.max(0, entries.length - 1),
+      });
+      throw new ClientStepPendingError(entries, input);
     }
 
     case "llm-batch": {
@@ -664,6 +689,7 @@ async function runLinearStepsFrom(
       }
     } catch (err) {
       if (err instanceof ClientStepPendingError) {
+        const primary = err.entries[0];
         throw new PipelinePausedError({
           runId,
           projectId,
@@ -680,8 +706,10 @@ async function runLinearStepsFrom(
             moduleId: m.id,
             label: m.label,
             kind: m.kind,
-            code: err.code,
+            code: primary?.code ?? "",
+            entries: err.entries,
             input: err.input,
+            pipelineState: err.pipelineState,
           },
         });
       }
@@ -883,9 +911,7 @@ export async function runPipeline(
     log.info(`persisting artifacts`, { artifactCount: artifacts.length });
     persistArtifacts(runId, inputDocId, store, artifacts, project.modules, project.models);
     // AI : save each custom step's code next to its input/output artifact (previous runs).
-    for (const m of project.modules) {
-      if (m.kind === "custom-code" && m.code) fileWriteHelper(join(dataDir(), "runs", runId), `${m.id}_code`, "ts", m.code);
-    }
+    for (const m of project.modules) persistCustomCodeArtifacts(runId, m);
     // AI : the same high-level HTML view, archived per run for the Logging tab.
     fileWriteHelper(join(dataDir(), "runs", runId), "run_high_level", "html", runToHtml(run));
     store.addRun(projectId, run);
@@ -894,11 +920,13 @@ export async function runPipeline(
 }
 
 // AI : browser POSTs user-code output — server validates and continues the linear run from the paused step.
+export type ClientStepResume = { output?: unknown; error?: string };
+
 export async function resumeRunPipeline(
   store: Store,
   checkpoint: RunCheckpoint,
-  clientOutput: unknown,
-  opts: Omit<RunOptions, "model"> & { model?: ModelId } = {},
+  clientStep: ClientStepResume,
+  opts: Omit<RunOptions, "model"> & { model?: ModelId; clientLogs?: import("@/lib/run-types").JobLogEntry[] } = {},
 ): Promise<PipelineRun> {
   const rawProject = store.project(checkpoint.projectId);
   if (!rawProject) throw new Error(`unknown project ${checkpoint.projectId}`);
@@ -940,8 +968,16 @@ export async function resumeRunPipeline(
   const beforeCents = ledger.totalCents();
   const defaultInputPreview = modelById(project.models, m.inStructureId)?.name ?? "Any";
 
+  for (const entry of opts.clientLogs ?? []) {
+    log[entry.level === "error" ? "error" : entry.level === "warn" ? "warn" : "info"](entry.line, {
+      moduleId: m.id,
+      tag: entry.tag,
+    });
+  }
+
   try {
-    result = buildClientResult(m, project, ctx, clientOutput);
+    if (clientStep.error) throw new Error(clientStep.error);
+    result = buildClientResult(m, project, ctx, clientStep.output);
     const out = modelById(project.models, m.outStructureId);
     if (out) {
       const isList = m.outIsList || m.kind === "llm-batch";
@@ -1052,9 +1088,7 @@ export async function resumeRunPipeline(
   writeLive(-1);
   if (persist) {
     persistArtifacts(checkpoint.runId, checkpoint.inputDocId, store, artifacts, project.modules, project.models);
-    for (const mod of project.modules) {
-      if (mod.kind === "custom-code" && mod.code) fileWriteHelper(join(dataDir(), "runs", checkpoint.runId), `${mod.id}_code`, "ts", mod.code);
-    }
+    for (const mod of project.modules) persistCustomCodeArtifacts(checkpoint.runId, mod);
     fileWriteHelper(join(dataDir(), "runs", checkpoint.runId), "run_high_level", "html", runToHtml(run));
     store.addRun(checkpoint.projectId, run);
   }

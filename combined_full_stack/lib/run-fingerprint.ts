@@ -25,6 +25,7 @@ function moduleForFingerprint(m: PipelineModule) {
     inputNameContains: m.inputNameContains ?? null,
     prompt: m.prompt ?? null,
     code: m.code ?? null,
+    fallbackList: m.fallbackList?.length ? m.fallbackList : null,
     model: m.model ?? null,
     outIsList: m.outIsList ?? null,
   }

@@ -4,6 +4,7 @@ import { billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { resumeRunPipeline } from "@/lib/server/run_engine";
 import {
+  appendJobLogs,
   claimJobResume,
   finishJob,
   getJobForProgress,
@@ -15,6 +16,7 @@ import {
   type RunJobId,
 } from "@/lib/server/run_jobs";
 import { logger } from "@/lib/server/server_logger";
+import type { JobLogEntry } from "@/lib/run-types";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -28,8 +30,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { auth, store } = authCtx;
 
   const { id } = await ctx.params;
-  const { output } = (await req.json()) as { output?: unknown };
-  if (output === undefined) return apiError("output required", 400);
+  const body = (await req.json()) as {
+    output?: unknown;
+    error?: string;
+    clientLogs?: JobLogEntry[];
+  };
+  if (body.output === undefined && !body.error) return apiError("output or error required", 400);
 
   const jobId = id as RunJobId;
   const jobDb = await openJobDb();
@@ -49,11 +55,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   });
 
   after(async () => {
+    if (body.clientLogs?.length) await appendJobLogs(auth.userId, jobId, body.clientLogs, jobDb);
     await withJobLogging(auth.userId, jobId, jobDb, async () => {
       try {
-        const run = await resumeRunPipeline(store, checkpoint, output, {
-          cacheOwnerId: checkpoint.cacheOwnerId ?? auth.userId,
-          onStep: (p) => {
+        const run = await resumeRunPipeline(
+          store,
+          checkpoint,
+          { output: body.output, error: body.error },
+          {
+            cacheOwnerId: checkpoint.cacheOwnerId ?? auth.userId,
+            clientLogs: body.clientLogs,
+            onStep: (p) => {
             void jobProgress(auth.userId, jobId, p, jobDb).catch((err) =>
               apiLog.error(`jobProgress failed`, { jobId, error: (err as Error).message }),
             );
