@@ -204,6 +204,15 @@ remove rlm.
 compare runs
 
 
+
+at some point a confiential deployment will be useful.
+
+
+
+
+need to add code editor for more natural developer workflow, and outsource llm calls out of my pocket
+
+
 ------------------------------------------------------------
 AI suggesetions 
 ------------------------------------------------------------
