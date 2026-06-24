@@ -192,8 +192,20 @@ Marketplace to buy and sell pipelines
 
 
 
+need to allow dynamic file loading, can't just be doing pipelines manually all the time, this will be done with cli
 
+
+
+remove rlm.
+
+
+compare runs
+
+
+------------------------------------------------------------
 AI suggesetions 
+------------------------------------------------------------
+
 Scheduled / folder-watch runs — renewals, competitor monitoring, comment periods
 Email & webhook ingest — shipping exceptions, tickets, whistleblower
 Human approval queue — legal, HR, refunds before anything ships
@@ -201,3 +213,6 @@ External write-back — CRM, ERP, ticketing (export CSV/JSON is enough for v1)
 Retrieval connector — live KB/vector search instead of static uploads
 Better OCR / images — receipts, scanned clinical forms
 Tabular join step — reconciliation without bespoke Custom TS every time
+
+
+
