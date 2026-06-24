@@ -91,6 +91,9 @@ combine inputs should be able to take in lots of inputs not just 1.
 
 
 
+need to be able to click on SOURCE DOCUMENT: and link back to document tab
+
+
 backend supabase should contain profit per user as a virtual table or concrete table. main expense is llm calls, ensure no user is arbitraging some mispriced llm calls. block account if value goes below -10$. ensure safegard.
 
 
