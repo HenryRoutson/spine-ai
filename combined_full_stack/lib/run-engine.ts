@@ -206,10 +206,11 @@ export async function awaitRun(
       !clientStepBusy &&
       clientStepSubmittedFor !== job.clientStep.moduleId
     ) {
-      const { moduleId, code, input } = job.clientStep
+      const { moduleId, code, input, pipelineState } = job.clientStep
       clientStepBusy = true
       try {
-        const output = await runCustomFn(code, input)
+        // AI : TODO(spec) — pass pipelineState once run_engine populates byLabel on checkpoints.
+        const output = await runCustomFn(code, input, pipelineState)
         await submitClientStep(jobId, output)
         clientStepSubmittedFor = moduleId
       } finally {

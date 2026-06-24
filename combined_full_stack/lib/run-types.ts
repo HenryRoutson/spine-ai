@@ -1,6 +1,10 @@
 // AI : client-safe run progress / job DTOs — no server imports (fs, Supabase, etc.).
 import type { ModuleId, ModuleKind, PipelineRun, RunId, RunStepStatus } from "./types";
 
+// AI : spec vision — accumulated step outputs keyed by module.label (see lib/server/pipeline_state.ts TODO).
+export type StepLabel = string;
+export type PipelineState = Record<StepLabel, unknown>;
+
 export type JobLogLevel = "debug" | "info" | "warn" | "error";
 
 export interface JobLogEntry {
@@ -33,6 +37,8 @@ export type ClientStepSpec = {
   kind: ModuleKind;
   code: string;
   input: unknown;
+  // AI : TODO(spec) — full label-keyed state for custom TS: `(input, state) => output`.
+  pipelineState?: PipelineState;
 };
 
 export interface RunJob {

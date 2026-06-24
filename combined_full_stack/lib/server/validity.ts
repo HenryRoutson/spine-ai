@@ -9,7 +9,12 @@ import type {
 import { hasQuoteField, listFieldsForWrap } from "./structure";
 import { isLlmKind } from "@/lib/module-kinds";
 
-export type InvalidKind = "io-mismatch" | "no-output" | "transform-list-wrap";
+export type InvalidKind =
+  | "io-mismatch"
+  | "no-output"
+  | "transform-list-wrap"
+  | "empty-label"
+  | "duplicate-label";
 
 export interface InvalidStep {
   moduleId: ModuleId;
@@ -52,10 +57,32 @@ export function stepEmits(m: PipelineModule | undefined): StructureModelId | und
   return m.outStructureId;
 }
 
+// AI : canonical pipeline validation — I/O linearity (today), unique labels (spec), future dependency graph.
+// AI : spec vision: labels key PipelineState (lib/server/pipeline_state.ts); see TODO(spec) there.
+function computeLabelInvalid(modules: PipelineModule[]): Map<ModuleId, InvalidStep> {
+  const invalid = new Map<ModuleId, InvalidStep>();
+  const byLabel = new Map<string, ModuleId[]>();
+  for (const m of modules) {
+    const label = m.label.trim();
+    if (!label) {
+      invalid.set(m.id, { moduleId: m.id, kind: "empty-label" });
+      continue;
+    }
+    const ids = byLabel.get(label) ?? [];
+    ids.push(m.id);
+    byLabel.set(label, ids);
+  }
+  for (const ids of byLabel.values()) {
+    if (ids.length < 2) continue;
+    for (const id of ids) invalid.set(id, { moduleId: id, kind: "duplicate-label" });
+  }
+  return invalid;
+}
+
 // AI : canonical I/O-validity check — strictly linear except combine (pipeline state + side doc).
 // AI : invalid = missing output model, or inStructureId ≠ previous step's emitted structure.
 export function computeInvalid(modules: PipelineModule[], models: StructureModel[] = []): Map<ModuleId, InvalidStep> {
-  const invalid = new Map<ModuleId, InvalidStep>();
+  const invalid = computeLabelInvalid(modules);
   for (const m of modules) {
     // AI : output steps only need inStructureId — they pass it through as a named artifact.
     if (m.kind === "output") {
@@ -234,6 +261,13 @@ export function invalidStepMessage(
     const inName = modelName(models, issue.expects) ?? "item";
     const outName = modelName(models, issue.upstreamEmits) ?? "output";
     return `list[${inName}] → ${outName} needs a list field (prefer list[model] ref ${inName}) or custom TS code`;
+  }
+  if (issue.kind === "empty-label") {
+    return "step label is required — labels key the accumulated pipeline state";
+  }
+  if (issue.kind === "duplicate-label") {
+    const step = modules.find((x) => x.id === issue.moduleId);
+    return `duplicate label "${step?.label ?? "?"}" — each step label must be unique`;
   }
   return "invalid step";
 }

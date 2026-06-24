@@ -11,6 +11,7 @@ import type {
 } from "./types";
 
 // AI : serialized mid-run state — server pauses before user-code steps; browser runs the fn and POSTs back.
+// AI : TODO(spec) — checkpoint.ctx gains `byLabel: PipelineState`; clientStep carries it for custom TS.
 export type RunCheckpoint = {
   runId: RunId;
   projectId: ProjectId;
@@ -43,6 +44,8 @@ export class ClientStepPendingError extends Error {
   constructor(
     readonly code: string,
     readonly input: unknown,
+    // AI : TODO(spec) — pass accumulated PipelineState keyed by label.
+    readonly pipelineState?: import("../run-types").PipelineState,
   ) {
     super("client code step pending");
   }

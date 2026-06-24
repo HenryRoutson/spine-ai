@@ -94,8 +94,9 @@ companies may have an option for their own deployments which will not store this
 
 
 the pipeline is linear and has no forking.
-steps have access to all other previous steps in the form of a pydantic object where every step description is the key. this allows for more complex behaviours, but a simple graph.
+steps have access to all other previous steps in the form of a pydantic object where every step **label** is the key. each step label must be unique across the pipeline. this allows for more complex behaviours, but a simple graph.
 You also do not need 'combine input' steps after the first input, as input is implicitly combined with all the data from previous steps.
+custom TypeScript / lambda steps receive the spine `input` plus the full accumulated pipeline-state object keyed by label.
 arrows should be drawn based on dependencies if steps use other steps and errors should be raised if certain steps are not used or isolated parts of the tree disconnect. ideally the dependencies will be automatically dervied.
 
 ts functions are executed on client side and sent to the server for efficiency and security

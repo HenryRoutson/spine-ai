@@ -401,6 +401,7 @@ export function PipelineModuleFields({
       )}
 
       {selected.kind === "custom-code" && (
+        // AI : TODO(spec) — label → "(input, state) => output"; state is prior outputs keyed by step label.
         <PipelineField label="TypeScript · (input) => output">
           {edit ? (
             <Textarea

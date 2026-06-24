@@ -1,8 +1,13 @@
 // AI : user-authored transform/custom steps — runs in the browser during inference (no server vm).
 // AI : unsandboxed in the user's tab is fine: they already control their browser; this keeps
 // AI : arbitrary code off the server and away from OPENROUTER_API_KEY / process.env.
+// AI : TODO(spec) — custom TS / lambda signature becomes `(input, state: PipelineState) => output`
+// AI : where `state` is every prior step's output keyed by label (see lib/server/pipeline_state.ts).
+// AI : Back-compat: if the compiled fn arity is 1, pass only `input` until migration completes.
 
-export type CustomFn = (input: unknown) => unknown | Promise<unknown>;
+import type { PipelineState } from "@/lib/run-types";
+
+export type CustomFn = (input: unknown, state?: PipelineState) => unknown | Promise<unknown>;
 
 const CUSTOM_CODE_TIMEOUT_MS = 15_000;
 
@@ -14,9 +19,9 @@ export function compileCustomFn(code: string): CustomFn {
   return fn as CustomFn;
 }
 
-export async function runCustomFn(code: string, input: unknown): Promise<unknown> {
+export async function runCustomFn(code: string, input: unknown, state?: PipelineState): Promise<unknown> {
   const fn = compileCustomFn(code);
-  const result = fn(input);
+  const result = fn.length >= 2 ? fn(input, state ?? {}) : fn(input);
   if (!(result instanceof Promise)) return result;
   return Promise.race([
     result,

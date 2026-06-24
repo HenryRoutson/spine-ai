@@ -67,9 +67,9 @@ can remove combine input, and just use input and implicit combine
 try 100 pipelines and then pick the one which performs the best on evaluation, or just iterative improve with AI automatically. then plot the speed, cost and accuracy over time or iterations or if 100 just on a single plot with efficient fronteir.
 
 
-need to allow pydantic model to expand with ALL the previous step outputs and then draw arrows for which is being used in which step back,
+need to allow pydantic model to expand with ALL the previous step outputs keyed by step label and then draw arrows for which is being used in which step back,
 and then automatically collapse into a more efficient tree to allow parallel execution. Directed Acyclic Graph. RxJS, XState, maybe? need to add an option in the UI to show the visual change of moving things into parallel.
-you need to give access to the pydantic model for each lambda function / custom ts
+you need to give access to the label-keyed pydantic model for each lambda function / custom ts — see combined_full_stack/lib/server/pipeline_state.ts TODO(spec)
 
 
 auto derive format from excel or JSON with UI.

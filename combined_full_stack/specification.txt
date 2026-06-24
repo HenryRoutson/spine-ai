@@ -24,10 +24,10 @@ auto pipeline — combined_full_stack specification
 
 === 02 — pipeline ===
 · linear step canvas: Start → steps → End; insert steps between any point
-· step kinds: Input, Doc→Text, LLM Call, Batch LLM, Link Quotes, Transform, Combine Inputs, Custom TS, Output
-· each step: label, in/out structure models, kind-specific config (prompt, input type, model override, cache toggle, notes…)
-· I/O model mismatches → invalid (blocks inference); warnings shown separately
-· combine-input groups: merge new document input with pipeline state
+· step kinds: Input, Doc→Text, LLM Call, Batch LLM, Link Quotes, Transform, Combine Inputs (legacy — spec: implicit combine), Custom TS, Output
+· each step: label (unique across pipeline; keys accumulated pipeline state), in/out structure models, kind-specific config (prompt, input type, model override, cache toggle, notes…)
+· spec vision: prior step outputs accumulate in a label-keyed pydantic object; custom TS receives (input, state); dependency arrows TBD
+· I/O model mismatches → invalid (blocks inference); duplicate/empty labels → invalid; warnings shown separately
 · right panel tabs: Inspector (edit selected step, reorder, delete) | AI Assistant (propose pipeline + models)
 · header stats: avg latency, cost/run, cache count, invalid/warning counts; copy pipeline JSON
 

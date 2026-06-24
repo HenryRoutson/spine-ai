@@ -121,7 +121,7 @@ Where appropriate there should be selectors for what LLM can be used, by default
 
 2. Convert to a list of rules. `text -> list[tuple[text, quote]]`, which is a list of rule descriptions and the quote where they came from in the original document. The user should be able to go into the saved output and click the quote to go to the document.
 
-3. Combine current pipeline input with new data. This should be with the **'new input data'** component, which should take in an input module like web, document and then combine into a new format. You should name this input data **"company data"**. Define this as a model automatically:
+3. Combine current pipeline input with new data. This should be with the **'new input data'** component, which should take in an input module like web, document and then combine into a new format. You should name this input data **"company data"**. Define this as a model automatically (spec: keyed by step **label**, no separate combine step):
 
 ```json
 {
@@ -145,7 +145,7 @@ Some of the parts in this pipeline require custom code to loop over things to ma
 
 Instead of a prebuilt step you can write a custom TypeScript function as a pipeline step:
 
-- The step stores its **code** (a string on the module) and compiles it to one **function which maps input to output** — `(input) => output` (async allowed, or a bare body using `input` with a `return`).
+- The step stores its **code** (a string on the module) and compiles it to one **function which maps input to output** — `(input, state) => output` where `state` is every prior step's output keyed by **step label** (async allowed, or a bare body using `input` / `state` with a `return`). Until migration, `(input) => output` still works.
 - The code is **saved**: with the pipeline definition, and per run alongside the step's input/output artifacts (`<module>_code_latest.ts` + timestamped) in 'previous runs'.
 - Output passes the same implicit schema validation as every other step — useful for splitting tasks into smaller deterministic pieces (sort, filter, reshape) with no LLM cost.
 - The default legal pipeline seeds an example: "Sort Rules by Severity" between rule extraction and combine.

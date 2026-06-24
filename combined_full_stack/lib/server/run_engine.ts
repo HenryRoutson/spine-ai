@@ -174,6 +174,8 @@ function failedStepResult(err: unknown, m: PipelineModule, ctx: RunCtx, prior?: 
 }
 
 // AI : the per-kind executors. Real where possible; placeholders are clearly marked.
+// AI : TODO(spec) — RunCtx gains `byLabel: PipelineState` (label → output); see pipeline_state.ts.
+// AI : Today: strict linear spine + combine step. Spec: implicit combine, DAG deps, LLM reads byLabel.
 interface RunCtx {
   project: Project;
   store: Store;

@@ -7,6 +7,9 @@ export type PipelineSegment =
   | { kind: "step"; module: PipelineModule; index: number }
   | { kind: "combine"; combine: PipelineModule; input: PipelineModule; index: number }
 
+// AI : TODO(spec) — delete combine segments when implicit combine ships (pipeline_state.ts #10).
+// AI : second+ input steps stand alone; canvas shows label-keyed state arrows instead.
+
 // AI : combine steps consume pipeline state + a secondary input module immediately before them —
 // AI : group the pair so the linear canvas shows where the extra document feeds in.
 export function segmentPipeline(modules: PipelineModule[]): PipelineSegment[] {
