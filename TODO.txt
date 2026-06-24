@@ -14,6 +14,14 @@ create something like {
   ]
 }
 
+you can attribute failures to parts of the code to pinpoint issues. say this code failed, you changed it like this, this still failed, etc
+
+need to make sub pipelines as an option.
+
+
+
+allow for multiple possible options for fallback instead of a stright line? 
+
 
 
 Need dynamic scehmas. If you have a task to mark homework, you're provided with a doc to text conversion of homework to text. from this you need to create an output schema of what the marking should check like question 7 should have fields a, b, c maybe, and the question descriptoins and marking criteria is inside each of those fields. you can't hardcode this for every homework sheet. Allow the option to request llm calls to output in a dynamic format and validate in same way. Maybe a format that adheres to a certain generic structure.
