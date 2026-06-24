@@ -150,6 +150,9 @@ there is a copy of the pipeline at the time the run was completed which will not
 
 json can be viewed in excel popups for non techincal people. there is also a view of the json with collapsible sections.
 
+
+when displaying prompts, all sub components are highlighted and profiled on their contribution to context length. JSON is syntax highlighted. Files link back to the documents tab and are highlighted in an outline. 
+
 # documents
 
 the documents tab contains all documents and their size with the ability to view them. you can also view pdf documents markdown in raw text or as formatted or as the original pdf and the same for word and other more complex documents. 
