@@ -10,6 +10,12 @@ add ai editing to code snippets for code step
 maybe add a code type to the output in strcutre which is like code[typescript] or code[python] and validate by running and add syntax highlighting but treat like a string otherwise
 maybe have different types of text like markdown text which is also displayed in format or latex.
 
+
+raise error if code doesn't compile in code step
+
+
+fix bug with cached log coming up in inference even if struct changes, likely need to store a hash of each struct
+
 n8n step option, ideally not. i kind of want the custom code steps to be able to handle everything. 
 
 add fallback support in custom code step
