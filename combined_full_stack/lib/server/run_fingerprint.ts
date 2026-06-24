@@ -92,6 +92,7 @@ function inputDocIdsForRun(store: Store, project: Project, run: PipelineRun): Do
 }
 
 // AI : newest matching ok run wins — runs are stored newest-first in the store.
+// AI : legacy runs without `fingerprint` / empty `inputDocIds` are skipped below — ignore, don't backfill.
 export function findMatchingRun(
   store: Store,
   project: Project,
@@ -107,6 +108,7 @@ export function findMatchingRun(
   for (const r of store.runs(projectId)) {
     if (r.status !== "ok") continue;
     const ids = inputDocIdsForRun(store, migrated, r);
+    // AI : legacy runs — missing inputDocIds / fingerprint; skip rather than guess.
     if (!ids.length) continue;
     if (computeRunFingerprint(migrated, resolvedModel, ids) === fingerprint) return r;
     if (computeRunFingerprint(migrated, r.model, ids) === fingerprint) return r;

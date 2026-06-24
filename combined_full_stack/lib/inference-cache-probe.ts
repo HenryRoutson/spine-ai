@@ -56,6 +56,8 @@ export function writeInferenceSessionCache(
   }
 }
 
+// AI : intentionally ignores legacy runs — pre-fingerprint rows have no `fingerprint` to match;
+// AI : do not add client-side recompute; server findMatchingRun may still match on POST /runs.
 function findLocalCachedRunByFingerprint(
   runs: PipelineRun[],
   fingerprint: string,

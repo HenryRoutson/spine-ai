@@ -37,6 +37,7 @@ interface DocRow {
 // AI : Supabase twin of JsonStore. The Store contract is synchronous, so: load everything
 // AI : for the signed-in user once in init(), serve reads from memory, and queue
 // AI : write-behind upserts that flush() awaits (routes flush before responding).
+// AI : docs table holds extracted text only — original PDF bytes are not stored (PDF viewer TODO).
 export class SupabaseStore implements Store {
   private state = {
     projects: [] as Project[],

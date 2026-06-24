@@ -47,6 +47,7 @@ export function DocViewer() {
   const tabs = docViewerTabs(docRef, hasPdf)
   const showPdf = isPdfDoc(docRef, hasPdf)
 
+  // AI : PDF tab only when /file has bytes — often false for uploads on Vercel/Supabase (see savePdfBytes TODO).
   useEffect(() => {
     if (!docId) return
     setHasPdf(false)

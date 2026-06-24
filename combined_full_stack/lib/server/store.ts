@@ -34,12 +34,16 @@ function docsDir(): string {
 
 // AI : original PDF bytes live beside the extracted text (data/docs/<hash>.pdf) so the
 // AI : doc viewer can render the real file — the extracted text stays the canonical content.
+// AI : TODO bug (prod) — local disk only; SupabaseStore persists text in `docs` but not PDF
+// AI : bytes, and on Vercel this lands in ephemeral /tmp. User uploads → GET /file 404.
+// AI : Fix: Supabase Storage (or inline blob) + serve from there, not dataDir().
 export function savePdfBytes(id: DocId, bytes: Uint8Array): void {
   mkdirSync(docsDir(), { recursive: true });
   writeFileSync(join(docsDir(), `${id}.pdf`), bytes);
 }
 
 // AI : lazy backfill — match seed PDFs via their .txt sidecar hash (no pdf-parse on serverless).
+// AI : uploaded PDFs are not backfilled here — only bundled seed sidecars (see savePdfBytes TODO).
 export async function pdfFilePath(id: DocId): Promise<string | undefined> {
   const path = join(docsDir(), `${id}.pdf`);
   if (existsSync(path)) return path;

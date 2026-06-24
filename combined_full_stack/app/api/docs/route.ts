@@ -64,7 +64,8 @@ export async function POST(req: NextRequest) {
   if (ctx instanceof NextResponse) return ctx;
   const { store } = ctx;
   const doc = store.addDoc(file.name, type, content, label);
-  if (type === "pdf") savePdfBytes(doc.id, bytes); // AI : keep the original for the PDF viewer
+  // AI : keep the original for the PDF viewer — see savePdfBytes TODO (broken on Vercel/Supabase).
+  if (type === "pdf") savePdfBytes(doc.id, bytes);
   await store.flush();
   apiLog.info(`doc saved`, { docId: doc.id, name: file.name, label });
   return NextResponse.json(doc);
