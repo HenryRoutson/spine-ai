@@ -70,6 +70,8 @@ try 100 pipelines and then pick the one which performs the best on evaluation, o
 need to allow pydantic model to expand with ALL the previous step outputs keyed by step label and then draw arrows for which is being used in which step back,
 and then automatically collapse into a more efficient tree to allow parallel execution. Directed Acyclic Graph. RxJS, XState, maybe? need to add an option in the UI to show the visual change of moving things into parallel.
 you need to give access to the label-keyed pydantic model for each lambda function / custom ts — see combined_full_stack/lib/server/pipeline_state.ts TODO(spec)
+The input pydantic field will need to be removed.
+ACTUALLY, I change my mind. this is going to make things much more complex and everything can be achived with a linear pipeline ideally. visually, and also in the complexity things will be worse. need to figure out how to enrich without using all the tokens to repeat something in a single step. probably just need a step to merge things.
 
 
 auto derive format from excel or JSON with UI.
