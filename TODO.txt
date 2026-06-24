@@ -1,5 +1,14 @@
 
+how to reorder fallbacks up and down buttons
 
+allow git sync to setup coding in custom code step, with env
+
+add ai editing to code snippets for code step
+
+
+
+maybe add a code type to the output in strcutre which is like code[typescript] or code[python] and validate by running and add syntax highlighting but treat like a string otherwise
+maybe have different types of text like markdown text which is also displayed in format or latex.
 
 n8n step option, ideally not. i kind of want the custom code steps to be able to handle everything. 
 
