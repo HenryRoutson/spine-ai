@@ -18,7 +18,7 @@ import { QuoteLinks, quotesFromJson } from "@/components/quote-links"
 import { cn } from "@/lib/utils"
 import { useDocViewer, type DocViewMode } from "@/lib/doc-viewer"
 import { useAppShell } from "@/lib/app-shell"
-import { stepDocId, stepDocLinkLabels } from "@/lib/step-doc"
+import { stepDocId, stepDocLinkLabels, stepSourceDocId } from "@/lib/step-doc"
 import { collectRunLlmCalls, llmCallsFromStep } from "@/lib/llm-distribution"
 import { timeAgo } from "@/lib/time-ago"
 import { enrichRunModules, modulesFromRunSteps } from "@/lib/pipeline-run-diff"
@@ -31,7 +31,7 @@ import { resolveRunInputDocIds, runInputDocsSummary } from "@/lib/inference-inpu
 import { stepIoLabels } from "@/lib/module-kinds"
 import type { DocId, DocRef, ModuleId, PipelineRun, RunStepStatus } from "@/lib/types"
 
-type PopupPayload = { json?: string; text?: string; title: string }
+type PopupPayload = { json?: string; text?: string; title: string; sourceDocId?: DocId }
 
 function filterRuns(runs: PipelineRun[], query: string): PipelineRun[] {
   if (!query.trim()) return runs
@@ -449,6 +449,7 @@ export function Logging() {
                       const stepLlmCalls = llmCallsFromStep(step)
                       const stepQuotes = quotesFromJson(step.outputJson)
                       const stepDoc = stepDocId(step)
+                      const stepSourceDoc = stepSourceDocId(step)
                       const stepDocRef = stepDoc ? docs.find((d) => d.id === stepDoc) : undefined
                       const stepDocLinks = stepDocLinkLabels(stepDocRef)
                       const hasStepDocLink =
@@ -499,10 +500,11 @@ export function Logging() {
                               setPopup({
                                 text: step.inputPreview,
                                 title: `${inTitle} (input) · ${step.label}`,
+                                sourceDocId: stepSourceDoc,
                               })
                             }
                           >
-                            <PromptText text={step.inputPreview} />
+                            <PromptText text={step.inputPreview} sourceDocId={stepSourceDoc} />
                           </IoSection>
 
                           {step.status === "error" && step.outputPreview && (
@@ -689,7 +691,7 @@ export function Logging() {
               </div>
             ) : (
               <div className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground">
-                <PromptText text={popup.text ?? ""} />
+                <PromptText text={popup.text ?? ""} sourceDocId={popup.sourceDocId} />
               </div>
             )}
           </div>

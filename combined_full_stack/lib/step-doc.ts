@@ -17,6 +17,16 @@ export function stepDocId(step: RunStep): DocId | undefined {
   return m ? (m[1] as DocId) : undefined
 }
 
+// AI : resolve source doc from SOURCE DOCUMENT (sha_…, N chars): blocks in step input previews.
+export function sourceDocIdFromPreview(text: string): DocId | undefined {
+  const m = text.match(/SOURCE DOCUMENT \(([^,)]+)/)
+  return m?.[1]?.startsWith("sha_") ? (m[1] as DocId) : undefined
+}
+
+export function stepSourceDocId(step: RunStep): DocId | undefined {
+  return stepDocId(step) ?? sourceDocIdFromPreview(step.inputPreview)
+}
+
 export function stepDocLinkLabels(doc?: DocRef): {
   input: { mode: DocViewMode; label: string }
   output: { mode: DocViewMode; label: string }

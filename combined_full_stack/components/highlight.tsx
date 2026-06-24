@@ -1,7 +1,11 @@
 "use client"
 
+import { Link2 } from "lucide-react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { OpenInDocumentsLink } from "@/components/open-in-documents"
+import { useDocViewer } from "@/lib/doc-viewer"
+import type { DocId } from "@/lib/types"
 
 // Lightweight JSON syntax highlighter for log/output views.
 export function JsonHighlight({ json }: { json: string }) {
@@ -85,7 +89,7 @@ export function MarkdownView({ md }: { md: string }) {
 }
 
 // Render prompt text with embedded JSON blobs syntax-highlighted inline.
-export function PromptText({ text }: { text: string }) {
+export function PromptText({ text, sourceDocId }: { text: string; sourceDocId?: DocId }) {
   const parts = splitJsonSegments(text)
   return (
     <>
@@ -95,15 +99,30 @@ export function PromptText({ text }: { text: string }) {
             <JsonHighlight json={p.text} />
           </span>
         ) : (
-          <PlainPromptSegment key={i} text={p.text} />
+          <PlainPromptSegment key={i} text={p.text} sourceDocId={sourceDocId} />
         ),
       )}
     </>
   )
 }
 
+type SourceDocHeader = { docId?: DocId; charCount?: number; label: string }
+
+// AI : parse doc id from SOURCE DOCUMENT (sha_…, N chars): headers stored in run logs.
+function parseSourceDocHeader(header: string): SourceDocHeader {
+  const withMeta = header.match(/^SOURCE DOCUMENT \(([^,)]+)(?:, (\d+) chars)?\):$/)
+  if (withMeta) {
+    return {
+      docId: withMeta[1] as DocId,
+      charCount: withMeta[2] ? +withMeta[2] : undefined,
+      label: header,
+    }
+  }
+  return { label: header }
+}
+
 // AI : highlight SOURCE DOCUMENT blocks in LLM prompts and Link Quotes step input.
-function PlainPromptSegment({ text }: { text: string }) {
+function PlainPromptSegment({ text, sourceDocId }: { text: string; sourceDocId?: DocId }) {
   const startMatch = text.match(/SOURCE DOCUMENT(?: \([^)]+\))?:\n/)
   if (!startMatch || startMatch.index === undefined) return <span>{text}</span>
 
@@ -124,15 +143,65 @@ function PlainPromptSegment({ text }: { text: string }) {
   return (
     <span>
       {before}
-      <span className="my-1 block rounded border border-chart-2/40 bg-chart-2/10 p-2">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-chart-2">
-          {header}
-        </span>
-        <span className="mt-1 block whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">
-          {body.trimEnd()}
-        </span>
-      </span>
+      <SourceDocumentBlock header={header} body={body} sourceDocId={sourceDocId} />
       {after}
+    </span>
+  )
+}
+
+function SourceDocumentBlock({
+  header,
+  body,
+  sourceDocId,
+}: {
+  header: string
+  body: string
+  sourceDocId?: DocId
+}) {
+  const { open } = useDocViewer()
+  const parsed = parseSourceDocHeader(header)
+  const docId = parsed.docId ?? sourceDocId
+
+  function openDoc() {
+    if (!docId) return
+    open({ docId, start: 0, end: 0 })
+  }
+
+  return (
+    <span className="my-1 block rounded border border-chart-2/40 bg-chart-2/10 p-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {docId ? (
+          <button
+            type="button"
+            onClick={openDoc}
+            className="font-mono text-[10px] font-semibold uppercase tracking-wide text-chart-2 hover:underline"
+            title={`Open source document ${docId}`}
+          >
+            SOURCE DOCUMENT ({docId}
+            {parsed.charCount != null ? `, ${parsed.charCount} chars` : ""}):
+          </button>
+        ) : (
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-wide text-chart-2">
+            {parsed.label}
+          </span>
+        )}
+        {docId && (
+          <span className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={openDoc}
+              className="inline-flex items-center gap-1 font-mono text-[10px] text-primary hover:underline"
+            >
+              <Link2 className="h-3 w-3" />
+              view original
+            </button>
+            <OpenInDocumentsLink docId={docId} label="documents" />
+          </span>
+        )}
+      </div>
+      <span className="mt-1 block whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">
+        {body.trimEnd()}
+      </span>
     </span>
   )
 }

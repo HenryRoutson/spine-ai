@@ -336,10 +336,10 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       const stepModel = m.model ?? ctx.model;
       log.info(`llm step`, { moduleId: m.id, model: stepModel, outStructure: out.name, outIsList: !!m.outIsList });
       const inputData = requireLinearInput(m, ctx);
-      const context =
-        ctx.sourceText && hasQuoteField(out, project.models)
-          ? `SOURCE DOCUMENT:\n${ctx.sourceText}`
-          : `INPUT DATA:\n${JSON.stringify(inputData, null, 2)}`;
+      const usesSourceDoc = ctx.sourceText && hasQuoteField(out, project.models);
+      const context = usesSourceDoc
+        ? sourceDocumentBlock(ctx.sourceText, ctx.sourceDocId)
+        : `INPUT DATA:\n${JSON.stringify(inputData, null, 2)}`;
       const userPrompt = `${m.prompt ?? "Process the input."}\n\n${context}`;
       const schema = llmSchema(out, project.models, !!m.outIsList);
       const prompt = structuredLlmPrompt(userPrompt, schema);
@@ -356,6 +356,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         preview: `${count} ${out.name} item(s) produced`,
         json: JSON.stringify(value, null, 2),
         inputPreview: prompt,
+        docId: usesSourceDoc ? ctx.sourceDocId : undefined,
         llmCalls: ctx.stepLlmCalls,
       };
     }
