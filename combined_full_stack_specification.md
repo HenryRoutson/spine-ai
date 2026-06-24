@@ -153,6 +153,8 @@ json can be viewed in excel popups for non techincal people. there is also a vie
 
 when displaying prompts, all sub components are highlighted and profiled on their contribution to context length. JSON is syntax highlighted. Files link back to the documents tab and are highlighted in an outline. 
 
+prompting should be stored in json for it's different components and then a static flatten function should be used to convert to the actual prompt. for example, don't store 1000 prompts with the denormalised text from a document as this is inefficient. only denormalise when sending to prompt.
+
 # documents
 
 the documents tab contains all documents and their size with the ability to view them. you can also view pdf documents markdown in raw text or as formatted or as the original pdf and the same for word and other more complex documents. 

@@ -90,6 +90,9 @@ Allow option to view full prompt
 combine inputs should be able to take in lots of inputs not just 1.
 
 
+prompting should be stored in json for it's different components and then a static flatten function should be used to convert to the actual prompt. for example, don't store 1000 prompts with the denormalised text from a document as this is inefficient. only denormalise when sending to prompt.
+
+
 
 need to be able to click on SOURCE DOCUMENT: and link back to document tab
 
