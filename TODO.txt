@@ -5,6 +5,10 @@ n8n step option, ideally not. i kind of want the custom code steps to be able to
 
 add fallback support in custom code step
 
+
+
+create fallback logic in custom code module, display fallbacks in logging, keeping track of what exactly failed with lines of code and exact input to recreate everything that failed. just take in a list of typescript code for now, other languages will be supported in future 
+
 add python support to custom code step.
 create something like {
   fallback_list : [
