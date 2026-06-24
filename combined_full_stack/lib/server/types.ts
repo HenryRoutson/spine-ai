@@ -35,6 +35,7 @@ export interface ModelField {
   type: FieldType;
   optional: boolean;
   description: string;
+  example?: string; // AI : sample value — shown in structure UI and emitted in pydantic / LLM schema hints
   ref?: StructureModelId; // referenced model id when type === "model" | "list[model]"
 }
 

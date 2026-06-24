@@ -228,15 +228,16 @@ export function StructureBuilder() {
               </div>
 
               <div className="overflow-hidden rounded-lg border border-border">
-                <div className="grid grid-cols-[1.3fr_1.2fr_1.4fr_auto] gap-2 border-b border-border bg-secondary/40 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                <div className="grid grid-cols-[1.1fr_1fr_1.2fr_1fr_auto] gap-2 border-b border-border bg-secondary/40 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                   <span>Name</span>
                   <span>Type</span>
                   <span>Description</span>
+                  <span>Example</span>
                   <span className="w-14 text-center">Opt</span>
                 </div>
                 {selected.fields.map((f) => (
                   <div key={f.id}>
-                    <div className="grid grid-cols-[1.3fr_1.2fr_1.4fr_auto] items-center gap-2 border-b border-border px-3 py-2">
+                    <div className="grid grid-cols-[1.1fr_1fr_1.2fr_1fr_auto] items-center gap-2 border-b border-border px-3 py-2">
                       <Input
                         value={f.name}
                         onChange={(e) => updateField(f.id, { name: e.target.value })}
@@ -271,6 +272,14 @@ export function StructureBuilder() {
                           updateField(f.id, { description: e.target.value })
                         }
                         className="h-8 text-xs"
+                      />
+                      <Input
+                        value={f.example ?? ""}
+                        placeholder="e.g. Acme Ltd"
+                        onChange={(e) =>
+                          updateField(f.id, { example: e.target.value || undefined })
+                        }
+                        className="h-8 font-mono text-xs"
                       />
                       <div className="flex w-14 items-center justify-center gap-1">
                         <button

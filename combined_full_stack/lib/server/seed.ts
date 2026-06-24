@@ -50,6 +50,7 @@ const SeedFileSchema = z.object({
           type: FieldTypeSchema,
           optional: z.boolean(),
           description: z.string(),
+          example: z.string().optional(),
           ref: z.string().optional(),
         }),
       ),

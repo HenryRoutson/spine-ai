@@ -31,6 +31,8 @@ function fieldToPy(field: ModelField, models: StructureModel[]): string {
   const fieldArgs: string[] = [];
   if (field.optional) fieldArgs.push("default=None");
   if (field.description) fieldArgs.push(`description=${JSON.stringify(field.description)}`);
+  const ex = field.example?.trim();
+  if (ex) fieldArgs.push(`examples=[${JSON.stringify(ex)}]`);
   const rhs = fieldArgs.length ? ` = Field(${fieldArgs.join(", ")})` : "";
   return `    ${field.name}: ${t}${rhs}`;
 }

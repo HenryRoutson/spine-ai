@@ -28,6 +28,19 @@ function byId(models: StructureModel[]): Map<StructureModelId, StructureModel> {
   return new Map(models.map((m) => [m.id, m]));
 }
 
+function fieldDescribe(f: ModelField): string | undefined {
+  const parts: string[] = [];
+  if (f.description.trim()) parts.push(f.description.trim());
+  const ex = f.example?.trim();
+  if (ex) parts.push(`Example: ${ex}`);
+  return parts.length ? parts.join(" — ") : undefined;
+}
+
+function withFieldMeta(schema: ZodType, f: ModelField): ZodType {
+  const d = fieldDescribe(f);
+  return d ? schema.describe(d) : schema;
+}
+
 function leafSchema(
   type: FieldType,
   ref: StructureModelId | undefined,
@@ -84,7 +97,7 @@ function build(
   const shape: Record<string, ZodType> = {};
   for (const f of model.fields) {
     if (!f.name.trim()) continue;
-    const base = leafSchema(f.type, f.ref, index, next);
+    const base = withFieldMeta(leafSchema(f.type, f.ref, index, next), f);
     // AI : optional ⇒ absent OR null — deterministic steps (db migration mapping) emit explicit
     // AI : nulls per spec; llmSchema keeps plain .optional() so models omit instead.
     shape[f.name] = f.optional ? base.nullish() : base;
@@ -168,7 +181,7 @@ function llmBuild(
   const shape: Record<string, ZodType> = {};
   for (const f of model.fields) {
     if (!f.name.trim()) continue;
-    const base = llmLeafSchema(f.type, f.ref, index, next);
+    const base = withFieldMeta(llmLeafSchema(f.type, f.ref, index, next), f);
     shape[f.name] = f.optional ? base.optional() : base;
   }
   return z.object(shape);
