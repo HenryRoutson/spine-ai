@@ -1,6 +1,24 @@
 
 
 
+n8n step option
+
+Need dynamic scehmas. If you have a task to mark homework, you're provided with a doc to text conversion of homework to text. from this you need to create an output schema of what the marking should check like question 7 should have fields a, b, c maybe, and the question descriptoins and marking criteria is inside each of those fields. you can't hardcode this for every homework sheet. Allow the option to request llm calls to output in a dynamic format and validate in same way. Maybe a format that adheres to a certain generic structure.
+
+
+
+export whole tool to cli
+
+export whole tool as claude code mcp plugin
+export whole tool as claude code skill?
+
+
+add deepseek OCR
+
+
+add human review step and what they see.
+
+
 - add an example of enrichment, where you keep the same format but just add things to it. do a test which would go over the context limit if you had to repeat the whole structure rather than just the new fields. 
 
 add mcp connections
@@ -170,3 +188,16 @@ I like the idea of each step being named and accumulating all the data from prev
 For the custom functions, give access to the input model and the json to make it easier ?
 Compare on benchmark to Claude code in accuracy, time, lines of code, and cost
 Marketplace to buy and sell pipelines
+
+
+
+
+
+AI suggesetions 
+Scheduled / folder-watch runs — renewals, competitor monitoring, comment periods
+Email & webhook ingest — shipping exceptions, tickets, whistleblower
+Human approval queue — legal, HR, refunds before anything ships
+External write-back — CRM, ERP, ticketing (export CSV/JSON is enough for v1)
+Retrieval connector — live KB/vector search instead of static uploads
+Better OCR / images — receipts, scanned clinical forms
+Tabular join step — reconciliation without bespoke Custom TS every time

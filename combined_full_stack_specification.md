@@ -69,6 +69,7 @@ steps include
     Text
     Web
     Image
+    n8n
   custom function - typescript or python
   single llm call
   parallel llm call - ensuring this completes in a similar time to the single call.
@@ -108,6 +109,12 @@ inputs have the option to only accept files which contain a certain term in thei
 This is to ensure that pipeline accept the correct files before anythign runs.
 
 if there is any validation errors, this should disable the run button in the inference tab.
+
+
+
+
+
+Need dynamic scehmas. If you have a task to mark homework, you're provided with a doc to text conversion of homework to text. from this you need to create an output schema of what the marking should check like question 7 should have fields a, b, c maybe, and the question descriptoins and marking criteria is inside each of those fields. you can't hardcode this for every homework sheet. Allow the option to request llm calls to output in a dynamic format and validate in same way. Maybe a format that adheres to a certain generic structure.
 
 
 # inference
