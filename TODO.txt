@@ -1,3 +1,158 @@
+================================================================================
+PLAN: OpenHands agent tier (separate server) — managed, minimal complexity
+================================================================================
+Goal: run OpenHands (open models via OpenRouter) on infrastructure separate from
+the Vercel UI so agent jobs (minutes, Docker, bash) never slow inference/API.
+Skip multi-node Ray / KubeRay / autoscaling for v1 — one managed VM is enough.
+
+--- architecture (3 tiers, no cluster) ---
+
+  [Vercel] Next.js UI + /api/runs          enqueue only, poll Supabase
+       |
+       v
+  [Supabase] jobs, runs, docs, billing     shared state + agent job rows
+       |
+       v
+  [Agent VM] Docker Compose stack          OpenHands + thin gateway (+ optional Ray)
+
+UI never runs agents. Pipeline pauses at openhands steps (like custom-code pause),
+resumes on webhook/callback when agent returns validated JSON.
+
+--- v1 deployment (recommended: Fly.io or Railway, single machine) ---
+
+Why Fly/Railway over raw EC2: git-push deploy, TLS, secrets UI, persistent volume,
+Docker-in-Docker or sibling containers without you managing the OS. No scaling config.
+
+Machine: 4 vCPU / 8GB RAM minimum (OpenHands Docker sandbox is hungry).
+Region: same as Supabase (eu-west) to cut latency.
+
+Docker Compose on the agent VM (3 services):
+
+  1. agent-gateway (Python FastAPI or Node — ~100 lines)
+     - POST /agent/jobs  → returns agentJobId immediately
+     - GET  /agent/jobs/{id} → status, events tail, result JSON
+     - POST /agent/jobs/{id}/cancel
+     - Auth: shared secret header AGENT_GATEWAY_KEY (Vercel env only)
+     - Writes progress to Supabase (or callbacks to Vercel /api/agent/callback)
+     - Does NOT run agents — only queues and tracks
+
+  2. openhands-worker (long-running; pulls jobs from gateway queue)
+     - Image: ghcr.io/openhands/agent-server:latest-python
+       (pre-built — do NOT DockerDevWorkspace build on demand in prod)
+     - Env:
+         LLM_BASE_URL=https://openrouter.ai/api/v1
+         LLM_MODEL=deepseek/deepseek-chat   (or qwen — benchmark tool reliability)
+         OPENROUTER_API_KEY=...             (only on worker + proxy, never Vercel)
+         OH_SECRET_KEY=...                  (openssl rand -hex 32)
+         SESSION_API_KEY=...                (gateway → openhands internal auth)
+     - Mount: /data/workspaces → Fly/Railway persistent volume
+     - Per job: gateway spawns isolated DockerWorkspace container OR
+       uses OpenHands conversation API with workspace dir /data/workspaces/{runId}/
+
+  3. openrouter-proxy (optional, recommended)
+     - Tiny forwarder to openrouter.ai — meters tokens per agentJobId for billing
+     - OpenHands points at http://openrouter-proxy:8080/v1 not OpenRouter direct
+     - Keeps API key out of sandboxes
+
+Deploy steps (Fly example — adapt names):
+  - fly launch --no-deploy  (pick region, attach volume for /data)
+  - fly secrets set OPENROUTER_API_KEY=... OH_SECRET_KEY=... AGENT_GATEWAY_KEY=...
+  - docker compose up (via fly.toml [build] or Dockerfile that COPY compose)
+  - fly deploy
+  - Restrict ingress: only Vercel outbound IPs + your dev IP on :443
+  - Vercel env: AGENT_GATEWAY_URL=https://forge-agent.fly.dev  AGENT_GATEWAY_KEY=...
+
+Railway: same pattern — one service from Dockerfile, volume mount /data, env in dashboard.
+
+--- Ray (v1 = optional, single-node only) ---
+
+Skip Ray until >3 concurrent agent jobs hurt. When needed, add ON THE SAME VM:
+
+  ray start --head --num-cpus=4
+  ray serve run gateway:app   # wraps the FastAPI gateway as @serve.deployment
+
+Use Ray only for:
+  - one Actor per agentJobId (conversation state survives polls)
+  - ray.get(timeout=900) hard kill on stuck jobs
+  - NOT multi-node, NOT KubeRay, NOT GPU Serve LLM (models stay on OpenRouter)
+
+Do not add Ray Serve LLM / vLLM unless self-hosting models later.
+
+--- integration with combined_full_stack (phased) ---
+
+Phase 0 — prove agent VM alone (no UI)
+  [ ] Deploy compose stack to Fly/Railway
+  [ ] curl POST /agent/jobs with bug_enricher docs pasted as files
+  [ ] Confirm: Docker sandbox starts, agent reads files, returns JSON, container dies
+  [ ] Confirm: OpenRouter usage visible in openrouter.ai dashboard
+
+Phase 1 — Supabase agent job table
+  [ ] Table agent_jobs: id, run_id, step_id, user_id, status, events_json, result_json, error
+  [ ] Gateway writes status transitions: queued → running → ok|error
+  [ ] Vercel polls agent_jobs (or gateway proxies Supabase row)
+
+Phase 2 — pipeline pause/resume (decouple UI — see "setup as an agent API" below)
+  [ ] Add executionMode on llm modules: direct | openhands
+  [ ] run_engine: on openhands step → POST gateway, throw AgentStepPendingError
+  [ ] Checkpoint in run_jobs (same pattern as ClientStepPendingError / custom-code)
+  [ ] /api/agent/callback webhook from gateway → resumeRunPipeline with result
+  [ ] Include executionMode in run fingerprint hash
+
+Phase 3 — inference UX
+  [ ] Stream agent events into job debug logs (bash output, file reads)
+  [ ] Logging tab: show agent transcript fenced like A/B strategy logs
+  [ ] Fallback chain: direct OpenRouter first → openhands on schema failure
+
+Phase 4 — wire A/B strategy placeholder
+  [ ] strategies.ts "claude-code" / "cheap-agent" → call same gateway (not fake loop)
+  [ ] Replaces "setup claude code as a step option" + "Claude code instance as strategy"
+
+--- Docker security defaults (non-negotiable in prod) ---
+
+  - One workspace dir per job: /data/workspaces/{userId}/{runId}/{stepId}/
+  - No host mounts except that volume root
+  - openhands headless = auto-approve tools → ONLY inside Docker sandbox
+  - Max job wall time: 15 min then SIGKILL container
+  - Max concurrent jobs per user: 2 (gateway enforces before spawn)
+  - Sandbox egress: openrouter-proxy only (block general internet if possible)
+  - Never put OPENROUTER_API_KEY in Vercel or client bundle
+
+--- env vars checklist ---
+
+  Vercel (UI):
+    AGENT_GATEWAY_URL
+    AGENT_GATEWAY_KEY
+    (existing SUPABASE_*, OPENROUTER_* stays for direct llm steps only)
+
+  Agent VM:
+    OPENROUTER_API_KEY
+    OH_SECRET_KEY
+    SESSION_API_KEY          (internal)
+    AGENT_GATEWAY_KEY        (must match Vercel)
+    SUPABASE_URL + SERVICE_ROLE_KEY   (gateway writes agent_jobs)
+    WORKSPACE_ROOT=/data/workspaces
+
+--- cost / ops expectations (v1) ---
+
+  - ~$30–50/mo single Fly machine + OpenRouter usage per job
+  - No autoscaling — if queue backs up, user sees "agent busy, queued"
+  - Upgrade path later: second worker VM + Redis queue (still no KubeRay until needed)
+
+--- defers (do not build yet) ---
+
+  - Multi-node Ray cluster, KubeRay, Anyscale
+  - Self-hosted vLLM on GPU
+  - Per-job Kubernetes pods
+  - Horizontal autoscaling
+  - MCP/skills inside OpenHands (Phase 5+)
+
+================================================================================
+
+
+
+
+
+
 
 how to reorder fallbacks up and down buttons
 
@@ -10,6 +165,12 @@ add ai editing to code snippets for code step
 maybe add a code type to the output in strcutre which is like code[typescript] or code[python] and validate by running and add syntax highlighting but treat like a string otherwise
 maybe have different types of text like markdown text which is also displayed in format or latex.
 
+
+bring back cache
+
+get rid of combine inputs option?
+
+can't open new projects
 
 raise error if code doesn't compile in code step
 

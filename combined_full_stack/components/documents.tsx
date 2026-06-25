@@ -1,9 +1,10 @@
 "use client"
 
-import { useRef, useState, useEffect } from "react"
+import { useMemo, useRef, useState, useEffect } from "react"
 import { useStore } from "@/lib/store"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { useAppShell } from "@/lib/app-shell"
+import { docsForProject } from "@/lib/project-docs"
 import { WindowHeader } from "@/components/window-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -37,7 +38,7 @@ const TYPE_ICON: Record<InputType, typeof FileText> = {
 }
 
 export function Documents() {
-  const { docs, addDoc } = useStore()
+  const { docs, addDoc, project } = useStore()
   const { open } = useDocViewer()
   const { focusDocId, clearFocusDoc } = useAppShell()
   const fileRef = useRef<HTMLInputElement>(null)
@@ -58,6 +59,8 @@ export function Documents() {
     return () => window.clearTimeout(t)
   }, [focusDocId])
 
+  const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
+
   // AI : de-mocked — files go through POST /api/docs (server hashes + parses PDFs);
   // AI : dedup when the returned content hash already exists in the store.
   async function ingest(files: FileList | null, label: DocLabel) {
@@ -70,8 +73,8 @@ export function Documents() {
         continue
       }
       try {
-        const doc = await addDoc(f, label)
-        if (docs.some((d) => d.id === doc.id)) {
+        const doc = await addDoc(f, label, project.id)
+        if (projectDocs.some((d) => d.id === doc.id)) {
           setLastDedup(doc.name)
           setTimeout(() => setLastDedup(null), 4000)
         }
@@ -88,26 +91,26 @@ export function Documents() {
     }
   }
 
-  const filtered = docs.filter((d) => {
+  const filtered = projectDocs.filter((d) => {
     if (filter !== "all" && d.label !== filter) return false
     if (query.trim() && !d.name.toLowerCase().includes(query.toLowerCase())) return false
     return true
   })
 
-  const totalKb = docs.reduce((a, d) => a + d.sizeKb, 0)
+  const totalKb = projectDocs.reduce((a, d) => a + d.sizeKb, 0)
 
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
         step="06 / Documents"
         title="Document Store"
-        description="Content-addressed storage. Identical uploads dedupe to one hash so you never pay to process the same file twice."
+        description={`Content-addressed storage for ${project.name}. Uploads and example files stay scoped to this pipeline.`}
       />
 
       <div className="grid grid-cols-3 gap-px border-b border-border bg-border">
-        <Stat label="Documents" value={String(docs.length)} />
+        <Stat label="Documents" value={String(projectDocs.length)} />
         <Stat label="Total size" value={`${(totalKb / 1024).toFixed(1)} MB`} />
-        <Stat label="Unique hashes" value={String(new Set(docs.map((d) => d.id)).size)} />
+        <Stat label="Unique hashes" value={String(new Set(projectDocs.map((d) => d.id)).size)} />
       </div>
 
       <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">

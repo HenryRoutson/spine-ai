@@ -1,9 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
-import { savePdfBytes } from "@/lib/server/store";
+import { linkDocToProject, savePdfBytes } from "@/lib/server/store";
 import { logger } from "@/lib/server/server_logger";
 import { confidentialUploadWarning } from "@/lib/confidential-upload";
-import type { DocLabel, InputType } from "@/lib/server/types";
+import type { DocLabel, InputType, ProjectId } from "@/lib/server/types";
 
 const apiLog = logger("api:docs");
 
@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     return apiError(confidentialBlock, 403);
   }
   const label = (form.get("label") as DocLabel) ?? "inference";
+  const projectId = (form.get("projectId") as ProjectId | null) ?? undefined;
   const type = EXT_TYPE[file.name.split(".").pop()?.toLowerCase() ?? ""] ?? "text";
   apiLog.info(`POST /api/docs upload`, { name: file.name, type, label, sizeKb: Math.round(file.size / 1024) });
 
@@ -64,6 +65,7 @@ export async function POST(req: NextRequest) {
   if (ctx instanceof NextResponse) return ctx;
   const { store } = ctx;
   const doc = store.addDoc(file.name, type, content, label);
+  if (projectId) linkDocToProject(store, projectId, file.name);
   // AI : keep the original for the PDF viewer — see savePdfBytes TODO (broken on Vercel/Supabase).
   if (type === "pdf") savePdfBytes(doc.id, bytes);
   await store.flush();

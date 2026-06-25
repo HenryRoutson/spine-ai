@@ -70,8 +70,25 @@ export function formatCustomCodeFailureLog(f: CustomCodeAttemptFailure): string 
 }
 
 export function compileCustomFn(code: string): CustomFn {
-  const isExpression = /^\s*(\(|function\b|async\b)/.test(code);
-  const src = isExpression ? `(${code})` : `((input) => { ${code} })`;
+  const trimmed = code.trim();
+  const isExpression = /^\s*(\(|function\b|async\b)/.test(trimmed);
+  let src: string;
+  if (isExpression) {
+    src = `(${trimmed})`;
+  } else {
+    // AI : seed steps prefix helper consts then a trailing `(arg)=>…` — invoke it with input.
+    const mainArrow = trimmed.match(/;\s*(\([^)]*\)\s*=>[\s\S]+)$/);
+    if (mainArrow) {
+      const arrowStart = trimmed.lastIndexOf(mainArrow[1]!);
+      const preamble = trimmed.slice(0, arrowStart).replace(/;\s*$/, "");
+      const arrow = trimmed.slice(arrowStart);
+      src = preamble
+        ? `((input) => { ${preamble}; return (${arrow})(input); })`
+        : `((input) => { return (${arrow})(input); })`;
+    } else {
+      src = `((input) => { ${trimmed} })`;
+    }
+  }
   const fn = new Function(`return ${src}`)();
   if (typeof fn !== "function") throw new Error("custom code must evaluate to a function (input) => output");
   return fn as CustomFn;

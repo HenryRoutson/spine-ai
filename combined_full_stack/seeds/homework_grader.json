@@ -1,0 +1,199 @@
+{
+  "id": "p_homework_grader",
+  "name": "Homework Grader",
+  "kind": "education",
+  "models": [
+    {
+      "id": "m_doc",
+      "name": "SourceDocument",
+      "description": "Raw document annotated with its purpose.",
+      "fields": [
+        {
+          "id": "f_purpose",
+          "name": "purpose",
+          "type": "text",
+          "optional": false,
+          "description": "What this document contains"
+        },
+        {
+          "id": "f_body",
+          "name": "body",
+          "type": "text",
+          "optional": false,
+          "description": "Full extracted text"
+        }
+      ]
+    },
+    {
+      "id": "m_section",
+      "name": "HomeworkSection",
+      "description": "One homework section split from markdown headings.",
+      "fields": [
+        {
+          "id": "f_sid",
+          "name": "section_id",
+          "type": "text",
+          "optional": false,
+          "description": "Section id"
+        },
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Section title"
+        },
+        {
+          "id": "f_body",
+          "name": "body",
+          "type": "text",
+          "optional": false,
+          "description": "Questions and student work"
+        }
+      ]
+    },
+    {
+      "id": "m_grade",
+      "name": "SectionGrade",
+      "description": "Marks for one homework section.",
+      "fields": [
+        {
+          "id": "f_sid",
+          "name": "section_id",
+          "type": "text",
+          "optional": false,
+          "description": "Matches section id"
+        },
+        {
+          "id": "f_score",
+          "name": "score",
+          "type": "int",
+          "optional": false,
+          "description": "Points awarded"
+        },
+        {
+          "id": "f_max",
+          "name": "max_score",
+          "type": "int",
+          "optional": false,
+          "description": "Points possible"
+        },
+        {
+          "id": "f_feedback",
+          "name": "feedback",
+          "type": "text",
+          "optional": false,
+          "description": "Marking comments"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in",
+      "kind": "input",
+      "label": "Homework Sheet",
+      "inputType": "text",
+      "inputNameContains": "algebra_homework",
+      "outStructureId": "m_doc",
+      "cached": false,
+      "avgMs": 90,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_split",
+      "kind": "custom-code",
+      "label": "Split Sections",
+      "note": "Split markdown ## sections — no raw tables sent to LLM.",
+      "inStructureId": "m_doc",
+      "outStructureId": "m_section",
+      "outIsList": true,
+      "cached": false,
+      "avgMs": 8,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "(doc)=>doc.body.split(/\\n## /).filter((c)=>c.trim()).map((chunk,i)=>{const lines=chunk.split(\"\\n\");const title=lines[0].replace(/^#+\\s*/,\"\").trim();return{section_id:String(i+1),title,body:lines.slice(1).join(\"\\n\").trim()};})"
+        }
+      ]
+    },
+    {
+      "id": "mod_grade",
+      "kind": "llm-batch",
+      "label": "Grade Each Section",
+      "inStructureId": "m_section",
+      "outStructureId": "m_grade",
+      "outIsList": true,
+      "prompt": "Grade this homework section using the marking scheme in the document header. Award partial credit for method. Section C requires shown working. Return section_id matching input.",
+      "model": "deepseek-v3",
+      "cached": false,
+      "avgMs": 2400,
+      "avgCostCents": 6
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Grades",
+      "inStructureId": "m_grade",
+      "outStructureId": "m_grade",
+      "outIsList": true,
+      "cached": false,
+      "avgMs": 40,
+      "avgCostCents": 0
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single_hw",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v3",
+      "accuracy": 78,
+      "latencyMs": 3200,
+      "costCents": 8,
+      "passRate": 90
+    },
+    {
+      "id": "s_rlm_hw",
+      "kind": "rlm",
+      "name": "Recursive LM",
+      "enabled": true,
+      "model": "deepseek-v3",
+      "accuracy": 86,
+      "latencyMs": 9800,
+      "costCents": 21,
+      "passRate": 94
+    },
+    {
+      "id": "s_agent_hw",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v3",
+      "accuracy": 92,
+      "latencyMs": 28000,
+      "costCents": 160,
+      "passRate": 97
+    },
+    {
+      "id": "s_cheap_hw",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v3",
+      "accuracy": 82,
+      "latencyMs": 18000,
+      "costCents": 12,
+      "passRate": 89
+    }
+  ],
+  "docs": [
+    {
+      "name": "algebra_homework_7.md",
+      "type": "text",
+      "label": "inference",
+      "file": "homework_grader/algebra_homework.md"
+    }
+  ]
+}

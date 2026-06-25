@@ -44,7 +44,6 @@ export function Projects() {
     cloneFromTemplate,
     cloneProject,
     resyncExamples,
-    refresh,
   } = useStore()
   const { setActiveWindow } = useAppShell()
   const [templates, setTemplates] = useState<ProjectTemplateSummary[]>([])
@@ -125,7 +124,7 @@ export function Projects() {
       <WindowHeader
         step="Projects"
         title="Your pipelines"
-        description="Switch projects, clone numbered copies from examples, or refresh built-in templates from seeds."
+        description="Switch projects, clone numbered copies from examples, or refresh templates from seeds."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" className="bg-transparent" onClick={() => void handleResync()} disabled={busy === "resync"}>
@@ -243,7 +242,7 @@ export function Projects() {
             <h3 className="text-sm font-semibold">Example templates</h3>
           </div>
           <p className="mb-3 text-xs text-muted-foreground">
-            Clone creates a new project numbered from the template name — e.g.{" "}
+            Clone creates a numbered copy you can open and edit — e.g.{" "}
             <span className="font-mono">Company Legal Evaluation 1</span>, then{" "}
             <span className="font-mono">Company Legal Evaluation 2</span>.
           </p>
@@ -265,23 +264,10 @@ export function Projects() {
                   <p className="mb-3 font-mono text-[10px] text-muted-foreground">
                     {t.inputCount} input slot{t.inputCount === 1 ? "" : "s"}
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="bg-transparent"
-                      onClick={() => {
-                        setActiveProjectId(t.id)
-                        void refresh()
-                      }}
-                    >
-                      Open built-in
-                    </Button>
-                    <Button size="sm" onClick={() => void handleCloneTemplate(t.id)} disabled={busy === t.id}>
-                      {busy === t.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
-                      Clone
-                    </Button>
-                  </div>
+                  <Button size="sm" onClick={() => void handleCloneTemplate(t.id)} disabled={busy === t.id}>
+                    {busy === t.id ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Copy className="mr-1.5 h-3.5 w-3.5" />}
+                    Clone
+                  </Button>
                 </li>
               ))}
             </ul>

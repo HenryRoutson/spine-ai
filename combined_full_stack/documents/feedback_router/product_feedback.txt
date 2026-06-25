@@ -1,0 +1,10 @@
+- The export button spins forever on Safari — lost 2 hours of work yesterday.
+- Love the new dashboard but the contrast on dark mode is rough; hard to read chart labels.
+- Docs for the webhook API are outdated — `payload.version` is still v1 in the guide but v2 in prod.
+- Can we get SSO for enterprise? Sales keeps asking.
+- App crashed when I uploaded a 40MB PDF. No error message, just white screen.
+- Keyboard shortcuts in the editor would be huge for power users.
+- Pricing page doesn't mention the seat minimum — confused our procurement team.
+- Search is slow when the workspace has 500+ files.
+- The mobile app doesn't sync offline edits — data loss risk.
+- Great product overall, onboarding was smooth.

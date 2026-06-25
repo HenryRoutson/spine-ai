@@ -73,7 +73,7 @@ interface StoreState {
   setModel: (m: string) => void
   // documents — real upload through POST /api/docs (content-hash dedupe server-side)
   docs: DocRef[]
-  addDoc: (file: File, label: DocLabel) => Promise<DocRef>
+  addDoc: (file: File, label: DocLabel, projectId?: string) => Promise<DocRef>
   // runs / logs
   runs: PipelineRun[]
   addRun: (r: PipelineRun) => void
@@ -344,19 +344,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [activeProjectId],
   )
 
-  const addDoc = useCallback(async (file: File, label: DocLabel) => {
+  const addDoc = useCallback(async (file: File, label: DocLabel, projectId?: string) => {
     const blocked = confidentialUploadWarning(file.name)
     if (blocked) throw new Error(blocked)
 
     const form = new FormData()
     form.append("file", file)
     form.append("label", label)
+    if (projectId) form.append("projectId", projectId)
     const doc = await apiJson<DocRef>("/api/docs", { method: "POST", body: form })
-    setState((prev) =>
-      prev && !prev.docs.some((d) => d.id === doc.id) ? { ...prev, docs: [doc, ...prev.docs] } : prev,
-    )
+    setState((prev) => {
+      if (!prev) return prev
+      const hasDoc = prev.docs.some((d) => d.id === doc.id)
+      const nextDocs = hasDoc ? prev.docs : [doc, ...prev.docs]
+      const pid = projectId ?? activeProjectId
+      if (!pid) return hasDoc ? prev : { ...prev, docs: nextDocs }
+      const names = prev.projects.find((p) => p.id === pid)?.seedDocNames ?? []
+      if (names.includes(doc.name)) return hasDoc ? prev : { ...prev, docs: nextDocs }
+      const nextProjects = prev.projects.map((p) =>
+        p.id === pid ? { ...p, seedDocNames: [...(p.seedDocNames ?? []), doc.name] } : p,
+      )
+      return { ...prev, docs: nextDocs, projects: nextProjects }
+    })
     return doc
-  }, [])
+  }, [activeProjectId])
 
   // AI : the server already persisted the run (run engine) — just mirror it locally.
   const addRun = useCallback((r: PipelineRun) => {

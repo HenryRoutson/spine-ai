@@ -100,7 +100,7 @@ export function InferenceInputPickerPopup({
     }
     setUploading(true)
     try {
-      const doc = await addDoc(files[0], "inference")
+      const doc = await addDoc(files[0], "inference", project.id)
       if (passableDocsForInputModule([doc], project, inputModule).some((d) => d.id === doc.id)) {
         onSelect(doc)
       }

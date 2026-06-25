@@ -1,0 +1,366 @@
+{
+  "id": "p_procurement_match",
+  "name": "Procurement Three-Way Match",
+  "kind": "procurement",
+  "models": [
+    {
+      "id": "m_doc",
+      "name": "SourceDocument",
+      "description": "Raw document annotated with its purpose.",
+      "fields": [
+        {
+          "id": "f_purpose",
+          "name": "purpose",
+          "type": "text",
+          "optional": false,
+          "description": "What this document contains"
+        },
+        {
+          "id": "f_body",
+          "name": "body",
+          "type": "text",
+          "optional": false,
+          "description": "Full extracted text"
+        }
+      ]
+    },
+    {
+      "id": "m_row",
+      "name": "TableRow",
+      "description": "One markdown table row as JSON (parsed before LLM steps).",
+      "fields": [
+        {
+          "id": "f_rid",
+          "name": "row_id",
+          "type": "text",
+          "optional": false,
+          "description": "Stable row id"
+        },
+        {
+          "id": "f_cells",
+          "name": "cells_json",
+          "type": "text",
+          "optional": false,
+          "description": "Row object as JSON string"
+        }
+      ]
+    },
+    {
+      "id": "m_po_dn",
+      "name": "PoDeliveryInput",
+      "auto": true,
+      "description": "PO rows + delivery note document.",
+      "fields": [
+        {
+          "id": "f_dn",
+          "name": "delivery_note",
+          "type": "document",
+          "optional": false,
+          "description": "Delivery note"
+        },
+        {
+          "id": "f_po",
+          "name": "po_rows",
+          "type": "list[model]",
+          "optional": false,
+          "description": "Parsed PO lines",
+          "ref": "m_row"
+        }
+      ]
+    },
+    {
+      "id": "m_dual",
+      "name": "PoDeliveryJson",
+      "description": "PO and delivery tables as JSON.",
+      "fields": [
+        {
+          "id": "f_po",
+          "name": "po_json",
+          "type": "text",
+          "optional": false,
+          "description": "PO lines JSON"
+        },
+        {
+          "id": "f_dn",
+          "name": "delivery_json",
+          "type": "text",
+          "optional": false,
+          "description": "Delivery lines JSON"
+        }
+      ]
+    },
+    {
+      "id": "m_inv_in",
+      "name": "InvoiceBundleInput",
+      "auto": true,
+      "description": "Invoice document + PO/DN JSON bundle.",
+      "fields": [
+        {
+          "id": "f_inv",
+          "name": "vendor_invoice",
+          "type": "document",
+          "optional": false,
+          "description": "Vendor invoice"
+        },
+        {
+          "id": "f_prior",
+          "name": "po_and_delivery",
+          "type": "model",
+          "optional": false,
+          "description": "Parsed PO and DN",
+          "ref": "m_dual"
+        }
+      ]
+    },
+    {
+      "id": "m_merged3",
+      "name": "MergedThreeTables",
+      "description": "PO, delivery note, and invoice as JSON row arrays.",
+      "fields": [
+        {
+          "id": "f_po",
+          "name": "po_json",
+          "type": "text",
+          "optional": false,
+          "description": "Purchase order lines"
+        },
+        {
+          "id": "f_dn",
+          "name": "delivery_json",
+          "type": "text",
+          "optional": false,
+          "description": "Delivery note lines"
+        },
+        {
+          "id": "f_inv",
+          "name": "invoice_json",
+          "type": "text",
+          "optional": false,
+          "description": "Invoice lines"
+        }
+      ]
+    },
+    {
+      "id": "m_line",
+      "name": "MatchLine",
+      "description": "Three-way match result for one SKU line.",
+      "fields": [
+        {
+          "id": "f_sku",
+          "name": "sku",
+          "type": "text",
+          "optional": false,
+          "description": "Line SKU"
+        },
+        {
+          "id": "f_status",
+          "name": "match_status",
+          "type": "text",
+          "optional": false,
+          "description": "match | mismatch | partial"
+        },
+        {
+          "id": "f_detail",
+          "name": "detail",
+          "type": "text",
+          "optional": false,
+          "description": "Cited qty/price differences"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_in_po",
+      "kind": "input",
+      "label": "Purchase Order",
+      "inputType": "text",
+      "inputNameContains": "purchase_order",
+      "outStructureId": "m_doc",
+      "cached": false,
+      "avgMs": 90,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_parse_po",
+      "kind": "custom-code",
+      "label": "Parse PO Table",
+      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inStructureId": "m_doc",
+      "outStructureId": "m_row",
+      "outIsList": true,
+      "cached": false,
+      "avgMs": 8,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(doc)=>mdFirstTableRows(doc.body).map((row,i)=>({row_id:String(i+1),cells_json:JSON.stringify(row)}))"
+        }
+      ]
+    },
+    {
+      "id": "mod_in_dn",
+      "kind": "input",
+      "label": "Delivery Note",
+      "inputType": "text",
+      "inputNameContains": "delivery_note",
+      "outStructureId": "m_doc",
+      "cached": false,
+      "avgMs": 90,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_combine_dn",
+      "kind": "combine",
+      "label": "Attach Delivery Note",
+      "inStructureId": "m_row",
+      "outStructureId": "m_po_dn",
+      "cached": false,
+      "avgMs": 40,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_merge_po_dn",
+      "kind": "custom-code",
+      "label": "Parse PO + DN",
+      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inStructureId": "m_po_dn",
+      "outStructureId": "m_dual",
+      "cached": false,
+      "avgMs": 8,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(c)=>({po_json:JSON.stringify(c.po_rows.map(r=>JSON.parse(r.cells_json))),delivery_json:JSON.stringify(mdFirstTableRows(c.delivery_note.body))})"
+        }
+      ]
+    },
+    {
+      "id": "mod_in_inv",
+      "kind": "input",
+      "label": "Vendor Invoice",
+      "inputType": "text",
+      "inputNameContains": "vendor_invoice",
+      "outStructureId": "m_doc",
+      "cached": false,
+      "avgMs": 90,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_combine_inv",
+      "kind": "combine",
+      "label": "Attach Invoice",
+      "inStructureId": "m_dual",
+      "outStructureId": "m_inv_in",
+      "cached": false,
+      "avgMs": 40,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_merge_all",
+      "kind": "custom-code",
+      "label": "Parse Invoice + Bundle",
+      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inStructureId": "m_inv_in",
+      "outStructureId": "m_merged3",
+      "cached": false,
+      "avgMs": 8,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(c)=>({po_json:c.po_and_delivery.po_json,delivery_json:c.po_and_delivery.delivery_json,invoice_json:JSON.stringify(mdFirstTableRows(c.vendor_invoice.body))})"
+        }
+      ]
+    },
+    {
+      "id": "mod_match",
+      "kind": "llm",
+      "label": "Three-Way Match",
+      "inStructureId": "m_merged3",
+      "outStructureId": "m_line",
+      "outIsList": true,
+      "prompt": "Compare po_json, delivery_json, and invoice_json row arrays. For each SKU present in any document, output one MatchLine with match_status and detail citing quantity or price mismatches (e.g. short-shipped SEAL-88 billed on invoice).",
+      "model": "deepseek-v3",
+      "cached": false,
+      "avgMs": 3200,
+      "avgCostCents": 11
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Match Report",
+      "inStructureId": "m_line",
+      "outStructureId": "m_line",
+      "outIsList": true,
+      "cached": false,
+      "avgMs": 40,
+      "avgCostCents": 0
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single_proc",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v3",
+      "accuracy": 78,
+      "latencyMs": 3200,
+      "costCents": 8,
+      "passRate": 90
+    },
+    {
+      "id": "s_rlm_proc",
+      "kind": "rlm",
+      "name": "Recursive LM",
+      "enabled": true,
+      "model": "deepseek-v3",
+      "accuracy": 86,
+      "latencyMs": 9800,
+      "costCents": 21,
+      "passRate": 94
+    },
+    {
+      "id": "s_agent_proc",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v3",
+      "accuracy": 92,
+      "latencyMs": 28000,
+      "costCents": 160,
+      "passRate": 97
+    },
+    {
+      "id": "s_cheap_proc",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v3",
+      "accuracy": 82,
+      "latencyMs": 18000,
+      "costCents": 12,
+      "passRate": 89
+    }
+  ],
+  "docs": [
+    {
+      "name": "po_77821.md",
+      "type": "text",
+      "label": "inference",
+      "file": "procurement_match/purchase_order.md"
+    },
+    {
+      "name": "dn_99214.md",
+      "type": "text",
+      "label": "inference",
+      "file": "procurement_match/delivery_note.md"
+    },
+    {
+      "name": "inv_44102.md",
+      "type": "text",
+      "label": "inference",
+      "file": "procurement_match/vendor_invoice.md"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAuthStore } from "@/lib/server/api_context";
-import { resyncSeedOwnedProjects } from "@/lib/server/store";
+import { ensureSeedDocs, backfillAllProjectSeedDocNames, resyncSeedOwnedProjects } from "@/lib/server/store";
 import { logger } from "@/lib/server/server_logger";
 
 const apiLog = logger("api:projects:resync-examples");
@@ -12,7 +12,9 @@ export async function POST() {
   const { store } = ctx;
 
   const updated = resyncSeedOwnedProjects(store);
+  await ensureSeedDocs(store);
+  const backfilled = backfillAllProjectSeedDocNames(store);
   await store.flush();
-  apiLog.info(`resynced built-in examples`, { updated });
-  return NextResponse.json({ updated });
+  apiLog.info(`resynced built-in examples`, { updated, backfilled });
+  return NextResponse.json({ updated: updated + backfilled });
 }

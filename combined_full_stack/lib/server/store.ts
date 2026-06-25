@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { dataDir } from "./config";
 import {
   allProjectSeeds,
+  backfillSeedDocNames,
   blankProject,
   isUnavailableSeedDoc,
   readSeedDocContent,
@@ -155,6 +156,41 @@ export function resyncSeedOwnedProjects(store: Store): number {
   return updated;
 }
 
+// AI : idempotent — ingest bundled documents/ files into the global doc store (safe on every request).
+export async function ensureSeedDocs(store: Store): Promise<void> {
+  for (const seed of allProjectSeeds()) {
+    for (const spec of seed.docSpecs) {
+      try {
+        await ingestSeedDoc(store, spec);
+      } catch (err) {
+        console.error(`seed doc failed (${spec.name}):`, err);
+      }
+    }
+  }
+}
+
+// AI : tie numbered clones to their template example docs when seedDocNames was never saved.
+export function backfillAllProjectSeedDocNames(store: Store): number {
+  let updated = 0;
+  for (const p of store.projects()) {
+    const filled = backfillSeedDocNames(p);
+    if (filled !== p) {
+      store.saveProject(filled);
+      updated += 1;
+    }
+  }
+  return updated;
+}
+
+// AI : register a user upload with the active project so inference/Documents stay scoped per pipeline.
+export function linkDocToProject(store: Store, projectId: ProjectId, docName: string): void {
+  const p = store.project(projectId);
+  if (!p) return;
+  const names = p.seedDocNames ?? [];
+  if (names.includes(docName)) return;
+  store.saveProject({ ...p, seedDocNames: [...names, docName] });
+}
+
 // AI : idempotent — upsert every seeds/*.json project (+ ingest its source docs) that the
 // AI : store doesn't have yet. Shared by JsonStore.init() and per-user first-sign-in seeding.
 export async function ensureSeeded(store: Store): Promise<void> {
@@ -166,14 +202,9 @@ export async function ensureSeeded(store: Store): Promise<void> {
       const synced = syncProjectFromSeed(existing, seed.project);
       if (synced !== existing) store.saveProject(synced);
     }
-    for (const spec of seed.docSpecs) {
-      try {
-        await ingestSeedDoc(store, spec);
-      } catch (err) {
-        console.error(`seed doc failed (${spec.name}):`, err);
-      }
-    }
   }
+  await ensureSeedDocs(store);
+  backfillAllProjectSeedDocNames(store);
   for (const p of store.projects()) {
     const migrated = migrateProjectModules(p);
     if (migrated !== p) store.saveProject(migrated);

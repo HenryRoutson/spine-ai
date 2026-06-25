@@ -74,6 +74,9 @@ const SeedFileSchema = z.object({
       auto: z.boolean().optional(),
       avgMs: z.number(),
       avgCostCents: z.number(),
+      fallbackList: z
+        .array(z.object({ typescript: z.string().optional(), python: z.string().optional() }))
+        .optional(),
     }),
   ),
   strategies: z.array(
@@ -164,10 +167,21 @@ export function allProjectSeeds(): ProjectSeed[] {
     .map((f) => loadProjectSeed(join(SEEDS_DIR, f)));
 }
 
-// AI : resolve seeded doc filenames for a project (persisted field or live seeds/ lookup).
+// AI : resolve seeded doc filenames for a project (persisted field, template id, or numbered clone name).
 export function projectSeedDocNames(project: Project): string[] {
   if (project.seedDocNames?.length) return project.seedDocNames;
-  return allProjectSeeds().find((s) => s.project.id === project.id)?.docSpecs.map((d) => d.name) ?? [];
+  const byId = allProjectSeeds().find((s) => s.project.id === project.id);
+  if (byId) return byId.docSpecs.map((d) => d.name);
+  const baseName = project.name.replace(/ \d+$/, "");
+  const byTemplate = allProjectSeeds().find((s) => s.project.name === baseName);
+  return byTemplate?.docSpecs.map((d) => d.name) ?? [];
+}
+
+// AI : numbered clones ("Tax Workpaper Preparer 1") inherit template seedDocNames when the field was never persisted.
+export function backfillSeedDocNames(project: Project): Project {
+  const names = projectSeedDocNames(project);
+  if (!names.length || project.seedDocNames?.join() === names.join()) return project;
+  return { ...project, seedDocNames: names };
 }
 
 // ---- the default seed: Company Legal Evaluation, loaded (and validated) at import time ----
@@ -226,7 +240,7 @@ export function cloneProject(source: Project, existingProjects: Project[]): Proj
   const id = uid<ProjectId>("p_");
   const name = nextNumberedCloneName(source.name, existingProjects.map((p) => p.name));
   const cloned: Project = {
-    ...structuredClone(source),
+    ...structuredClone(backfillSeedDocNames(source)),
     id,
     name,
     strategies: source.strategies.map((s) => ({ ...s, id: `${s.id}_${id}` })),

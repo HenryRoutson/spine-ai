@@ -125,8 +125,8 @@ export function useInferenceRun({
     () => new Map(inputIssues.map((issue) => [issue.moduleId, issue])),
     [inputIssues],
   )
-  // AI : cached id is enough to route back to Logging, even before run details hydrate.
-  const configAlreadyCompleted = phase !== "running" && cachedRunId != null
+  // AI : proactive cache shortcut disabled — was blocking re-runs with "View cached run in Logging".
+  const configAlreadyCompleted = false
   const loggingRunId = cachedRunId ?? run?.id
 
   const inputDocIdsKey = inputModules.map((m) => inputDocs[m.id]?.id ?? "").join(",")
@@ -155,6 +155,8 @@ export function useInferenceRun({
   const prevProbeKeyRef = useRef(probeKey)
 
   useEffect(() => {
+    // AI : proactive cache probe disabled — let users always hit Run; server dedup still applies on POST.
+    return
     if (!allInputsReady || phaseRef.current === "running") return
     if (prevProbeKeyRef.current !== probeKey) {
       prevProbeKeyRef.current = probeKey
@@ -478,6 +480,16 @@ export function useInferenceRun({
         },
       })
       if (jobGen !== activeJobGenRef.current) return
+      if (deduped) {
+        // AI : dedup completion UI disabled until cache/dedup bugs are fixed.
+        setPhase("idle")
+        setRun(null)
+        setCachedRunId(null)
+        setWasDeduped(false)
+        setStepStates(new Map())
+        setDebugLogs([])
+        return
+      }
       const notes = runNotesRef.current.trim() || undefined
       const withNotes = notes ? { ...finished, notes } : finished
       savedNotesRef.current = notes

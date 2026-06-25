@@ -1,6 +1,6 @@
 import type { DocRef, Project } from "@/lib/types";
 
-// AI : seeded projects declare doc filenames in seeds/*.json — keep inference/uploads scoped per project.
+// AI : blank projects see every doc; seeded / cloned pipelines only see their linked filenames.
 export function docsForProject(docs: DocRef[], project: Project): DocRef[] {
   const names = project.seedDocNames;
   if (!names?.length) return docs;

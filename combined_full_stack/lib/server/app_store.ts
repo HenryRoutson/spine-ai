@@ -1,6 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { isProductionDeploy, isVercelWithoutSupabase } from "./require_auth";
-import { ensureSeeded, openStore, type JsonStore } from "./store";
+import { ensureSeeded, ensureSeedDocs, backfillAllProjectSeedDocNames, openStore, type JsonStore } from "./store";
 import type { Store } from "./store";
 import { logger } from "./server_logger";
 import { isMissingSchemaError, openUserStore } from "./supabase_store";
@@ -25,6 +25,13 @@ async function getLocalStore(): Promise<Store> {
   return store;
 }
 
+async function hydrateUserStore(store: Store): Promise<Store> {
+  await ensureSeedDocs(store);
+  backfillAllProjectSeedDocNames(store);
+  await store.flush();
+  return store;
+}
+
 // AI : signed-in requests get a per-user SupabaseStore (RLS isolation). Local dev without
 // AI : Supabase keeps the shared JsonStore; production deploys reject unauthenticated access.
 export async function getStore(): Promise<Store> {
@@ -35,7 +42,7 @@ export async function getStore(): Promise<Store> {
     if (!data?.claims?.sub) throw new Error("Sign in required");
     storeLog.info(`authenticated user — SupabaseStore`, { sub: data.claims.sub });
     const store = await openUserStore(supabase);
-    return store;
+    return hydrateUserStore(store);
   }
 
   try {
@@ -46,7 +53,7 @@ export async function getStore(): Promise<Store> {
       try {
         const store = await openUserStore(supabase);
         storeLog.info(`using SupabaseStore`);
-        return store;
+        return hydrateUserStore(store);
       } catch (err) {
         storeLog.error(`SupabaseStore failed`, { error: storeErrorMessage(err, "Store load failed") });
         if (!isMissingSchemaError(err)) throw err;

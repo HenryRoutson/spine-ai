@@ -177,27 +177,15 @@ export function Inference() {
                 run.phase === "running" ||
                 insufficientCredit
               }
-              onClick={
-                run.configAlreadyCompleted && run.loggingRunId
-                  ? () => openLogging(run.loggingRunId!)
-                  : run.start
-              }
+              onClick={run.start}
             >
               {run.runButtonBusy ? (
                 <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : run.configAlreadyCompleted ? (
-                <ScrollText className="mr-1.5 h-4 w-4" />
               ) : (
                 <Zap className="mr-1.5 h-4 w-4" />
               )}
               {run.runButtonLabel}
             </Button>
-
-            {run.configAlreadyCompleted && (
-              <p className="text-center font-mono text-[10px] text-muted-foreground">
-                Identical pipeline and inputs — no compute needed. Change an input or edit the pipeline to run again.
-              </p>
-            )}
             </>
             )}
 
@@ -275,7 +263,7 @@ export function Inference() {
               </div>
             )}
 
-            {run.run && run.phase === "done" && (
+            {run.run && run.phase === "done" && !run.wasDeduped && (
               <div className="rounded-lg border border-border bg-card px-6 py-8 text-center">
                 {run.wasDeduped ? (
                   <Zap className="mx-auto h-10 w-10 text-primary" />

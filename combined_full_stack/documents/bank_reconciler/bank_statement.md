@@ -1,0 +1,15 @@
+# First National — Operating Account — March 2025
+
+| Post date | Description | Amount (USD) |
+|-----------|-------------|------------|
+| 2025-03-01 | ACH VENDOR-1042 ACME SUPPLIES | -4,820.00 |
+| 2025-03-03 | WIRE IN CLIENT ORBIT LLC | 12,000.00 |
+| 2025-03-05 | CARD 8842 CLOUDHOST INC | -299.00 |
+| 2025-03-07 | ACH PAYROLL MARCH 1 | -18,450.00 |
+| 2025-03-10 | CHECK 1187 OFFICE LEASE | -3,200.00 |
+| 2025-03-12 | CARD 8842 UNKNOWN MERCHANT SF | -89.50 |
+| 2025-03-15 | ACH VENDOR-2201 NORTHSTAR LOGISTICS | -1,150.00 |
+| 2025-03-18 | FEE MONTHLY SERVICE | -35.00 |
+| 2025-03-22 | CARD 8842 STAPLES #442 | -127.44 |
+
+Opening balance: $42,100.00 · Closing balance: $25,929.06
