@@ -34,15 +34,25 @@ const len = (v, key) => {
 };
 `;
 
+function withAssertSuccessReturn(body: string): string {
+  if (/\breturn\s+true\b/.test(body)) return body;
+  return body.replace(/\}\s*$/, "  return true;\n}");
+}
+
 export function wrapAssertTypeScript(code: string): string {
   const trimmed = code.trim();
-  if (!trimmed) return "(input, state) => {}";
+  if (!trimmed) return "(input, state) => { return true; }";
   if (/^\s*\(/.test(trimmed)) {
-    if (trimmed.includes("const step =") || trimmed.includes("function step(")) return trimmed;
-    return trimmed.replace(/^\(\s*([^)]*)\)\s*=>\s*\{/, `($1) => {${ASSERT_HELPERS_TS}`);
+    if (trimmed.includes("const step =") || trimmed.includes("function step(")) {
+      return withAssertSuccessReturn(trimmed);
+    }
+    return withAssertSuccessReturn(
+      trimmed.replace(/^\(\s*([^)]*)\)\s*=>\s*\{/, `($1) => {${ASSERT_HELPERS_TS}`),
+    );
   }
   return `(input, state) => {${ASSERT_HELPERS_TS}
 ${trimmed}
+  return true;
 }`;
 }
 
