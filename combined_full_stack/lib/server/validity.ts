@@ -7,6 +7,7 @@ import type {
   StructureModelId,
 } from "./types";
 import { migrateCustomCodeModule } from "@/lib/custom_code_entries";
+import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
 import { hasQuoteField, listFieldsForWrap } from "./structure";
 import { isLlmKind } from "@/lib/module-kinds";
 
@@ -57,7 +58,7 @@ export function transformListWrapInvalid(
 // AI : what structure a step puts on the linear spine for the *next* step (output passthrough).
 export function stepEmits(m: PipelineModule | undefined): StructureModelId | undefined {
   if (!m) return undefined;
-  if (m.kind === "output") return m.inStructureId ?? m.outStructureId;
+  if (m.kind === "output" || m.kind === "assert") return m.inStructureId ?? m.outStructureId;
   return m.outStructureId;
 }
 
@@ -89,7 +90,7 @@ export function computeInvalid(modules: PipelineModule[], models: StructureModel
   const invalid = computeLabelInvalid(modules);
   for (const m of modules) {
     // AI : output steps only need inStructureId — they pass it through as a named artifact.
-    if (m.kind === "output") {
+    if (m.kind === "output" || m.kind === "assert") {
       if (!m.inStructureId) invalid.set(m.id, { moduleId: m.id, kind: "no-output" });
       continue;
     }
@@ -128,7 +129,7 @@ export function computeInvalid(modules: PipelineModule[], models: StructureModel
       continue;
     }
 
-    if (m.kind === "output") {
+    if (m.kind === "output" || m.kind === "assert") {
       if (invalid.has(m.id)) continue;
       const upstream = stepEmits(prev) ?? flow;
       if (!m.inStructureId || upstream !== m.inStructureId) {
@@ -182,7 +183,7 @@ function computeUnusedOutputInvalid(modules: PipelineModule[]): Map<ModuleId, In
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i];
     const emitted = stepEmits(m);
-    if (!emitted || m.kind === "input" || m.kind === "output") continue;
+    if (!emitted || m.kind === "input" || m.kind === "output" || m.kind === "assert") continue;
     const used = modules.slice(i + 1).some((down) => down.inStructureId === emitted);
     if (!used) invalid.set(m.id, { moduleId: m.id, kind: "unused-output", expects: emitted });
   }
@@ -403,7 +404,9 @@ export function invalidStepMessage(
 ): string {
   if (issue.kind === "no-output") {
     const m = modules.find((x) => x.id === issue.moduleId);
-    return m?.kind === "output" ? "select a structure to materialize" : "select an output model";
+    if (m?.kind === "output") return "select a structure to materialize";
+    if (m?.kind === "assert") return "select passthrough structure";
+    return "select an output model";
   }
   if (issue.kind === "io-mismatch") {
     return `input expects ${modelName(models, issue.expects)}, upstream emits ${
@@ -516,6 +519,39 @@ function modulesEqual(a: PipelineModule[], b: PipelineModule[]): boolean {
   return a.length === b.length && a.every((m, i) => m === b[i] || JSON.stringify(m) === JSON.stringify(b[i]));
 }
 
+// AI : move assert steps to immediately after the latest referenced step label (by pipeline order).
+export function syncAssertPlacement(modules: PipelineModule[]): PipelineModule[] {
+  const asserts = modules.filter((m) => m.kind === "assert");
+  if (!asserts.length) return modules;
+
+  const spine = modules.filter((m) => m.kind !== "assert");
+  const placed: PipelineModule[] = [...spine];
+
+  for (const a of asserts) {
+    const code = assertEntriesForModule(a).map((e) => e.code).join("\n");
+    const labels = parseAssertReferencedLabels(code);
+    let insertAfter = -1;
+    for (const label of labels) {
+      const idx = placed.findIndex((m) => m.label === label);
+      if (idx > insertAfter) insertAfter = idx;
+    }
+    if (insertAfter < 0) insertAfter = placed.length - 1;
+
+    const upstream = placed[insertAfter];
+    const emits = stepEmits(upstream);
+    const fixed: PipelineModule = {
+      ...a,
+      inStructureId: emits ?? a.inStructureId,
+      outStructureId: emits ?? a.outStructureId ?? a.inStructureId,
+    };
+    const existingIdx = placed.findIndex((m) => m.id === a.id);
+    if (existingIdx >= 0) placed.splice(existingIdx, 1);
+    placed.splice(insertAfter + 1, 0, fixed);
+  }
+
+  return modulesEqual(modules, placed) ? modules : placed;
+}
+
 // AI : strip managed Link Quotes steps and re-insert immediately after each quote-emitting LLM.
 export function syncAutoQuoteSteps(
   modules: PipelineModule[],
@@ -538,7 +574,7 @@ export function syncAutoQuoteSteps(
       inStructureId: m.outStructureId,
       outStructureId: m.outStructureId,
       outIsList: !!m.outIsList || m.kind === "llm-batch",
-      cached: existing?.cached ?? true,
+      cached: true,
       avgMs: existing?.avgMs ?? 12,
       avgCostCents: 0,
     });
@@ -551,9 +587,15 @@ export function syncAutoQuoteSteps(
 export const insertMissingQuoteSteps = syncAutoQuoteSteps;
 
 export function migrateProjectModules(project: Project): Project {
-  const synced = syncAutoQuoteSteps(project.modules, project.models);
-  const migrated = synced.map(migrateCustomCodeModule);
-  const changed = synced !== project.modules || migrated.some((m, i) => m !== synced[i]);
+  const quoted = syncAutoQuoteSteps(project.modules, project.models);
+  const placed = syncAssertPlacement(quoted);
+  const migrated = placed.map(migrateCustomCodeModule);
+  // AI : cache is always on — normalize legacy projects that disabled it per step.
+  const withCache = migrated.map((m) => (m.cached ? m : { ...m, cached: true }));
+  const changed =
+    placed !== project.modules ||
+    migrated.some((m, i) => m !== placed[i]) ||
+    withCache.some((m, i) => m !== migrated[i]);
   if (!changed) return project;
-  return { ...project, modules: migrated };
+  return { ...project, modules: withCache };
 }

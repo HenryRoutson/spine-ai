@@ -118,7 +118,7 @@ const parseStep = (id: string, label: string, inId: string, outId: string, code:
   inStructureId: inId,
   outStructureId: outId,
   ...(list ? { outIsList: true } : {}),
-  cached: false,
+  cached: true,
   avgMs: 8,
   avgCostCents: 0,
   fallbackList: [{ typescript: code }],
@@ -157,10 +157,10 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_policy", kind: "input", label: "Expense Policy", inputType: "text", inputNameContains: "expense_policy", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in_policy", kind: "input", label: "Expense Policy", inputType: "text", inputNameContains: "expense_policy", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
       parseStep("mod_parse_policy", "Parse Policy Table", "m_doc", "m_row", PARSE_ROWS, true),
-      { id: "mod_in_report", kind: "input", label: "Expense Report", inputType: "text", inputNameContains: "expense_report", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_report", kind: "input", label: "Expense Report", inputType: "text", inputNameContains: "expense_report", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
       parseStep(
         "mod_merge",
         "Merge Parsed Tables",
@@ -178,11 +178,11 @@ const seeds: Record<string, unknown> = {
         prompt:
           "table_a_json is the travel policy limits (JSON array). table_b_json is submitted expenses (JSON array). For EACH expense row, output one ComplianceFlag: line_id from the row index, category and amount_usd from the row, compliant verdict vs policy limits, and issue text if non-compliant.",
         model: "deepseek-v3",
-        cached: false,
+        cached: true,
         avgMs: 2800,
         avgCostCents: 9,
       },
-      { id: "mod_out", kind: "output", label: "Compliance Flags", inStructureId: "m_flag", outStructureId: "m_flag", outIsList: true, cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Compliance Flags", inStructureId: "m_flag", outStructureId: "m_flag", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
     ],
     strategies: STRATEGIES("expense"),
     docs: [
@@ -223,10 +223,10 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_inv", kind: "input", label: "Open Invoices", inputType: "text", inputNameContains: "open_invoices", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in_inv", kind: "input", label: "Open Invoices", inputType: "text", inputNameContains: "open_invoices", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
       parseStep("mod_parse_inv", "Parse Invoice Table", "m_doc", "m_row", PARSE_ROWS, true),
-      { id: "mod_in_stmt", kind: "input", label: "Bank Statement", inputType: "text", inputNameContains: "bank_statement", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_stmt", kind: "input", label: "Bank Statement", inputType: "text", inputNameContains: "bank_statement", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
       parseStep(
         "mod_merge",
         "Merge Tables",
@@ -244,11 +244,11 @@ const seeds: Record<string, unknown> = {
         prompt:
           "table_a_json is bank statement rows; table_b_json is open invoices. For each bank outflow (negative amount), output one ReconcileLine with matched=true if an invoice explains it, else matched=false with explanation.",
         model: "deepseek-v3",
-        cached: false,
+        cached: true,
         avgMs: 3000,
         avgCostCents: 10,
       },
-      { id: "mod_out", kind: "output", label: "Reconciliation", inStructureId: "m_match", outStructureId: "m_match", outIsList: true, cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Reconciliation", inStructureId: "m_match", outStructureId: "m_match", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
     ],
     strategies: STRATEGIES("bank"),
     docs: [
@@ -288,10 +288,10 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_w2", kind: "input", label: "W-2", inputType: "text", inputNameContains: "w2_2024", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in_w2", kind: "input", label: "W-2", inputType: "text", inputNameContains: "w2_2024", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
       parseStep("mod_parse_w2", "Parse W-2 Table", "m_doc", "m_row", PARSE_ROWS, true),
-      { id: "mod_in_1099", kind: "input", label: "1099-MISC", inputType: "text", inputNameContains: "1099", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_1099", kind: "input", label: "1099-MISC", inputType: "text", inputNameContains: "1099", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
       parseStep(
         "mod_merge",
         "Merge Form Tables",
@@ -309,11 +309,11 @@ const seeds: Record<string, unknown> = {
         prompt:
           "table_a_json is parsed W-2 box rows; table_b_json is parsed 1099 field rows. Emit standardized WorkpaperField entries for wages, federal withholding, 401(k), state tax, and 1099 other income — each with source_form and source_box.",
         model: "deepseek-v3",
-        cached: false,
+        cached: true,
         avgMs: 2600,
         avgCostCents: 8,
       },
-      { id: "mod_out", kind: "output", label: "Client Workpaper", inStructureId: "m_field", outStructureId: "m_field", outIsList: true, cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Client Workpaper", inStructureId: "m_field", outStructureId: "m_field", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
     ],
     strategies: STRATEGIES("tax"),
     docs: [
@@ -371,10 +371,10 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_po", kind: "input", label: "Purchase Order", inputType: "text", inputNameContains: "purchase_order", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in_po", kind: "input", label: "Purchase Order", inputType: "text", inputNameContains: "purchase_order", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
       parseStep("mod_parse_po", "Parse PO Table", "m_doc", "m_row", PARSE_ROWS, true),
-      { id: "mod_in_dn", kind: "input", label: "Delivery Note", inputType: "text", inputNameContains: "delivery_note", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine_dn", kind: "combine", label: "Attach Delivery Note", inStructureId: "m_row", outStructureId: "m_po_dn", cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_dn", kind: "input", label: "Delivery Note", inputType: "text", inputNameContains: "delivery_note", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_combine_dn", kind: "combine", label: "Attach Delivery Note", inStructureId: "m_row", outStructureId: "m_po_dn", cached: true, avgMs: 40, avgCostCents: 0 },
       parseStep(
         "mod_merge_po_dn",
         "Parse PO + DN",
@@ -382,8 +382,8 @@ const seeds: Record<string, unknown> = {
         "m_dual",
         `${MD_TABLE_PARSER_PREAMBLE}(c)=>({po_json:JSON.stringify(c.po_rows.map(r=>JSON.parse(r.cells_json))),delivery_json:JSON.stringify(mdFirstTableRows(c.delivery_note.body))})`,
       ),
-      { id: "mod_in_inv", kind: "input", label: "Vendor Invoice", inputType: "text", inputNameContains: "vendor_invoice", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine_inv", kind: "combine", label: "Attach Invoice", inStructureId: "m_dual", outStructureId: "m_inv_in", cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_inv", kind: "input", label: "Vendor Invoice", inputType: "text", inputNameContains: "vendor_invoice", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_combine_inv", kind: "combine", label: "Attach Invoice", inStructureId: "m_dual", outStructureId: "m_inv_in", cached: true, avgMs: 40, avgCostCents: 0 },
       parseStep(
         "mod_merge_all",
         "Parse Invoice + Bundle",
@@ -401,11 +401,11 @@ const seeds: Record<string, unknown> = {
         prompt:
           "Compare po_json, delivery_json, and invoice_json row arrays. For each SKU present in any document, output one MatchLine with match_status and detail citing quantity or price mismatches (e.g. short-shipped SEAL-88 billed on invoice).",
         model: "deepseek-v3",
-        cached: false,
+        cached: true,
         avgMs: 3200,
         avgCostCents: 11,
       },
-      { id: "mod_out", kind: "output", label: "Match Report", inStructureId: "m_line", outStructureId: "m_line", outIsList: true, cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Match Report", inStructureId: "m_line", outStructureId: "m_line", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
     ],
     strategies: STRATEGIES("proc"),
     docs: [
@@ -446,10 +446,10 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_txn", kind: "input", label: "Transaction Sample", inputType: "text", inputNameContains: "transaction_sample", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in_txn", kind: "input", label: "Transaction Sample", inputType: "text", inputNameContains: "transaction_sample", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
       parseStep("mod_parse_txn", "Parse Transaction Table", "m_doc", "m_row", PARSE_ROWS, true),
-      { id: "mod_in_je", kind: "input", label: "Journal Entries", inputType: "text", inputNameContains: "journal_entries", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_je", kind: "input", label: "Journal Entries", inputType: "text", inputNameContains: "journal_entries", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
       parseStep(
         "mod_merge",
         "Merge Audit Tables",
@@ -467,11 +467,11 @@ const seeds: Record<string, unknown> = {
         prompt:
           "table_a_json lists AP transactions; table_b_json lists journal entries. For each transaction in table_a_json, output one SampleVerdict: whether supporting docs exist (per txn notes), whether JE ref ties and amounts match, and a brief finding.",
         model: "deepseek-v3",
-        cached: false,
+        cached: true,
         avgMs: 3000,
         avgCostCents: 10,
       },
-      { id: "mod_out", kind: "output", label: "Sample Results", inStructureId: "m_sample", outStructureId: "m_sample", outIsList: true, cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Sample Results", inStructureId: "m_sample", outStructureId: "m_sample", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
     ],
     strategies: STRATEGIES("audit"),
     docs: [
@@ -509,7 +509,7 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in", kind: "input", label: "Homework Sheet", inputType: "text", inputNameContains: "algebra_homework", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in", kind: "input", label: "Homework Sheet", inputType: "text", inputNameContains: "algebra_homework", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
       {
         id: "mod_split",
         kind: "custom-code",
@@ -518,7 +518,7 @@ const seeds: Record<string, unknown> = {
         inStructureId: "m_doc",
         outStructureId: "m_section",
         outIsList: true,
-        cached: false,
+        cached: true,
         avgMs: 8,
         avgCostCents: 0,
         fallbackList: [
@@ -538,11 +538,11 @@ const seeds: Record<string, unknown> = {
         prompt:
           "Grade this homework section using the marking scheme in the document header. Award partial credit for method. Section C requires shown working. Return section_id matching input.",
         model: "deepseek-v3",
-        cached: false,
+        cached: true,
         avgMs: 2400,
         avgCostCents: 6,
       },
-      { id: "mod_out", kind: "output", label: "Grades", inStructureId: "m_grade", outStructureId: "m_grade", outIsList: true, cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Grades", inStructureId: "m_grade", outStructureId: "m_grade", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
     ],
     strategies: STRATEGIES("hw"),
     docs: [{ name: "algebra_homework_7.md", type: "text", label: "inference", file: "homework_grader/algebra_homework.md" }],
@@ -575,7 +575,7 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in", kind: "input", label: "Feedback Dump", inputType: "text", inputNameContains: "product_feedback", outStructureId: "m_doc", cached: false, avgMs: 80, avgCostCents: 0 },
+      { id: "mod_in", kind: "input", label: "Feedback Dump", inputType: "text", inputNameContains: "product_feedback", outStructureId: "m_doc", cached: true, avgMs: 80, avgCostCents: 0 },
       {
         id: "mod_split",
         kind: "custom-code",
@@ -583,7 +583,7 @@ const seeds: Record<string, unknown> = {
         inStructureId: "m_doc",
         outStructureId: "m_item",
         outIsList: true,
-        cached: false,
+        cached: true,
         avgMs: 5,
         avgCostCents: 0,
         fallbackList: [
@@ -602,11 +602,11 @@ const seeds: Record<string, unknown> = {
         outIsList: true,
         prompt: "Classify product feedback into eng, design, docs, sales, or praise. Include a short representative_quote. Keep feedback_id.",
         model: "deepseek-v3",
-        cached: false,
+        cached: true,
         avgMs: 1800,
         avgCostCents: 4,
       },
-      { id: "mod_out", kind: "output", label: "Routed Feedback", inStructureId: "m_route", outStructureId: "m_route", outIsList: true, cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Routed Feedback", inStructureId: "m_route", outStructureId: "m_route", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
     ],
     strategies: STRATEGIES("fb"),
     docs: [{ name: "march_product_feedback.txt", type: "text", label: "inference", file: "feedback_router/product_feedback.txt" }],
@@ -632,7 +632,7 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in", kind: "input", label: "SLA Uptime Report", inputType: "text", inputNameContains: "sla_uptime", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in", kind: "input", label: "SLA Uptime Report", inputType: "text", inputNameContains: "sla_uptime", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
       parseStep("mod_parse", "Parse Uptime Table", "m_doc", "m_parsed", PARSE_TABLE),
       {
         id: "mod_breach",
@@ -644,11 +644,11 @@ const seeds: Record<string, unknown> = {
         prompt:
           "rows_json is a JSON array parsed from the uptime markdown table. Emit one SlaBreachRow per service with breached=true when the Breach column is yes. Include credit_note from the document narrative when breached.",
         model: "deepseek-v3",
-        cached: false,
+        cached: true,
         avgMs: 2200,
         avgCostCents: 7,
       },
-      { id: "mod_out", kind: "output", label: "Breach Table", inStructureId: "m_breach", outStructureId: "m_breach", outIsList: true, cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Breach Table", inStructureId: "m_breach", outStructureId: "m_breach", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
     ],
     strategies: STRATEGIES("sla"),
     docs: [{ name: "cloudhost_sla_march_2025.md", type: "text", label: "inference", file: "sla_breach/sla_uptime_report.md" }],
@@ -683,9 +683,9 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_report", kind: "input", label: "Bug Report", inputType: "text", inputNameContains: "bug_report", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_in_logs", kind: "input", label: "App Logs", inputType: "text", inputNameContains: "app_logs", outStructureId: "m_doc", cached: false, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_doc", outStructureId: "m_combined", cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_report", kind: "input", label: "Bug Report", inputType: "text", inputNameContains: "bug_report", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in_logs", kind: "input", label: "App Logs", inputType: "text", inputNameContains: "app_logs", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_doc", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
       {
         id: "mod_enrich",
         kind: "llm",
@@ -695,11 +695,11 @@ const seeds: Record<string, unknown> = {
         prompt:
           "user_report is the bug report SourceDocument (use user_report.body). app_logs is the log document (use app_logs.body). Infer repro_steps, severity, likely_component (e.g. export/pdf/fonts), and a concise summary.",
         model: "deepseek-v3",
-        cached: false,
+        cached: true,
         avgMs: 2400,
         avgCostCents: 7,
       },
-      { id: "mod_out", kind: "output", label: "Enriched Ticket", inStructureId: "m_enriched", outStructureId: "m_enriched", cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Enriched Ticket", inStructureId: "m_enriched", outStructureId: "m_enriched", cached: true, avgMs: 40, avgCostCents: 0 },
     ],
     strategies: STRATEGIES("bug"),
     docs: [

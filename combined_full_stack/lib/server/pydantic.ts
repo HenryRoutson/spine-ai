@@ -11,6 +11,7 @@ const PY_TYPE: Record<FieldType, string> = {
   bool: "bool",
   datetime: "datetime",
   document: "Document",
+  "list[document]": "list[Document]",
   json: "str", // serialized JSON — prefer nested models when shape is known
   "list[text]": "list[str]",
   "tuple[text,quote]": "tuple[str, Quote]",

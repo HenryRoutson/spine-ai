@@ -1,5 +1,6 @@
 import type { CustomCodeEntry, ModelId, ModuleId, ModuleKind, PipelineModule, StructureModel, StructureModelId } from "@/lib/types"
 import { makeCustomCodeEntry } from "@/lib/custom_code_entries"
+import { DEFAULT_ASSERT_TS } from "@/lib/assert_steps"
 import { MODULE_META } from "@/lib/types"
 import { uid } from "@/lib/id"
 import { isLlmKind } from "@/lib/module-kinds"
@@ -9,7 +10,6 @@ export type ModuleFactoryOpts = {
   kind: ModuleKind
   label?: string
   note?: string
-  cached?: boolean
   inputType?: PipelineModule["inputType"]
   inputNameContains?: string
   inStructureId?: StructureModelId
@@ -35,19 +35,22 @@ export function createPipelineModule(
     kind,
     label: opts.label ?? MODULE_META[kind].label,
     note: opts.note,
-    cached: opts.cached ?? true,
+    cached: true,
     avgMs: 0,
     avgCostCents: 0,
     inputType: kind === "input" ? (opts.inputType ?? "pdf") : undefined,
     inputNameContains: kind === "input" ? opts.inputNameContains?.trim() || undefined : undefined,
     inStructureId: kind !== "input" ? opts.inStructureId ?? defaultModel : undefined,
-    outStructureId: kind === "output" ? undefined : opts.outStructureId ?? defaultModel,
+    outStructureId:
+      kind === "output" || kind === "assert" ? opts.outStructureId ?? opts.inStructureId ?? defaultModel : opts.outStructureId ?? defaultModel,
     outIsList: opts.outIsList,
     prompt: isLlm ? opts.prompt ?? "" : undefined,
     fallbackList:
       kind === "custom-code"
         ? (opts.fallbackList ?? [makeCustomCodeEntry("typescript", opts.code ?? "(input) => input")])
-        : undefined,
+        : kind === "assert"
+          ? (opts.fallbackList ?? [makeCustomCodeEntry("typescript", DEFAULT_ASSERT_TS)])
+          : undefined,
     model: isLlm ? opts.model ?? globalModel : undefined,
   }
 }

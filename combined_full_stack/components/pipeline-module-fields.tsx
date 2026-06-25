@@ -213,19 +213,6 @@ export function PipelineModuleFields({
             </StaticValue>
           )}
         </PipelineField>
-        <PipelineField label="Cache results">
-          {edit ? (
-            <div className="flex items-center justify-between rounded-md border border-border bg-secondary/30 px-3 py-2.5">
-              <div>
-                <p className="text-xs font-medium">Cache results</p>
-                <p className="font-mono text-[10px] text-muted-foreground">skip recompute &amp; billing</p>
-              </div>
-              <Switch checked={selected.cached} onCheckedChange={(v) => onUpdate!({ cached: v })} />
-            </div>
-          ) : (
-            <StaticValue>{selected.cached ? "On" : "Off"}</StaticValue>
-          )}
-        </PipelineField>
       </>
     )
   }
@@ -322,29 +309,64 @@ export function PipelineModuleFields({
             ) : null}
           </PipelineField>
           <PipelineField
-            label="Minimum documents"
-            hint={edit ? "required count for this input slot — use with out list for many submissions" : undefined}
+            label="Multiple documents"
+            hint={
+              edit
+                ? "when on, inference lets you add many files and this step emits a list on the pipeline spine"
+                : undefined
+            }
           >
             {edit ? (
-              <Input
-                type="number"
-                min={1}
-                value={selected.inputMinCount ?? 1}
-                onChange={(e) => {
-                  const n = Math.max(1, Number.parseInt(e.target.value, 10) || 1)
-                  onUpdate!({ inputMinCount: n === 1 ? undefined : n })
-                }}
-                className="h-8 font-mono text-xs"
-              />
+              <div className="flex items-center justify-between rounded-md border border-border bg-secondary/30 px-3 py-2.5">
+                <div>
+                  <p className="text-xs font-medium">Emit list output</p>
+                  <p className="font-mono text-[10px] text-muted-foreground">
+                    {selected.outIsList ? "multi-doc slot · list[structure]" : "single-doc slot · one structure"}
+                  </p>
+                </div>
+                <Switch
+                  checked={!!selected.outIsList}
+                  onCheckedChange={(v) =>
+                    onUpdate!({
+                      outIsList: v || undefined,
+                      inputMinCount: v ? Math.max(2, selected.inputMinCount ?? 1) : undefined,
+                    })
+                  }
+                />
+              </div>
             ) : (
-              <StaticValue mono>{selected.inputMinCount ?? 1}</StaticValue>
+              <StaticValue>{selected.outIsList ? "Multi-doc (list)" : "Single-doc"}</StaticValue>
             )}
           </PipelineField>
-          {(selected.inputMinCount ?? 1) > 1 || selected.outIsList ? (
-            <PipelineField label="Output shape">
-              <StaticValue mono>list[SourceDocument]</StaticValue>
+          {(selected.outIsList || (selected.inputMinCount ?? 1) > 1) && (
+            <PipelineField
+              label="Minimum documents"
+              hint={edit ? "required count when this slot accepts multiple files" : undefined}
+            >
+              {edit ? (
+                <Input
+                  type="number"
+                  min={1}
+                  value={selected.inputMinCount ?? (selected.outIsList ? 2 : 1)}
+                  onChange={(e) => {
+                    const n = Math.max(1, Number.parseInt(e.target.value, 10) || 1)
+                    onUpdate!({ inputMinCount: n === 1 && !selected.outIsList ? undefined : n })
+                  }}
+                  className="h-8 font-mono text-xs"
+                />
+              ) : (
+                <StaticValue mono>{selected.inputMinCount ?? (selected.outIsList ? 2 : 1)}</StaticValue>
+              )}
             </PipelineField>
-          ) : null}
+          )}
+          {selected.outIsList && selected.outStructureId && (
+            <PipelineField label="Output shape">
+              <StaticValue mono>
+                list[
+                {models.find((m) => m.id === selected.outStructureId)?.name ?? "structure"}]
+              </StaticValue>
+            </PipelineField>
+          )}
           <PipelineField
             label="I/O model"
             hint={
@@ -375,20 +397,22 @@ export function PipelineModuleFields({
 
       {selected.kind !== "input" && (
         <PipelineField
-          label={selected.kind === "output" ? "Structure to materialize" : "Input model"}
+          label={selected.kind === "output" || selected.kind === "assert" ? "Structure to materialize" : "Input model"}
           hint={
             selected.kind === "output" && invalid?.kind === "no-output"
               ? "required — pick the structure this step snapshots"
-              : undefined
+              : selected.kind === "assert" && invalid?.kind === "no-output"
+                ? "required — passthrough structure (matches upstream)"
+                : undefined
           }
-          hintTone={selected.kind === "output" && invalid?.kind === "no-output" ? "error" : "warning"}
+          hintTone={selected.kind === "output" || selected.kind === "assert" ? (invalid?.kind === "no-output" ? "error" : "warning") : "warning"}
         >
           {edit ? (
             <StructureModelSelect
               models={models}
               value={selected.inStructureId}
               onValueChange={(v) => onUpdate!({ inStructureId: v })}
-              invalid={selected.kind === "output" && invalid?.kind === "no-output"}
+              invalid={(selected.kind === "output" || selected.kind === "assert") && invalid?.kind === "no-output"}
             />
           ) : (
             <StaticValue mono>
@@ -484,8 +508,15 @@ export function PipelineModuleFields({
         </>
       )}
 
-      {selected.kind === "custom-code" && (
-        <PipelineField label="Code list · tried in order (first is primary)">
+      {(selected.kind === "custom-code" || selected.kind === "assert") && (
+        <PipelineField
+          label={selected.kind === "assert" ? "Assert · step[\"Label\"] + len()" : "Code list · tried in order (first is primary)"}
+          hint={
+            selected.kind === "assert"
+              ? "auto-placed after the latest referenced step label — passthrough on success"
+              : undefined
+          }
+        >
           {edit ? (
             <div className="space-y-2">
               {(selected.fallbackList ?? []).map((fb, i) => {
@@ -528,7 +559,13 @@ export function PipelineModuleFields({
                       </Button>
                     </div>
                     <p className="font-mono text-[10px] text-muted-foreground">
-                      {lang === "python" ? "def transform(input, state=None)" : "(input, state) => output"}
+                      {lang === "python"
+                        ? selected.kind === "assert"
+                          ? "def transform(input, state=None) — len/step helpers injected"
+                          : "def transform(input, state=None)"
+                        : selected.kind === "assert"
+                          ? "(input, state) => void — step/len helpers injected"
+                          : "(input, state) => output"}
                     </p>
                     <CustomCodeEditor
                       value={code}
@@ -578,20 +615,6 @@ export function PipelineModuleFields({
           )}
         </PipelineField>
       )}
-
-      <PipelineField label="Cache results">
-        {edit ? (
-          <div className="flex items-center justify-between rounded-md border border-border bg-secondary/30 px-3 py-2.5">
-            <div>
-              <p className="text-xs font-medium">Cache results</p>
-              <p className="font-mono text-[10px] text-muted-foreground">skip recompute &amp; billing</p>
-            </div>
-            <Switch checked={selected.cached} onCheckedChange={(v) => onUpdate!({ cached: v })} />
-          </div>
-        ) : (
-          <StaticValue>{selected.cached ? "On" : "Off"}</StaticValue>
-        )}
-      </PipelineField>
     </>
   )
 }

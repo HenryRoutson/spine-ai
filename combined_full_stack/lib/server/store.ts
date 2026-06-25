@@ -94,12 +94,34 @@ export interface Store {
   flush(): Promise<void>;
 }
 
+// AI : pull models + module graph from a bundled template — keep per-step model/prompt overrides.
+function mergeSeedPipelineIntoProject(existing: Project, seed: Project): Project {
+  const seedDocNames = seed.seedDocNames?.length ? seed.seedDocNames : existing.seedDocNames;
+  const models = structuredClone(seed.models);
+  let modules = seed.modules.map((sm) => {
+    const em = existing.modules.find((m) => m.id === sm.id);
+    if (!em) return structuredClone(sm);
+    return {
+      ...sm,
+      cached: true,
+      model: em.model ?? sm.model,
+      prompt: em.prompt ?? sm.prompt,
+    };
+  });
+  modules = syncAutoQuoteSteps(modules, models);
+  return migrateProjectModules({ ...existing, seedDocNames, models, modules });
+}
+
 // AI : keep persisted seed projects aligned with seeds/*.json — merge new modules (e.g. Link Quotes)
-// AI : while preserving user cached/model/prompt overrides on steps they already had.
+// AI : while preserving user model/prompt overrides on steps they already had.
 export function syncProjectFromSeed(existing: Project, seed: Project): Project {
   const seedDocNames = seed.seedDocNames?.length ? seed.seedDocNames : existing.seedDocNames;
 
   if (existing.id !== seed.id) {
+    const baseName = existing.name.replace(/ \d+$/, "");
+    if (baseName === seed.name) {
+      return mergeSeedPipelineIntoProject(existing, seed);
+    }
     let next = existing;
     if (seedDocNames?.length && !existing.seedDocNames?.length)
       next = { ...next, seedDocNames };
@@ -123,25 +145,7 @@ export function syncProjectFromSeed(existing: Project, seed: Project): Project {
   }
 
   // AI : seed-owned project — reset models + linear step graph from seeds/*.json; keep runtime overrides only.
-  const models = structuredClone(seed.models);
-  let modules = seed.modules.map((sm) => {
-    const em = existing.modules.find((m) => m.id === sm.id);
-    if (!em) return structuredClone(sm);
-    // AI : ...sm already carries seed fallbackList/code — only cached/model/prompt are user overrides.
-    return {
-      ...sm,
-      cached: em.cached,
-      model: em.model ?? sm.model,
-      prompt: em.prompt ?? sm.prompt,
-    };
-  });
-  modules = syncAutoQuoteSteps(modules, models);
-  const migrated = migrateProjectModules({ ...existing, seedDocNames, models, modules });
-  const same =
-    existing.seedDocNames?.join() === migrated.seedDocNames?.join() &&
-    JSON.stringify(existing.models) === JSON.stringify(migrated.models) &&
-    JSON.stringify(existing.modules) === JSON.stringify(migrated.modules);
-  return same ? existing : migrated;
+  return mergeSeedPipelineIntoProject(existing, seed);
 }
 
 // AI : built-in templates live in seeds/*.json only — drop any legacy rows that were openable in-store.
@@ -198,9 +202,15 @@ export async function ensureSeeded(store: Store): Promise<void> {
   await ensureSeedDocs(store);
   purgeSeedTemplateProjects(store);
   backfillAllProjectSeedDocNames(store);
+  const seeds = allProjectSeeds();
   for (const p of store.projects()) {
-    const migrated = migrateProjectModules(p);
-    if (migrated !== p) store.saveProject(migrated);
+    const seed = seeds.find(
+      (s) =>
+        s.project.id === p.id ||
+        (!isSeedTemplateProject(p) && s.project.name === p.name.replace(/ \d+$/, "")),
+    );
+    const next = seed ? syncProjectFromSeed(p, seed.project) : migrateProjectModules(p);
+    if (next !== p) store.saveProject(next);
   }
 }
 

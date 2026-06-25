@@ -179,11 +179,17 @@ export function projectSeedDocNames(project: Project): string[] {
   return byTemplate?.docSpecs.map((d) => d.name) ?? [];
 }
 
-// AI : numbered clones ("Tax Workpaper Preparer 1") inherit template seedDocNames when the field was never persisted.
+// AI : numbered clones inherit template seedDocNames; merge in any new bundled example filenames.
 export function backfillSeedDocNames(project: Project): Project {
   const names = projectSeedDocNames(project);
-  if (!names.length || project.seedDocNames?.join() === names.join()) return project;
-  return { ...project, seedDocNames: names };
+  if (!names.length) return project;
+  const existing = project.seedDocNames ?? [];
+  const merged = [...existing];
+  for (const n of names) {
+    if (!merged.includes(n)) merged.push(n);
+  }
+  if (merged.join() === existing.join()) return project;
+  return { ...project, seedDocNames: merged };
 }
 
 // ---- the default seed: Company Legal Evaluation, loaded (and validated) at import time ----

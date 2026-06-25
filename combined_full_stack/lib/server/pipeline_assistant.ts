@@ -45,7 +45,6 @@ const moduleSpecSchema = z.object({
   code: z.string().optional(),
   model: z.string().optional(),
   outIsList: z.boolean().optional(),
-  cached: z.boolean().optional(),
 });
 
 const modelSpecSchema = structureModelSpecSchema;
@@ -100,7 +99,6 @@ function makeModuleFromSpec(
       kind: spec.kind,
       label: spec.label,
       note: spec.note,
-      cached: spec.cached,
       inputType: spec.kind === "input" ? (spec.inputType as PipelineModule["inputType"]) ?? "pdf" : undefined,
       inputNameContains: spec.inputNameContains,
       inStructureId: spec.kind !== "input" ? inId ?? defaultOutForKind(spec.kind, models) : undefined,
@@ -227,7 +225,6 @@ function buildUserPrompt(
       code: m.code,
       model: m.model,
       outIsList: m.outIsList,
-      cached: m.cached,
     })),
     null,
     2,

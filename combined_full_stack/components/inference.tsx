@@ -200,7 +200,36 @@ export function Inference() {
 
             {run.error && run.phase !== "done" && <ErrorBanner text={run.error} />}
 
-            {run.phase === "running" && (
+            {run.run && run.phase === "done" && (
+              <div className="rounded-lg border border-border bg-card px-6 py-8 text-center">
+                {run.wasDeduped ? (
+                  <Zap className="mx-auto h-10 w-10 text-primary" />
+                ) : run.run.status === "ok" ? (
+                  <CheckCircle2 className="mx-auto h-10 w-10 text-primary" />
+                ) : (
+                  <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
+                )}
+                <p className="mt-4 text-sm font-medium">
+                  {run.wasDeduped
+                    ? "Identical run already completed"
+                    : run.run.status === "ok"
+                      ? "Pipeline finished"
+                      : "Pipeline finished with errors"}
+                </p>
+                <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                  {run.wasDeduped
+                    ? "Pipeline and inputs match a previous run — no compute was used."
+                    : "Output, step traces, and costs are in Logging."}
+                </p>
+                {run.runErr && (
+                  <div className="mt-4 text-left">
+                    <ErrorBanner text={run.runErr} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(run.phase === "running" || run.phase === "done") && (
               <div className="rounded-lg border border-border p-4">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -209,7 +238,16 @@ export function Inference() {
                   <span className="font-mono text-[11px] text-primary">{run.progressPct}%</span>
                 </div>
                 <Progress value={run.progressPct} className="h-1.5" />
-                <CyclingWaitPhrase phrase={run.waitPhrase} className="mt-3" />
+                {run.phase === "running" && (
+                  <CyclingWaitPhrase phrase={run.waitPhrase} className="mt-3" />
+                )}
+                {run.phase === "done" && run.run && (
+                  <GoToLoggingButton
+                    className="mt-4"
+                    deduped={run.wasDeduped}
+                    onClick={() => openLogging(run.loggingRunId ?? run.run!.id)}
+                  />
+                )}
                 <div className="mt-4 space-y-2.5">
                   {segmentPipeline(modules).map((seg) => {
                     if (seg.kind === "combine") {
@@ -251,39 +289,6 @@ export function Inference() {
                   })}
                 </div>
                 <div ref={run.logEndRef} />
-              </div>
-            )}
-
-            {run.run && run.phase === "done" && (
-              <div className="rounded-lg border border-border bg-card px-6 py-8 text-center">
-                {run.wasDeduped ? (
-                  <Zap className="mx-auto h-10 w-10 text-primary" />
-                ) : run.run.status === "ok" ? (
-                  <CheckCircle2 className="mx-auto h-10 w-10 text-primary" />
-                ) : (
-                  <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
-                )}
-                <p className="mt-4 text-sm font-medium">
-                  {run.wasDeduped
-                    ? "Identical run already completed"
-                    : run.run.status === "ok"
-                      ? "Pipeline finished"
-                      : "Pipeline finished with errors"}
-                </p>
-                <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                  {run.wasDeduped
-                    ? "Pipeline and inputs match a previous run — no compute was used."
-                    : "Output, step traces, and costs are in Logging."}
-                </p>
-                {run.runErr && (
-                  <div className="mt-4 text-left">
-                    <ErrorBanner text={run.runErr} />
-                  </div>
-                )}
-                <Button className="mt-5 gap-1.5" onClick={() => openLogging(run.loggingRunId ?? run.run!.id)}>
-                  <ScrollText className="h-3.5 w-3.5" />
-                  {run.wasDeduped ? "View cached run in Logging" : "Go to logging"}
-                </Button>
               </div>
             )}
           </div>
@@ -384,6 +389,31 @@ function InferenceInputSlot({
         <p className="mt-2 font-mono text-[10px] text-destructive">{issue.message}</p>
       )}
     </div>
+  )
+}
+
+function GoToLoggingButton({
+  deduped,
+  onClick,
+  className,
+}: {
+  deduped: boolean
+  onClick: () => void
+  className?: string
+}) {
+  return (
+    <Button
+      className={cn(
+        "w-full gap-1.5",
+        "animate-in fade-in slide-in-from-bottom-2 duration-500",
+        "motion-safe:animate-[pulse_2s_ease-in-out_infinite] motion-safe:ring-2 motion-safe:ring-primary/30",
+        className,
+      )}
+      onClick={onClick}
+    >
+      <ScrollText className="h-3.5 w-3.5" />
+      {deduped ? "View cached run in Logging" : "Go to logging"}
+    </Button>
   )
 }
 

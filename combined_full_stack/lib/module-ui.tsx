@@ -10,6 +10,7 @@ import {
   Code2,
   Link2,
   Lock,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -43,6 +44,7 @@ export const KIND_ICON: Record<ModuleKind, ModuleIcon> = {
   transform: Shuffle,
   combine: Merge,
   "custom-code": Code2,
+  assert: ShieldCheck,
   output: FileOutput,
 }
 
@@ -55,6 +57,7 @@ export const KIND_COLOR: Record<ModuleKind, string> = {
   transform: "text-chart-3",
   combine: "text-chart-3",
   "custom-code": "text-chart-1",
+  assert: "text-chart-2",
   output: "text-output",
 }
 

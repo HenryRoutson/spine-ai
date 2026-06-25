@@ -9,6 +9,7 @@
 import type { ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
 import type { CustomCodeLanguage } from "@/lib/types";
 import type { PipelineState } from "@/lib/run-types";
+import { wrapAssertCode } from "@/lib/assert_steps";
 
 export type { CustomCodeLanguage, CustomCodeEntry } from "@/lib/types";
 export type { ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
@@ -58,10 +59,10 @@ export function numberedCodeBlock(code: string): string {
     .join("\n");
 }
 
-export function formatCustomCodeFailureLog(f: CustomCodeAttemptFailure): string {
+export function formatCustomCodeFailureLog(f: CustomCodeAttemptFailure, tag = "custom-code"): string {
   const inputJson = JSON.stringify(f.input, null, 2);
   return [
-    `custom-code attempt ${f.attemptIndex + 1} (${f.language}) failed: ${f.error}`,
+    `${tag} attempt ${f.attemptIndex + 1} (${f.language}) failed: ${f.error}`,
     "--- code ---",
     numberedCodeBlock(f.code),
     "--- input (reproduce) ---",
@@ -192,6 +193,34 @@ export async function runCustomCodeWithFallbacks(
   throw new CustomCodeExhaustedError(failures);
 }
 
+export async function runAssertWithFallbacks(
+  entries: ParsedCustomCodeEntry[],
+  input: unknown,
+  state?: PipelineState,
+): Promise<CustomCodeRunResult> {
+  if (!entries.length) throw new Error("assert step has no code entries");
+  const failures: CustomCodeAttemptFailure[] = [];
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i]!;
+    const wrapped = { ...entry, code: wrapAssertCode(entry.code, entry.language) };
+    try {
+      const result = await runCustomEntry(wrapped, input, state);
+      if (result === false) throw new Error("assert returned false");
+      return { output: input, attemptIndex: i, language: entry.language, failures };
+    } catch (err) {
+      failures.push({
+        attemptIndex: i,
+        language: entry.language,
+        code: entry.code,
+        error: (err as Error).message,
+        stack: (err as Error).stack,
+        input,
+      });
+    }
+  }
+  throw new CustomCodeExhaustedError(failures);
+}
+
 export function isUserCodeStep(kind: string, code?: string): boolean {
-  return kind === "custom-code" || (kind === "transform" && !!code?.trim());
+  return kind === "custom-code" || kind === "assert" || (kind === "transform" && !!code?.trim());
 }

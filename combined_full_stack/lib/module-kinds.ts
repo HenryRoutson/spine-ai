@@ -9,6 +9,7 @@ export const USER_ADDABLE_MODULE_KINDS = [
   "transform",
   "combine",
   "custom-code",
+  "assert",
   "output",
 ] as const satisfies readonly ModuleKind[]
 

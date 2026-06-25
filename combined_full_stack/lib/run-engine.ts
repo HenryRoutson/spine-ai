@@ -4,6 +4,7 @@
 import {
   CustomCodeExhaustedError,
   formatCustomCodeFailureLog,
+  runAssertWithFallbacks,
   runCustomCodeWithFallbacks,
 } from "@/lib/custom_code"
 import { readApiErrorBody, formatApiError, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
@@ -216,21 +217,21 @@ export async function awaitRun(
       !clientStepBusy &&
       clientStepSubmittedFor !== job.clientStep.moduleId
     ) {
-      const { moduleId, entries, input, pipelineState } = job.clientStep
+      const { moduleId, entries, input, pipelineState, kind } = job.clientStep
       clientStepBusy = true
       const clientLogs: JobLogEntry[] = []
+      const tag = kind === "assert" ? "assert" : "custom-code"
       try {
-        const { output, failures, attemptIndex, language } = await runCustomCodeWithFallbacks(
-          entries,
-          input,
-          pipelineState,
-        )
+        const { output, failures, attemptIndex, language } =
+          kind === "assert"
+            ? await runAssertWithFallbacks(entries, input, pipelineState)
+            : await runCustomCodeWithFallbacks(entries, input, pipelineState)
         for (const f of failures) {
           clientLogs.push({
             at: Date.now(),
             level: "warn",
-            tag: "custom-code",
-            line: formatCustomCodeFailureLog(f),
+            tag,
+            line: formatCustomCodeFailureLog(f, tag),
             moduleId,
           })
         }
@@ -238,14 +239,16 @@ export async function awaitRun(
           clientLogs.push({
             at: Date.now(),
             level: "info",
-            tag: "custom-code",
-            line: `custom-code succeeded on attempt ${attemptIndex + 1} (${language}) after ${failures.length} fallback(s)`,
+            tag,
+            line: `${tag} succeeded on attempt ${attemptIndex + 1} (${language}) after ${failures.length} fallback(s)`,
             moduleId,
           })
         }
         if (output === undefined) {
           throw new Error(
-            "custom code returned undefined — add a trailing (input) => output arrow or an explicit return",
+            kind === "assert"
+              ? "assert returned undefined — throw or return true on success"
+              : "custom code returned undefined — add a trailing (input) => output arrow or an explicit return",
           )
         }
         await submitClientStep(jobId, { output, clientLogs })
@@ -268,16 +271,16 @@ export async function awaitRun(
           clientLogs.push({
             at: Date.now(),
             level: "error",
-            tag: "custom-code",
-            line: formatCustomCodeFailureLog(f),
+            tag,
+            line: formatCustomCodeFailureLog(f, tag),
             moduleId,
           })
         }
         clientLogs.push({
           at: Date.now(),
           level: "error",
-          tag: "custom-code",
-          line: `custom-code exhausted all ${entries.length} attempt(s)`,
+          tag,
+          line: `${tag} exhausted all ${entries.length} attempt(s)`,
           moduleId,
         })
         await submitClientStep(jobId, {

@@ -3,7 +3,12 @@ import { modelHasQuoteFields } from "./quote_schema";
 import type { FieldType, ModelField, StructureModel, StructureModelId } from "./types";
 
 function isListFieldType(type: FieldType): boolean {
-  return type === "list[text]" || type === "list[model]" || type === "list[tuple[text,quote]]";
+  return (
+    type === "list[text]" ||
+    type === "list[document]" ||
+    type === "list[model]" ||
+    type === "list[tuple[text,quote]]"
+  );
 }
 
 // AI : shared by run_engine wrap + pipeline validity — one definition for list-field detection.
@@ -84,6 +89,8 @@ function leafSchema(
       return z.string(); // ISO-8601 string for JSON transport
     case "document":
       return DocumentSchema;
+    case "list[document]":
+      return z.array(DocumentSchema);
     case "json":
       return JsonStringSchema;
     case "list[text]":
@@ -185,6 +192,8 @@ function llmLeafSchema(
       return z.string();
     case "document":
       return DocumentSchema;
+    case "list[document]":
+      return z.array(DocumentSchema);
     case "json":
       return JsonStringSchema;
     case "list[text]":
@@ -251,6 +260,7 @@ export interface ValidationResult<T = unknown> {
 // AI : hints when coercing loose step output (doc text, labels) into a declared StructureModel.
 export interface MaterializeHints {
   docId?: string;
+  docName?: string;
   label?: string;
   note?: string;
   sourceText?: string;
@@ -304,6 +314,8 @@ function coerceFieldValue(
       return "";
     case "document":
       return { doc_id: docId, purpose, body };
+    case "list[document]":
+      return [];
     case "json":
       return "[]";
     case "list[text]":
@@ -338,7 +350,8 @@ export function materializeToModel(
   const purpose =
     typeof raw.purpose === "string" && raw.purpose.trim()
       ? raw.purpose.trim()
-      : hints.note?.trim() ||
+      : hints.docName?.trim() ||
+        hints.note?.trim() ||
         hints.label?.trim() ||
         body.split("\n").find((l) => l.trim())?.trim() ||
         "Document";

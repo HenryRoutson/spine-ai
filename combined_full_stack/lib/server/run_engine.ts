@@ -8,6 +8,7 @@ import { llmBatchStructured, llmStructured } from "./llm";
 import { StructuredResponseError } from "./openrouter_llm";
 import { collectQuotes, resolveQuotesValue } from "./quotation";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
+import { assertEntriesForModule } from "@/lib/assert_steps";
 import { unknownProject } from "./api-errors";
 import { ClientStepPendingError, PipelinePausedError, type RunCheckpoint } from "./run_checkpoint";
 import { type LiveStep, progressHtml, runToHtml } from "./logging";
@@ -264,7 +265,7 @@ function restoreCtx(project: Project, store: Store, ledger: UsageLedger, model: 
 }
 
 function persistCustomCodeArtifacts(runId: string, m: PipelineModule): void {
-  if (m.kind !== "custom-code" && !(m.kind === "transform" && m.code?.trim())) return;
+  if (m.kind !== "custom-code" && m.kind !== "assert" && !(m.kind === "transform" && m.code?.trim())) return;
   const entries = customCodeEntriesForModule(m);
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i]!;
@@ -272,6 +273,15 @@ function persistCustomCodeArtifacts(runId: string, m: PipelineModule): void {
     const suffix = i === 0 ? "code" : `fallback_${i}`;
     fileWriteHelper(join(dataDir(), "runs", runId), `${m.id}_${suffix}`, ext, e.code);
   }
+}
+
+function buildAssertResult(value: unknown): ExecResult {
+  const count = Array.isArray(value) ? value.length : 1;
+  return {
+    value,
+    preview: `assert ok — passthrough (${count} item${count === 1 ? "" : "s"})`,
+    json: JSON.stringify(value, null, 2),
+  };
 }
 
 function buildClientResult(m: PipelineModule, project: Project, ctx: RunCtx, value: unknown): ExecResult {
@@ -331,7 +341,8 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
           ctx.sourceText = content;
           ctx.sourceDocId = docId;
         }
-        const hints = materializeHints(m, ctx, docId, content);
+        const docName = store.docs().find((d) => d.id === docId)?.name;
+        const hints = { ...materializeHints(m, ctx, docId, content), docName };
         return materializeStepOutput(m, project, { doc_id: docId, body: content }, hints);
       };
       if (!multi) {
@@ -555,6 +566,17 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       const structId = m.outStructureId ?? m.inStructureId;
       const name = modelById(project.models, structId)?.name ?? "Output";
       return { value: report, preview: `${name} snapshot`, json: JSON.stringify(report, null, 2) };
+    }
+
+    case "assert": {
+      const input = requireLinearInput(m, ctx);
+      const entries = assertEntriesForModule(m);
+      if (!entries.length) {
+        log.warn(`assert passthrough (no code)`, { moduleId: m.id });
+        return buildAssertResult(input);
+      }
+      log.info(`assert — deferring to browser`, { moduleId: m.id, attempts: entries.length });
+      throw new ClientStepPendingError(entries, input, ctx.byLabel);
     }
   }
 }
@@ -799,7 +821,7 @@ async function runLinearStepsFrom(
     if (status !== "error") {
       ctx.outputs.set(m.id, result.value);
       ctx.byLabel[m.label] = result.value;
-      const structId = m.outStructureId ?? (m.kind === "output" ? m.inStructureId : undefined);
+      const structId = m.outStructureId ?? (m.kind === "output" || m.kind === "assert" ? m.inStructureId : undefined);
       if (structId) ctx.byModel.set(structId, result.value);
       ctx.prevModuleId = m.id;
       artifacts.push({
@@ -1025,7 +1047,7 @@ export async function resumeRunPipeline(
       const value = ctx.outputs.get(s.moduleId);
       if (value === undefined) return [];
       const m = project.modules.find((x) => x.id === s.moduleId);
-      const structId = m?.outStructureId ?? (m?.kind === "output" ? m.inStructureId : undefined);
+      const structId = m?.outStructureId ?? (m?.kind === "output" || m?.kind === "assert" ? m.inStructureId : undefined);
       return [{ moduleId: s.moduleId, structure: modelById(project.models, structId), value }];
     });
 
@@ -1059,7 +1081,7 @@ export async function resumeRunPipeline(
 
     try {
       if (clientStep.error) throw new Error(clientStep.error);
-      result = buildClientResult(m, project, ctx, clientStep.output);
+      result = m.kind === "assert" ? buildAssertResult(clientStep.output) : buildClientResult(m, project, ctx, clientStep.output);
       const out = modelById(project.models, m.outStructureId);
       if (out) {
         const isList = m.outIsList || m.kind === "llm-batch";
@@ -1118,7 +1140,7 @@ export async function resumeRunPipeline(
   if (status !== "error") {
     ctx.outputs.set(m.id, result.value);
     ctx.byLabel[m.label] = result.value;
-    const structId = m.outStructureId ?? (m.kind === "output" ? m.inStructureId : undefined);
+    const structId = m.outStructureId ?? (m.kind === "output" || m.kind === "assert" ? m.inStructureId : undefined);
     if (structId) ctx.byModel.set(structId, result.value);
     ctx.prevModuleId = m.id;
     artifacts.push({ moduleId: m.id, structure: modelById(project.models, structId), value: result.value });

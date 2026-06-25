@@ -25,6 +25,7 @@ export type FieldType =
   | "bool"
   | "datetime"
   | "document"
+  | "list[document]"
   | "json"
   | "list[text]"
   | "tuple[text,quote]"
@@ -69,6 +70,7 @@ export type ModuleKind =
   | "transform"
   | "combine"
   | "custom-code"
+  | "assert" // AI : validate pipeline state — passthrough spine; code reads step["Label"] keys
   | "output";
 
 export type CustomCodeLanguage = "typescript" | "python";
@@ -265,6 +267,7 @@ export const FIELD_TYPES: FieldType[] = [
   "bool",
   "datetime",
   "document",
+  "list[document]",
   "json",
   "list[text]",
   "tuple[text,quote]",
@@ -300,6 +303,10 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   "custom-code": {
     label: "Custom Code",
     description: "TypeScript or Python (input) => output with ordered fallbacks on failure",
+  },
+  assert: {
+    label: "Assert",
+    description: "Check pipeline state (step[\"Label\"], len) — runs after referenced steps; passthrough",
   },
   output: {
     label: "Output",

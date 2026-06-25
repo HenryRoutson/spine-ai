@@ -102,6 +102,16 @@ export function defaultDocForInputModule(
   return passable[0]
 }
 
+// AI : template filenames first, then remaining inference docs alphabetically.
+function sortMultiInputDocs(docs: DocRef[]): DocRef[] {
+  return [...docs].sort((a, b) => {
+    const aTemplate = /template/i.test(a.name) ? 0 : 1
+    const bTemplate = /template/i.test(b.name) ? 0 : 1
+    if (aTemplate !== bTemplate) return aTemplate - bTemplate
+    return a.name.localeCompare(b.name)
+  })
+}
+
 // AI : assign docs per input slot — multi-doc slots get every matching unused inference doc.
 export function defaultInputDocsForModules(
   docs: DocRef[],
@@ -115,7 +125,7 @@ export function defaultInputDocsForModules(
     const passable = passableDocsForInputModule(docs, project, m).filter((d) => !used.has(d.id))
     if (!passable.length) continue
     if (isMultiDocInputModule(m)) {
-      const picked = passable
+      const picked = sortMultiInputDocs(passable)
       picked.forEach((d) => used.add(d.id))
       out[m.id] = picked
       continue
@@ -179,7 +189,24 @@ export function resolveInputDocs(
       const doc = docs.find((d) => d.id === id)
       return doc && docMatchesInputModule(doc, m) ? [doc] : []
     })
-    if (resolved.length) out[m.id] = isMultiDocInputModule(m) ? resolved : resolved[0]
+    if (!resolved.length) continue
+    if (isMultiDocInputModule(m)) {
+      // AI : union saved picks with default seed docs so new example files (e.g. more students) auto-appear
+      const defaultDocs = docsForInputModule(defaults, m.id)
+      const seen = new Set(resolved.map((d) => d.id))
+      const merged = sortMultiInputDocs([
+        ...resolved,
+        ...defaultDocs.filter((d) => !seen.has(d.id)),
+      ])
+      out[m.id] =
+        merged.length >= inputMinCountForModule(m)
+          ? merged
+          : defaultDocs.length
+            ? defaultDocs
+            : merged
+      continue
+    }
+    out[m.id] = resolved[0]
   }
   return out
 }

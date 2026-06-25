@@ -6,7 +6,7 @@ export function modulesFromRunSteps(steps: RunStep[]): PipelineModule[] {
     id: step.moduleId,
     kind: step.kind,
     label: step.label,
-    cached: false,
+    cached: true,
     avgMs: step.ms,
     avgCostCents: step.costCents,
     model: step.model,
