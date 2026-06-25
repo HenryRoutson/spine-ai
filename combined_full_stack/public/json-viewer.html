@@ -334,6 +334,8 @@ body[data-embed] .rp-header { min-height:28px; }
 }
 .th-group { font-size:9px; color:var(--muted); font-weight:400; text-transform:uppercase; letter-spacing:.06em; }
 .th-name  { font-size:10.5px; color:var(--text); font-weight:600; }
+.th-path  { font-family:"SF Mono","Fira Code",monospace; font-size:10px; font-weight:500; }
+.th-type  { font-size:9px; color:var(--muted); font-weight:400; font-family:"SF Mono","Fira Code",monospace; }
 .th-struct-link {
   display:block; font-size:9px; color:var(--accent); cursor:pointer;
   margin-top:2px; line-height:1.2; font-weight:500; opacity:.85;
@@ -652,6 +654,50 @@ function inferType(val) {
   if (typeof val==='string') return isDateStr(val)?'date':'string';
   if (Array.isArray(val)) return 'array';
   return 'object';
+}
+
+// AI: parse JSON embedded in string fields (cells_json, table_a_json, …) — shared by tree + table views
+function tryParseEmbeddedJson(s) {
+  if (typeof s !== 'string') return null;
+  const t = s.trim();
+  if (!t || (t[0] !== '{' && t[0] !== '[')) return null;
+  try {
+    const parsed = JSON.parse(t);
+    if (parsed !== null && typeof parsed === 'object') return parsed;
+  } catch (_) {}
+  return null;
+}
+
+function unwrapForDisplay(val) {
+  if (typeof val === 'string') {
+    const parsed = tryParseEmbeddedJson(val);
+    if (parsed !== null) return parsed;
+  }
+  return val;
+}
+
+// AI: human-facing views (tree, table, structure) must never show serialized JSON as a leaf value
+function assertNotRawEmbeddedJson(val, path) {
+  if (typeof val !== 'string' || tryParseEmbeddedJson(val) === null) return;
+  const where = path || '(root)';
+  const msg = `[JSON Viewer] raw embedded JSON must not be shown as a field value at ${where}`;
+  console.assert(false, msg);
+  console.error(msg);
+}
+
+// AI: load-time check — every leaf must be displayable without a raw JSON string after unwrapping
+function auditNoRawEmbeddedJsonLeaves(val, path = '') {
+  const display = unwrapForDisplay(val);
+  const type = inferType(display);
+  if (type !== 'object' && type !== 'array') {
+    assertNotRawEmbeddedJson(display, path);
+    return;
+  }
+  if (Array.isArray(display)) {
+    display.forEach((item, i) => auditNoRawEmbeddedJsonLeaves(item, path ? `${path}[${i}]` : `[${i}]`));
+    return;
+  }
+  Object.entries(display).forEach(([k, v]) => auditNoRawEmbeddedJsonLeaves(v, path ? `${path}.${k}` : k));
 }
 function friendlyTypeName(jsType, format, hasEnum) {
   if (hasEnum) return 'Choice';
@@ -1330,6 +1376,7 @@ function renderTreeView(val, mode) {
 
 // AI: jsonPath = raw dot-notation key path used by jumpToJson; path = humanized array for breadcrumb
 function renderTreeNode(val, keyName, container, path, isArrayItem, jsonPath) {
+  val = unwrapForDisplay(val);
   const type=inferType(val);
   const label=isArrayItem ? (getNodeTitle(val)||`Item ${keyName}`) : humanize(keyName);
 
@@ -1374,6 +1421,7 @@ function renderTreeNode(val, keyName, container, path, isArrayItem, jsonPath) {
   }
 
   // Leaf node
+  assertNotRawEmbeddedJson(val, jsonPath || keyName);
   const {text,cls}=formatTreeVal(val, keyName);
   const row=document.createElement('div'); row.className='tree-row t-leaf';
   const valHtml=cls==='string'
@@ -1544,8 +1592,10 @@ function buildConstraints(s) {
   return o;
 }
 function renderDataVal(val,path,container,keyName) {
+  val = unwrapForDisplay(val);
   const type=inferType(val);
   if (type!=='object'&&type!=='array') {
+    assertNotRawEmbeddedJson(val, keyName !== null ? String(keyName) : path.join('.'));
     const label=keyName!==null?humanize(String(keyName)):'Value';
     const card=mkCard(),head=mkHead(false),chev=mkChev(false);
     head.appendChild(chev);
@@ -1624,6 +1674,19 @@ function getGroupColor(key) {
 function expandRefCol(key)  { log('col:expand-ref', { key }); expandedRefCols.add(key);    drawDataTable(); }
 function collapseRefCol(key){ log('col:collapse-ref', { key }); expandedRefCols.delete(key); drawDataTable(); }
 
+function assignFlattenedValue(cols, fullKey, v, depth, labelKey) {
+  if (v === null || typeof v !== 'object') {
+    cols[fullKey] = v;
+    return;
+  }
+  if (Array.isArray(v)) {
+    cols[fullKey] = { $ref: 'array', $val: v, $count: v.length, $label: humanize(labelKey) };
+    return;
+  }
+  if (depth < 1) Object.assign(cols, flattenRow(v, depth + 1, fullKey));
+  else cols[fullKey] = { $ref: 'object', $val: v, $label: humanize(labelKey) };
+}
+
 // AI: flatten one level of nested objects into dotted-key columns; arrays/deep objects become reference cells
 function flattenRow(obj, depth=0, prefix='') {
   const cols={};
@@ -1631,6 +1694,10 @@ function flattenRow(obj, depth=0, prefix='') {
   for (const [k,v] of Object.entries(obj)) {
     const fullKey=prefix?`${prefix}.${k}`:k;
     if (v===null||typeof v!=='object') {
+      if (typeof v === 'string') {
+        const parsed = tryParseEmbeddedJson(v);
+        if (parsed !== null) { assignFlattenedValue(cols, fullKey, parsed, depth, k); continue; }
+      }
       cols[fullKey]=v;
     } else if (Array.isArray(v)) {
       cols[fullKey]={ $ref:'array',  $val:v, $count:v.length, $label:humanize(k) };
@@ -1645,8 +1712,24 @@ function flattenRow(obj, depth=0, prefix='') {
 
 function colLabel(key) {
   const parts=key.split('.');
-  if (parts.length===1) return { group:null, name:humanize(parts[0]) };
-  return { group:parts.slice(0,-1).map(humanize).join(' / '), name:humanize(parts[parts.length-1]) };
+  if (parts.length===1) return { group:null, name:humanize(parts[0]), path:key };
+  return { group:parts.slice(0,-1).join('.'), name:parts[parts.length-1], path:key };
+}
+
+function sampleValueForCol(rows, col) {
+  const flatKey = col.groupKey ? joinJsonPath(col.key, col.subKey) : col.key;
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const flat = flattenRow(row);
+    const v = flat[flatKey];
+    if (v !== null && v !== undefined && !(v && typeof v === 'object' && v.$ref)) return v;
+  }
+  return null;
+}
+
+function colHeaderLabel(col) {
+  if (col.key.includes('.')) return col.key;
+  return col.group ? col.name : (col.name || humanize(col.key));
 }
 
 // AI: builds column definitions respecting expandedRefCols — expands object refs inline
@@ -1707,15 +1790,23 @@ function buildTableColDefs(rows) {
   return cols;
 }
 
-// AI: detect best array to use as primary table; prefer largest array of objects
+function tableRowsFromValue(v) {
+  if (Array.isArray(v) && v.length > 0 && v.some(i => i && typeof i === 'object' && !Array.isArray(i))) return v;
+  if (typeof v === 'string') {
+    const parsed = tryParseEmbeddedJson(v);
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed.some(i => i && typeof i === 'object' && !Array.isArray(i))) return parsed;
+  }
+  return null;
+}
+
+// AI: detect best array to use as primary table; prefer largest array of objects (incl. JSON string fields)
 function detectPrimaryTable(val) {
   if (Array.isArray(val)) return { label:'Items', rows:val, jsonPath:'', isArray:true };
   if (typeof val==='object'&&val) {
     let best=null;
     for (const [k,v] of Object.entries(val)) {
-      if (Array.isArray(v)&&v.length>0&&v.some(i=>i&&typeof i==='object'&&!Array.isArray(i))) {
-        if (!best||v.length>best.rows.length) best={ label:humanize(k), rows:v, jsonPath:k, isArray:true };
-      }
+      const rows = tableRowsFromValue(v);
+      if (rows && (!best || rows.length > best.rows.length)) best={ label:humanize(k), rows, jsonPath:k, isArray:true };
     }
     if (best) return best;
     return { label:'Record', rows:[val], jsonPath:'', isArray:false };
@@ -1822,11 +1913,14 @@ function drawDataTable() {
       // Direct or ref column — rowspan=2 if there's a sub-row
       const th=document.createElement('th');
       if (hasExpandedGroups) th.rowSpan=2;
-      const lbl=col.group?`<span class="th-group">${esc(col.group)}</span>`:'';
+      const lbl=col.group && !col.key.includes('.')?`<span class="th-group">${esc(col.group)}</span>`:'';
       const inner=document.createElement('div'); inner.className='th-inner';
+      const headerName=colHeaderLabel(col);
+      const sampleVal=col.type==='leaf'||col.type==='sub-leaf'?sampleValueForCol(rows,col):null;
+      const typeHint=sampleVal!==null?friendlyTypeName(inferType(sampleVal)):null;
 
       if (col.type==='ref-obj') {
-        inner.innerHTML=`${lbl}<span class="th-name">${esc(col.name)}</span>`;
+        inner.innerHTML=`${lbl}<span class="th-name">${esc(headerName)}</span>`;
         const expBtn=document.createElement('button');
         expBtn.className='col-btn expand'; expBtn.textContent='⊕';
         expBtn.title=`Expand ${col.name} as columns`;
@@ -1834,11 +1928,12 @@ function drawDataTable() {
         inner.appendChild(expBtn);
         appendThStructureLink(inner, col.key);
       } else if (col.type==='ref-arr') {
-        inner.innerHTML=`${lbl}<span class="th-name">${esc(col.name)}</span><span style="color:#60a5fa;margin-left:4px;font-size:10px">▤ list</span>`;
+        inner.innerHTML=`${lbl}<span class="th-name">${esc(headerName)}</span><span style="color:#60a5fa;margin-left:4px;font-size:10px">▤ list</span>`;
         appendThStructureLink(inner, col.key);
       } else {
-        inner.innerHTML=`${lbl}<span class="th-name">${esc(col.name)}</span>`;
-        appendThStructureLink(inner, col.key);
+        const nameCls=col.key.includes('.')?'th-name th-path':'th-name';
+        inner.innerHTML=`${lbl}<span class="${nameCls}">${esc(headerName)}</span>${typeHint?`<span class="th-type">${esc(typeHint)}</span>`:''}`;
+        appendThStructureLink(inner, col.groupKey?joinJsonPath(col.key,col.subKey):col.key);
       }
       th.appendChild(inner);
       th.title=col.key;
@@ -1856,9 +1951,13 @@ function drawDataTable() {
       th.className='th-sub';
       th.style.cssText=`background:${col.color.dark};border-top:2px solid ${col.color.bar}`;
       const inner=document.createElement('div'); inner.className='th-inner';
-      inner.innerHTML=`<span class="th-name" style="font-weight:500;color:#d0e8ff">${esc(col.name)}</span>`;
-      appendThStructureLink(inner, joinJsonPath(col.key, col.subKey));
+      const subPath=joinJsonPath(col.key,col.subKey);
+      const subSample=sampleValueForCol(rows,col);
+      const subType=subSample!==null?friendlyTypeName(inferType(subSample)):null;
+      inner.innerHTML=`<span class="th-name th-path" style="font-weight:500;color:#d0e8ff">${esc(subPath)}</span>${subType?`<span class="th-type">${esc(subType)}</span>`:''}`;
+      appendThStructureLink(inner, subPath);
       th.appendChild(inner);
+      th.title=subPath;
       tr2.appendChild(th);
     });
     thead.appendChild(tr2);
@@ -1931,6 +2030,7 @@ function drawDataTable() {
 // Fill a primitive cell (shared by normal and sub-column cells)
 function fillPrimCell(td, val, key, jsonPath) {
   const path = jsonPath || key;
+  assertNotRawEmbeddedJson(val, path);
   if (val===null||val===undefined) { td.className='td-null'; td.textContent='—'; appendCellJumps(td, path); return; }
   const type=inferType(val);
   if (type==='boolean') { td.innerHTML=val?`<span class="td-bool-y">✓ Yes</span>`:`<span class="td-bool-n">✗ No</span>`; appendCellJumps(td, path); return; }
@@ -2053,6 +2153,7 @@ function openDetailPanel(title, obj) {
   const body=document.getElementById('dp-body'); body.innerHTML='';
 
   function addRow(key, val, indent=0) {
+    val = unwrapForDisplay(val);
     const type=inferType(val);
     const row=document.createElement('div'); row.className='dp-row';
     row.style.paddingLeft=(8+indent*12)+'px';
@@ -2072,6 +2173,7 @@ function openDetailPanel(title, obj) {
       }
       row.appendChild(btn);
     } else {
+      assertNotRawEmbeddedJson(val, key);
       const valEl=document.createElement('span');
       if (val===null) { valEl.className='dp-val-null'; valEl.textContent='—'; }
       else if (type==='boolean') { valEl.className=val?'dp-val-bool-t':'dp-val-bool-f'; valEl.textContent=val?'Yes':'No'; }
@@ -2243,6 +2345,7 @@ window.addEventListener('message', (e) => {
       else                           { badge.className = 'h-badge hb-data';   badge.textContent = 'Data';   }
     }
     log('external:load', { mode: _currentMode, type: Array.isArray(val) ? 'array' : typeof val });
+    auditNoRawEmbeddedJsonLeaves(val);
     applyDefaultView(readDefaultView(e.data.defaultView));
     applySyntaxTheme(readSyntaxTheme(e.data.syntaxTheme));
     renderStructurePanel(_currentVal, _currentMode);

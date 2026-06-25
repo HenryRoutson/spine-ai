@@ -7,6 +7,7 @@ import { useAppShell } from "@/lib/app-shell"
 import { useStore, uid } from "@/lib/store"
 import {
   FIELD_TYPES,
+  JSON_FIELD_PREFER_STRUCTURE_MSG,
   type FieldType,
   type ModelField,
   type StructureModel,
@@ -301,6 +302,13 @@ export function StructureBuilder() {
                         </button>
                       </div>
                     </div>
+                    {f.type === "json" && (
+                      <div className="border-b border-border bg-amber-500/5 px-3 py-1.5">
+                        <p className="font-mono text-[10px] text-amber-700 dark:text-amber-500">
+                          {JSON_FIELD_PREFER_STRUCTURE_MSG}
+                        </p>
+                      </div>
+                    )}
                     {REF_TYPES.includes(f.type) && (
                       <div className="grid grid-cols-[1.3fr_auto] items-center gap-2 border-b border-border bg-secondary/20 px-3 py-1.5">
                         <span className="font-mono text-[10px] text-muted-foreground">

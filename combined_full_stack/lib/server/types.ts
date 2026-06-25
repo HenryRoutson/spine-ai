@@ -23,11 +23,16 @@ export type FieldType =
   | "bool"
   | "datetime"
   | "document"
+  | "json"
   | "list[text]"
   | "tuple[text,quote]"
   | "list[tuple[text,quote]]"
   | "model"
   | "list[model]";
+
+// AI : shown in Structure builder when a field uses type json
+export const JSON_FIELD_PREFER_STRUCTURE_MSG =
+  "JSON fields store serialized data — prefer a typed structure (model / list[model]) when you can.";
 
 export interface ModelField {
   id: string;
@@ -232,6 +237,7 @@ export const FIELD_TYPES: FieldType[] = [
   "bool",
   "datetime",
   "document",
+  "json",
   "list[text]",
   "tuple[text,quote]",
   "list[tuple[text,quote]]",

@@ -24,6 +24,30 @@ const TextQuoteSchema = z.object({ text: z.string(), quote: QuoteSchema });
 // AI : the prebuilt Document base (matches pydantic Document).
 const DocumentSchema = z.object({ doc_id: z.string(), purpose: z.string(), body: z.string() });
 
+// AI : json field — string that must parse; prefer model / list[model] when shape is known
+export function isValidJsonString(s: string): boolean {
+  const t = s.trim();
+  if (!t) return false;
+  try {
+    JSON.parse(t);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function assertValidJsonFieldValue(val: unknown, fieldName?: string): asserts val is string {
+  const label = fieldName ? `field "${fieldName}"` : "JSON field";
+  if (typeof val !== "string") {
+    throw new Error(`${label} must be a string containing serialized JSON`);
+  }
+  if (!isValidJsonString(val)) {
+    throw new Error(`${label} must contain valid JSON`);
+  }
+}
+
+const JsonStringSchema = z.string().refine(isValidJsonString, { message: "must be valid JSON" });
+
 function byId(models: StructureModel[]): Map<StructureModelId, StructureModel> {
   return new Map(models.map((m) => [m.id, m]));
 }
@@ -60,6 +84,8 @@ function leafSchema(
       return z.string(); // ISO-8601 string for JSON transport
     case "document":
       return DocumentSchema;
+    case "json":
+      return JsonStringSchema;
     case "list[text]":
       return z.array(z.string());
     case "tuple[text,quote]":
@@ -156,6 +182,8 @@ function llmLeafSchema(
       return z.string();
     case "document":
       return DocumentSchema;
+    case "json":
+      return JsonStringSchema;
     case "list[text]":
       return z.array(z.string());
     case "tuple[text,quote]":
@@ -270,6 +298,8 @@ function coerceFieldValue(
       return "";
     case "document":
       return { doc_id: docId, purpose, body };
+    case "json":
+      return "[]";
     case "list[text]":
       return [];
     case "tuple[text,quote]":
@@ -396,6 +426,7 @@ export function inferModel(sample: Record<string, unknown>, name: string, id: St
 function inferType(val: unknown): FieldType {
   if (typeof val === "boolean") return "bool";
   if (typeof val === "number") return Number.isInteger(val) ? "int" : "float";
+  if (typeof val === "string" && isValidJsonString(val)) return "json";
   if (Array.isArray(val)) return "list[text]";
   return "text";
 }

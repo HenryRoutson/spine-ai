@@ -94,8 +94,8 @@ const MERGED_TWO = {
   name: "MergedTwoTables",
   description: "Two parsed tables as JSON strings.",
   fields: [
-    { id: "f_a", name: "table_a_json", type: "text", optional: false, description: "First table JSON array" },
-    { id: "f_b", name: "table_b_json", type: "text", optional: false, description: "Second table JSON array" },
+    { id: "f_a", name: "table_a_json", type: "json", optional: false, description: "First table JSON array" },
+    { id: "f_b", name: "table_b_json", type: "json", optional: false, description: "Second table JSON array" },
   ],
 };
 

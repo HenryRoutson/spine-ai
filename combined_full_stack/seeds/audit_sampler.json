@@ -76,14 +76,14 @@
         {
           "id": "f_a",
           "name": "table_a_json",
-          "type": "text",
+          "type": "json",
           "optional": false,
           "description": "First table JSON array"
         },
         {
           "id": "f_b",
           "name": "table_b_json",
-          "type": "text",
+          "type": "json",
           "optional": false,
           "description": "Second table JSON array"
         }
