@@ -285,7 +285,7 @@ openclaw add
 
 mediflow_ai_company_profile.pdf : {"error":"no pdf file for sha_8b4a33391ead33d7"}
 
-
+after inference is finished or if it's cached, the final output should show up. With a json, excel style viewer, or even custom visualisations like video, plots.
 
 are you prompting with the input schema in addition to output schema?
 Allow option to view full prompt

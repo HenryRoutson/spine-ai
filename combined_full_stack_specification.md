@@ -146,6 +146,8 @@ documents are selected from the documents tab to avoid repeat uplaods, latency i
 
 if you do not have enough funds in billing, a button to direct you to the billing tab will appear.
 
+after inference is finished or if it's cached, the final output should show up. With a json, excel style viewer, or even custom visualisations like video, plots.
+
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.
 you can search for runs, based on descriptions provided and editable when selecting the run.
