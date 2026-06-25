@@ -26,6 +26,7 @@ import { timeAgo } from "@/lib/time-ago"
 import { enrichRunModules, modulesFromRunSteps } from "@/lib/pipeline-run-diff"
 import { PipelineCanvas } from "@/components/pipeline-canvas"
 import { PipelineInspector } from "@/components/pipeline-inspector"
+import { computeInvalid } from "@/lib/validity"
 import { RunNotesEditor } from "@/components/run-notes-editor"
 import { StepServerLogsSection, ServerLogLines } from "@/components/server-logs-panel"
 import { KIND_ICON } from "@/lib/module-ui"
@@ -627,6 +628,7 @@ export function Logging() {
                           selectedId={selectedPipelineModuleId}
                           onSelect={setSelectedPipelineModuleId}
                           stepStatus={runPipeline.stepStatus}
+                          invalid={computeInvalid(runPipeline.modules, models)}
                         />
                       </div>
                       <aside className="flex min-h-0 flex-col overflow-hidden">

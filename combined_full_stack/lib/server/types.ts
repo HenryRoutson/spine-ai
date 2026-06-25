@@ -111,6 +111,7 @@ export interface Project {
   modules: PipelineModule[];
   strategies: Strategy[];
   seedDocNames?: string[]; // AI : filenames from seeds/*.json — scopes inference inputs to this project
+  createdAt?: number; // AI : ms since epoch — set when blank/cloned; templates from seeds/*.json omit this
 }
 
 export type StrategyKind = "single-llm" | "rlm" | "claude-code" | "cheap-agent";

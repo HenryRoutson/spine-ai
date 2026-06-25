@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAuthStore } from "@/lib/server/api_context";
+import { userProjectsFrom } from "@/lib/server/store";
 import { logger } from "@/lib/server/server_logger";
 import type { ProjectId } from "@/lib/server/types";
 
@@ -13,8 +14,9 @@ export async function GET(req: NextRequest) {
   const { store } = ctx;
 
   const projectId = req.nextUrl.searchParams.get("projectId") as ProjectId | null;
-  const projects = store.projects();
-  const project = (projectId && store.project(projectId)) || projects[0];
+  const projects = userProjectsFrom(store.projects());
+  const project =
+    (projectId && projects.find((p) => p.id === projectId)) || projects[0];
   apiLog.debug(`GET /api/state`, {
     projectId,
     activeProject: project?.id,

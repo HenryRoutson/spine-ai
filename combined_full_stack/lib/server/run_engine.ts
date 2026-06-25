@@ -412,7 +412,8 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       // AI : out structure (`document` field ← the new input, every other field ← pipeline data).
       const out = modelById(project.models, m.outStructureId);
       if (!out) throw new Error(`combine step ${m.id} has no output structure`);
-      const newInput = (ctx.prevModuleId && ctx.outputs.get(ctx.prevModuleId)) as { doc_id?: DocId; body?: string } | undefined;
+      const rawInput = ctx.prevModuleId ? ctx.outputs.get(ctx.prevModuleId) : undefined;
+      const newInput = Array.isArray(rawInput) ? rawInput[0] : rawInput;
       const pipelineData = ctx.byModel.get(m.inStructureId as StructureModelId);
       // AI : purpose = the upstream input module's label (e.g. "Company Data", "Field Mapping").
       const purpose = project.modules.find((x) => x.id === ctx.prevModuleId)?.label ?? "Document";

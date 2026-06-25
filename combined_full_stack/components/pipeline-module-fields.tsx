@@ -35,6 +35,8 @@ import {
   invalidStepMessage,
   warningStepMessage,
   type InvalidStep,
+  type IoMismatchFixKind,
+  type IoMismatchInspectorFix,
   type PipelineWarning,
 } from "@/lib/validity"
 import { StructureLink } from "@/components/structure-link"
@@ -131,6 +133,32 @@ function StructureModelSelect({
   )
 }
 
+function IoMismatchFieldFix({
+  fix,
+  edit,
+  onFix,
+}: {
+  fix?: IoMismatchInspectorFix
+  edit: boolean
+  onFix?: (mismatchModuleId: string, kind: IoMismatchFixKind) => void
+}) {
+  if (!fix || !edit || !onFix) return null
+  return (
+    <div className="mt-2 space-y-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-2">
+      <p className="font-mono text-[10px] leading-relaxed text-destructive">{fix.message}</p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-7 border-destructive/40 font-mono text-[10px] text-destructive hover:bg-destructive/10"
+        onClick={() => onFix(fix.mismatchModuleId, fix.kind)}
+      >
+        {fix.label}
+      </Button>
+    </div>
+  )
+}
+
 type PipelineModuleFieldsProps = {
   module: PipelineModule
   models: StructureModel[]
@@ -139,7 +167,9 @@ type PipelineModuleFieldsProps = {
   globalModel?: string
   invalid?: InvalidStep
   warning?: PipelineWarning
+  ioMismatchFix?: IoMismatchInspectorFix
   onUpdate?: (patch: Partial<PipelineModule>) => void
+  onFixIoMismatch?: (mismatchModuleId: string, kind: IoMismatchFixKind) => void
 }
 
 // AI : shared inspector field layout — editable in Pipeline builder, static in Logging.
@@ -151,7 +181,9 @@ export function PipelineModuleFields({
   globalModel,
   invalid,
   warning,
+  ioMismatchFix,
   onUpdate,
+  onFixIoMismatch,
 }: PipelineModuleFieldsProps) {
   const llmSchemaPreview = useLlmSchemaPreview(selected, models)
   const edit = mode === "edit" && onUpdate
@@ -203,7 +235,7 @@ export function PipelineModuleFields({
       <p className="mb-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
         {MODULE_META[selected.kind].description}
       </p>
-      {invalid && (
+      {invalid && invalid.kind !== "io-mismatch" && (
         <p className="mb-3 font-mono text-[10px] leading-relaxed text-destructive">
           {invalidStepMessage(invalid, models, modules)}
         </p>
@@ -332,6 +364,11 @@ export function PipelineModuleFields({
                 <StructureLink models={models} structureId={selected.outStructureId} />
               </StaticValue>
             )}
+            <IoMismatchFieldFix
+              fix={ioMismatchFix?.kind === "align-upstream" ? ioMismatchFix : undefined}
+              edit={!!edit}
+              onFix={onFixIoMismatch}
+            />
           </PipelineField>
         </>
       )}
@@ -358,6 +395,17 @@ export function PipelineModuleFields({
               <StructureLink models={models} structureId={selected.inStructureId} />
             </StaticValue>
           )}
+          <IoMismatchFieldFix
+            fix={
+              ioMismatchFix &&
+              (ioMismatchFix.kind === "adopt-upstream" ||
+                (selected.kind === "output" && ioMismatchFix.kind === "align-upstream"))
+                ? ioMismatchFix
+                : undefined
+            }
+            edit={!!edit}
+            onFix={onFixIoMismatch}
+          />
         </PipelineField>
       )}
 
@@ -379,6 +427,11 @@ export function PipelineModuleFields({
               <StructureLink models={models} structureId={selected.outStructureId} />
             </StaticValue>
           )}
+          <IoMismatchFieldFix
+            fix={ioMismatchFix?.kind === "align-upstream" ? ioMismatchFix : undefined}
+            edit={!!edit}
+            onFix={onFixIoMismatch}
+          />
         </PipelineField>
       )}
 
@@ -406,11 +459,6 @@ export function PipelineModuleFields({
                 {warning?.kind === "no-prompt" && (
                   <p className="mt-1 font-mono text-[9px] text-muted-foreground">
                     no custom text — JSON schema is sent as the structured output contract
-                  </p>
-                )}
-                {warning?.kind === "unused-output" && (
-                  <p className="mt-1 font-mono text-[9px] WARNING_TEXT_CLASS">
-                    {warningStepMessage(warning, models, modules)}
                   </p>
                 )}
               </>

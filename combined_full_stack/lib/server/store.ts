@@ -2,12 +2,16 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "./config";
+import { uid } from "../id";
 import {
   allProjectSeeds,
   backfillSeedDocNames,
   blankProject,
+  isSeedTemplateProject,
   isUnavailableSeedDoc,
   readSeedDocContent,
+  seedTemplateIds,
+  userProjectsFrom,
   type SeedDocSpec,
 } from "./seed";
 import { computeInvalid, migrateProjectModules, syncAutoQuoteSteps } from "./validity";
@@ -140,20 +144,19 @@ export function syncProjectFromSeed(existing: Project, seed: Project): Project {
   return same ? existing : migrated;
 }
 
-// AI : pull latest seeds/*.json into built-in example project rows (same ids as templates).
-export function resyncSeedOwnedProjects(store: Store): number {
-  let updated = 0;
-  for (const seed of allProjectSeeds()) {
-    const existing = store.project(seed.project.id);
-    if (!existing) continue;
-    const synced = syncProjectFromSeed(existing, seed.project);
-    if (synced !== existing) {
-      store.saveProject(synced);
-      updated += 1;
-    }
+// AI : built-in templates live in seeds/*.json only — drop any legacy rows that were openable in-store.
+export function purgeSeedTemplateProjects(store: Store): number {
+  const templateIds = seedTemplateIds();
+  const hasUserProject = store.projects().some((p) => !templateIds.has(p.id));
+  if (!hasUserProject) store.saveProject(blankProject(uid<ProjectId>("p_")));
+  let removed = 0;
+  for (const id of templateIds) {
+    if (store.project(id) && store.deleteProject(id)) removed += 1;
   }
-  return updated;
+  return removed;
 }
+
+export { userProjectsFrom, isSeedTemplateProject };
 
 // AI : idempotent — ingest bundled documents/ files into the global doc store (safe on every request).
 export async function ensureSeedDocs(store: Store): Promise<void> {
@@ -190,19 +193,10 @@ export function linkDocToProject(store: Store, projectId: ProjectId, docName: st
   store.saveProject({ ...p, seedDocNames: [...names, docName] });
 }
 
-// AI : idempotent — upsert every seeds/*.json project (+ ingest its source docs) that the
-// AI : store doesn't have yet. Shared by JsonStore.init() and per-user first-sign-in seeding.
+// AI : ingest bundled docs + migrate user projects — templates are cloned via POST /api/projects only.
 export async function ensureSeeded(store: Store): Promise<void> {
-  for (const seed of allProjectSeeds()) {
-    const existing = store.project(seed.project.id);
-    if (!existing) {
-      store.saveProject(migrateProjectModules(structuredClone(seed.project)));
-    } else {
-      const synced = syncProjectFromSeed(existing, seed.project);
-      if (synced !== existing) store.saveProject(synced);
-    }
-  }
   await ensureSeedDocs(store);
+  purgeSeedTemplateProjects(store);
   backfillAllProjectSeedDocNames(store);
   for (const p of store.projects()) {
     const migrated = migrateProjectModules(p);
@@ -245,7 +239,7 @@ export class JsonStore implements Store {
       this.state.runProjects ??= {};
     }
     await ensureSeeded(this);
-    if (fresh) {
+    if (fresh && this.state.projects.length === 0) {
       this.state.projects.push(blankProject("p_blank" as ProjectId));
       this.persist();
     }

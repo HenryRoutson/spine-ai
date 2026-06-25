@@ -198,11 +198,25 @@ export function defaultProject(): Project {
   return structuredClone(defaultSeed.project);
 }
 
+export function seedTemplateIds(): Set<ProjectId> {
+  return new Set(allProjectSeeds().map((s) => s.project.id));
+}
+
+export function isSeedTemplateProject(project: Project): boolean {
+  return seedTemplateIds().has(project.id);
+}
+
+export function userProjectsFrom(projects: Project[]): Project[] {
+  const templateIds = seedTemplateIds();
+  return projects.filter((p) => !templateIds.has(p.id));
+}
+
 export function blankProject(id: ProjectId): Project {
   return {
     id,
     name: "Untitled Pipeline",
     kind: "blank",
+    createdAt: Date.now(),
     models: [],
     modules: [
       { id: "mod_blank_in" as ModuleId, kind: "input", label: "Input", inputType: "text", cached: true, avgMs: 80, avgCostCents: 0 },
@@ -245,6 +259,7 @@ export function cloneProject(source: Project, existingProjects: Project[]): Proj
     ...structuredClone(backfillSeedDocNames(source)),
     id,
     name,
+    createdAt: Date.now(),
     strategies: source.strategies.map((s) => ({ ...s, id: `${s.id}_${id}` })),
   };
   return cloned;

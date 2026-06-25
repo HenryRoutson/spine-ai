@@ -165,6 +165,29 @@
       ]
     },
     {
+      "id": "m_hw_combine",
+      "name": "SchemaWithSubmissions",
+      "auto": true,
+      "description": "Derived marking schema plus student submission input.",
+      "fields": [
+        {
+          "id": "f_sub",
+          "name": "student_submission",
+          "type": "document",
+          "optional": false,
+          "description": "Primary student sheet (full batch in pipeline state)"
+        },
+        {
+          "id": "f_schema",
+          "name": "marking_schema",
+          "type": "model",
+          "optional": false,
+          "description": "Derived rubric",
+          "ref": "m_schema"
+        }
+      ]
+    },
+    {
       "id": "m_gradable",
       "name": "GradableSection",
       "description": "One student section ready for batch grading.",
@@ -297,18 +320,29 @@
       "avgCostCents": 0
     },
     {
+      "id": "mod_combine",
+      "kind": "combine",
+      "label": "Combine Inputs",
+      "note": "Merge derived marking schema with student submission documents.",
+      "inStructureId": "m_schema",
+      "outStructureId": "m_hw_combine",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0
+    },
+    {
       "id": "mod_assemble",
       "kind": "custom-code",
       "label": "Assemble Grader Work",
       "note": "Merge derived schema with all student submissions.",
-      "inStructureId": "m_doc",
+      "inStructureId": "m_hw_combine",
       "outStructureId": "m_work",
       "cached": true,
       "avgMs": 6,
       "avgCostCents": 0,
       "fallbackList": [
         {
-          "typescript": "(subs, state) => ({ marking_schema: state[\"Derive Marking Schema\"], student_submissions: Array.isArray(subs) ? subs : [subs] })"
+          "typescript": "(_combined, state) => { const subs = state[\"Student Submissions\"]; return { marking_schema: state[\"Derive Marking Schema\"], student_submissions: Array.isArray(subs) ? subs : subs ? [subs] : [] }; }"
         }
       ]
     },

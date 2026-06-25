@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { apiJson } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
+import { timeAgo } from "@/lib/time-ago"
 import type { Project, ProjectId } from "@/lib/types"
 
 type ProjectTemplateSummary = {
@@ -28,10 +29,6 @@ type ProjectTemplateSummary = {
   kind: string
   moduleCount: number
   inputCount: number
-}
-
-function isBuiltInExample(project: Project, templateIds: Set<string>): boolean {
-  return templateIds.has(project.id)
 }
 
 export function Projects() {
@@ -53,8 +50,6 @@ export function Projects() {
   const [editName, setEditName] = useState("")
   const [busy, setBusy] = useState<string | null>(null)
   const [resyncMsg, setResyncMsg] = useState<string | null>(null)
-
-  const templateIds = new Set(templates.map((t) => t.id))
 
   useEffect(() => {
     let cancelled = false
@@ -102,7 +97,7 @@ export function Projects() {
     setResyncMsg(null)
     try {
       const updated = await resyncExamples()
-      setResyncMsg(updated ? `Updated ${updated} built-in example(s) from repo seeds.` : "Built-in examples already up to date.")
+      setResyncMsg(updated ? `Refreshed bundled example documents.` : "Example documents already up to date.")
     } catch (e) {
       setResyncMsg((e as Error).message)
     } finally {
@@ -125,12 +120,12 @@ export function Projects() {
       <WindowHeader
         step="Projects"
         title="Your pipelines"
-        description="Switch projects, clone numbered copies from examples, or refresh templates from seeds."
+        description="Clone example templates into your workspace, or start from a blank pipeline."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" className="bg-transparent" onClick={() => void handleResync()} disabled={busy === "resync"}>
               {busy === "resync" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
-              Refresh examples
+              Refresh docs
             </Button>
             <Button size="sm" onClick={addProject}>
               <Plus className="mr-1.5 h-3.5 w-3.5" /> Blank project
@@ -158,7 +153,6 @@ export function Projects() {
           <ul className="divide-y divide-border rounded-lg border border-border bg-card">
             {projects.map((p) => {
               const active = p.id === project.id
-              const builtIn = isBuiltInExample(p, templateIds)
               return (
                 <li
                   key={p.id}
@@ -189,15 +183,23 @@ export function Projects() {
                               active
                             </Badge>
                           )}
-                          {builtIn && (
-                            <Badge variant="outline" className="h-4 font-mono text-[9px] text-muted-foreground">
-                              built-in example
-                            </Badge>
-                          )}
                         </div>
                         <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
                           {p.kind} · {p.modules.length} steps · {p.modules.filter((m) => m.kind === "input").length} input
                           {p.modules.some((m) => m.inputNameContains) ? " · name rules" : ""}
+                          {p.createdAt != null ? (
+                            <>
+                              {" · "}
+                              {new Date(p.createdAt).toLocaleDateString(undefined, {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              })}
+                              {" ("}
+                              {timeAgo(p.createdAt)}
+                              {")"}
+                            </>
+                          ) : null}
                         </p>
                       </>
                     )}
@@ -243,7 +245,7 @@ export function Projects() {
             <h3 className="text-sm font-semibold">Example templates</h3>
           </div>
           <p className="mb-3 text-xs text-muted-foreground">
-            Clone creates a numbered copy you can open and edit — e.g.{" "}
+            Example templates are read-only until you clone them — e.g.{" "}
             <span className="font-mono">Company Legal Evaluation 1</span>, then{" "}
             <span className="font-mono">Company Legal Evaluation 2</span>.
           </p>

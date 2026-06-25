@@ -24,6 +24,8 @@ import type { ModuleId, PipelineModule, RunStepStatus, StructureModel } from "@/
 import { inputTypeLabel } from "@/lib/inference-input"
 import {
   invalidStepMessage,
+  ioMismatchAtModuleIndex,
+  stepIoMismatchLinked,
   warningStepMessage,
   type InvalidStep,
   type PipelineWarning,
@@ -42,7 +44,7 @@ type PipelineCanvasProps = {
   invalid?: Map<ModuleId, InvalidStep>
   warnings?: Map<ModuleId, PipelineWarning>
   renderInsertBefore?: (insertAt: number) => React.ReactNode
-  renderInsertAfter?: (insertAt: number, opts: { blocked?: boolean; invalid?: boolean }) => React.ReactNode
+  renderInsertAfter?: (insertAt: number, opts: { blocked?: boolean; connectionInvalid?: boolean }) => React.ReactNode
   renderFooter?: () => React.ReactNode
   className?: string
 }
@@ -63,13 +65,17 @@ export function PipelineCanvas({
 }: PipelineCanvasProps) {
   const segments = segmentPipeline(modules)
   const editMode = Boolean(renderInsertAfter ?? renderInsertBefore ?? renderFooter)
+  const firstSeg = segments[0]
+  const startConnectionInvalid = firstSeg
+    ? ioMismatchAtModuleIndex(modules, invalid, firstSeg.index)
+    : false
 
   return (
     <div className={cn("mx-auto flex w-full max-w-xl flex-col items-stretch gap-0", className)}>
       <div className="mx-auto flex w-full flex-col items-center">
         <PipelineNode label="Start" subtle />
         {segments.length > 0 && renderInsertBefore?.(insertBeforeIndex(segments[0]))}
-        {segments.length > 0 && !renderInsertBefore && <PipelineConnector />}
+        {segments.length > 0 && !renderInsertBefore && <PipelineConnector invalid={startConnectionInvalid} />}
       </div>
       {segments.map((seg) => (
         <SegmentRow
@@ -116,14 +122,17 @@ function SegmentRow({
   invalid?: Map<ModuleId, InvalidStep>
   warnings?: Map<ModuleId, PipelineWarning>
   editMode: boolean
-  renderInsertAfter?: (insertAt: number, opts: { blocked?: boolean; invalid?: boolean }) => React.ReactNode
+  renderInsertAfter?: (insertAt: number, opts: { blocked?: boolean; connectionInvalid?: boolean }) => React.ReactNode
 }) {
   const insertAt = insertAfterIndex(seg)
   const blocked = blocksInsertBefore(modules, insertAt)
+  const connectionInvalid = ioMismatchAtModuleIndex(modules, invalid, insertAt)
 
   if (seg.kind === "combine") {
     const { combine, input, index } = seg
-    const combineInvalid = invalid?.has(combine.id)
+    const combineIssue = invalid?.get(combine.id)
+    const combineInvalid = combineIssue && combineIssue.kind !== "io-mismatch"
+    const combineIoLinked = stepIoMismatchLinked(combine.id, modules, invalid)
     const combineStatus = stepStatus?.get(combine.id)
     const inputStatus = stepStatus?.get(input.id)
     const groupSelected = selectedId === combine.id || selectedId === input.id
@@ -134,9 +143,11 @@ function SegmentRow({
             "w-full rounded-lg border-2 border-dashed px-3.5 py-3 transition-colors",
             combineInvalid
               ? "border-destructive/70 bg-destructive/5"
-              : statusBorder(combineStatus) ?? (
-                  groupSelected ? "border-primary bg-primary/5" : "border-chart-3/40 bg-chart-3/5"
-                ),
+              : combineIoLinked
+                ? "border-destructive/60 bg-destructive/[0.03]"
+                : statusBorder(combineStatus) ?? (
+                    groupSelected ? "border-primary bg-primary/5" : "border-chart-3/40 bg-chart-3/5"
+                  ),
           )}
         >
           <StepButton onClick={() => onSelect?.(combine.id)} className="flex w-full items-start gap-2 text-left">
@@ -155,7 +166,11 @@ function SegmentRow({
               }
             />
             {combine.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
-            <StepTrailingIcon invalid={combineInvalid} status={combineStatus} editMode={editMode} />
+            <StepTrailingIcon
+              invalid={combineInvalid || combineIoLinked}
+              status={combineStatus}
+              editMode={editMode}
+            />
           </StepButton>
           {combine.note && (
             <p className="mt-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">{combine.note}</p>
@@ -185,17 +200,21 @@ function SegmentRow({
           </StepButton>
         </div>
         <InvalidMessage
-          show={combineInvalid}
-          message={combineInvalid ? invalidStepMessage(invalid!.get(combine.id)!, models, modules) : undefined}
+          show={!!combineInvalid}
+          message={combineInvalid ? invalidStepMessage(combineIssue!, models, modules) : undefined}
         />
-        {renderInsertAfter?.(insertAt, { blocked, invalid: combineInvalid }) ?? <PipelineConnector />}
+        {renderInsertAfter?.(insertAt, { blocked, connectionInvalid }) ?? (
+          <PipelineConnector invalid={connectionInvalid} />
+        )}
       </div>
     )
   }
 
   const m = seg.module
   const i = seg.index
-  const isInvalid = invalid?.has(m.id)
+  const stepIssue = invalid?.get(m.id)
+  const isInvalid = !!stepIssue && stepIssue.kind !== "io-mismatch"
+  const ioLinked = stepIoMismatchLinked(m.id, modules, invalid)
   const stepWarning = warnings?.get(m.id)
   const locked = isAutoQuoteStep(m)
   const status = stepStatus?.get(m.id)
@@ -211,9 +230,10 @@ function SegmentRow({
                 "flex w-full flex-col items-center gap-1.5 rounded-lg border border-dashed px-4 py-3 text-center transition-colors",
                 "border-output/50 bg-output/5 shadow-sm",
                 isInvalid && "border-destructive/70 bg-destructive/5",
+                !isInvalid && ioLinked && "border-destructive/60 bg-destructive/[0.03]",
                 statusBorder(status),
                 m.id === selectedId && "border-output ring-1 ring-output/40",
-                m.id !== selectedId && !isInvalid && !status && "hover:border-output/80 hover:bg-output/10",
+                m.id !== selectedId && !isInvalid && !ioLinked && !status && "hover:border-output/80 hover:bg-output/10",
               )}
             >
               <div className="flex items-center justify-center gap-2">
@@ -232,8 +252,8 @@ function SegmentRow({
               />
               <div className="flex items-center justify-center gap-1.5">
                 {m.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
-                {(isInvalid || status) && (
-                  <StepTrailingIcon invalid={isInvalid} status={status} editMode={editMode} />
+                {(isInvalid || ioLinked || status) && (
+                  <StepTrailingIcon invalid={isInvalid || ioLinked} status={status} editMode={editMode} />
                 )}
               </div>
             </StepButton>
@@ -245,10 +265,12 @@ function SegmentRow({
         </div>
         <InvalidMessage
           show={isInvalid}
-          message={isInvalid ? invalidStepMessage(invalid!.get(m.id)!, models, modules) : undefined}
+          message={isInvalid ? invalidStepMessage(stepIssue!, models, modules) : undefined}
           className="max-w-xs"
         />
-        {renderInsertAfter?.(insertAt, { blocked, invalid: isInvalid }) ?? <PipelineConnector />}
+        {renderInsertAfter?.(insertAt, { blocked, connectionInvalid }) ?? (
+          <PipelineConnector invalid={connectionInvalid} />
+        )}
       </div>
     )
   }
@@ -262,7 +284,9 @@ function SegmentRow({
           locked && "border-dashed border-chart-2/50 bg-chart-2/5",
           isInvalid
             ? "border-destructive/70"
-            : statusBorder(status) ?? (
+            : ioLinked
+              ? "border-destructive/60"
+              : statusBorder(status) ?? (
                 m.id === selectedId
                   ? "border-primary"
                   : !locked && "border-border hover:border-muted-foreground/40"
@@ -307,18 +331,20 @@ function SegmentRow({
           )
         )}
         {m.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
-        <StepTrailingIcon invalid={isInvalid} status={status} editMode={editMode} />
+        <StepTrailingIcon invalid={isInvalid || ioLinked} status={status} editMode={editMode} />
       </StepButton>
       <InvalidMessage
         show={isInvalid}
-        message={isInvalid ? invalidStepMessage(invalid!.get(m.id)!, models, modules) : undefined}
+        message={isInvalid ? invalidStepMessage(stepIssue!, models, modules) : undefined}
       />
       {!isInvalid && stepWarning && (
         <p className={cn("mt-1 text-center font-mono text-[10px]", WARNING_TEXT_CLASS)}>
           {warningStepMessage(stepWarning, models, modules)}
         </p>
       )}
-      {renderInsertAfter?.(insertAt, { blocked, invalid: isInvalid }) ?? <PipelineConnector />}
+      {renderInsertAfter?.(insertAt, { blocked, connectionInvalid }) ?? (
+        <PipelineConnector invalid={connectionInvalid} />
+      )}
     </div>
   )
 }

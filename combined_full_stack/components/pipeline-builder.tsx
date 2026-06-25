@@ -14,7 +14,7 @@ import {
   Zap,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
-import { computeInvalid, computeWarnings } from "@/lib/validity"
+import { computeInvalid, computeWarnings, ioMismatchInspectorFix, prevModuleId, type IoMismatchFixKind } from "@/lib/validity"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { moduleMetrics } from "@/lib/billing"
 import { combinePairIds } from "@/lib/pipeline-layout"
@@ -86,6 +86,22 @@ export function PipelineBuilder() {
         return next
       }),
     )
+  }
+
+  function fixIoMismatch(moduleId: string, kind: IoMismatchFixKind) {
+    const issue = invalid.get(moduleId as ModuleId)
+    if (!issue || issue.kind !== "io-mismatch") return
+    if (kind === "adopt-upstream" && issue.upstreamEmits) {
+      const m = modules.find((x) => x.id === moduleId)
+      const patch: Partial<PipelineModule> = { inStructureId: issue.upstreamEmits }
+      if (m?.kind === "output") patch.outStructureId = issue.upstreamEmits
+      update(moduleId, patch)
+      return
+    }
+    if (kind === "align-upstream" && issue.expects) {
+      const prevId = prevModuleId(modules, moduleId as ModuleId)
+      if (prevId) update(prevId, { outStructureId: issue.expects })
+    }
   }
 
   function remove(id: string) {
@@ -178,7 +194,7 @@ export function PipelineBuilder() {
                   <InsertSlot
                     insertAt={insertAt}
                     onInsert={insertModule}
-                    invalid={opts.invalid}
+                    connectionInvalid={opts.connectionInvalid}
                     blocked={opts.blocked}
                   />
                 )}
@@ -257,7 +273,9 @@ export function PipelineBuilder() {
                   globalModel={globalModel}
                   invalid={invalid.get(selected.id)}
                   warning={warnings.get(selected.id)}
+                  ioMismatchFix={ioMismatchInspectorFix(selected.id as ModuleId, modules, invalid, models)}
                   onUpdate={(patch) => update(selected.id, patch)}
+                  onFixIoMismatch={(mismatchModuleId, kind) => fixIoMismatch(mismatchModuleId, kind)}
                 />
                 {!isAutoQuoteStep(selected) && (
                   <div className="mt-4 grid grid-cols-2 gap-2">
@@ -313,13 +331,13 @@ function AutoQuoteLockTooltip() {
 function InsertSlot({
   insertAt,
   onInsert,
-  invalid,
+  connectionInvalid,
   alwaysShow,
   blocked,
 }: {
   insertAt: number
   onInsert: (kind: ModuleKind, at: number) => void
-  invalid?: boolean
+  connectionInvalid?: boolean
   alwaysShow?: boolean
   blocked?: boolean
 }) {
@@ -330,8 +348,8 @@ function InsertSlot({
     <div className="group relative flex h-8 w-full items-center justify-center">
       <div
         className={cn(
-          "absolute h-full w-px bg-border transition-colors group-hover:bg-muted-foreground/40",
-          invalid && "bg-destructive/70",
+          "absolute h-full w-px transition-colors",
+          connectionInvalid ? "bg-destructive" : "bg-border group-hover:bg-muted-foreground/40",
         )}
       />
       <AddStepMenu insertAt={insertAt} onInsert={onInsert} variant="slot" alwaysShow={alwaysShow} />

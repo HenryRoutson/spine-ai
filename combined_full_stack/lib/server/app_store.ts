@@ -1,7 +1,7 @@
 import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
 import { createClient } from "@/utils/supabase/server";
 import { isProductionDeploy, isVercelWithoutSupabase } from "./require_auth";
-import { ensureSeeded, ensureSeedDocs, backfillAllProjectSeedDocNames, openStore, type JsonStore } from "./store";
+import { ensureSeeded, ensureSeedDocs, backfillAllProjectSeedDocNames, purgeSeedTemplateProjects, openStore, type JsonStore } from "./store";
 import type { Store } from "./store";
 import { logger } from "./server_logger";
 import { isMissingSchemaError, openUserStore } from "./supabase_store";
@@ -27,6 +27,7 @@ async function getLocalStore(): Promise<Store> {
 }
 
 async function hydrateUserStore(store: Store): Promise<Store> {
+  purgeSeedTemplateProjects(store);
   await ensureSeedDocs(store);
   backfillAllProjectSeedDocNames(store);
   await store.flush();

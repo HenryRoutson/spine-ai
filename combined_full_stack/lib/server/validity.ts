@@ -15,7 +15,10 @@ export type InvalidKind =
   | "no-output"
   | "transform-list-wrap"
   | "empty-label"
-  | "duplicate-label";
+  | "duplicate-label"
+  | "unused-output"
+  | "duplicate-input-struct"
+  | "duplicate-output-struct";
 
 export interface InvalidStep {
   moduleId: ModuleId;
@@ -26,7 +29,7 @@ export interface InvalidStep {
 
 export interface PipelineWarning {
   moduleId: ModuleId;
-  kind: "no-prompt" | "quote-no-fields" | "unused-output" | "transform-multi-list";
+  kind: "no-prompt" | "quote-no-fields" | "transform-multi-list";
 }
 
 // AI : mirrors run_engine transform — llm-batch and outIsList steps put a bare array on the spine.
@@ -163,6 +166,58 @@ export function computeInvalid(modules: PipelineModule[], models: StructureModel
     if (transformIssue) invalid.set(m.id, transformIssue);
   }
 
+  for (const [id, issue] of computeUnusedOutputInvalid(modules)) {
+    if (!invalid.has(id)) invalid.set(id, issue);
+  }
+  for (const [id, issue] of computeDuplicateIoStructInvalid(modules)) {
+    if (!invalid.has(id)) invalid.set(id, issue);
+  }
+
+  return invalid;
+}
+
+// AI : middle steps must feed a downstream inStructureId (combine counts via inStructureId).
+function computeUnusedOutputInvalid(modules: PipelineModule[]): Map<ModuleId, InvalidStep> {
+  const invalid = new Map<ModuleId, InvalidStep>();
+  for (let i = 0; i < modules.length; i++) {
+    const m = modules[i];
+    const emitted = stepEmits(m);
+    if (!emitted || m.kind === "input" || m.kind === "output") continue;
+    const used = modules.slice(i + 1).some((down) => down.inStructureId === emitted);
+    if (!used) invalid.set(m.id, { moduleId: m.id, kind: "unused-output", expects: emitted });
+  }
+  return invalid;
+}
+
+// AI : shared input struct is ok when the repeat sits directly before combine (side document).
+function computeDuplicateIoStructInvalid(modules: PipelineModule[]): Map<ModuleId, InvalidStep> {
+  const invalid = new Map<ModuleId, InvalidStep>();
+  const spineInputStructs = new Set<StructureModelId>();
+  const outputByStruct = new Map<StructureModelId, ModuleId[]>();
+
+  for (let i = 0; i < modules.length; i++) {
+    const m = modules[i];
+    if (m.kind === "input" && m.outStructureId) {
+      const beforeCombine = modules[i + 1]?.kind === "combine";
+      if (beforeCombine) continue;
+      if (spineInputStructs.has(m.outStructureId)) {
+        invalid.set(m.id, { moduleId: m.id, kind: "duplicate-input-struct", expects: m.outStructureId });
+      } else {
+        spineInputStructs.add(m.outStructureId);
+      }
+    }
+    if (m.kind === "output" && m.inStructureId) {
+      const ids = outputByStruct.get(m.inStructureId) ?? [];
+      ids.push(m.id);
+      outputByStruct.set(m.inStructureId, ids);
+    }
+  }
+
+  for (const ids of outputByStruct.values()) {
+    if (ids.length < 2) continue;
+    for (const id of ids) invalid.set(id, { moduleId: id, kind: "duplicate-output-struct" });
+  }
+
   return invalid;
 }
 
@@ -183,11 +238,6 @@ export function computeWarnings(
         warnings.set(m.id, { moduleId: m.id, kind: "quote-no-fields" });
       }
     }
-    const emitted = stepEmits(m);
-    if (!emitted || m.kind === "input" || m.kind === "output") continue;
-    const used = modules.slice(i + 1).some((down) => down.inStructureId === emitted);
-    if (!used) warnings.set(m.id, { moduleId: m.id, kind: "unused-output" });
-
     const prev = i > 0 ? modules[i - 1] : undefined;
     if (
       m.kind === "transform" &&
@@ -203,6 +253,7 @@ export function computeWarnings(
       }
     }
   }
+
   return warnings;
 }
 
@@ -213,11 +264,6 @@ export function warningStepMessage(
 ): string {
   if (issue.kind === "no-prompt") return "no prompt — schema-only call at runtime";
   if (issue.kind === "quote-no-fields") return "output model has no quote fields";
-  if (issue.kind === "unused-output") {
-    const m = modules.find((x) => x.id === issue.moduleId);
-    const name = modelName(models, stepEmits(m)) ?? "output";
-    return `${name} is never consumed by a downstream step`;
-  }
   if (issue.kind === "transform-multi-list") {
     const m = modules.find((x) => x.id === issue.moduleId);
     const name = modelName(models, m?.outStructureId) ?? "output";
@@ -241,6 +287,113 @@ export function formatPipelineValidationErrors(
     lines.push(`- "${label}" (${kind}): ${invalidStepMessage(issue, models, modules)}`);
   }
   return lines.join("\n");
+}
+
+export type IoMismatchFixKind = "adopt-upstream" | "align-upstream";
+
+export type IoMismatchFixHint = {
+  kind: IoMismatchFixKind;
+  label: string;
+};
+
+export type IoMismatchInspectorFix = {
+  mismatchModuleId: ModuleId;
+  kind: IoMismatchFixKind;
+  label: string;
+  message: string;
+};
+
+// AI : when step input expects X but upstream emits Y — two one-click alignments.
+export function ioMismatchFixHints(
+  issue: InvalidStep,
+  models: StructureModel[],
+): IoMismatchFixHint[] | undefined {
+  if (issue.kind !== "io-mismatch" || !issue.expects || !issue.upstreamEmits) return undefined;
+  const expected = modelName(models, issue.expects);
+  const upstream = modelName(models, issue.upstreamEmits);
+  if (!expected || !upstream || expected === upstream) return undefined;
+  return [
+    { kind: "adopt-upstream", label: `${expected} → ${upstream}` },
+    { kind: "align-upstream", label: `${upstream} → ${expected}` },
+  ];
+}
+
+export function prevModuleId(modules: PipelineModule[], moduleId: ModuleId): ModuleId | undefined {
+  const i = modules.findIndex((m) => m.id === moduleId);
+  return i > 0 ? modules[i - 1]!.id : undefined;
+}
+
+// AI : red connector / upstream border — downstream step index carries the io-mismatch invalid flag.
+export function ioMismatchAtModuleIndex(
+  modules: PipelineModule[],
+  invalid: Map<ModuleId, InvalidStep> | undefined,
+  moduleIndex: number,
+): boolean {
+  if (!invalid || moduleIndex < 0 || moduleIndex >= modules.length) return false;
+  const issue = invalid.get(modules[moduleIndex]!.id);
+  return issue?.kind === "io-mismatch";
+}
+
+export function ioMismatchUpstreamOf(
+  moduleId: ModuleId,
+  modules: PipelineModule[],
+  invalid: Map<ModuleId, InvalidStep> | undefined,
+): boolean {
+  if (!invalid) return false;
+  for (const [downId, issue] of invalid) {
+    if (issue.kind !== "io-mismatch") continue;
+    if (prevModuleId(modules, downId) === moduleId) return true;
+  }
+  return false;
+}
+
+export function stepIoMismatchLinked(
+  moduleId: ModuleId,
+  modules: PipelineModule[],
+  invalid: Map<ModuleId, InvalidStep> | undefined,
+): boolean {
+  if (!invalid) return false;
+  const issue = invalid.get(moduleId);
+  if (issue?.kind === "io-mismatch") return true;
+  return ioMismatchUpstreamOf(moduleId, modules, invalid);
+}
+
+// AI : one inspector fix per step — downstream gets adopt-upstream, upstream gets align-upstream.
+export function ioMismatchInspectorFix(
+  moduleId: ModuleId,
+  modules: PipelineModule[],
+  invalid: Map<ModuleId, InvalidStep>,
+  models: StructureModel[],
+): IoMismatchInspectorFix | undefined {
+  const own = invalid.get(moduleId);
+  if (own?.kind === "io-mismatch") {
+    const adopt = ioMismatchFixHints(own, models)?.find((h) => h.kind === "adopt-upstream");
+    if (!adopt) return undefined;
+    return {
+      mismatchModuleId: moduleId,
+      kind: "adopt-upstream",
+      label: adopt.label,
+      message: `input expects ${modelName(models, own.expects)}, upstream emits ${
+        modelName(models, own.upstreamEmits) ?? "?"
+      }`,
+    };
+  }
+
+  for (const [downId, issue] of invalid) {
+    if (issue.kind !== "io-mismatch" || prevModuleId(modules, downId) !== moduleId) continue;
+    const align = ioMismatchFixHints(issue, models)?.find((h) => h.kind === "align-upstream");
+    if (!align) continue;
+    return {
+      mismatchModuleId: downId,
+      kind: "align-upstream",
+      label: align.label,
+      message: `downstream expects ${modelName(models, issue.expects)}, this step emits ${
+        modelName(models, issue.upstreamEmits) ?? "?"
+      }`,
+    };
+  }
+
+  return undefined;
 }
 
 export function invalidStepMessage(
@@ -269,6 +422,19 @@ export function invalidStepMessage(
   if (issue.kind === "duplicate-label") {
     const step = modules.find((x) => x.id === issue.moduleId);
     return `duplicate label "${step?.label ?? "?"}" — each step label must be unique`;
+  }
+  if (issue.kind === "unused-output") {
+    const name = modelName(models, issue.expects) ?? "output";
+    return `${name} is never consumed by a downstream step`;
+  }
+  if (issue.kind === "duplicate-input-struct") {
+    const name = modelName(models, issue.expects) ?? "structure";
+    return `multiple input steps emit ${name} — use distinct structures or a combine step`;
+  }
+  if (issue.kind === "duplicate-output-struct") {
+    const m = modules.find((x) => x.id === issue.moduleId);
+    const name = modelName(models, m?.inStructureId) ?? "structure";
+    return `multiple output steps materialize ${name}`;
   }
   return "invalid step";
 }

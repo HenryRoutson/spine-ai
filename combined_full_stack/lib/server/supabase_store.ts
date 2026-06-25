@@ -2,7 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // AI : adopted from backend_with_users/ — implements the same Store contract, so
 // AI : runPipeline & co accept this store unchanged. RLS scopes every row to the
 // AI : signed-in user behind `db`; no user_id handling anywhere in app code.
-import { ensureSeeded, hashContent, type Store } from "./store";
+import { hashContent, type Store } from "./store";
+import { blankProject } from "./seed";
+import { uid } from "../id";
 import { storeErrorMessage } from "./errors";
 import { migrateProjectModules } from "./validity";
 import type {
@@ -258,14 +260,12 @@ export function isMissingSchemaError(error: unknown): boolean {
   );
 }
 
-// AI : a ready store for one signed-in user — first sign-in gets the seed projects + docs,
-// AI : mirroring what JsonStore.init() does for the anonymous local store.
+// AI : a ready store for one signed-in user — first sign-in gets a blank project + bundled docs.
 export async function openUserStore(db: SupabaseClient): Promise<SupabaseStore> {
   const s = new SupabaseStore(db);
   await s.init();
-  // AI : only seed empty stores — ensureSeeded on every request was rewriting projects (syncProjectFromSeed) and busting run fingerprints.
   if (s.projects().length === 0) {
-    await ensureSeeded(s);
+    s.saveProject(blankProject(uid<ProjectId>("p_")));
     await s.flush();
   }
   return s;

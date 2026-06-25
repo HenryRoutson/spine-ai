@@ -170,7 +170,10 @@ function ProjectSelector() {
             <>
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate font-medium">{p.name}</span>
-                <span className="font-mono text-[10px] text-muted-foreground">{p.kind}</span>
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {p.kind}
+                  {p.createdAt != null ? ` · ${new Date(p.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}` : ""}
+                </span>
               </span>
               <div className="flex shrink-0 items-center gap-1">
                 <Button

@@ -22,6 +22,7 @@ clone built in projects
 delete and rename projects
 a project selector is at the top of the screen and available no matter what tab you're on
 Create a blank project button
+project was created and give a date in the ui.
 
 # example projects
 
@@ -137,6 +138,10 @@ code should also be fully traceable. if a piece of code fails, this is stored fo
 
 Need dynamic scehmas. If you have a task to mark homework, you're provided with a doc to text conversion of homework to text. from this you need to create an output schema of what the marking should check like question 7 should have fields a, b, c maybe, and the question descriptoins and marking criteria is inside each of those fields. you can't hardcode this for every homework sheet. Allow the option to request llm calls to output in a dynamic format and validate in same way. Maybe a format that adheres to a certain generic structure.
 
+
+please add a warning if you add the same struct multiple times as an input or output in a pipeline 
+please make the connection which doesn't work red if input doesn't connect to output
+if input x and output y, please have buttons for either x->y on step n or y->x on step n + 1.
 
 # inference
 

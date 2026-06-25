@@ -83,10 +83,10 @@ export function PipelineNode({ label, subtle }: { label: string; subtle?: boolea
   )
 }
 
-export function PipelineConnector() {
+export function PipelineConnector({ invalid }: { invalid?: boolean }) {
   return (
     <div className="flex h-8 w-full items-center justify-center">
-      <div className="h-full w-px bg-border" />
+      <div className={cn("h-full w-px", invalid ? "bg-destructive" : "bg-border")} />
     </div>
   )
 }
