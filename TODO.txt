@@ -263,7 +263,7 @@ can remove combine input, and just use input and implicit combine
 
 
 
-
+fix logging view of inputs with multiple files, create a clear list view in logging. … same prompt × 15 items isn't going to cut it. maybe add <> buttons
 
 
 
