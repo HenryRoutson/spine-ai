@@ -238,6 +238,11 @@ export async function awaitRun(
             line: `custom-code succeeded on attempt ${attemptIndex + 1} (${language}) after ${failures.length} fallback(s)`,
           })
         }
+        if (output === undefined) {
+          throw new Error(
+            "custom code returned undefined — add a trailing (input) => output arrow or an explicit return",
+          )
+        }
         await submitClientStep(jobId, { output, clientLogs })
         clientStepSubmittedFor = moduleId
       } catch (err) {

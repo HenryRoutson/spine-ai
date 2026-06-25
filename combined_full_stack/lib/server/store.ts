@@ -123,13 +123,12 @@ export function syncProjectFromSeed(existing: Project, seed: Project): Project {
   let modules = seed.modules.map((sm) => {
     const em = existing.modules.find((m) => m.id === sm.id);
     if (!em) return structuredClone(sm);
+    // AI : ...sm already carries seed fallbackList/code — only cached/model/prompt are user overrides.
     return {
       ...sm,
       cached: em.cached,
       model: em.model ?? sm.model,
       prompt: em.prompt ?? sm.prompt,
-      fallbackList: em.fallbackList ?? sm.fallbackList,
-      code: em.code ?? sm.code,
     };
   });
   modules = syncAutoQuoteSteps(modules, models);

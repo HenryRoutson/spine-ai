@@ -77,10 +77,11 @@ export function compileCustomFn(code: string): CustomFn {
     src = `(${trimmed})`;
   } else {
     // AI : seed steps prefix helper consts then a trailing `(arg)=>…` — invoke it with input.
-    const mainArrow = trimmed.match(/;\s*(\([^)]*\)\s*=>[\s\S]+)$/);
+    const mainArrow =
+      trimmed.match(/;\s*(\([^)]*\)\s*=>[\s\S]+)$/) ?? trimmed.match(/\n\s*(\([^)]*\)\s*=>[\s\S]+)$/);
     if (mainArrow) {
       const arrowStart = trimmed.lastIndexOf(mainArrow[1]!);
-      const preamble = trimmed.slice(0, arrowStart).replace(/;\s*$/, "");
+      const preamble = trimmed.slice(0, arrowStart).replace(/[;\s]*$/, "");
       const arrow = trimmed.slice(arrowStart);
       src = preamble
         ? `((input) => { ${preamble}; return (${arrow})(input); })`
@@ -106,8 +107,11 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
 export async function runCustomFn(code: string, input: unknown, state?: PipelineState): Promise<unknown> {
   const fn = compileCustomFn(code);
   const result = fn.length >= 2 ? fn(input, state ?? {}) : fn(input);
-  if (!(result instanceof Promise)) return result;
-  return withTimeout(result, CUSTOM_CODE_TIMEOUT_MS, "custom code");
+  const settled = result instanceof Promise ? await withTimeout(result, CUSTOM_CODE_TIMEOUT_MS, "custom code") : result;
+  if (settled === undefined) {
+    throw new Error("custom code returned undefined — add a trailing (input) => output arrow or an explicit return");
+  }
+  return settled;
 }
 
 type PyodideLike = {
