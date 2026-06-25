@@ -43,6 +43,11 @@ const EMPTY: BillingAccount = {
   creditedSessions: [],
 };
 
+// AI : Supabase billing_accounts uses int cents; run traces may carry sub-cent costCents.
+function toWholeCents(cents: number): number {
+  return Math.round(cents);
+}
+
 function billingFile(): string {
   return join(dataDir(), "billing.json");
 }
@@ -91,8 +96,8 @@ async function saveSupabaseAccount(userId: BillingUserKey, account: BillingAccou
   const db = await createClient();
   const { error } = await db.from("billing_accounts").upsert({
     user_id: userId,
-    balance_cents: account.balanceCents,
-    total_billed_cents: account.totalBilledCents,
+    balance_cents: toWholeCents(account.balanceCents),
+    total_billed_cents: toWholeCents(account.totalBilledCents),
     subscribed: account.subscribed,
     credited_sessions: account.creditedSessions,
   });
@@ -166,17 +171,17 @@ export const chargeForRun = assertCanStartRun;
 
 // AI : deduct measured LLM / service cost after a run completes (skipped when billedCents is 0).
 export async function billRunUsage(key: BillingUserKey, cents: number): Promise<BillingAccount> {
-  const billed = +Math.max(0, cents).toFixed(4);
+  const billed = toWholeCents(Math.max(0, cents));
   if (billed <= 0) return loadBillingAccount(key);
   const account = await loadBillingAccount(key);
-  const balanceAfter = +(account.balanceCents - billed).toFixed(4);
+  const balanceAfter = toWholeCents(account.balanceCents - billed);
   if (balanceAfter < MIN_ACCOUNT_BALANCE_CENTS) {
     billLog.warn(`billRunUsage floor breached`, { key, balanceAfter, billed, floor: MIN_ACCOUNT_BALANCE_CENTS });
     throw new BillingError("insufficient_funds");
   }
   const next: BillingAccount = { ...account, balanceCents: balanceAfter };
   await saveBillingAccount(key, next);
-  billLog.info(`billRunUsage ok`, { key, billed, balanceAfter });
+  billLog.info(`billRunUsage ok`, { key, billed, balanceAfter, rawCents: cents });
   return next;
 }
 
