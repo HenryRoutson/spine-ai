@@ -123,7 +123,10 @@ function build(
   const shape: Record<string, ZodType> = {};
   for (const f of model.fields) {
     if (!f.name.trim()) continue;
-    const base = withFieldMeta(leafSchema(f.type, f.ref, index, next), f);
+    let base = withFieldMeta(leafSchema(f.type, f.ref, index, next), f);
+    if (f.minItems && f.minItems > 1 && isListFieldType(f.type) && base instanceof z.ZodArray) {
+      base = base.min(f.minItems);
+    }
     // AI : optional ⇒ absent OR null — deterministic steps (db migration mapping) emit explicit
     // AI : nulls per spec; llmSchema keeps plain .optional() so models omit instead.
     shape[f.name] = f.optional ? base.nullish() : base;
@@ -209,7 +212,10 @@ function llmBuild(
   const shape: Record<string, ZodType> = {};
   for (const f of model.fields) {
     if (!f.name.trim()) continue;
-    const base = withFieldMeta(llmLeafSchema(f.type, f.ref, index, next), f);
+    let base = withFieldMeta(llmLeafSchema(f.type, f.ref, index, next), f);
+    if (f.minItems && f.minItems > 1 && isListFieldType(f.type) && base instanceof z.ZodArray) {
+      base = base.min(f.minItems);
+    }
     shape[f.name] = f.optional ? base.optional() : base;
   }
   return z.object(shape);

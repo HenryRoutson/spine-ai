@@ -12,6 +12,16 @@ import {
   AlertTriangle,
 } from "lucide-react"
 import { uid } from "@/lib/id"
+import { API_ROUTES } from "@/lib/api-routes"
+import { JSON_HEADERS } from "@/lib/api-client"
+import {
+  ASSISTANT_HISTORY_LIMIT,
+  ASSISTANT_REQUEST_FAILED,
+  ASSISTANT_STREAM_EVENT,
+  assistantRequestFailed,
+  type AssistantChatRole,
+  type ProposalStatus,
+} from "@/lib/assistant-chat-types"
 import { useStore } from "@/lib/store"
 import type { PipelineModule, StructureModel } from "@/lib/types"
 import { MODULE_META } from "@/lib/types"
@@ -21,7 +31,7 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
-type ChatRole = "user" | "assistant"
+type ChatRole = AssistantChatRole
 
 type PipelineProposal = {
   modules: PipelineModule[]
@@ -35,7 +45,7 @@ type ChatMessage = {
   proposal?: PipelineProposal
   invalidCount?: number
   retryCount?: number
-  status?: "pending" | "approved" | "rejected"
+  status?: ProposalStatus
 }
 
 const STARTERS = [
@@ -102,9 +112,9 @@ export function PipelineAssistant() {
           invalidCount?: number
           retryCount?: number
         }
-        if (evt.type === "retrying") setLoadingPhase("retrying")
-        if (evt.type === "error") throw new Error(evt.error ?? "Assistant request failed")
-        if (evt.type === "done") {
+        if (evt.type === ASSISTANT_STREAM_EVENT.RETRYING) setLoadingPhase("retrying")
+        if (evt.type === ASSISTANT_STREAM_EVENT.ERROR) throw new Error(evt.error ?? ASSISTANT_REQUEST_FAILED)
+        if (evt.type === ASSISTANT_STREAM_EVENT.DONE) {
           result = {
             message: evt.message ?? "",
             proposal: evt.proposal ?? undefined,
@@ -140,13 +150,13 @@ export function PipelineAssistant() {
 
     const history = [...messages, userMsg]
       .filter((m) => m.role === "user" || (m.role === "assistant" && !m.proposal))
-      .slice(-8)
+      .slice(-ASSISTANT_HISTORY_LIMIT)
       .map((m) => ({ role: m.role, content: m.content }))
 
     try {
-      const res = await fetch("/api/pipeline-assistant", {
+      const res = await fetch(API_ROUTES.pipelineAssistant, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify({
           projectId: project.id,
           message: trimmed,
@@ -157,7 +167,7 @@ export function PipelineAssistant() {
       })
       if (!res.ok) {
         const data = await res.json()
-        throw new Error(data.error ?? `request failed (${res.status})`)
+        throw new Error(data.error ?? assistantRequestFailed(res.status))
       }
 
       const data = await readAssistantStream(res)
@@ -173,7 +183,7 @@ export function PipelineAssistant() {
       }
       setMessages((prev) => [...prev, assistantMsg])
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Assistant request failed")
+      setError(err instanceof Error ? err.message : ASSISTANT_REQUEST_FAILED)
     } finally {
       setLoading(false)
     }

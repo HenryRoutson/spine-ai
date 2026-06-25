@@ -2,12 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react"
 import { apiJson } from "@/lib/api-client"
+import { API_ROUTES } from "@/lib/api-routes"
 import { defaultInferenceDoc } from "@/lib/project-docs"
 import {
   buildDefaultInputDocs,
   inputDocIdsForModules,
+  inputDocsByModuleFromAssignment,
   orderedInputModules,
   resolveInputDocs,
+  moduleInputReady,
+  docsForInputModule,
+  flattenInputDocIds,
+  isMultiDocInputModule,
+  type InputDocsAssignment,
 } from "@/lib/inference-input"
 import {
   probeLocalInferenceCache,
@@ -71,8 +78,8 @@ type UseInferenceRunArgs = {
   model: string
   docs: DocRef[]
   runs: PipelineRun[]
-  inferenceInputDocIds: Partial<Record<ModuleId, DocId>>
-  setInferenceInputDocIds: (docs: Partial<Record<ModuleId, DocId>>) => void
+  inferenceInputDocIds: Partial<Record<ModuleId, DocId | DocId[]>>
+  setInferenceInputDocIds: (docs: Partial<Record<ModuleId, DocId | DocId[]>>) => void
   addRun: (r: PipelineRun) => void
   updateRunNotes: (runId: PipelineRun["id"], notes: string | undefined) => Promise<void>
   refreshBilling: () => Promise<void>
@@ -90,7 +97,7 @@ export function useInferenceRun({
   updateRunNotes,
   refreshBilling,
 }: UseInferenceRunArgs) {
-  const [inputDocs, setInputDocs] = useState<Partial<Record<ModuleId, DocRef>>>({})
+  const [inputDocs, setInputDocs] = useState<InputDocsAssignment>({})
   const [inputIssues, setInputIssues] = useState<InferenceInputIssue[]>([])
   const [validatingInputs, setValidatingInputs] = useState(false)
   const [probingCache, setProbingCache] = useState(false)
@@ -120,7 +127,7 @@ export function useInferenceRun({
 
   const inputModules = useMemo(() => orderedInputModules(modules), [modules])
   const pickerModule = pickerModuleId ? inputModules.find((m) => m.id === pickerModuleId) : undefined
-  const allInputsReady = inputModules.every((m) => inputDocs[m.id])
+  const allInputsReady = inputModules.every((m) => moduleInputReady(m, inputDocs))
   const inputsInvalid = inputIssues.length > 0
   const inputIssueByModule = useMemo(
     () => new Map(inputIssues.map((issue) => [issue.moduleId, issue])),
@@ -130,7 +137,9 @@ export function useInferenceRun({
   const configAlreadyCompleted = false
   const loggingRunId = cachedRunId ?? run?.id
 
-  const inputDocIdsKey = inputModules.map((m) => inputDocs[m.id]?.id ?? "").join(",")
+  const inputDocIdsKey = inputModules
+    .map((m) => docsForInputModule(inputDocs, m.id).map((d) => d.id).join("+"))
+    .join(",")
   const configKey = useMemo(
     () => runConfigStableKey(project, model as ModelId),
     [project, model],
@@ -303,9 +312,20 @@ export function useInferenceRun({
   useEffect(() => {
     if (!allInputsReady) return
     const ids = Object.fromEntries(
-      inputModules.filter((m) => inputDocs[m.id]).map((m) => [m.id, inputDocs[m.id]!.id as DocId]),
-    ) as Partial<Record<ModuleId, DocId>>
-    const unchanged = inputModules.every((m) => inferenceInputDocIds[m.id] === ids[m.id])
+      inputModules
+        .filter((m) => moduleInputReady(m, inputDocs))
+        .map((m) => {
+          const docs = docsForInputModule(inputDocs, m.id)
+          const docIds = docs.map((d) => d.id as DocId)
+          return [m.id, isMultiDocInputModule(m) ? docIds : docIds[0]!] as const
+        }),
+    ) as Partial<Record<ModuleId, DocId | DocId[]>>
+    const unchanged = inputModules.every((m) => {
+      const saved = inferenceInputDocIds[m.id]
+      const docs = docsForInputModule(inputDocs, m.id).map((d) => d.id)
+      if (Array.isArray(saved)) return saved.length === docs.length && saved.every((id, i) => id === docs[i])
+      return saved === docs[0]
+    })
     if (unchanged) return
     setInferenceInputDocIds(ids)
   }, [probeKey, allInputsReady, inferenceInputDocIds, setInferenceInputDocIds, inputModules, inputDocs])
@@ -315,29 +335,29 @@ export function useInferenceRun({
     function contentFromCache(assigned: PipelineModule[]): Partial<Record<string, string>> {
       const contentByDocId: Partial<Record<string, string>> = {}
       for (const m of assigned) {
-        const doc = inputDocs[m.id]!
-        const cached = docTextCacheRef.current.get(doc.id)
-        if (cached) contentByDocId[doc.id] = cached
+        for (const doc of docsForInputModule(inputDocs, m.id)) {
+          const cached = docTextCacheRef.current.get(doc.id)
+          if (cached) contentByDocId[doc.id] = cached
+        }
       }
       return contentByDocId
     }
     async function validateInputs() {
-      const assigned = inputModules.filter((m) => inputDocs[m.id])
+      const assigned = inputModules.filter((m) => moduleInputReady(m, inputDocs))
       if (!assigned.length) {
         setInputIssues([])
         return
       }
       const contentByDocId = contentFromCache(assigned)
-      setInputIssues(collectInferenceInputIssues(inputModules, inputDocs, contentByDocId))
+      setInputIssues(collectInferenceInputIssues(inputModules, {}, contentByDocId, inputDocs))
 
       const docIdsToFetch = [
         ...new Set(
-          assigned
-            .filter((m) => {
-              const doc = inputDocs[m.id]!
-              return inferenceDocNeedsFullContent(m, doc) && !docTextCacheRef.current.has(doc.id)
-            })
-            .map((m) => inputDocs[m.id]!.id),
+          assigned.flatMap((m) =>
+            docsForInputModule(inputDocs, m.id)
+              .filter((doc) => inferenceDocNeedsFullContent(m, doc) && !docTextCacheRef.current.has(doc.id))
+              .map((doc) => doc.id),
+          ),
         ),
       ]
       if (!docIdsToFetch.length) return
@@ -348,7 +368,7 @@ export function useInferenceRun({
         await Promise.all(
           docIdsToFetch.map(async (docId) => {
             try {
-              const { text } = await apiJson<{ text: string }>(`/api/docs/${docId}/text`)
+              const { text } = await apiJson<{ text: string }>(API_ROUTES.docText(docId))
               docTextCacheRef.current.set(docId, text)
             } catch {
               // AI : dev HMR / tab churn can abort fetches — block run until text loads.
@@ -360,15 +380,16 @@ export function useInferenceRun({
         if (!cancelled) setValidatingInputs(false)
       }
       if (cancelled) return
-      const issues = collectInferenceInputIssues(inputModules, inputDocs, contentFromCache(assigned))
+      const issues = collectInferenceInputIssues(inputModules, {}, contentFromCache(assigned), inputDocs)
       for (const m of assigned) {
-        const doc = inputDocs[m.id]!
-        if (fetchFailedDocIds.has(doc.id) && inferenceDocNeedsFullContent(m, doc)) {
-          issues.push({
-            moduleId: m.id,
-            docName: doc.name,
-            message: "could not load document text for validation",
-          })
+        for (const doc of docsForInputModule(inputDocs, m.id)) {
+          if (fetchFailedDocIds.has(doc.id) && inferenceDocNeedsFullContent(m, doc)) {
+            issues.push({
+              moduleId: m.id,
+              docName: doc.name,
+              message: "could not load document text for validation",
+            })
+          }
         }
       }
       setInputIssues(issues)
@@ -439,8 +460,34 @@ export function useInferenceRun({
   )
 
   function setInputDocForModule(moduleId: ModuleId, doc: DocRef) {
-    setInputDocs((prev) => ({ ...prev, [moduleId]: doc }))
+    const mod = inputModules.find((m) => m.id === moduleId)
+    setInputDocs((prev) => {
+      if (mod && isMultiDocInputModule(mod)) {
+        const current = docsForInputModule(prev, moduleId)
+        const next = current.some((d) => d.id === doc.id) ? current : [...current, doc]
+        return { ...prev, [moduleId]: next }
+      }
+      return { ...prev, [moduleId]: doc }
+    })
     setPickerModuleId(null)
+  }
+
+  function removeInputDocForModule(moduleId: ModuleId, docId: DocId) {
+    setInputDocs((prev) => {
+      const mod = inputModules.find((m) => m.id === moduleId)
+      if (!mod || !isMultiDocInputModule(mod)) {
+        const next = { ...prev }
+        delete next[moduleId]
+        return next
+      }
+      const filtered = docsForInputModule(prev, moduleId).filter((d) => d.id !== docId)
+      if (!filtered.length) {
+        const next = { ...prev }
+        delete next[moduleId]
+        return next
+      }
+      return { ...prev, [moduleId]: filtered }
+    })
   }
 
   function useSamples() {
@@ -451,7 +498,8 @@ export function useInferenceRun({
     if (!allInputsReady || inputsInvalid) return
     probeGenRef.current++
     const jobGen = ++activeJobGenRef.current
-    const orderedIds = inputModules.map((m) => inputDocs[m.id]!.id as DocId)
+    const orderedIds = flattenInputDocIds(inputModules, inputDocs)
+    const byModule = inputDocsByModuleFromAssignment(inputModules, inputDocs)
     const [primary, ...rest] = orderedIds
     if (phase === "done") {
       setRunNotes("")
@@ -467,7 +515,7 @@ export function useInferenceRun({
     setStepStates(new Map())
     setDebugLogs([])
     try {
-      const { jobId } = await startRun(project.id as ProjectId, primary, model, rest)
+      const { jobId } = await startRun(project.id as ProjectId, primary, model, rest, byModule)
       if (jobGen !== activeJobGenRef.current) return
       refreshBilling().catch(console.error)
       const { run: finished, deduped, cachedRunId: matchedCachedId } = await awaitRun(jobId, {
@@ -611,6 +659,7 @@ export function useInferenceRun({
     progressPct,
     waitPhrase,
     setInputDocForModule,
+    removeInputDocForModule,
     useSamples,
     start,
     reset,

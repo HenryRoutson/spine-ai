@@ -1,5 +1,6 @@
 import { NextResponse, after, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { HTTP, unknownJob } from "@/lib/server/api-errors";
 import { billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { resumeRunPipeline } from "@/lib/server/run_engine";
@@ -42,10 +43,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const checkpoint = await claimJobResume(auth.userId, jobId, jobDb);
   if (!checkpoint) {
     const job = await getJobForProgress(auth.userId, jobId, jobDb);
-    if (!job) return apiError(`unknown job ${id}`, 404);
+    if (!job) return apiError(unknownJob(id), HTTP.NOT_FOUND);
     // AI : race fix — duplicate POST after another instance claimed; not an error, keep polling.
     if (isJobResuming(job)) return NextResponse.json({ ok: true, alreadyClaimed: true });
-    return apiError(`job ${id} is not waiting for client code`, 409);
+    return apiError(`job ${id} is not waiting for client code`, HTTP.CONFLICT);
   }
 
   apiLog.info(`POST client-step — scheduling resume`, {

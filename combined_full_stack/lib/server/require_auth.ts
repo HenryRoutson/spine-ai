@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
 import { createClient } from "@/utils/supabase/server";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 
@@ -62,7 +63,7 @@ export async function requireAuth(): Promise<AuthSession | NextResponse> {
   } catch {
     /* fall through */
   }
-  return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+  return NextResponse.json({ error: AUTH_SIGN_IN_REQUIRED }, { status: 401 });
 }
 
 export function isAuthSession(v: AuthSession | NextResponse): v is AuthSession {

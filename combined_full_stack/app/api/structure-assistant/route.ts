@@ -1,33 +1,34 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
-import { proposeStructureChange, type ChatTurn } from "@/lib/server/structure_assistant";
+import { HTTP } from "@/lib/server/api-errors";
+import {
+  requireAssistantMessage,
+  requireProjectOr404,
+  trimAssistantHistory,
+  type AssistantRequestBody,
+} from "@/lib/server/assistant-route";
+import { proposeStructureChange } from "@/lib/server/structure_assistant";
 import { logger } from "@/lib/server/server_logger";
-import { DEFAULT_MODEL, type ModelId, type ProjectId } from "@/lib/server/types";
+import { DEFAULT_MODEL } from "@/lib/server/types";
 
 const apiLog = logger("api:structure-assistant");
 
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as {
-    projectId: ProjectId;
-    message: string;
-    history?: ChatTurn[];
-    model?: ModelId;
-  };
+  const body = (await req.json()) as AssistantRequestBody;
   const { projectId, message, history = [], model = DEFAULT_MODEL } = body;
 
-  if (!message?.trim()) return apiError("message required", 400);
+  const messageErr = requireAssistantMessage(message);
+  if (messageErr) return messageErr;
 
   const ctx = await requireAuthStore();
   if (ctx instanceof NextResponse) return ctx;
   const { store } = ctx;
 
-  const project = store.project(projectId);
-  if (!project) {
-    apiLog.warn(`unknown project`, { projectId });
-    return apiError(`unknown project ${projectId}`, 404);
-  }
+  const projectOrErr = requireProjectOr404(store, projectId, apiLog);
+  if (projectOrErr instanceof NextResponse) return projectOrErr;
+  const project = projectOrErr;
 
   apiLog.info(`POST /api/structure-assistant`, {
     projectId,
@@ -37,10 +38,10 @@ export async function POST(req: NextRequest) {
   });
 
   try {
-    const result = await proposeStructureChange(project, message.trim(), history.slice(-8), model);
+    const result = await proposeStructureChange(project, message.trim(), trimAssistantHistory(history), model);
     return NextResponse.json(result);
   } catch (err) {
     apiLog.error(`assistant failed`, { projectId, error: (err as Error).message });
-    return apiError((err as Error).message, 422);
+    return apiError((err as Error).message, HTTP.UNPROCESSABLE);
   }
 }

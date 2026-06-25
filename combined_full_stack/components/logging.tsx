@@ -11,15 +11,17 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { JsonHighlight, PromptText } from "@/components/highlight"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { LlmCallDistribution } from "@/components/llm-call-distribution"
+import { StepFailuresSection } from "@/components/step-failures-panel"
 import { StepProfiling } from "@/components/step-profiling"
 import { InputDocumentLink } from "@/components/input-document-link"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { QuoteLinks, quotesFromJson } from "@/components/quote-links"
+import { formatSecondsShort, formatUsdFromCents } from "@/lib/format"
 import { cn } from "@/lib/utils"
 import { useDocViewer, type DocViewMode } from "@/lib/doc-viewer"
 import { useAppShell } from "@/lib/app-shell"
 import { stepDocId, stepDocLinkLabels, stepSourceDocId } from "@/lib/step-doc"
-import { collectRunLlmCalls, llmCallsFromStep } from "@/lib/llm-distribution"
+import { llmCallsFromStep } from "@/lib/llm-distribution"
 import { timeAgo } from "@/lib/time-ago"
 import { enrichRunModules, modulesFromRunSteps } from "@/lib/pipeline-run-diff"
 import { PipelineCanvas } from "@/components/pipeline-canvas"
@@ -146,7 +148,7 @@ function RunPickerColumn({
                   <div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground">
                     <span>{run.model}</span>
                     <span>
-                      {(run.totalMs / 1000).toFixed(1)}s · ${(run.billedCents / 100).toFixed(2)}
+                      {formatSecondsShort(run.totalMs)} · {formatUsdFromCents(run.billedCents)}
                     </span>
                   </div>
                   <span className="font-mono text-[10px] text-muted-foreground">
@@ -288,7 +290,15 @@ export function Logging() {
       .map((id) => docs.find((d) => d.id === id))
       .filter((d): d is DocRef => d != null)
   }, [active, docs, project])
-  const activeLlmCalls = active ? collectRunLlmCalls(active.steps) : []
+  const activeLlmCallGroups = useMemo(() => {
+    if (!active) return []
+    return active.steps
+      .map((step) => ({
+        calls: llmCallsFromStep(step),
+        stepSucceeded: step.status !== "error",
+      }))
+      .filter((g) => g.calls.length > 0)
+  }, [active])
   const popupQuotes = popup?.json ? quotesFromJson(popup.json) : []
 
   const runPipeline = useMemo(() => {
@@ -381,7 +391,7 @@ export function Logging() {
                       <div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground">
                         <span>{run.model}</span>
                         <span>
-                          {(run.totalMs / 1000).toFixed(1)}s · ${(run.billedCents / 100).toFixed(2)}
+                          {formatSecondsShort(run.totalMs)} · {formatUsdFromCents(run.billedCents)}
                         </span>
                       </div>
                       <span className="font-mono text-[10px] text-muted-foreground">
@@ -423,9 +433,9 @@ export function Logging() {
 
                 <div className="grid grid-cols-4 gap-2">
                   {[
-                    { label: "Latency", value: `${(active.totalMs / 1000).toFixed(1)}s` },
-                    { label: "Billed", value: `$${(active.billedCents / 100).toFixed(2)}` },
-                    { label: "Saved (cache)", value: `$${(active.savedCents / 100).toFixed(2)}` },
+                    { label: "Latency", value: formatSecondsShort(active.totalMs) },
+                    { label: "Billed", value: formatUsdFromCents(active.billedCents) },
+                    { label: "Saved (cache)", value: formatUsdFromCents(active.savedCents) },
                     {
                       label: "Cache hits",
                       value: `${active.steps.filter((s) => s.status === "cached").length}/${active.steps.length}`,
@@ -438,8 +448,8 @@ export function Logging() {
                   ))}
                 </div>
 
-                {activeLlmCalls.length > 0 && (
-                  <LlmCallDistribution calls={activeLlmCalls} />
+                {activeLlmCallGroups.length > 0 && (
+                  <LlmCallDistribution callGroups={activeLlmCallGroups} />
                 )}
 
                 <div>
@@ -483,12 +493,18 @@ export function Logging() {
                               {step.ms}ms
                             </span>
                             <span className="w-16 text-right font-mono text-[10px] text-muted-foreground">
-                              ${(step.costCents / 100).toFixed(4)}
+                              {formatUsdFromCents(step.costCents, 4)}
                             </span>
                           </div>
 
+                          <StepFailuresSection step={step} className="ml-7" />
+
                           {stepLlmCalls.length > 0 && (
-                            <LlmCallDistribution calls={stepLlmCalls} compact />
+                            <LlmCallDistribution
+                              calls={stepLlmCalls}
+                              compact
+                              stepSucceeded={step.status !== "error"}
+                            />
                           )}
 
                           <IoSection

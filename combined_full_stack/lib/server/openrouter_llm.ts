@@ -1,6 +1,7 @@
 import { type ZodType } from "zod";
 import { Agent, fetch as undiciFetch, type Dispatcher } from "undici";
 import { structuredLlmPrompt } from "./structure";
+import { type FailureKind } from "./types";
 import { type ServerLogger, logger } from "./server_logger";
 // AI : env loading is centralised in ./config (cwd-anchored) — importing it for the
 // AI : side effect keeps OPENROUTER_API_KEY available here without a second dotenv path.
@@ -40,7 +41,28 @@ export interface ChatOptions {
   // AI : fired with token counts after every successful call (feeds Logging + Billing).
   onUsage?: (usage: RawUsage) => void;
   // AI : fired after every HTTP round-trip (ok or failed) for length + latency distributions.
-  onRoundTrip?: (inputChars: number, outputChars: number, ok: boolean, latencyMs: number) => void;
+  onRoundTrip?: (
+    inputChars: number,
+    outputChars: number,
+    ok: boolean,
+    latencyMs: number,
+    meta?: {
+      attempt: number;
+      httpStatus?: number;
+      willRetry?: boolean;
+      failureKind?: FailureKind;
+      failureDetail?: string;
+    },
+  ) => void;
+  // AI : HTTP succeeded but JSON/schema validation failed on the reply body.
+  onStructuredFailure?: (detail: {
+    kind: Extract<FailureKind, "json_parse" | "schema">;
+    error: string;
+    attempt: number;
+    inputChars: number;
+    replyChars: number;
+    willRetry: boolean;
+  }) => void;
 }
 
 export interface ParallelChatResult {
@@ -205,13 +227,32 @@ async function fetchChat(
     const { res, latencyMs } = await httpPost(body, dispatcher);
     if (!res.ok) {
       lastError = await res.text();
-      log.warn(`chat HTTP error`, { status: res.status, attempt: attempt + 1, bodyPreview: lastError.slice(0, 200) });
-      if (RETRYABLE_STATUSES.has(res.status) && attempt < MAX_CHAT_ATTEMPTS - 1) {
-        opts.onRoundTrip?.(prompt.length, 0, false, latencyMs);
-        await sleep(retryDelayMs(res, attempt));
+      const willRetry = RETRYABLE_STATUSES.has(res.status) && attempt < MAX_CHAT_ATTEMPTS - 1;
+      const failureDetail = `HTTP ${res.status}: ${lastError.slice(0, 500)}`;
+      log.warn(willRetry ? `llm provider error — will retry` : `llm provider error`, {
+        failureKind: "provider",
+        status: res.status,
+        attempt: attempt + 1,
+        maxAttempts: MAX_CHAT_ATTEMPTS,
+        detail: failureDetail.slice(0, 300),
+      });
+      opts.onRoundTrip?.(prompt.length, 0, false, latencyMs, {
+        attempt: attempt + 1,
+        httpStatus: res.status,
+        willRetry,
+        failureKind: "provider",
+        failureDetail,
+      });
+      if (willRetry) {
+        const delayMs = retryDelayMs(res, attempt);
+        log.info(`llm provider retry scheduled`, {
+          attempt: attempt + 2,
+          delayMs,
+          reason: `HTTP ${res.status}`,
+        });
+        await sleep(delayMs);
         continue;
       }
-      opts.onRoundTrip?.(prompt.length, 0, false, latencyMs);
       throw openRouterAuthError(res.status, lastError);
     }
     const data = (await res.json()) as {
@@ -222,19 +263,40 @@ async function fetchChat(
     if (data.model) assertResponseModel(data.model, model);
     const content = data.choices?.[0]?.message?.content;
     if (typeof content !== "string") {
-      opts.onRoundTrip?.(prompt.length, 0, false, latencyMs);
-      throw new Error("OpenRouter returned no message content");
+      const failureDetail = "OpenRouter returned no message content";
+      opts.onRoundTrip?.(prompt.length, 0, false, latencyMs, {
+        attempt: attempt + 1,
+        failureKind: "provider",
+        failureDetail,
+      });
+      log.error(`llm provider error`, { failureKind: "provider", attempt: attempt + 1, detail: failureDetail });
+      throw new Error(failureDetail);
     }
     opts.onUsage?.({
       promptTokens: data.usage?.prompt_tokens ?? 0,
       completionTokens: data.usage?.completion_tokens ?? 0,
     });
-    opts.onRoundTrip?.(prompt.length, content.length, true, latencyMs);
-    log.info(`chat success`, { model, replyChars: content.length, attempt: attempt + 1 });
+    opts.onRoundTrip?.(prompt.length, content.length, true, latencyMs, { attempt: attempt + 1 });
+    if (attempt > 0) {
+      log.info(`llm provider recovered`, {
+        model,
+        attempt: attempt + 1,
+        priorFailures: attempt,
+        failureKind: "provider",
+      });
+    } else {
+      log.info(`chat success`, { model, replyChars: content.length, attempt: attempt + 1 });
+    }
     return content as RawReply;
   }
-  opts.onRoundTrip?.(prompt.length, 0, false, 0);
-  throw new Error(`OpenRouter failed after ${MAX_CHAT_ATTEMPTS} attempts: ${lastError}`);
+  const failureDetail = `OpenRouter failed after ${MAX_CHAT_ATTEMPTS} attempts: ${lastError.slice(0, 500)}`;
+  opts.onRoundTrip?.(prompt.length, 0, false, 0, {
+    attempt: MAX_CHAT_ATTEMPTS,
+    failureKind: "provider",
+    failureDetail,
+  });
+  log.error(`llm provider error`, { failureKind: "provider", attempt: MAX_CHAT_ATTEMPTS, detail: failureDetail.slice(0, 300) });
+  throw new Error(failureDetail);
 }
 
 // AI : single low-level call; jsonMode forces the model into strict json output
@@ -311,14 +373,20 @@ function extractJson(raw: RawReply): string {
   return start !== -1 && end > start ? body.slice(start, end + 1) : body;
 }
 
-function parseStructured<T>(raw: RawReply, schema: ZodType<T>): { ok: true; data: T } | { ok: false; error: string } {
+type StructuredParseFail = { ok: false; kind: Extract<FailureKind, "json_parse" | "schema">; error: string };
+
+function parseStructured<T>(
+  raw: RawReply,
+  schema: ZodType<T>,
+): { ok: true; data: T } | StructuredParseFail {
   const json = extractJson(raw);
   try {
-    const result = schema.safeParse(JSON.parse(json));
+    const parsed = JSON.parse(json);
+    const result = schema.safeParse(parsed);
     if (result.success) return { ok: true, data: result.data };
-    return { ok: false, error: result.error.toString() };
+    return { ok: false, kind: "schema", error: result.error.toString() };
   } catch (e) {
-    return { ok: false, error: `not valid JSON: ${(e as Error).message}` };
+    return { ok: false, kind: "json_parse", error: (e as Error).message };
   }
 }
 
@@ -331,8 +399,10 @@ export async function getStructuredResponse<T>(
 ): Promise<T> {
   const base = structuredLlmPrompt(prompt, schema);
   let lastError = "";
+  let lastFailureKind: Extract<FailureKind, "json_parse" | "schema"> | undefined;
   let lastRaw = "";
   for (let attempt = 0; attempt < 2; attempt++) {
+    const willRetry = attempt < 1;
     log.debug(`structured attempt`, { attempt: attempt + 1, correcting: attempt > 0 });
     const ask =
       attempt === 0
@@ -342,13 +412,38 @@ export async function getStructuredResponse<T>(
     lastRaw = extractJson(raw);
     const parsed = parseStructured(raw, schema);
     if (parsed.ok) {
-      log.info(`structured parse ok`, { attempt: attempt + 1 });
+      if (attempt > 0 && lastFailureKind) {
+        log.info(`llm ${lastFailureKind === "json_parse" ? "json parse" : "schema validation"} recovered`, {
+          attempt: attempt + 1,
+          priorFailureKind: lastFailureKind,
+        });
+      } else {
+        log.info(`structured parse ok`, { attempt: attempt + 1 });
+      }
       return parsed.data;
     }
+    lastFailureKind = parsed.kind;
     lastError = parsed.error;
-    log.warn(`structured validation failed`, { attempt: attempt + 1, error: lastError.slice(0, 300) });
+    const logMsg =
+      parsed.kind === "json_parse" ? "llm json parse failed" : "llm schema validation failed";
+    log.warn(willRetry ? `${logMsg} — will retry` : logMsg, {
+      failureKind: parsed.kind,
+      attempt: attempt + 1,
+      detail: lastError.slice(0, 500),
+    });
+    opts.onStructuredFailure?.({
+      kind: parsed.kind,
+      error: lastError,
+      attempt: attempt + 1,
+      inputChars: ask.length,
+      replyChars: raw.length,
+      willRetry,
+    });
   }
-  log.error(`structured response failed after retry`, { lastError: lastError.slice(0, 500) });
+  log.error(`llm structured output failed after retry`, {
+    failureKind: lastFailureKind,
+    detail: lastError.slice(0, 500),
+  });
   throw new StructuredResponseError(`structured response failed validation after retry:\n${lastError}`, lastRaw || undefined);
 }
 

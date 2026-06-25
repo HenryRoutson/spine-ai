@@ -1,5 +1,9 @@
 // AI : shared fetch helpers for client components and run-engine.
 
+export const JSON_HEADERS = { "Content-Type": "application/json" } as const;
+export const FETCH_CREDENTIALS = "same-origin" as const;
+export const FETCH_NO_STORE = { cache: "no-store" as const };
+
 export type ApiErrorBody = { error?: string; detail?: string; code?: string };
 
 export async function readApiErrorBody(res: Response): Promise<ApiErrorBody | null> {
@@ -18,7 +22,7 @@ export function formatApiError(context: string, res: Response, body: ApiErrorBod
 }
 
 export async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { credentials: "same-origin", ...init });
+  const res = await fetch(url, { credentials: FETCH_CREDENTIALS, ...init });
   if (!res.ok) {
     const body = await readApiErrorBody(res);
     throw new Error(formatApiError(url, res, body));
@@ -27,7 +31,7 @@ export async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export async function apiText(url: string, init?: RequestInit): Promise<string> {
-  const res = await fetch(url, { credentials: "same-origin", ...init });
+  const res = await fetch(url, { credentials: FETCH_CREDENTIALS, ...init });
   if (!res.ok) {
     const body = await readApiErrorBody(res);
     throw new Error(formatApiError(url, res, body));
@@ -48,9 +52,9 @@ export async function apiPut(
   try {
     const res = await fetch(url, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: JSON_HEADERS,
       body,
-      credentials: "same-origin",
+      credentials: FETCH_CREDENTIALS,
     });
     if (!res.ok) {
       const parsed = await readApiErrorBody(res);

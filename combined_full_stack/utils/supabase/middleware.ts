@@ -1,10 +1,11 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
+import { PUBLIC_API_PATHS } from "@/lib/api-routes";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { sanitizeRedirectPath } from "@/utils/sanitize_redirect";
 
 const PUBLIC_PATHS = ["/login", "/auth/callback"];
-const PUBLIC_API_PATHS = ["/api/supabase-env", "/api/billing/webhook"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -77,7 +78,7 @@ export async function updateSession(request: NextRequest) {
   const user = data?.claims;
 
   if (!user && isApiRoute && !isPublicApiPath(pathname)) {
-    return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+    return NextResponse.json({ error: AUTH_SIGN_IN_REQUIRED }, { status: 401 });
   }
 
   if (!user && !isApiRoute && !isPublic) {

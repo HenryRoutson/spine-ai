@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { MarkdownView } from "@/components/highlight"
 import { defaultDocViewMode, docViewerTabs, isPdfDoc } from "@/lib/doc-content"
+import { API_ROUTES } from "@/lib/api-routes"
 import type { DocId } from "@/lib/types"
 
 // AI : de-mocked — source text comes from GET /api/docs/:id/text (the stored content-hash
@@ -51,7 +52,7 @@ export function DocViewer() {
   useEffect(() => {
     if (!docId) return
     setHasPdf(false)
-    fetch(`/api/docs/${docId}/file`, { method: "HEAD" })
+    fetch(API_ROUTES.docFile(docId), { method: "HEAD" })
       .then((r) => setHasPdf(r.ok))
       .catch(() => setHasPdf(false))
   }, [docId])
@@ -63,7 +64,7 @@ export function DocViewer() {
     setView(
       defaultDocViewMode(docRef, hasPdf, { hasSpan, requested: requestedMode ?? undefined }),
     )
-    fetch(`/api/docs/${docId}/text`)
+    fetch(API_ROUTES.docText(docId))
       .then((r) => (r.ok ? r.json() : { text: `⚠ source not found for ${docId}` }))
       .then((d) => setText(d.text))
       .catch(() => setText("⚠ failed to load source document"))
@@ -141,7 +142,7 @@ export function DocViewer() {
         {view === "pdf" ? (
           // AI: browser-native PDF viewer over the stored original (GET /api/docs/:id/file).
           <iframe
-            src={`/api/docs/${target.docId}/file`}
+            src={API_ROUTES.docFile(target.docId)}
             title={`PDF ${target.docId}`}
             className="min-h-0 flex-1 bg-white"
           />

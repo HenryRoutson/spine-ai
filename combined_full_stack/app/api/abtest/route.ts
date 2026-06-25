@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
+import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { assertCanStartRun, billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
 import { mergeBenchmarkStrategies, runBenchmark } from "@/lib/server/strategies";
 import { logger } from "@/lib/server/server_logger";
@@ -9,6 +10,7 @@ const apiLog = logger("api:abtest");
 
 // AI : real A/B benchmark (replaces the setTimeout jitter) — all enabled environments run
 // AI : on the cheap model, the LLM judge scores them. Takes ~1-2 min; the client awaits.
+// AI : keep in sync with ROUTE_MAX_DURATION_RUNS in lib/server/route-config.ts.
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
@@ -21,7 +23,7 @@ export async function POST(req: NextRequest) {
   const project = store.project(projectId);
   if (!project) {
     apiLog.warn(`unknown project`, { projectId });
-    return apiError(`unknown project ${projectId}`, 404);
+    return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
   }
 
   // AI : default task input = the oldest inference doc (the seeded source document).
@@ -53,6 +55,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (err) {
     apiLog.error(`benchmark failed`, { projectId, error: (err as Error).message });
-    return apiError((err as Error).message, 422);
+    return apiError((err as Error).message, HTTP.UNPROCESSABLE);
   }
 }

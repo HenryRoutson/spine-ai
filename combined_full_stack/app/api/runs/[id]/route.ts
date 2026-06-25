@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { HTTP, unknownRun } from "@/lib/server/api-errors";
 import type { RunId } from "@/lib/server/types";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const { notes } = (await req.json()) as PatchRunRequest;
   const ok = store.updateRunNotes(id as RunId, notes === null || notes === "" ? undefined : notes);
-  if (!ok) return apiError(`unknown run ${id}`, 404);
+  if (!ok) return apiError(unknownRun(id), HTTP.NOT_FOUND);
   await store.flush();
   return NextResponse.json({ ok: true });
 }

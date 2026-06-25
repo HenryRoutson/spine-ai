@@ -59,6 +59,7 @@ export function buildRunInputDocIds(
   project: Project,
   inputDocId: DocId,
   extraInputDocIds?: DocId[],
+  explicitByModule?: Partial<Record<ModuleId, DocId[]>>,
 ): DocId[] {
   return buildRunInputDocIdsFromDocs(
     store.docs(),
@@ -66,6 +67,7 @@ export function buildRunInputDocIds(
     inputDocId,
     extraInputDocIds,
     projectSeedDocNames(project),
+    explicitByModule,
   );
 }
 
@@ -75,9 +77,10 @@ export function computeRunFingerprintForRequest(
   model: ModelId | undefined,
   inputDocId: DocId,
   extraInputDocIds?: DocId[],
+  explicitByModule?: Partial<Record<ModuleId, DocId[]>>,
 ): { fingerprint: RunFingerprint; inputDocIds: DocId[]; project: Project } {
   const migrated = fingerprintProject(project);
-  const inputDocIds = buildRunInputDocIds(store, migrated, inputDocId, extraInputDocIds);
+  const inputDocIds = buildRunInputDocIds(store, migrated, inputDocId, extraInputDocIds, explicitByModule);
   return {
     fingerprint: computeRunFingerprint(migrated, model, inputDocIds),
     inputDocIds,

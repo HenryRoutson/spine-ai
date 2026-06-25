@@ -1,11 +1,21 @@
-import type { LlmCallRecord, RunStep } from "@/lib/types"
+import type { FailureKind, LlmCallRecord, RunFailureRecord, RunStep } from "@/lib/types"
+import { formatCostCents, formatMs } from "@/lib/format"
 
 export type MetricField = "inputChars" | "outputChars" | "latencyMs"
+
+export type LlmCallDisplayStatus = LlmCallRecord["status"] | "retried"
+
+export type LlmCallSummary = {
+  ok: number
+  retried: number
+  failed: number
+  displayStatuses: LlmCallDisplayStatus[]
+}
 
 export type ScatterPoint = {
   x: number
   y: number
-  status: LlmCallRecord["status"]
+  status: LlmCallDisplayStatus
   index: number
 }
 
@@ -33,8 +43,64 @@ function jitterY(index: number, total: number, xKey: number): number {
   return Math.min(0.96, Math.max(0.04, band + wobble))
 }
 
+export function failureKindLabel(kind: FailureKind): string {
+  switch (kind) {
+    case "provider":
+      return "LLM provider"
+    case "json_parse":
+      return "JSON parse"
+    case "schema":
+      return "Schema validation (pydantic/zod)"
+    case "step_output":
+      return "Step output validation (pydantic/zod)"
+  }
+}
+
+export function failuresFromLlmCalls(
+  calls: LlmCallRecord[] | undefined,
+  stepSucceeded: boolean,
+): RunFailureRecord[] {
+  if (!calls?.length) return []
+  const display = displayStatusesForCalls(calls, stepSucceeded)
+  return calls
+    .map((call, i) => ({ call, display: display[i] }))
+    .filter(({ call }) => call.failureKind)
+    .map(({ call, display }) => ({
+      kind: call.failureKind!,
+      detail: call.failureDetail ?? (call.httpStatus ? `HTTP ${call.httpStatus}` : ""),
+      attempt: call.attempt,
+      recovered: display === "retried",
+    }))
+}
+
+export function stepFailures(step: RunStep): RunFailureRecord[] {
+  if (step.failures?.length) return step.failures
+  return failuresFromLlmCalls(llmCallsFromStep(step), step.status !== "error")
+}
+
+export function displayStatusesForCalls(
+  calls: LlmCallRecord[],
+  stepSucceeded: boolean,
+): LlmCallDisplayStatus[] {
+  return calls.map((call, i) => {
+    if (call.status === "ok") return "ok"
+    const recovered = stepSucceeded && calls.slice(i + 1).some((c) => c.status === "ok")
+    return recovered ? "retried" : "error"
+  })
+}
+
+export function summarizeLlmCalls(calls: LlmCallRecord[], stepSucceeded = true): LlmCallSummary {
+  const displayStatuses = displayStatusesForCalls(calls, stepSucceeded)
+  return {
+    ok: displayStatuses.filter((s) => s === "ok").length,
+    retried: displayStatuses.filter((s) => s === "retried").length,
+    failed: displayStatuses.filter((s) => s === "error").length,
+    displayStatuses,
+  }
+}
+
 export function buildValueScatter(
-  items: { value: number; status: LlmCallRecord["status"] }[],
+  items: { value: number; status: LlmCallDisplayStatus }[],
 ): MetricScatter | null {
   if (items.length === 0) return null
   const values = items.map((i) => i.value)
@@ -50,9 +116,17 @@ export function buildValueScatter(
   return { points, mean, std, min, max }
 }
 
-export function buildMetricScatter(calls: LlmCallRecord[], field: MetricField): MetricScatter | null {
+export function buildMetricScatter(
+  calls: LlmCallRecord[],
+  field: MetricField,
+  stepSucceeded = true,
+): MetricScatter | null {
+  const summary = summarizeLlmCalls(calls, stepSucceeded)
   return buildValueScatter(
-    calls.map((call) => ({ value: call[field], status: call.status })),
+    calls.map((call, i) => ({
+      value: call[field],
+      status: summary.displayStatuses[i],
+    })),
   )
 }
 
@@ -90,16 +164,7 @@ export function formatChars(n: number): string {
   return String(Math.round(n))
 }
 
-export function formatMs(n: number): string {
-  if (n >= 60000) return `${(n / 60000).toFixed(1)}m`
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}s`
-  return `${Math.round(n)}ms`
-}
-
-export function formatCostCents(n: number): string {
-  if (n >= 100) return `$${(n / 100).toFixed(2)}`
-  return `${n.toFixed(2)}c`
-}
+export { formatCostCents, formatMs } from "@/lib/format"
 
 const METRIC_FORMAT: Record<MetricField, (n: number) => string> = {
   inputChars: formatChars,
@@ -138,4 +203,16 @@ export function llmCallsFromStep(step: RunStep): LlmCallRecord[] {
 
 export function collectRunLlmCalls(steps: RunStep[]): LlmCallRecord[] {
   return steps.flatMap((s) => llmCallsFromStep(s))
+}
+
+export function summarizeRunLlmCalls(steps: RunStep[]): LlmCallSummary {
+  const perStep = steps
+    .map((step) => summarizeLlmCalls(llmCallsFromStep(step), step.status !== "error"))
+    .filter((s) => s.ok + s.retried + s.failed > 0)
+  return {
+    ok: perStep.reduce((n, s) => n + s.ok, 0),
+    retried: perStep.reduce((n, s) => n + s.retried, 0),
+    failed: perStep.reduce((n, s) => n + s.failed, 0),
+    displayStatuses: perStep.flatMap((s) => s.displayStatuses),
+  }
 }

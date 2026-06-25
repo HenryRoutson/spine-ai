@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { apiJson } from "@/lib/api-client"
+import { API_ROUTES } from "@/lib/api-routes"
 import type { Project, ProjectId } from "@/lib/types"
 
 type ProjectTemplateSummary = {
@@ -57,7 +58,7 @@ export function Projects() {
 
   useEffect(() => {
     let cancelled = false
-    void apiJson<{ templates: ProjectTemplateSummary[] }>("/api/project-templates")
+    void apiJson<{ templates: ProjectTemplateSummary[] }>(API_ROUTES.projectTemplates)
       .then((data) => {
         if (!cancelled) setTemplates(data.templates)
       })

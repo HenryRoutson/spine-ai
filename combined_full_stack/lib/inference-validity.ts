@@ -80,21 +80,33 @@ export function collectInferenceInputIssues(
   inputModules: PipelineModule[],
   inputDocs: Partial<Record<ModuleId, DocRef>>,
   contentByDocId: Partial<Record<string, string>>,
+  assignment?: import("./inference-input").InputDocsAssignment,
 ): InferenceInputIssue[] {
   const issues: InferenceInputIssue[] = [];
+  const fullAssignment = assignment ?? inputDocs;
   for (const m of inputModules) {
-    const doc = inputDocs[m.id];
-    if (!doc) continue;
-    const assignmentIssue = validateInferenceDocAssignment(m, doc);
-    if (assignmentIssue) {
-      issues.push(assignmentIssue);
-      continue;
+    const docs = assignment
+      ? (Array.isArray(fullAssignment[m.id])
+          ? (fullAssignment[m.id] as DocRef[])
+          : fullAssignment[m.id]
+            ? [fullAssignment[m.id] as DocRef]
+            : [])
+      : inputDocs[m.id]
+        ? [inputDocs[m.id]!]
+        : [];
+    if (!docs.length) continue;
+    for (const doc of docs) {
+      const assignmentIssue = validateInferenceDocAssignment(m, doc);
+      if (assignmentIssue) {
+        issues.push(assignmentIssue);
+        continue;
+      }
+      const content = contentByDocId[doc.id];
+      const issue = content
+        ? validateInferenceDocContent(m, doc, content)
+        : validateInferenceDocPreview(m, doc);
+      if (issue) issues.push(issue);
     }
-    const content = contentByDocId[doc.id];
-    const issue = content
-      ? validateInferenceDocContent(m, doc, content)
-      : validateInferenceDocPreview(m, doc);
-    if (issue) issues.push(issue);
   }
   return issues;
 }

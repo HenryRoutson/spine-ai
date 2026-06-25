@@ -49,12 +49,12 @@ const TYPE_ICON: Record<InputType, typeof FileText> = {
 
 export function InferenceInputPickerPopup({
   inputModule,
-  selectedDocId,
+  selectedDocIds = [],
   onSelect,
   onClose,
 }: {
   inputModule: PipelineModule
-  selectedDocId?: DocId
+  selectedDocIds?: DocId[]
   onSelect: (doc: DocRef) => void
   onClose: () => void
 }) {
@@ -216,7 +216,7 @@ export function InferenceInputPickerPopup({
                 <ul className="divide-y divide-border">
                   {filtered.map((doc) => {
                     const Icon = TYPE_ICON[doc.type]
-                    const selected = doc.id === selectedDocId
+                    const selected = selectedDocIds.includes(doc.id)
                     return (
                       <li
                         key={doc.id}

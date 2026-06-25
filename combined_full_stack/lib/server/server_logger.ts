@@ -1,9 +1,10 @@
+import type { JobLogLevel } from "@/lib/run-types";
 import { join } from "node:path";
 import { dataDir } from "./config";
 import { FileLog } from "./file_log";
 import { pushJobLog } from "./job_log_sink";
 
-export type LogLevel = "debug" | "info" | "warn" | "error";
+export type LogLevel = JobLogLevel;
 type LogCtx = Record<string, unknown>;
 
 function ts(): string {

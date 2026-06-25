@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { Plus, Trash2 } from "lucide-react"
 import { CustomCodeEditor } from "@/components/custom-code-editor"
 import { JsonHighlight } from "@/components/highlight"
@@ -73,7 +74,7 @@ export function PipelineField({
         <p
           className={cn(
             "mb-1.5 font-mono text-[10px]",
-            hintTone === "error" ? "text-destructive" : "text-amber-600 dark:text-amber-500",
+            hintTone === "error" ? "text-destructive" : "WARNING_TEXT_CLASS",
           )}
         >
           {hint}
@@ -208,7 +209,7 @@ export function PipelineModuleFields({
         </p>
       )}
       {warning && (
-        <p className="mb-3 font-mono text-[10px] leading-relaxed text-amber-600 dark:text-amber-500">
+        <p className="mb-3 font-mono text-[10px] leading-relaxed WARNING_TEXT_CLASS">
           {warningStepMessage(warning, models, modules)}
         </p>
       )}
@@ -288,6 +289,30 @@ export function PipelineModuleFields({
               <StaticValue mono>{inputNameRestrictionLabel(selected)}</StaticValue>
             ) : null}
           </PipelineField>
+          <PipelineField
+            label="Minimum documents"
+            hint={edit ? "required count for this input slot — use with out list for many submissions" : undefined}
+          >
+            {edit ? (
+              <Input
+                type="number"
+                min={1}
+                value={selected.inputMinCount ?? 1}
+                onChange={(e) => {
+                  const n = Math.max(1, Number.parseInt(e.target.value, 10) || 1)
+                  onUpdate!({ inputMinCount: n === 1 ? undefined : n })
+                }}
+                className="h-8 font-mono text-xs"
+              />
+            ) : (
+              <StaticValue mono>{selected.inputMinCount ?? 1}</StaticValue>
+            )}
+          </PipelineField>
+          {(selected.inputMinCount ?? 1) > 1 || selected.outIsList ? (
+            <PipelineField label="Output shape">
+              <StaticValue mono>list[SourceDocument]</StaticValue>
+            </PipelineField>
+          ) : null}
           <PipelineField
             label="I/O model"
             hint={
@@ -384,7 +409,7 @@ export function PipelineModuleFields({
                   </p>
                 )}
                 {warning?.kind === "unused-output" && (
-                  <p className="mt-1 font-mono text-[9px] text-amber-600 dark:text-amber-500">
+                  <p className="mt-1 font-mono text-[9px] WARNING_TEXT_CLASS">
                     {warningStepMessage(warning, models, modules)}
                   </p>
                 )}

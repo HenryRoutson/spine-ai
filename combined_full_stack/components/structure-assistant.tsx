@@ -11,6 +11,15 @@ import {
   X,
 } from "lucide-react"
 import { uid } from "@/lib/id"
+import { API_ROUTES } from "@/lib/api-routes"
+import { JSON_HEADERS } from "@/lib/api-client"
+import {
+  ASSISTANT_HISTORY_LIMIT,
+  ASSISTANT_REQUEST_FAILED,
+  assistantRequestFailed,
+  type AssistantChatRole,
+  type ProposalStatus,
+} from "@/lib/assistant-chat-types"
 import { useStore } from "@/lib/store"
 import type { StructureModel } from "@/lib/types"
 import { Button } from "@/components/ui/button"
@@ -19,7 +28,7 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
-type ChatRole = "user" | "assistant"
+type ChatRole = AssistantChatRole
 
 type StructureProposal = {
   models: StructureModel[]
@@ -30,7 +39,7 @@ type ChatMessage = {
   role: ChatRole
   content: string
   proposal?: StructureProposal
-  status?: "pending" | "approved" | "rejected"
+  status?: ProposalStatus
 }
 
 const STARTERS = [
@@ -81,13 +90,13 @@ export function StructureAssistant() {
 
     const history = [...messages, userMsg]
       .filter((m) => m.role === "user" || (m.role === "assistant" && !m.proposal))
-      .slice(-8)
+      .slice(-ASSISTANT_HISTORY_LIMIT)
       .map((m) => ({ role: m.role, content: m.content }))
 
     try {
-      const res = await fetch("/api/structure-assistant", {
+      const res = await fetch(API_ROUTES.structureAssistant, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify({
           projectId: project.id,
           message: trimmed,
@@ -96,7 +105,7 @@ export function StructureAssistant() {
         }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? `request failed (${res.status})`)
+      if (!res.ok) throw new Error(data.error ?? assistantRequestFailed(res.status))
 
       const assistantMsg: ChatMessage = {
         id: uid(),
@@ -107,7 +116,7 @@ export function StructureAssistant() {
       }
       setMessages((prev) => [...prev, assistantMsg])
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Assistant request failed")
+      setError(err instanceof Error ? err.message : ASSISTANT_REQUEST_FAILED)
     } finally {
       setLoading(false)
     }

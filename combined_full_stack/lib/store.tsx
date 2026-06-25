@@ -31,7 +31,8 @@ import type {
 } from "@/lib/types"
 import { DEFAULT_MODEL } from "@/lib/types"
 import { billingSeries } from "@/lib/billing"
-import { apiJson, apiPut } from "@/lib/api-client"
+import { apiJson, apiPut, JSON_HEADERS } from "@/lib/api-client"
+import { API_ROUTES } from "@/lib/api-routes"
 import { migrateProjectModules, syncAutoQuoteSteps } from "@/lib/quote-steps"
 
 export type BillingAccountView = {
@@ -79,8 +80,8 @@ interface StoreState {
   addRun: (r: PipelineRun) => void
   updateRunNotes: (runId: PipelineRun["id"], notes: string | undefined) => Promise<void>
   // AI : survives Inference tab unmount — doc ids only, resolved against hydrated docs on restore.
-  inferenceInputDocIds: Partial<Record<ModuleId, DocId>>
-  setInferenceInputDocIds: (docs: Partial<Record<ModuleId, DocId>>) => void
+  inferenceInputDocIds: Partial<Record<ModuleId, DocId | DocId[]>>
+  setInferenceInputDocIds: (docs: Partial<Record<ModuleId, DocId | DocId[]>>) => void
   // billing (computed from real run history only)
   billing: BillingPoint[]
   billingAccount: BillingAccountView | null
@@ -108,7 +109,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [projectLoading, setProjectLoading] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [inferenceInputsByProject, setInferenceInputsByProject] = useState<
-    Record<string, Partial<Record<ModuleId, DocId>>>
+    Record<string, Partial<Record<ModuleId, DocId | DocId[]>>>
   >({})
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hydratedRef = useRef(false)
@@ -117,7 +118,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const clearSaveError = useCallback(() => setSaveError(null), [])
 
   const persistProject = useCallback(async (id: string, body: string) => {
-    const result = await apiPut(`/api/projects/${id}`, body)
+    const result = await apiPut(API_ROUTES.project(id), body)
     if (!result.ok) {
       setSaveError(result.error)
       return
@@ -126,12 +127,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refreshBilling = useCallback(async () => {
-    setBillingAccount(await apiJson<BillingAccountView>("/api/billing"))
+    setBillingAccount(await apiJson<BillingAccountView>(API_ROUTES.billing))
   }, [])
 
   const fetchState = useCallback(async (projectId: string) => {
     const q = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""
-    return apiJson<ServerState>(`/api/state${q}`)
+    return apiJson<ServerState>(`${API_ROUTES.state}${q}`)
   }, [])
 
   const loadProjectState = useCallback(
@@ -227,9 +228,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       clean()
       return
     }
-    apiJson<{ creditedCents: number }>("/api/billing/confirm", {
+    apiJson<{ creditedCents: number }>(API_ROUTES.billingConfirm, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: JSON_HEADERS,
       body: JSON.stringify({ sessionId }),
     })
       .then(({ creditedCents }) => refreshBilling().then(() => creditedCents))
@@ -265,7 +266,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const addProject = useCallback(() => {
-    apiJson<Project>("/api/projects", { method: "POST" })
+    apiJson<Project>(API_ROUTES.projects, { method: "POST" })
       .then((fresh) => {
         setState((prev) => (prev ? { ...prev, projects: [...prev.projects, fresh] } : prev))
         setActiveProjectId(fresh.id)
@@ -274,9 +275,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const postNewProject = useCallback((body: { templateId?: string; cloneFrom?: string }) => {
-    return apiJson<Project>("/api/projects", {
+    return apiJson<Project>(API_ROUTES.projects, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: JSON_HEADERS,
       body: JSON.stringify(body),
     })
       .then((fresh) => {
@@ -301,7 +302,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const resyncExamples = useCallback(() => {
-    return apiJson<{ updated: number }>("/api/projects/resync-examples", { method: "POST" })
+    return apiJson<{ updated: number }>(API_ROUTES.projectsResyncExamples, { method: "POST" })
       .then(async ({ updated }) => {
         await refresh()
         return updated
@@ -328,7 +329,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const deleteProject = useCallback(
     (id: string) => {
-      apiJson<{ ok: true }>(`/api/projects/${id}`, { method: "DELETE" })
+      apiJson<{ ok: true }>(API_ROUTES.project(id), { method: "DELETE" })
         .then(() => {
           let nextActiveId: string | undefined
           setState((prev) => {
@@ -352,7 +353,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     form.append("file", file)
     form.append("label", label)
     if (projectId) form.append("projectId", projectId)
-    const doc = await apiJson<DocRef>("/api/docs", { method: "POST", body: form })
+    const doc = await apiJson<DocRef>(API_ROUTES.docs, { method: "POST", body: form })
     setState((prev) => {
       if (!prev) return prev
       const hasDoc = prev.docs.some((d) => d.id === doc.id)
@@ -378,16 +379,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const setInferenceInputDocIds = useCallback(
-    (projectId: string, docs: Partial<Record<ModuleId, DocId>>) => {
+    (projectId: string, docs: Partial<Record<ModuleId, DocId | DocId[]>>) => {
       setInferenceInputsByProject((prev) => ({ ...prev, [projectId]: docs }))
     },
     [],
   )
 
   const updateRunNotes = useCallback(async (runId: PipelineRun["id"], notes: string | undefined) => {
-    await apiJson("/api/runs/" + runId, {
+    await apiJson(API_ROUTES.run(runId), {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: JSON_HEADERS,
       body: JSON.stringify({ notes: notes ?? null }),
     })
     setState((prev) => {

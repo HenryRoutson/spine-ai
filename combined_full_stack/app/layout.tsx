@@ -10,6 +10,7 @@ const geistMono = Geist_Mono({
 })
 
 // AI : read Supabase env at request time — static build would bake an empty config otherwise.
+// AI : keep in sync with ROUTE_DYNAMIC in lib/server/route-config.ts.
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {

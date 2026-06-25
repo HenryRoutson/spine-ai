@@ -8,6 +8,7 @@ import { llmBatchStructured, llmStructured } from "./llm";
 import { StructuredResponseError } from "./openrouter_llm";
 import { collectQuotes, resolveQuotesValue } from "./quotation";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
+import { unknownProject } from "./api-errors";
 import { ClientStepPendingError, PipelinePausedError, type RunCheckpoint } from "./run_checkpoint";
 import { type LiveStep, progressHtml, runToHtml } from "./logging";
 import {
@@ -21,8 +22,17 @@ import {
 import type { Store } from "./store";
 import { uid } from "../id";
 import { buildRunInputDocIds, computeRunFingerprint, stepCacheKey } from "./run_fingerprint";
-import { docMatchesInputModule, inputTypeLabel, orderedInputModules } from "../inference-input";
+import {
+  docMatchesInputModule,
+  flattenInputDocIdsFromByModule,
+  inputDocsByModuleFromFlat,
+  inputMinCountForModule,
+  inputTypeLabel,
+  isMultiDocInputModule,
+  orderedInputModules,
+} from "../inference-input";
 import { isLlmKind } from "@/lib/module-kinds";
+import { failuresFromLlmCalls } from "@/lib/llm-distribution";
 import { computeInvalid, migrateProjectModules, stepEmits } from "./validity";
 import { UsageLedger } from "./usage";
 import {
@@ -36,13 +46,14 @@ import {
   type Project,
   type ProjectId,
   type RunFingerprint,
+  type RunFailureRecord,
   type RunId,
   type RunStep,
   type RunStepStatus,
   type StructureModel,
   type StructureModelId,
 } from "./types";
-import type { JobLogEntry, StepProgress, StepSubProgress } from "@/lib/run-types";
+import type { JobLogEntry, PipelineState, StepProgress, StepSubProgress } from "@/lib/run-types";
 import { collectLogsDuring, withStepModuleContext } from "./job_log_sink";
 import { MAX_STEP_LOGS } from "./log_limits";
 
@@ -55,7 +66,8 @@ function stepServerLogs(logs: JobLogEntry[], moduleId: ModuleId): JobLogEntry[] 
 
 export interface RunOptions {
   model: ModelId; // global model (per-step `module.model` overrides for llm)
-  inputDocIds?: DocId[]; // docs assigned to `input` modules in order; [0] is the dropped doc
+  inputDocIds?: DocId[]; // flat docs in slot order (multi-doc slots are contiguous)
+  inputDocsByModule?: Partial<Record<ModuleId, DocId[]>>;
   fingerprint?: RunFingerprint; // AI : precomputed at POST gate — must match persisted run
   fingerprintInputDocIds?: DocId[]; // AI : resolved slot docs paired with fingerprint
   cacheOwnerId?: string; // AI : scopes per-step disk cache to the signed-in user
@@ -153,16 +165,14 @@ function failedStepResult(err: unknown, m: PipelineModule, ctx: RunCtx, prior?: 
   };
 }
 
-// AI : the per-kind executors. Real where possible; placeholders are clearly marked.
-// AI : TODO(spec) — RunCtx gains `byLabel: PipelineState` (label → output); see pipeline_state.ts.
-// AI : Today: strict linear spine + combine step. Spec: implicit combine, DAG deps, LLM reads byLabel.
+// AI : custom-code steps receive `byLabel` in the browser — prior step outputs keyed by label.
 interface RunCtx {
   project: Project;
   store: Store;
   ledger: UsageLedger;
   model: ModelId;
-  inputQueue: DocId[];
-  // flowing state shared across the linear pipeline
+  inputByModule: Map<ModuleId, DocId[]>;
+  byLabel: PipelineState;
   byModel: Map<StructureModelId, unknown>;
   outputs: Map<ModuleId, unknown>;
   sourceText: string;
@@ -170,6 +180,16 @@ interface RunCtx {
   prevModuleId?: ModuleId;
   reportSub?: (sub: StepSubProgress) => void;
   stepLlmCalls?: LlmCallRecord[];
+  stepExtraFailures?: RunFailureRecord[];
+}
+
+function stepFailuresFor(
+  result: ExecResult,
+  status: RunStepStatus,
+  extra?: RunFailureRecord[],
+): RunFailureRecord[] | undefined {
+  const merged = [...(extra ?? []), ...failuresFromLlmCalls(result.llmCalls, status !== "error")];
+  return merged.length ? merged : undefined;
 }
 
 function materializeHints(m: PipelineModule, ctx: RunCtx, docId?: DocId, sourceText?: string) {
@@ -189,10 +209,11 @@ function applyModuleSideEffects(
   log: ReturnType<typeof runLogger>,
 ): void {
   if (m.kind === "input") {
-    const docId = ctx.inputQueue.shift();
+    const docIds = ctx.inputByModule.get(m.id) ?? [];
+    const docId = docIds[0];
     const content = docId ? store.docContent(docId) ?? "" : "";
-    log.info(`input module side effects`, { docId, chars: content.length, queueRemaining: ctx.inputQueue.length, cached: true });
-    if (!ctx.sourceText) {
+    log.info(`input module side effects`, { docId, docCount: docIds.length, cached: true });
+    if (!ctx.sourceText && content) {
       ctx.sourceText = content;
       ctx.sourceDocId = docId ?? ("none" as DocId);
     }
@@ -209,7 +230,8 @@ function applyModuleSideEffects(
 
 function serializeCtx(ctx: RunCtx): RunCheckpoint["ctx"] {
   return {
-    inputQueue: [...ctx.inputQueue],
+    inputByModule: Object.fromEntries(ctx.inputByModule) as Record<ModuleId, DocId[]>,
+    byLabel: ctx.byLabel,
     outputs: Object.fromEntries(ctx.outputs) as Record<ModuleId, unknown>,
     byModel: Object.fromEntries(ctx.byModel) as Record<StructureModelId, unknown>,
     sourceText: ctx.sourceText,
@@ -219,12 +241,20 @@ function serializeCtx(ctx: RunCtx): RunCheckpoint["ctx"] {
 }
 
 function restoreCtx(project: Project, store: Store, ledger: UsageLedger, model: ModelId, snap: RunCheckpoint["ctx"]): RunCtx {
+  const legacyQueue = (snap as { inputQueue?: DocId[] }).inputQueue;
+  const inputByModule =
+    snap.inputByModule && Object.keys(snap.inputByModule).length
+      ? new Map(Object.entries(snap.inputByModule) as [ModuleId, DocId[]][])
+      : legacyQueue?.length
+        ? new Map(orderedInputModules(project.modules).map((m, i) => [m.id, legacyQueue[i] ? [legacyQueue[i]!] : []]))
+        : new Map<ModuleId, DocId[]>();
   return {
     project,
     store,
     ledger,
     model,
-    inputQueue: [...snap.inputQueue],
+    inputByModule,
+    byLabel: snap.byLabel ?? {},
     byModel: new Map(Object.entries(snap.byModel) as [StructureModelId, unknown][]),
     outputs: new Map(Object.entries(snap.outputs) as [ModuleId, unknown][]),
     sourceText: snap.sourceText,
@@ -288,18 +318,41 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
   log.debug(`execModule start`, { moduleId: m.id, kind: m.kind, label: m.label });
   switch (m.kind) {
     case "input": {
-      const docId = ctx.inputQueue.shift();
-      const content = docId ? store.docContent(docId) ?? "" : "";
-      log.info(`input module loaded doc`, { docId, chars: content.length, queueRemaining: ctx.inputQueue.length });
-      // AI : first input is the primary source for quote offsets.
-      if (!ctx.sourceText) {
-        ctx.sourceText = content;
-        ctx.sourceDocId = docId ?? ("none" as DocId);
+      const docIds = ctx.inputByModule.get(m.id) ?? [];
+      const min = inputMinCountForModule(m);
+      if (docIds.length < min) {
+        throw new Error(`input "${m.label}" needs at least ${min} document(s), got ${docIds.length}`);
       }
-      const hints = materializeHints(m, ctx, docId, content);
-      const value = materializeStepOutput(m, project, { doc_id: docId, body: content }, hints);
+      const multi = isMultiDocInputModule(m) || docIds.length > 1;
+      log.info(`input module loaded doc(s)`, { moduleId: m.id, docCount: docIds.length, multi });
+      const materializeDoc = (docId: DocId, first: boolean) => {
+        const content = store.docContent(docId) ?? "";
+        if (first && !ctx.sourceText) {
+          ctx.sourceText = content;
+          ctx.sourceDocId = docId;
+        }
+        const hints = materializeHints(m, ctx, docId, content);
+        return materializeStepOutput(m, project, { doc_id: docId, body: content }, hints);
+      };
+      if (!multi) {
+        const docId = docIds[0]!;
+        const value = materializeDoc(docId, true);
+        ctx.outputs.set(m.id, value);
+        return { value, preview: `loaded ${inputTypeLabel(m.inputType)} → ${docId}`, docId };
+      }
+      const items = docIds.map((docId, i) => materializeDoc(docId, i === 0));
+      const out = modelById(project.models, m.outStructureId);
+      const value =
+        m.outIsList || !out
+          ? items
+          : wrapListForOutputStructure(items, out, m.outStructureId);
       ctx.outputs.set(m.id, value);
-      return { value, preview: `loaded ${inputTypeLabel(m.inputType)} → ${docId ?? "(none)"}`, docId };
+      return {
+        value,
+        preview: `loaded ${docIds.length} ${inputTypeLabel(m.inputType)} doc(s)`,
+        docId: docIds[0],
+        json: JSON.stringify({ doc_ids: docIds }, null, 2),
+      };
     }
 
     case "doc-to-text": {
@@ -398,7 +451,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
           attempts: entries.length,
           fallbacks: Math.max(0, entries.length - 1),
         });
-        throw new ClientStepPendingError(entries, input);
+        throw new ClientStepPendingError(entries, input, ctx.byLabel);
       } else if (out && !m.outIsList && Array.isArray(input)) {
         if (input.length === 1 && m.inStructureId === m.outStructureId) {
           value = input[0];
@@ -431,7 +484,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         attempts: entries.length,
         fallbacks: Math.max(0, entries.length - 1),
       });
-      throw new ClientStepPendingError(entries, input);
+      throw new ClientStepPendingError(entries, input, ctx.byLabel);
     }
 
     case "llm-batch": {
@@ -614,6 +667,7 @@ async function runLinearStepsFrom(
       });
     };
     ctx.stepLlmCalls = undefined;
+    ctx.stepExtraFailures = undefined;
 
     const defaultInputPreview =
       i === 0 ? `${inputTypeLabel(m.inputType)} document` : modelById(project.models, m.inStructureId)?.name ?? "Any";
@@ -648,8 +702,17 @@ async function runLinearStepsFrom(
             const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes });
             if (!check.ok) {
               const failedJson = result.json ?? JSON.stringify(result.value, null, 2);
-              log.error(`validation failed`, { moduleId: m.id, structure: out.name, error: check.error, failedJson });
-              throw new Error(`output failed ${out.name} validation: ${check.error}`);
+              const validationError = check.error ?? "unknown validation error";
+              ctx.stepExtraFailures = [
+                { kind: "step_output", detail: validationError, recovered: false },
+              ];
+              log.error(`step output schema validation failed`, {
+                failureKind: "step_output",
+                structure: out.name,
+                detail: validationError,
+                failedJsonPreview: failedJson.slice(0, 500),
+              });
+              throw new Error(`output failed ${out.name} validation: ${validationError}`);
             }
             const itemCount = isList && Array.isArray(result.value) ? result.value.length : 1;
             log.debug(`validation ok`, { moduleId: m.id, structure: out.name, itemCount });
@@ -734,6 +797,7 @@ async function runLinearStepsFrom(
 
     if (status !== "error") {
       ctx.outputs.set(m.id, result.value);
+      ctx.byLabel[m.label] = result.value;
       const structId = m.outStructureId ?? (m.kind === "output" ? m.inStructureId : undefined);
       if (structId) ctx.byModel.set(structId, result.value);
       ctx.prevModuleId = m.id;
@@ -757,6 +821,7 @@ async function runLinearStepsFrom(
       outputJson: result.json,
       docId: result.docId,
       llmCalls: result.llmCalls?.length ? result.llmCalls : undefined,
+      failures: stepFailuresFor(result, status, ctx.stepExtraFailures),
       serverLogs: stepServerLogs(serverLogs, m.id),
     });
     await opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status });
@@ -777,7 +842,7 @@ export async function runPipeline(
   opts: Omit<RunOptions, "model"> & { model?: ModelId } = {},
 ): Promise<PipelineRun> {
   const rawProject = store.project(projectId);
-  if (!rawProject) throw new Error(`unknown project ${projectId}`);
+  if (!rawProject) throw new Error(unknownProject(projectId));
   const project = migrateProjectModules(rawProject);
   // AI : bug fix — fallback used a hardcoded "qwen-2.5-72b" instead of DEFAULT_MODEL.
   const model = opts.model ?? project.modules.find((m) => m.kind === "llm")?.model ?? DEFAULT_MODEL;
@@ -807,28 +872,35 @@ export async function runPipeline(
 
   const fingerprintInputDocIds =
     opts.fingerprintInputDocIds ??
-    buildRunInputDocIds(store, project, inputDocId, opts.inputDocIds);
+    buildRunInputDocIds(store, project, inputDocId, opts.inputDocIds, opts.inputDocsByModule);
   const fingerprint =
     opts.fingerprint ?? computeRunFingerprint(project, model, fingerprintInputDocIds);
+  const inputMods = orderedInputModules(project.modules);
+  const inputByModuleRecord =
+    opts.inputDocsByModule ??
+    inputDocsByModuleFromFlat(inputMods, fingerprintInputDocIds);
   log.info(`input queue resolved`, {
     fingerprintInputDocIds,
     fingerprint,
-    inputDocIds: opts.inputDocIds,
+    inputDocsByModule: inputByModuleRecord,
   });
 
-  const inputMods = orderedInputModules(project.modules);
-  for (let i = 0; i < inputMods.length; i++) {
-    const docId = fingerprintInputDocIds[i];
-    if (!docId) continue;
-    const mod = inputMods[i];
-    const doc = store.docs().find((d) => d.id === docId);
-    if (doc && !docMatchesInputModule(doc, mod)) {
-      const req = mod.inputNameContains?.trim();
-      throw new Error(
-        req
-          ? `input "${mod.label}" requires a filename containing "${req}", got "${doc.name}"`
-          : `input "${mod.label}" rejected "${doc.name}" (wrong type for this slot)`,
-      );
+  for (const mod of inputMods) {
+    const docIds = inputByModuleRecord[mod.id] ?? [];
+    const min = inputMinCountForModule(mod);
+    if (docIds.length < min) {
+      throw new Error(`input "${mod.label}" needs at least ${min} document(s)`);
+    }
+    for (const docId of docIds) {
+      const doc = store.docs().find((d) => d.id === docId);
+      if (doc && !docMatchesInputModule(doc, mod)) {
+        const req = mod.inputNameContains?.trim();
+        throw new Error(
+          req
+            ? `input "${mod.label}" requires a filename containing "${req}", got "${doc.name}"`
+            : `input "${mod.label}" rejected "${doc.name}" (wrong type for this slot)`,
+        );
+      }
     }
   }
 
@@ -837,7 +909,8 @@ export async function runPipeline(
     store,
     ledger,
     model,
-    inputQueue: [...fingerprintInputDocIds],
+    inputByModule: new Map(Object.entries(inputByModuleRecord) as [ModuleId, DocId[]][]),
+    byLabel: {},
     byModel: new Map(),
     outputs: new Map(),
     sourceText: "",
@@ -928,7 +1001,7 @@ export async function resumeRunPipeline(
   opts: Omit<RunOptions, "model"> & { model?: ModelId; clientLogs?: import("@/lib/run-types").JobLogEntry[] } = {},
 ): Promise<PipelineRun> {
   const rawProject = store.project(checkpoint.projectId);
-  if (!rawProject) throw new Error(`unknown project ${checkpoint.projectId}`);
+  if (!rawProject) throw new Error(unknownProject(checkpoint.projectId));
   const project = migrateProjectModules(rawProject);
 
   const model = checkpoint.model;
@@ -938,7 +1011,10 @@ export async function resumeRunPipeline(
   const fingerprintInputDocIds =
     checkpoint.fingerprintInputDocIds ??
     checkpoint.inputDocIds ??
-    checkpoint.ctx.inputQueue;
+    flattenInputDocIdsFromByModule(
+      orderedInputModules(project.modules),
+      checkpoint.ctx.inputByModule ?? {},
+    );
   const fingerprint = computeRunFingerprint(project, model, fingerprintInputDocIds);
   const ctx = restoreCtx(project, store, ledger, model, checkpoint.ctx);
   const steps: RunStep[] = [...checkpoint.steps];
@@ -987,7 +1063,16 @@ export async function resumeRunPipeline(
       if (out) {
         const isList = m.outIsList || m.kind === "llm-batch";
         const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes: false });
-        if (!check.ok) throw new Error(`output failed ${out.name} validation: ${check.error}`);
+        if (!check.ok) {
+          const validationError = check.error ?? "unknown validation error";
+          ctx.stepExtraFailures = [{ kind: "step_output", detail: validationError, recovered: false }];
+          log.error(`step output schema validation failed`, {
+            failureKind: "step_output",
+            structure: out.name,
+            detail: validationError,
+          });
+          throw new Error(`output failed ${out.name} validation: ${validationError}`);
+        }
       }
     } catch (err) {
       status = "error";
@@ -1031,6 +1116,7 @@ export async function resumeRunPipeline(
   }
   if (status !== "error") {
     ctx.outputs.set(m.id, result.value);
+    ctx.byLabel[m.label] = result.value;
     const structId = m.outStructureId ?? (m.kind === "output" ? m.inStructureId : undefined);
     if (structId) ctx.byModel.set(structId, result.value);
     ctx.prevModuleId = m.id;
@@ -1048,6 +1134,8 @@ export async function resumeRunPipeline(
     inputPreview: defaultInputPreview,
     outputPreview: result.preview,
     outputJson: result.json,
+    llmCalls: result.llmCalls?.length ? result.llmCalls : undefined,
+    failures: stepFailuresFor(result, status, ctx.stepExtraFailures),
     serverLogs: stepServerLogs(serverLogs, m.id),
   });
   await opts.onStep?.({ index: checkpoint.stepIndex, total: project.modules.length, moduleId: m.id, label: m.label, status });

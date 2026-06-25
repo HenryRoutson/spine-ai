@@ -1,6 +1,26 @@
 import { docsForProject } from "@/lib/project-docs"
 import { INPUT_TYPES, type DocId, type DocRef, type InputType, type InputTypeSpec, type ModuleId, type PipelineModule, type PipelineRun, type Project } from "@/lib/types"
 
+export type InputDocsAssignment = Partial<Record<ModuleId, DocRef | DocRef[]>>
+
+export function inputMinCountForModule(inputModule: PipelineModule): number {
+  return Math.max(1, inputModule.inputMinCount ?? 1)
+}
+
+export function isMultiDocInputModule(inputModule: PipelineModule): boolean {
+  return inputModule.kind === "input" && (inputMinCountForModule(inputModule) > 1 || !!inputModule.outIsList)
+}
+
+export function docsForInputModule(assignment: InputDocsAssignment, moduleId: ModuleId): DocRef[] {
+  const v = assignment[moduleId]
+  if (!v) return []
+  return Array.isArray(v) ? v : [v]
+}
+
+export function moduleInputReady(inputModule: PipelineModule, assignment: InputDocsAssignment): boolean {
+  return docsForInputModule(assignment, inputModule.id).length >= inputMinCountForModule(inputModule)
+}
+
 export function inputTypesForModule(inputModule: PipelineModule): InputType[] {
   if (!inputModule.inputType) return []
   return Array.isArray(inputModule.inputType) ? inputModule.inputType : [inputModule.inputType]
@@ -82,16 +102,24 @@ export function defaultDocForInputModule(
   return passable[0]
 }
 
-// AI : one doc per input slot — name/type restrictions + no reuse across multi-input pipelines.
+// AI : assign docs per input slot — multi-doc slots get every matching unused inference doc.
 export function defaultInputDocsForModules(
   docs: DocRef[],
   project: Project,
   inputModules: PipelineModule[],
   preferred?: DocRef | null,
-): Partial<Record<PipelineModule["id"], DocRef>> {
-  const out: Partial<Record<PipelineModule["id"], DocRef>> = {}
+): InputDocsAssignment {
+  const out: InputDocsAssignment = {}
   const used = new Set<DocRef["id"]>()
   for (const m of inputModules) {
+    const passable = passableDocsForInputModule(docs, project, m).filter((d) => !used.has(d.id))
+    if (!passable.length) continue
+    if (isMultiDocInputModule(m)) {
+      const picked = passable
+      picked.forEach((d) => used.add(d.id))
+      out[m.id] = picked
+      continue
+    }
     const doc = defaultDocForInputModule(docs, project, m, preferred, used)
     if (!doc) continue
     out[m.id] = doc
@@ -129,7 +157,7 @@ export function buildDefaultInputDocs(
   project: Project,
   inputModules: PipelineModule[],
   preferred?: DocRef | null,
-): Partial<Record<ModuleId, DocRef>> {
+): InputDocsAssignment {
   return defaultInputDocsForModules(docs, project, inputModules, preferred ?? null)
 }
 
@@ -137,26 +165,76 @@ export function resolveInputDocs(
   docs: DocRef[],
   project: Project,
   inputModules: PipelineModule[],
-  savedDocIds: Partial<Record<ModuleId, DocId>>,
+  savedDocIds: Partial<Record<ModuleId, DocId | DocId[]>>,
   preferred?: DocRef | null,
-): Partial<Record<ModuleId, DocRef>> {
+): InputDocsAssignment {
   const defaults = buildDefaultInputDocs(docs, project, inputModules, preferred)
   if (!Object.keys(savedDocIds).length) return defaults
-  const out: Partial<Record<ModuleId, DocRef>> = { ...defaults }
+  const out: InputDocsAssignment = { ...defaults }
   for (const m of inputModules) {
-    const savedId = savedDocIds[m.id]
-    if (!savedId) continue
-    const doc = docs.find((d) => d.id === savedId)
-    if (doc && docMatchesInputModule(doc, m)) out[m.id] = doc
+    const saved = savedDocIds[m.id]
+    if (!saved) continue
+    const ids = Array.isArray(saved) ? saved : [saved]
+    const resolved = ids.flatMap((id) => {
+      const doc = docs.find((d) => d.id === id)
+      return doc && docMatchesInputModule(doc, m) ? [doc] : []
+    })
+    if (resolved.length) out[m.id] = isMultiDocInputModule(m) ? resolved : resolved[0]
   }
   return out
 }
 
+export function flattenInputDocIds(
+  inputModules: PipelineModule[],
+  inputDocs: InputDocsAssignment,
+): DocId[] {
+  return inputModules.flatMap((m) => docsForInputModule(inputDocs, m.id).map((d) => d.id as DocId))
+}
+
 export function inputDocIdsForModules(
   inputModules: PipelineModule[],
-  inputDocs: Partial<Record<ModuleId, DocRef>>,
+  inputDocs: InputDocsAssignment,
 ): DocId[] {
-  return inputModules.map((m) => inputDocs[m.id]!.id as DocId)
+  return flattenInputDocIds(inputModules, inputDocs)
+}
+
+export function inputDocsByModuleFromAssignment(
+  inputModules: PipelineModule[],
+  assignment: InputDocsAssignment,
+): Partial<Record<ModuleId, DocId[]>> {
+  const out: Partial<Record<ModuleId, DocId[]>> = {}
+  for (const m of inputModules) {
+    const docs = docsForInputModule(assignment, m.id)
+    if (docs.length) out[m.id] = docs.map((d) => d.id as DocId)
+  }
+  return out
+}
+
+// AI : legacy flat doc list — one id per slot unless explicit by-module map is provided.
+export function inputDocsByModuleFromFlat(
+  inputModules: PipelineModule[],
+  flatDocIds: DocId[],
+): Partial<Record<ModuleId, DocId[]>> {
+  const out: Partial<Record<ModuleId, DocId[]>> = {}
+  let i = 0
+  for (const m of inputModules) {
+    if (i >= flatDocIds.length) break
+    if (isMultiDocInputModule(m)) {
+      const rest = flatDocIds.slice(i)
+      out[m.id] = rest.length ? rest : [flatDocIds[i]!]
+      break
+    }
+    out[m.id] = [flatDocIds[i]!]
+    i += 1
+  }
+  return out
+}
+
+export function flattenInputDocIdsFromByModule(
+  inputModules: PipelineModule[],
+  byModule: Partial<Record<ModuleId, DocId[]>>,
+): DocId[] {
+  return inputModules.flatMap((m) => byModule[m.id] ?? [])
 }
 
 
@@ -167,15 +245,37 @@ export function buildRunInputDocIds(
   inputDocId: DocId,
   extraInputDocIds: DocId[] = [],
   seedDocNames?: string[],
+  explicitByModule?: Partial<Record<ModuleId, DocId[]>>,
 ): DocId[] {
   const inputMods = orderedInputModules(project.modules)
+  if (explicitByModule && Object.keys(explicitByModule).length) {
+    return flattenInputDocIdsFromByModule(inputMods, explicitByModule)
+  }
   const explicit = [inputDocId, ...extraInputDocIds].filter(Boolean) as DocId[]
+  if (explicit.length > inputMods.length) {
+    return explicit
+  }
   const names = seedDocNames ?? project.seedDocNames
   const scoped = names?.length ? docs.filter((d) => new Set(names).has(d.name)) : docs
   const inputQueue: DocId[] = []
   const used = new Set<DocId>()
   for (let i = 0; i < inputMods.length; i++) {
     const mod = inputMods[i]
+    if (isMultiDocInputModule(mod)) {
+      const seeded = scoped
+        .filter(
+          (d) =>
+            d.label === "inference" &&
+            !used.has(d.id) &&
+            docMatchesInputModule(d, mod),
+        )
+        .map((d) => d.id as DocId)
+      seeded.forEach((id) => {
+        inputQueue.push(id)
+        used.add(id)
+      })
+      continue
+    }
     const explicitId = explicit[i]
     if (explicitId) {
       inputQueue.push(explicitId)

@@ -6,7 +6,8 @@ import {
   formatCustomCodeFailureLog,
   runCustomCodeWithFallbacks,
 } from "@/lib/custom_code"
-import { readApiErrorBody, formatApiError } from "@/lib/api-client"
+import { readApiErrorBody, formatApiError, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
+import { API_ROUTES } from "@/lib/api-routes"
 import type { DocId, ModelId, ModuleId, PipelineRun, ProjectId, RunStepStatus } from "@/lib/types"
 import type { JobLogEntry, RunJob, RunJobId, StepProgress, StepSubProgress } from "@/lib/types"
 
@@ -64,6 +65,7 @@ export function isRunBillingError(e: unknown): e is RunStartError {
 }
 
 const MAX_PROGRESS_POLLS = 10
+const PROGRESS_POLL_BACKOFF_MS = 200
 
 function throwApiError(context: string, res: Response, body: Awaited<ReturnType<typeof readApiErrorBody>>): never {
   throw new RunStartError(formatApiError(context, res, body), res.status, body?.code)
@@ -88,9 +90,9 @@ export async function matchRun(
   model: ModelId,
   inputDocIds: DocId[] = [],
 ): Promise<MatchRunResult> {
-  const res = await fetch("/api/runs/match", {
+  const res = await fetch(API_ROUTES.runsMatch, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: JSON_HEADERS,
     body: JSON.stringify({ projectId, inputDocId, inputDocIds, model }),
   });
   if (!res.ok) {
@@ -110,11 +112,12 @@ export async function startRun(
   inputDocId: DocId,
   model: ModelId,
   inputDocIds: DocId[] = [],
+  inputDocsByModule?: Partial<Record<ModuleId, DocId[]>>,
 ): Promise<StartRunResult> {
-  const res = await fetch("/api/runs", {
+  const res = await fetch(API_ROUTES.runs, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ projectId, inputDocId, inputDocIds, model }),
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ projectId, inputDocId, inputDocIds, inputDocsByModule, model }),
   })
   if (!res.ok) {
     const body = await readApiErrorBody(res)
@@ -135,11 +138,11 @@ export async function runProgress(jobId: RunJobId): Promise<RunJob> {
   // AI : first polls can 404 when progress GET hits a cold bundle before the job file is visible.
   let lastDetail: string | undefined
   for (let attempt = 0; attempt < MAX_PROGRESS_POLLS; attempt++) {
-    const res = await fetch(`/api/runs/${jobId}/progress`, { cache: "no-store" })
+    const res = await fetch(API_ROUTES.runProgress(jobId), FETCH_NO_STORE)
     if (res.status === 404 && attempt < MAX_PROGRESS_POLLS - 1) {
       const body = await readApiErrorBody(res)
       lastDetail = [body?.error, body?.detail].filter(Boolean).join(" — ") || lastDetail
-      await new Promise((r) => setTimeout(r, 200 * (attempt + 1)))
+      await new Promise((r) => setTimeout(r, PROGRESS_POLL_BACKOFF_MS * (attempt + 1)))
       continue
     }
     if (!res.ok) {
@@ -170,9 +173,9 @@ async function submitClientStep(
   jobId: RunJobId,
   payload: { output?: unknown; error?: string; clientLogs?: JobLogEntry[] },
 ): Promise<void> {
-  const res = await fetch(`/api/runs/${jobId}/client-step`, {
+  const res = await fetch(API_ROUTES.runClientStep(jobId), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: JSON_HEADERS,
     body: JSON.stringify(payload),
   })
   if (res.ok) return

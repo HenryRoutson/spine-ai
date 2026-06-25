@@ -1,6 +1,9 @@
 "use client"
 
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
+import { API_ROUTES } from "@/lib/api-routes"
+import { JSON_HEADERS } from "@/lib/api-client"
+import { formatUsdFromCents } from "@/lib/format"
 import { useMemo, useState } from "react"
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import { useStore } from "@/lib/store"
@@ -21,10 +24,6 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { CreditCard, Loader2, TrendingDown, TrendingUp } from "lucide-react"
 
-function dollars(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`
-}
-
 // AI : de-mocked — series keys come from the real billing aggregation (one line per model
 // AI : + the doc-parse service), so new models show up without touching this file.
 const CHART_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-4)", "var(--chart-3)", "var(--chart-5)"]
@@ -43,9 +42,9 @@ export function Billing() {
     setCheckoutKey(key)
     setBanner(null)
     try {
-      const res = await fetch("/api/billing/checkout", {
+      const res = await fetch(API_ROUTES.billingCheckout, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify({ mode, amountCents }),
       })
       const body = await res.json()
@@ -99,7 +98,7 @@ export function Billing() {
       <WindowHeader
         step="07 / Billing"
         title="Spend & Inference Cost"
-        description={`Credit-based billing — subscribe for monthly credit, top up when you run out. Actual run cost depends on models and pipeline length; you need at least ${dollars(minRunBalanceCents)} credit to start a run.`}
+        description={`Credit-based billing — subscribe for monthly credit, top up when you run out. Actual run cost depends on models and pipeline length; you need at least ${formatUsdFromCents(minRunBalanceCents)} credit to start a run.`}
       />
 
       {billingAccount && (
@@ -112,10 +111,10 @@ export function Billing() {
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="font-mono text-[10px] uppercase text-muted-foreground">Credit balance</p>
-              <p className="font-mono text-3xl font-semibold">{dollars(billingAccount.balanceCents)}</p>
+              <p className="font-mono text-3xl font-semibold">{formatUsdFromCents(billingAccount.balanceCents)}</p>
               <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                {dollars(minRunBalanceCents)} minimum to run · billed {dollars(billingAccount.totalBilledCents)} of{" "}
-                {dollars(billingAccount.billingCapCents)} cap
+                {formatUsdFromCents(minRunBalanceCents)} minimum to run · billed {formatUsdFromCents(billingAccount.totalBilledCents)} of{" "}
+                {formatUsdFromCents(billingAccount.billingCapCents)} cap
                 {capReached ? " — cap reached" : ""}
               </p>
             </div>
@@ -133,8 +132,8 @@ export function Billing() {
                   <CreditCard className="h-3.5 w-3.5" />
                 )}
                 {billingAccount.subscribed
-                  ? `Subscribed — ${dollars(billingAccount.subCentsPerMonth)}/mo`
-                  : `Subscribe ${dollars(billingAccount.subCentsPerMonth)}/mo`}
+                  ? `Subscribed — ${formatUsdFromCents(billingAccount.subCentsPerMonth)}/mo`
+                  : `Subscribe ${formatUsdFromCents(billingAccount.subCentsPerMonth)}/mo`}
               </Button>
               {billingAccount.topupOptionsCents.map((amountCents) => {
                 const topupKey = `topup:${amountCents}`
@@ -152,12 +151,12 @@ export function Billing() {
                       capReached
                         ? "Billing cap reached"
                         : topupCapReached
-                          ? `Would exceed ${dollars(billingAccount.billingCapCents)} cap`
+                          ? `Would exceed ${formatUsdFromCents(billingAccount.billingCapCents)} cap`
                           : undefined
                     }
                   >
                     {checkoutKey === topupKey ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                    Top up {dollars(amountCents)}
+                    Top up {formatUsdFromCents(amountCents)}
                   </Button>
                 )
               })}

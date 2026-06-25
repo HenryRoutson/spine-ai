@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { buildValueScatter, normalCurvePoints, type MetricScatter } from "@/lib/llm-distribution"
+import { buildValueScatter, normalCurvePoints, type LlmCallDisplayStatus, type MetricScatter } from "@/lib/llm-distribution"
 
 const W = 300
 const H = 120
@@ -11,6 +11,8 @@ import {
   CHART_ERR_STROKE,
   CHART_OK,
   CHART_OK_STROKE,
+  CHART_RETRY,
+  CHART_RETRY_STROKE,
   CHART_STAT,
 } from "@/lib/chart-colors"
 const PLOT_STROKE = "currentColor"
@@ -36,7 +38,7 @@ export function ValueScatterChart({
 }: {
   title: string
   scatter?: MetricScatter | null
-  items?: { value: number; status: "ok" | "error" }[]
+  items?: { value: number; status: LlmCallDisplayStatus }[]
   format: (n: number) => string
   axisLabel: string
   count: number
@@ -133,15 +135,22 @@ export function ValueScatterChart({
         {scatter.points.map((pt) => {
           const cx = xScale(xMin, xMax, pt.x)
           const cy = yScale(pt.y, plotH)
-          const ok = pt.status === "ok"
+          const fill =
+            pt.status === "ok" ? CHART_OK : pt.status === "retried" ? CHART_RETRY : CHART_ERR
+          const stroke =
+            pt.status === "ok"
+              ? CHART_OK_STROKE
+              : pt.status === "retried"
+                ? CHART_RETRY_STROKE
+                : CHART_ERR_STROKE
           return (
             <circle
               key={pt.index}
               cx={cx}
               cy={cy}
               r={R}
-              fill={ok ? CHART_OK : CHART_ERR}
-              stroke={ok ? CHART_OK_STROKE : CHART_ERR_STROKE}
+              fill={fill}
+              stroke={stroke}
               strokeWidth={1.75}
             />
           )

@@ -10,6 +10,9 @@ import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
+import { API_ROUTES } from "@/lib/api-routes"
+import { JSON_HEADERS } from "@/lib/api-client"
+import { formatSecondsShort, formatUsdFromCents } from "@/lib/format"
 import { cn } from "@/lib/utils"
 
 type Metric = "accuracy" | "passRate" | "latencyMs" | "costCents"
@@ -37,9 +40,9 @@ export function AbTesting() {
     setHasRun(false)
     setError(null)
     try {
-      const res = await fetch("/api/abtest", {
+      const res = await fetch(API_ROUTES.abtest, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify({ projectId: project.id }),
       })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `benchmark failed (${res.status})`)
@@ -147,7 +150,7 @@ export function AbTesting() {
                   metric="latencyMs"
                   strategies={enabled}
                   higherIsBetter={false}
-                  format={(v) => `${(v / 1000).toFixed(1)}s`}
+                  format={(v) => formatSecondsShort(v)}
                 />
                 <MetricChart
                   title="Cost per run"
@@ -155,7 +158,7 @@ export function AbTesting() {
                   metric="costCents"
                   strategies={enabled}
                   higherIsBetter={false}
-                  format={(v) => `$${(v / 100).toFixed(2)}`}
+                  format={(v) => formatUsdFromCents(v)}
                 />
               </div>
               {verdict && (
@@ -222,11 +225,11 @@ function StrategyCard({
         <Mini label="pass" value={running ? "…" : `${strategy.passRate}%`} />
         <Mini
           label="lat"
-          value={running ? "…" : `${(strategy.latencyMs / 1000).toFixed(1)}s`}
+          value={running ? "…" : formatSecondsShort(strategy.latencyMs)}
         />
         <Mini
           label="cost"
-          value={running ? "…" : `$${(strategy.costCents / 100).toFixed(2)}`}
+          value={running ? "…" : formatUsdFromCents(strategy.costCents)}
         />
       </div>
     </div>

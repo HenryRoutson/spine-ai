@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { HTTP, unknownDoc } from "@/lib/server/api-errors";
 import type { DocId } from "@/lib/server/types";
 
 // AI : real source text for the doc-viewer overlay (replaces the hardcoded LEGAL_SOURCE_TEXT).
@@ -10,6 +11,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   const { id } = await ctx.params;
   const text = store.docContent(id as DocId);
-  if (text === undefined) return apiError(`unknown doc ${id}`, 404);
+  if (text === undefined) return apiError(unknownDoc(id), HTTP.NOT_FOUND);
   return NextResponse.json({ text });
 }

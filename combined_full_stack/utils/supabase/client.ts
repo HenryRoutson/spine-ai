@@ -1,5 +1,7 @@
 import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { API_ROUTES } from "@/lib/api-routes";
+import { FETCH_NO_STORE } from "@/lib/api-client";
 import type { SupabasePublicEnv } from "@/utils/supabase/env";
 
 declare global {
@@ -30,7 +32,7 @@ function envFromBuild(): SupabasePublicEnv | null {
 }
 
 async function fetchPublicEnv(): Promise<SupabasePublicEnv> {
-  const res = await fetch("/api/supabase-env", { cache: "no-store" });
+  const res = await fetch(API_ROUTES.supabaseEnv, FETCH_NO_STORE);
   if (!res.ok) {
     throw new Error(
       "Supabase is not configured — set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY on Vercel, then redeploy.",

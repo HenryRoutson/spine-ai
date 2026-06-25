@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { NextResponse } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { HTTP, unknownDoc } from "@/lib/server/api-errors";
 import { pdfFilePath } from "@/lib/server/store";
 import type { DocId } from "@/lib/server/types";
 
@@ -13,7 +14,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
 
   const { id } = await ctx.params;
   if (store.docContent(id as DocId) === undefined) {
-    return apiError(`unknown doc ${id}`, 404);
+    return apiError(unknownDoc(id), HTTP.NOT_FOUND);
   }
   const path = await pdfFilePath(id as DocId);
   // AI : expected for user-uploaded PDFs on Vercel/Supabase until Storage backfill lands.

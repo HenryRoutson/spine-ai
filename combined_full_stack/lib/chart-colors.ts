@@ -9,3 +9,6 @@ export const CHART_AXIS = "#64748b"
 
 export const CHART_OK_TEXT_CLASS = "text-[#22c55e]" as const
 export const CHART_ERR_TEXT_CLASS = "text-[#ef4444]" as const
+export const CHART_RETRY = "#f59e0b"
+export const CHART_RETRY_STROKE = "#b45309"
+export const CHART_RETRY_TEXT_CLASS = "text-[#f59e0b]" as const

@@ -27,12 +27,27 @@ function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
       log?.info(`token usage`, { model: ctx.model, ...u });
       ctx.ledger.recordLlm({ model: ctx.model, ...u });
     },
-    onRoundTrip: (inputChars, outputChars, ok, latencyMs) => {
+    onRoundTrip: (inputChars, outputChars, ok, latencyMs, meta) => {
       ctx.llmCalls?.push({
         inputChars,
         outputChars,
         latencyMs,
         status: ok ? "ok" : "error",
+        attempt: meta?.attempt,
+        httpStatus: meta?.httpStatus,
+        failureKind: meta?.failureKind ?? (ok ? undefined : "provider"),
+        failureDetail: meta?.failureDetail,
+      });
+    },
+    onStructuredFailure: (detail) => {
+      ctx.llmCalls?.push({
+        inputChars: detail.inputChars,
+        outputChars: detail.replyChars,
+        latencyMs: 0,
+        status: "error",
+        attempt: detail.attempt,
+        failureKind: detail.kind,
+        failureDetail: detail.error,
       });
     },
   };

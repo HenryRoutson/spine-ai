@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { computeRunFingerprintForRequest, findMatchingRun } from "@/lib/server/run_fingerprint";
 import type { DocId, ModelId, ProjectId } from "@/lib/server/types";
 
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
   const { store } = ctx;
 
   const { projectId, inputDocId, inputDocIds, model } = (await req.json()) as MatchRequest;
-  if (!store.project(projectId)) return apiError(`unknown project ${projectId}`, 404);
+  if (!store.project(projectId)) return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
 
   const project = store.project(projectId)!;
   const { fingerprint } = computeRunFingerprintForRequest(store, project, model, inputDocId, inputDocIds);

@@ -17,6 +17,7 @@ import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { cn } from "@/lib/utils"
 import {
   Select,
@@ -194,8 +195,8 @@ export function StructureBuilder() {
               )}
               {selected.fields.length === 0 && (
                 <div className="mb-4 flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-500" />
-                  <p className="font-mono text-[11px] text-amber-600 dark:text-amber-500">
+                  <AlertTriangle className={cn("h-3.5 w-3.5 shrink-0", WARNING_TEXT_CLASS)} />
+                  <p className={cn("font-mono text-[11px]", WARNING_TEXT_CLASS)}>
                     this model has no fields — add at least one before using it in a pipeline step
                   </p>
                 </div>

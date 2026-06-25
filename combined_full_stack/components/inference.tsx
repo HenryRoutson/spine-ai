@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
+import { formatUsdFromCents } from "@/lib/format"
 import { useAppShell } from "@/lib/app-shell"
 import { computeInvalid, modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
@@ -29,7 +30,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
-import { inputTypeLabel, inputNameRestrictionLabel } from "@/lib/inference-input"
+import { inputTypeLabel, inputNameRestrictionLabel, inputMinCountForModule, docsForInputModule, isMultiDocInputModule } from "@/lib/inference-input"
 import { inferenceInputIssueMessage } from "@/lib/inference-validity"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
 import { segmentPipeline, mergeCombineSegmentStatus } from "@/lib/pipeline-layout"
@@ -128,10 +129,11 @@ export function Inference() {
                   key={m.id}
                   inputModule={m}
                   outModel={modelName(models, m.outStructureId)}
-                  doc={run.inputDocs[m.id]}
+                  docs={docsForInputModule(run.inputDocs, m.id)}
                   issue={run.inputIssueByModule.get(m.id)}
                   onOpenPicker={() => run.setPickerModuleId(m.id)}
                   onOpenDoc={(docId) => open({ docId, start: 0, end: 0 })}
+                  onRemoveDoc={(docId) => run.removeInputDocForModule(m.id, docId)}
                 />
               ))}
             </div>
@@ -155,8 +157,8 @@ export function Inference() {
                   Not enough credit to run a pipeline
                 </p>
                 <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                  Balance ${(billingAccount!.balanceCents / 100).toFixed(2)} ·{" "}
-                  ${(minRunBalanceCents / 100).toFixed(2)} minimum to run
+                  Balance {formatUsdFromCents(billingAccount!.balanceCents)} ·{" "}
+                  {formatUsdFromCents(minRunBalanceCents)} minimum to run
                 </p>
                 <Button
                   variant="outline"
@@ -290,7 +292,7 @@ export function Inference() {
       {run.pickerModule && (
         <InferenceInputPickerPopup
           inputModule={run.pickerModule}
-          selectedDocId={run.inputDocs[run.pickerModule.id]?.id}
+          selectedDocIds={docsForInputModule(run.inputDocs, run.pickerModule.id).map((d) => d.id)}
           onSelect={(doc) => run.setInputDocForModule(run.pickerModule!.id, doc)}
           onClose={() => run.setPickerModuleId(null)}
         />
@@ -302,18 +304,22 @@ export function Inference() {
 function InferenceInputSlot({
   inputModule,
   outModel,
-  doc,
+  docs,
   issue,
   onOpenPicker,
   onOpenDoc,
+  onRemoveDoc,
 }: {
   inputModule: PipelineModule
   outModel?: string
-  doc?: DocRef
+  docs: DocRef[]
   issue?: { message: string }
   onOpenPicker: () => void
   onOpenDoc: (docId: DocId) => void
+  onRemoveDoc?: (docId: DocId) => void
 }) {
+  const min = inputMinCountForModule(inputModule)
+  const multi = isMultiDocInputModule(inputModule)
   return (
     <div className={cn("rounded-lg border bg-card p-3", issue ? "border-destructive/50" : "border-border")}>
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
@@ -321,6 +327,11 @@ function InferenceInputSlot({
         <Badge variant="outline" className="font-mono text-[9px] capitalize">
           {inputTypeLabel(inputModule.inputType)}
         </Badge>
+        {multi && (
+          <Badge variant="outline" className="font-mono text-[9px] text-muted-foreground">
+            min {min} doc{min === 1 ? "" : "s"}
+          </Badge>
+        )}
         {inputNameRestrictionLabel(inputModule) && (
           <Badge variant="outline" className="font-mono text-[9px] text-muted-foreground">
             name ∋ "{inputNameRestrictionLabel(inputModule)}"
@@ -328,25 +339,41 @@ function InferenceInputSlot({
         )}
         {outModel && (
           <Badge variant="outline" className="font-mono text-[9px] text-muted-foreground">
-            → {outModel}
+            → {outModel}{multi ? "[]" : ""}
           </Badge>
         )}
       </div>
-      {doc ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => onOpenDoc(doc.id)}
-            className="inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border bg-secondary/30 px-2 py-1.5 font-mono text-[10px] transition-colors hover:border-primary/40 hover:bg-primary/5"
-            title="Preview selected document"
-          >
-            <Link2 className="h-3 w-3 shrink-0 text-primary" />
-            <FileText className="h-3 w-3 shrink-0 text-primary" />
-            <span className="truncate">{doc.name}</span>
-          </button>
-          <Button variant="outline" size="sm" className="h-8 bg-transparent" onClick={onOpenPicker}>
-            <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> Change
-          </Button>
+      {docs.length ? (
+        <div className="space-y-2">
+          {docs.map((doc) => (
+            <div key={doc.id} className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenDoc(doc.id)}
+                className="inline-flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-border bg-secondary/30 px-2 py-1.5 font-mono text-[10px] transition-colors hover:border-primary/40 hover:bg-primary/5"
+                title="Preview selected document"
+              >
+                <Link2 className="h-3 w-3 shrink-0 text-primary" />
+                <FileText className="h-3 w-3 shrink-0 text-primary" />
+                <span className="truncate">{doc.name}</span>
+              </button>
+              {multi && onRemoveDoc && (
+                <Button variant="ghost" size="sm" className="h-8" onClick={() => onRemoveDoc(doc.id)}>
+                  Remove
+                </Button>
+              )}
+            </div>
+          ))}
+          {multi && (
+            <Button variant="outline" size="sm" className="h-8 bg-transparent" onClick={onOpenPicker}>
+              <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> Add document
+            </Button>
+          )}
+          {!multi && (
+            <Button variant="outline" size="sm" className="h-8 bg-transparent" onClick={onOpenPicker}>
+              <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> Change
+            </Button>
+          )}
         </div>
       ) : (
         <Button variant="outline" size="sm" className="w-full bg-transparent" onClick={onOpenPicker}>

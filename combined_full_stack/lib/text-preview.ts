@@ -2,7 +2,6 @@
 
 export const PREVIEW_STEP_IO_CHARS = 100
 export const PREVIEW_RUN_NOTES_CHARS = 72
-export const PREVIEW_RUN_STEP_CHARS = 160
 export const PREVIEW_SERVER_LOGS_CHARS = PREVIEW_STEP_IO_CHARS
 
 export function compactPreview(text: string, max: number): string {

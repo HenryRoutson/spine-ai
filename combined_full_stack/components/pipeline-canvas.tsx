@@ -28,6 +28,7 @@ import {
   type InvalidStep,
   type PipelineWarning,
 } from "@/lib/validity"
+import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { StructureLink } from "@/components/structure-link"
@@ -313,7 +314,7 @@ function SegmentRow({
         message={isInvalid ? invalidStepMessage(invalid!.get(m.id)!, models, modules) : undefined}
       />
       {!isInvalid && stepWarning && (
-        <p className="mt-1 text-center font-mono text-[10px] text-amber-600 dark:text-amber-500">
+        <p className={cn("mt-1 text-center font-mono text-[10px]", WARNING_TEXT_CLASS)}>
           {warningStepMessage(stepWarning, models, modules)}
         </p>
       )}

@@ -27,6 +27,8 @@ import { PipelineCanvas } from "@/components/pipeline-canvas"
 import { PipelineModuleFields } from "@/components/pipeline-module-fields"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { formatSecondsShort, formatUsdFromCents } from "@/lib/format"
+import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -137,10 +139,10 @@ export function PipelineBuilder() {
                 {copied ? "Copied" : "Copy prompt"}
               </Button>
               <span className="text-muted-foreground">
-                {totalMs != null ? `~${(totalMs / 1000).toFixed(1)}s avg` : "— avg"}
+                {totalMs != null ? `~${formatSecondsShort(totalMs)} avg` : "— avg"}
               </span>
               <span className="text-muted-foreground">
-                {totalCost != null ? `$${(totalCost / 100).toFixed(2)}/run` : "—/run"}
+                {totalCost != null ? `${formatUsdFromCents(totalCost)}/run` : "—/run"}
               </span>
               <Badge variant="outline" className="gap-1 text-[10px]">
                 <Zap className="h-3 w-3 text-primary" /> {cachedCount} cached
@@ -151,7 +153,7 @@ export function PipelineBuilder() {
                 </Badge>
               )}
               {warnings.size > 0 && (
-                <Badge variant="outline" className="gap-1 border-amber-500/50 text-[10px] text-amber-600 dark:text-amber-500">
+                <Badge variant="outline" className={cn("gap-1 border-amber-500/50 text-[10px]", WARNING_TEXT_CLASS)}>
                   <AlertTriangle className="h-3 w-3" /> {warnings.size} warning{warnings.size === 1 ? "" : "s"}
                 </Badge>
               )}
@@ -269,7 +271,7 @@ export function PipelineBuilder() {
                       label="avg cost"
                       value={
                         metrics.has(selected.id)
-                          ? `$${(metrics.get(selected.id)!.avgCostCents / 100).toFixed(2)}`
+                          ? formatUsdFromCents(metrics.get(selected.id)!.avgCostCents)
                           : "—"
                       }
                     />

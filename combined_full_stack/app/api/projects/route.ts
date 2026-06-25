@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { uid } from "@/lib/id";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { allProjectSeeds, blankProject, cloneProject } from "@/lib/server/seed";
 import { migrateProjectModules } from "@/lib/server/validity";
 import { logger } from "@/lib/server/server_logger";
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
     apiLog.info(`POST /api/projects — clone template`, { templateId: body.templateId, projectId: project.id });
   } else if (body.cloneFrom) {
     const source = store.project(body.cloneFrom);
-    if (!source) return apiError(`unknown project ${body.cloneFrom}`, 404);
+    if (!source) return apiError(unknownProject(body.cloneFrom), HTTP.NOT_FOUND);
     project = migrateProjectModules(cloneProject(source, existing));
     apiLog.info(`POST /api/projects — clone project`, { cloneFrom: body.cloneFrom, projectId: project.id });
   } else {

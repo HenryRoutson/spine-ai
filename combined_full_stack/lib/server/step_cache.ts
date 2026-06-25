@@ -50,6 +50,60 @@ function ownerPrefix(cacheOwnerId: string): string {
   return createHash("sha256").update(cacheOwnerId).digest("hex").slice(0, 12);
 }
 
+export function isStepCacheKeyOwned(key: string, cacheOwnerId: string): boolean {
+  return key.startsWith(`${ownerPrefix(cacheOwnerId)}__`) && key.endsWith(".json");
+}
+
+// AI : list/detail reads must not inflate hit counts — only run_engine cache hits bump stats.
+export function peekStepCache(key: string): StepCacheArtifact | undefined {
+  const path = join(cacheDir(), key);
+  if (!existsSync(path)) return undefined;
+  try {
+    const raw = JSON.parse(readFileSync(path, "utf8")) as StepCacheArtifact;
+    if (!raw || typeof raw !== "object" || !("value" in raw)) return undefined;
+    return raw;
+  } catch {
+    return undefined;
+  }
+}
+
+function artifactOutputText(artifact: StepCacheArtifact): string {
+  if (artifact.json) return artifact.json;
+  if (artifact.value === undefined) return "";
+  return typeof artifact.value === "string" ? artifact.value : JSON.stringify(artifact.value);
+}
+
+// AI : each whitespace token must appear in the same field (subset-style search per field).
+function matchesTokenQuery(haystack: string, query: string): boolean {
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return true;
+  const h = haystack.toLowerCase();
+  return tokens.every((t) => h.includes(t));
+}
+
+export type StepCacheSearchFields = {
+  step?: boolean;
+  input?: boolean;
+  output?: boolean;
+};
+
+function matchesCacheEntryQuery(
+  query: string,
+  fields: StepCacheSearchFields,
+  texts: { step: string; input: string; output: string },
+): boolean {
+  const q = query.trim();
+  if (!q) return true;
+
+  const enabled: string[] = [];
+  if (fields.step) enabled.push(texts.step);
+  if (fields.input) enabled.push(texts.input);
+  if (fields.output) enabled.push(texts.output);
+  if (!enabled.length) return true;
+
+  return enabled.some((haystack) => matchesTokenQuery(haystack, q));
+}
+
 function readStats(): CacheStatsFile {
   const path = statsPath();
   if (!existsSync(path)) return {};
@@ -129,13 +183,15 @@ export function listStepCacheEntries(args: {
   projects: Project[];
   query?: string;
   projectId?: ProjectId;
+  searchFields?: StepCacheSearchFields;
 }): StepCacheEntrySummary[] {
   const dir = cacheDir();
   if (!existsSync(dir)) return [];
 
   const prefix = ownerPrefix(args.cacheOwnerId);
   const stats = readStats();
-  const q = args.query?.trim().toLowerCase() ?? "";
+  const q = args.query?.trim() ?? "";
+  const searchFields = args.searchFields ?? {};
   const projectById = new Map(args.projects.map((p) => [p.id, p]));
   const rows: StepCacheEntrySummary[] = [];
 
@@ -168,21 +224,20 @@ export function listStepCacheEntries(args: {
     const stat = stats[name];
     const hits = stat?.hits ?? 0;
 
-    const haystack = [
-      name,
-      parsed.projectId,
-      project?.name,
-      parsed.moduleId,
-      moduleLabel,
-      parsed.model,
-      parsed.inputDocIds.join(" "),
-      artifact.inputPreview,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
+    const stepText = [moduleLabel, parsed.moduleId].filter(Boolean).join(" ");
+    const inputText = artifact.inputPreview ?? "";
+    const outputText = artifactOutputText(artifact);
 
-    if (q && !haystack.includes(q)) continue;
+    if (
+      q &&
+      !matchesCacheEntryQuery(q, searchFields, {
+        step: stepText,
+        input: inputText,
+        output: outputText,
+      })
+    ) {
+      continue;
+    }
 
     rows.push({
       key: name,
@@ -201,4 +256,57 @@ export function listStepCacheEntries(args: {
 
   rows.sort((a, b) => (b.lastHitAt ?? b.createdAt ?? 0) - (a.lastHitAt ?? a.createdAt ?? 0));
   return rows;
+}
+
+export type StepCacheEntryDetail = StepCacheEntrySummary & {
+  projectName?: string;
+  moduleLabel?: string;
+  outputJson: string;
+  docId?: DocId;
+};
+
+export function getStepCacheEntryDetail(args: {
+  cacheOwnerId: string;
+  projects: Project[];
+  key: string;
+}): StepCacheEntryDetail | undefined {
+  if (!isStepCacheKeyOwned(args.key, args.cacheOwnerId)) return undefined;
+
+  const artifact = peekStepCache(args.key);
+  if (!artifact) return undefined;
+
+  const path = join(cacheDir(), args.key);
+  const stats = readStats();
+  const stat = stats[args.key];
+
+  const parsed =
+    artifact.meta ??
+    parseCacheKeyFilename(args.key, args.projects) ??
+    ({
+      projectId: args.key.split("__")[1] as ProjectId,
+      moduleId: "unknown" as ModuleId,
+      model: "unknown" as ModelId,
+      inputDocIds: [],
+    } satisfies StepCacheMeta);
+
+  const project = args.projects.find((p) => p.id === parsed.projectId);
+  const moduleLabel = project?.modules.find((m) => m.id === parsed.moduleId)?.label;
+
+  return {
+    key: args.key,
+    projectId: parsed.projectId,
+    projectName: project?.name,
+    moduleId: parsed.moduleId,
+    moduleLabel,
+    model: parsed.model,
+    inputDocIds: parsed.inputDocIds,
+    hits: stat?.hits ?? 0,
+    costCents: artifact.costCents,
+    lastHitAt: stat?.lastHitAt,
+    createdAt: artifact.createdAt ?? stat?.createdAt,
+    inputPreview: artifact.inputPreview,
+    sizeBytes: existsSync(path) ? statSync(path).size : 0,
+    outputJson: artifactOutputText(artifact),
+    docId: artifact.docId,
+  };
 }

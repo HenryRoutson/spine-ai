@@ -44,6 +44,7 @@ export interface ModelField {
   description: string;
   example?: string; // AI : sample value — shown in structure UI and emitted in pydantic / LLM schema hints
   ref?: StructureModelId; // referenced model id when type === "model" | "list[model]"
+  minItems?: number; // AI : minimum list length when type is a list[…] field
 }
 
 export interface StructureModel {
@@ -86,6 +87,7 @@ export interface PipelineModule {
   // config
   inputType?: InputTypeSpec;
   inputNameContains?: string; // AI : optional filename substring — only matching docs can fill this input slot
+  inputMinCount?: number; // AI : minimum documents for this input slot (default 1); pair with outIsList for N submissions
   prompt?: string;
   code?: string; // AI : transform steps with custom code only
   fallbackList?: CustomCodeEntry[]; // AI : custom-code — ordered attempts, first is primary
@@ -156,12 +158,26 @@ export type RunStepStatus = "ok" | "cached" | "error";
 
 export type LlmCallStatus = "ok" | "error";
 
+// AI : what failed — provider HTTP, JSON parse, zod/pydantic schema, or post-step output check.
+export type FailureKind = "provider" | "json_parse" | "schema" | "step_output";
+
+export interface RunFailureRecord {
+  kind: FailureKind;
+  detail: string;
+  attempt?: number;
+  recovered: boolean;
+}
+
 // AI : one OpenRouter round-trip — feeds Logging length + latency distributions.
 export interface LlmCallRecord {
   inputChars: number;
   outputChars: number;
   latencyMs: number;
   status: LlmCallStatus;
+  attempt?: number;
+  httpStatus?: number;
+  failureKind?: FailureKind;
+  failureDetail?: string;
 }
 
 export interface RunStep {
@@ -177,6 +193,7 @@ export interface RunStep {
   outputJson?: string;
   docId?: DocId; // AI : source doc for input / doc-to-text steps — powers logging trace links
   llmCalls?: LlmCallRecord[];
+  failures?: RunFailureRecord[];
   serverLogs?: import("@/lib/run-types").JobLogEntry[]; // AI : mirrored ServerLogger lines for this step
 }
 
@@ -226,7 +243,7 @@ export interface TokenUsage {
 
 export const MODEL_OPTIONS: ModelOption[] = [
   { id: "qwen-2.5-72b", label: "Qwen 2.5 72B", provider: "openrouter", flag: "CN", costPer1k: 0.1064, promptUsdPerToken: 3.6e-7, completionUsdPerToken: 4e-7, cheap: true, slug: "qwen/qwen-2.5-72b-instruct" as OpenRouterSlug },
-  { id: "deepseek-v3", label: "DeepSeek V3", provider: "openrouter", flag: "CN", costPer1k: 0.14, promptUsdPerToken: 2.002e-7, completionUsdPerToken: 8.001e-7, cheap: true, slug: "deepseek/deepseek-chat" as OpenRouterSlug },
+  { id: "deepseek-v3", label: "DeepSeek V3", provider: "openrouter", flag: "CN", costPer1k: 0.14, promptUsdPerToken: 2.002e-7, completionUsdPerToken: 8.001e-7, cheap: true, slug: DEEPSEEK_SLUG as OpenRouterSlug },
   { id: "glm-4-plus", label: "GLM-4 Plus", provider: "openrouter", flag: "CN", costPer1k: 0.3038, promptUsdPerToken: 4.3e-7, completionUsdPerToken: 0.00000174, cheap: true, slug: "z-ai/glm-4.6" as OpenRouterSlug },
   { id: "gpt-5-mini", label: "GPT-5 mini", provider: "openai", flag: "US", costPer1k: 0.105, promptUsdPerToken: 1.5e-7, completionUsdPerToken: 6e-7, slug: "openai/gpt-4o-mini" as OpenRouterSlug },
   // AI : bug fix — old slug anthropic/claude-3.5-sonnet is gone from OpenRouter (404).

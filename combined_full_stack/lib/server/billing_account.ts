@@ -1,4 +1,12 @@
-import { MIN_ACCOUNT_BALANCE_CENTS, MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config";
+import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
+import {
+  BILLING_CAP_CENTS,
+  MIN_ACCOUNT_BALANCE_CENTS,
+  MIN_RUN_BALANCE_CENTS,
+  NEW_ACCOUNT_BALANCE_CENTS,
+  SUB_CENTS_PER_MONTH,
+  TOPUP_OPTIONS_CENTS,
+} from "@/lib/billing_config";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type Stripe from "stripe";
@@ -25,10 +33,12 @@ export type BillingAccount = {
   creditedSessions: string[];
 };
 
-export { MIN_RUN_BALANCE_CENTS };
-export const TOPUP_OPTIONS_CENTS = [100, 1000, 2000] as const;
-export const SUB_CENTS_PER_MONTH = 500;
-export const BILLING_CAP_CENTS = 30000; 
+export {
+  BILLING_CAP_CENTS,
+  MIN_RUN_BALANCE_CENTS,
+  SUB_CENTS_PER_MONTH,
+  TOPUP_OPTIONS_CENTS,
+};
 
 export class BillingError extends Error {
   constructor(readonly code: "insufficient_funds" | "cap_reached") {
@@ -37,7 +47,7 @@ export class BillingError extends Error {
 }
 
 const EMPTY: BillingAccount = {
-  balanceCents: 1000, // AI : $10 free credit for new accounts
+  balanceCents: NEW_ACCOUNT_BALANCE_CENTS,
   totalBilledCents: 0,
   subscribed: false,
   creditedSessions: [],
@@ -110,7 +120,7 @@ function isLocalJsonBillingKey(key: BillingUserKey): boolean {
 
 export async function getBillingUserKey(): Promise<BillingUserKey> {
   const auth = await requireAuth();
-  if (!isAuthSession(auth)) throw new Error("Sign in required");
+  if (!isAuthSession(auth)) throw new Error(AUTH_SIGN_IN_REQUIRED);
   return auth.userId as unknown as BillingUserKey;
 }
 

@@ -297,6 +297,12 @@ each step of the pipeline should have an optional evaluate prompt where an llm c
 
 
 allow creating alternate paths, and add testing option, then multiplex that with projects inside projects.
+  create optional paths or steps
+
+
+need to add enum type in structs
+
+add a feedback button into the UI
 
 
 mediflow_ai_company_profile.pdf : {"error":"no pdf file for sha_8b4a33391ead33d7"}

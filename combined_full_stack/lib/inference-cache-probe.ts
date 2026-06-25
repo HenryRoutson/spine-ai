@@ -3,6 +3,7 @@
 import {
   inputDocIdsForModules,
   runInputDocIdsMatch,
+  type InputDocsAssignment,
 } from "@/lib/inference-input"
 import { computeRunFingerprint } from "@/lib/run-fingerprint"
 import { matchRun } from "@/lib/run-engine"
@@ -73,7 +74,7 @@ export async function probeLocalInferenceCache(args: {
   docs: DocRef[]
   runs: PipelineRun[]
   inputModules: PipelineModule[]
-  inputDocs: Partial<Record<ModuleId, DocRef>>
+  inputDocs: InputDocsAssignment
 }): Promise<InferenceCacheLocalOutcome> {
   const { projectId, probeKey, project, model, docs, runs, inputModules, inputDocs } = args
   const orderedIds = inputDocIdsForModules(inputModules, inputDocs)
@@ -108,7 +109,7 @@ export async function probeServerInferenceCache(args: {
   project: Project
   model: ModelId
   inputModules: PipelineModule[]
-  inputDocs: Partial<Record<ModuleId, DocRef>>
+  inputDocs: InputDocsAssignment
   fingerprint: string
 }): Promise<InferenceCacheProbeHit | { kind: "miss"; fingerprint: string }> {
   const { projectId, project, model, inputModules, inputDocs, fingerprint } = args

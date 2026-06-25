@@ -6,6 +6,8 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // AI : skip static assets — everything else needs fresh session cookies.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  // AI : skip static assets + metadata routes (favicon, icon, sitemap) — auth must not gate them.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icon|apple-icon|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+  ],
 };

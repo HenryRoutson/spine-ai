@@ -25,7 +25,9 @@ export type RunCheckpoint = {
   startedAt: number;
   steps: RunStep[];
   ctx: {
-    inputQueue: DocId[];
+    inputByModule?: Record<ModuleId, DocId[]>;
+    inputQueue?: DocId[]; // AI : legacy checkpoints
+    byLabel?: import("../run-types").PipelineState;
     outputs: Record<ModuleId, unknown>;
     byModel: Record<StructureModelId, unknown>;
     sourceText: string;

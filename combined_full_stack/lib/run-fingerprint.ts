@@ -23,6 +23,7 @@ function moduleForFingerprint(m: PipelineModule) {
     outStructureId: m.outStructureId ?? null,
     inputType: m.inputType ?? null,
     inputNameContains: m.inputNameContains ?? null,
+    inputMinCount: m.inputMinCount ?? null,
     prompt: m.prompt ?? null,
     code: m.code ?? null,
     fallbackList: m.fallbackList?.length ? m.fallbackList : null,
