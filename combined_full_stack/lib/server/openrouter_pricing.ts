@@ -1,4 +1,6 @@
 // AI : OpenRouter list-models pricing + our 40% markup on top of their per-token rates.
+import { OPENROUTER_MODELS_URL } from "./openrouter_slugs";
+
 export const PRICE_MARKUP = 1.4;
 
 type UsdPerToken = number;
@@ -22,8 +24,6 @@ export function tokenCostCents(
   const usd = promptTokens * rates.promptUsdPerToken + completionTokens * rates.completionUsdPerToken;
   return +(usd * 100 * PRICE_MARKUP).toFixed(6);
 }
-
-const OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models";
 
 // AI : live pull from OpenRouter — used by scripts/sync_openrouter_pricing.mjs to refresh MODEL_OPTIONS.
 export async function fetchOpenRouterRates(slug: string): Promise<OpenRouterRates> {

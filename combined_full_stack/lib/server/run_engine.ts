@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "./config";
+import { readStepCache, writeStepCache, type StepCacheArtifact } from "./step_cache";
 import { runLogger } from "./server_logger";
 import { fileWriteHelper } from "./file_write_helper";
 import { llmBatchStructured, llmStructured } from "./llm";
@@ -41,9 +42,16 @@ import {
   type StructureModel,
   type StructureModelId,
 } from "./types";
-import type { StepProgress, StepSubProgress } from "@/lib/run-types";
+import type { JobLogEntry, StepProgress, StepSubProgress } from "@/lib/run-types";
+import { collectLogsDuring, withStepModuleContext } from "./job_log_sink";
+import { MAX_STEP_LOGS } from "./log_limits";
 
 export type { StepProgress, StepSubProgress };
+function stepServerLogs(logs: JobLogEntry[], moduleId: ModuleId): JobLogEntry[] | undefined {
+  const scoped = logs.filter((l) => l.moduleId === moduleId);
+  if (!scoped.length) return undefined;
+  return scoped.length <= MAX_STEP_LOGS ? scoped : scoped.slice(-MAX_STEP_LOGS);
+}
 
 export interface RunOptions {
   model: ModelId; // global model (per-step `module.model` overrides for llm)
@@ -61,30 +69,6 @@ export const LIVE_HTML_PATH = join(dataDir(), "live", "run_live.html");
 
 function modelById(models: StructureModel[], id?: StructureModelId): StructureModel | undefined {
   return models.find((m) => m.id === id);
-}
-
-// AI : per-step cache keyed by owner+project+module+all input slots+model+module config — honours `module.cached`.
-const cacheDir = join(dataDir(), "cache");
-
-type StepCacheArtifact = {
-  value: unknown;
-  json?: string;
-  docId?: DocId;
-  inputPreview?: string;
-  costCents?: number;
-};
-
-function readCache(key: string): StepCacheArtifact | undefined {
-  const path = join(cacheDir, key);
-  if (!existsSync(path)) return undefined;
-  const raw = JSON.parse(readFileSync(path, "utf8")) as StepCacheArtifact;
-  if (raw && typeof raw === "object" && "value" in raw) return raw;
-  return undefined;
-}
-
-function writeCache(key: string, artifact: StepCacheArtifact): void {
-  mkdirSync(cacheDir, { recursive: true });
-  writeFileSync(join(cacheDir, key), JSON.stringify(artifact, null, 2), "utf8");
 }
 
 function resultFromCache(m: PipelineModule, cached: StepCacheArtifact, ctx: RunCtx): ExecResult {
@@ -123,11 +107,6 @@ function resultFromCache(m: PipelineModule, cached: StepCacheArtifact, ctx: RunC
     docId,
     inputPreview: cached.inputPreview,
   };
-}
-
-function preview(s: string, n = 160): string {
-  const flat = s.replace(/\s+/g, " ").trim();
-  return flat.length > n ? flat.slice(0, n) + "…" : flat;
 }
 
 function sourceDocumentBlock(sourceText: string, docId: DocId, maxChars = 2400): string {
@@ -621,8 +600,6 @@ async function runLinearStepsFrom(
 
   for (let i = startIndex; i < project.modules.length; i++) {
     const m = project.modules[i];
-    log.section(`step ${i + 1}/${project.modules.length}: ${m.label}`);
-    log.info(`step starting`, { moduleId: m.id, kind: m.kind, cached: !!m.cached, stepModel: m.model ?? model });
     await opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status: "running" });
     writeLive(i);
 
@@ -642,97 +619,118 @@ async function runLinearStepsFrom(
       i === 0 ? `${inputTypeLabel(m.inputType)} document` : modelById(project.models, m.inStructureId)?.name ?? "Any";
     const beforeCents = ledger.totalCents();
     const t0 = Date.now();
-    let status: RunStepStatus = "ok";
-    let result: ExecResult | undefined;
 
-    const key = stepCacheKey(cacheOwnerId, projectId, m, m.model ?? model, fingerprintInputDocIds);
-    log.debug(`cache lookup`, { key, cachedFlag: !!m.cached });
-    const cached = m.cached ? readCache(key) : undefined;
+    const { logs: serverLogs, value: stepOutcome } = await withStepModuleContext(m.id, () =>
+      collectLogsDuring(async () => {
+      let status: RunStepStatus = "ok";
+      let result: ExecResult | undefined;
 
-    try {
-      if (cached) {
-        applyModuleSideEffects(m, ctx, ctx.store, log);
-        status = "cached";
-        savedCentsAcc.value += cached.costCents ?? 0;
-        result = resultFromCache(m, cached, ctx);
-        log.info(`cache HIT`, { moduleId: m.id, key, savedCents: cached.costCents ?? 0 });
-      } else {
-        result = await execModule(m, ctx, log);
-        const out = modelById(project.models, m.outStructureId);
-        if (out) {
-          const isList = m.outIsList || m.kind === "llm-batch";
-          const rawQuotes = isLlmKind(m.kind) && hasQuoteField(out, project.models);
-          const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes });
-          if (!check.ok) {
-            const failedJson = result.json ?? JSON.stringify(result.value, null, 2);
-            log.error(`validation failed`, { moduleId: m.id, structure: out.name, error: check.error, failedJson });
-            throw new Error(`output failed ${out.name} validation: ${check.error}`);
+      log.section(`step ${i + 1}/${project.modules.length}: ${m.label}`);
+      log.info(`step starting`, { moduleId: m.id, kind: m.kind, cached: !!m.cached, stepModel: m.model ?? model });
+
+      const key = stepCacheKey(cacheOwnerId, projectId, m, m.model ?? model, fingerprintInputDocIds);
+      log.debug(`cache lookup`, { key, cachedFlag: !!m.cached });
+      const cached = m.cached ? readStepCache(key) : undefined;
+
+      try {
+        if (cached) {
+          applyModuleSideEffects(m, ctx, ctx.store, log);
+          status = "cached";
+          savedCentsAcc.value += cached.costCents ?? 0;
+          result = resultFromCache(m, cached, ctx);
+          log.info(`cache HIT`, { moduleId: m.id, key, savedCents: cached.costCents ?? 0 });
+        } else {
+          result = await execModule(m, ctx, log);
+          const out = modelById(project.models, m.outStructureId);
+          if (out) {
+            const isList = m.outIsList || m.kind === "llm-batch";
+            const rawQuotes = isLlmKind(m.kind) && hasQuoteField(out, project.models);
+            const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes });
+            if (!check.ok) {
+              const failedJson = result.json ?? JSON.stringify(result.value, null, 2);
+              log.error(`validation failed`, { moduleId: m.id, structure: out.name, error: check.error, failedJson });
+              throw new Error(`output failed ${out.name} validation: ${check.error}`);
+            }
+            const itemCount = isList && Array.isArray(result.value) ? result.value.length : 1;
+            log.debug(`validation ok`, { moduleId: m.id, structure: out.name, itemCount });
           }
-          const itemCount = isList && Array.isArray(result.value) ? result.value.length : 1;
-          log.debug(`validation ok`, { moduleId: m.id, structure: out.name, itemCount });
+          if (m.cached) {
+            const stepCost = +(ledger.totalCents() - beforeCents).toFixed(4);
+            writeStepCache(
+              key,
+              {
+                value: result.value,
+                json:
+                  result.json ??
+                  (result.docId && m.kind === "input"
+                    ? JSON.stringify({ doc_id: result.docId }, null, 2)
+                    : undefined),
+                docId: result.docId,
+                inputPreview: result.inputPreview,
+                costCents: stepCost,
+              },
+              {
+                projectId,
+                moduleId: m.id,
+                model: m.model ?? model,
+                inputDocIds: fingerprintInputDocIds,
+              },
+            );
+            log.debug(`cache written`, { key, costCents: stepCost });
+          }
         }
-        if (m.cached) {
-          const stepCost = +(ledger.totalCents() - beforeCents).toFixed(4);
-          writeCache(key, {
-            value: result.value,
-            json:
-              result.json ??
-              (result.docId && m.kind === "input"
-                ? JSON.stringify({ doc_id: result.docId }, null, 2)
-                : undefined),
-            docId: result.docId,
-            inputPreview: result.inputPreview,
-            costCents: stepCost,
+      } catch (err) {
+        if (err instanceof ClientStepPendingError) {
+          const primary = err.entries[0];
+          throw new PipelinePausedError({
+            runId,
+            projectId,
+            cacheOwnerId,
+            inputDocId,
+            inputDocIds: fingerprintInputDocIds,
+            fingerprintInputDocIds,
+            model,
+            stepIndex: i,
+            startedAt,
+            steps: [...steps],
+            ctx: serializeCtx(ctx),
+            clientStep: {
+              moduleId: m.id,
+              label: m.label,
+              kind: m.kind,
+              code: primary?.code ?? "",
+              entries: err.entries,
+              input: err.input,
+              pipelineState: err.pipelineState,
+            },
           });
-          log.debug(`cache written`, { key, costCents: stepCost });
         }
-      }
-    } catch (err) {
-      if (err instanceof ClientStepPendingError) {
-        const primary = err.entries[0];
-        throw new PipelinePausedError({
-          runId,
-          projectId,
-          cacheOwnerId,
-          inputDocId,
-          inputDocIds: fingerprintInputDocIds,
-          fingerprintInputDocIds,
-          model,
-          stepIndex: i,
-          startedAt,
-          steps: [...steps],
-          ctx: serializeCtx(ctx),
-          clientStep: {
-            moduleId: m.id,
-            label: m.label,
-            kind: m.kind,
-            code: primary?.code ?? "",
-            entries: err.entries,
-            input: err.input,
-            pipelineState: err.pipelineState,
-          },
+        status = "error";
+        result = failedStepResult(err, m, ctx, result);
+        log.error(`step failed`, {
+          moduleId: m.id,
+          kind: m.kind,
+          error: (err as Error).message,
+          failedJson: result.json,
+          stack: (err as Error).stack,
         });
       }
-      status = "error";
-      result = failedStepResult(err, m, ctx, result);
-      log.error(`step failed`, {
+
+      log.info(`step finished`, {
         moduleId: m.id,
-        kind: m.kind,
-        error: (err as Error).message,
-        failedJson: result.json,
-        stack: (err as Error).stack,
+        status,
+        ms: status === "cached" ? 0 : Date.now() - t0,
+        costCents: +(status === "cached" ? 0 : ledger.totalCents() - beforeCents).toFixed(4),
+        preview: result?.preview,
       });
-    }
+      return { status, result };
+      }),
+    );
+
+    const { status, result } = stepOutcome;
 
     const ms = status === "cached" ? 0 : Date.now() - t0;
     const costCents = status === "cached" ? 0 : ledger.totalCents() - beforeCents;
-    log.info(`step finished`, {
-      moduleId: m.id,
-      status,
-      ms,
-      costCents: +costCents.toFixed(4),
-      preview: result.preview,
-    });
 
     if (status !== "error") {
       ctx.outputs.set(m.id, result.value);
@@ -759,6 +757,7 @@ async function runLinearStepsFrom(
       outputJson: result.json,
       docId: result.docId,
       llmCalls: result.llmCalls?.length ? result.llmCalls : undefined,
+      serverLogs: stepServerLogs(serverLogs, m.id),
     });
     await opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status });
     ctx.reportSub = undefined;
@@ -962,45 +961,73 @@ export async function resumeRunPipeline(
     value: steps.filter((s) => s.status === "cached").reduce((a, s) => a + s.costCents, 0),
   };
 
-  let status: RunStepStatus = "ok";
-  let result: ExecResult | undefined;
   const t0 = Date.now();
   const beforeCents = ledger.totalCents();
   const defaultInputPreview = modelById(project.models, m.inStructureId)?.name ?? "Any";
 
-  for (const entry of opts.clientLogs ?? []) {
-    log[entry.level === "error" ? "error" : entry.level === "warn" ? "warn" : "info"](entry.line, {
-      moduleId: m.id,
-      tag: entry.tag,
-    });
-  }
+  const { logs: serverLogs, value: stepOutcome } = await withStepModuleContext(m.id, () =>
+    collectLogsDuring(async () => {
+    let status: RunStepStatus = "ok";
+    let result: ExecResult | undefined;
 
-  try {
-    if (clientStep.error) throw new Error(clientStep.error);
-    result = buildClientResult(m, project, ctx, clientStep.output);
-    const out = modelById(project.models, m.outStructureId);
-    if (out) {
-      const isList = m.outIsList || m.kind === "llm-batch";
-      const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes: false });
-      if (!check.ok) throw new Error(`output failed ${out.name} validation: ${check.error}`);
+    log.section(`step ${checkpoint.stepIndex + 1}/${project.modules.length}: ${m.label}`);
+    log.info(`client step resume`, { moduleId: m.id, kind: m.kind });
+
+    for (const entry of opts.clientLogs ?? []) {
+      log[entry.level === "error" ? "error" : entry.level === "warn" ? "warn" : "info"](entry.line, {
+        moduleId: m.id,
+        tag: entry.tag,
+      });
     }
-  } catch (err) {
-    status = "error";
-    result = failedStepResult(err, m, ctx, result);
-    log.error(`client step failed`, { moduleId: m.id, error: (err as Error).message, failedJson: result.json });
-  }
+
+    try {
+      if (clientStep.error) throw new Error(clientStep.error);
+      result = buildClientResult(m, project, ctx, clientStep.output);
+      const out = modelById(project.models, m.outStructureId);
+      if (out) {
+        const isList = m.outIsList || m.kind === "llm-batch";
+        const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes: false });
+        if (!check.ok) throw new Error(`output failed ${out.name} validation: ${check.error}`);
+      }
+    } catch (err) {
+      status = "error";
+      result = failedStepResult(err, m, ctx, result);
+      log.error(`client step failed`, { moduleId: m.id, error: (err as Error).message, failedJson: result.json });
+    }
+
+    log.info(`step finished`, {
+      moduleId: m.id,
+      status,
+      ms: Date.now() - t0,
+      costCents: +(ledger.totalCents() - beforeCents).toFixed(4),
+      preview: result?.preview,
+    });
+    return { status, result };
+    }),
+  );
+
+  const { status, result } = stepOutcome;
 
   const ms = Date.now() - t0;
   const costCents = ledger.totalCents() - beforeCents;
   if (status !== "error" && m.cached && result) {
     const key = stepCacheKey(cacheOwnerId, checkpoint.projectId, m, m.model ?? model, fingerprintInputDocIds);
-    writeCache(key, {
-      value: result.value,
-      json: result.json,
-      docId: result.docId,
-      inputPreview: result.inputPreview,
-      costCents: +costCents.toFixed(4),
-    });
+    writeStepCache(
+      key,
+      {
+        value: result.value,
+        json: result.json,
+        docId: result.docId,
+        inputPreview: result.inputPreview,
+        costCents: +costCents.toFixed(4),
+      },
+      {
+        projectId: checkpoint.projectId,
+        moduleId: m.id,
+        model: m.model ?? model,
+        inputDocIds: fingerprintInputDocIds,
+      },
+    );
   }
   if (status !== "error") {
     ctx.outputs.set(m.id, result.value);
@@ -1021,6 +1048,7 @@ export async function resumeRunPipeline(
     inputPreview: defaultInputPreview,
     outputPreview: result.preview,
     outputJson: result.json,
+    serverLogs: stepServerLogs(serverLogs, m.id),
   });
   await opts.onStep?.({ index: checkpoint.stepIndex, total: project.modules.length, moduleId: m.id, label: m.label, status });
   if (status === "error") {

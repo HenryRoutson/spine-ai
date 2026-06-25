@@ -7,4 +7,4 @@ export {
   type ParallelStrategy,
 } from "./openrouter_llm";
 
-export const DEEPSEEK_SLUG = "deepseek/deepseek-chat" as const;
+export { DEEPSEEK_SLUG } from "./openrouter_slugs";

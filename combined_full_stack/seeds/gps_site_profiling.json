@@ -228,7 +228,7 @@
       "label": "GPS Site Catalog",
       "inputType": "json",
       "outStructureId": "m_src",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -240,7 +240,7 @@
       "inStructureId": "m_src",
       "outStructureId": "m_site",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 5,
       "avgCostCents": 0,
       "fallbackList": [
@@ -259,7 +259,7 @@
       "outIsList": true,
       "prompt": "Profile this GPS site from its coordinates and notes. Infer country, region, nearest settlement, and climate zone from latitude/longitude. Set is_cold_location true for polar, subarctic, or routinely sub-zero climates. Guess facility_type_guess from the name and notes (research lab, military, industrial, logistics, etc.). Set is_likely_research_lab and is_russian_or_post_soviet from geography and context. Keep the same site_id and name as the input. Write a concise two-sentence profile_summary.",
       "model": "deepseek-v3",
-      "cached": false,
+      "cached": true,
       "avgMs": 2200,
       "avgCostCents": 5
     },
@@ -270,7 +270,7 @@
       "note": "list[SiteProfile] → ProfileCollection for the cross-site similarity step.",
       "inStructureId": "m_profile",
       "outStructureId": "m_bundle",
-      "cached": false,
+      "cached": true,
       "avgMs": 5,
       "avgCostCents": 0,
       "fallbackList": [
@@ -288,7 +288,7 @@
       "outStructureId": "m_report",
       "prompt": "Analyze all site profiles in profiles_json. Group sites into similarity_clusters — each entry should name the cluster, list member site_ids, and explain shared traits (e.g. Russian Arctic installations, polar research hubs, high-security western labs). Populate russian_site_ids, research_lab_site_ids, and cold_location_site_ids from the profiles. List notable_pairs of the most similar sites with a one-line rationale each. Write an executive_summary of the overall pattern. Return one SimilarityReport object, not an array.",
       "model": "deepseek-v3",
-      "cached": false,
+      "cached": true,
       "avgMs": 3200,
       "avgCostCents": 8
     },
@@ -298,7 +298,7 @@
       "label": "Similarity Analysis Output",
       "inStructureId": "m_report",
       "outStructureId": "m_report",
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     }

@@ -22,6 +22,9 @@ import type { DocId, DocRef, ModelId, ModuleId, ProjectId } from "@/lib/server/t
 
 const apiLog = logger("api:runs");
 
+// AI : run dedup disabled — fingerprint matching is often wrong; re-enable when fixed.
+const RUN_DEDUP_ENABLED = false;
+
 // AI : todo §8 — after() keeps the pipeline alive once the response is sent (Vercel
 // AI : freezes plain dangling promises); maxDuration is the Fluid-compute ceiling.
 export const maxDuration = 300;
@@ -75,7 +78,7 @@ export async function POST(req: NextRequest) {
     inputDocId,
     inputDocIds,
   );
-  const cachedRun = findMatchingRun(store, project, projectId, fingerprint, model);
+  const cachedRun = RUN_DEDUP_ENABLED ? findMatchingRun(store, project, projectId, fingerprint, model) : undefined;
   if (cachedRun) {
     apiLog.info(`run deduped — identical pipeline + inputs already completed`, {
       fingerprint,

@@ -6,11 +6,13 @@ import { buildValueScatter, normalCurvePoints, type MetricScatter } from "@/lib/
 const W = 300
 const H = 120
 const PAD = { l: 8, r: 8, t: 10, b: 20 }
-const OK = "#22c55e"
-const OK_STROKE = "#15803d"
-const ERR = "#ef4444"
-const ERR_STROKE = "#b91c1c"
-const STAT = "#94a3b8"
+import {
+  CHART_ERR,
+  CHART_ERR_STROKE,
+  CHART_OK,
+  CHART_OK_STROKE,
+  CHART_STAT,
+} from "@/lib/chart-colors"
 const PLOT_STROKE = "currentColor"
 const R = 5
 
@@ -90,7 +92,7 @@ export function ValueScatterChart({
               })
               .join(" ")}
             fill="none"
-            stroke={STAT}
+            stroke={CHART_STAT}
             strokeWidth={1.5}
             opacity={0.9}
           />
@@ -102,7 +104,7 @@ export function ValueScatterChart({
               x2={stdLo}
               y1={plotY}
               y2={plotY + plotH}
-              stroke={STAT}
+              stroke={CHART_STAT}
               strokeWidth={1}
               strokeDasharray="3 3"
               opacity={0.65}
@@ -112,7 +114,7 @@ export function ValueScatterChart({
               x2={stdHi}
               y1={plotY}
               y2={plotY + plotH}
-              stroke={STAT}
+              stroke={CHART_STAT}
               strokeWidth={1}
               strokeDasharray="3 3"
               opacity={0.65}
@@ -124,7 +126,7 @@ export function ValueScatterChart({
           x2={meanX}
           y1={plotY}
           y2={plotY + plotH}
-          stroke={STAT}
+          stroke={CHART_STAT}
           strokeWidth={1.5}
           opacity={0.85}
         />
@@ -138,19 +140,19 @@ export function ValueScatterChart({
               cx={cx}
               cy={cy}
               r={R}
-              fill={ok ? OK : ERR}
-              stroke={ok ? OK_STROKE : ERR_STROKE}
+              fill={ok ? CHART_OK : CHART_ERR}
+              stroke={ok ? CHART_OK_STROKE : CHART_ERR_STROKE}
               strokeWidth={1.75}
             />
           )
         })}
-        <text x={plotX + 2} y={H - 5} fill={STAT} fontSize={8} fontFamily="ui-monospace, monospace">
+        <text x={plotX + 2} y={H - 5} fill={CHART_STAT} fontSize={8} fontFamily="ui-monospace, monospace">
           {fmt(xMin)}
         </text>
         <text
           x={plotX + plotW - 2}
           y={H - 5}
-          fill={STAT}
+          fill={CHART_STAT}
           fontSize={8}
           fontFamily="ui-monospace, monospace"
           textAnchor="end"
@@ -160,7 +162,7 @@ export function ValueScatterChart({
         <text
           x={W / 2}
           y={H - 5}
-          fill={STAT}
+          fill={CHART_STAT}
           fontSize={8}
           fontFamily="ui-monospace, monospace"
           textAnchor="middle"

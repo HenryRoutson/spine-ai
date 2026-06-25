@@ -140,7 +140,7 @@
       "inputType": "text",
       "inputNameContains": "open_invoices",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -152,7 +152,7 @@
       "inStructureId": "m_doc",
       "outStructureId": "m_row",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
       "fallbackList": [
@@ -168,7 +168,7 @@
       "inputType": "text",
       "inputNameContains": "bank_statement",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -178,7 +178,7 @@
       "label": "Combine Inputs",
       "inStructureId": "m_row",
       "outStructureId": "m_combined",
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     },
@@ -189,7 +189,7 @@
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
       "inStructureId": "m_combined",
       "outStructureId": "m_merged2",
-      "cached": false,
+      "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
       "fallbackList": [
@@ -207,7 +207,7 @@
       "outIsList": true,
       "prompt": "table_a_json is bank statement rows; table_b_json is open invoices. For each bank outflow (negative amount), output one ReconcileLine with matched=true if an invoice explains it, else matched=false with explanation.",
       "model": "deepseek-v3",
-      "cached": false,
+      "cached": true,
       "avgMs": 3000,
       "avgCostCents": 10
     },
@@ -218,7 +218,7 @@
       "inStructureId": "m_match",
       "outStructureId": "m_match",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     }

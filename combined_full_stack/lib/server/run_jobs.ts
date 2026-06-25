@@ -22,7 +22,7 @@ export interface RunJob extends RunJobBase {
   paused?: RunCheckpoint;
 }
 
-const MAX_JOB_LOGS = 400;
+import { MAX_JOB_LOGS } from "./log_limits";
 const LOG_PERSIST_MS = 300;
 const SUPABASE_PERSIST_MS = 200;
 

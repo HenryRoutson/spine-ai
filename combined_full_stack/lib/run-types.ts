@@ -13,6 +13,7 @@ export interface JobLogEntry {
   level: JobLogLevel;
   tag: string;
   line: string;
+  moduleId?: ModuleId; // AI : pipeline step that emitted this line — powers per-step log panels
 }
 
 export interface StepSubProgress {

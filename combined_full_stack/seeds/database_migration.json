@@ -203,7 +203,7 @@
       "label": "Legacy Users",
       "inputType": "json",
       "outStructureId": "m_src",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -215,7 +215,7 @@
       "inStructureId": "m_src",
       "outStructureId": "m_legacy",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 5,
       "avgCostCents": 0,
       "fallbackList": [
@@ -230,7 +230,7 @@
       "label": "Field Mapping Input",
       "inputType": "json",
       "outStructureId": "m_src",
-      "cached": false,
+      "cached": true,
       "avgMs": 80,
       "avgCostCents": 0
     },
@@ -241,7 +241,7 @@
       "note": "Builds {\"mapping\", \"legacy_users\"}",
       "inStructureId": "m_legacy",
       "outStructureId": "m_mig",
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     },
@@ -253,7 +253,7 @@
       "inStructureId": "m_mig",
       "outStructureId": "m_user",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 10,
       "avgCostCents": 0,
       "fallbackList": [
@@ -269,7 +269,7 @@
       "inStructureId": "m_user",
       "outStructureId": "m_user",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     }

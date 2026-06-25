@@ -136,7 +136,7 @@
       ],
       "inputNameContains": "legal_requirements",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 110,
       "avgCostCents": 0
     },
@@ -147,7 +147,7 @@
       "note": "Parse the contract and annotate its governing purpose.",
       "inStructureId": "m_doc",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 460,
       "avgCostCents": 1
     },
@@ -161,7 +161,7 @@
       "outIsList": true,
       "prompt": "Extract the 6 most important atomic, independently verifiable legal rules from the document. For each rule, give a stable rule_id (R-01, R-02, …), a concise plain-language description, the verbatim source quote it came from, and a 1-5 severity. Return at most 6 rules.",
       "model": "deepseek-v3",
-      "cached": false,
+      "cached": true,
       "avgMs": 2300,
       "avgCostCents": 6
     },
@@ -186,7 +186,7 @@
       "inStructureId": "m_rule",
       "outStructureId": "m_rule",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 5,
       "avgCostCents": 0,
       "fallbackList": [
@@ -205,7 +205,7 @@
       ],
       "inputNameContains": "company_legal_compliance",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -216,7 +216,7 @@
       "note": "Builds {\"company_data\", \"company_legal_requirements\"}",
       "inStructureId": "m_rule",
       "outStructureId": "m_combined",
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     },
@@ -230,7 +230,7 @@
       "outIsList": true,
       "prompt": "Given the company data and the extracted legal requirements, produce one concise assessment per rule: a short summary, the rule_id, a compliant verdict, a brief rationale, and the estimated USD liability exposure if non-compliant.",
       "model": "deepseek-v3",
-      "cached": false,
+      "cached": true,
       "avgMs": 3100,
       "avgCostCents": 12
     },
@@ -241,7 +241,7 @@
       "inStructureId": "m_report",
       "outStructureId": "m_report",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     }

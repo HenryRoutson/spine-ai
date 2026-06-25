@@ -1,5 +1,17 @@
 import type { ModuleKind } from "@/lib/types"
 
+// AI : kinds users can add in the builder / pipeline assistant (quote is auto-managed).
+export const USER_ADDABLE_MODULE_KINDS = [
+  "input",
+  "doc-to-text",
+  "llm",
+  "llm-batch",
+  "transform",
+  "combine",
+  "custom-code",
+  "output",
+] as const satisfies readonly ModuleKind[]
+
 // AI : llm + llm-batch share prompt/model fields across UI and server validity.
 export const LLM_KINDS: ModuleKind[] = ["llm", "llm-batch"]
 

@@ -1,6 +1,0 @@
-{
-  "value": {
-    "doc_id": "sha_538265aa171d99d5",
-    "body": "[\n  {\n    \"ID\": 101,\n    \"FullName\": \"Ada Lovelace\",\n    \"EMAIL_ADDR\": \"Ada@Example.COM\",\n    \"signup\": \"15/03/2021\",\n    \"addr_street\": \"12 Byron St\",\n    \"addr_city\": \"London\",\n    \"is_active\": \"Y\",\n    \"fax\": \"none\"\n  },\n  {\n    \"ID\": 102,\n    \"FullName\": \"Grace Brewster Hopper\",\n    \"EMAIL_ADDR\": \"GRACE@Navy.MIL\",\n    \"signup\": \"01/12/2019\",\n    \"addr_street\": \"3 Cobol Ave\",\n    \"addr_city\": \"Arlington\",\n    \"is_active\": \"N\",\n    \"fax\": \"555-0100\"\n  },\n  {\n    \"ID\": 103,\n    \"FullName\": \"Alan Turing\",\n    \"EMAIL_ADDR\": \"alan@bletchley.org\",\n    \"signup\": \"23/06/2020\",\n    \"addr_street\": \"1 Enigma Rd\",\n    \"is_active\": \"Y\"\n  }\n]\n"
-  }
-}

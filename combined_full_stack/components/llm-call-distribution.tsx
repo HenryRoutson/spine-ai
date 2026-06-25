@@ -7,6 +7,7 @@ import {
   metricAxisLabel,
   type MetricField,
 } from "@/lib/llm-distribution"
+import { CHART_ERR_TEXT_CLASS, CHART_OK_TEXT_CLASS } from "@/lib/chart-colors"
 import { ValueScatterChart } from "@/components/value-scatter-chart"
 
 export function LlmCallDistribution({
@@ -35,11 +36,11 @@ export function LlmCallDistribution({
             LLM call distributions
           </h4>
           <span className="font-mono text-[9px] text-muted-foreground">
-            <span className="text-[#22c55e]">{ok} ok</span>
+            <span className={CHART_OK_TEXT_CLASS}>{ok} ok</span>
             {failed > 0 && (
               <>
                 {" · "}
-                <span className="text-[#ef4444]">{failed} failed</span>
+                <span className={CHART_ERR_TEXT_CLASS}>{failed} failed</span>
               </>
             )}
           </span>
@@ -48,11 +49,11 @@ export function LlmCallDistribution({
       {compact && (
         <p className="mb-2 font-mono text-[10px] text-muted-foreground">
           Call distributions ·{" "}
-          <span className="text-[#22c55e]">{ok} ok</span>
+          <span className={CHART_OK_TEXT_CLASS}>{ok} ok</span>
           {failed > 0 && (
             <>
               {" · "}
-              <span className="text-[#ef4444]">{failed} failed</span>
+              <span className={CHART_ERR_TEXT_CLASS}>{failed} failed</span>
             </>
           )}
         </p>

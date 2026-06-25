@@ -38,16 +38,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
-const ADDABLE: ModuleKind[] = [
-  "input",
-  "doc-to-text",
-  "llm",
-  "llm-batch",
-  "transform",
-  "combine",
-  "custom-code",
-  "output",
-]
+import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"
+import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 
 type AsideTab = "inspector" | "assistant"
 
@@ -120,7 +112,7 @@ export function PipelineBuilder() {
     const json = JSON.stringify({ models, modules }, null, 2)
     await navigator.clipboard.writeText(json)
     setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)
   }
 
   const invalidMap = invalid
@@ -197,7 +189,7 @@ export function PipelineBuilder() {
             </div>
           </div>
 
-          <aside className="flex w-80 shrink-0 flex-col border-l border-border">
+          <aside className="flex min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-border">
             <div className="flex border-b border-border">
               <button
                 type="button"
@@ -229,7 +221,7 @@ export function PipelineBuilder() {
             {asideTab === "assistant" ? (
               <PipelineAssistant />
             ) : selected ? (
-              <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
+              <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                     {MODULE_META[selected.kind].label}
@@ -381,7 +373,7 @@ function AddStepMenu({
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuGroup>
-          {ADDABLE.map((k) => {
+          {USER_ADDABLE_MODULE_KINDS.map((k) => {
             const Icon = KIND_ICON[k]
             return (
               <DropdownMenuItem key={k} onClick={() => onInsert(k, insertAt)} className="gap-2">

@@ -140,7 +140,7 @@
       "inputType": "text",
       "inputNameContains": "expense_policy",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -152,7 +152,7 @@
       "inStructureId": "m_doc",
       "outStructureId": "m_row",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
       "fallbackList": [
@@ -168,7 +168,7 @@
       "inputType": "text",
       "inputNameContains": "expense_report",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -178,7 +178,7 @@
       "label": "Combine Inputs",
       "inStructureId": "m_row",
       "outStructureId": "m_combined",
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     },
@@ -189,7 +189,7 @@
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
       "inStructureId": "m_combined",
       "outStructureId": "m_merged2",
-      "cached": false,
+      "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
       "fallbackList": [
@@ -207,7 +207,7 @@
       "outIsList": true,
       "prompt": "table_a_json is the travel policy limits (JSON array). table_b_json is submitted expenses (JSON array). For EACH expense row, output one ComplianceFlag: line_id from the row index, category and amount_usd from the row, compliant verdict vs policy limits, and issue text if non-compliant.",
       "model": "deepseek-v3",
-      "cached": false,
+      "cached": true,
       "avgMs": 2800,
       "avgCostCents": 9
     },
@@ -218,7 +218,7 @@
       "inStructureId": "m_flag",
       "outStructureId": "m_flag",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     }

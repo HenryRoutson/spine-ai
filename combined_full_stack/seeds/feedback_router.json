@@ -82,7 +82,7 @@
       "inputType": "text",
       "inputNameContains": "product_feedback",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 80,
       "avgCostCents": 0
     },
@@ -93,7 +93,7 @@
       "inStructureId": "m_doc",
       "outStructureId": "m_item",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 5,
       "avgCostCents": 0,
       "fallbackList": [
@@ -111,7 +111,7 @@
       "outIsList": true,
       "prompt": "Classify product feedback into eng, design, docs, sales, or praise. Include a short representative_quote. Keep feedback_id.",
       "model": "deepseek-v3",
-      "cached": false,
+      "cached": true,
       "avgMs": 1800,
       "avgCostCents": 4
     },
@@ -122,7 +122,7 @@
       "inStructureId": "m_route",
       "outStructureId": "m_route",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     }

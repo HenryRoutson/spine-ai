@@ -11,6 +11,7 @@ export type AppWindowId =
   | "pipeline"
   | "inference"
   | "logging"
+  | "cache"
   | "documents"
   | "billing"
   | "settings"

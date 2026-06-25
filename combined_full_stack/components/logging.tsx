@@ -25,13 +25,21 @@ import { enrichRunModules, modulesFromRunSteps } from "@/lib/pipeline-run-diff"
 import { PipelineCanvas } from "@/components/pipeline-canvas"
 import { PipelineInspector } from "@/components/pipeline-inspector"
 import { RunNotesEditor } from "@/components/run-notes-editor"
+import { StepServerLogsSection, ServerLogLines } from "@/components/server-logs-panel"
 import { KIND_ICON } from "@/lib/module-ui"
 import { Search, Cpu, Maximize2, X, GitCompareArrows, Zap, Link2 } from "lucide-react"
 import { resolveRunInputDocIds, runInputDocsSummary } from "@/lib/inference-input"
 import { stepIoLabels } from "@/lib/module-kinds"
-import type { DocId, DocRef, ModuleId, PipelineRun, RunStepStatus } from "@/lib/types"
+import { compactPreview, PREVIEW_RUN_NOTES_CHARS, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
+import type { DocId, DocRef, JobLogEntry, ModuleId, PipelineRun, RunStepStatus } from "@/lib/types"
 
-type PopupPayload = { json?: string; text?: string; title: string; sourceDocId?: DocId }
+type PopupPayload = {
+  json?: string
+  text?: string
+  serverLogs?: JobLogEntry[]
+  title: string
+  sourceDocId?: DocId
+}
 
 function filterRuns(runs: PipelineRun[], query: string): PipelineRun[] {
   if (!query.trim()) return runs
@@ -45,12 +53,8 @@ function filterRuns(runs: PipelineRun[], query: string): PipelineRun[] {
   )
 }
 
-const RUN_NOTES_PREVIEW_CHARS = 72
-
 function previewRunNotes(notes: string): string {
-  const flat = notes.replace(/\s+/g, " ").trim()
-  if (flat.length <= RUN_NOTES_PREVIEW_CHARS) return flat
-  return `${flat.slice(0, RUN_NOTES_PREVIEW_CHARS).trimEnd()}...`
+  return compactPreview(notes, PREVIEW_RUN_NOTES_CHARS)
 }
 
 function RunNotesPreview({ notes }: { notes: string }) {
@@ -490,7 +494,7 @@ export function Logging() {
                           <IoSection
                             title={inTitle}
                             qualifier="input"
-                            summary={compactPreview(step.inputPreview)}
+                            summary={compactPreview(step.inputPreview, PREVIEW_STEP_IO_CHARS)}
                             docLink={
                               hasStepDocLink
                                 ? { docId: stepDoc, ...stepDocLinks.input }
@@ -507,11 +511,23 @@ export function Logging() {
                             <PromptText text={step.inputPreview} sourceDocId={stepSourceDoc} />
                           </IoSection>
 
+                          {step.serverLogs && step.serverLogs.length > 0 && (
+                            <StepServerLogsSection
+                              logs={step.serverLogs}
+                              onExpand={(logs) =>
+                                setPopup({
+                                  serverLogs: logs,
+                                  title: `Server logs · ${step.label}`,
+                                })
+                              }
+                            />
+                          )}
+
                           {step.status === "error" && step.outputPreview && (
                             <IoSection
                               title="Validation errors"
                               qualifier="error"
-                              summary={compactPreview(step.outputPreview)}
+                              summary={compactPreview(step.outputPreview, PREVIEW_STEP_IO_CHARS)}
                               onExpand={() =>
                                 setPopup({
                                   text: step.outputPreview,
@@ -528,7 +544,7 @@ export function Logging() {
                             qualifier="output"
                             summary={
                               step.outputJson
-                                ? compactPreview(step.outputJson.replace(/\s+/g, " "))
+                                ? compactPreview(step.outputJson, PREVIEW_STEP_IO_CHARS)
                                 : step.status === "error"
                                   ? undefined
                                   : step.outputPreview
@@ -597,7 +613,7 @@ export function Logging() {
                           stepStatus={runPipeline.stepStatus}
                         />
                       </div>
-                      <aside className="flex min-h-48 flex-col">
+                      <aside className="flex min-h-0 flex-col overflow-hidden">
                         <div className="border-b border-border px-4 py-2">
                           <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                             Inspector
@@ -689,6 +705,10 @@ export function Logging() {
                 {popupQuotes.length > 0 && <QuoteLinks quotes={popupQuotes} className="border-b border-border px-4 py-3" />}
                 <JsonPreviewPanel json={popup.json} className="min-h-0 flex-1" />
               </div>
+            ) : popup.serverLogs ? (
+              <div className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed">
+                <ServerLogLines logs={popup.serverLogs} />
+              </div>
             ) : (
               <div className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground">
                 <PromptText text={popup.text ?? ""} sourceDocId={popup.sourceDocId} />
@@ -700,9 +720,4 @@ export function Logging() {
       )}
     </div>
   )
-}
-
-function compactPreview(text: string, max = 100): string {
-  const one = text.replace(/\s+/g, " ").trim()
-  return one.length <= max ? one : `${one.slice(0, max)}…`
 }

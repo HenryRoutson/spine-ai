@@ -18,6 +18,12 @@ import {
   type JsonViewerHumanViewId,
   type JsonViewerSyntaxThemeId,
 } from "@/lib/json-viewer"
+import {
+  DEFAULT_HIDE_SERVER_LOGS,
+  readHideServerLogsDefault,
+  writeHideServerLogsDefault,
+} from "@/lib/logging-settings"
+import { Switch } from "@/components/ui/switch"
 
 // AI : vscode-style preview colors — mirror public/json-viewer.html theme "vscode"
 function VscodeSyntaxPreview({ json }: { json: string }) {
@@ -61,10 +67,12 @@ function SyntaxThemePreview({ theme }: { theme: JsonViewerSyntaxThemeId }) {
 export function Settings() {
   const [defaultView, setDefaultView] = useState<JsonViewerHumanViewId>(DEFAULT_JSON_VIEWER_HUMAN_VIEW)
   const [syntaxTheme, setSyntaxTheme] = useState<JsonViewerSyntaxThemeId>(DEFAULT_JSON_VIEWER_SYNTAX_THEME)
+  const [hideServerLogs, setHideServerLogs] = useState(DEFAULT_HIDE_SERVER_LOGS)
 
   useEffect(() => {
     setDefaultView(readJsonViewerDefaultView())
     setSyntaxTheme(readJsonViewerSyntaxTheme())
+    setHideServerLogs(readHideServerLogsDefault())
   }, [])
 
   function pickView(view: JsonViewerHumanViewId) {
@@ -75,6 +83,11 @@ export function Settings() {
   function pickSyntax(theme: JsonViewerSyntaxThemeId) {
     writeJsonViewerSyntaxTheme(theme)
     setSyntaxTheme(theme)
+  }
+
+  function pickHideServerLogs(hide: boolean) {
+    writeHideServerLogsDefault(hide)
+    setHideServerLogs(hide)
   }
 
   return (
@@ -149,6 +162,28 @@ export function Settings() {
                 )
               })}
             </div>
+          </section>
+
+          <section className="rounded-lg border border-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+              <h3 className="text-sm font-semibold">Run logging</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Server log sections in the step trace and live inference panel.
+              </p>
+            </div>
+            <label className="flex cursor-pointer items-start gap-3 px-4 py-3">
+              <Switch
+                checked={hideServerLogs}
+                onCheckedChange={(checked) => pickHideServerLogs(!!checked)}
+                className="mt-0.5"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">Hide server logs by default</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  When on, per-step server logs start collapsed — expand any step to read them.
+                </span>
+              </span>
+            </label>
           </section>
         </div>
       </div>

@@ -127,7 +127,13 @@ or
 }
 
 
+
+
+the pipeline should have clickable linked to the intput and output structs that are set so you don't have to manually go to the structs tab and find it 
+
+
 raise error to pipeline if code doesn't compile in a code step
+code should also be fully traceable. if a piece of code fails, this is stored for future reference. 
 
 Need dynamic scehmas. If you have a task to mark homework, you're provided with a doc to text conversion of homework to text. from this you need to create an output schema of what the marking should check like question 7 should have fields a, b, c maybe, and the question descriptoins and marking criteria is inside each of those fields. you can't hardcode this for every homework sheet. Allow the option to request llm calls to output in a dynamic format and validate in same way. Maybe a format that adheres to a certain generic structure.
 
@@ -139,7 +145,7 @@ documents are filtered based on if they adhere to the restrictions of the input 
 So you can either say, i only want pdfs or i only want json which is of this structure. 
 files are already uploaded into documents, and you can select from these, with filtering based on name and extension completed.
 there is a run button,
-when you click it a live server log appears. when the run is completed there is a button directing users to the logging tab.
+when you click it a live server log appears. when the run is completed there is a button directing users to the logging tab. server logs displayed should be broken down by step in the pipeline.
 there is a text field to put a description of why you are doing this run which you can edit in logging and saerch for later to organiase your runs.
 if you do a run that has already been completed the same setup, there is a button that appears to go to the log and not to run.
 documents are selected from the documents tab to avoid repeat uplaods, latency in upload, and work in converting to text.
@@ -147,6 +153,8 @@ documents are selected from the documents tab to avoid repeat uplaods, latency i
 if you do not have enough funds in billing, a button to direct you to the billing tab will appear.
 
 after inference is finished or if it's cached, the final output should show up. With a json, excel style viewer, or even custom visualisations like video, plots.
+
+
 
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.
@@ -171,11 +179,17 @@ when displaying prompts, all sub components are highlighted and profiled on thei
 
 prompting should be stored in json for it's different components and then a static flatten function should be used to convert to the actual prompt. for example, don't store 1000 prompts with the denormalised text from a document as this is inefficient. only denormalise when sending to prompt.
 
+please include the server logs in addition to input and output at each step with an option to hide them as default set to true in settings.
+please make sure you attribute server logs to different steps in the pipeline, not just putting it in one blob
+
+
 # documents
 
 the documents tab contains all documents and their size with the ability to view them. you can also view pdf documents markdown in raw text or as formatted or as the original pdf and the same for word and other more complex documents. 
 csv, excel, json can all be viewed as json, excel or in original text.
 flag and block uploads if they contain 'confidential' until you click approve
+
+uploading a new document will check if it matches any of the existing structs and display this. you have the option to add any new structures in the document.
 
 # Billing 
 current credit.

@@ -6,6 +6,7 @@ import {
   GitBranch,
   Play,
   ScrollText,
+  Database,
   Files,
   CreditCard,
   Settings,
@@ -33,6 +34,7 @@ import { PipelineBuilder } from "@/components/pipeline-builder"
 // import { AbTesting } from "@/components/ab-testing" // AI : commented out — placeholder until auto-config benchmark lands
 import { Inference } from "@/components/inference"
 import { Logging } from "@/components/logging"
+import { Cache } from "@/components/cache"
 import { Documents } from "@/components/documents"
 import { Billing } from "@/components/billing"
 import { Settings as SettingsPanel } from "@/components/settings"
@@ -61,9 +63,10 @@ const WINDOWS: { id: WindowId; label: string; hint: string; icon: typeof Boxes }
   { id: "pipeline", label: "Pipeline", hint: "02", icon: GitBranch },
   { id: "inference", label: "Inference", hint: "03", icon: Play },
   { id: "logging", label: "Logging", hint: "04", icon: ScrollText },
-  { id: "documents", label: "Documents", hint: "05", icon: Files },
-  { id: "billing", label: "Billing", hint: "06", icon: CreditCard },
-  { id: "settings", label: "Settings", hint: "07", icon: Settings },
+  { id: "cache", label: "Cache", hint: "05", icon: Database },
+  { id: "documents", label: "Documents", hint: "06", icon: Files },
+  { id: "billing", label: "Billing", hint: "07", icon: CreditCard },
+  { id: "settings", label: "Settings", hint: "08", icon: Settings },
 ]
 
 function ProjectRenameInput({
@@ -376,6 +379,7 @@ function Shell() {
               {activeWindow === "pipeline" && <PipelineBuilder />}
               {activeWindow === "inference" && <Inference />}
               {activeWindow === "logging" && <Logging />}
+              {activeWindow === "cache" && <Cache />}
               {activeWindow === "documents" && <Documents />}
               {activeWindow === "billing" && <Billing />}
               {activeWindow === "settings" && <SettingsPanel />}

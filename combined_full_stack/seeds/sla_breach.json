@@ -89,7 +89,7 @@
       "inputType": "text",
       "inputNameContains": "sla_uptime",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -100,7 +100,7 @@
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
       "inStructureId": "m_doc",
       "outStructureId": "m_parsed",
-      "cached": false,
+      "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
       "fallbackList": [
@@ -118,7 +118,7 @@
       "outIsList": true,
       "prompt": "rows_json is a JSON array parsed from the uptime markdown table. Emit one SlaBreachRow per service with breached=true when the Breach column is yes. Include credit_note from the document narrative when breached.",
       "model": "deepseek-v3",
-      "cached": false,
+      "cached": true,
       "avgMs": 2200,
       "avgCostCents": 7
     },
@@ -129,7 +129,7 @@
       "inStructureId": "m_breach",
       "outStructureId": "m_breach",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     }

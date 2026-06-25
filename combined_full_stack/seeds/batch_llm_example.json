@@ -95,7 +95,7 @@
       "label": "Bullet List",
       "inputType": "text",
       "outStructureId": "m_src",
-      "cached": false,
+      "cached": true,
       "avgMs": 80,
       "avgCostCents": 0
     },
@@ -107,7 +107,7 @@
       "inStructureId": "m_src",
       "outStructureId": "m_chunk",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 5,
       "avgCostCents": 0,
       "fallbackList": [
@@ -126,7 +126,7 @@
       "outIsList": true,
       "prompt": "Summarize the checklist line in one concise sentence. Keep the same id as the input item.",
       "model": "deepseek-v3",
-      "cached": false,
+      "cached": true,
       "avgMs": 1800,
       "avgCostCents": 4
     },
@@ -137,7 +137,7 @@
       "note": "AFTER batch LLM — list[ChunkSummary] → single CombinedReport for the output step.",
       "inStructureId": "m_summary",
       "outStructureId": "m_report",
-      "cached": false,
+      "cached": true,
       "avgMs": 5,
       "avgCostCents": 0,
       "fallbackList": [
@@ -152,7 +152,7 @@
       "label": "Summary Report",
       "inStructureId": "m_report",
       "outStructureId": "m_report",
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     }

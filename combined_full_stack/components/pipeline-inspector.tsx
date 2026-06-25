@@ -22,7 +22,7 @@ export function PipelineInspector({ module: selected, models, modules = [] }: Pi
   }
 
   return (
-    <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
+    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
       <div className="mb-3 flex items-center justify-between">
         <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           {MODULE_META[selected.kind].label}

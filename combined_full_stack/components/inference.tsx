@@ -34,7 +34,10 @@ import { inferenceInputIssueMessage } from "@/lib/inference-validity"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
 import { segmentPipeline, mergeCombineSegmentStatus } from "@/lib/pipeline-layout"
 import { useInferenceRun } from "@/lib/use-inference-run"
+import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { RunNotesPad } from "@/components/run-notes-pad"
+import { StepServerLogsSection } from "@/components/server-logs-panel"
+import type { JobLogEntry } from "@/lib/types"
 
 export function Inference() {
   const {
@@ -217,8 +220,19 @@ export function Inference() {
                       )
                       return (
                         <div key={seg.combine.id} className="space-y-1">
-                          <StepRow label={seg.combine.label} state={state} sub={combineUi?.sub} />
-                          <StepRow label={seg.input.label} state={inputState} sub={inputUi?.sub} nested />
+                          <StepRow
+                            label={seg.combine.label}
+                            state={state}
+                            sub={combineUi?.sub}
+                            serverLogs={run.logsByModule.get(seg.combine.id) ?? []}
+                          />
+                          <StepRow
+                            label={seg.input.label}
+                            state={inputState}
+                            sub={inputUi?.sub}
+                            nested
+                            serverLogs={run.logsByModule.get(seg.input.id) ?? []}
+                          />
                         </div>
                       )
                     }
@@ -229,41 +243,16 @@ export function Inference() {
                         label={seg.module.label}
                         state={moduleUi?.status ?? "idle"}
                         sub={moduleUi?.sub}
+                        serverLogs={run.logsByModule.get(seg.module.id) ?? []}
                       />
                     )
                   })}
                 </div>
+                <div ref={run.logEndRef} />
               </div>
             )}
 
-            {run.debugLogs.length > 0 && (
-              <div className="rounded-lg border border-border">
-                <div className="border-b border-border px-3 py-2">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    server logs · live
-                  </span>
-                </div>
-                <div className="max-h-48 overflow-y-auto p-2 font-mono text-[10px] leading-relaxed">
-                  {run.debugLogs.map((l, i) => (
-                    <div
-                      key={`${l.at}-${i}`}
-                      className={cn(
-                        "whitespace-pre-wrap break-words",
-                        l.level === "error" && "text-destructive",
-                        l.level === "warn" && "text-yellow-500",
-                        l.level === "debug" && "text-muted-foreground",
-                        l.level === "info" && "text-foreground/80",
-                      )}
-                    >
-                      {l.line}
-                    </div>
-                  ))}
-                  <div ref={run.logEndRef} />
-                </div>
-              </div>
-            )}
-
-            {run.run && run.phase === "done" && !run.wasDeduped && (
+            {run.run && run.phase === "done" && (
               <div className="rounded-lg border border-border bg-card px-6 py-8 text-center">
                 {run.wasDeduped ? (
                   <Zap className="mx-auto h-10 w-10 text-primary" />
@@ -399,7 +388,7 @@ function ErrorBanner({ text }: { text: string }) {
     await navigator.clipboard.writeText(text)
     setCopied(true)
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
-    copyTimerRef.current = setTimeout(() => setCopied(false), 2000)
+    copyTimerRef.current = setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)
   }
 
   return (
@@ -424,11 +413,13 @@ function StepRow({
   state,
   nested,
   sub,
+  serverLogs = [],
 }: {
   label: string
   state: StepProgress["status"] | "idle"
   nested?: boolean
   sub?: StepSubProgress
+  serverLogs?: JobLogEntry[]
 }) {
   return (
     <div className={cn(nested && "pl-5")}>
@@ -461,6 +452,9 @@ function StepRow({
             <Progress value={sub.total > 0 ? Math.round((sub.current / sub.total) * 100) : 0} className="h-0.5" />
           )}
         </div>
+      )}
+      {serverLogs.length > 0 && (
+        <StepServerLogsSection logs={serverLogs} className={nested ? "pl-5" : "pl-7"} />
       )}
     </div>
   )

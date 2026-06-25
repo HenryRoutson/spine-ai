@@ -55,7 +55,7 @@ export const KIND_COLOR: Record<ModuleKind, string> = {
   transform: "text-chart-3",
   combine: "text-chart-3",
   "custom-code": "text-chart-1",
-  output: "text-chart-4",
+  output: "text-output",
 }
 
 export function KindIcon({ kind, size = "md" }: { kind: ModuleKind; size?: "sm" | "md" }) {

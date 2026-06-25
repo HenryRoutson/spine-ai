@@ -203,8 +203,8 @@ export function blankProject(id: ProjectId): Project {
     kind: "blank",
     models: [],
     modules: [
-      { id: "mod_blank_in" as ModuleId, kind: "input", label: "Input", inputType: "text", cached: false, avgMs: 80, avgCostCents: 0 },
-      { id: "mod_blank_out" as ModuleId, kind: "output", label: "Output", cached: false, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_blank_in" as ModuleId, kind: "input", label: "Input", inputType: "text", cached: true, avgMs: 80, avgCostCents: 0 },
+      { id: "mod_blank_out" as ModuleId, kind: "output", label: "Output", cached: true, avgMs: 40, avgCostCents: 0 },
     ],
     strategies: legalStrategies.map((s) => ({ ...s, id: `${s.id}_${id}` })),
   };

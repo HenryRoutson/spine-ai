@@ -280,11 +280,23 @@ ACTUALLY, I change my mind. this is going to make things much more complex and e
 
 auto derive format from excel or JSON with UI.
 
-openclaw add
+openclaw add? can't be in custom code?
 
+
+should i be able to delete the core SourceDocument? put a lock icon on it.
+also rename SourceDocument purpose?
 
 need more evidence in 
 Audit Sample Tester
+
+
+uploading a new document will check if it matches any of the existing structs and display this. you have the option to add any new structures in the document.
+
+each step of the pipeline should have an optional evaluate prompt where an llm can evaluate ?
+
+
+
+allow creating alternate paths, and add testing option, then multiplex that with projects inside projects.
 
 
 mediflow_ai_company_profile.pdf : {"error":"no pdf file for sha_8b4a33391ead33d7"}

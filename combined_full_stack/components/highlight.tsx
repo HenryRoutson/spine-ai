@@ -5,34 +5,77 @@ import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { useDocViewer } from "@/lib/doc-viewer"
-import type { DocId } from "@/lib/types"
+import type { DocId, JobLogLevel } from "@/lib/types"
+
+const JSON_TOKEN_RE =
+  /("(?:\\.|[^"\\])*"(?:\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g
+
+function jsonTokenClass(token: string): string {
+  if (/^"/.test(token)) return /:\s*$/.test(token) ? "text-chart-2" : "text-primary"
+  if (/^(true|false|null)$/.test(token)) return "text-chart-4"
+  if (/^-?\d/.test(token)) return "text-chart-3"
+  return "text-foreground"
+}
+
+// AI : inline JSON token coloring — shared by JsonHighlight and server log lines.
+export function InlineJsonTokens({ text }: { text: string }) {
+  const tokens = text.split(JSON_TOKEN_RE)
+  return (
+    <>
+      {tokens.map((t, i) =>
+        t ? (
+          <span key={i} className={jsonTokenClass(t)}>
+            {t}
+          </span>
+        ) : null,
+      )}
+    </>
+  )
+}
 
 // Lightweight JSON syntax highlighter for log/output views.
 export function JsonHighlight({ json }: { json: string }) {
-  const tokens = json.split(
-    /("(?:\\.|[^"\\])*"(?:\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,
-  )
   return (
     <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed">
       <code>
-        {tokens.map((t, i) => {
-          if (!t) return null
-          let cls = "text-foreground"
-          if (/^"/.test(t)) {
-            cls = /:\s*$/.test(t) ? "text-chart-2" : "text-primary"
-          } else if (/^(true|false|null)$/.test(t)) {
-            cls = "text-chart-4"
-          } else if (/^-?\d/.test(t)) {
-            cls = "text-chart-3"
-          }
-          return (
-            <span key={i} className={cls}>
-              {t}
-            </span>
-          )
-        })}
+        <InlineJsonTokens text={json} />
       </code>
     </pre>
+  )
+}
+
+const LOG_PREFIX_RE =
+  /^(\[\d{2}:\d{2}:\d{2}\.\d{3}\]) (\[(?:DEBUG|INFO|WARN|ERROR)\]) (\[[^\]]+\]) (.*)$/
+
+const LOG_LEVEL_CLASS: Record<JobLogLevel, string> = {
+  debug: "text-muted-foreground",
+  info: "text-foreground/80",
+  warn: "text-yellow-500",
+  error: "text-destructive",
+}
+
+function logMessageBody(line: string, tag: string): string {
+  const needle = `] [${tag}] `
+  const idx = line.indexOf(needle)
+  return idx >= 0 ? line.slice(idx + needle.length) : line
+}
+
+// AI : [time] [LEVEL] [tag] message — structural colors only; body stays plain readable text.
+export function ServerLogLineHighlight({ line, level, tag }: { line: string; level: JobLogLevel; tag: string }) {
+  const m = line.match(LOG_PREFIX_RE)
+  if (!m) {
+    return <span className={LOG_LEVEL_CLASS[level]}>{line}</span>
+  }
+  const [, ts, levelBracket, tagBracket, bodyFromLine] = m
+  const body = bodyFromLine || logMessageBody(line, tag)
+  const parsedLevel = levelBracket.slice(1, -1).toLowerCase() as JobLogLevel
+  return (
+    <span>
+      <span className="text-muted-foreground/60">{ts} </span>
+      <span className={LOG_LEVEL_CLASS[parsedLevel] ?? LOG_LEVEL_CLASS[level]}>{levelBracket} </span>
+      <span className="text-muted-foreground/80">{tagBracket} </span>
+      {body && <span className="text-foreground/90">{body}</span>}
+    </span>
   )
 }
 

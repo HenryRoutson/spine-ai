@@ -91,7 +91,7 @@
       "inputType": "text",
       "inputNameContains": "bug_report",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -102,7 +102,7 @@
       "inputType": "text",
       "inputNameContains": "app_logs",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -112,7 +112,7 @@
       "label": "Combine Inputs",
       "inStructureId": "m_doc",
       "outStructureId": "m_combined",
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     },
@@ -124,7 +124,7 @@
       "outStructureId": "m_enriched",
       "prompt": "user_report is the bug report SourceDocument (use user_report.body). app_logs is the log document (use app_logs.body). Infer repro_steps, severity, likely_component (e.g. export/pdf/fonts), and a concise summary.",
       "model": "deepseek-v3",
-      "cached": false,
+      "cached": true,
       "avgMs": 2400,
       "avgCostCents": 7
     },
@@ -134,7 +134,7 @@
       "label": "Enriched Ticket",
       "inStructureId": "m_enriched",
       "outStructureId": "m_enriched",
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     }

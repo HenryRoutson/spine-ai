@@ -228,6 +228,7 @@ export async function awaitRun(
             level: "warn",
             tag: "custom-code",
             line: formatCustomCodeFailureLog(f),
+            moduleId,
           })
         }
         if (failures.length) {
@@ -236,6 +237,7 @@ export async function awaitRun(
             level: "info",
             tag: "custom-code",
             line: `custom-code succeeded on attempt ${attemptIndex + 1} (${language}) after ${failures.length} fallback(s)`,
+            moduleId,
           })
         }
         if (output === undefined) {
@@ -265,6 +267,7 @@ export async function awaitRun(
             level: "error",
             tag: "custom-code",
             line: formatCustomCodeFailureLog(f),
+            moduleId,
           })
         }
         clientLogs.push({
@@ -272,6 +275,7 @@ export async function awaitRun(
           level: "error",
           tag: "custom-code",
           line: `custom-code exhausted all ${entries.length} attempt(s)`,
+          moduleId,
         })
         await submitClientStep(jobId, {
           error: (err as Error).message,

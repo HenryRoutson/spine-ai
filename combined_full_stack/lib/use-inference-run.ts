@@ -19,9 +19,10 @@ import {
   inferenceDocNeedsFullContent,
   type InferenceInputIssue,
 } from "@/lib/inference-validity"
+import { segmentPipeline } from "@/lib/pipeline-layout"
 import { computeRunFingerprint, runConfigStableKey } from "@/lib/run-fingerprint"
 import { pipelineRunError } from "@/lib/run-errors"
-import { segmentPipeline } from "@/lib/pipeline-layout"
+import { partitionLogsByModule } from "@/lib/step-logs"
 import { useCyclingWaitPhrase } from "@/lib/inference-wait-phrases"
 import { useRunNotesFlushOnLeave } from "@/lib/run-notes-flush"
 import {
@@ -480,16 +481,6 @@ export function useInferenceRun({
         },
       })
       if (jobGen !== activeJobGenRef.current) return
-      if (deduped) {
-        // AI : dedup completion UI disabled until cache/dedup bugs are fixed.
-        setPhase("idle")
-        setRun(null)
-        setCachedRunId(null)
-        setWasDeduped(false)
-        setStepStates(new Map())
-        setDebugLogs([])
-        return
-      }
       const notes = runNotesRef.current.trim() || undefined
       const withNotes = notes ? { ...finished, notes } : finished
       savedNotesRef.current = notes
@@ -566,6 +557,16 @@ export function useInferenceRun({
 
   const waitPhrase = useCyclingWaitPhrase(phase === "running", runningHints)
   const runErr = useMemo(() => (run ? pipelineRunError(run) : null), [run])
+  const activeModuleId = useMemo(() => {
+    for (const m of modules) {
+      if (stepStates.get(m.id)?.status === "running") return m.id
+    }
+    return undefined
+  }, [stepStates, modules])
+  const logsByModule = useMemo(
+    () => partitionLogsByModule(debugLogs, modules.map((m) => m.id), activeModuleId),
+    [debugLogs, modules, activeModuleId],
+  )
   const runButtonBusy = phase === "running" || validatingInputs || probingCache
   const runButtonLabel =
     phase === "running"
@@ -598,6 +599,7 @@ export function useInferenceRun({
     dbFingerprint,
     error,
     debugLogs,
+    logsByModule,
     runNotes,
     setRunNotes,
     logEndRef,

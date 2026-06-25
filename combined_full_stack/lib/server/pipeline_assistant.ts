@@ -13,6 +13,7 @@ import {
 import { UsageLedger } from "./usage";
 import { createPipelineModule } from "@/lib/pipeline-module-factory";
 import { uid } from "@/lib/id";
+import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds";
 import {
   DEFAULT_MODEL,
   INPUT_TYPES,
@@ -28,16 +29,7 @@ import {
   type StructureModelId,
 } from "./types";
 
-const MODULE_KINDS = [
-  "input",
-  "doc-to-text",
-  "llm",
-  "llm-batch",
-  "transform",
-  "combine",
-  "custom-code",
-  "output",
-] as const;
+const MODULE_KINDS = USER_ADDABLE_MODULE_KINDS;
 
 const INPUT_TYPE_VALUES = INPUT_TYPES.map((t) => t.value);
 

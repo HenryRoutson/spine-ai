@@ -96,7 +96,7 @@
       "inputType": "text",
       "inputNameContains": "algebra_homework",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -108,7 +108,7 @@
       "inStructureId": "m_doc",
       "outStructureId": "m_section",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
       "fallbackList": [
@@ -126,7 +126,7 @@
       "outIsList": true,
       "prompt": "Grade this homework section using the marking scheme in the document header. Award partial credit for method. Section C requires shown working. Return section_id matching input.",
       "model": "deepseek-v3",
-      "cached": false,
+      "cached": true,
       "avgMs": 2400,
       "avgCostCents": 6
     },
@@ -137,7 +137,7 @@
       "inStructureId": "m_grade",
       "outStructureId": "m_grade",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     }

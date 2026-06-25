@@ -8,6 +8,8 @@
 // AI :   - frontend MODEL_OPTIONS is missing "sonnet-4.7" (the A/B fallback model).
 
 // ---- branded id types (rule 4: differentiate otherwise-shared strings) ----
+import { DEEPSEEK_SLUG } from "./openrouter_slugs";
+
 export type ProjectId = string & { __brand: "ProjectId" };
 export type StructureModelId = string & { __brand: "StructureModelId" };
 export type ModuleId = string & { __brand: "ModuleId" };
@@ -111,6 +113,13 @@ export interface Project {
 
 export type StrategyKind = "single-llm" | "rlm" | "claude-code" | "cheap-agent";
 
+export const STRATEGY_KINDS = [
+  "single-llm",
+  "rlm",
+  "claude-code",
+  "cheap-agent",
+] as const satisfies readonly StrategyKind[];
+
 export interface Strategy {
   id: string;
   kind: StrategyKind;
@@ -168,6 +177,7 @@ export interface RunStep {
   outputJson?: string;
   docId?: DocId; // AI : source doc for input / doc-to-text steps — powers logging trace links
   llmCalls?: LlmCallRecord[];
+  serverLogs?: import("@/lib/run-types").JobLogEntry[]; // AI : mirrored ServerLogger lines for this step
 }
 
 export type RunFingerprint = string & { __brand: "RunFingerprint" };
@@ -289,7 +299,7 @@ export const STRATEGY_META: Record<StrategyKind, { name: string; description: st
 // AI : map a demo model id to its real OpenRouter slug; falls back to the cheap default.
 export function slugFor(modelId: ModelId | undefined): OpenRouterSlug {
   const opt = MODEL_OPTIONS.find((m) => m.id === modelId);
-  return opt?.slug ?? ("deepseek/deepseek-chat" as OpenRouterSlug);
+  return opt?.slug ?? (DEEPSEEK_SLUG as OpenRouterSlug);
 }
 
 export function modelOption(modelId: ModelId): ModelOption {

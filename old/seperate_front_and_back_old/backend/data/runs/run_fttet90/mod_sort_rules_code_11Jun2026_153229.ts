@@ -1,1 +1,0 @@
-(rules) => [...rules].sort((a, b) => b.severity - a.severity)

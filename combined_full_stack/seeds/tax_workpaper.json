@@ -133,7 +133,7 @@
       "inputType": "text",
       "inputNameContains": "w2_2024",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -145,7 +145,7 @@
       "inStructureId": "m_doc",
       "outStructureId": "m_row",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
       "fallbackList": [
@@ -161,7 +161,7 @@
       "inputType": "text",
       "inputNameContains": "1099",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -171,7 +171,7 @@
       "label": "Combine Inputs",
       "inStructureId": "m_row",
       "outStructureId": "m_combined",
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     },
@@ -182,7 +182,7 @@
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
       "inStructureId": "m_combined",
       "outStructureId": "m_merged2",
-      "cached": false,
+      "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
       "fallbackList": [
@@ -200,7 +200,7 @@
       "outIsList": true,
       "prompt": "table_a_json is parsed W-2 box rows; table_b_json is parsed 1099 field rows. Emit standardized WorkpaperField entries for wages, federal withholding, 401(k), state tax, and 1099 other income — each with source_form and source_box.",
       "model": "deepseek-v3",
-      "cached": false,
+      "cached": true,
       "avgMs": 2600,
       "avgCostCents": 8
     },
@@ -211,7 +211,7 @@
       "inStructureId": "m_field",
       "outStructureId": "m_field",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     }

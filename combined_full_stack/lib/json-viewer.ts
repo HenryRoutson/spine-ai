@@ -1,7 +1,9 @@
 // AI : shared JSON viewer settings — keep localStorage key + view ids in sync with public/json-viewer.html
 
-export const JSON_VIEWER_DEFAULT_VIEW_KEY = "auto-pipeline:json-viewer-default-view" as const
-export const JSON_VIEWER_SYNTAX_THEME_KEY = "auto-pipeline:json-viewer-syntax-theme" as const
+import { appStorageKey } from "@/lib/storage-keys"
+
+export const JSON_VIEWER_DEFAULT_VIEW_KEY = appStorageKey("json-viewer-default-view")
+export const JSON_VIEWER_SYNTAX_THEME_KEY = appStorageKey("json-viewer-syntax-theme")
 
 export type JsonViewerHumanViewId = "tree" | "table" | "json"
 export type JsonViewerSyntaxThemeId = "app" | "vscode"

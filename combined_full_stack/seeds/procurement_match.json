@@ -177,7 +177,7 @@
       "inputType": "text",
       "inputNameContains": "purchase_order",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -189,7 +189,7 @@
       "inStructureId": "m_doc",
       "outStructureId": "m_row",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
       "fallbackList": [
@@ -205,7 +205,7 @@
       "inputType": "text",
       "inputNameContains": "delivery_note",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -215,7 +215,7 @@
       "label": "Attach Delivery Note",
       "inStructureId": "m_row",
       "outStructureId": "m_po_dn",
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     },
@@ -226,7 +226,7 @@
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
       "inStructureId": "m_po_dn",
       "outStructureId": "m_dual",
-      "cached": false,
+      "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
       "fallbackList": [
@@ -242,7 +242,7 @@
       "inputType": "text",
       "inputNameContains": "vendor_invoice",
       "outStructureId": "m_doc",
-      "cached": false,
+      "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
     },
@@ -252,7 +252,7 @@
       "label": "Attach Invoice",
       "inStructureId": "m_dual",
       "outStructureId": "m_inv_in",
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     },
@@ -263,7 +263,7 @@
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
       "inStructureId": "m_inv_in",
       "outStructureId": "m_merged3",
-      "cached": false,
+      "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
       "fallbackList": [
@@ -281,7 +281,7 @@
       "outIsList": true,
       "prompt": "Compare po_json, delivery_json, and invoice_json row arrays. For each SKU present in any document, output one MatchLine with match_status and detail citing quantity or price mismatches (e.g. short-shipped SEAL-88 billed on invoice).",
       "model": "deepseek-v3",
-      "cached": false,
+      "cached": true,
       "avgMs": 3200,
       "avgCostCents": 11
     },
@@ -292,7 +292,7 @@
       "inStructureId": "m_line",
       "outStructureId": "m_line",
       "outIsList": true,
-      "cached": false,
+      "cached": true,
       "avgMs": 40,
       "avgCostCents": 0
     }

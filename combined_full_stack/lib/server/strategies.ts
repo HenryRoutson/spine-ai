@@ -9,6 +9,7 @@ import { UsageLedger } from "./usage";
 import { pipelineOutputModel, pipelineTaskPrompt } from "./validity";
 import {
   DEFAULT_MODEL,
+  STRATEGY_KINDS,
   type DocId,
   type ModelId,
   type Project,
@@ -184,7 +185,7 @@ export interface JudgeVerdict {
   scores: { resultKey: string; kind: StrategyKind; accuracy: number }[];
 }
 
-const KINDS = ["single-llm", "rlm", "claude-code", "cheap-agent"] as const;
+const KINDS = STRATEGY_KINDS;
 
 // AI : LLM judge — scores each environment's output quality (accuracy 0-100) and picks the winner.
 export async function judgeStrategies(

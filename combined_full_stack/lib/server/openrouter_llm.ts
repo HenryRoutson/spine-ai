@@ -4,6 +4,7 @@ import { structuredLlmPrompt } from "./structure";
 import { type ServerLogger, logger } from "./server_logger";
 // AI : env loading is centralised in ./config (cwd-anchored) — importing it for the
 // AI : side effect keeps OPENROUTER_API_KEY available here without a second dotenv path.
+import { DEEPSEEK_SLUG, OPENROUTER_AUTH_KEY_URL, OPENROUTER_CHAT_URL } from "./openrouter_slugs";
 import "./config";
 
 const orLog = logger("openrouter");
@@ -13,9 +14,7 @@ type ModelSlug = string & { __brand: "ModelSlug" };
 type RawReply = string & { __brand: "RawReply" };
 type JsonModeOn = boolean;
 
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const OPENROUTER_AUTH_KEY_URL = "https://openrouter.ai/api/v1/auth/key";
-const DEFAULT_MODEL = "deepseek/deepseek-chat" as ModelSlug;
+const DEFAULT_MODEL = DEEPSEEK_SLUG as ModelSlug;
 
 export type ParallelStrategy = "http1-burst" | "http1-pooled";
 
@@ -177,13 +176,13 @@ async function httpPost(
 ): Promise<{ res: Response; latencyMs: number }> {
   const t0 = Date.now();
   const res = dispatcher
-    ? await undiciFetch(OPENROUTER_URL, {
+    ? await undiciFetch(OPENROUTER_CHAT_URL, {
         method: "POST",
         headers: openRouterHeaders(apiKey()),
         body,
         dispatcher,
       })
-    : await fetch(OPENROUTER_URL, {
+    : await fetch(OPENROUTER_CHAT_URL, {
         method: "POST",
         headers: openRouterHeaders(apiKey()),
         body,

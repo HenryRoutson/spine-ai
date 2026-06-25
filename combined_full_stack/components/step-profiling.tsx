@@ -11,17 +11,21 @@ import {
   type StepMeanStats,
 } from "@/lib/step-profiling"
 
-const OK = "#22c55e"
-const OK_STROKE = "#15803d"
-const ERR = "#ef4444"
-const ERR_STROKE = "#b91c1c"
-const STAT = "#94a3b8"
-const AXIS = "#64748b"
+import {
+  CHART_AXIS,
+  CHART_ERR,
+  CHART_ERR_STROKE,
+  CHART_ERR_TEXT_CLASS,
+  CHART_OK,
+  CHART_OK_STROKE,
+  CHART_OK_TEXT_CLASS,
+  CHART_STAT,
+} from "@/lib/chart-colors"
 const PAD = { t: 12, r: 8, b: 48, l: 52 }
 const PLOT_H = 132
 
 function barColor(failed: number): { fill: string; stroke: string } {
-  return failed > 0 ? { fill: ERR, stroke: ERR_STROKE } : { fill: OK, stroke: OK_STROKE }
+  return failed > 0 ? { fill: CHART_ERR, stroke: CHART_ERR_STROKE } : { fill: CHART_OK, stroke: CHART_OK_STROKE }
 }
 
 function truncateLabel(label: string, max = 14): string {
@@ -62,16 +66,16 @@ function StepMetricBarChart({
           width={plotW}
           height={PLOT_H}
           className="fill-muted/15"
-          stroke={AXIS}
+          stroke={CHART_AXIS}
           strokeWidth={1}
         />
 
-        <line x1={plotX} y1={baselineY} x2={plotX + plotW} y2={baselineY} stroke={AXIS} strokeWidth={1} />
+        <line x1={plotX} y1={baselineY} x2={plotX + plotW} y2={baselineY} stroke={CHART_AXIS} strokeWidth={1} />
 
-        <text x={plotX - 6} y={baselineY + 3} fill={STAT} fontSize={8} fontFamily="ui-monospace, monospace" textAnchor="end">
+        <text x={plotX - 6} y={baselineY + 3} fill={CHART_STAT} fontSize={8} fontFamily="ui-monospace, monospace" textAnchor="end">
           0
         </text>
-        <text x={plotX - 6} y={PAD.t + 9} fill={STAT} fontSize={8} fontFamily="ui-monospace, monospace" textAnchor="end">
+        <text x={plotX - 6} y={PAD.t + 9} fill={CHART_STAT} fontSize={8} fontFamily="ui-monospace, monospace" textAnchor="end">
           {format(maxVal)}
         </text>
 
@@ -105,7 +109,7 @@ function StepMetricBarChart({
                 <text
                   x={centerX}
                   y={baselineY - barH - 4}
-                  fill={STAT}
+                  fill={CHART_STAT}
                   fontSize={7}
                   fontFamily="ui-monospace, monospace"
                   textAnchor="middle"
@@ -118,7 +122,7 @@ function StepMetricBarChart({
                   <text
                     x={centerX}
                     y={baselineY + 14}
-                    fill={STAT}
+                    fill={CHART_STAT}
                     fontSize={8}
                     fontFamily="ui-monospace, monospace"
                     textAnchor="middle"
@@ -128,7 +132,7 @@ function StepMetricBarChart({
                   <text
                     x={centerX}
                     y={baselineY + 28}
-                    fill={STAT}
+                    fill={CHART_STAT}
                     fontSize={7}
                     fontFamily="ui-monospace, monospace"
                     textAnchor="end"
@@ -178,11 +182,11 @@ export function StepProfiling({
           </p>
         </div>
         <span className="shrink-0 font-mono text-[9px] text-muted-foreground">
-          <span className="text-[#22c55e]">{ok} ok</span>
+          <span className={CHART_OK_TEXT_CLASS}>{ok} ok</span>
           {failed > 0 && (
             <>
               {" · "}
-              <span className="text-[#ef4444]">{failed} failed</span>
+              <span className={CHART_ERR_TEXT_CLASS}>{failed} failed</span>
             </>
           )}
         </span>

@@ -24,13 +24,13 @@ import type { ModuleId, PipelineModule, RunStepStatus, StructureModel } from "@/
 import { inputTypeLabel } from "@/lib/inference-input"
 import {
   invalidStepMessage,
-  modelName,
   warningStepMessage,
   type InvalidStep,
   type PipelineWarning,
 } from "@/lib/validity"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
+import { StructureLink } from "@/components/structure-link"
 
 type PipelineCanvasProps = {
   modules: PipelineModule[]
@@ -126,8 +126,6 @@ function SegmentRow({
     const combineStatus = stepStatus?.get(combine.id)
     const inputStatus = stepStatus?.get(input.id)
     const groupSelected = selectedId === combine.id || selectedId === input.id
-    const pipelineModel = modelName(models, combine.inStructureId)
-    const outModel = modelName(models, combine.outStructureId)
     return (
       <div className="mx-auto flex w-full flex-col items-center">
         <div
@@ -147,11 +145,11 @@ function SegmentRow({
               label={combine.label}
               detail={
                 <>
-                  {pipelineModel ?? "pipeline"}
+                  <StructureLink models={models} structureId={combine.inStructureId} fallback="pipeline" />
                   <span className="text-muted-foreground/60"> + </span>
                   document
                   <span className="text-muted-foreground/60"> → </span>
-                  {outModel ?? "·"}
+                  <StructureLink models={models} structureId={combine.outStructureId} />
                 </>
               }
             />
@@ -176,7 +174,9 @@ function SegmentRow({
               labelClass="text-xs"
               detail={
                 <>
-                  {modelName(models, input.outStructureId) ?? "·"} · {inputTypeLabel(input.inputType)}
+                  <StructureLink models={models} structureId={input.outStructureId} />
+                  <span className="text-muted-foreground/60"> · </span>
+                  {inputTypeLabel(input.inputType)}
                 </>
               }
             />
@@ -197,7 +197,6 @@ function SegmentRow({
   const isInvalid = invalid?.has(m.id)
   const stepWarning = warnings?.get(m.id)
   const locked = isAutoQuoteStep(m)
-  const ioName = modelName(models, m.inStructureId)
   const status = stepStatus?.get(m.id)
 
   if (m.kind === "output") {
@@ -209,15 +208,15 @@ function SegmentRow({
               onClick={() => onSelect?.(m.id)}
               className={cn(
                 "flex w-full flex-col items-center gap-1.5 rounded-lg border border-dashed px-4 py-3 text-center transition-colors",
-                "border-chart-4/50 bg-chart-4/5 shadow-sm",
+                "border-output/50 bg-output/5 shadow-sm",
                 isInvalid && "border-destructive/70 bg-destructive/5",
                 statusBorder(status),
-                m.id === selectedId && "border-chart-4 ring-1 ring-chart-4/40",
-                m.id !== selectedId && !isInvalid && !status && "hover:border-chart-4/80 hover:bg-chart-4/10",
+                m.id === selectedId && "border-output ring-1 ring-output/40",
+                m.id !== selectedId && !isInvalid && !status && "hover:border-output/80 hover:bg-output/10",
               )}
             >
               <div className="flex items-center justify-center gap-2">
-                <StepIndex index={i} className="text-chart-4/80" />
+                <StepIndex index={i} className="text-output/80" />
                 <KindIcon kind="output" />
               </div>
               <StepBody
@@ -225,8 +224,8 @@ function SegmentRow({
                 centered
                 detail={
                   <>
-                    {modelName(models, m.inStructureId) ?? "·"}
-                    <span className="text-chart-4/80"> · snapshot</span>
+                    <StructureLink models={models} structureId={m.inStructureId} />
+                    <span className="text-output/80"> · snapshot</span>
                   </>
                 }
               />
@@ -238,7 +237,7 @@ function SegmentRow({
               </div>
             </StepButton>
             <ArrowRight
-              className="pointer-events-none absolute left-full top-1/2 ml-2 h-4 w-4 -translate-y-1/2 text-chart-4"
+              className="pointer-events-none absolute left-full top-1/2 ml-2 h-4 w-4 -translate-y-1/2 text-output"
               aria-hidden
             />
           </div>
@@ -274,22 +273,24 @@ function SegmentRow({
         <StepBody
           label={m.label}
           detail={
-            m.kind === "input"
-              ? `${modelName(models, m.outStructureId) ?? "·"} · ${inputTypeLabel(m.inputType)}`
-              : locked
-                ? (
-                    <>
-                      {ioName ?? "·"}
-                      <span className="text-muted-foreground/60"> · same model in/out</span>
-                    </>
-                  )
-                : (
-                    <>
-                      {ioName ?? "·"}
-                      <span className="text-muted-foreground/60"> → </span>
-                      {modelName(models, m.outStructureId) ?? "·"}
-                    </>
-                  )
+            m.kind === "input" ? (
+              <>
+                <StructureLink models={models} structureId={m.outStructureId} />
+                <span className="text-muted-foreground/60"> · </span>
+                {inputTypeLabel(m.inputType)}
+              </>
+            ) : locked ? (
+              <>
+                <StructureLink models={models} structureId={m.inStructureId} />
+                <span className="text-muted-foreground/60"> · same model in/out</span>
+              </>
+            ) : (
+              <>
+                <StructureLink models={models} structureId={m.inStructureId} />
+                <span className="text-muted-foreground/60"> → </span>
+                <StructureLink models={models} structureId={m.outStructureId} />
+              </>
+            )
           }
         />
         {locked && <AutoQuoteLock />}

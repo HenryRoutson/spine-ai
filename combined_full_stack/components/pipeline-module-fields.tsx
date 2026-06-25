@@ -32,11 +32,11 @@ import { codeOfEntry, languageOfEntry, makeCustomCodeEntry } from "@/lib/custom_
 import { inputTypeLabel, inputNameRestrictionLabel, inputTypesForModule } from "@/lib/inference-input"
 import {
   invalidStepMessage,
-  modelName,
   warningStepMessage,
   type InvalidStep,
   type PipelineWarning,
 } from "@/lib/validity"
+import { StructureLink } from "@/components/structure-link"
 import { cn } from "@/lib/utils"
 
 function llmModelLabel(id?: string) {
@@ -162,18 +162,18 @@ export function PipelineModuleFields({
         <PipelineField label="Structure">
           {edit ? (
             <p className="rounded-md border border-chart-2/30 bg-chart-2/5 px-2.5 py-2 font-mono text-xs">
-              {modelName(models, selected.inStructureId) ?? "·"}
+              <StructureLink models={models} structureId={selected.inStructureId} />
               <span className="text-muted-foreground"> → </span>
-              {modelName(models, selected.outStructureId) ?? "·"}
+              <StructureLink models={models} structureId={selected.outStructureId} />
               <span className="mt-1 block font-mono text-[10px] text-muted-foreground">
                 same model — LLM emits strings, this step attaches source spans
               </span>
             </p>
           ) : (
             <StaticValue mono>
-              {modelName(models, selected.inStructureId) ?? "·"}
+              <StructureLink models={models} structureId={selected.inStructureId} />
               <span className="text-muted-foreground"> → </span>
-              {modelName(models, selected.outStructureId) ?? "·"}
+              <StructureLink models={models} structureId={selected.outStructureId} />
               <span className="mt-1 block font-mono text-[10px] text-muted-foreground">
                 same model — LLM emits strings, this step attaches source spans
               </span>
@@ -303,7 +303,9 @@ export function PipelineModuleFields({
                 invalid={invalid?.kind === "no-output"}
               />
             ) : (
-              <StaticValue mono>{modelName(models, selected.outStructureId)}</StaticValue>
+              <StaticValue mono>
+                <StructureLink models={models} structureId={selected.outStructureId} />
+              </StaticValue>
             )}
           </PipelineField>
         </>
@@ -327,7 +329,9 @@ export function PipelineModuleFields({
               invalid={selected.kind === "output" && invalid?.kind === "no-output"}
             />
           ) : (
-            <StaticValue mono>{modelName(models, selected.inStructureId)}</StaticValue>
+            <StaticValue mono>
+              <StructureLink models={models} structureId={selected.inStructureId} />
+            </StaticValue>
           )}
         </PipelineField>
       )}
@@ -346,7 +350,9 @@ export function PipelineModuleFields({
               invalid={invalid?.kind === "no-output"}
             />
           ) : (
-            <StaticValue mono>{modelName(models, selected.outStructureId)}</StaticValue>
+            <StaticValue mono>
+              <StructureLink models={models} structureId={selected.outStructureId} />
+            </StaticValue>
           )}
         </PipelineField>
       )}
