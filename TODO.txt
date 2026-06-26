@@ -151,6 +151,13 @@ Phase 4 — wire A/B strategy placeholder
 
 
 
+please make a plan for how to have a complete type system in this project. currently the types are kind of vibes . if something is a list like an input step, somehow it doesn't matter if you change it to a list of not. don't code. ideally i would just compile a python script dervied from the json and see what errors come from that. what would be best? i still want to support generics and document types like word. i also want to see errors per step like they are not and not overall. be step specific. 
+
+
+
+
+
+
 could have prompt evaluations, but i think the formats we use are more important like pydantic structures.
 
 
@@ -171,6 +178,10 @@ how to reorder fallbacks up and down buttons
 allow git sync to setup coding in custom code step, with env
 
 add ai editing to code snippets for code step
+
+
+please add an env model which is shared between all projects and a specific project env model. this shouldn't be a text file, but a struct that is locked from being deleted. it will be passed into all custom code steps and also be the env for implicit calls which use that.
+?
 
 
 

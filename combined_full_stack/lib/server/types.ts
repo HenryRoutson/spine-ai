@@ -78,6 +78,9 @@ export type CustomCodeLanguage = "typescript" | "python";
 // AI : one language key per entry — e.g. { "typescript": "(input) => input" } or { "python": "..." }.
 export type CustomCodeEntry = { typescript?: string; python?: string };
 
+// AI : doc-to-text — prebuilt PDF/text parser vs OpenRouter vision OCR (handwriting, scans).
+export type DocParseMode = "parser" | "llm";
+
 export interface PipelineModule {
   id: ModuleId;
   kind: ModuleKind;
@@ -94,6 +97,8 @@ export interface PipelineModule {
   code?: string; // AI : transform steps with custom code only
   fallbackList?: CustomCodeEntry[]; // AI : custom-code — ordered attempts, first is primary
   model?: ModelId; // per-step model override
+  docParseMode?: DocParseMode; // doc-to-text only — parser (default) or vision LLM
+  useOcr?: boolean; // input only — OpenRouter vision OCR when PDF/image is an accepted type
   cached: boolean;
   // AI : backend-only — llm/transform steps may emit a list of `outStructure` rather than one.
   outIsList?: boolean;
@@ -260,6 +265,22 @@ export const MODEL_OPTIONS: ModelOption[] = [
 // AI : for large structured outputs (qwen-2.5-72b on OpenRouter is markedly slower here).
 export const DEFAULT_MODEL: ModelId = "deepseek-v3";
 
+// AI : default vision model for doc-to-text LLM mode — Gemini reads images/PDFs/handwriting well.
+export const DEFAULT_VISION_DOC_PARSE_MODEL: ModelId = "gemini-3-flash";
+
+export const DOC_PARSE_MODES: { value: DocParseMode; label: string; hint: string }[] = [
+  { value: "parser", label: "Built-in parser", hint: "JS PDF reader · text extracted at upload" },
+  { value: "llm", label: "Use OCR", hint: "OpenRouter vision — scans, handwriting, image PDFs" },
+];
+
+export function docParseModeForModule(m: PipelineModule): DocParseMode {
+  return m.docParseMode ?? "parser";
+}
+
+export function isDocToTextLlm(m: PipelineModule): boolean {
+  return m.kind === "doc-to-text" && docParseModeForModule(m) === "llm";
+}
+
 export const FIELD_TYPES: FieldType[] = [
   "text",
   "int",
@@ -288,7 +309,7 @@ export const INPUT_TYPES: { value: InputType; label: string }[] = [
 
 export const MODULE_META: Record<ModuleKind, { label: string; description: string }> = {
   input: { label: "Input", description: "Ingest a source (pdf, word, web, json…)" },
-  "doc-to-text": { label: "Doc → Text", description: "Prebuilt parser, document to text" },
+  "doc-to-text": { label: "Doc → Text", description: "Prebuilt parser or OpenRouter vision LLM (scans & handwriting)" },
   llm: { label: "LLM Call", description: "Run a model against a prompt + schema" },
   "llm-batch": { label: "Batch LLM", description: "list in → list out (one structured call per item). Wrap with Custom TS before/after when upstream/downstream is a single object." },
   quote: {

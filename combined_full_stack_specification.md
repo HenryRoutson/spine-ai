@@ -57,19 +57,23 @@ preview code of structures with pydantic or zod and syntax highlighting
 ask an ai assistant to change the models for you
 
 
+
+
+
+
 # Pipeline
 
 A central visualisation of all steps of the pipeline with boxes for each step and a descrpition and associated icon.
 
 steps include 
   input - select a any subset of input types like pdf, word not just 1. select doucment to be default.
-    PDF
+    PDF - add a is_use_ocr toggle if pdf is an option.
     Word
     Excel
     JSON
     Text
     Web
-    Image
+    Image - add a is_use_ocr toggle
     n8n
   custom function - typescript or python, with built in fallback system
   single llm call

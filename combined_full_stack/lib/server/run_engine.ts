@@ -5,6 +5,7 @@ import { readStepCache, writeStepCache, type StepCacheArtifact } from "./step_ca
 import { runLogger } from "./server_logger";
 import { fileWriteHelper } from "./file_write_helper";
 import { llmBatchStructured, llmStructured } from "./llm";
+import { docToTextViaLlm } from "./doc_to_text";
 import { StructuredResponseError } from "./openrouter_llm";
 import { collectQuotes, resolveQuotesValue } from "./quotation";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
@@ -39,6 +40,8 @@ import { computeInvalid, migrateProjectModules, stepEmits } from "./validity";
 import { UsageLedger } from "./usage";
 import {
   DEFAULT_MODEL,
+  DEFAULT_VISION_DOC_PARSE_MODEL,
+  docParseModeForModule,
   type DocId,
   type LlmCallRecord,
   type ModelId,
@@ -335,9 +338,23 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         throw new Error(`input "${m.label}" needs at least ${min} document(s), got ${docIds.length}`);
       }
       const multi = isMultiDocInputModule(m) || docIds.length > 1;
-      log.info(`input module loaded doc(s)`, { moduleId: m.id, docCount: docIds.length, multi });
-      const materializeDoc = (docId: DocId, first: boolean) => {
-        const content = store.docContent(docId) ?? "";
+      log.info(`input module loaded doc(s)`, { moduleId: m.id, docCount: docIds.length, multi, useOcr: !!m.useOcr });
+      if (m.useOcr) ctx.stepLlmCalls = [];
+
+      const materializeDoc = async (docId: DocId, first: boolean) => {
+        let content = store.docContent(docId) ?? "";
+        if (m.useOcr) {
+          const stepModel = m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
+          content = await docToTextViaLlm(
+            store,
+            docId,
+            m.note ?? m.label,
+            m.prompt,
+            { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls },
+            content,
+            log.child("input-ocr"),
+          );
+        }
         if (first && !ctx.sourceText) {
           ctx.sourceText = content;
           ctx.sourceDocId = docId;
@@ -346,13 +363,23 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         const hints = { ...materializeHints(m, ctx, docId, content), docName };
         return materializeInputDocument(content, docId, m, project.models, hints);
       };
+
       if (!multi) {
         const docId = docIds[0]!;
-        const value = materializeDoc(docId, true);
+        const value = await materializeDoc(docId, true);
         ctx.outputs.set(m.id, value);
-        return { value, preview: `loaded ${inputTypeLabel(m.inputType)} → ${docId}`, docId };
+        return {
+          value,
+          preview: `loaded ${inputTypeLabel(m.inputType)} → ${docId}${m.useOcr ? " · OCR" : ""}`,
+          docId,
+          inputPreview: m.useOcr ? `vision OCR · ${m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL}` : undefined,
+          llmCalls: m.useOcr ? ctx.stepLlmCalls : undefined,
+        };
       }
-      const items = docIds.map((docId, i) => materializeDoc(docId, i === 0));
+      const items = [];
+      for (let i = 0; i < docIds.length; i++) {
+        items.push(await materializeDoc(docIds[i]!, i === 0));
+      }
       const out = modelById(project.models, m.outStructureId);
       const value =
         m.outIsList || !out
@@ -361,30 +388,89 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       ctx.outputs.set(m.id, value);
       return {
         value,
-        preview: `loaded ${docIds.length} ${inputTypeLabel(m.inputType)} doc(s)`,
+        preview: `loaded ${docIds.length} ${inputTypeLabel(m.inputType)} doc(s)${m.useOcr ? " · OCR" : ""}`,
         docId: docIds[0],
         json: JSON.stringify({ doc_ids: docIds }, null, 2),
+        inputPreview: m.useOcr ? `vision OCR · ${m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL}` : undefined,
+        llmCalls: m.useOcr ? ctx.stepLlmCalls : undefined,
       };
     }
 
     case "doc-to-text": {
-      // AI : prebuilt parser. Input already carries text (PDF parsed at ingest); annotate purpose.
-      const upstream = (ctx.prevModuleId && ctx.outputs.get(ctx.prevModuleId)) as { doc_id?: DocId; body?: string } | undefined;
-      const body = upstream?.body ?? ctx.sourceText;
-      const docId = upstream?.doc_id ?? ctx.sourceDocId;
+      const upstream = ctx.prevModuleId ? ctx.outputs.get(ctx.prevModuleId) : undefined;
+      const useLlm = docParseModeForModule(m) === "llm";
+      const stepModel = m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
+
+      const transcribeDoc = async (doc: { doc_id?: DocId; body?: string; purpose?: string }) => {
+        const docId = doc.doc_id ?? ctx.sourceDocId;
+        let body = doc.body ?? ctx.sourceText;
+        if (useLlm) {
+          body = await docToTextViaLlm(
+            store,
+            docId,
+            m.note ?? m.label,
+            m.prompt,
+            { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls },
+            body,
+            log.child("doc-to-text"),
+          );
+        } else {
+          ctx.ledger.recordService("doc-parse svc", ctx.model, 1);
+        }
+        const hints = materializeHints(m, ctx, docId, body);
+        return materializeStepOutput(m, project, { ...doc, doc_id: docId, body }, hints);
+      };
+
+      if (Array.isArray(upstream)) {
+        if (useLlm) ctx.stepLlmCalls = [];
+        log.info(`doc-to-text batch`, { count: upstream.length, llm: useLlm, purpose: m.label });
+        const items = [];
+        for (const doc of upstream) {
+          items.push(await transcribeDoc(doc as { doc_id?: DocId; body?: string; purpose?: string }));
+        }
+        const first = items[0] as { body?: string; doc_id?: DocId } | undefined;
+        if (first?.body) ctx.sourceText = first.body;
+        if (first?.doc_id) ctx.sourceDocId = first.doc_id;
+        const value = m.outIsList || upstream.length > 1 ? items : items[0];
+        const purpose = m.note ?? m.label;
+        return {
+          value,
+          preview: `purpose: ${purpose}${useLlm ? " · LLM OCR" : ""} · ${items.length} doc(s)`,
+          json: JSON.stringify({ purpose, count: items.length, mode: useLlm ? "llm" : "parser" }, null, 2),
+          docId: first?.doc_id,
+          inputPreview: useLlm ? `vision OCR · ${stepModel}` : undefined,
+          llmCalls: useLlm ? ctx.stepLlmCalls : undefined,
+        };
+      }
+
+      const single = (upstream ?? { body: ctx.sourceText, doc_id: ctx.sourceDocId }) as {
+        doc_id?: DocId;
+        body?: string;
+        purpose?: string;
+      };
+      if (useLlm) ctx.stepLlmCalls = [];
+      const value = await transcribeDoc(single);
+      const body = (value as { body?: string }).body ?? single.body ?? "";
+      const docId = (value as { doc_id?: DocId }).doc_id ?? single.doc_id ?? ctx.sourceDocId;
       ctx.sourceText = body;
       ctx.sourceDocId = docId;
-      // AI : doc parsing is a billable service line (Billing "doc-parse svc"), flat ~1c.
-      ctx.ledger.recordService("doc-parse svc", ctx.model, 1);
-      log.info(`doc-to-text`, { docId, chars: body.length, purpose: m.label });
-      const hints = materializeHints(m, ctx, docId, body);
-      const value = materializeStepOutput(m, project, { doc_id: docId, body }, hints);
-      const purpose = typeof (value as { purpose?: string }).purpose === "string" ? (value as { purpose: string }).purpose : m.label;
+      log.info(useLlm ? `doc-to-text LLM` : `doc-to-text`, {
+        docId,
+        chars: body.length,
+        model: useLlm ? stepModel : undefined,
+        purpose: m.label,
+      });
+      const purpose =
+        typeof (value as { purpose?: string }).purpose === "string"
+          ? (value as { purpose: string }).purpose
+          : m.label;
       return {
         value,
-        preview: `purpose: ${purpose}`,
-        json: JSON.stringify({ doc_id: docId, purpose, chars: body.length }, null, 2),
+        preview: `purpose: ${purpose}${useLlm ? " · LLM OCR" : ""}`,
+        json: JSON.stringify({ doc_id: docId, purpose, chars: body.length, mode: useLlm ? "llm" : "parser" }, null, 2),
         docId,
+        inputPreview: useLlm ? `vision OCR · ${stepModel}` : undefined,
+        llmCalls: useLlm ? ctx.stepLlmCalls : undefined,
       };
     }
 
@@ -645,7 +731,12 @@ function createWriteLive(
 }
 
 function recordStepModel(m: PipelineModule, globalModel: ModelId): ModelId | undefined {
-  return isLlmKind(m.kind) ? m.model ?? globalModel : undefined;
+  if (isLlmKind(m.kind)) return m.model ?? globalModel;
+  if (m.kind === "input" && m.useOcr) return m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
+  if (m.kind === "doc-to-text" && docParseModeForModule(m) === "llm") {
+    return m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
+  }
+  return undefined;
 }
 
 type LinearStepParams = {
@@ -713,6 +804,24 @@ async function runLinearStepsFrom(
       try {
         if (cached) {
           applyModuleSideEffects(m, ctx, ctx.store, log);
+          // AI : cache hit — OCR text lives in cached.value.body, not upstream (images start empty).
+          // AI : cache hit — OCR text lives in cached value, not raw store content.
+          if (m.kind === "input" && m.useOcr) {
+            const v = cached.value;
+            const first = Array.isArray(v)
+              ? (v[0] as { body?: string; doc_id?: DocId } | undefined)
+              : (v as { body?: string; doc_id?: DocId } | undefined);
+            if (typeof first?.body === "string") ctx.sourceText = first.body;
+            if (first?.doc_id) ctx.sourceDocId = first.doc_id;
+          }
+          if (m.kind === "doc-to-text" && docParseModeForModule(m) === "llm") {
+            const v = cached.value;
+            const first = Array.isArray(v)
+              ? (v[0] as { body?: string; doc_id?: DocId } | undefined)
+              : (v as { body?: string; doc_id?: DocId } | undefined);
+            if (typeof first?.body === "string") ctx.sourceText = first.body;
+            if (first?.doc_id) ctx.sourceDocId = first.doc_id;
+          }
           status = "cached";
           savedCentsAcc.value += cached.costCents ?? 0;
           result = resultFromCache(m, cached, ctx);

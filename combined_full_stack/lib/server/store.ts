@@ -37,21 +37,44 @@ function docsDir(): string {
   return join(dataDir(), "docs");
 }
 
-// AI : original PDF bytes live beside the extracted text (data/docs/<hash>.pdf) so the
-// AI : doc viewer can render the real file — the extracted text stays the canonical content.
-// AI : TODO bug (prod) — local disk only; SupabaseStore persists text in `docs` but not PDF
+// AI : original file bytes live beside extracted text (data/docs/<hash>.<ext>) for PDF viewer + vision OCR.
+// AI : TODO bug (prod) — local disk only; SupabaseStore persists text in `docs` but not file
 // AI : bytes, and on Vercel this lands in ephemeral /tmp. User uploads → GET /file 404.
 // AI : Fix: Supabase Storage (or inline blob) + serve from there, not dataDir().
-export function savePdfBytes(id: DocId, bytes: Uint8Array): void {
+const ORIGINAL_DOC_EXTS = ["pdf", "png", "jpg", "jpeg", "webp"] as const;
+type OriginalDocExt = (typeof ORIGINAL_DOC_EXTS)[number];
+
+const EXT_MIME: Record<OriginalDocExt, string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+};
+
+export function saveOriginalDocBytes(id: DocId, bytes: Uint8Array, ext: string): void {
+  const safe = ext.toLowerCase().replace(/^\./, "") as OriginalDocExt;
+  if (!ORIGINAL_DOC_EXTS.includes(safe)) return;
   mkdirSync(docsDir(), { recursive: true });
-  writeFileSync(join(docsDir(), `${id}.pdf`), bytes);
+  writeFileSync(join(docsDir(), `${id}.${safe}`), bytes);
 }
 
-// AI : lazy backfill — match seed PDFs via their .txt sidecar hash (no pdf-parse on serverless).
-// AI : uploaded PDFs are not backfilled here — only bundled seed sidecars (see savePdfBytes TODO).
-export async function pdfFilePath(id: DocId): Promise<string | undefined> {
-  const path = join(docsDir(), `${id}.pdf`);
-  if (existsSync(path)) return path;
+/** @deprecated use saveOriginalDocBytes */
+export function savePdfBytes(id: DocId, bytes: Uint8Array): void {
+  saveOriginalDocBytes(id, bytes, "pdf");
+}
+
+export type OriginalDocFile = { path: string; mime: string; ext: OriginalDocExt };
+
+export async function originalDocFile(id: DocId): Promise<OriginalDocFile | undefined> {
+  for (const ext of ORIGINAL_DOC_EXTS) {
+    const path = join(docsDir(), `${id}.${ext}`);
+    if (existsSync(path)) return { path, mime: EXT_MIME[ext], ext };
+  }
+  return backfillSeedOriginalDoc(id);
+}
+
+async function backfillSeedOriginalDoc(id: DocId): Promise<OriginalDocFile | undefined> {
   for (const seed of allProjectSeeds()) {
     for (const spec of seed.docSpecs) {
       // AI : match by extracted-text hash — seed docs may be typed "text" while still shipping a PDF sidecar.
@@ -60,12 +83,19 @@ export async function pdfFilePath(id: DocId): Promise<string | undefined> {
       if (hashContent(readFileSync(txtSidecar, "utf8")) !== id) continue;
       const pdfPath = spec.path.endsWith(".pdf") ? spec.path : spec.path.replace(/\.txt$/i, ".pdf");
       if (!existsSync(pdfPath)) continue;
+      const dest = join(docsDir(), `${id}.pdf`);
       mkdirSync(docsDir(), { recursive: true });
-      copyFileSync(pdfPath, path);
-      return path;
+      copyFileSync(pdfPath, dest);
+      return { path: dest, mime: EXT_MIME.pdf, ext: "pdf" };
     }
   }
   return undefined;
+}
+
+// AI : lazy backfill — match seed PDFs via their .txt sidecar hash (no pdf-parse on serverless).
+export async function pdfFilePath(id: DocId): Promise<string | undefined> {
+  const file = await originalDocFile(id);
+  return file?.ext === "pdf" ? file.path : undefined;
 }
 
 interface Persisted {
@@ -106,6 +136,8 @@ function mergeSeedPipelineIntoProject(existing: Project, seed: Project): Project
       cached: true,
       model: em.model ?? sm.model,
       prompt: em.prompt ?? sm.prompt,
+      docParseMode: em.docParseMode ?? sm.docParseMode,
+      useOcr: em.useOcr ?? sm.useOcr,
     };
   });
   modules = syncAutoQuoteSteps(modules, models);

@@ -38,7 +38,6 @@ export interface ChatOptions {
   system?: string;
   temperature?: number;
   maxTokens?: number;
-  // AI : fired with token counts after every successful call (feeds Logging + Billing).
   onUsage?: (usage: RawUsage) => void;
   // AI : fired after every HTTP round-trip (ok or failed) for length + latency distributions.
   onRoundTrip?: (
@@ -176,20 +175,52 @@ export function assertResponseModel(responseModel: string, requested: ModelSlug)
 }
 
 function buildChatBody(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn): string {
-  const messages = [
+  return buildMessagesBody([{ role: "user", content: prompt }], opts, jsonMode);
+}
+
+// AI : multimodal attachments for doc-to-text vision OCR (images, PDF scans, handwriting).
+export type VisionAttachment = {
+  mime: string;
+  base64: string;
+};
+
+type ChatMessage =
+  | { role: "system"; content: string }
+  | { role: "user"; content: string | VisionUserContent[] };
+
+type VisionUserContent =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+function buildMessagesBody(messages: ChatMessage[], opts: ChatOptions, jsonMode: JsonModeOn): string {
+  const payload = [
     ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
-    { role: "user" as const, content: prompt },
+    ...messages,
   ];
   return JSON.stringify({
     model: opts.model ?? DEFAULT_MODEL,
-    messages,
+    messages: payload,
     temperature: opts.temperature ?? 0,
     max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-    // AI : block routing to a different model family — still allows DeepInfra/StreamLake hosts.
     provider: { allow_fallbacks: false },
-    // AI : json_object mode requires a top-level object — list steps unwrap via coerceLlmListOutput in llmSchema.
     ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
   });
+}
+
+function buildVisionChatBody(
+  prompt: string,
+  attachments: readonly VisionAttachment[],
+  opts: ChatOptions,
+  jsonMode: JsonModeOn,
+): string {
+  const content: VisionUserContent[] = [{ type: "text", text: prompt }];
+  for (const a of attachments) {
+    content.push({
+      type: "image_url",
+      image_url: { url: `data:${a.mime};base64,${a.base64}` },
+    });
+  }
+  return buildMessagesBody([{ role: "user", content }], opts, jsonMode);
 }
 
 async function httpPost(
@@ -213,14 +244,13 @@ async function httpPost(
 }
 
 async function fetchChat(
-  prompt: string,
+  body: string,
+  inputChars: number,
   opts: ChatOptions,
-  jsonMode: JsonModeOn,
   log: ServerLogger,
   dispatcher?: Dispatcher,
 ): Promise<RawReply> {
   const model = opts.model ?? DEFAULT_MODEL;
-  const body = buildChatBody(prompt, opts, jsonMode);
   let lastError = "";
   for (let attempt = 0; attempt < MAX_CHAT_ATTEMPTS; attempt++) {
     log.debug(`fetch attempt`, { attempt: attempt + 1, max: MAX_CHAT_ATTEMPTS });
@@ -236,7 +266,7 @@ async function fetchChat(
         maxAttempts: MAX_CHAT_ATTEMPTS,
         detail: failureDetail.slice(0, 300),
       });
-      opts.onRoundTrip?.(prompt.length, 0, false, latencyMs, {
+      opts.onRoundTrip?.(inputChars, 0, false, latencyMs, {
         attempt: attempt + 1,
         httpStatus: res.status,
         willRetry,
@@ -264,7 +294,7 @@ async function fetchChat(
     const content = data.choices?.[0]?.message?.content;
     if (typeof content !== "string") {
       const failureDetail = "OpenRouter returned no message content";
-      opts.onRoundTrip?.(prompt.length, 0, false, latencyMs, {
+      opts.onRoundTrip?.(inputChars, 0, false, latencyMs, {
         attempt: attempt + 1,
         failureKind: "provider",
         failureDetail,
@@ -276,7 +306,7 @@ async function fetchChat(
       promptTokens: data.usage?.prompt_tokens ?? 0,
       completionTokens: data.usage?.completion_tokens ?? 0,
     });
-    opts.onRoundTrip?.(prompt.length, content.length, true, latencyMs, { attempt: attempt + 1 });
+    opts.onRoundTrip?.(inputChars, content.length, true, latencyMs, { attempt: attempt + 1 });
     if (attempt > 0) {
       log.info(`llm provider recovered`, {
         model,
@@ -290,13 +320,35 @@ async function fetchChat(
     return content as RawReply;
   }
   const failureDetail = `OpenRouter failed after ${MAX_CHAT_ATTEMPTS} attempts: ${lastError.slice(0, 500)}`;
-  opts.onRoundTrip?.(prompt.length, 0, false, 0, {
+  opts.onRoundTrip?.(inputChars, 0, false, 0, {
     attempt: MAX_CHAT_ATTEMPTS,
     failureKind: "provider",
     failureDetail,
   });
   log.error(`llm provider error`, { failureKind: "provider", attempt: MAX_CHAT_ATTEMPTS, detail: failureDetail.slice(0, 300) });
   throw new Error(failureDetail);
+}
+
+async function fetchTextChat(
+  prompt: string,
+  opts: ChatOptions,
+  jsonMode: JsonModeOn,
+  log: ServerLogger,
+  dispatcher?: Dispatcher,
+): Promise<RawReply> {
+  return fetchChat(buildChatBody(prompt, opts, jsonMode), prompt.length, opts, log, dispatcher);
+}
+
+async function fetchVisionChat(
+  prompt: string,
+  attachments: readonly VisionAttachment[],
+  opts: ChatOptions,
+  jsonMode: JsonModeOn,
+  log: ServerLogger,
+  dispatcher?: Dispatcher,
+): Promise<RawReply> {
+  const inputChars = prompt.length + attachments.reduce((n, a) => n + a.base64.length, 0);
+  return fetchChat(buildVisionChatBody(prompt, attachments, opts, jsonMode), inputChars, opts, log, dispatcher);
 }
 
 // AI : single low-level call; jsonMode forces the model into strict json output
@@ -312,7 +364,33 @@ async function chat(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn, log
   });
   const release = await acquireOpenRouterSlot(log);
   try {
-    return await fetchChat(prompt, opts, jsonMode, log);
+    return await fetchTextChat(prompt, opts, jsonMode, log);
+  } finally {
+    release();
+  }
+}
+
+// AI : vision OCR path — images/PDFs attached as base64 data URLs (doc-to-text LLM mode).
+async function visionChat(
+  prompt: string,
+  attachments: readonly VisionAttachment[],
+  opts: ChatOptions,
+  jsonMode: JsonModeOn,
+  log = orLog,
+): Promise<RawReply> {
+  await assertInferenceKey(log);
+  const model = opts.model ?? DEFAULT_MODEL;
+  log.info(`vision chat request`, {
+    model,
+    jsonMode,
+    promptChars: prompt.length,
+    attachments: attachments.length,
+    temperature: opts.temperature ?? 0,
+    maxTokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+  });
+  const release = await acquireOpenRouterSlot(log);
+  try {
+    return await fetchVisionChat(prompt, attachments, opts, jsonMode, log);
   } finally {
     release();
   }
@@ -339,7 +417,7 @@ export async function parallelChat(
     return Promise.all(
       prompts.map(async (prompt, index) => {
         const t0 = Date.now();
-        const content = await fetchChat(prompt, opts, jsonMode, log, dispatcher);
+        const content = await fetchTextChat(prompt, opts, jsonMode, log, dispatcher);
         return { index, content, latencyMs: Date.now() - t0 };
       }),
     );
@@ -362,6 +440,14 @@ export class StructuredResponseError extends Error {
 // 1. plain string response from openrouter
 export async function getStringResponse(prompt: string, opts: ChatOptions = {}): Promise<string> {
   return chat(prompt, opts, false);
+}
+
+export async function getVisionStringResponse(
+  prompt: string,
+  attachments: readonly VisionAttachment[],
+  opts: ChatOptions = {},
+): Promise<string> {
+  return visionChat(prompt, attachments, opts, false);
 }
 
 // AI : pull the first json value out of a possibly fenced / chatty reply

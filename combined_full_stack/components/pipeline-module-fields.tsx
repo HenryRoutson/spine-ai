@@ -21,16 +21,18 @@ import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { llmSchemaJson } from "@/lib/structure"
 import { isLlmKind } from "@/lib/module-kinds"
 import {
+  DOC_PARSE_MODES,
   INPUT_TYPES,
   MODEL_OPTIONS,
   MODULE_META,
+  docParseModeForModule,
   type CustomCodeLanguage,
   type PipelineModule,
   type StructureModel,
   type StructureModelId,
 } from "@/lib/types"
 import { codeOfEntry, languageOfEntry, makeCustomCodeEntry } from "@/lib/custom_code_entries"
-import { inputTypeLabel, inputNameRestrictionLabel, inputTypesForModule } from "@/lib/inference-input"
+import { inputTypeLabel, inputNameRestrictionLabel, inputTypesForModule, inputTypesNeedOcr, inputModuleNeedsOcr, upstreamInputModule } from "@/lib/inference-input"
 import {
   invalidStepMessage,
   warningStepMessages,
@@ -161,6 +163,45 @@ function IoMismatchFieldFix({
   )
 }
 
+function OcrExtraFields({
+  selected,
+  edit,
+  onUpdate,
+}: {
+  selected: PipelineModule
+  edit: boolean
+  onUpdate: (patch: Partial<PipelineModule>) => void
+}) {
+  return (
+    <>
+      <PipelineField label="Vision model">
+        {edit ? (
+          <ModelSelector
+            value={selected.model ?? "gemini-3-flash"}
+            onChange={(v) => onUpdate({ model: v })}
+          />
+        ) : (
+          <StaticValue mono>{llmModelLabel(selected.model ?? "gemini-3-flash")}</StaticValue>
+        )}
+      </PipelineField>
+      <PipelineField label="OCR prompt" hint={edit ? "optional — extra transcription instructions" : undefined}>
+        {edit ? (
+          <Textarea
+            value={selected.prompt ?? ""}
+            onChange={(e) => onUpdate({ prompt: e.target.value })}
+            placeholder="e.g. preserve table columns; read handwritten amounts carefully…"
+            className="min-h-20 resize-y text-xs leading-relaxed"
+          />
+        ) : (
+          <StaticValue mono pre>
+            {selected.prompt?.trim() ? selected.prompt : "—"}
+          </StaticValue>
+        )}
+      </PipelineField>
+    </>
+  )
+}
+
 type PipelineModuleFieldsProps = {
   module: PipelineModule
   models: StructureModel[]
@@ -190,6 +231,13 @@ export function PipelineModuleFields({
   const llmSchemaPreview = useLlmSchemaPreview(selected, models)
   const edit = mode === "edit" && onUpdate
   const hasNoPromptWarning = warnings?.some((w) => w.kind === "no-prompt")
+  const inputOcrAvailable = selected.kind === "input" && inputModuleNeedsOcr(selected)
+  const docToTextOcrAvailable =
+    selected.kind === "doc-to-text" &&
+    (() => {
+      const upstream = upstreamInputModule(selected, modules)
+      return upstream ? inputTypesNeedOcr(inputTypesForModule(upstream)) : false
+    })()
 
   if (isAutoQuoteStep(selected)) {
     return (
@@ -267,9 +315,58 @@ export function PipelineModuleFields({
         </PipelineField>
       )}
 
+      {selected.kind === "doc-to-text" && docToTextOcrAvailable && (
+        <>
+          <PipelineField
+            label="Conversion"
+            hint={edit ? "Use OCR for scanned PDFs and handwriting (OpenRouter vision)" : undefined}
+          >
+            {edit ? (
+              <div className="flex flex-wrap gap-1.5">
+                {DOC_PARSE_MODES.map((mode) => {
+                  const active = docParseModeForModule(selected) === mode.value
+                  return (
+                    <button
+                      key={mode.value}
+                      type="button"
+                      onClick={() =>
+                        onUpdate!({
+                          docParseMode: mode.value === "parser" ? undefined : mode.value,
+                          model: mode.value === "llm" ? selected.model ?? "gemini-3-flash" : undefined,
+                        })
+                      }
+                      className={cn(
+                        "rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
+                        active
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:border-muted-foreground/40",
+                      )}
+                      title={mode.hint}
+                    >
+                      {mode.label}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <StaticValue>
+                {DOC_PARSE_MODES.find((m) => m.value === docParseModeForModule(selected))?.label ??
+                  "Built-in parser"}
+              </StaticValue>
+            )}
+          </PipelineField>
+          {docParseModeForModule(selected) === "llm" && onUpdate && (
+            <OcrExtraFields selected={selected} edit={!!edit} onUpdate={onUpdate} />
+          )}
+        </>
+      )}
+
       {selected.kind === "input" && (
         <>
-          <PipelineField label="Input types">
+          <PipelineField
+            label="Input types"
+            hint={edit ? "enable PDF and/or Image to unlock Use OCR below" : undefined}
+          >
             {edit ? (
               <div className="flex flex-wrap gap-1.5">
                 {INPUT_TYPES.map((t) => {
@@ -282,7 +379,14 @@ export function PipelineModuleFields({
                         const current = inputTypesForModule(selected)
                         const next = active ? current.filter((v) => v !== t.value) : [...current, t.value]
                         if (!next.length) return
-                        onUpdate!({ inputType: next.length === 1 ? next[0] : next })
+                        const spec = next.length === 1 ? next[0]! : next
+                        const ocrOk = inputTypesNeedOcr(next)
+                        onUpdate!({
+                          inputType: spec,
+                          useOcr: ocrOk ? selected.useOcr : undefined,
+                          model: ocrOk && selected.useOcr ? selected.model : undefined,
+                          prompt: ocrOk && selected.useOcr ? selected.prompt : undefined,
+                        })
                       }}
                       className={cn(
                         "rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
@@ -300,6 +404,46 @@ export function PipelineModuleFields({
               <StaticValue>{inputTypeLabel(selected.inputType)}</StaticValue>
             )}
           </PipelineField>
+          {inputOcrAvailable && (
+            <PipelineField
+              label="Use OCR"
+              hint={
+                edit
+                  ? "OpenRouter vision — scanned PDFs, photos, and handwriting (needs PDF or Image in input types)"
+                  : undefined
+              }
+            >
+              {edit ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between rounded-md border border-border bg-secondary/30 px-3 py-2.5">
+                    <div>
+                      <p className="text-xs font-medium">Use OCR</p>
+                      <p className="font-mono text-[10px] text-muted-foreground">
+                        {selected.useOcr
+                          ? "vision model transcribes PDF/image at run time"
+                          : "text/md/json use as-is · PDF/image use built-in extract unless OCR on"}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={!!selected.useOcr}
+                      onCheckedChange={(v) =>
+                        onUpdate!({
+                          useOcr: v || undefined,
+                          model: v ? selected.model ?? "gemini-3-flash" : undefined,
+                          prompt: v ? selected.prompt : undefined,
+                        })
+                      }
+                    />
+                  </div>
+                  {selected.useOcr && onUpdate && (
+                    <OcrExtraFields selected={selected} edit={!!edit} onUpdate={onUpdate} />
+                  )}
+                </div>
+              ) : (
+                <StaticValue>{selected.useOcr ? "On" : "Off"}</StaticValue>
+              )}
+            </PipelineField>
+          )}
           <PipelineField
             label="Filename must contain"
             hint={edit ? "optional — only documents whose name includes this text can be assigned to this input" : undefined}

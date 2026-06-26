@@ -26,6 +26,27 @@ export function inputTypesForModule(inputModule: PipelineModule): InputType[] {
   return Array.isArray(inputModule.inputType) ? inputModule.inputType : [inputModule.inputType]
 }
 
+// AI : OCR toggle when the input accepts PDF (scans) and/or Image (photos, handwriting).
+export function inputTypesNeedOcr(types: InputType[]): boolean {
+  return types.includes("pdf") || types.includes("image")
+}
+
+export function inputModuleNeedsOcr(inputModule: PipelineModule): boolean {
+  return inputModule.kind === "input" && inputTypesNeedOcr(inputTypesForModule(inputModule))
+}
+
+export function upstreamInputModule(
+  module: PipelineModule,
+  modules: PipelineModule[],
+): PipelineModule | undefined {
+  const idx = modules.findIndex((m) => m.id === module.id)
+  for (let i = idx - 1; i >= 0; i--) {
+    const m = modules[i]
+    if (m?.kind === "input") return m
+  }
+  return undefined
+}
+
 export function docNameMatchesInputModule(doc: DocRef, inputModule: PipelineModule): boolean {
   const required = inputModule.inputNameContains?.trim()
   if (!required) return true

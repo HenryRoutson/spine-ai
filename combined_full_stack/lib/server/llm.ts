@@ -3,7 +3,9 @@ import {
   getStringResponse,
   getStructuredResponse,
   getStructuredResponsesParallel,
+  getVisionStringResponse,
   type ChatOptions,
+  type VisionAttachment,
 } from "./openrouter_llm";
 import { type ServerLogger } from "./server_logger";
 import { type LlmCallRecord, type ModelId, slugFor } from "./types";
@@ -11,10 +13,11 @@ import { type UsageLedger } from "./usage";
 
 // AI : single place to call the LLM with a demo ModelId — maps id→slug and bills the ledger.
 // AI : mirrors the pitch's "Get llm instance" idea (one cached entry point for all calls).
-interface CallContext {
+export interface CallContext {
   model: ModelId;
   ledger: UsageLedger;
   system?: string;
+  maxTokens?: number;
   llmCalls?: LlmCallRecord[];
 }
 
@@ -23,6 +26,7 @@ function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
     // AI : the demo ModelId maps to a real OpenRouter slug; both are branded strings.
     model: slugFor(ctx.model) as unknown as ChatOptions["model"],
     system: ctx.system,
+    maxTokens: ctx.maxTokens,
     onUsage: (u) => {
       log?.info(`token usage`, { model: ctx.model, ...u });
       ctx.ledger.recordLlm({ model: ctx.model, ...u });
@@ -55,6 +59,15 @@ function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
 
 export function llmString(prompt: string, ctx: CallContext): Promise<string> {
   return getStringResponse(prompt, chatOpts(ctx));
+}
+
+export function llmVisionString(
+  prompt: string,
+  attachments: readonly VisionAttachment[],
+  ctx: CallContext,
+  log?: ServerLogger,
+): Promise<string> {
+  return getVisionStringResponse(prompt, attachments, chatOpts(ctx, log));
 }
 
 export function llmStructured<T>(

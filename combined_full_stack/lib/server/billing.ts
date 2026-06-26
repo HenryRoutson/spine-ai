@@ -18,7 +18,10 @@ export function billingFromRuns(runs: PipelineRun[]): BillingPoint[] {
     bucket.ts = Math.min(bucket.ts, run.startedAt);
     for (const step of run.steps) {
       if (step.costCents <= 0) continue;
-      const key = step.kind === "doc-to-text" ? "doc-parse svc" : modelOption(step.model ?? run.model).label;
+      const key =
+        step.kind === "doc-to-text" && !step.model
+          ? "doc-parse svc"
+          : modelOption(step.model ?? run.model).label;
       bucket.spend[key] = +((bucket.spend[key] ?? 0) + step.costCents).toFixed(4);
     }
     byDay.set(day, bucket);
@@ -34,7 +37,7 @@ export function spendSplit(runs: PipelineRun[]): { cheapCents: number; frontierC
   let frontierCents = 0;
   for (const run of runs) {
     for (const step of run.steps) {
-      if (step.kind === "doc-to-text") continue;
+      if (step.kind === "doc-to-text" && !step.model) continue;
       const opt = modelOption(step.model ?? run.model);
       if (opt.cheap) cheapCents += step.costCents;
       else frontierCents += step.costCents;

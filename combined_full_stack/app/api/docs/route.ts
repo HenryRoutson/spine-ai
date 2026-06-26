@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
-import { linkDocToProject, savePdfBytes } from "@/lib/server/store";
+import { linkDocToProject, saveOriginalDocBytes } from "@/lib/server/store";
 import { logger } from "@/lib/server/server_logger";
 import { confidentialUploadWarning } from "@/lib/confidential-upload";
 import type { DocLabel, InputType, ProjectId } from "@/lib/server/types";
@@ -53,6 +53,9 @@ export async function POST(req: NextRequest) {
       const { pdfBytesToText } = await import("@/lib/server/pdf_to_text");
       content = await pdfBytesToText(bytes);
       apiLog.info(`PDF parsed`, { name: file.name, chars: content.length });
+    } else if (type === "image") {
+      // AI : images need vision OCR at doc-to-text LLM step — no text at ingest.
+      content = "";
     } else {
       content = new TextDecoder().decode(bytes);
     }
@@ -66,8 +69,8 @@ export async function POST(req: NextRequest) {
   const { store } = ctx;
   const doc = store.addDoc(file.name, type, content, label);
   if (projectId) linkDocToProject(store, projectId, file.name);
-  // AI : keep the original for the PDF viewer — see savePdfBytes TODO (broken on Vercel/Supabase).
-  if (type === "pdf") savePdfBytes(doc.id, bytes);
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  if (type === "pdf" || type === "image") saveOriginalDocBytes(doc.id, bytes, ext);
   await store.flush();
   apiLog.info(`doc saved`, { docId: doc.id, name: file.name, label });
   return NextResponse.json(doc);
