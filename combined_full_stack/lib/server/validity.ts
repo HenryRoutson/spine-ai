@@ -8,7 +8,7 @@ import type {
 } from "./types";
 import { migrateCustomCodeModule } from "@/lib/custom_code_entries";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
-import { hasQuoteField, listFieldsForWrap } from "./structure";
+import { hasQuoteField, listFieldsForWrap, isSourceDocumentModel } from "./structure";
 import { isLlmKind } from "@/lib/module-kinds";
 
 export type InvalidKind =
@@ -30,7 +30,12 @@ export interface InvalidStep {
 
 export interface PipelineWarning {
   moduleId: ModuleId;
-  kind: "no-prompt" | "quote-no-fields" | "transform-multi-list";
+  kind: "no-prompt" | "quote-no-fields" | "transform-multi-list" | "json-input-type";
+}
+
+function moduleInputTypes(m: PipelineModule): string[] {
+  if (!m.inputType) return [];
+  return Array.isArray(m.inputType) ? m.inputType : [m.inputType];
 }
 
 // AI : mirrors run_engine transform — llm-batch and outIsList steps put a bare array on the spine.
@@ -114,12 +119,14 @@ export function computeInvalid(modules: PipelineModule[], models: StructureModel
     }
 
     if (m.kind === "combine") {
+      // AI : combine reads pipeline state by structure id — not the side document on the spine.
       if (m.inStructureId && !byModel.has(m.inStructureId)) {
+        const spineUpstream = flow && flow !== m.inStructureId ? flow : undefined;
         invalid.set(m.id, {
           moduleId: m.id,
           kind: "io-mismatch",
           expects: m.inStructureId,
-          upstreamEmits: flow ?? prev?.outStructureId,
+          upstreamEmits: spineUpstream,
         });
       }
       if (m.outStructureId) {
@@ -226,17 +233,29 @@ function computeDuplicateIoStructInvalid(modules: PipelineModule[]): Map<ModuleI
 export function computeWarnings(
   modules: PipelineModule[],
   models: StructureModel[] = [],
-): Map<ModuleId, PipelineWarning> {
-  const warnings = new Map<ModuleId, PipelineWarning>();
+): Map<ModuleId, PipelineWarning[]> {
+  const warnings = new Map<ModuleId, PipelineWarning[]>();
+  const add = (moduleId: ModuleId, issue: PipelineWarning) => {
+    const list = warnings.get(moduleId) ?? [];
+    list.push(issue);
+    warnings.set(moduleId, list);
+  };
+
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i];
+    if (m.kind === "input" && moduleInputTypes(m).includes("json")) {
+      const out = models.find((x) => x.id === m.outStructureId);
+      if (isSourceDocumentModel(out)) {
+        add(m.id, { moduleId: m.id, kind: "json-input-type" });
+      }
+    }
     if (isLlmKind(m.kind) && !m.prompt?.trim()) {
-      warnings.set(m.id, { moduleId: m.id, kind: "no-prompt" });
+      add(m.id, { moduleId: m.id, kind: "no-prompt" });
     }
     if (m.kind === "quote" && !isAutoQuoteStep(m) && m.outStructureId) {
       const out = models.find((x) => x.id === m.outStructureId);
       if (out && !hasQuoteField(out, models)) {
-        warnings.set(m.id, { moduleId: m.id, kind: "quote-no-fields" });
+        add(m.id, { moduleId: m.id, kind: "quote-no-fields" });
       }
     }
     const prev = i > 0 ? modules[i - 1] : undefined;
@@ -250,7 +269,7 @@ export function computeWarnings(
     ) {
       const out = models.find((x) => x.id === m.outStructureId);
       if (out && listFieldsForWrap(out).length === 0) {
-        warnings.set(m.id, { moduleId: m.id, kind: "transform-multi-list" });
+        add(m.id, { moduleId: m.id, kind: "transform-multi-list" });
       }
     }
   }
@@ -264,6 +283,7 @@ export function warningStepMessage(
   modules: PipelineModule[],
 ): string {
   if (issue.kind === "no-prompt") return "no prompt — schema-only call at runtime";
+  if (issue.kind === "json-input-type") return "JSON file type is not typed — set I/O model to a structure";
   if (issue.kind === "quote-no-fields") return "output model has no quote fields";
   if (issue.kind === "transform-multi-list") {
     const m = modules.find((x) => x.id === issue.moduleId);
@@ -271,6 +291,14 @@ export function warningStepMessage(
     return `upstream list → ${name} only auto-unwraps one item — add a list field or custom TS if batch size may exceed 1`;
   }
   return "warning";
+}
+
+export function warningStepMessages(
+  issues: PipelineWarning[] | undefined,
+  models: StructureModel[],
+  modules: PipelineModule[],
+): string[] {
+  return (issues ?? []).map((issue) => warningStepMessage(issue, models, modules));
 }
 
 // AI : human-readable validation report for assistants and retry prompts.
@@ -331,8 +359,12 @@ export function ioMismatchAtModuleIndex(
   moduleIndex: number,
 ): boolean {
   if (!invalid || moduleIndex < 0 || moduleIndex >= modules.length) return false;
-  const issue = invalid.get(modules[moduleIndex]!.id);
-  return issue?.kind === "io-mismatch";
+  const m = modules[moduleIndex]!;
+  // AI : connector before a combine block points at the side input — flag the combine step instead.
+  if (m.kind === "input" && modules[moduleIndex + 1]?.kind === "combine") {
+    return invalid.get(modules[moduleIndex + 1]!.id)?.kind === "io-mismatch";
+  }
+  return invalid.get(m.id)?.kind === "io-mismatch";
 }
 
 export function ioMismatchUpstreamOf(
@@ -344,6 +376,11 @@ export function ioMismatchUpstreamOf(
   for (const [downId, issue] of invalid) {
     if (issue.kind !== "io-mismatch") continue;
     if (prevModuleId(modules, downId) === moduleId) return true;
+    const downIdx = modules.findIndex((m) => m.id === downId);
+    const down = modules[downIdx];
+    if (down?.kind === "combine" && downIdx >= 2 && modules[downIdx - 1]?.kind === "input") {
+      if (modules[downIdx - 2]?.id === moduleId) return true;
+    }
   }
   return false;
 }
@@ -369,31 +406,39 @@ export function ioMismatchInspectorFix(
   const own = invalid.get(moduleId);
   if (own?.kind === "io-mismatch") {
     const adopt = ioMismatchFixHints(own, models)?.find((h) => h.kind === "adopt-upstream");
-    if (!adopt) return undefined;
     return {
       mismatchModuleId: moduleId,
       kind: "adopt-upstream",
-      label: adopt.label,
-      message: `input expects ${modelName(models, own.expects)}, upstream emits ${
-        modelName(models, own.upstreamEmits) ?? "?"
-      }`,
+      label: adopt?.label ?? "",
+      message: invalidStepMessage(own, models, modules),
     };
   }
 
   for (const [downId, issue] of invalid) {
     if (issue.kind !== "io-mismatch" || prevModuleId(modules, downId) !== moduleId) continue;
     const align = ioMismatchFixHints(issue, models)?.find((h) => h.kind === "align-upstream");
-    if (!align) continue;
     return {
       mismatchModuleId: downId,
       kind: "align-upstream",
-      label: align.label,
-      message: `downstream expects ${modelName(models, issue.expects)}, this step emits ${
-        modelName(models, issue.upstreamEmits) ?? "?"
-      }`,
+      label: align?.label ?? "",
+      message: invalidStepMessage(issue, models, modules),
     };
   }
 
+  return undefined;
+}
+
+// AI : canvas hint when a step is io-linked but the invalid flag sits on a neighbor (e.g. combine output).
+export function stepIoMismatchMessage(
+  moduleId: ModuleId,
+  modules: PipelineModule[],
+  invalid: Map<ModuleId, InvalidStep>,
+  models: StructureModel[],
+): string | undefined {
+  const fix = ioMismatchInspectorFix(moduleId, modules, invalid, models);
+  if (fix) return fix.message;
+  const own = invalid.get(moduleId);
+  if (own?.kind === "io-mismatch") return invalidStepMessage(own, models, modules);
   return undefined;
 }
 
@@ -409,9 +454,15 @@ export function invalidStepMessage(
     return "select an output model";
   }
   if (issue.kind === "io-mismatch") {
-    return `input expects ${modelName(models, issue.expects)}, upstream emits ${
-      modelName(models, issue.upstreamEmits) ?? "?"
-    }`;
+    const m = modules.find((x) => x.id === issue.moduleId);
+    const expected = modelName(models, issue.expects);
+    if (m?.kind === "combine" && issue.expects) {
+      if (!issue.upstreamEmits) {
+        return `pipeline state has no ${expected ?? "structure"} — no upstream step has emitted this structure`;
+      }
+      return `pipeline state expects ${expected}, spine carries ${modelName(models, issue.upstreamEmits) ?? "?"}`;
+    }
+    return `input expects ${expected}, upstream emits ${modelName(models, issue.upstreamEmits) ?? "?"}`;
   }
   if (issue.kind === "transform-list-wrap") {
     const m = modules.find((x) => x.id === issue.moduleId);

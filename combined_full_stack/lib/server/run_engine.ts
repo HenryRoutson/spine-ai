@@ -15,6 +15,7 @@ import { type LiveStep, progressHtml, runToHtml } from "./logging";
 import {
   hasQuoteField,
   llmSchema,
+  materializeInputDocument,
   materializeToModel,
   structuredLlmPrompt,
   validateStepOutput,
@@ -343,7 +344,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         }
         const docName = store.docs().find((d) => d.id === docId)?.name;
         const hints = { ...materializeHints(m, ctx, docId, content), docName };
-        return materializeStepOutput(m, project, { doc_id: docId, body: content }, hints);
+        return materializeInputDocument(content, docId, m, project.models, hints);
       };
       if (!multi) {
         const docId = docIds[0]!;

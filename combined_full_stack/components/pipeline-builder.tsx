@@ -54,6 +54,7 @@ export function PipelineBuilder() {
   const selected = modules.find((m) => m.id === selectedId)
   const invalid = computeInvalid(modules, models)
   const warnings = computeWarnings(modules, models)
+  const warningCount = [...warnings.values()].reduce((n, ws) => n + ws.length, 0)
   const metrics = moduleMetrics(runs)
   const okRuns = runs.filter((r) => r.status === "ok")
   const totalMs =
@@ -168,9 +169,9 @@ export function PipelineBuilder() {
                   <AlertTriangle className="h-3 w-3" /> {invalid.size} invalid
                 </Badge>
               )}
-              {warnings.size > 0 && (
+              {warningCount > 0 && (
                 <Badge variant="outline" className={cn("gap-1 border-amber-500/50 text-[10px]", WARNING_TEXT_CLASS)}>
-                  <AlertTriangle className="h-3 w-3" /> {warnings.size} warning{warnings.size === 1 ? "" : "s"}
+                  <AlertTriangle className="h-3 w-3" /> {warningCount} warning{warningCount === 1 ? "" : "s"}
                 </Badge>
               )}
             </div>
@@ -272,7 +273,7 @@ export function PipelineBuilder() {
                   mode="edit"
                   globalModel={globalModel}
                   invalid={invalid.get(selected.id)}
-                  warning={warnings.get(selected.id)}
+                  warnings={warnings.get(selected.id)}
                   ioMismatchFix={ioMismatchInspectorFix(selected.id as ModuleId, modules, invalid, models)}
                   onUpdate={(patch) => update(selected.id, patch)}
                   onFixIoMismatch={(mismatchModuleId, kind) => fixIoMismatch(mismatchModuleId, kind)}

@@ -26,7 +26,8 @@ import {
   invalidStepMessage,
   ioMismatchAtModuleIndex,
   stepIoMismatchLinked,
-  warningStepMessage,
+  stepIoMismatchMessage,
+  warningStepMessages,
   type InvalidStep,
   type PipelineWarning,
 } from "@/lib/validity"
@@ -42,7 +43,7 @@ type PipelineCanvasProps = {
   onSelect?: (id: ModuleId) => void
   stepStatus?: Map<ModuleId, RunStepStatus>
   invalid?: Map<ModuleId, InvalidStep>
-  warnings?: Map<ModuleId, PipelineWarning>
+  warnings?: Map<ModuleId, PipelineWarning[]>
   renderInsertBefore?: (insertAt: number) => React.ReactNode
   renderInsertAfter?: (insertAt: number, opts: { blocked?: boolean; connectionInvalid?: boolean }) => React.ReactNode
   renderFooter?: () => React.ReactNode
@@ -120,7 +121,7 @@ function SegmentRow({
   onSelect?: (id: ModuleId) => void
   stepStatus?: Map<ModuleId, RunStepStatus>
   invalid?: Map<ModuleId, InvalidStep>
-  warnings?: Map<ModuleId, PipelineWarning>
+  warnings?: Map<ModuleId, PipelineWarning[]>
   editMode: boolean
   renderInsertAfter?: (insertAt: number, opts: { blocked?: boolean; connectionInvalid?: boolean }) => React.ReactNode
 }) {
@@ -133,6 +134,10 @@ function SegmentRow({
     const combineIssue = invalid?.get(combine.id)
     const combineInvalid = combineIssue && combineIssue.kind !== "io-mismatch"
     const combineIoLinked = stepIoMismatchLinked(combine.id, modules, invalid)
+    const combineIoMsg =
+      combineIoLinked && invalid
+        ? stepIoMismatchMessage(combine.id, modules, invalid, models)
+        : undefined
     const combineStatus = stepStatus?.get(combine.id)
     const inputStatus = stepStatus?.get(input.id)
     const groupSelected = selectedId === combine.id || selectedId === input.id
@@ -200,8 +205,12 @@ function SegmentRow({
           </StepButton>
         </div>
         <InvalidMessage
-          show={!!combineInvalid}
-          message={combineInvalid ? invalidStepMessage(combineIssue!, models, modules) : undefined}
+          show={!!combineInvalid || !!combineIoMsg}
+          message={
+            combineInvalid
+              ? invalidStepMessage(combineIssue!, models, modules)
+              : combineIoMsg
+          }
         />
         {renderInsertAfter?.(insertAt, { blocked, connectionInvalid }) ?? (
           <PipelineConnector invalid={connectionInvalid} />
@@ -215,7 +224,7 @@ function SegmentRow({
   const stepIssue = invalid?.get(m.id)
   const isInvalid = !!stepIssue && stepIssue.kind !== "io-mismatch"
   const ioLinked = stepIoMismatchLinked(m.id, modules, invalid)
-  const stepWarning = warnings?.get(m.id)
+  const stepWarnings = warnings?.get(m.id)
   const locked = isAutoQuoteStep(m)
   const status = stepStatus?.get(m.id)
 
@@ -337,11 +346,15 @@ function SegmentRow({
         show={isInvalid}
         message={isInvalid ? invalidStepMessage(stepIssue!, models, modules) : undefined}
       />
-      {!isInvalid && stepWarning && (
-        <p className={cn("mt-1 text-center font-mono text-[10px]", WARNING_TEXT_CLASS)}>
-          {warningStepMessage(stepWarning, models, modules)}
-        </p>
-      )}
+      {!isInvalid && stepWarnings?.length ? (
+        <div className="mt-1 space-y-0.5">
+          {warningStepMessages(stepWarnings, models, modules).map((msg, i) => (
+            <p key={i} className={cn("text-center font-mono text-[10px]", WARNING_TEXT_CLASS)}>
+              {msg}
+            </p>
+          ))}
+        </div>
+      ) : null}
       {renderInsertAfter?.(insertAt, { blocked, connectionInvalid }) ?? (
         <PipelineConnector invalid={connectionInvalid} />
       )}

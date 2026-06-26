@@ -33,7 +33,7 @@ import { codeOfEntry, languageOfEntry, makeCustomCodeEntry } from "@/lib/custom_
 import { inputTypeLabel, inputNameRestrictionLabel, inputTypesForModule } from "@/lib/inference-input"
 import {
   invalidStepMessage,
-  warningStepMessage,
+  warningStepMessages,
   type InvalidStep,
   type IoMismatchFixKind,
   type IoMismatchInspectorFix,
@@ -142,19 +142,21 @@ function IoMismatchFieldFix({
   edit: boolean
   onFix?: (mismatchModuleId: string, kind: IoMismatchFixKind) => void
 }) {
-  if (!fix || !edit || !onFix) return null
+  if (!fix) return null
   return (
     <div className="mt-2 space-y-1.5 rounded-md border border-destructive/30 bg-destructive/5 px-2.5 py-2">
       <p className="font-mono text-[10px] leading-relaxed text-destructive">{fix.message}</p>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-7 border-destructive/40 font-mono text-[10px] text-destructive hover:bg-destructive/10"
-        onClick={() => onFix(fix.mismatchModuleId, fix.kind)}
-      >
-        {fix.label}
-      </Button>
+      {fix.label && edit && onFix ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 border-destructive/40 font-mono text-[10px] text-destructive hover:bg-destructive/10"
+          onClick={() => onFix(fix.mismatchModuleId, fix.kind)}
+        >
+          {fix.label}
+        </Button>
+      ) : null}
     </div>
   )
 }
@@ -166,7 +168,7 @@ type PipelineModuleFieldsProps = {
   mode: "edit" | "view"
   globalModel?: string
   invalid?: InvalidStep
-  warning?: PipelineWarning
+  warnings?: PipelineWarning[]
   ioMismatchFix?: IoMismatchInspectorFix
   onUpdate?: (patch: Partial<PipelineModule>) => void
   onFixIoMismatch?: (mismatchModuleId: string, kind: IoMismatchFixKind) => void
@@ -180,13 +182,14 @@ export function PipelineModuleFields({
   mode,
   globalModel,
   invalid,
-  warning,
+  warnings,
   ioMismatchFix,
   onUpdate,
   onFixIoMismatch,
 }: PipelineModuleFieldsProps) {
   const llmSchemaPreview = useLlmSchemaPreview(selected, models)
   const edit = mode === "edit" && onUpdate
+  const hasNoPromptWarning = warnings?.some((w) => w.kind === "no-prompt")
 
   if (isAutoQuoteStep(selected)) {
     return (
@@ -227,11 +230,15 @@ export function PipelineModuleFields({
           {invalidStepMessage(invalid, models, modules)}
         </p>
       )}
-      {warning && (
-        <p className="mb-3 font-mono text-[10px] leading-relaxed WARNING_TEXT_CLASS">
-          {warningStepMessage(warning, models, modules)}
-        </p>
-      )}
+      {selected.kind !== "input" && warnings?.length ? (
+        <div className="mb-3 space-y-1">
+          {warningStepMessages(warnings, models, modules).map((msg, i) => (
+            <p key={i} className={cn("font-mono text-[10px] leading-relaxed", WARNING_TEXT_CLASS)}>
+              {msg}
+            </p>
+          ))}
+        </div>
+      ) : null}
 
       <PipelineField label="Label">
         {edit ? (
@@ -367,6 +374,15 @@ export function PipelineModuleFields({
               </StaticValue>
             </PipelineField>
           )}
+          {warnings?.length ? (
+            <div className="space-y-1">
+              {warningStepMessages(warnings, models, modules).map((msg, i) => (
+                <p key={i} className={cn("font-mono text-[10px] leading-relaxed", WARNING_TEXT_CLASS)}>
+                  {msg}
+                </p>
+              ))}
+            </div>
+          ) : null}
           <PipelineField
             label="I/O model"
             hint={
@@ -471,7 +487,7 @@ export function PipelineModuleFields({
               <StaticValue mono>{llmModelLabel(selected.model)}</StaticValue>
             )}
           </PipelineField>
-          <PipelineField label={warning?.kind === "no-prompt" ? "Prompt · optional" : "Prompt"}>
+          <PipelineField label={hasNoPromptWarning ? "Prompt · optional" : "Prompt"}>
             {edit ? (
               <>
                 <Textarea
@@ -480,7 +496,7 @@ export function PipelineModuleFields({
                   placeholder="Extra instruction (schema below also guides the model)…"
                   className="min-h-32 resize-y text-xs leading-relaxed"
                 />
-                {warning?.kind === "no-prompt" && (
+                {hasNoPromptWarning && (
                   <p className="mt-1 font-mono text-[9px] text-muted-foreground">
                     no custom text — JSON schema is sent as the structured output contract
                   </p>

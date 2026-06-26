@@ -143,6 +143,8 @@ please add a warning if you add the same struct multiple times as an input or ou
 please make the connection which doesn't work red if input doesn't connect to output
 if input x and output y, please have buttons for either x->y on step n or y->x on step n + 1.
 
+Please add a warning if you use json input type option, as ideally you should use structures instead. 
+
 # inference
 
 All inputs are shown with the option to select documents.

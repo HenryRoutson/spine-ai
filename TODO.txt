@@ -151,7 +151,19 @@ Phase 4 — wire A/B strategy placeholder
 
 
 
+could have prompt evaluations, but i think the formats we use are more important like pydantic structures.
 
+
+document conversion ?
+  add Reducto
+  add Anyformat?
+
+  just deepseek ocr to keep simple
+
+
+
+add option for custom llm calls. 
+  def(prompt : str, args**)
 
 
 how to reorder fallbacks up and down buttons

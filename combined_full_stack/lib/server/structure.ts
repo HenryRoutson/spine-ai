@@ -1,6 +1,6 @@
 import { z, type ZodError, type ZodType } from "zod";
 import { modelHasQuoteFields } from "./quote_schema";
-import type { FieldType, ModelField, StructureModel, StructureModelId } from "./types";
+import type { FieldType, ModelField, PipelineModule, StructureModel, StructureModelId } from "./types";
 
 function isListFieldType(type: FieldType): boolean {
   return (
@@ -333,6 +333,49 @@ function coerceFieldValue(
     default:
       return null;
   }
+}
+
+// AI : canonical raw-file wrapper — JSON/PDF/etc. inputs that keep full file text in body.
+export function isSourceDocumentModel(model: StructureModel | undefined): boolean {
+  return model?.name === "SourceDocument";
+}
+
+// AI : input step — parse JSON file content into the declared I/O structure when possible.
+export function materializeInputDocument(
+  content: string,
+  docId: string,
+  m: PipelineModule,
+  models: StructureModel[],
+  hints: MaterializeHints = {},
+): unknown {
+  const out = models.find((x) => x.id === m.outStructureId);
+  if (!out) return { doc_id: docId, body: content };
+
+  const inputTypes = !m.inputType ? [] : Array.isArray(m.inputType) ? m.inputType : [m.inputType];
+  const docHints = { ...hints, docId, sourceText: content };
+
+  if (inputTypes.includes("json")) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      parsed = undefined;
+    }
+    if (parsed !== undefined) {
+      if (Array.isArray(parsed)) {
+        const items = parsed.map((item) => materializeToModel(item, out, models, docHints));
+        if (m.outIsList) return items;
+        if (items.length === 1) return items[0]!;
+        throw new Error(
+          `input "${m.label}" JSON array has ${items.length} items but step expects a single ${out.name}`,
+        );
+      }
+      const item = materializeToModel(parsed, out, models, docHints);
+      return m.outIsList ? [item] : item;
+    }
+  }
+
+  return materializeToModel({ doc_id: docId, body: content }, out, models, docHints);
 }
 
 // AI : map loose runtime values (file text, doc_id) into every field of a pydantic/zod StructureModel.
