@@ -260,12 +260,15 @@ input pdf to source doucment doesn't make sense and is implicit.
 
 can remove combine input, and just use input and implicit combine
 
-
+https://www.baseten.co/
 
 
 fix logging view of inputs with multiple files, create a clear list view in logging. … same prompt × 15 items isn't going to cut it. maybe add <> buttons
 
+constrained decoding
 
+
+Dynamic schemas bad idea
 
 
 try 100 pipelines and then pick the one which performs the best on evaluation, or just iterative improve with AI automatically. then plot the speed, cost and accuracy over time or iterations or if 100 just on a single plot with efficient fronteir.
