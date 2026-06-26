@@ -12,6 +12,7 @@ export type ModuleFactoryOpts = {
   note?: string
   inputType?: PipelineModule["inputType"]
   inputNameContains?: string
+  inputDescription?: string
   inStructureId?: StructureModelId
   outStructureId?: StructureModelId
   outIsList?: boolean
@@ -40,6 +41,7 @@ export function createPipelineModule(
     avgCostCents: 0,
     inputType: kind === "input" ? (opts.inputType ?? "pdf") : undefined,
     inputNameContains: kind === "input" ? opts.inputNameContains?.trim() || undefined : undefined,
+    inputDescription: opts.inputDescription?.trim() || undefined,
     inStructureId: kind !== "input" ? opts.inStructureId ?? defaultModel : undefined,
     outStructureId:
       kind === "output" || kind === "assert" ? opts.outStructureId ?? opts.inStructureId ?? defaultModel : opts.outStructureId ?? defaultModel,

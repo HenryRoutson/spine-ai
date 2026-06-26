@@ -1,3 +1,4 @@
+// AI : TODO refactor — use apiError/HTTP + requireAuthStore like other routes; map BillingError consistently.
 import { MIN_ACCOUNT_BALANCE_CENTS, MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config";
 import { NextResponse } from "next/server";
 import {

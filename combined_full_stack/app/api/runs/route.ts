@@ -30,7 +30,7 @@ import type { DocId, DocRef, ModelId, ModuleId, ProjectId } from "@/lib/server/t
 
 const apiLog = logger("api:runs");
 
-// AI : run dedup disabled — fingerprint matching is often wrong; re-enable when fixed.
+// AI : TODO refactor — RUN_DEDUP_ENABLED false but client still probes cache; re-enable or delete dead path.
 const RUN_DEDUP_ENABLED = false;
 
 // AI : todo §8 — after() keeps the pipeline alive once the response is sent (Vercel

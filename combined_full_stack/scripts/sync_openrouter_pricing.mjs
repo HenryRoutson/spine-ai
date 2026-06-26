@@ -18,6 +18,7 @@ const CATALOG = [
   { id: "gpt-5-mini", slug: "openai/gpt-4o-mini" },
   { id: "claude-opus-4.6", slug: "anthropic/claude-opus-4.1" },
   { id: "sonnet-4.7", slug: "anthropic/claude-sonnet-4.5" },
+  { id: "gemini-2-flash-lite", slug: "google/gemini-2.0-flash-lite-001" },
   { id: "gemini-3-flash", slug: "google/gemini-3-flash-preview" },
 ];
 
@@ -67,6 +68,7 @@ for (const { id, slug } of CATALOG) {
     "gpt-5-mini": { label: "GPT-5 mini", provider: "openai", flag: "US" },
     "claude-opus-4.6": { label: "Claude Opus 4.6", provider: "anthropic", flag: "US" },
     "sonnet-4.7": { label: "Claude Sonnet 4.7", provider: "anthropic", flag: "US" },
+    "gemini-2-flash-lite": { label: "Gemini 2.0 Flash-Lite", provider: "google", flag: "US", cheap: true },
     "gemini-3-flash": { label: "Gemini 3 Flash", provider: "google", flag: "US" },
   }[id];
   const cheap = meta.cheap ? ", cheap: true" : "";

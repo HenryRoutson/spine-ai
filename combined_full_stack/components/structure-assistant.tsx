@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO refactor — share AssistantChat<Proposal> with pipeline-assistant.tsx.
 import { useEffect, useRef, useState } from "react"
 import {
   Bot,

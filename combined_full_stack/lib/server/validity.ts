@@ -1,3 +1,4 @@
+// AI : TODO refactor — ~800 lines; split I/O graph checks, warnings, auto-quote migration, issue messages.
 import type {
   ModuleId,
   PipelineModule,
@@ -666,6 +667,7 @@ export function isPipelineValid(modules: PipelineModule[], models: StructureMode
 
 // AI : a step's run button is enabled only when the pipeline is valid AND the step is
 // AI : cached or has an input ready (demo_outline: "run button on each step which has a cached or input").
+// AI : TODO refactor — fix canRunStep semantics or remove API if per-step run stays unsupported.
 // AI : TODO bug — "cached" here is the m.cached CONFIG toggle, not whether a cache artifact
 // AI : actually exists for the step's key (run_engine readCache); a cached:true step with no
 // AI : cache file lights up with nothing to serve. Also: there is no per-step run entry point

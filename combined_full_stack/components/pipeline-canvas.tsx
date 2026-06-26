@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO refactor (spec) — remove combine segments when implicit multi-input merge ships (pipeline-layout.ts).
 import {
   ArrowRight,
   ChevronRight,
@@ -47,6 +48,7 @@ type PipelineCanvasProps = {
   warnings?: Map<ModuleId, PipelineWarning[]>
   renderInsertBefore?: (insertAt: number) => React.ReactNode
   renderInsertAfter?: (insertAt: number, opts: { blocked?: boolean; connectionInvalid?: boolean }) => React.ReactNode
+  renderBeforeEnd?: () => React.ReactNode
   renderFooter?: () => React.ReactNode
   className?: string
 }
@@ -62,6 +64,7 @@ export function PipelineCanvas({
   warnings,
   renderInsertBefore,
   renderInsertAfter,
+  renderBeforeEnd,
   renderFooter,
   className,
 }: PipelineCanvasProps) {
@@ -95,6 +98,7 @@ export function PipelineCanvas({
         />
       ))}
       <div className="mx-auto flex w-full flex-col items-center">
+        {renderBeforeEnd?.()}
         {segments.length === 0 && renderInsertAfter?.(0, {})}
         <PipelineNode label="End" subtle />
         {renderFooter?.()}

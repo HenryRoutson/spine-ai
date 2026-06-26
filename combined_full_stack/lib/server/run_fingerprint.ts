@@ -1,3 +1,4 @@
+// AI : TODO refactor — vitest target: fingerprint stability + findMatchingRun edge cases.
 import { createHash } from "node:crypto";
 import { buildRunInputDocIds as buildRunInputDocIdsFromDocs } from "../inference-input";
 import {

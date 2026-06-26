@@ -1,5 +1,7 @@
 "use client"
 
+// AI : TODO refactor — split into useInferenceDocs, useRunProgress, useInferenceCacheMatch;
+// AI : keep inference.tsx mostly layout.
 import { useEffect, useMemo, useRef, useState, type MutableRefObject } from "react"
 import { apiJson } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"

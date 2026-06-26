@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO refactor — thin layout shell once use-inference-run.ts is split into focused hooks.
 import { useEffect, useRef, useState } from "react"
 import {
   FileText,

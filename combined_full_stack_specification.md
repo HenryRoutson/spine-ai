@@ -98,6 +98,8 @@ this may be used as training data later if the company is aquired and so is impo
 companies may have an option for their own deployments which will not store this data off their site.
 
 
+can you add an optional prompt for the any step for a description of the output, if it doesn't fit this descirption please raise an error. ask an llm. use a super cheap model for this with 1-2 million context window.
+
 the pipeline is linear and has no forking.
 steps have access to all other previous steps in the form of a pydantic object where every step **label** is the key. each step label must be unique across the pipeline. this allows for more complex behaviours, but a simple graph.
 You also do not need 'combine input' steps after the first input, as input is implicitly combined with all the data from previous steps.
@@ -148,6 +150,11 @@ please make the connection which doesn't work red if input doesn't connect to ou
 if input x and output y, please have buttons for either x->y on step n or y->x on step n + 1.
 
 Please add a warning if you use json input type option, as ideally you should use structures instead. 
+
+
+please add a generate summary button which summarises the current pipeline and points out current issues. make this a button.
+
+add an optional input description which is evaluated by an llm if enabled to check data is ok before being passed in to avoid attributing errors to code rather than the wrong data. also holds for files being passed in and is an extra step on top of the type system. 
 
 # inference
 

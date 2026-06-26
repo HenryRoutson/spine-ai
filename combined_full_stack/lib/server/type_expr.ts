@@ -205,6 +205,7 @@ export function formatTypeExpr(expr: TypeExpr, models: StructureModel[] = []): s
   }
 }
 
+// AI : TODO refactor — canonical copy; export and delete duplicate in structure.ts.
 function fieldDescribe(f: ModelField): string | undefined {
   const parts: string[] = [];
   if (f.description.trim()) parts.push(f.description.trim());

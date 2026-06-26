@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO refactor — extract shell chrome, tab routing, project dropdown from this page.
 import { useEffect, useRef, useState } from "react"
 import {
   Boxes,

@@ -174,8 +174,24 @@ export function assertResponseModel(responseModel: string, requested: ModelSlug)
   }
 }
 
-function buildChatBody(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn): string {
-  return buildMessagesBody([{ role: "user", content: prompt }], opts, jsonMode);
+function buildMessagesBody(messages: ChatMessage[], opts: ChatOptions, jsonMode: JsonModeOn, stream = false): string {
+  const payload = [
+    ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
+    ...messages,
+  ];
+  return JSON.stringify({
+    model: opts.model ?? DEFAULT_MODEL,
+    messages: payload,
+    temperature: opts.temperature ?? 0,
+    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
+    provider: { allow_fallbacks: false },
+    ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
+    ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
+  });
+}
+
+function buildChatBody(prompt: string, opts: ChatOptions, jsonMode: JsonModeOn, stream = false): string {
+  return buildMessagesBody([{ role: "user", content: prompt }], opts, jsonMode, stream);
 }
 
 // AI : multimodal attachments for doc-to-text vision OCR (images, PDF scans, handwriting).
@@ -191,21 +207,6 @@ type ChatMessage =
 type VisionUserContent =
   | { type: "text"; text: string }
   | { type: "image_url"; image_url: { url: string } };
-
-function buildMessagesBody(messages: ChatMessage[], opts: ChatOptions, jsonMode: JsonModeOn): string {
-  const payload = [
-    ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
-    ...messages,
-  ];
-  return JSON.stringify({
-    model: opts.model ?? DEFAULT_MODEL,
-    messages: payload,
-    temperature: opts.temperature ?? 0,
-    max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-    provider: { allow_fallbacks: false },
-    ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
-  });
-}
 
 function buildVisionChatBody(
   prompt: string,
@@ -437,9 +438,125 @@ export class StructuredResponseError extends Error {
   }
 }
 
+async function fetchStreamingChat(
+  prompt: string,
+  opts: ChatOptions,
+  onDelta: (delta: string) => void,
+  log: ServerLogger,
+): Promise<RawReply> {
+  const model = opts.model ?? DEFAULT_MODEL;
+  const body = buildChatBody(prompt, opts, false, true);
+  const inputChars = prompt.length;
+  let lastError = "";
+
+  for (let attempt = 0; attempt < MAX_CHAT_ATTEMPTS; attempt++) {
+    log.debug(`stream attempt`, { attempt: attempt + 1, max: MAX_CHAT_ATTEMPTS });
+    const t0 = Date.now();
+    const res = await fetch(OPENROUTER_CHAT_URL, {
+      method: "POST",
+      headers: openRouterHeaders(apiKey()),
+      body,
+    });
+    const latencyMs = Date.now() - t0;
+
+    if (!res.ok) {
+      lastError = await res.text();
+      const willRetry = RETRYABLE_STATUSES.has(res.status) && attempt < MAX_CHAT_ATTEMPTS - 1;
+      opts.onRoundTrip?.(inputChars, 0, false, latencyMs, {
+        attempt: attempt + 1,
+        httpStatus: res.status,
+        willRetry,
+        failureKind: "provider",
+        failureDetail: `HTTP ${res.status}: ${lastError.slice(0, 500)}`,
+      });
+      if (willRetry) {
+        await sleep(retryDelayMs(res, attempt));
+        continue;
+      }
+      throw openRouterAuthError(res.status, lastError);
+    }
+
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error("OpenRouter stream returned no body");
+
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let full = "";
+    let responseModel: string | undefined;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const data = trimmed.slice(5).trim();
+        if (!data || data === "[DONE]") continue;
+        try {
+          const parsed = JSON.parse(data) as {
+            model?: string;
+            choices?: { delta?: { content?: string } }[];
+            usage?: { prompt_tokens?: number; completion_tokens?: number };
+          };
+          if (parsed.model) responseModel = parsed.model;
+          const delta = parsed.choices?.[0]?.delta?.content;
+          if (typeof delta === "string" && delta) {
+            full += delta;
+            onDelta(delta);
+          }
+          if (parsed.usage) {
+            opts.onUsage?.({
+              promptTokens: parsed.usage.prompt_tokens ?? 0,
+              completionTokens: parsed.usage.completion_tokens ?? 0,
+            });
+          }
+        } catch {
+          // AI : skip malformed SSE lines
+        }
+      }
+    }
+
+    if (responseModel) assertResponseModel(responseModel, model);
+    opts.onRoundTrip?.(inputChars, full.length, true, latencyMs, { attempt: attempt + 1 });
+    log.info(`stream success`, { model, replyChars: full.length, attempt: attempt + 1 });
+    return full as RawReply;
+  }
+
+  throw new Error(`OpenRouter stream failed after ${MAX_CHAT_ATTEMPTS} attempts: ${lastError.slice(0, 500)}`);
+}
+
+async function streamTextChat(
+  prompt: string,
+  opts: ChatOptions,
+  onDelta: (delta: string) => void,
+  log: ServerLogger,
+): Promise<RawReply> {
+  await assertInferenceKey(log);
+  const model = opts.model ?? DEFAULT_MODEL;
+  log.info(`stream request`, { model, promptChars: prompt.length });
+  const release = await acquireOpenRouterSlot(log);
+  try {
+    return await fetchStreamingChat(prompt, opts, onDelta, log);
+  } finally {
+    release();
+  }
+}
+
 // 1. plain string response from openrouter
 export async function getStringResponse(prompt: string, opts: ChatOptions = {}): Promise<string> {
   return chat(prompt, opts, false);
+}
+
+export async function streamStringResponse(
+  prompt: string,
+  onDelta: (delta: string) => void,
+  opts: ChatOptions = {},
+  log: ServerLogger = orLog,
+): Promise<string> {
+  return streamTextChat(prompt, opts, onDelta, log);
 }
 
 export async function getVisionStringResponse(

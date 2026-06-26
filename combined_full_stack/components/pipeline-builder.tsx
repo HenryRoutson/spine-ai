@@ -24,6 +24,7 @@ import { MODULE_META, type ModuleKind, type PipelineModule, type ModuleId } from
 import { WindowHeader } from "@/components/window-header"
 import { PipelineAssistant } from "@/components/pipeline-assistant"
 import { PipelineCanvas } from "@/components/pipeline-canvas"
+import { PipelineSummaryBox } from "@/components/pipeline-summary-box"
 import { PipelineModuleFields } from "@/components/pipeline-module-fields"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -200,8 +201,9 @@ export function PipelineBuilder() {
                   />
                 )}
                 renderFooter={() => (
-                  <div className="mt-6">
+                  <div className="mt-6 flex w-full flex-col items-center">
                     <AddStepMenu insertAt={modules.length} onInsert={insertModule} variant="button" />
+                    <PipelineSummaryBox />
                   </div>
                 )}
               />

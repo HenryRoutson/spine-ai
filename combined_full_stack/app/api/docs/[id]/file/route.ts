@@ -6,6 +6,7 @@ import { originalDocFile } from "@/lib/server/store";
 import type { DocId } from "@/lib/server/types";
 
 // AI : the original file for the Documents-tab viewer — extracted text stays at /text.
+// AI : TODO refactor (prod) — serve from Supabase Storage once Store persists upload bytes (see store.ts).
 // AI : prod gap — bytes are not in Supabase; originalDocFile only finds local/seed files.
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const authCtx = await requireAuthStore();

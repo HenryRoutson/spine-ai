@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO refactor — extract run list, step detail panel, compare mode, JSON/excel popups.
 import { useMemo, useState, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { useStore } from "@/lib/store"

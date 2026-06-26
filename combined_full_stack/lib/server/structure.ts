@@ -48,6 +48,7 @@ export function assertValidJsonFieldValue(val: unknown, fieldName?: string): ass
   }
 }
 
+// AI : TODO refactor — duplicated in type_expr.ts; keep one copy (prefer type_expr) and import here.
 function fieldDescribe(f: ModelField): string | undefined {
   const parts: string[] = [];
   if (f.description.trim()) parts.push(f.description.trim());

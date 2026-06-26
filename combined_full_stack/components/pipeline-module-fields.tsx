@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO refactor — split by ModuleKind into components/pipeline-fields/* (Input, Llm, CustomCode, …).
 import { useMemo } from "react"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { Plus, Trash2 } from "lucide-react"
@@ -302,6 +303,26 @@ export function PipelineModuleFields({
         ) : (
           <StaticValue>{selected.label}</StaticValue>
         )}
+      </PipelineField>
+
+      <PipelineField
+        label="Input description"
+        hint={
+          edit
+            ? "optional — Gemini Flash-Lite rejects step input that doesn't match before processing"
+            : undefined
+        }
+      >
+        {edit ? (
+          <Textarea
+            value={selected.inputDescription ?? ""}
+            onChange={(e) => onUpdate!({ inputDescription: e.target.value.trim() || undefined })}
+            placeholder='e.g. "A signed W-2 wage statement for tax year 2024"'
+            className="min-h-[72px] font-mono text-xs"
+          />
+        ) : selected.inputDescription?.trim() ? (
+          <StaticValue>{selected.inputDescription}</StaticValue>
+        ) : null}
       </PipelineField>
 
       {(selected.kind === "doc-to-text" || selected.kind === "combine" || isLlmKind(selected.kind)) && (

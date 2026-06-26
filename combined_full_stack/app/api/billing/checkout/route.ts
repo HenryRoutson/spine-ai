@@ -1,3 +1,4 @@
+// AI : TODO refactor — align with apiError/HTTP + requireAuthStore (see app/api/billing/route.ts).
 import { NextResponse, type NextRequest } from "next/server";
 import {
   BillingError,

@@ -23,6 +23,7 @@ export const API_ROUTES = {
   cacheEntry: (key: string) => `/api/cache/${encodeURIComponent(key)}`,
   abtest: "/api/abtest",
   pipelineAssistant: "/api/pipeline-assistant",
+  pipelineSummary: "/api/pipeline-summary",
   structureAssistant: "/api/structure-assistant",
   supabaseEnv: "/api/supabase-env",
 } as const

@@ -57,7 +57,7 @@ export function DocViewer() {
   const displayText =
     view === "vision" ? (visionEntries[visionIndex]?.text ?? "") : (parserText ?? "")
 
-  // AI : PDF tab only when /file has bytes — often false for uploads on Vercel/Supabase (see savePdfBytes TODO).
+  // AI : TODO refactor (prod) — PDF tab depends on /file bytes; fix when Supabase Storage ships (store.ts).
   useEffect(() => {
     if (!docId) return
     setHasPdf(false)

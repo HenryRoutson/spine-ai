@@ -41,6 +41,7 @@ const moduleSpecSchema = z.object({
   structureOut: z.string().optional(),
   inputType: z.enum(INPUT_TYPE_VALUES as [string, ...string[]]).optional(),
   inputNameContains: z.string().optional(),
+  inputDescription: z.string().optional(),
   prompt: z.string().optional(),
   code: z.string().optional(),
   model: z.string().optional(),
@@ -101,6 +102,7 @@ function makeModuleFromSpec(
       note: spec.note,
       inputType: spec.kind === "input" ? (spec.inputType as PipelineModule["inputType"]) ?? "pdf" : undefined,
       inputNameContains: spec.inputNameContains,
+      inputDescription: spec.inputDescription,
       inStructureId: spec.kind !== "input" ? inId ?? defaultOutForKind(spec.kind, models) : undefined,
       outStructureId: outId,
       outIsList: spec.outIsList,
@@ -180,6 +182,7 @@ Rules:
 - Every step needs an output structure (structureOut). Input steps only need structureOut.
 - Reference structures by exact name from the project's models list (e.g. "SourceDocument", "AtomicRule").
 - Input steps may set inputNameContains so only documents whose filename includes that substring can fill that slot (useful when a pipeline has multiple inputs).
+- Any step may set inputDescription — before the step runs, Gemini Flash-Lite rejects input that doesn't match.
 - combine steps merge pipeline state with a new document — emit ONLY the combine step; a Document Input is auto-inserted before it.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
 - llm-batch consumes a list and emits a list — set outIsList: true.

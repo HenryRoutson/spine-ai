@@ -1,3 +1,5 @@
+// AI : TODO refactor — ~1.4k lines; split into lib/server/steps/{input,doc-to-text,llm,...}.ts
+// AI : with thin orchestration (runPipeline / resumeRunPipeline / execModule switch).
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "./config";
@@ -6,6 +8,7 @@ import { runLogger } from "./server_logger";
 import { fileWriteHelper } from "./file_write_helper";
 import { llmBatchStructured, llmStructured } from "./llm";
 import { docToTextViaLlm } from "./doc_to_text";
+import { assertInputMatchesDescription } from "./input_description_check";
 import { StructuredResponseError } from "./openrouter_llm";
 import { collectQuotes, resolveQuotesValue } from "./quotation";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
@@ -40,6 +43,7 @@ import { computeInvalid, migrateProjectModules, stepEmits } from "./validity";
 import { UsageLedger } from "./usage";
 import {
   DEFAULT_MODEL,
+  DEFAULT_INPUT_CHECK_MODEL,
   DEFAULT_VISION_DOC_PARSE_MODEL,
   docParseModeForModule,
   type DocId,
@@ -325,6 +329,41 @@ function requireLinearInput(m: PipelineModule, ctx: RunCtx): unknown {
   }
   if (!ctx.prevModuleId) throw new Error(`step "${m.label}" has no previous step`);
   return ctx.outputs.get(ctx.prevModuleId);
+}
+
+type StepInputForCheck = {
+  value: unknown;
+  vision?: { store: Store; docId: DocId; docName: string };
+};
+
+// AI : resolve what will enter a step — raw docs for input steps, upstream output for everything else.
+function resolveStepInputForCheck(m: PipelineModule, ctx: RunCtx, store: Store): StepInputForCheck {
+  if (m.kind === "input") {
+    const docIds = ctx.inputByModule.get(m.id) ?? [];
+    const items = docIds.map((docId) => {
+      const doc = store.docs().find((d) => d.id === docId);
+      return {
+        doc_id: docId,
+        filename: doc?.name ?? docId,
+        body: store.docContent(docId) ?? "",
+      };
+    });
+    const first = items[0];
+    return {
+      value: items.length === 1 ? first : items,
+      vision: first ? { store, docId: first.doc_id, docName: first.filename } : undefined,
+    };
+  }
+  if (m.kind === "combine") {
+    const rawInput = ctx.prevModuleId ? ctx.outputs.get(ctx.prevModuleId) : undefined;
+    const newInput = Array.isArray(rawInput) ? rawInput[0] : rawInput;
+    const pipelineData = ctx.byModel.get(m.inStructureId as StructureModelId);
+    return { value: { newDocument: newInput, pipelineState: pipelineData } };
+  }
+  if (ctx.prevModuleId) {
+    return { value: requireLinearInput(m, ctx) };
+  }
+  return { value: undefined };
 }
 
 async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof runLogger>): Promise<ExecResult> {
@@ -816,6 +855,21 @@ async function runLinearStepsFrom(
       const cached = m.cached ? readStepCache(key) : undefined;
 
       try {
+        if (!cached) {
+          const inDesc = m.inputDescription?.trim();
+          if (inDesc) {
+            if (!ctx.stepLlmCalls) ctx.stepLlmCalls = [];
+            const { value, vision } = resolveStepInputForCheck(m, ctx, ctx.store);
+            await assertInputMatchesDescription(
+              m.label,
+              inDesc,
+              value,
+              { model: DEFAULT_INPUT_CHECK_MODEL, ledger, llmCalls: ctx.stepLlmCalls },
+              log.child("input-desc"),
+              vision,
+            );
+          }
+        }
         if (cached) {
           applyModuleSideEffects(m, ctx, ctx.store, log);
           // AI : cache hit — OCR text lives in cached.value.body, not upstream (images start empty).

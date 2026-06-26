@@ -4,6 +4,7 @@ import {
   getStructuredResponse,
   getStructuredResponsesParallel,
   getVisionStringResponse,
+  streamStringResponse,
   type ChatOptions,
   type VisionAttachment,
 } from "./openrouter_llm";
@@ -59,6 +60,15 @@ function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
 
 export function llmString(prompt: string, ctx: CallContext): Promise<string> {
   return getStringResponse(prompt, chatOpts(ctx));
+}
+
+export function llmStreamString(
+  prompt: string,
+  ctx: CallContext,
+  onDelta: (delta: string) => void,
+  log?: ServerLogger,
+): Promise<string> {
+  return streamStringResponse(prompt, onDelta, chatOpts(ctx, log), log);
 }
 
 export function llmVisionString(

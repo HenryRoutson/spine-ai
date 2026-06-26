@@ -1,3 +1,4 @@
+// AI : TODO refactor (prod) — persist original bytes to Supabase Storage on upload, not local disk only.
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { linkDocToProject, saveOriginalDocBytes } from "@/lib/server/store";

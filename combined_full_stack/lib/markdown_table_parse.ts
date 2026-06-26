@@ -1,3 +1,4 @@
+// AI : TODO refactor — seeds paste duplicate splitMdRow/mdTableToRows strings; import this module instead.
 // AI : markdown table → row objects (CSV-equivalent) → JSON for custom-code seed steps.
 
 export type MarkdownTable = {

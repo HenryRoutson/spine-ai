@@ -92,6 +92,7 @@ export interface PipelineModule {
   // config
   inputType?: InputTypeSpec;
   inputNameContains?: string; // AI : optional filename substring — only matching docs can fill this input slot
+  inputDescription?: string; // AI : optional expected input — Gemini Flash-Lite rejects mismatches before the step runs
   inputMinCount?: number; // AI : minimum documents for this input slot (default 1); pair with outIsList for N submissions
   prompt?: string;
   code?: string; // AI : transform steps with custom code only
@@ -258,6 +259,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "claude-opus-4.6", label: "Claude Opus 4.6", provider: "anthropic", flag: "US", costPer1k: 12.6, promptUsdPerToken: 0.000015, completionUsdPerToken: 0.000075, slug: "anthropic/claude-opus-4.1" as OpenRouterSlug },
   // AI : demo_outline §3 — the A/B fallback model "if nothing else works well".
   { id: "sonnet-4.7", label: "Claude Sonnet 4.7", provider: "anthropic", flag: "US", costPer1k: 2.52, promptUsdPerToken: 0.000003, completionUsdPerToken: 0.000015, slug: "anthropic/claude-sonnet-4.5" as OpenRouterSlug },
+  { id: "gemini-2-flash-lite", label: "Gemini 2.0 Flash-Lite", provider: "google", flag: "US", costPer1k: 0.0518, promptUsdPerToken: 7e-8, completionUsdPerToken: 3e-7, cheap: true, slug: "google/gemini-2.0-flash-lite-001" as OpenRouterSlug },
   { id: "gemini-3-flash", label: "Gemini 3 Flash", provider: "google", flag: "US", costPer1k: 0.49, promptUsdPerToken: 5e-7, completionUsdPerToken: 0.000003, slug: "google/gemini-3-flash-preview" as OpenRouterSlug },
 ];
 
@@ -267,6 +269,9 @@ export const DEFAULT_MODEL: ModelId = "deepseek-v3";
 
 // AI : default vision model for doc-to-text LLM mode — Gemini reads images/PDFs/handwriting well.
 export const DEFAULT_VISION_DOC_PARSE_MODEL: ModelId = "gemini-3-flash";
+
+// AI : input-description guard — 1M ctx, ~$0.07/1M input on OpenRouter.
+export const DEFAULT_INPUT_CHECK_MODEL: ModelId = "gemini-2-flash-lite";
 
 export const DOC_PARSE_MODES: { value: DocParseMode; label: string; hint: string }[] = [
   { value: "parser", label: "Built-in parser", hint: "PDF.js text extract at upload — stored in docs.content" },

@@ -1,3 +1,4 @@
+// AI : TODO refactor — align with apiError/HTTP where applicable (see app/api/billing/route.ts).
 import { NextResponse } from "next/server";
 import { handleStripeWebhook, verifyStripeWebhookPayload } from "@/lib/server/billing_account";
 import { logger } from "@/lib/server/server_logger";

@@ -14,7 +14,7 @@ const DEFAULT_OCR_PROMPT =
 
 type DocBytes = { bytes: Uint8Array; mime: string };
 
-async function loadDocBytes(store: Store, docId: DocId): Promise<DocBytes | undefined> {
+export async function loadDocBytesForVision(store: Store, docId: DocId): Promise<DocBytes | undefined> {
   const file = await originalDocFile(docId);
   if (file) return { bytes: new Uint8Array(readFileSync(file.path)), mime: file.mime };
   const meta = store.docs().find((d) => d.id === docId);
@@ -60,7 +60,7 @@ export async function docToTextViaLlm(
   const llmCtx: CallContext = { ...ctx, system: OCR_SYSTEM, maxTokens: 16384 };
   let text: string;
 
-  const media = await loadDocBytes(store, docId);
+  const media = await loadDocBytesForVision(store, docId);
   if (media) {
     const attachments: VisionAttachment[] = [
       { mime: media.mime, base64: bytesToBase64(media.bytes) },

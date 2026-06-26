@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+// AI : TODO refactor (prod) — add original doc bytes via Supabase Storage (see store.ts saveOriginalDocBytes).
+// AI : TODO refactor — parser/vision cache CRUD duplicates store.ts; extract shared ParserVisionCache backend.
 // AI : adopted from backend_with_users/ — implements the same Store contract, so
 // AI : runPipeline & co accept this store unchanged. RLS scopes every row to the
 // AI : signed-in user behind `db`; no user_id handling anywhere in app code.
