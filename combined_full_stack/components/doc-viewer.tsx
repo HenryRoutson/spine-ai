@@ -24,18 +24,24 @@ function resolveSpan(text: string, start: number, end: number, expected?: string
 }
 
 const TAB_LABEL: Record<DocViewMode, string> = {
-  text: "text",
+  parser: "built-in",
+  vision: "vision OCR",
   formatted: "formatted",
   pdf: "pdf",
   json: "json",
 }
 
+type VisionEntry = { key: string; model: string; text: string; createdAt: number }
+
 export function DocViewer() {
   const { target, close } = useDocViewer()
   const { docs } = useStore()
   const markRef = useRef<HTMLSpanElement>(null)
-  const [text, setText] = useState<string | null>(null)
-  const [view, setView] = useState<DocViewMode>("text")
+  const [parserText, setParserText] = useState<string | null>(null)
+  const [parserMeta, setParserMeta] = useState<{ parser?: string; fromCache?: boolean }>({})
+  const [visionEntries, setVisionEntries] = useState<VisionEntry[]>([])
+  const [visionIndex, setVisionIndex] = useState(0)
+  const [view, setView] = useState<DocViewMode>("parser")
 
   const docId = target?.docId ?? null
   const spanStart = target?.start ?? 0
@@ -45,8 +51,11 @@ export function DocViewer() {
   const docName = docRef?.name ?? null
   const docType = docRef?.type ?? null
   const [hasPdf, setHasPdf] = useState(false)
-  const tabs = docViewerTabs(docRef, hasPdf)
+  const hasVisionText = visionEntries.length > 0
+  const tabs = docViewerTabs(docRef, hasPdf, hasVisionText)
   const showPdf = isPdfDoc(docRef, hasPdf)
+  const displayText =
+    view === "vision" ? (visionEntries[visionIndex]?.text ?? "") : (parserText ?? "")
 
   // AI : PDF tab only when /file has bytes — often false for uploads on Vercel/Supabase (see savePdfBytes TODO).
   useEffect(() => {
@@ -59,21 +68,40 @@ export function DocViewer() {
 
   useEffect(() => {
     if (!docId) return
-    setText(null)
+    setParserText(null)
+    setParserMeta({})
+    setVisionEntries([])
+    setVisionIndex(0)
     const hasSpan = spanStart !== spanEnd
-    setView(
-      defaultDocViewMode(docRef, hasPdf, { hasSpan, requested: requestedMode ?? undefined }),
-    )
-    fetch(API_ROUTES.docText(docId))
-      .then((r) => (r.ok ? r.json() : { text: `⚠ source not found for ${docId}` }))
-      .then((d) => setText(d.text))
-      .catch(() => setText("⚠ failed to load source document"))
+    let visionRows: VisionEntry[] = []
+    Promise.all([
+      fetch(API_ROUTES.docText(docId, "parser")).then((r) =>
+        r.ok ? r.json() : { text: `⚠ source not found for ${docId}` },
+      ),
+      fetch(API_ROUTES.docText(docId, "vision")).then((r) =>
+        r.ok ? r.json() : { entries: [] as VisionEntry[] },
+      ),
+    ])
+      .then(([parser, vision]) => {
+        visionRows = vision.entries ?? []
+        setParserText(parser.text ?? "")
+        setParserMeta({ parser: parser.parser, fromCache: parser.fromCache })
+        setVisionEntries(visionRows)
+        setView(
+          defaultDocViewMode(docRef, hasPdf, {
+            hasSpan,
+            requested: requestedMode ?? undefined,
+            hasVisionText: visionRows.length > 0,
+          }),
+        )
+      })
+      .catch(() => setParserText("⚠ failed to load source document"))
   }, [docId, requestedMode, spanStart, spanEnd, hasPdf, docName, docType])
 
   useEffect(() => {
-    if (!docId || text === null || view !== "text" || !markRef.current) return
+    if (!docId || parserText === null || view !== "parser" || !markRef.current) return
     markRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
-  }, [docId, text, view])
+  }, [docId, parserText, view])
 
   useEffect(() => {
     if (!docId) return
@@ -85,10 +113,13 @@ export function DocViewer() {
   }, [docId, close])
 
   if (!target) return null
-  const span = text !== null ? resolveSpan(text, target.start, target.end, target.text) : { start: 0, end: 0 }
-  const before = text?.slice(0, span.start) ?? ""
-  const quote = text?.slice(span.start, span.end) ?? ""
-  const after = text?.slice(span.end) ?? ""
+  const span =
+    parserText !== null && view === "parser"
+      ? resolveSpan(parserText, target.start, target.end, target.text)
+      : { start: 0, end: 0 }
+  const before = displayText.slice(0, span.start)
+  const quote = displayText.slice(span.start, span.end)
+  const after = displayText.slice(span.end)
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -147,58 +178,83 @@ export function DocViewer() {
             className="min-h-0 flex-1 bg-white"
           />
         ) : view === "json" ? (
-          text === null ? (
+          parserText === null ? (
             <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span className="font-mono text-[11px]">loading source…</span>
             </div>
           ) : (
             // AI: full interactive viewer — tree / table modes via the embedded iframe
-            <JsonPreviewPanel json={text} className="min-h-0 flex-1" />
+            <JsonPreviewPanel json={parserText} className="min-h-0 flex-1" />
           )
         ) : view === "formatted" ? (
           <div className="flex-1 overflow-auto px-6 py-5">
-            {text === null ? (
+            {parserText === null ? (
               <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span className="font-mono text-[11px]">loading source…</span>
               </div>
             ) : (
-              <MarkdownView md={text} />
+              <MarkdownView md={parserText} />
             )}
           </div>
         ) : (
-          <div className="flex-1 overflow-auto px-6 py-5">
-            {text === null ? (
-              <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="font-mono text-[11px]">loading source…</span>
-              </div>
-            ) : (
-              <pre className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-muted-foreground">
-                {before}
-                {quote && (
-                  <span
-                    ref={markRef}
-                    className="rounded bg-primary/25 px-0.5 font-medium text-foreground ring-1 ring-primary/50"
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {view === "vision" && visionEntries.length > 1 ? (
+              <div className="flex flex-wrap gap-1 border-b border-border px-4 py-2">
+                {visionEntries.map((entry, i) => (
+                  <button
+                    key={entry.key}
+                    type="button"
+                    onClick={() => setVisionIndex(i)}
+                    className={cn(
+                      "rounded border px-2 py-0.5 font-mono text-[10px]",
+                      i === visionIndex
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground",
+                    )}
                   >
-                    {quote}
-                  </span>
-                )}
-                {after}
-              </pre>
-            )}
+                    {entry.model}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="flex-1 overflow-auto px-6 py-5">
+              {parserText === null && view !== "vision" ? (
+                <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="font-mono text-[11px]">loading source…</span>
+                </div>
+              ) : view === "vision" && !visionEntries.length ? (
+                <p className="font-mono text-[11px] text-muted-foreground">no vision OCR cached for this document</p>
+              ) : (
+                <pre className="whitespace-pre-wrap font-mono text-[12px] leading-relaxed text-muted-foreground">
+                  {view === "parser" ? before : null}
+                  {view === "parser" && quote ? (
+                    <span
+                      ref={markRef}
+                      className="rounded bg-primary/25 px-0.5 font-medium text-foreground ring-1 ring-primary/50"
+                    >
+                      {quote}
+                    </span>
+                  ) : null}
+                  {view === "parser" ? after : displayText}
+                </pre>
+              )}
+            </div>
           </div>
         )}
         <div className="flex items-center justify-between border-t border-border px-5 py-2.5 font-mono text-[10px] text-muted-foreground">
           <span>
             {view === "pdf"
-              ? "original document — stored beside its content-hashed extracted text"
+              ? "original document — stored beside built-in parser text"
               : view === "json"
-              ? "interactive JSON viewer — tree · table"
-              : view === "formatted"
-              ? "formatted markdown — rendered via GFM (tables, lists, code, links)"
-              : "validated text — extracted span linked to source via langextract-style offsets"}
+                ? "interactive JSON viewer — tree · table"
+                : view === "formatted"
+                  ? "formatted markdown — rendered via GFM (tables, lists, code, links)"
+                  : view === "vision"
+                    ? `vision OCR — ${visionEntries[visionIndex]?.model ?? "—"}${visionEntries.length ? " (cached)" : ""}`
+                    : `built-in parser — ${parserMeta.parser ?? "upload"}${parserMeta.fromCache ? " (cached)" : ""}`}
           </span>
           <OpenInDocumentsLink docId={target.docId as DocId} label="saved in documents" className="shrink-0" />
         </div>

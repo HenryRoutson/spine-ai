@@ -1,34 +1,31 @@
 import { z, type ZodError, type ZodType } from "zod";
 import { modelHasQuoteFields } from "./quote_schema";
+import {
+  fieldTypeToExpr,
+  isListFieldType,
+  typeExprToZod,
+  zodFromModel as zodFromModelExpr,
+} from "./type_expr";
 import type { FieldType, ModelField, PipelineModule, StructureModel, StructureModelId } from "./types";
 
-function isListFieldType(type: FieldType): boolean {
-  return (
-    type === "list[text]" ||
-    type === "list[document]" ||
-    type === "list[model]" ||
-    type === "list[tuple[text,quote]]"
-  );
-}
+export { QuoteSchema, isListFieldType } from "./type_expr";
+export type { TypeExpr } from "./type_expr";
+export {
+  cardinalityMismatch,
+  fieldTypeToExpr,
+  formatTypeExpr,
+  stepEmitsList,
+  stepSpineInType,
+  stepSpineOutType,
+  typeExprEqual,
+  typeExprToPy,
+  typeExprToTs,
+} from "./type_expr";
 
 // AI : shared by run_engine wrap + pipeline validity — one definition for list-field detection.
 export function listFieldsForWrap(model: StructureModel): ModelField[] {
   return model.fields.filter((f) => isListFieldType(f.type));
 }
-
-// AI : the Quote shape mirrors the pydantic `Quote` class — links extracted text to a source span.
-export const QuoteSchema = z.object({
-  doc_id: z.string(),
-  start: z.number().int(),
-  end: z.number().int(),
-});
-
-// AI : tuple[text,quote] is modelled as an object (LLM-friendly) of { text, quote }.
-const TextQuoteSchema = z.object({ text: z.string(), quote: QuoteSchema });
-
-// AI : the prebuilt Document base (matches pydantic Document).
-const DocumentSchema = z.object({ doc_id: z.string(), purpose: z.string(), body: z.string() });
-
 // AI : json field — string that must parse; prefer model / list[model] when shape is known
 export function isValidJsonString(s: string): boolean {
   const t = s.trim();
@@ -51,12 +48,6 @@ export function assertValidJsonFieldValue(val: unknown, fieldName?: string): ass
   }
 }
 
-const JsonStringSchema = z.string().refine(isValidJsonString, { message: "must be valid JSON" });
-
-function byId(models: StructureModel[]): Map<StructureModelId, StructureModel> {
-  return new Map(models.map((m) => [m.id, m]));
-}
-
 function fieldDescribe(f: ModelField): string | undefined {
   const parts: string[] = [];
   if (f.description.trim()) parts.push(f.description.trim());
@@ -70,80 +61,24 @@ function withFieldMeta(schema: ZodType, f: ModelField): ZodType {
   return d ? schema.describe(d) : schema;
 }
 
-function leafSchema(
-  type: FieldType,
-  ref: StructureModelId | undefined,
-  index: Map<StructureModelId, StructureModel>,
-  seen: Set<StructureModelId>,
-): ZodType {
-  switch (type) {
-    case "text":
-      return z.string();
-    case "int":
-      return z.number().int();
-    case "float":
-      return z.number();
-    case "bool":
-      return z.boolean();
-    case "datetime":
-      return z.string(); // ISO-8601 string for JSON transport
-    case "document":
-      return DocumentSchema;
-    case "list[document]":
-      return z.array(DocumentSchema);
-    case "json":
-      return JsonStringSchema;
-    case "list[text]":
-      return z.array(z.string());
-    case "tuple[text,quote]":
-      return TextQuoteSchema;
-    case "list[tuple[text,quote]]":
-      return z.array(TextQuoteSchema);
-    case "model":
-      return refSchema(ref, index, seen);
-    case "list[model]":
-      return z.array(refSchema(ref, index, seen));
-    default:
-      // AI : corrupt/partial field types (UI draft state, legacy persisted data) — never leave undefined in z.object().
-      return z.unknown();
-  }
-}
-
-function refSchema(
-  ref: StructureModelId | undefined,
-  index: Map<StructureModelId, StructureModel>,
-  seen: Set<StructureModelId>,
-): ZodType {
-  const model = ref ? index.get(ref) : undefined;
-  if (!model) return z.record(z.string(), z.unknown());
-  return build(model, index, seen);
-}
-
-function build(
-  model: StructureModel,
-  index: Map<StructureModelId, StructureModel>,
-  seen: Set<StructureModelId>,
-): ZodType {
-  // AI : guard against self/cyclic refs (the linear demo has none, but be safe).
+function llmModelToZod(model: StructureModel, models: StructureModel[], seen: Set<StructureModelId>): ZodType {
   if (seen.has(model.id)) return z.record(z.string(), z.unknown());
   const next = new Set(seen).add(model.id);
   const shape: Record<string, ZodType> = {};
   for (const f of model.fields) {
     if (!f.name.trim()) continue;
-    let base = withFieldMeta(leafSchema(f.type, f.ref, index, next), f);
+    let base = withFieldMeta(typeExprToZod(fieldTypeToExpr(f), models, next, true), f);
     if (f.minItems && f.minItems > 1 && isListFieldType(f.type) && base instanceof z.ZodArray) {
       base = base.min(f.minItems);
     }
-    // AI : optional ⇒ absent OR null — deterministic steps (db migration mapping) emit explicit
-    // AI : nulls per spec; llmSchema keeps plain .optional() so models omit instead.
-    shape[f.name] = f.optional ? base.nullish() : base;
+    shape[f.name] = f.optional ? base.optional() : base;
   }
   return z.object(shape);
 }
 
 // AI : canonical schema builder — ONE definition backs runtime validation AND llm output schemas.
 export function zodFromModel(model: StructureModel, models: StructureModel[] = []): ZodType {
-  return build(model, byId(models), new Set());
+  return zodFromModelExpr(model, models.length ? models : [model], false);
 }
 
 // AI : true when this model or any nested ref carries a quote field — drives LLM source + link steps.
@@ -163,77 +98,16 @@ export function llmSchemaJson(model: StructureModel, models: StructureModel[], i
   return JSON.stringify(z.toJSONSchema(llmSchema(model, models, isList)), null, 2);
 }
 
-function llmRefSchema(
-  ref: StructureModelId | undefined,
-  index: Map<StructureModelId, StructureModel>,
-  seen: Set<StructureModelId>,
-): ZodType {
-  const model = ref ? index.get(ref) : undefined;
-  if (!model) return z.record(z.string(), z.unknown());
-  return llmBuild(model, index, seen);
-}
-
-function llmLeafSchema(
-  type: FieldType,
-  ref: StructureModelId | undefined,
-  index: Map<StructureModelId, StructureModel>,
-  seen: Set<StructureModelId>,
-): ZodType {
-  switch (type) {
-    case "text":
-      return z.string();
-    case "int":
-      return z.number().int();
-    case "float":
-      return z.number();
-    case "bool":
-      return z.boolean();
-    case "datetime":
-      return z.string();
-    case "document":
-      return DocumentSchema;
-    case "list[document]":
-      return z.array(DocumentSchema);
-    case "json":
-      return JsonStringSchema;
-    case "list[text]":
-      return z.array(z.string());
-    case "tuple[text,quote]":
-      return z.string();
-    case "list[tuple[text,quote]]":
-      return z.array(z.string());
-    case "model":
-      return llmRefSchema(ref, index, seen);
-    case "list[model]":
-      return z.array(llmRefSchema(ref, index, seen));
-    default:
-      return z.unknown();
-  }
-}
-
 function llmBuild(
   model: StructureModel,
-  index: Map<StructureModelId, StructureModel>,
+  models: StructureModel[],
   seen: Set<StructureModelId>,
 ): ZodType {
-  if (seen.has(model.id)) return z.record(z.string(), z.unknown());
-  const next = new Set(seen).add(model.id);
-  const shape: Record<string, ZodType> = {};
-  for (const f of model.fields) {
-    if (!f.name.trim()) continue;
-    let base = withFieldMeta(llmLeafSchema(f.type, f.ref, index, next), f);
-    if (f.minItems && f.minItems > 1 && isListFieldType(f.type) && base instanceof z.ZodArray) {
-      base = base.min(f.minItems);
-    }
-    shape[f.name] = f.optional ? base.optional() : base;
-  }
-  return z.object(shape);
+  return llmModelToZod(model, models, seen);
 }
 
 export function llmSchema(model: StructureModel, models: StructureModel[], isList: boolean): ZodType {
-  const index = byId(models);
-  const obj = llmBuild(model, index, new Set());
-  // AI : json_object mode returns a wrapper object — unwrap before validating the list.
+  const obj = llmBuild(model, models, new Set());
   return isList ? z.preprocess(coerceLlmListOutput, z.array(obj)) : obj;
 }
 

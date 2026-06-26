@@ -14,7 +14,7 @@ import {
   Zap,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
-import { computeInvalid, computeWarnings, ioMismatchInspectorFix, prevModuleId, type IoMismatchFixKind } from "@/lib/validity"
+import { computeInvalid, computeWarnings, ioMismatchInspectorFix, invalidForModule, invalidIssuesForModule, prevModuleId, type IoMismatchFixKind } from "@/lib/validity"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { moduleMetrics } from "@/lib/billing"
 import { combinePairIds } from "@/lib/pipeline-layout"
@@ -90,8 +90,8 @@ export function PipelineBuilder() {
   }
 
   function fixIoMismatch(moduleId: string, kind: IoMismatchFixKind) {
-    const issue = invalid.get(moduleId as ModuleId)
-    if (!issue || issue.kind !== "io-mismatch") return
+    const issue = invalidForModule(invalid, moduleId as ModuleId)
+    if (!issue || (issue.kind !== "io-mismatch" && issue.kind !== "cardinality-mismatch")) return
     if (kind === "adopt-upstream" && issue.upstreamEmits) {
       const m = modules.find((x) => x.id === moduleId)
       const patch: Partial<PipelineModule> = { inStructureId: issue.upstreamEmits }
@@ -272,7 +272,8 @@ export function PipelineBuilder() {
                   modules={modules}
                   mode="edit"
                   globalModel={globalModel}
-                  invalid={invalid.get(selected.id)}
+                  invalid={invalidForModule(invalid, selected.id)}
+                  invalidIssues={invalidIssuesForModule(invalid, selected.id)}
                   warnings={warnings.get(selected.id)}
                   ioMismatchFix={ioMismatchInspectorFix(selected.id as ModuleId, modules, invalid, models)}
                   onUpdate={(patch) => update(selected.id, patch)}

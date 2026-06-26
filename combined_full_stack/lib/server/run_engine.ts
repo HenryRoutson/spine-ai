@@ -340,12 +340,13 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       const multi = isMultiDocInputModule(m) || docIds.length > 1;
       log.info(`input module loaded doc(s)`, { moduleId: m.id, docCount: docIds.length, multi, useOcr: !!m.useOcr });
       if (m.useOcr) ctx.stepLlmCalls = [];
+      let lastOcr: { model: string; fromVisionCache: boolean } | undefined;
 
       const materializeDoc = async (docId: DocId, first: boolean) => {
         let content = store.docContent(docId) ?? "";
         if (m.useOcr) {
           const stepModel = m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
-          content = await docToTextViaLlm(
+          const ocr = await docToTextViaLlm(
             store,
             docId,
             m.note ?? m.label,
@@ -354,6 +355,8 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
             content,
             log.child("input-ocr"),
           );
+          content = ocr.text;
+          lastOcr = { model: ocr.model, fromVisionCache: ocr.fromVisionCache };
         }
         if (first && !ctx.sourceText) {
           ctx.sourceText = content;
@@ -372,7 +375,9 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
           value,
           preview: `loaded ${inputTypeLabel(m.inputType)} → ${docId}${m.useOcr ? " · OCR" : ""}`,
           docId,
-          inputPreview: m.useOcr ? `vision OCR · ${m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL}` : undefined,
+          inputPreview: m.useOcr
+            ? `vision OCR · ${lastOcr?.model ?? m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL}${lastOcr?.fromVisionCache ? " · cached" : ""}`
+            : undefined,
           llmCalls: m.useOcr ? ctx.stepLlmCalls : undefined,
         };
       }
@@ -391,7 +396,9 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         preview: `loaded ${docIds.length} ${inputTypeLabel(m.inputType)} doc(s)${m.useOcr ? " · OCR" : ""}`,
         docId: docIds[0],
         json: JSON.stringify({ doc_ids: docIds }, null, 2),
-        inputPreview: m.useOcr ? `vision OCR · ${m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL}` : undefined,
+        inputPreview: m.useOcr
+          ? `vision OCR · ${lastOcr?.model ?? m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL}${lastOcr?.fromVisionCache ? " · cached" : ""}`
+          : undefined,
         llmCalls: m.useOcr ? ctx.stepLlmCalls : undefined,
       };
     }
@@ -400,12 +407,13 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       const upstream = ctx.prevModuleId ? ctx.outputs.get(ctx.prevModuleId) : undefined;
       const useLlm = docParseModeForModule(m) === "llm";
       const stepModel = m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
+      let lastOcr: { model: string; fromVisionCache: boolean } | undefined;
 
       const transcribeDoc = async (doc: { doc_id?: DocId; body?: string; purpose?: string }) => {
         const docId = doc.doc_id ?? ctx.sourceDocId;
         let body = doc.body ?? ctx.sourceText;
         if (useLlm) {
-          body = await docToTextViaLlm(
+          const ocr = await docToTextViaLlm(
             store,
             docId,
             m.note ?? m.label,
@@ -414,6 +422,8 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
             body,
             log.child("doc-to-text"),
           );
+          body = ocr.text;
+          lastOcr = { model: ocr.model, fromVisionCache: ocr.fromVisionCache };
         } else {
           ctx.ledger.recordService("doc-parse svc", ctx.model, 1);
         }
@@ -438,7 +448,9 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
           preview: `purpose: ${purpose}${useLlm ? " · LLM OCR" : ""} · ${items.length} doc(s)`,
           json: JSON.stringify({ purpose, count: items.length, mode: useLlm ? "llm" : "parser" }, null, 2),
           docId: first?.doc_id,
-          inputPreview: useLlm ? `vision OCR · ${stepModel}` : undefined,
+          inputPreview: useLlm
+            ? `vision OCR · ${lastOcr?.model ?? stepModel}${lastOcr?.fromVisionCache ? " · cached" : ""}`
+            : undefined,
           llmCalls: useLlm ? ctx.stepLlmCalls : undefined,
         };
       }
@@ -469,7 +481,9 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         preview: `purpose: ${purpose}${useLlm ? " · LLM OCR" : ""}`,
         json: JSON.stringify({ doc_id: docId, purpose, chars: body.length, mode: useLlm ? "llm" : "parser" }, null, 2),
         docId,
-        inputPreview: useLlm ? `vision OCR · ${stepModel}` : undefined,
+        inputPreview: useLlm
+          ? `vision OCR · ${lastOcr?.model ?? stepModel}${lastOcr?.fromVisionCache ? " · cached" : ""}`
+          : undefined,
         llmCalls: useLlm ? ctx.stepLlmCalls : undefined,
       };
     }

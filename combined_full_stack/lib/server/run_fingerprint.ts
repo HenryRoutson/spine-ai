@@ -6,6 +6,7 @@ import {
   resolveRunModel,
   stableJson,
 } from "../run-fingerprint";
+import { stepModelForCache } from "./types";
 import { projectSeedDocNames } from "./seed";
 import type { Store } from "./store";
 import { migrateProjectModules } from "./validity";
@@ -33,7 +34,7 @@ export function stepCacheKey(
     .update(stableJson(moduleConfigForStepCache(module)))
     .digest("hex")
     .slice(0, 12);
-  const stepModel = module.model ?? model;
+  const stepModel = stepModelForCache(module, model);
   const owner = createHash("sha256").update(cacheOwnerId).digest("hex").slice(0, 12);
   return `${owner}__${projectId}__${module.id}__${stepModel}__${inputs}__${cfg}.json`;
 }

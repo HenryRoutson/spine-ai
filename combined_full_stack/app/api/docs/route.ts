@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { linkDocToProject, saveOriginalDocBytes } from "@/lib/server/store";
+import { hashFileBytes, parserCacheKey, type ParserKind } from "@/lib/server/doc_text_cache";
 import { logger } from "@/lib/server/server_logger";
 import { confidentialUploadWarning } from "@/lib/confidential-upload";
 import type { DocLabel, InputType, ProjectId } from "@/lib/server/types";
@@ -45,29 +46,60 @@ export async function POST(req: NextRequest) {
   const type = EXT_TYPE[file.name.split(".").pop()?.toLowerCase() ?? ""] ?? "text";
   apiLog.info(`POST /api/docs upload`, { name: file.name, type, label, sizeKb: Math.round(file.size / 1024) });
 
+  const ctx = await requireAuthStore();
+  if (ctx instanceof NextResponse) return ctx;
+  const { store } = ctx;
+
   const bytes = new Uint8Array(await file.arrayBuffer());
+  const fileHash = hashFileBytes(bytes);
+  let parserKind: ParserKind | null = null;
+  let parsedFresh = false;
   let content: string;
+
   try {
     if (type === "pdf") {
-      apiLog.debug(`parsing PDF`, { name: file.name });
-      const { pdfBytesToText } = await import("@/lib/server/pdf_to_text");
-      content = await pdfBytesToText(bytes);
-      apiLog.info(`PDF parsed`, { name: file.name, chars: content.length });
+      parserKind = "pdfjs";
+      const cached = store.parserCacheGetByFileHash(fileHash, parserKind);
+      if (cached) {
+        content = cached.content;
+        apiLog.info(`parser cache HIT`, { name: file.name, parser: parserKind, fileHash });
+      } else {
+        apiLog.debug(`parsing PDF (built-in parser)`, { name: file.name });
+        const { pdfBytesToText } = await import("@/lib/server/pdf_to_text");
+        content = await pdfBytesToText(bytes);
+        parsedFresh = true;
+        apiLog.info(`PDF parsed (built-in)`, { name: file.name, chars: content.length });
+      }
     } else if (type === "image") {
-      // AI : images need vision OCR at doc-to-text LLM step — no text at ingest.
+      // AI : images have no built-in parser text — vision OCR fills doc_vision_cache at run time.
       content = "";
     } else {
-      content = new TextDecoder().decode(bytes);
+      parserKind = "plain";
+      const cached = store.parserCacheGetByFileHash(fileHash, parserKind);
+      if (cached) {
+        content = cached.content;
+        apiLog.info(`parser cache HIT`, { name: file.name, parser: parserKind, fileHash });
+      } else {
+        content = new TextDecoder().decode(bytes);
+        parsedFresh = true;
+      }
     }
   } catch (err) {
     apiLog.error(`doc parse failed`, { name: file.name, error: (err as Error).message });
     return apiError(`could not parse ${file.name}: ${(err as Error).message}`, 422);
   }
 
-  const ctx = await requireAuthStore();
-  if (ctx instanceof NextResponse) return ctx;
-  const { store } = ctx;
   const doc = store.addDoc(file.name, type, content, label);
+  if (parsedFresh && parserKind) {
+    store.parserCacheSet({
+      key: parserCacheKey(fileHash, parserKind),
+      fileHash,
+      docId: doc.id,
+      parser: parserKind,
+      content,
+    });
+    apiLog.info(`parser cache written`, { docId: doc.id, parser: parserKind, fileHash });
+  }
   if (projectId) linkDocToProject(store, projectId, file.name);
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
   if (type === "pdf" || type === "image") saveOriginalDocBytes(doc.id, bytes, ext);

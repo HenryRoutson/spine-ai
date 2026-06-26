@@ -209,6 +209,7 @@ type PipelineModuleFieldsProps = {
   mode: "edit" | "view"
   globalModel?: string
   invalid?: InvalidStep
+  invalidIssues?: InvalidStep[]
   warnings?: PipelineWarning[]
   ioMismatchFix?: IoMismatchInspectorFix
   onUpdate?: (patch: Partial<PipelineModule>) => void
@@ -223,6 +224,7 @@ export function PipelineModuleFields({
   mode,
   globalModel,
   invalid,
+  invalidIssues,
   warnings,
   ioMismatchFix,
   onUpdate,
@@ -273,11 +275,13 @@ export function PipelineModuleFields({
       <p className="mb-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
         {MODULE_META[selected.kind].description}
       </p>
-      {invalid && invalid.kind !== "io-mismatch" && (
-        <p className="mb-3 font-mono text-[10px] leading-relaxed text-destructive">
-          {invalidStepMessage(invalid, models, modules)}
-        </p>
-      )}
+      {(invalidIssues ?? (invalid ? [invalid] : []))
+        .filter((issue) => issue.kind !== "io-mismatch" && issue.kind !== "cardinality-mismatch")
+        .map((issue, i) => (
+          <p key={i} className="mb-3 font-mono text-[10px] leading-relaxed text-destructive">
+            {invalidStepMessage(issue, models, modules)}
+          </p>
+        ))}
       {selected.kind !== "input" && warnings?.length ? (
         <div className="mb-3 space-y-1">
           {warningStepMessages(warnings, models, modules).map((msg, i) => (
@@ -406,22 +410,21 @@ export function PipelineModuleFields({
           </PipelineField>
           {inputOcrAvailable && (
             <PipelineField
-              label="Use OCR"
-              hint={
-                edit
-                  ? "OpenRouter vision — scanned PDFs, photos, and handwriting (needs PDF or Image in input types)"
-                  : undefined
-              }
+              label="Vision OCR"
+              hint={edit ? "Separate from built-in parser (docs.content) — cached in doc_vision_cache" : undefined}
             >
               {edit ? (
-                <div className="space-y-3">
+                <div className="space-y-3 rounded-md border border-dashed border-chart-3/40 bg-chart-3/5 p-3">
+                  <p className="font-mono text-[10px] text-muted-foreground">
+                    Built-in parser runs at upload (PDF.js → docs.content). Vision OCR runs via OpenRouter and is cached separately.
+                  </p>
                   <div className="flex items-center justify-between rounded-md border border-border bg-secondary/30 px-3 py-2.5">
                     <div>
-                      <p className="text-xs font-medium">Use OCR</p>
+                      <p className="text-xs font-medium">Enable vision OCR</p>
                       <p className="font-mono text-[10px] text-muted-foreground">
                         {selected.useOcr
-                          ? "vision model transcribes PDF/image at run time"
-                          : "text/md/json use as-is · PDF/image use built-in extract unless OCR on"}
+                          ? "OpenRouter vision — cached per doc + model + prompt"
+                          : "use built-in parser text only"}
                       </p>
                     </div>
                     <Switch
@@ -440,7 +443,7 @@ export function PipelineModuleFields({
                   )}
                 </div>
               ) : (
-                <StaticValue>{selected.useOcr ? "On" : "Off"}</StaticValue>
+                <StaticValue>{selected.useOcr ? "Vision OCR on" : "Built-in parser only"}</StaticValue>
               )}
             </PipelineField>
           )}

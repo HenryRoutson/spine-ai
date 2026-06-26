@@ -28,7 +28,8 @@ import {
   stepIoMismatchLinked,
   stepIoMismatchMessage,
   warningStepMessages,
-  type InvalidStep,
+  invalidForModule,
+  type InvalidMap,
   type PipelineWarning,
 } from "@/lib/validity"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
@@ -42,7 +43,7 @@ type PipelineCanvasProps = {
   selectedId?: ModuleId
   onSelect?: (id: ModuleId) => void
   stepStatus?: Map<ModuleId, RunStepStatus>
-  invalid?: Map<ModuleId, InvalidStep>
+  invalid?: InvalidMap
   warnings?: Map<ModuleId, PipelineWarning[]>
   renderInsertBefore?: (insertAt: number) => React.ReactNode
   renderInsertAfter?: (insertAt: number, opts: { blocked?: boolean; connectionInvalid?: boolean }) => React.ReactNode
@@ -120,7 +121,7 @@ function SegmentRow({
   selectedId?: ModuleId
   onSelect?: (id: ModuleId) => void
   stepStatus?: Map<ModuleId, RunStepStatus>
-  invalid?: Map<ModuleId, InvalidStep>
+  invalid?: InvalidMap
   warnings?: Map<ModuleId, PipelineWarning[]>
   editMode: boolean
   renderInsertAfter?: (insertAt: number, opts: { blocked?: boolean; connectionInvalid?: boolean }) => React.ReactNode
@@ -131,8 +132,8 @@ function SegmentRow({
 
   if (seg.kind === "combine") {
     const { combine, input, index } = seg
-    const combineIssue = invalid?.get(combine.id)
-    const combineInvalid = combineIssue && combineIssue.kind !== "io-mismatch"
+    const combineIssue = invalidForModule(invalid ?? new Map(), combine.id)
+    const combineInvalid = combineIssue && combineIssue.kind !== "io-mismatch" && combineIssue.kind !== "cardinality-mismatch"
     const combineIoLinked = stepIoMismatchLinked(combine.id, modules, invalid)
     const combineIoMsg =
       combineIoLinked && invalid
@@ -221,8 +222,8 @@ function SegmentRow({
 
   const m = seg.module
   const i = seg.index
-  const stepIssue = invalid?.get(m.id)
-  const isInvalid = !!stepIssue && stepIssue.kind !== "io-mismatch"
+  const stepIssue = invalid ? invalidForModule(invalid, m.id) : undefined
+  const isInvalid = !!stepIssue && stepIssue.kind !== "io-mismatch" && stepIssue.kind !== "cardinality-mismatch"
   const ioLinked = stepIoMismatchLinked(m.id, modules, invalid)
   const stepWarnings = warnings?.get(m.id)
   const locked = isAutoQuoteStep(m)

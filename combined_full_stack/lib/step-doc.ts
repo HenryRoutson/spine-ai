@@ -50,7 +50,7 @@ export function stepDocLinkLabels(doc?: DocRef): {
     }
   }
   return {
-    input: { mode: "text", label: "source document" },
-    output: { mode: "text", label: "stored text" },
+    input: { mode: "parser", label: "built-in parser" },
+    output: { mode: "parser", label: "stored parser text" },
   }
 }

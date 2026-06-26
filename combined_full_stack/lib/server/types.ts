@@ -269,8 +269,8 @@ export const DEFAULT_MODEL: ModelId = "deepseek-v3";
 export const DEFAULT_VISION_DOC_PARSE_MODEL: ModelId = "gemini-3-flash";
 
 export const DOC_PARSE_MODES: { value: DocParseMode; label: string; hint: string }[] = [
-  { value: "parser", label: "Built-in parser", hint: "JS PDF reader · text extracted at upload" },
-  { value: "llm", label: "Use OCR", hint: "OpenRouter vision — scans, handwriting, image PDFs" },
+  { value: "parser", label: "Built-in parser", hint: "PDF.js text extract at upload — stored in docs.content" },
+  { value: "llm", label: "Vision OCR", hint: "OpenRouter vision — cached separately in doc_vision_cache" },
 ];
 
 export function docParseModeForModule(m: PipelineModule): DocParseMode {
@@ -279,6 +279,14 @@ export function docParseModeForModule(m: PipelineModule): DocParseMode {
 
 export function isDocToTextLlm(m: PipelineModule): boolean {
   return m.kind === "doc-to-text" && docParseModeForModule(m) === "llm";
+}
+
+// AI : step-cache model slug — vision OCR steps must not share keys with the global run model.
+export function stepModelForCache(m: PipelineModule, globalModel: ModelId): ModelId {
+  if (m.kind === "input" && m.useOcr) return m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
+  if (isDocToTextLlm(m)) return m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
+  if (m.kind === "llm" || m.kind === "llm-batch") return m.model ?? globalModel;
+  return m.model ?? globalModel;
 }
 
 export const FIELD_TYPES: FieldType[] = [

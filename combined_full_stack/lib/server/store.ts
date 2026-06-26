@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "./config";
 import { uid } from "../id";
@@ -27,6 +27,22 @@ import type {
   RunFingerprint,
   RunId,
 } from "./types";
+import {
+  parserCacheKey,
+  type FileContentHash,
+  type ParserCacheRow,
+  type ParserKind,
+  type VisionCacheKey,
+  type VisionCacheRow,
+} from "./doc_text_cache";
+
+function visionCacheDir(): string {
+  return join(dataDir(), "vision_cache");
+}
+
+function parserCacheDir(): string {
+  return join(dataDir(), "parser_cache");
+}
 
 // AI : content hash == doc id, so identical uploads dedupe to one ref (Documents tab).
 export function hashContent(content: string): DocId {
@@ -114,7 +130,14 @@ export interface Store {
   saveProject(p: Project): void;
   deleteProject(id: ProjectId): boolean;
   docs(): DocRef[];
+  /** AI : built-in parser text (PDF.js at upload, plain decode) — stored in docs.content / {id}.txt */
   docContent(id: DocId): string | undefined;
+  parserCacheGetByFileHash(fileHash: FileContentHash, parser: ParserKind): ParserCacheRow | undefined;
+  parserCacheGetByDoc(docId: DocId): ParserCacheRow | undefined;
+  parserCacheSet(row: Omit<ParserCacheRow, "createdAt"> & { createdAt?: number }): void;
+  visionCacheGet(key: VisionCacheKey): VisionCacheRow | undefined;
+  visionCacheSet(row: Omit<VisionCacheRow, "createdAt"> & { createdAt?: number }): void;
+  visionCachesForDoc(docId: DocId): VisionCacheRow[];
   addDoc(name: string, type: InputType, content: string, label: DocLabel): DocRef;
   removeDoc(id: DocId): boolean;
   runs(projectId?: ProjectId): PipelineRun[];
@@ -353,6 +376,71 @@ export class JsonStore implements Store {
     return existsSync(path) ? readFileSync(path, "utf8") : undefined;
   }
 
+  parserCacheGetByFileHash(fileHash: FileContentHash, parser: ParserKind): ParserCacheRow | undefined {
+    const path = join(parserCacheDir(), `${parserCacheKey(fileHash, parser)}.json`);
+    if (!existsSync(path)) return undefined;
+    try {
+      return JSON.parse(readFileSync(path, "utf8")) as ParserCacheRow;
+    } catch {
+      return undefined;
+    }
+  }
+
+  parserCacheGetByDoc(docId: DocId): ParserCacheRow | undefined {
+    const dir = parserCacheDir();
+    if (!existsSync(dir)) return undefined;
+    let latest: ParserCacheRow | undefined;
+    for (const name of readdirSync(dir)) {
+      if (!name.endsWith(".json")) continue;
+      try {
+        const row = JSON.parse(readFileSync(join(dir, name), "utf8")) as ParserCacheRow;
+        if (row.docId !== docId) continue;
+        if (!latest || row.createdAt > latest.createdAt) latest = row;
+      } catch {
+        continue;
+      }
+    }
+    return latest;
+  }
+
+  parserCacheSet(row: Omit<ParserCacheRow, "createdAt"> & { createdAt?: number }): void {
+    mkdirSync(parserCacheDir(), { recursive: true });
+    const payload: ParserCacheRow = { ...row, createdAt: row.createdAt ?? Date.now() };
+    writeFileSync(join(parserCacheDir(), `${row.key}.json`), JSON.stringify(payload), "utf8");
+  }
+
+  visionCacheGet(key: VisionCacheKey): VisionCacheRow | undefined {
+    const path = join(visionCacheDir(), `${key}.json`);
+    if (!existsSync(path)) return undefined;
+    try {
+      return JSON.parse(readFileSync(path, "utf8")) as VisionCacheRow;
+    } catch {
+      return undefined;
+    }
+  }
+
+  visionCacheSet(row: Omit<VisionCacheRow, "createdAt"> & { createdAt?: number }): void {
+    mkdirSync(visionCacheDir(), { recursive: true });
+    const payload: VisionCacheRow = { ...row, createdAt: row.createdAt ?? Date.now() };
+    writeFileSync(join(visionCacheDir(), `${row.key}.json`), JSON.stringify(payload), "utf8");
+  }
+
+  visionCachesForDoc(docId: DocId): VisionCacheRow[] {
+    const dir = visionCacheDir();
+    if (!existsSync(dir)) return [];
+    const out: VisionCacheRow[] = [];
+    for (const name of readdirSync(dir)) {
+      if (!name.endsWith(".json")) continue;
+      try {
+        const row = JSON.parse(readFileSync(join(dir, name), "utf8")) as VisionCacheRow;
+        if (row.docId === docId) out.push(row);
+      } catch {
+        continue;
+      }
+    }
+    return out.sort((a, b) => b.createdAt - a.createdAt);
+  }
+
   addDoc(name: string, type: InputType, content: string, label: DocLabel): DocRef {
     const doc = this.ingest(name, type, content, label);
     this.persist();
@@ -365,6 +453,30 @@ export class JsonStore implements Store {
     this.state.docs.splice(i, 1);
     const path = join(this.docsDir, `${id}.txt`);
     if (existsSync(path)) unlinkSync(path);
+    const pdir = parserCacheDir();
+    if (existsSync(pdir)) {
+      for (const name of readdirSync(pdir)) {
+        if (!name.endsWith(".json")) continue;
+        try {
+          const row = JSON.parse(readFileSync(join(pdir, name), "utf8")) as ParserCacheRow;
+          if (row.docId === id) unlinkSync(join(pdir, name));
+        } catch {
+          continue;
+        }
+      }
+    }
+    const vdir = visionCacheDir();
+    if (existsSync(vdir)) {
+      for (const name of readdirSync(vdir)) {
+        if (!name.endsWith(".json")) continue;
+        try {
+          const row = JSON.parse(readFileSync(join(vdir, name), "utf8")) as VisionCacheRow;
+          if (row.docId === id) unlinkSync(join(vdir, name));
+        } catch {
+          continue;
+        }
+      }
+    }
     this.persist();
     return true;
   }
