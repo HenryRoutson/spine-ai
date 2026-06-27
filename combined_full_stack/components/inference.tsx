@@ -41,6 +41,7 @@ import {
 } from "@/components/inference/inference-step-trace"
 import { moduleInputDescription } from "@/components/step-input-description"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
+import { ShareLinkDialog } from "@/components/share-link-dialog"
 import { useInferenceOutputStepsOnly } from "@/lib/inference-settings"
 import { useRerenderOnEvent } from "@/lib/use-browser-pref-event"
 
@@ -98,11 +99,18 @@ export function Inference() {
         title="Run Pipeline"
         description="Assign inputs and run the pipeline. Final output appears here when the run finishes."
         actions={
-          run.phase !== "idle" ? (
-            <Button variant="outline" size="sm" className="bg-transparent" onClick={run.reset} disabled={run.phase === "running"}>
-              <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
-            </Button>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            <ShareLinkDialog
+              project={project}
+              docs={docs}
+              inferenceInputDocIds={inferenceInputDocIds}
+            />
+            {run.phase !== "idle" ? (
+              <Button variant="outline" size="sm" className="bg-transparent" onClick={run.reset} disabled={run.phase === "running"}>
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
+              </Button>
+            ) : null}
+          </div>
         }
       />
 

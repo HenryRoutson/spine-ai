@@ -248,6 +248,9 @@ export interface RunStep extends Omit<StepDescriptionFields, "outputPreview"> {
 }
 
 export type RunFingerprint = string & { __brand: "RunFingerprint" };
+export type SharedLinkId = string & { __brand: "SharedLinkId" };
+export type RunSource = "app" | "shared_link";
+export type SharedLinkFundingMode = "sharer_pays" | "viewer_pays" | "viewer_signs_in";
 
 export interface PipelineRun {
   id: RunId;
@@ -262,6 +265,10 @@ export interface PipelineRun {
   inputDocIds?: DocId[]; // AI : all inference inputs, in slot order — powers run dedup + logging
   fingerprint?: RunFingerprint; // AI : hash of pipeline + inputs — identical reruns link here
   notes?: string; // AI : freeform context for this run — set before or after inference
+  source?: RunSource;
+  sharedLinkId?: SharedLinkId;
+  viewerName?: string;
+  viewerSessionId?: string;
 }
 
 export interface BillingPoint {

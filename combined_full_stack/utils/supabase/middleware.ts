@@ -1,18 +1,18 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
-import { PUBLIC_API_PATHS } from "@/lib/api-routes";
+import { isPublicApiPath } from "@/lib/api-routes";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { sanitizeRedirectPath } from "@/utils/sanitize_redirect";
 
-const PUBLIC_PATHS = ["/login", "/auth/callback"];
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/run"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-function isPublicApiPath(pathname: string): boolean {
-  return PUBLIC_API_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+function isPublicApiPathLocal(pathname: string): boolean {
+  return isPublicApiPath(pathname);
 }
 
 function copySessionCookies(from: NextResponse, to: NextResponse): void {
@@ -41,7 +41,7 @@ export async function updateSession(request: NextRequest) {
   const supabaseEnv = getSupabasePublicEnv();
   if (!supabaseEnv) {
     // AI : missing Vercel env vars must not crash proxy — gate pages, block protected APIs.
-    if (isApiRoute && !isPublicApiPath(pathname)) {
+    if (isApiRoute && !isPublicApiPathLocal(pathname)) {
       return NextResponse.json(
         { error: "Supabase env missing — set NEXT_PUBLIC_SUPABASE_URL and key on Vercel" },
         { status: 503 },
@@ -77,7 +77,7 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
-  if (!user && isApiRoute && !isPublicApiPath(pathname)) {
+  if (!user && isApiRoute && !isPublicApiPathLocal(pathname)) {
     return NextResponse.json({ error: AUTH_SIGN_IN_REQUIRED }, { status: 401 });
   }
 

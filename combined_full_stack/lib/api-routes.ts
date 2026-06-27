@@ -26,6 +26,24 @@ export const API_ROUTES = {
   structureAssistant: "/api/structure-assistant",
   feedback: "/api/feedback",
   supabaseEnv: "/api/supabase-env",
+  sharedLinks: "/api/shared-links",
+  sharedLink: (id: string) => `/api/shared-links/${id}`,
+  sharedLinkRun: (id: string) => `/api/shared-links/${id}/run`,
+  sharedLinkProgress: (id: string) => `/api/shared-links/${id}/progress`,
+  sharedLinkDocs: (id: string) => `/api/shared-links/${id}/docs`,
+  sharedLinkDownload: (id: string) => `/api/shared-links/${id}/download`,
 } as const
+
+function isSharedLinkPublicApi(pathname: string): boolean {
+  return (
+    /^\/api\/shared-links\/[^/]+$/.test(pathname) ||
+    /^\/api\/shared-links\/[^/]+\/(run|progress|docs|download)$/.test(pathname)
+  )
+}
+
+export function isPublicApiPath(pathname: string): boolean {
+  if (PUBLIC_API_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return true
+  return isSharedLinkPublicApi(pathname)
+}
 
 export const PUBLIC_API_PATHS = [API_ROUTES.supabaseEnv, API_ROUTES.billingWebhook] as const

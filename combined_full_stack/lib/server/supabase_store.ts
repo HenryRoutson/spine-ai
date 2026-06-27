@@ -93,26 +93,45 @@ export class SupabaseStore implements Store {
   private hasVisionCacheTable = false;
   private hasParserCacheTable = false;
 
-  constructor(private db: SupabaseClient) {}
+  constructor(
+    private db: SupabaseClient,
+    private scopedUserId?: string,
+  ) {}
+
+  private rowUserId(): string | undefined {
+    return this.scopedUserId;
+  }
+
+  private withUserId<T extends Record<string, unknown>>(row: T): T {
+    const uid = this.rowUserId();
+    return uid ? { ...row, user_id: uid } : row;
+  }
 
   async init(): Promise<void> {
-    const [projects, docs] = await Promise.all([
-      this.db.from("projects").select("data"),
-      this.db.from("docs").select("*").order("uploaded_at", { ascending: false }),
-    ]);
+    let projectsQ = this.db.from("projects").select("data");
+    let docsQ = this.db.from("docs").select("*").order("uploaded_at", { ascending: false });
+    if (this.scopedUserId) {
+      projectsQ = projectsQ.eq("user_id", this.scopedUserId);
+      docsQ = docsQ.eq("user_id", this.scopedUserId);
+    }
+    const [projects, docs] = await Promise.all([projectsQ, docsQ]);
     for (const r of [projects, docs]) if (r.error) throw r.error;
 
     let runRows: RunRow[] = [];
-    const runsWithFp = await this.db
+    let runsWithFpQ = this.db
       .from("runs")
       .select("project_id, started_at, data, fingerprint")
       .order("started_at", { ascending: false });
+    if (this.scopedUserId) runsWithFpQ = runsWithFpQ.eq("user_id", this.scopedUserId);
+    const runsWithFp = await runsWithFpQ;
     if (runsWithFp.error?.message?.includes("fingerprint")) {
       this.hasFingerprintColumn = false;
-      const runsLegacy = await this.db
+      let runsLegacyQ = this.db
         .from("runs")
         .select("project_id, started_at, data")
         .order("started_at", { ascending: false });
+      if (this.scopedUserId) runsLegacyQ = runsLegacyQ.eq("user_id", this.scopedUserId);
+      const runsLegacy = await runsLegacyQ;
       if (runsLegacy.error) throw runsLegacy.error;
       runRows = (runsLegacy.data ?? []) as RunRow[];
     } else {
@@ -211,7 +230,9 @@ export class SupabaseStore implements Store {
     if (i === -1) this.state.projects.push(toPersist);
     else this.state.projects[i] = toPersist;
     this.pending.push(
-      this.db.from("projects").upsert({ id: toPersist.id, data: toPersist }, { onConflict: "user_id,id" }),
+      this.db.from("projects").upsert(this.withUserId({ id: toPersist.id, data: toPersist }), {
+        onConflict: "user_id,id",
+      }),
     );
   }
 
@@ -313,7 +334,7 @@ export class SupabaseStore implements Store {
     this.state.contents.set(id, content);
     this.pending.push(
       this.db.from("docs").upsert(
-        {
+        this.withUserId({
           id,
           name,
           type,
@@ -322,7 +343,7 @@ export class SupabaseStore implements Store {
           uploaded_at: doc.uploadedAt,
           preview: doc.preview,
           content,
-        },
+        }),
         { onConflict: "user_id,id" },
       ),
     );
@@ -358,7 +379,7 @@ export class SupabaseStore implements Store {
     this.state.runProjects[run.id] = projectId;
     this.state.runs = [run, ...this.state.runs];
     this.pending.push(
-      this.db.from("runs").upsert(this.runRow(projectId, run), { onConflict: "user_id,id" }),
+      this.db.from("runs").upsert(this.withUserId(this.runRow(projectId, run)), { onConflict: "user_id,id" }),
     );
   }
 
@@ -372,7 +393,7 @@ export class SupabaseStore implements Store {
     this.state.runs[i] = run;
     const projectId = this.state.runProjects[runId];
     this.pending.push(
-      this.db.from("runs").upsert(this.runRow(projectId, run), { onConflict: "user_id,id" }),
+      this.db.from("runs").upsert(this.withUserId(this.runRow(projectId, run)), { onConflict: "user_id,id" }),
     );
     return true;
   }

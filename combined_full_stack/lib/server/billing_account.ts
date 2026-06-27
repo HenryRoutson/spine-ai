@@ -16,6 +16,7 @@ import {
   isAuthSession,
   LOCAL_DEV_USER_ID,
   requireAuth,
+  type user_id_string,
 } from "./require_auth";
 import { logger } from "./server_logger";
 import { getStripe } from "./stripe_client";
@@ -122,6 +123,10 @@ export async function getBillingUserKey(): Promise<BillingUserKey> {
   const auth = await requireAuth();
   if (!isAuthSession(auth)) throw new Error(AUTH_SIGN_IN_REQUIRED);
   return auth.userId as unknown as BillingUserKey;
+}
+
+export function billingKeyForUser(userId: user_id_string): BillingUserKey {
+  return userId as unknown as BillingUserKey;
 }
 
 export async function loadBillingAccount(key: BillingUserKey): Promise<BillingAccount> {

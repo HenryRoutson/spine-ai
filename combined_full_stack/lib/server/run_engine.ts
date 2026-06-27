@@ -93,6 +93,8 @@ export interface RunOptions {
   onStep?: (p: StepProgress) => void | Promise<void>;
   persist?: boolean; // write run + artifacts to the store/disk (default true)
   liveHtml?: boolean; // write an auto-refreshing progress page during the run (default = persist)
+  projectOverride?: Project; // AI : shared-link runs execute a frozen snapshot, not live project row
+  runMeta?: Pick<PipelineRun, "source" | "sharedLinkId" | "viewerName" | "viewerSessionId" | "notes">;
 }
 
 // AI : the live progress page — open in a browser while a run executes; it refreshes itself.
@@ -1058,7 +1060,7 @@ export async function runPipeline(
   inputDocId: DocId,
   opts: Omit<RunOptions, "model"> & { model?: ModelId } = {},
 ): Promise<PipelineRun> {
-  const rawProject = store.project(projectId);
+  const rawProject = opts.projectOverride ?? store.project(projectId);
   if (!rawProject) throw new Error(unknownProject(projectId));
   const project = migrateProjectModules(rawProject);
   // AI : bug fix — fallback used a hardcoded "qwen-2.5-72b" instead of DEFAULT_MODEL.
@@ -1177,6 +1179,7 @@ export async function runPipeline(
     inputDocId,
     inputDocIds: fingerprintInputDocIds,
     fingerprint,
+    ...opts.runMeta,
   };
 
   writeLive(-1); // final state, refresh meta dropped

@@ -22,6 +22,9 @@ export function billingFromRuns(runs: PipelineRun[]): BillingPoint[] {
           ? "doc-parse svc"
           : modelOption(step.model ?? run.model).label;
       bucket.spend[key] = +((bucket.spend[key] ?? 0) + step.costCents).toFixed(4);
+      if (run.source === "shared_link") {
+        bucket.spend["shared link"] = +((bucket.spend["shared link"] ?? 0) + step.costCents).toFixed(4);
+      }
     }
     byDay.set(day, bucket);
   }

@@ -19,6 +19,7 @@ import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { QuoteLinks, quotesFromJson } from "@/components/quote-links"
 import { formatCostCents, formatSecondsShort } from "@/lib/format"
 import { runBilledCents, runSavedCents, runTotalMs } from "@/lib/run-metrics"
+import { isSharedRun } from "@/lib/shared-link-types"
 import { cn } from "@/lib/utils"
 import { useDocViewer, type DocViewMode } from "@/lib/doc-viewer"
 import { useAppShell } from "@/lib/app-shell"
@@ -133,6 +134,11 @@ function RunPickerColumn({
                   <div className="flex items-center justify-between gap-2">
                     <span className="truncate font-mono text-xs">{runInputLabel(run)}</span>
                     <div className="flex shrink-0 items-center gap-1.5">
+                      {isSharedRun(run) && (
+                        <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
+                          shared run
+                        </Badge>
+                      )}
                       {runInputDocIds(run).map((docId) => (
                         <OpenInDocumentsLink key={docId} docId={docId} label="store" className="text-[9px]" />
                       ))}
@@ -376,6 +382,11 @@ export function Logging() {
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate font-mono text-xs">{runInputLabel(run)}</span>
                         <div className="flex shrink-0 items-center gap-1.5">
+                          {isSharedRun(run) && (
+                            <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
+                              shared run
+                            </Badge>
+                          )}
                           {runInputDocIds(run).map((docId) => (
                             <OpenInDocumentsLink key={docId} docId={docId} label="store" className="text-[9px]" />
                           ))}
