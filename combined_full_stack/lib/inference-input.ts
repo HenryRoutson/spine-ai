@@ -111,6 +111,14 @@ export function orderedInputModules(modules: PipelineModule[]): PipelineModule[]
   return modules.filter((m) => m.kind === "input")
 }
 
+// AI : seeded example filenames first — matches docs[] order in seeds/*.json.
+function sortPassableBySeedOrder(docs: DocRef[], project: Project): DocRef[] {
+  const names = project.seedDocNames;
+  if (!names?.length) return docs;
+  const rank = new Map(names.map((n, i) => [n, i]));
+  return [...docs].sort((a, b) => (rank.get(a.name) ?? 999) - (rank.get(b.name) ?? 999));
+}
+
 export function defaultDocForInputModule(
   docs: DocRef[],
   project: Project,
@@ -118,7 +126,10 @@ export function defaultDocForInputModule(
   preferred?: DocRef | null,
   excludeIds: ReadonlySet<DocRef["id"]> = new Set(),
 ): DocRef | undefined {
-  const passable = passableDocsForInputModule(docs, project, inputModule).filter((d) => !excludeIds.has(d.id))
+  const passable = sortPassableBySeedOrder(
+    passableDocsForInputModule(docs, project, inputModule).filter((d) => !excludeIds.has(d.id)),
+    project,
+  );
   if (preferred && passable.some((d) => d.id === preferred.id)) return preferred
   return passable[0]
 }
@@ -143,7 +154,10 @@ export function defaultInputDocsForModules(
   const out: InputDocsAssignment = {}
   const used = new Set<DocRef["id"]>()
   for (const m of inputModules) {
-    const passable = passableDocsForInputModule(docs, project, m).filter((d) => !used.has(d.id))
+    const passable = sortPassableBySeedOrder(
+      passableDocsForInputModule(docs, project, m).filter((d) => !used.has(d.id)),
+      project,
+    );
     if (!passable.length) continue
     if (isMultiDocInputModule(m)) {
       const picked = sortMultiInputDocs(passable)

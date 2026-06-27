@@ -48,12 +48,26 @@ export interface ModelField {
   minItems?: number; // AI : minimum list length when type is a list[…] field
 }
 
+// AI : meta-type — one field row inside a StructureDef (structure-of-structures)
+export type StructureFieldDef = Pick<ModelField, "id" | "name" | "type" | "optional" | "description" | "ref" | "minItems">;
+
+// AI : meta-type — JSON-serializable shape used to define StructureModel entries in seeds / assistants
+export type StructureDef = {
+  id: StructureModelId;
+  name: string;
+  description: string;
+  fields: StructureFieldDef[];
+  auto?: boolean;
+  dynamic?: boolean; // AI : inferred at runtime (e.g. homework MarkingSchema from template)
+};
+
 export interface StructureModel {
   id: StructureModelId;
   name: string;
   description: string;
   fields: ModelField[];
   auto?: boolean; // generated automatically (e.g. by a combine step)
+  dynamic?: boolean; // AI : content shape varies per run — validated against this generic schema
   shared?: boolean; // AI : injected into every project — not persisted per project
   locked?: boolean; // AI : read-only in Structure UI — cannot rename, edit fields, or delete
 }
@@ -94,7 +108,7 @@ export interface PipelineModule {
   // config
   inputType?: InputTypeSpec;
   inputNameContains?: string; // AI : optional filename substring — only matching docs can fill this input slot
-  inputDescription?: string; // AI : optional expected input — Gemini Flash-Lite rejects mismatches before the step runs
+  inputDescription?: string; // AI : optional expected input — LLM guard rejects mismatches before the step runs
   checkInputDescription?: boolean; // AI : when false, skip the LLM guard even if inputDescription is set
   inputMinCount?: number; // AI : minimum documents for this input slot (default 1); pair with outIsList for N submissions
   prompt?: string;
@@ -192,6 +206,18 @@ export interface LlmCallRecord {
   failureDetail?: string;
 }
 
+export type InputDescriptionCheckItem = {
+  matches: boolean;
+  reason: string;
+  label?: string;
+};
+
+export type InputDescriptionCheckResult = {
+  matches: boolean;
+  reason: string;
+  items?: InputDescriptionCheckItem[];
+};
+
 export interface RunStep {
   moduleId: ModuleId;
   kind: ModuleKind;
@@ -204,7 +230,8 @@ export interface RunStep {
   outputPreview: string;
   outputJson?: string;
   inputDescription?: string; // AI : snapshot at run time — expected input for this step
-  descriptionCheckCostCents?: number; // AI : billed Gemini Flash-Lite guard for this step (subset of costCents)
+  inputDescriptionCheck?: InputDescriptionCheckResult; // AI : LLM guard result — matches:false + reason when rejected
+  descriptionCheckCostCents?: number; // AI : billed input-description guard for this step (subset of costCents)
   docId?: DocId; // AI : source doc for input / doc-to-text steps — powers logging trace links
   llmCalls?: LlmCallRecord[];
   failures?: RunFailureRecord[];
@@ -275,8 +302,8 @@ export const DEFAULT_MODEL: ModelId = "deepseek-v3";
 // AI : default vision model for doc-to-text LLM mode — Gemini reads images/PDFs/handwriting well.
 export const DEFAULT_VISION_DOC_PARSE_MODEL: ModelId = "gemini-3-flash";
 
-// AI : input-description guard — 1M ctx, ~$0.07/1M input on OpenRouter.
-export const DEFAULT_INPUT_CHECK_MODEL: ModelId = "gemini-2-flash-lite";
+// AI : input-description guard — DeepSeek V3 is reliable on OpenRouter (gemini-2-flash-lite slug 404s).
+export const DEFAULT_INPUT_CHECK_MODEL: ModelId = "deepseek-v3";
 
 export const DOC_PARSE_MODES: { value: DocParseMode; label: string; hint: string }[] = [
   { value: "parser", label: "Built-in parser", hint: "PDF.js text extract at upload — stored in docs.content" },

@@ -121,13 +121,15 @@
       "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "Markdown expense policy table listing category limits and approval rules"
     },
     {
       "id": "mod_parse_policy",
       "kind": "custom-code",
       "label": "Parse Policy Table",
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inputDescription": "TableRow list parsed from the expense policy markdown table",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_row",
       "outIsList": true,
@@ -149,7 +151,8 @@
       "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "Submitted employee expense report as a markdown table of line items"
     },
     {
       "id": "mod_combine",
@@ -159,13 +162,15 @@
       "outStructureId": "m_combined",
       "cached": true,
       "avgMs": 40,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "Parsed policy rows from the first input, ready to merge with the expense report document"
     },
     {
       "id": "mod_merge",
       "kind": "custom-code",
       "label": "Merge Parsed Tables",
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inputDescription": "Combined audit input bundling parsed policy rows with the expense report document",
       "inStructureId": "m_combined",
       "outStructureId": "m_merged2",
       "cached": true,
@@ -184,6 +189,7 @@
       "inStructureId": "m_merged2",
       "outStructureId": "m_flag",
       "outIsList": true,
+      "inputDescription": "Merged JSON tables — policy limits in table_a_json and expense lines in table_b_json",
       "prompt": "table_a_json is the travel policy limits (JSON array). table_b_json is submitted expenses (JSON array). For EACH expense row, output one ComplianceFlag: line_id from the row index, category and amount_usd from the row, compliant verdict vs policy limits, and issue text if non-compliant.",
       "model": "deepseek-v3",
       "cached": true,
@@ -199,7 +205,8 @@
       "outIsList": true,
       "cached": true,
       "avgMs": 40,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "List of ComplianceFlag records — one per audited expense line"
     }
   ],
   "strategies": [

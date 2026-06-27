@@ -158,13 +158,15 @@
       "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "Purchase order markdown table listing SKU lines, quantities, and unit prices"
     },
     {
       "id": "mod_parse_po",
       "kind": "custom-code",
       "label": "Parse PO Table",
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inputDescription": "TableRow list parsed from the purchase order markdown table",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_row",
       "outIsList": true,
@@ -186,7 +188,8 @@
       "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "Delivery note markdown table showing quantities actually shipped"
     },
     {
       "id": "mod_combine_dn",
@@ -196,13 +199,15 @@
       "outStructureId": "m_po_dn",
       "cached": true,
       "avgMs": 40,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "Parsed PO rows from the first input, ready to merge with the delivery note document"
     },
     {
       "id": "mod_merge_po_dn",
       "kind": "custom-code",
       "label": "Parse PO + DN",
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inputDescription": "Combined PO and delivery note — parsed PO rows plus delivery note document",
       "inStructureId": "m_po_dn",
       "outStructureId": "m_dual",
       "cached": true,
@@ -223,7 +228,8 @@
       "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "Vendor invoice markdown table billing SKUs, quantities, and prices"
     },
     {
       "id": "mod_combine_inv",
@@ -233,13 +239,15 @@
       "outStructureId": "m_inv_in",
       "cached": true,
       "avgMs": 40,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "Parsed PO and delivery JSON bundle, ready to merge with the vendor invoice"
     },
     {
       "id": "mod_merge_all",
       "kind": "custom-code",
       "label": "Parse Invoice + Bundle",
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inputDescription": "Combined procurement bundle — PO/DN JSON plus vendor invoice document",
       "inStructureId": "m_inv_in",
       "outStructureId": "m_merged3",
       "cached": true,
@@ -258,6 +266,7 @@
       "inStructureId": "m_merged3",
       "outStructureId": "m_line",
       "outIsList": true,
+      "inputDescription": "Merged JSON — purchase order, delivery note, and vendor invoice row arrays",
       "prompt": "Compare po_json, delivery_json, and invoice_json row arrays. For each SKU present in any document, output one MatchLine with match_status and detail citing quantity or price mismatches (e.g. short-shipped SEAL-88 billed on invoice).",
       "model": "deepseek-v3",
       "cached": true,
@@ -273,7 +282,8 @@
       "outIsList": true,
       "cached": true,
       "avgMs": 40,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "List of MatchLine records — one three-way match verdict per SKU"
     }
   ],
   "strategies": [

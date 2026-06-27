@@ -150,7 +150,7 @@ Phase 4 — wire A/B strategy placeholder
 
 
 
-
+add dynamic schema with homework example. provide the marking schema as a file, not just unmarked.
 
 given this is a developing product, can you create a log of all user actions to record everything? this is for me to find issues users might have and where they get stuck
 

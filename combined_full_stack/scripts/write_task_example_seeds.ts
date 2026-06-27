@@ -9,8 +9,29 @@ import {
 } from "../lib/markdown_table_parse";
 import { loadProjectSeed, SEEDS_DIR } from "../lib/server/seed";
 import { BUILTIN_DOCUMENT_ID } from "../lib/server/builtin_models";
+import type { FieldType, StructureDef, StructureModelId } from "../lib/server/types";
 
 const DOC_ID = BUILTIN_DOCUMENT_ID;
+
+// AI : meta-type helpers — StructureDef is the shape used to define StructureModel entries
+type StructureFieldDef = StructureDef["fields"][number];
+const sid = (id: string): StructureModelId => id as StructureModelId;
+const STRUCT = (def: StructureDef) => def;
+const field = (
+  id: string,
+  name: string,
+  type: FieldType,
+  description: string,
+  extra: { ref?: string; minItems?: number } = {},
+): StructureFieldDef => ({
+  id,
+  name,
+  type,
+  optional: false,
+  description,
+  ...(extra.ref ? { ref: sid(extra.ref) } : {}),
+  ...(extra.minItems !== undefined ? { minItems: extra.minItems } : {}),
+});
 
 const PARSE_TABLE = customCodeParseDocBodyToParsedTable();
 const PARSE_ROWS = customCodeParseDocToTableRows();
@@ -103,11 +124,50 @@ const MERGED_THREE = {
   ],
 };
 
-const parseStep = (id: string, label: string, inId: string, outId: string, code: string, list = false) => ({
+const DESC = (inputDescription: string) => ({ inputDescription });
+
+// AI : single source of truth — seeds/*.json is generated from this script, not edited by hand
+const EXPENSE_POLICY_INPUT_DESC = "Markdown expense policy table listing category limits and approval rules";
+const EXPENSE_REPORT_INPUT_DESC = "Submitted employee expense report as a markdown table of line items";
+const OPEN_INVOICES_INPUT_DESC = "Markdown table of open accounts-payable invoices awaiting payment";
+const BANK_STATEMENT_INPUT_DESC = "Bank statement markdown table of March transactions including outflows";
+const W2_INPUT_DESC = "W-2 wage statement for tax year 2024 as a markdown table of box values";
+const FORM_1099_INPUT_DESC = "1099-MISC supplemental income form as a markdown table";
+const PO_INPUT_DESC = "Purchase order markdown table listing SKU lines, quantities, and unit prices";
+const DELIVERY_NOTE_INPUT_DESC = "Delivery note markdown table showing quantities actually shipped";
+const VENDOR_INVOICE_INPUT_DESC = "Vendor invoice markdown table billing SKUs, quantities, and prices";
+const AUDIT_TXN_SAMPLE_INPUT_DESC = "AP transaction sample markdown table drawn for audit testing";
+const AUDIT_JE_INPUT_DESC = "Journal entry excerpt markdown table with refs and amounts";
+const HOMEWORK_MARKING_SCHEMA_INPUT_DESC =
+  "MarkingSchema JSON — assignment_title and sections with nested RubricQuestion lists";
+const STUDENT_SUBMISSIONS_INPUT_DESC = "Completed student homework sheets — one Document per student";
+const HOMEWORK_COMBINE_INPUT_DESC =
+  "One student homework Document (new input) plus flat RubricQuestion list from Marking Questions List (pipeline state)";
+const SECTION_GRADES_OUTPUT_DESC = "List of SectionGrade records — one grade per student × rubric question";
+const FEEDBACK_DUMP_INPUT_DESC = "Raw product feedback dump — bullet list of user comments";
+const FEEDBACK_DUMP_SPLIT_DESC = "Product feedback Document from the upload step, ready to split into bullet items";
+const SLA_UPTIME_INPUT_DESC = "Vendor SLA uptime report markdown table with measured availability per service";
+const BUG_REPORT_INPUT_DESC = "User-submitted bug report describing steps to reproduce and expected behavior";
+const APP_LOGS_INPUT_DESC = "Application log snippet around the time of the reported failure";
+const BUG_ENRICH_COMBINED_INPUT_DESC = "Combined bug input — user_report document plus app_logs log excerpt";
+
+const parseTableRowsDesc = (tableTopic: string) => `TableRow list parsed from the ${tableTopic} markdown table`;
+const parseTableDesc = (tableTopic: string) => `ParsedTable parsed from the ${tableTopic} markdown table`;
+
+const parseStep = (
+  id: string,
+  label: string,
+  inId: string,
+  outId: string,
+  code: string,
+  list: boolean,
+  inputDescription: string,
+) => ({
   id,
   kind: "custom-code",
   label,
   note: "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+  inputDescription,
   inStructureId: inId,
   outStructureId: outId,
   ...(list ? { outIsList: true } : {}),
@@ -149,16 +209,18 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_policy", kind: "input", label: "Expense Policy", inputType: "text", inputNameContains: "expense_policy", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
-      parseStep("mod_parse_policy", "Parse Policy Table", DOC_ID, "m_row", PARSE_ROWS, true),
-      { id: "mod_in_report", kind: "input", label: "Expense Report", inputType: "text", inputNameContains: "expense_report", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_policy", kind: "input", label: "Expense Policy", inputType: "text", inputNameContains: "expense_policy", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0, ...DESC(EXPENSE_POLICY_INPUT_DESC) },
+      parseStep("mod_parse_policy", "Parse Policy Table", DOC_ID, "m_row", PARSE_ROWS, true, parseTableRowsDesc("expense policy")),
+      { id: "mod_in_report", kind: "input", label: "Expense Report", inputType: "text", inputNameContains: "expense_report", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0, ...DESC(EXPENSE_REPORT_INPUT_DESC) },
+      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0, ...DESC("Parsed policy rows from the first input, ready to merge with the expense report document") },
       parseStep(
         "mod_merge",
         "Merge Parsed Tables",
         "m_combined",
         "m_merged2",
         customCodeMergeTableRowsFromCombined("policy_rows", "expense_report", "table_a_json", "table_b_json"),
+        false,
+        "Combined audit input bundling parsed policy rows with the expense report document",
       ),
       {
         id: "mod_audit",
@@ -167,6 +229,7 @@ const seeds: Record<string, unknown> = {
         inStructureId: "m_merged2",
         outStructureId: "m_flag",
         outIsList: true,
+        inputDescription: "Merged JSON tables — policy limits in table_a_json and expense lines in table_b_json",
         prompt:
           "table_a_json is the travel policy limits (JSON array). table_b_json is submitted expenses (JSON array). For EACH expense row, output one ComplianceFlag: line_id from the row index, category and amount_usd from the row, compliant verdict vs policy limits, and issue text if non-compliant.",
         model: "deepseek-v3",
@@ -174,7 +237,7 @@ const seeds: Record<string, unknown> = {
         avgMs: 2800,
         avgCostCents: 9,
       },
-      { id: "mod_out", kind: "output", label: "Compliance Flags", inStructureId: "m_flag", outStructureId: "m_flag", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Compliance Flags", inStructureId: "m_flag", outStructureId: "m_flag", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0, ...DESC("List of ComplianceFlag records — one per audited expense line") },
     ],
     strategies: STRATEGIES("expense"),
     docs: [
@@ -214,16 +277,18 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_inv", kind: "input", label: "Open Invoices", inputType: "text", inputNameContains: "open_invoices", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
-      parseStep("mod_parse_inv", "Parse Invoice Table", DOC_ID, "m_row", PARSE_ROWS, true),
-      { id: "mod_in_stmt", kind: "input", label: "Bank Statement", inputType: "text", inputNameContains: "bank_statement", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_inv", kind: "input", label: "Open Invoices", inputType: "text", inputNameContains: "open_invoices", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0, ...DESC(OPEN_INVOICES_INPUT_DESC) },
+      parseStep("mod_parse_inv", "Parse Invoice Table", DOC_ID, "m_row", PARSE_ROWS, true, parseTableRowsDesc("open accounts-payable invoice")),
+      { id: "mod_in_stmt", kind: "input", label: "Bank Statement", inputType: "text", inputNameContains: "bank_statement", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0, ...DESC(BANK_STATEMENT_INPUT_DESC) },
+      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0, ...DESC("Parsed invoice rows from the first input, ready to merge with the bank statement") },
       parseStep(
         "mod_merge",
         "Merge Tables",
         "m_combined",
         "m_merged2",
         customCodeMergeTableRowsFromCombined("invoice_rows", "bank_statement", "table_b_json", "table_a_json"),
+        false,
+        "Combined reconcile input — parsed invoice rows plus bank statement document",
       ),
       {
         id: "mod_recon",
@@ -232,6 +297,7 @@ const seeds: Record<string, unknown> = {
         inStructureId: "m_merged2",
         outStructureId: "m_match",
         outIsList: true,
+        inputDescription: "Merged JSON — bank statement rows in table_a_json and open invoices in table_b_json",
         prompt:
           "table_a_json is bank statement rows; table_b_json is open invoices. For each bank outflow (negative amount), output one ReconcileLine with matched=true if an invoice explains it, else matched=false with explanation.",
         model: "deepseek-v3",
@@ -239,7 +305,7 @@ const seeds: Record<string, unknown> = {
         avgMs: 3000,
         avgCostCents: 10,
       },
-      { id: "mod_out", kind: "output", label: "Reconciliation", inStructureId: "m_match", outStructureId: "m_match", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Reconciliation", inStructureId: "m_match", outStructureId: "m_match", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0, ...DESC("List of ReconcileLine records — one match verdict per bank outflow") },
     ],
     strategies: STRATEGIES("bank"),
     docs: [
@@ -278,16 +344,18 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_w2", kind: "input", label: "W-2", inputType: "text", inputNameContains: "w2_2024", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
-      parseStep("mod_parse_w2", "Parse W-2 Table", DOC_ID, "m_row", PARSE_ROWS, true),
-      { id: "mod_in_1099", kind: "input", label: "1099-MISC", inputType: "text", inputNameContains: "1099", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_w2", kind: "input", label: "W-2", inputType: "text", inputNameContains: "w2_2024", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0, ...DESC(W2_INPUT_DESC) },
+      parseStep("mod_parse_w2", "Parse W-2 Table", DOC_ID, "m_row", PARSE_ROWS, true, parseTableRowsDesc("W-2 wage statement")),
+      { id: "mod_in_1099", kind: "input", label: "1099-MISC", inputType: "text", inputNameContains: "1099", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0, ...DESC(FORM_1099_INPUT_DESC) },
+      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0, ...DESC("Parsed W-2 box rows from the first input, ready to merge with the 1099 document") },
       parseStep(
         "mod_merge",
         "Merge Form Tables",
         "m_combined",
         "m_merged2",
         customCodeMergeTableRowsFromCombined("w2_rows", "form_1099", "table_a_json", "table_b_json"),
+        false,
+        "Combined tax input — W-2 row JSON in table_a_json and 1099 fields in table_b_json",
       ),
       {
         id: "mod_workpaper",
@@ -296,6 +364,7 @@ const seeds: Record<string, unknown> = {
         inStructureId: "m_merged2",
         outStructureId: "m_field",
         outIsList: true,
+        inputDescription: "Merged form tables — parsed W-2 rows and 1099 field rows as JSON arrays",
         prompt:
           "table_a_json is parsed W-2 box rows; table_b_json is parsed 1099 field rows. Emit standardized WorkpaperField entries for wages, federal withholding, 401(k), state tax, and 1099 other income — each with source_form and source_box.",
         model: "deepseek-v3",
@@ -303,7 +372,7 @@ const seeds: Record<string, unknown> = {
         avgMs: 2600,
         avgCostCents: 8,
       },
-      { id: "mod_out", kind: "output", label: "Client Workpaper", inStructureId: "m_field", outStructureId: "m_field", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Client Workpaper", inStructureId: "m_field", outStructureId: "m_field", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0, ...DESC("List of WorkpaperField entries sourced from W-2 and 1099 forms") },
     ],
     strategies: STRATEGIES("tax"),
     docs: [
@@ -360,25 +429,29 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_po", kind: "input", label: "Purchase Order", inputType: "text", inputNameContains: "purchase_order", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
-      parseStep("mod_parse_po", "Parse PO Table", DOC_ID, "m_row", PARSE_ROWS, true),
-      { id: "mod_in_dn", kind: "input", label: "Delivery Note", inputType: "text", inputNameContains: "delivery_note", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine_dn", kind: "combine", label: "Attach Delivery Note", inStructureId: "m_row", outStructureId: "m_po_dn", cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_po", kind: "input", label: "Purchase Order", inputType: "text", inputNameContains: "purchase_order", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0, ...DESC(PO_INPUT_DESC) },
+      parseStep("mod_parse_po", "Parse PO Table", DOC_ID, "m_row", PARSE_ROWS, true, parseTableRowsDesc("purchase order")),
+      { id: "mod_in_dn", kind: "input", label: "Delivery Note", inputType: "text", inputNameContains: "delivery_note", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0, ...DESC(DELIVERY_NOTE_INPUT_DESC) },
+      { id: "mod_combine_dn", kind: "combine", label: "Attach Delivery Note", inStructureId: "m_row", outStructureId: "m_po_dn", cached: true, avgMs: 40, avgCostCents: 0, ...DESC("Parsed PO rows from the first input, ready to merge with the delivery note document") },
       parseStep(
         "mod_merge_po_dn",
         "Parse PO + DN",
         "m_po_dn",
         "m_dual",
         `${MD_TABLE_PARSER_PREAMBLE}(c)=>({po_json:JSON.stringify(c.po_rows.map(r=>JSON.parse(r.cells_json))),delivery_json:JSON.stringify(mdFirstTableRows(c.delivery_note.content))})`,
+        false,
+        "Combined PO and delivery note — parsed PO rows plus delivery note document",
       ),
-      { id: "mod_in_inv", kind: "input", label: "Vendor Invoice", inputType: "text", inputNameContains: "vendor_invoice", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine_inv", kind: "combine", label: "Attach Invoice", inStructureId: "m_dual", outStructureId: "m_inv_in", cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_inv", kind: "input", label: "Vendor Invoice", inputType: "text", inputNameContains: "vendor_invoice", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0, ...DESC(VENDOR_INVOICE_INPUT_DESC) },
+      { id: "mod_combine_inv", kind: "combine", label: "Attach Invoice", inStructureId: "m_dual", outStructureId: "m_inv_in", cached: true, avgMs: 40, avgCostCents: 0, ...DESC("Parsed PO and delivery JSON bundle, ready to merge with the vendor invoice") },
       parseStep(
         "mod_merge_all",
         "Parse Invoice + Bundle",
         "m_inv_in",
         "m_merged3",
         `${MD_TABLE_PARSER_PREAMBLE}(c)=>({po_json:c.po_and_delivery.po_json,delivery_json:c.po_and_delivery.delivery_json,invoice_json:JSON.stringify(mdFirstTableRows(c.vendor_invoice.content))})`,
+        false,
+        "Combined procurement bundle — PO/DN JSON plus vendor invoice document",
       ),
       {
         id: "mod_match",
@@ -387,6 +460,7 @@ const seeds: Record<string, unknown> = {
         inStructureId: "m_merged3",
         outStructureId: "m_line",
         outIsList: true,
+        inputDescription: "Merged JSON — purchase order, delivery note, and vendor invoice row arrays",
         prompt:
           "Compare po_json, delivery_json, and invoice_json row arrays. For each SKU present in any document, output one MatchLine with match_status and detail citing quantity or price mismatches (e.g. short-shipped SEAL-88 billed on invoice).",
         model: "deepseek-v3",
@@ -394,7 +468,7 @@ const seeds: Record<string, unknown> = {
         avgMs: 3200,
         avgCostCents: 11,
       },
-      { id: "mod_out", kind: "output", label: "Match Report", inStructureId: "m_line", outStructureId: "m_line", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Match Report", inStructureId: "m_line", outStructureId: "m_line", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0, ...DESC("List of MatchLine records — one three-way match verdict per SKU") },
     ],
     strategies: STRATEGIES("proc"),
     docs: [
@@ -434,16 +508,18 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_txn", kind: "input", label: "Transaction Sample", inputType: "text", inputNameContains: "transaction_sample", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
-      parseStep("mod_parse_txn", "Parse Transaction Table", DOC_ID, "m_row", PARSE_ROWS, true),
-      { id: "mod_in_je", kind: "input", label: "Journal Entries", inputType: "text", inputNameContains: "journal_entries", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_txn", kind: "input", label: "Transaction Sample", inputType: "text", inputNameContains: "transaction_sample", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0, ...DESC(AUDIT_TXN_SAMPLE_INPUT_DESC) },
+      parseStep("mod_parse_txn", "Parse Transaction Table", DOC_ID, "m_row", PARSE_ROWS, true, parseTableRowsDesc("AP transaction sample")),
+      { id: "mod_in_je", kind: "input", label: "Journal Entries", inputType: "text", inputNameContains: "journal_entries", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0, ...DESC(AUDIT_JE_INPUT_DESC) },
+      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0, ...DESC("Parsed transaction rows from the first input, ready to merge with journal entries") },
       parseStep(
         "mod_merge",
         "Merge Audit Tables",
         "m_combined",
         "m_merged2",
         customCodeMergeTableRowsFromCombined("transaction_rows", "journal_entries", "table_a_json", "table_b_json"),
+        false,
+        "Combined audit input — transaction row JSON in table_a_json and journal entry document",
       ),
       {
         id: "mod_test",
@@ -452,6 +528,7 @@ const seeds: Record<string, unknown> = {
         inStructureId: "m_merged2",
         outStructureId: "m_sample",
         outIsList: true,
+        inputDescription: "Merged JSON — AP transactions in table_a_json and journal entries in table_b_json",
         prompt:
           "table_a_json lists AP transactions; table_b_json lists journal entries. For each transaction in table_a_json, output one SampleVerdict: whether supporting docs exist (per txn notes), whether JE ref ties and amounts match, and a brief finding.",
         model: "deepseek-v3",
@@ -459,7 +536,7 @@ const seeds: Record<string, unknown> = {
         avgMs: 3000,
         avgCostCents: 10,
       },
-      { id: "mod_out", kind: "output", label: "Sample Results", inStructureId: "m_sample", outStructureId: "m_sample", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Sample Results", inStructureId: "m_sample", outStructureId: "m_sample", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0, ...DESC("List of SampleVerdict records — one audit test result per sampled transaction") },
     ],
     strategies: STRATEGIES("audit"),
     docs: [
@@ -473,45 +550,200 @@ const seeds: Record<string, unknown> = {
     name: "Homework Grader",
     kind: "education",
     models: [
-      {
-        id: "m_section",
-        name: "HomeworkSection",
-        description: "One homework section split from markdown headings.",
+      STRUCT({
+        id: sid("m_rubric_q"),
+        name: "RubricQuestion",
+        description: "One question in the marking schema.",
         fields: [
-          { id: "f_sid", name: "section_id", type: "text", optional: false, description: "Section id" },
-          { id: "f_title", name: "title", type: "text", optional: false, description: "Section title" },
-          { id: "f_body", name: "body", type: "text", optional: false, description: "Questions and student work" },
+          field("f_qid", "question_id", "text", "Stable question id"),
+          field("f_prompt", "prompt", "text", "Question text"),
+          field("f_max", "max_score", "int", "Points possible"),
+          field("f_criteria", "marking_criteria", "text", "How to award marks"),
         ],
-      },
-      {
-        id: "m_grade",
+      }),
+      STRUCT({
+        id: sid("m_rubric_sec"),
+        name: "RubricSection",
+        description: "One section in the derived marking schema.",
+        fields: [
+          field("f_sid", "section_id", "text", "Section id"),
+          field("f_title", "title", "text", "Section title"),
+          field("f_max", "max_score", "int", "Points possible for the section"),
+          field("f_criteria", "criteria", "text", "Section-level marking notes"),
+          field("f_questions", "questions", "list[model]", "Questions in this section", { ref: "m_rubric_q" }),
+        ],
+      }),
+      STRUCT({
+        id: sid("m_schema"),
+        name: "MarkingSchema",
+        description: "Dynamic rubric loaded from MarkingSchema JSON or inferred from template.",
+        dynamic: true,
+        fields: [
+          field("f_title", "assignment_title", "text", "Homework title"),
+          field("f_sections", "sections", "list[model]", "Sections to grade", { ref: "m_rubric_sec" }),
+        ],
+      }),
+      STRUCT({
+        id: sid("m_hw_combined"),
+        name: "HomeworkGraderInput",
+        description: "Auto-generated by the Combine Inputs step.",
+        auto: true,
+        fields: [
+          field("f_student_doc", "student_submission", "document", "Student submission attached at combine"),
+          field("f_questions", "marking_questions", "list[model]", "Flat rubric questions from the template", {
+            ref: "m_rubric_q",
+          }),
+        ],
+      }),
+      STRUCT({
+        id: sid("m_work"),
+        name: "GraderWork",
+        description: "Marking schema document plus student submission documents.",
+        fields: [
+          field("f_schema", "marking_schema", "document", "Derived rubric (JSON in content)"),
+          {
+            id: "f_subs",
+            name: "student_submissions",
+            type: "list[document]",
+            optional: false,
+            description: "Student homework sheets",
+            minItems: 1,
+          },
+        ],
+      }),
+      STRUCT({
+        id: sid("m_gradable"),
+        name: "GradableSection",
+        description: "One student × question row ready for batch grading.",
+        fields: [
+          field("f_student", "student_label", "text", "Student name or id"),
+          field("f_sid", "section_id", "text", "Matches rubric section id"),
+          field("f_title", "title", "text", "Section and question title"),
+          field("f_body", "body", "text", "Question prompt and student work"),
+          field("f_max", "max_score", "int", "Points possible"),
+          field("f_criteria", "criteria", "text", "Marking criteria for this question"),
+        ],
+      }),
+      STRUCT({
+        id: sid("m_grade"),
         name: "SectionGrade",
-        description: "Marks for one homework section.",
+        description: "Marks for one homework question.",
         fields: [
-          { id: "f_sid", name: "section_id", type: "text", optional: false, description: "Matches section id" },
-          { id: "f_score", name: "score", type: "int", optional: false, description: "Points awarded" },
-          { id: "f_max", name: "max_score", type: "int", optional: false, description: "Points possible" },
-          { id: "f_feedback", name: "feedback", type: "text", optional: false, description: "Marking comments" },
+          field("f_student", "student_label", "text", "Student graded"),
+          field("f_sid", "section_id", "text", "Matches section id"),
+          field("f_score", "score", "int", "Points awarded"),
+          field("f_max", "max_score", "int", "Points possible"),
+          field("f_feedback", "feedback", "text", "Marking comments"),
         ],
-      },
+      }),
     ],
     modules: [
-      { id: "mod_in", kind: "input", label: "Homework Sheet", inputType: "text", inputNameContains: "algebra_homework", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
       {
-        id: "mod_split",
-        kind: "custom-code",
-        label: "Split Sections",
-        note: "Split markdown ## sections — no raw tables sent to LLM.",
-        inStructureId: DOC_ID,
-        outStructureId: "m_section",
-        outIsList: true,
+        id: "mod_in_schema",
+        kind: "input",
+        label: "Marking Schema",
+        note: "Structured rubric JSON — sections and questions to grade against.",
+        inputType: "json",
+        inputNameContains: "marking_schema",
+        outStructureId: DOC_ID,
         cached: true,
-        avgMs: 8,
+        avgMs: 90,
+        avgCostCents: 0,
+        ...DESC(HOMEWORK_MARKING_SCHEMA_INPUT_DESC),
+      },
+      {
+        id: "mod_load_schema",
+        kind: "custom-code",
+        label: "Load Marking Schema",
+        note: "Parse MarkingSchema JSON from the uploaded rubric file.",
+        inStructureId: DOC_ID,
+        outStructureId: "m_schema",
+        ...DESC(HOMEWORK_MARKING_SCHEMA_INPUT_DESC),
+        cached: true,
+        avgMs: 4,
         avgCostCents: 0,
         fallbackList: [
           {
             typescript:
-              '(doc)=>doc.content.split(/\\n## /).filter((c)=>c.trim()).map((chunk,i)=>{const lines=chunk.split("\\n");const title=lines[0].replace(/^#+\\s*/,"").trim();return{section_id:String(i+1),title,body:lines.slice(1).join("\\n").trim()};})',
+              '(doc) => { const raw = doc?.content ?? doc?.body ?? ""; return JSON.parse(typeof raw === "string" ? raw : JSON.stringify(raw)); }',
+          },
+        ],
+      },
+      {
+        id: "mod_questions",
+        kind: "custom-code",
+        label: "Marking Questions List",
+        note: "Flatten rubric questions — one list item per gradable question.",
+        inputDescription: "MarkingSchema object — sections with nested RubricQuestion lists",
+        inStructureId: "m_schema",
+        outStructureId: "m_rubric_q",
+        outIsList: true,
+        cached: true,
+        avgMs: 3,
+        avgCostCents: 0,
+        fallbackList: [{ typescript: "(schema) => (schema.sections ?? []).flatMap((s) => s.questions ?? [])" }],
+      },
+      {
+        id: "mod_in_students",
+        kind: "input",
+        label: "Student Submissions",
+        note: "One or more completed student homework sheets to grade.",
+        inputType: "text",
+        inputNameContains: "homework_student",
+        inputMinCount: 1,
+        outStructureId: DOC_ID,
+        outIsList: true,
+        cached: true,
+        avgMs: 90,
+        avgCostCents: 0,
+        ...DESC(STUDENT_SUBMISSIONS_INPUT_DESC),
+      },
+      {
+        id: "mod_combine",
+        kind: "combine",
+        label: "Combine Inputs",
+        note: "Merges flat marking questions with each student submission document.",
+        inputDescription: HOMEWORK_COMBINE_INPUT_DESC,
+        inStructureId: "m_rubric_q",
+        outStructureId: "m_hw_combined",
+        cached: true,
+        avgMs: 40,
+        avgCostCents: 0,
+      },
+      {
+        id: "mod_assemble",
+        kind: "custom-code",
+        label: "Assemble Grader Work",
+        note: "Merge derived schema with all student submissions from pipeline state.",
+        inputDescription: "HomeworkGraderInput from combine — schema JSON plus student submission documents in pipeline state",
+        inStructureId: "m_hw_combined",
+        outStructureId: "m_work",
+        cached: true,
+        avgMs: 6,
+        avgCostCents: 0,
+        fallbackList: [
+          {
+            typescript:
+              '(_combined, state) => { const schema = state["Load Marking Schema"]; const subs = state["Student Submissions"]; const list = Array.isArray(subs) ? subs : subs ? [subs] : []; return { marking_schema: { filename: "marking_schema.json", content: JSON.stringify(schema) }, student_submissions: list.map((s) => ({ filename: s.filename ?? "student.md", content: s.content ?? "" })) }; }',
+          },
+        ],
+      },
+      {
+        id: "mod_flatten",
+        kind: "custom-code",
+        label: "Flatten Sections",
+        note: "One gradable row per student × rubric question.",
+        inputDescription: "GraderWork — marking_schema Document plus list of student submission Documents",
+        inStructureId: "m_work",
+        outStructureId: "m_gradable",
+        outIsList: true,
+        cached: true,
+        avgMs: 10,
+        avgCostCents: 0,
+        fallbackList: [
+          {
+            typescript:
+              '(work) => { let sections = []; const ms = work.marking_schema; if (ms?.sections) sections = ms.sections; else if (typeof ms?.content === "string") { try { sections = JSON.parse(ms.content).sections ?? []; } catch {} } const out = []; for (const sub of work.student_submissions ?? []) { const content = sub.content ?? ""; const student = (content.match(/Student:\\s*([^\\n]+)/i) || [])[1]?.trim() || sub.filename?.replace(/\\.md$/i, "") || "student"; for (const sec of sections) { for (const q of sec.questions ?? []) { const qRe = new RegExp(`\\\\*\\\\*${q.question_id}\\\\.\\\\*\\\\*[\\\\s\\\\S]*?(Student work:[^\\\\n]*)`, "i"); const workLine = (content.match(qRe) || [])[1]?.trim() ?? ""; out.push({ student_label: student, section_id: sec.section_id, title: `${sec.title} — ${q.question_id}`, body: `${q.prompt ?? ""}${workLine ? "\\n" + workLine : ""}`, max_score: q.max_score ?? 1, criteria: q.marking_criteria ?? sec.criteria ?? "" }); } } } return out; }',
           },
         ],
       },
@@ -519,20 +751,60 @@ const seeds: Record<string, unknown> = {
         id: "mod_grade",
         kind: "llm-batch",
         label: "Grade Each Section",
-        inStructureId: "m_section",
+        inStructureId: "m_gradable",
         outStructureId: "m_grade",
         outIsList: true,
+        inputDescription: "List of GradableSection objects — student_label, question body, max_score, and criteria",
         prompt:
-          "Grade this homework section using the marking scheme in the document header. Award partial credit for method. Section C requires shown working. Return section_id matching input.",
+          "Grade this student's homework section using max_score and criteria. Award partial credit for correct method. Return student_label and section_id exactly matching the input (do not change them).",
         model: "deepseek-v3",
         cached: true,
         avgMs: 2400,
         avgCostCents: 6,
       },
-      { id: "mod_out", kind: "output", label: "Grades", inStructureId: "m_grade", outStructureId: "m_grade", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
+      {
+        id: "mod_out",
+        kind: "output",
+        label: "Final Output",
+        inStructureId: "m_grade",
+        outStructureId: "m_grade",
+        outIsList: true,
+        cached: true,
+        avgMs: 40,
+        avgCostCents: 0,
+        ...DESC(SECTION_GRADES_OUTPUT_DESC),
+      },
+      {
+        id: "mod_assert",
+        kind: "assert",
+        label: "Grade Count Check",
+        note: "len(Student Submissions) × len(Marking Questions List) = len(Final Output)",
+        inStructureId: "m_grade",
+        outStructureId: "m_grade",
+        outIsList: true,
+        ...DESC(SECTION_GRADES_OUTPUT_DESC),
+        cached: true,
+        avgMs: 2,
+        avgCostCents: 0,
+        fallbackList: [
+          {
+            typescript:
+              'const nStudents = len(step("Student Submissions"));\nconst nQuestions = len(step("Marking Questions List"));\nconst nOut = len(step("Final Output"));\nif (nStudents * nQuestions !== nOut) {\n  throw new Error(`expected ${nStudents}×${nQuestions}=${nStudents * nQuestions} grades, got ${nOut}`);\n}',
+          },
+          {
+            python:
+              "n_students = len_of(step('Student Submissions'))\nn_questions = len_of(step('Marking Questions List'))\nn_out = len_of(step('Final Output'))\nif n_students * n_questions != n_out:\n    raise ValueError(f'expected {n_students}×{n_questions}={n_students * n_questions} grades, got {n_out}')",
+          },
+        ],
+      },
     ],
     strategies: STRATEGIES("hw"),
-    docs: [{ name: "algebra_homework_7.md", type: "text", label: "inference", file: "homework_grader/algebra_homework.md" }],
+    docs: [
+      { name: "homework_marking_schema.json", type: "json", label: "inference", file: "homework_grader/homework_marking_schema.json" },
+      { name: "homework_student_sam.md", type: "text", label: "inference", file: "homework_grader/homework_student_sam.md" },
+      { name: "homework_student_jordan.md", type: "text", label: "inference", file: "homework_grader/homework_student_jordan.md" },
+      { name: "homework_student_alex.md", type: "text", label: "inference", file: "homework_grader/homework_student_alex.md" },
+    ],
   },
 
   feedback_router: {
@@ -561,11 +833,12 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in", kind: "input", label: "Feedback Dump", inputType: "text", inputNameContains: "product_feedback", outStructureId: DOC_ID, cached: true, avgMs: 80, avgCostCents: 0 },
+      { id: "mod_in", kind: "input", label: "Feedback Dump", inputType: "text", inputNameContains: "product_feedback", outStructureId: DOC_ID, cached: true, avgMs: 80, avgCostCents: 0, ...DESC(FEEDBACK_DUMP_INPUT_DESC) },
       {
         id: "mod_split",
         kind: "custom-code",
         label: "Split Bullets",
+        ...DESC(FEEDBACK_DUMP_SPLIT_DESC),
         inStructureId: DOC_ID,
         outStructureId: "m_item",
         outIsList: true,
@@ -586,13 +859,14 @@ const seeds: Record<string, unknown> = {
         inStructureId: "m_item",
         outStructureId: "m_route",
         outIsList: true,
+        inputDescription: "List of FeedbackItem objects — one bullet of verbatim user feedback",
         prompt: "Classify product feedback into eng, design, docs, sales, or praise. Include a short representative_quote. Keep feedback_id.",
         model: "deepseek-v3",
         cached: true,
         avgMs: 1800,
         avgCostCents: 4,
       },
-      { id: "mod_out", kind: "output", label: "Routed Feedback", inStructureId: "m_route", outStructureId: "m_route", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Routed Feedback", inStructureId: "m_route", outStructureId: "m_route", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0, ...DESC("List of RoutedFeedback records — bucket and quote per feedback item") },
     ],
     strategies: STRATEGIES("fb"),
     docs: [{ name: "march_product_feedback.txt", type: "text", label: "inference", file: "feedback_router/product_feedback.txt" }],
@@ -617,8 +891,8 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in", kind: "input", label: "SLA Uptime Report", inputType: "text", inputNameContains: "sla_uptime", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
-      parseStep("mod_parse", "Parse Uptime Table", DOC_ID, "m_parsed", PARSE_TABLE),
+      { id: "mod_in", kind: "input", label: "SLA Uptime Report", inputType: "text", inputNameContains: "sla_uptime", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0, ...DESC(SLA_UPTIME_INPUT_DESC) },
+      parseStep("mod_parse", "Parse Uptime Table", DOC_ID, "m_parsed", PARSE_TABLE, false, parseTableDesc("vendor SLA uptime report")),
       {
         id: "mod_breach",
         kind: "llm",
@@ -626,6 +900,7 @@ const seeds: Record<string, unknown> = {
         inStructureId: "m_parsed",
         outStructureId: "m_breach",
         outIsList: true,
+        inputDescription: "ParsedTable with rows_json — JSON array of uptime rows from the SLA report",
         prompt:
           "rows_json is a JSON array parsed from the uptime markdown table. Emit one SlaBreachRow per service with breached=true when the Breach column is yes. Include credit_note from the document narrative when breached.",
         model: "deepseek-v3",
@@ -633,7 +908,7 @@ const seeds: Record<string, unknown> = {
         avgMs: 2200,
         avgCostCents: 7,
       },
-      { id: "mod_out", kind: "output", label: "Breach Table", inStructureId: "m_breach", outStructureId: "m_breach", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Breach Table", inStructureId: "m_breach", outStructureId: "m_breach", outIsList: true, cached: true, avgMs: 40, avgCostCents: 0, ...DESC("List of SlaBreachRow records — one breach verdict per monitored service") },
     ],
     strategies: STRATEGIES("sla"),
     docs: [{ name: "cloudhost_sla_march_2025.md", type: "text", label: "inference", file: "sla_breach/sla_uptime_report.md" }],
@@ -667,15 +942,16 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_report", kind: "input", label: "Bug Report", inputType: "text", inputNameContains: "bug_report", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_in_logs", kind: "input", label: "App Logs", inputType: "text", inputNameContains: "app_logs", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: DOC_ID, outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_report", kind: "input", label: "Bug Report", inputType: "text", inputNameContains: "bug_report", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0, ...DESC(BUG_REPORT_INPUT_DESC) },
+      { id: "mod_in_logs", kind: "input", label: "App Logs", inputType: "text", inputNameContains: "app_logs", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0, ...DESC(APP_LOGS_INPUT_DESC) },
+      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: DOC_ID, outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0, ...DESC(BUG_REPORT_INPUT_DESC) },
       {
         id: "mod_enrich",
         kind: "llm",
         label: "Enrich Bug",
         inStructureId: "m_combined",
         outStructureId: "m_enriched",
+        inputDescription: BUG_ENRICH_COMBINED_INPUT_DESC,
         prompt:
           "user_report is the bug report Document (use user_report.content). app_logs is the log document (use app_logs.content). Infer repro_steps, severity, likely_component (e.g. export/pdf/fonts), and a concise summary.",
         model: "deepseek-v3",
@@ -683,7 +959,7 @@ const seeds: Record<string, unknown> = {
         avgMs: 2400,
         avgCostCents: 7,
       },
-      { id: "mod_out", kind: "output", label: "Enriched Ticket", inStructureId: "m_enriched", outStructureId: "m_enriched", cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_out", kind: "output", label: "Enriched Ticket", inStructureId: "m_enriched", outStructureId: "m_enriched", cached: true, avgMs: 40, avgCostCents: 0, ...DESC("Single EnrichedBug object — structured ticket ready for engineering triage") },
     ],
     strategies: STRATEGIES("bug"),
     docs: [

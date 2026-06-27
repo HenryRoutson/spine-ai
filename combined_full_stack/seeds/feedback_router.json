@@ -63,12 +63,14 @@
       "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 80,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "Raw product feedback dump — bullet list of user comments"
     },
     {
       "id": "mod_split",
       "kind": "custom-code",
       "label": "Split Bullets",
+      "inputDescription": "Product feedback Document from the upload step, ready to split into bullet items",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_item",
       "outIsList": true,
@@ -88,6 +90,7 @@
       "inStructureId": "m_item",
       "outStructureId": "m_route",
       "outIsList": true,
+      "inputDescription": "List of FeedbackItem objects — one bullet of verbatim user feedback",
       "prompt": "Classify product feedback into eng, design, docs, sales, or praise. Include a short representative_quote. Keep feedback_id.",
       "model": "deepseek-v3",
       "cached": true,
@@ -103,7 +106,8 @@
       "outIsList": true,
       "cached": true,
       "avgMs": 40,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "List of RoutedFeedback records — bucket and quote per feedback item"
     }
   ],
   "strategies": [

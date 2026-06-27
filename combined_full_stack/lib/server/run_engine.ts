@@ -8,7 +8,7 @@ import { runLogger } from "./server_logger";
 import { fileWriteHelper } from "./file_write_helper";
 import { llmBatchStructured, llmStructured } from "./llm";
 import { docToTextViaLlm } from "./doc_to_text";
-import { assertInputMatchesDescription, shouldCheckInputDescription } from "./input_description_check";
+import { assertInputMatchesDescription, InputDescriptionRejectedError, shouldCheckInputDescription, type InputDescriptionCheckListItem } from "./input_description_check";
 import { StructuredResponseError } from "./openrouter_llm";
 import { collectQuotes, resolveQuotesValue } from "./quotation";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
@@ -19,6 +19,7 @@ import { type LiveStep, progressHtml, runToHtml } from "./logging";
 import {
   hasQuoteField,
   llmSchema,
+  logDynamicStructureCreated,
   materializeInputDocument,
   materializeToModel,
   structuredLlmPrompt,
@@ -53,6 +54,7 @@ import {
   DEFAULT_VISION_DOC_PARSE_MODEL,
   docParseModeForModule,
   type DocId,
+  type InputDescriptionCheckResult,
   type LlmCallRecord,
   type ModelId,
   type ModuleId,
@@ -340,6 +342,7 @@ function requireLinearInput(m: PipelineModule, ctx: RunCtx): unknown {
 type StepInputForCheck = {
   value: unknown;
   vision?: { store: Store; docId: DocId; docName: string };
+  items?: InputDescriptionCheckListItem[];
 };
 
 // AI : resolve what will enter a step — raw docs for input steps, upstream output for everything else.
@@ -356,9 +359,25 @@ function resolveStepInputForCheck(m: PipelineModule, ctx: RunCtx, store: Store):
     });
     const first = items[0];
     const firstDocId = docIds[0];
+    const listItems: InputDescriptionCheckListItem[] | undefined =
+      items.length > 1
+        ? items.map((item, i) => {
+            const docId = docIds[i]!;
+            const docName = store.docs().find((d) => d.id === docId)?.name;
+            const rec = item as Record<string, unknown>;
+            const label =
+              (typeof rec.filename === "string" && rec.filename) || docName || `doc ${i + 1}`;
+            return {
+              value: item,
+              vision: { store, docId, docName: label },
+              label,
+            };
+          })
+        : undefined;
     return {
       value: items.length === 1 ? first : items,
       vision: first ? { store, docId: firstDocId, docName: first.filename } : undefined,
+      items: listItems,
     };
   }
   if (m.kind === "combine") {
@@ -549,6 +568,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       ctx.stepLlmCalls = [];
       const raw = await llmStructured(userPrompt, schema, { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls }, log.child("llm"));
       log.info(`llm response received`, { moduleId: m.id, items: Array.isArray(raw) ? raw.length : 1 });
+      if (out.dynamic) logDynamicStructureCreated(log, out, raw, project.models);
       // AI : quote strings stay raw — a downstream Link Quotes step resolves offsets.
       const value = raw;
       const count = Array.isArray(value) ? value.length : 1;
@@ -860,20 +880,22 @@ async function runLinearStepsFrom(
       const cached = m.cached ? readStepCache(key) : undefined;
 
       let descriptionCheckCostCents = 0;
+      let inputDescriptionCheck: InputDescriptionCheckResult | undefined;
       try {
         if (!cached) {
           const inDesc = m.inputDescription?.trim();
           if (inDesc && shouldCheckInputDescription(m)) {
             const descBeforeCents = ledger.totalCents();
             if (!ctx.stepLlmCalls) ctx.stepLlmCalls = [];
-            const { value, vision } = resolveStepInputForCheck(m, ctx, ctx.store);
-            await assertInputMatchesDescription(
+            const { value, vision, items } = resolveStepInputForCheck(m, ctx, ctx.store);
+            inputDescriptionCheck = await assertInputMatchesDescription(
               m.label,
               inDesc,
               value,
               { model: DEFAULT_INPUT_CHECK_MODEL, ledger, llmCalls: ctx.stepLlmCalls },
               log.child("input-desc"),
               vision,
+              items,
             );
             descriptionCheckCostCents = +(ledger.totalCents() - descBeforeCents).toFixed(4);
           }
@@ -978,6 +1000,9 @@ async function runLinearStepsFrom(
           });
         }
         status = "error";
+        if (err instanceof InputDescriptionRejectedError) {
+          inputDescriptionCheck = err.check;
+        }
         result = failedStepResult(err, m, ctx, result);
         log.error(`step failed`, {
           moduleId: m.id,
@@ -995,11 +1020,11 @@ async function runLinearStepsFrom(
         costCents: +(status === "cached" ? 0 : ledger.totalCents() - beforeCents).toFixed(4),
         preview: result?.preview,
       });
-      return { status, result, descriptionCheckCostCents };
+      return { status, result, descriptionCheckCostCents, inputDescriptionCheck };
       }),
     );
 
-    const { status, result, descriptionCheckCostCents = 0 } = stepOutcome;
+    const { status, result, descriptionCheckCostCents = 0, inputDescriptionCheck } = stepOutcome;
 
     const ms = status === "cached" ? 0 : Date.now() - t0;
     const costCents = status === "cached" ? 0 : ledger.totalCents() - beforeCents;
@@ -1029,6 +1054,7 @@ async function runLinearStepsFrom(
       outputPreview: result.preview,
       outputJson: result.json,
       inputDescription: m.inputDescription?.trim() || undefined,
+      inputDescriptionCheck,
       descriptionCheckCostCents: descriptionCheckCostCents > 0 ? descriptionCheckCostCents : undefined,
       docId: result.docId,
       llmCalls: result.llmCalls?.length ? result.llmCalls : undefined,

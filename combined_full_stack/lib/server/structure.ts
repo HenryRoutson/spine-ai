@@ -4,6 +4,7 @@ import { documentContentFrom, documentFilenameFrom, documentValueFrom } from "./
 import { modelHasQuoteFields } from "./quote_schema";
 import {
   fieldTypeToExpr,
+  formatTypeExpr,
   isListFieldType,
   typeExprToZod,
   zodFromModel as zodFromModelExpr,
@@ -364,6 +365,44 @@ export function inferModel(sample: Record<string, unknown>, name: string, id: St
     description: "",
   }));
   return { id, name, description: "Auto-generated structure.", auto: true, fields };
+}
+
+// AI : human-readable schema line for logs — e.g. MarkingSchema { assignment_title: text, sections: list[RubricSection] }
+export function formatStructureDef(model: StructureModel, models: StructureModel[] = []): string {
+  const fields = model.fields
+    .map((f) => `${f.name}: ${formatTypeExpr(fieldTypeToExpr(f), models)}`)
+    .join(", ");
+  return `${model.name} { ${fields} }`;
+}
+
+type StructureLog = { info: (msg: string, meta?: Record<string, unknown>) => void };
+
+// AI : call after an LLM step emits a dynamic structure — tells later steps what shape to format to
+export function logDynamicStructureCreated(
+  log: StructureLog,
+  model: StructureModel,
+  value: unknown,
+  models: StructureModel[] = [],
+): void {
+  const schemaLine = formatStructureDef(model, models);
+  const meta: Record<string, unknown> = {
+    structure: model.name,
+    structureId: model.id,
+    schema: schemaLine,
+    dynamic: true,
+  };
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const rec = value as Record<string, unknown>;
+    if (Array.isArray(rec.sections)) {
+      meta.sectionCount = rec.sections.length;
+      meta.questionCount = (rec.sections as unknown[]).reduce<number>((n, s) => {
+        const qs =
+          s && typeof s === "object" ? (s as Record<string, unknown>).questions : undefined;
+        return n + (Array.isArray(qs) ? qs.length : 0);
+      }, 0);
+    }
+  }
+  log.info(`dynamic structure created — downstream steps format to: ${schemaLine}`, meta);
 }
 
 function inferType(val: unknown): FieldType {

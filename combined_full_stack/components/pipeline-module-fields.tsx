@@ -321,7 +321,7 @@ export function PipelineModuleFields({
           edit
             ? requireInputDescriptions
               ? "required — describe what data this step expects"
-              : "optional — Gemini Flash-Lite can reject step input that doesn't match before processing"
+              : "optional — an LLM check can reject step input that doesn't match before processing"
             : undefined
         }
       >
@@ -340,7 +340,7 @@ export function PipelineModuleFields({
       {edit && selected.inputDescription?.trim() ? (
         <PipelineField
           label="Validate input"
-          hint="Gemini Flash-Lite check before this step runs — billed to your account"
+          hint="LLM input check before this step runs — billed to your account"
         >
           <div className="flex items-center gap-2.5">
             <Switch

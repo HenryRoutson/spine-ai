@@ -25,7 +25,7 @@ import { useAppShell } from "@/lib/app-shell"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
-import type { DocId, DocRef, ModuleId, PipelineModule } from "@/lib/types"
+import type { DocId, DocRef, InputDescriptionCheckResult, ModuleId, PipelineModule } from "@/lib/types"
 import type { StepProgress, StepSubProgress } from "@/lib/run-engine"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
@@ -275,6 +275,7 @@ export function Inference() {
                             state={state}
                             sub={combineUi?.sub}
                             inputDescription={moduleInputDescription(seg.combine)}
+                            inputDescriptionCheck={run.run?.steps.find((s) => s.moduleId === seg.combine.id)?.inputDescriptionCheck}
                             serverLogs={run.logsByModule.get(seg.combine.id) ?? []}
                           />
                           <StepRow
@@ -283,6 +284,7 @@ export function Inference() {
                             sub={inputUi?.sub}
                             nested
                             inputDescription={moduleInputDescription(seg.input)}
+                            inputDescriptionCheck={run.run?.steps.find((s) => s.moduleId === seg.input.id)?.inputDescriptionCheck}
                             serverLogs={run.logsByModule.get(seg.input.id) ?? []}
                           />
                         </div>
@@ -296,6 +298,7 @@ export function Inference() {
                         state={moduleUi?.status ?? "idle"}
                         sub={moduleUi?.sub}
                         inputDescription={moduleInputDescription(seg.module)}
+                        inputDescriptionCheck={run.run?.steps.find((s) => s.moduleId === seg.module.id)?.inputDescriptionCheck}
                         serverLogs={run.logsByModule.get(seg.module.id) ?? []}
                       />
                     )
@@ -489,6 +492,7 @@ function StepRow({
   nested,
   sub,
   inputDescription,
+  inputDescriptionCheck,
   serverLogs = [],
 }: {
   label: string
@@ -496,6 +500,7 @@ function StepRow({
   nested?: boolean
   sub?: StepSubProgress
   inputDescription?: string
+  inputDescriptionCheck?: InputDescriptionCheckResult
   serverLogs?: JobLogEntry[]
 }) {
   return (
@@ -513,6 +518,7 @@ function StepRow({
       </div>
       <StepInputDescription
         description={inputDescription}
+        check={inputDescriptionCheck}
         forceVisible={state === "error"}
         className={nested ? "pl-5" : "pl-7"}
       />

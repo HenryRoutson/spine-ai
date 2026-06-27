@@ -504,6 +504,7 @@ export function Logging() {
 
                           <StepInputDescription
                             description={resolveStepInputDescription(step, modules)}
+                            check={step.inputDescriptionCheck}
                             forceVisible={step.status === "error"}
                             className="ml-7"
                           />

@@ -10,6 +10,7 @@ import {
   isSeedTemplateProject,
   isUnavailableSeedDoc,
   readSeedDocContent,
+  unavailableSeedDocMessage,
   seedTemplateIds,
   userProjectsFrom,
   type SeedDocSpec,
@@ -273,7 +274,14 @@ export async function ensureSeeded(store: Store): Promise<void> {
 
 // AI : add missing seed docs; replace stale Vercel placeholder rows when real content is available.
 async function ingestSeedDoc(store: Store, spec: SeedDocSpec): Promise<void> {
-  const fresh = await readSeedDocContent(spec);
+  let fresh: string;
+  try {
+    fresh = await readSeedDocContent(spec);
+  } catch (err) {
+    // AI : deployment fallback — placeholder surfaces in inference instead of silently skipping the doc.
+    console.error(`seed doc missing (${spec.name}):`, err);
+    fresh = unavailableSeedDocMessage(spec.name);
+  }
   const existing = store.docs().find((d) => d.name === spec.name);
   if (!existing) {
     store.addDoc(spec.name, spec.type, fresh, spec.label);

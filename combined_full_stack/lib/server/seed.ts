@@ -43,6 +43,7 @@ const SeedFileSchema = z.object({
       name: z.string(),
       description: z.string(),
       auto: z.boolean().optional(),
+      dynamic: z.boolean().optional(),
       fields: z.array(
         z.object({
           id: z.string(),

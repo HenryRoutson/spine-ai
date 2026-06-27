@@ -121,13 +121,15 @@
       "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "Markdown table of open accounts-payable invoices awaiting payment"
     },
     {
       "id": "mod_parse_inv",
       "kind": "custom-code",
       "label": "Parse Invoice Table",
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inputDescription": "TableRow list parsed from the open accounts-payable invoice markdown table",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_row",
       "outIsList": true,
@@ -149,7 +151,8 @@
       "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "Bank statement markdown table of March transactions including outflows"
     },
     {
       "id": "mod_combine",
@@ -159,13 +162,15 @@
       "outStructureId": "m_combined",
       "cached": true,
       "avgMs": 40,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "Parsed invoice rows from the first input, ready to merge with the bank statement"
     },
     {
       "id": "mod_merge",
       "kind": "custom-code",
       "label": "Merge Tables",
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inputDescription": "Combined reconcile input — parsed invoice rows plus bank statement document",
       "inStructureId": "m_combined",
       "outStructureId": "m_merged2",
       "cached": true,
@@ -184,6 +189,7 @@
       "inStructureId": "m_merged2",
       "outStructureId": "m_match",
       "outIsList": true,
+      "inputDescription": "Merged JSON — bank statement rows in table_a_json and open invoices in table_b_json",
       "prompt": "table_a_json is bank statement rows; table_b_json is open invoices. For each bank outflow (negative amount), output one ReconcileLine with matched=true if an invoice explains it, else matched=false with explanation.",
       "model": "deepseek-v3",
       "cached": true,
@@ -199,7 +205,8 @@
       "outIsList": true,
       "cached": true,
       "avgMs": 40,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "inputDescription": "List of ReconcileLine records — one match verdict per bank outflow"
     }
   ],
   "strategies": [
