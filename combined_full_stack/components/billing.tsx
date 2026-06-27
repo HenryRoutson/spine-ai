@@ -5,7 +5,7 @@ import { API_ROUTES } from "@/lib/api-routes"
 import { JSON_HEADERS } from "@/lib/api-client"
 import { formatUsdFromCents } from "@/lib/format"
 import { useMemo, useState } from "react"
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
+import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts"
 import { useStore } from "@/lib/store"
 import { billingPointsUsd, billingSeries, totalSaved } from "@/lib/billing"
 import { redirectToCheckout } from "@/lib/stripe-client"
@@ -27,6 +27,8 @@ import { CreditCard, Loader2, TrendingDown, TrendingUp } from "lucide-react"
 // AI : de-mocked — series keys come from the real billing aggregation (one line per model
 // AI : + the doc-parse service), so new models show up without touching this file.
 const CHART_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-4)", "var(--chart-3)", "var(--chart-5)"]
+// AI : Y floor — $1 is at most 10% chart height so sub-dollar pipeline spend reads as cheap.
+const CHART_Y_FLOOR_USD = 10
 
 function isCheapKey(key: string) {
   return key === "doc-parse svc" || MODEL_OPTIONS.some((m) => m.label === key && m.cheap)
@@ -88,6 +90,16 @@ export function Billing() {
     }
     return t
   }, [billing, series])
+
+  const yMaxUsd = useMemo(() => {
+    let peak = 0
+    for (const point of chartData) {
+      let dayTotal = 0
+      for (const s of series) dayTotal += Number(point[s.key] ?? 0)
+      peak = Math.max(peak, dayTotal)
+    }
+    return Math.max(peak, CHART_Y_FLOOR_USD)
+  }, [chartData, series])
 
   const grand = Object.values(totals).reduce((a, b) => a + b, 0)
   const hasSpend = grand > 0
@@ -260,6 +272,7 @@ export function Billing() {
                   tickMargin={8}
                   width={40}
                   className="text-[10px]"
+                  domain={[0, yMaxUsd]}
                   tickFormatter={(v) => formatUsdFromCents(v * 100)}
                 />
                 <ChartTooltip
@@ -281,6 +294,7 @@ export function Billing() {
                     strokeWidth={1.5}
                   />
                 ))}
+                <ReferenceLine y={0} stroke="#fff" strokeWidth={1.5} ifOverflow="visible" />
               </AreaChart>
             </ChartContainer>
           ) : (
