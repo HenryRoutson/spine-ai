@@ -6,8 +6,7 @@ function dayOf(ts: number): DayLabel {
   return new Date(ts).toLocaleString("en-US", { month: "short", day: "2-digit" });
 }
 
-// AI : aggregate real run history into daily spend, split per model AND per processing service.
-// AI : doc-to-text steps bill the "doc-parse svc" line; llm steps bill their model's label.
+// AI : input OCR steps bill their vision model; legacy doc-to-text runs may still appear in history.
 export function billingFromRuns(runs: PipelineRun[]): BillingPoint[] {
   // AI : bug fix — sorting parsed "Jun 11" labels breaks across a year boundary;
   // AI : track the earliest real timestamp per day and sort on that instead.

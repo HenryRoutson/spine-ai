@@ -1,0 +1,246 @@
+"use client"
+
+import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  flattenInputDocIds,
+  inputDocsByModuleFromAssignment,
+  type InputDocsAssignment,
+} from "@/lib/inference-input"
+import { segmentPipeline } from "@/lib/pipeline-layout"
+import { formatRunErrorForDisplay, pipelineRunError } from "@/lib/run-errors"
+import { partitionLogsByModule } from "@/lib/step-logs"
+import { useCyclingWaitPhrase } from "@/lib/inference-wait-phrases"
+import { useRunNotesFlushOnLeave } from "@/lib/run-notes-flush"
+import {
+  awaitRun,
+  isRunBillingError,
+  mergeStepStates,
+  startRun,
+  type StepUiState,
+} from "@/lib/run-engine"
+import type { DocId, JobLogEntry, ModuleId, PipelineModule, PipelineRun, ProjectId } from "@/lib/types"
+import type { ClientStepSpec } from "@/lib/run-types"
+
+export type InferencePhase = "idle" | "running" | "done"
+
+type UseInferenceRunProgressArgs = {
+  projectId: ProjectId
+  modules: PipelineModule[]
+  model: string
+  inputModules: PipelineModule[]
+  inputDocs: InputDocsAssignment
+  allInputsReady: boolean
+  inputsInvalid: boolean
+  runs: PipelineRun[]
+  addRun: (r: PipelineRun) => void
+  updateRunNotes: (runId: PipelineRun["id"], notes: string | undefined) => Promise<void>
+  refreshBilling: () => Promise<void>
+  resetInputs?: () => void
+}
+
+export function useInferenceRunProgress({
+  projectId,
+  modules,
+  model,
+  inputModules,
+  inputDocs,
+  allInputsReady,
+  inputsInvalid,
+  runs,
+  addRun,
+  updateRunNotes,
+  refreshBilling,
+  resetInputs,
+}: UseInferenceRunProgressArgs) {
+  const [phase, setPhase] = useState<InferencePhase>("idle")
+  const [stepStates, setStepStates] = useState<Map<ModuleId, StepUiState>>(new Map())
+  const [run, setRun] = useState<PipelineRun | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [debugLogs, setDebugLogs] = useState<JobLogEntry[]>([])
+  const [runNotes, setRunNotes] = useState("")
+  const [pendingHumanReview, setPendingHumanReview] = useState<ClientStepSpec | null>(null)
+  const humanReviewResolveRef = useRef<((decision: "approved" | "rejected") => void) | null>(null)
+  const runNotesRef = useRef("")
+  const savedNotesRef = useRef<string | undefined>(undefined)
+  const logEndRef = useRef<HTMLDivElement>(null)
+  const activeJobGenRef = useRef(0)
+  const runsRef = useRef(runs)
+  runsRef.current = runs
+
+  useEffect(() => {
+    runNotesRef.current = runNotes
+  }, [runNotes])
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [debugLogs.length])
+
+  useEffect(() => {
+    return () => {
+      activeJobGenRef.current++
+    }
+  }, [])
+
+  useRunNotesFlushOnLeave(
+    phase === "done" ? run?.id : undefined,
+    runNotes,
+    run?.notes,
+    updateRunNotes,
+    (id, next) => {
+      savedNotesRef.current = next
+      setRun((r) => (r?.id === id ? { ...r, notes: next } : r))
+    },
+  )
+
+  function resetRunState() {
+    activeJobGenRef.current++
+    setPhase("idle")
+    setStepStates(new Map())
+    setRun(null)
+    setError(null)
+    setDebugLogs([])
+    setRunNotes("")
+    setPendingHumanReview(null)
+    humanReviewResolveRef.current = null
+    savedNotesRef.current = undefined
+    resetInputs?.()
+  }
+
+  async function start() {
+    if (!allInputsReady || inputsInvalid) return
+    const jobGen = ++activeJobGenRef.current
+    const orderedIds = flattenInputDocIds(inputModules, inputDocs)
+    const byModule = inputDocsByModuleFromAssignment(inputModules, inputDocs)
+    const [primary, ...rest] = orderedIds
+    if (phase === "done") {
+      setRunNotes("")
+      runNotesRef.current = ""
+    }
+    setPhase("running")
+    setError(null)
+    setRun(null)
+    setStepStates(new Map())
+    setDebugLogs([])
+    try {
+      const { jobId } = await startRun(projectId, primary, model, rest, byModule)
+      if (jobGen !== activeJobGenRef.current) return
+      refreshBilling().catch(console.error)
+      const { run: finished } = await awaitRun(jobId, {
+        onStep: (steps) => {
+          if (jobGen !== activeJobGenRef.current) return
+          setStepStates((prev) => mergeStepStates(prev, steps))
+        },
+        onLogs: (logs) => {
+          if (jobGen !== activeJobGenRef.current) return
+          setDebugLogs(logs)
+        },
+        onHumanReview: (spec) => {
+          if (jobGen !== activeJobGenRef.current) {
+            return Promise.resolve("rejected" as const)
+          }
+          setPendingHumanReview(spec)
+          return new Promise<"approved" | "rejected">((resolve) => {
+            humanReviewResolveRef.current = resolve
+          })
+        },
+      })
+      if (jobGen !== activeJobGenRef.current) return
+      const notes = runNotesRef.current.trim() || undefined
+      const withNotes = notes ? { ...finished, notes } : finished
+      savedNotesRef.current = notes
+      setRun(withNotes)
+      if (!runsRef.current.some((r) => r.id === finished.id)) {
+        addRun(withNotes)
+      }
+      if (notes) updateRunNotes(finished.id, notes).catch(console.error)
+      const runErr = pipelineRunError(finished)
+      if (runErr) setError(runErr)
+      setPhase("done")
+    } catch (e) {
+      if (jobGen !== activeJobGenRef.current) return
+      if (isRunBillingError(e)) refreshBilling().catch(console.error)
+      setError((e as Error).message)
+      setPhase("idle")
+    }
+  }
+
+  function resolveHumanReview(decision: "approved" | "rejected") {
+    humanReviewResolveRef.current?.(decision)
+    humanReviewResolveRef.current = null
+    setPendingHumanReview(null)
+  }
+
+  function reset() {
+    resetRunState()
+  }
+
+  const progressPct = useMemo(() => {
+    if (phase === "idle") return 0
+    if (phase === "done") return 100
+    const done = modules.filter((m) => {
+      const s = stepStates.get(m.id)?.status
+      return s !== undefined && s !== "idle" && s !== "running"
+    }).length
+    return Math.round((done / Math.max(1, modules.length)) * 100)
+  }, [phase, stepStates, modules])
+
+  const runningHints = useMemo(() => {
+    const hints: string[] = []
+    for (const seg of segmentPipeline(modules)) {
+      if (seg.kind === "combine") {
+        const combineUi = stepStates.get(seg.combine.id)
+        const inputUi = stepStates.get(seg.input.id)
+        if (combineUi?.status === "running") hints.push(combineUi.sub?.label ?? seg.combine.label)
+        if (inputUi?.status === "running") hints.push(inputUi.sub?.label ?? seg.input.label)
+        continue
+      }
+      const moduleUi = stepStates.get(seg.module.id)
+      if (moduleUi?.status === "running") hints.push(moduleUi.sub?.label ?? seg.module.label)
+    }
+    return hints
+  }, [stepStates, modules])
+
+  const waitPhrase = useCyclingWaitPhrase(phase === "running", runningHints)
+  const runErr = useMemo(() => (run ? pipelineRunError(run) : null), [run])
+  const runErrorDisplay = useMemo(() => (run ? formatRunErrorForDisplay(run) : null), [run])
+  const activeModuleId = useMemo(() => {
+    for (const m of modules) {
+      if (stepStates.get(m.id)?.status === "running") return m.id
+    }
+    return undefined
+  }, [stepStates, modules])
+  const logsByModule = useMemo(
+    () => partitionLogsByModule(debugLogs, modules.map((m) => m.id), activeModuleId),
+    [debugLogs, modules, activeModuleId],
+  )
+  const runButtonBusy = phase === "running" && !pendingHumanReview
+  const runButtonLabel =
+    pendingHumanReview != null
+      ? "Waiting for your review…"
+      : phase === "running"
+        ? `${waitPhrase}…`
+        : "Run pipeline"
+
+  return {
+    phase,
+    stepStates,
+    run,
+    error,
+    debugLogs,
+    logsByModule,
+    runNotes,
+    setRunNotes,
+    logEndRef,
+    runErr,
+    runErrorDisplay,
+    runButtonBusy,
+    runButtonLabel,
+    progressPct,
+    waitPhrase,
+    pendingHumanReview,
+    resolveHumanReview,
+    start,
+    reset,
+    resetRunState,
+  }
+}

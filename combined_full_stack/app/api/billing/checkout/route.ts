@@ -1,35 +1,37 @@
-// AI : TODO refactor — align with apiError/HTTP + requireAuthStore (see app/api/billing/route.ts).
 import { NextResponse, type NextRequest } from "next/server";
+import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
+import { HTTP } from "@/lib/server/api-errors";
 import {
-  BillingError,
   TOPUP_OPTIONS_CENTS,
+  type BillingUserKey,
   createCheckoutSession,
-  getBillingUserKey,
 } from "@/lib/server/billing_account";
 
 export async function POST(req: NextRequest) {
+  const ctx = await requireAuthStore();
+  if (ctx instanceof NextResponse) return ctx;
+
   const { mode, amountCents } = (await req.json()) as {
     mode: "payment" | "subscription";
     amountCents?: number;
   };
   if (mode !== "payment" && mode !== "subscription") {
-    return NextResponse.json({ error: "mode must be payment or subscription" }, { status: 400 });
+    return apiError("mode must be payment or subscription", HTTP.BAD_REQUEST);
   }
   if (
     mode === "payment" &&
     (amountCents == null || !TOPUP_OPTIONS_CENTS.includes(amountCents as (typeof TOPUP_OPTIONS_CENTS)[number]))
   ) {
-    return NextResponse.json({ error: "amountCents must be a valid top-up amount" }, { status: 400 });
+    return apiError("amountCents must be a valid top-up amount", HTTP.BAD_REQUEST);
   }
 
   try {
-    const key = await getBillingUserKey();
+    const key = ctx.auth.userId as unknown as BillingUserKey;
     const session = await createCheckoutSession(key, mode, req.nextUrl.origin, amountCents);
     return NextResponse.json(session);
   } catch (err) {
-    if (err instanceof BillingError) {
-      return NextResponse.json({ error: err.message, code: err.code }, { status: 402 });
-    }
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    const billed = billingResponse(err);
+    if (billed) return billed;
+    return apiError((err as Error).message, HTTP.INTERNAL);
   }
 }

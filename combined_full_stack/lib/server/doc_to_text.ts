@@ -4,7 +4,7 @@ import { llmVisionString, type CallContext } from "./llm";
 import { originalDocFile, type Store } from "./store";
 import { type DocId, type ModelId } from "./types";
 import { type ServerLogger } from "./server_logger";
-import { visionCacheKey } from "./vision_cache";
+import { visionCacheKey } from "./doc_text_cache";
 
 const OCR_SYSTEM =
   "You are an OCR engine. Transcribe documents faithfully. Preserve structure with markdown headings and lists where helpful. For handwritten text, read carefully and include uncertain words in [brackets]. Output only the transcribed text — no commentary or preamble.";

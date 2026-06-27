@@ -44,8 +44,8 @@ export type ClientStepSpec = {
   moduleId: ModuleId;
   label: string;
   kind: ModuleKind;
-  code: string;
-  entries: ParsedCustomCodeEntry[];
+  code?: string;
+  entries?: ParsedCustomCodeEntry[];
   input: unknown;
   pipelineState?: PipelineState;
 };

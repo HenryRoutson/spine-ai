@@ -23,6 +23,7 @@ import type {
   StepProgress,
   StepSubProgress,
 } from "@/lib/types"
+import type { ClientStepSpec } from "@/lib/run-types"
 
 export type StepUiState = StepDescriptionFields & {
   status: StepProgress["status"] | "idle"
@@ -158,6 +159,8 @@ export async function runProgress(jobId: RunJobId): Promise<RunJob> {
 export interface AwaitRunCallbacks {
   onStep?: (steps: StepProgress[]) => void
   onLogs?: (logs: JobLogEntry[], newLines: JobLogEntry[]) => void
+  // AI : human-review steps pause until the operator approves or rejects in Inference.
+  onHumanReview?: (spec: ClientStepSpec) => Promise<"approved" | "rejected">
 }
 
 export type AwaitRunResult = {
@@ -188,7 +191,7 @@ export async function awaitRun(
   callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
   intervalMs = 700,
 ): Promise<AwaitRunResult> {
-  const { onStep, onLogs } = typeof callbacks === "function" ? { onStep: callbacks } : callbacks
+  const { onStep, onLogs, onHumanReview } = typeof callbacks === "function" ? { onStep: callbacks } : callbacks
   let seenLogs = 0
   let clientStepBusy = false
   let clientStepSubmittedFor: ModuleId | undefined
@@ -206,15 +209,46 @@ export async function awaitRun(
       seenLogs = logs.length
     }
     if (!job.clientStep) clientStepSubmittedFor = undefined
+    // AI : human-review — wait for operator decision in Inference, then POST passthrough or error.
+    if (
+      job.clientStep?.kind === "human-review" &&
+      !job.run &&
+      !job.error &&
+      !clientStepBusy &&
+      clientStepSubmittedFor !== job.clientStep.moduleId
+    ) {
+      const spec = job.clientStep
+      if (onHumanReview) {
+        clientStepBusy = true
+        try {
+          const decision = await onHumanReview(spec)
+          if (decision === "approved") {
+            await submitClientStep(jobId, { output: spec.input })
+          } else {
+            await submitClientStep(jobId, { error: "Human review rejected" })
+          }
+          clientStepSubmittedFor = spec.moduleId
+        } finally {
+          clientStepBusy = false
+        }
+        continue
+      }
+    }
     // AI : race fix — track per moduleId so a stale poll can't re-fire the same client-step POST.
     if (
       job.clientStep &&
+      job.clientStep.kind !== "human-review" &&
       !job.run &&
       !job.error &&
       !clientStepBusy &&
       clientStepSubmittedFor !== job.clientStep.moduleId
     ) {
       const { moduleId, entries, input, pipelineState, kind } = job.clientStep
+      if (!entries?.length) {
+        await submitClientStep(jobId, { error: `${kind} step has no code configured` })
+        clientStepSubmittedFor = moduleId
+        continue
+      }
       clientStepBusy = true
       const clientLogs: JobLogEntry[] = []
       const tag = kind === "assert" ? "assert" : "custom-code"

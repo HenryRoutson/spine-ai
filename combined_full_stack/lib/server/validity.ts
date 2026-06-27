@@ -7,6 +7,7 @@ import type {
   StructureModelId,
 } from "./types";
 import { migrateCustomCodeModule, customCodeEntriesForModule } from "@/lib/custom_code_entries";
+import { usesPassthroughStructure } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
 import { hasQuoteField, listFieldsForWrap, isBuiltinDocumentModel } from "./structure";
 import { stripSharedModels, withSharedModels } from "./builtin_models";
@@ -99,7 +100,7 @@ function stepAcceptsSpineType(m: PipelineModule, expected: TypeExpr, actual: Typ
   // AI : custom-code / coded transform steps reshape list↔object at runtime — spine item type still matches.
   if (m.kind === "custom-code" || (m.kind === "transform" && !!m.code?.trim())) return true;
   // AI : output/assert snapshot spine as-is; quote links list or scalar extracts.
-  if (m.kind === "output" || m.kind === "assert" || m.kind === "quote") return true;
+  if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review" || m.kind === "quote") return true;
   return false;
 }
 
@@ -216,7 +217,7 @@ export function computeInvalid(
     }
   }
   for (const m of modules) {
-    if (m.kind === "output" || m.kind === "assert") {
+    if (usesPassthroughStructure(m.kind)) {
       if (!m.inStructureId) pushInvalid(invalid, { moduleId: m.id, kind: "no-output" });
       continue;
     }
@@ -262,7 +263,7 @@ export function computeInvalid(
       continue;
     }
 
-    if (m.kind === "output" || m.kind === "assert") {
+    if (usesPassthroughStructure(m.kind)) {
       if (invalidIssuesForModule(invalid, m.id).some((x) => x.kind === "no-output")) continue;
       const expected = stepSpineInType(m);
       const upstreamType = (prev && stepSpineOutType(prev)) ?? flowType;
@@ -345,7 +346,7 @@ function computeUnusedOutputInvalid(modules: PipelineModule[]): InvalidMap {
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i]!;
     const emitted = stepEmits(m);
-    if (!emitted || m.kind === "input" || m.kind === "output" || m.kind === "assert") continue;
+    if (!emitted || m.kind === "input" || usesPassthroughStructure(m.kind)) continue;
     const used = modules.slice(i + 1).some((down) => down.inStructureId === emitted);
     if (!used) pushInvalid(invalid, { moduleId: m.id, kind: "unused-output", expects: emitted });
   }
@@ -615,6 +616,7 @@ export function invalidStepMessage(
     const m = modules.find((x) => x.id === issue.moduleId);
     if (m?.kind === "output") return "select a structure to materialize";
     if (m?.kind === "assert") return "select passthrough structure";
+    if (m?.kind === "human-review") return "select passthrough structure for review";
     return "select an output model";
   }
   if (issue.kind === "io-mismatch") {
@@ -810,9 +812,35 @@ export function syncAutoQuoteSteps(
   return modulesEqual(modules, out) ? modules : out;
 }
 
+// AI : fold legacy doc-to-text steps into the preceding input (parser / vision OCR now live on input).
+function foldDocToTextSteps(modules: PipelineModule[]): PipelineModule[] {
+  const out: PipelineModule[] = [];
+  for (const m of modules) {
+    if ((m.kind as string) !== "doc-to-text") {
+      out.push(m);
+      continue;
+    }
+    const prev = out[out.length - 1];
+    const legacy = m as PipelineModule & { docParseMode?: "parser" | "llm" };
+    const useLlm = legacy.docParseMode === "llm";
+    if (prev?.kind === "input") {
+      out[out.length - 1] = {
+        ...prev,
+        note: legacy.note ?? prev.note,
+        useOcr: useLlm ? true : prev.useOcr,
+        model: useLlm ? legacy.model ?? prev.model : prev.model,
+        prompt: useLlm ? legacy.prompt ?? prev.prompt : prev.prompt,
+        inputDescription: legacy.inputDescription ?? prev.inputDescription,
+      };
+    }
+  }
+  return modulesEqual(modules, out) ? modules : out;
+}
+
 export function migrateProjectModules(project: Project): Project {
   const models = withSharedModels(stripSharedModels(project.models));
-  const quoted = syncAutoQuoteSteps(project.modules, models);
+  const folded = foldDocToTextSteps(project.modules);
+  const quoted = syncAutoQuoteSteps(folded, models);
   const placed = syncAssertPlacement(quoted);
   const migrated = placed.map(migrateCustomCodeModule);
   // AI : cache is always on — normalize legacy projects that disabled it per step.
@@ -820,7 +848,8 @@ export function migrateProjectModules(project: Project): Project {
   const modelsChanged = models.length !== project.models.length || models.some((m, i) => m !== project.models[i]);
   const changed =
     modelsChanged ||
-    placed !== project.modules ||
+    folded !== project.modules ||
+    placed !== folded ||
     migrated.some((m, i) => m !== placed[i]) ||
     withCache.some((m, i) => m !== migrated[i]);
   if (!changed) return project;

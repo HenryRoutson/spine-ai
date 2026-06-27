@@ -3,7 +3,7 @@ import { makeCustomCodeEntry } from "@/lib/custom_code_entries"
 import { DEFAULT_ASSERT_TS } from "@/lib/assert_steps"
 import { MODULE_META } from "@/lib/types"
 import { uid } from "@/lib/id"
-import { isLlmKind } from "@/lib/module-kinds"
+import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds"
 
 export type ModuleFactoryOpts = {
   id?: ModuleId
@@ -44,7 +44,9 @@ export function createPipelineModule(
     inputDescription: opts.inputDescription?.trim() || undefined,
     inStructureId: kind !== "input" ? opts.inStructureId ?? defaultModel : undefined,
     outStructureId:
-      kind === "output" || kind === "assert" ? opts.outStructureId ?? opts.inStructureId ?? defaultModel : opts.outStructureId ?? defaultModel,
+      usesPassthroughStructure(kind)
+        ? opts.outStructureId ?? opts.inStructureId ?? defaultModel
+        : opts.outStructureId ?? defaultModel,
     outIsList: opts.outIsList,
     prompt: isLlm ? opts.prompt ?? "" : undefined,
     fallbackList:

@@ -1,12 +1,13 @@
 import { z, type ZodError, type ZodType } from "zod";
 import { isBuiltinDocumentModel } from "./builtin_models";
-import { documentContentFrom, documentFilenameFrom, documentValueFrom } from "./document_value";
+import { documentContentFrom, documentFilenameFrom, documentValueFrom } from "@/lib/server/document_value";
 import { modelHasQuoteFields } from "./quote_schema";
 import {
   fieldTypeToExpr,
   formatTypeExpr,
   isListFieldType,
   typeExprToZod,
+  withFieldMeta,
   zodFromModel as zodFromModelExpr,
 } from "./type_expr";
 import type { FieldType, ModelField, PipelineModule, StructureModel, StructureModelId } from "./types";
@@ -51,20 +52,6 @@ export function assertValidJsonFieldValue(val: unknown, fieldName?: string): ass
   if (!isValidJsonString(val)) {
     throw new Error(`${label} must contain valid JSON`);
   }
-}
-
-// AI : TODO refactor — duplicated in type_expr.ts; keep one copy (prefer type_expr) and import here.
-function fieldDescribe(f: ModelField): string | undefined {
-  const parts: string[] = [];
-  if (f.description.trim()) parts.push(f.description.trim());
-  const ex = f.example?.trim();
-  if (ex) parts.push(`Example: ${ex}`);
-  return parts.length ? parts.join(" — ") : undefined;
-}
-
-function withFieldMeta(schema: ZodType, f: ModelField): ZodType {
-  const d = fieldDescribe(f);
-  return d ? schema.describe(d) : schema;
 }
 
 function llmModelToZod(model: StructureModel, models: StructureModel[], seen: Set<StructureModelId>): ZodType {
@@ -294,7 +281,7 @@ export function materializeToModel(
       : hints.docName?.trim() ||
         hints.note?.trim() ||
         hints.label?.trim() ||
-        content.split("\n").find((l) => l.trim())?.trim() ||
+        content.split("\n").find((line: string) => line.trim())?.trim() ||
         "Document";
   const filename = documentFilenameFrom(raw, hints, hints.docName ?? hints.docId ?? "document");
   const docId = typeof raw.doc_id === "string" ? raw.doc_id : hints.docId ?? "";

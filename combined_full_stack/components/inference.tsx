@@ -1,7 +1,7 @@
 "use client"
 
-// AI : TODO refactor — thin layout shell once use-inference-run.ts is split into focused hooks.
-import { useEffect, useRef, useState } from "react"
+// AI : TODO refactor — thin layout shell only (hooks split: use-inference-docs + use-inference-run-progress).
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   FileText,
   CheckCircle2,
@@ -17,10 +17,12 @@ import {
   ScrollText,
   Link2,
   CreditCard,
+  UserCheck,
+  X,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
-import { formatUsdFromCents } from "@/lib/format"
+import { formatCostCents, formatUsdFromCents } from "@/lib/format"
 import { useAppShell } from "@/lib/app-shell"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { modelName } from "@/lib/validity"
@@ -43,9 +45,11 @@ import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { RunNotesPad } from "@/components/run-notes-pad"
 import { StepServerLogsSection } from "@/components/server-logs-panel"
 import { StepInputDescription, moduleInputDescription } from "@/components/step-input-description"
+import { JsonHighlight } from "@/components/highlight"
 import { LlmCallDistribution } from "@/components/llm-call-distribution"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import type { JobLogEntry } from "@/lib/types"
+import type { ClientStepSpec } from "@/lib/run-types"
 
 export function Inference() {
   const {
@@ -203,6 +207,15 @@ export function Inference() {
               {run.runButtonLabel}
             </Button>
             </>
+            )}
+
+            {run.pendingHumanReview && (
+              <HumanReviewPanel
+                spec={run.pendingHumanReview}
+                module={modules.find((m) => m.id === run.pendingHumanReview!.moduleId)}
+                onApprove={() => run.resolveHumanReview("approved")}
+                onReject={() => run.resolveHumanReview("rejected")}
+              />
             )}
 
             {run.inputsInvalid && (
@@ -587,7 +600,7 @@ function StepRow({
         {state === "cached" && <span className="font-mono text-[10px] text-chart-3">cache · $0.00</span>}
         {descriptionCheckCostCents != null && descriptionCheckCostCents > 0 && state !== "idle" && state !== "cached" && (
           <span className="font-mono text-[10px] text-muted-foreground">
-            desc check · {formatUsdFromCents(descriptionCheckCostCents, 4)}
+            desc check · {formatCostCents(descriptionCheckCostCents)}
           </span>
         )}
       </div>
@@ -627,6 +640,63 @@ function StepRow({
       {serverLogs.length > 0 && (
         <StepServerLogsSection logs={serverLogs} className={nested ? "pl-5" : "pl-7"} />
       )}
+    </div>
+  )
+}
+
+function HumanReviewPanel({
+  spec,
+  module,
+  onApprove,
+  onReject,
+}: {
+  spec: ClientStepSpec
+  module?: PipelineModule
+  onApprove: () => void
+  onReject: () => void
+}) {
+  const previewJson = useMemo(() => {
+    try {
+      return JSON.stringify(spec.input, null, 2)
+    } catch {
+      return String(spec.input)
+    }
+  }, [spec.input])
+
+  return (
+    <div className="rounded-lg border border-chart-1/50 bg-chart-1/5 p-4">
+      <div className="flex items-start gap-3">
+        <UserCheck className="mt-0.5 h-5 w-5 shrink-0 text-chart-1" />
+        <div className="min-w-0 flex-1 space-y-3">
+          <div>
+            <p className="text-sm font-medium">Human review required</p>
+            <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+              Step · {spec.label}
+            </p>
+            {module?.note?.trim() && (
+              <p className="mt-2 text-xs text-muted-foreground">{module.note.trim()}</p>
+            )}
+          </div>
+          <div className="max-h-64 min-w-0 overflow-auto rounded-md border border-border bg-[oklch(0.14_0.004_264)] p-2">
+            <JsonHighlight json={previewJson} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" className="gap-1.5" onClick={onApprove}>
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Approve
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={onReject}
+            >
+              <X className="h-3.5 w-3.5" />
+              Reject
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 // AI : TODO refactor (prod) — add original doc bytes via Supabase Storage (see store.ts saveOriginalDocBytes).
-// AI : TODO refactor — parser/vision cache CRUD duplicates store.ts; extract shared ParserVisionCache backend.
 // AI : adopted from backend_with_users/ — implements the same Store contract, so
 // AI : runPipeline & co accept this store unchanged. RLS scopes every row to the
 // AI : signed-in user behind `db`; no user_id handling anywhere in app code.
@@ -18,6 +17,16 @@ import type {
   VisionCacheKey,
   VisionCacheRow,
 } from "./doc_text_cache";
+import {
+  createParserVisionCacheIndex,
+  indexParserRow,
+  indexVisionRow,
+  parserCacheGetByDoc,
+  parserCacheGetByFileHash,
+  purgeParserVisionCacheForDoc,
+  visionCacheGet,
+  visionCachesForDoc,
+} from "./parser_vision_cache_index";
 import type {
   DocId,
   DocLabel,
@@ -75,13 +84,10 @@ export class SupabaseStore implements Store {
     projects: [] as Project[],
     docs: [] as DocRef[],
     contents: new Map<DocId, string>(),
-    parserCache: new Map<ParserCacheKey, ParserCacheRow>(),
-    parserCacheByDoc: new Map<DocId, ParserCacheRow>(),
-    parserCacheByFile: new Map<string, ParserCacheRow>(),
-    visionCache: new Map<VisionCacheKey, VisionCacheRow>(),
     runs: [] as PipelineRun[],
     runProjects: {} as Record<string, ProjectId>,
   };
+  private cacheIndex = createParserVisionCacheIndex();
   private pending: PromiseLike<{ error: unknown }>[] = [];
   private hasFingerprintColumn = false;
   private hasVisionCacheTable = false;
@@ -148,7 +154,7 @@ export class SupabaseStore implements Store {
     } else {
       this.hasVisionCacheTable = true;
       for (const row of (vision.data ?? []) as VisionCacheDbRow[]) {
-        this.indexVisionRow({
+        indexVisionRow(this.cacheIndex, {
           key: row.cache_key as VisionCacheKey,
           docId: row.doc_id as DocId,
           model: row.model as VisionCacheRow["model"],
@@ -167,7 +173,7 @@ export class SupabaseStore implements Store {
     } else {
       this.hasParserCacheTable = true;
       for (const row of (parser.data ?? []) as ParserCacheDbRow[]) {
-        this.indexParserRow({
+        indexParserRow(this.cacheIndex, {
           key: row.cache_key as ParserCacheKey,
           fileHash: row.file_hash as FileContentHash,
           docId: row.doc_id as DocId,
@@ -177,16 +183,6 @@ export class SupabaseStore implements Store {
         });
       }
     }
-  }
-
-  private indexVisionRow(row: VisionCacheRow): void {
-    this.state.visionCache.set(row.key, row);
-  }
-
-  private indexParserRow(row: ParserCacheRow): void {
-    this.state.parserCache.set(row.key, row);
-    this.state.parserCacheByDoc.set(row.docId, row);
-    this.state.parserCacheByFile.set(`${row.parser}:${row.fileHash}`, row);
   }
 
   private runRow(projectId: ProjectId, run: PipelineRun): Record<string, unknown> {
@@ -246,16 +242,16 @@ export class SupabaseStore implements Store {
   }
 
   parserCacheGetByFileHash(fileHash: FileContentHash, parser: ParserKind): ParserCacheRow | undefined {
-    return this.state.parserCacheByFile.get(`${parser}:${fileHash}`);
+    return parserCacheGetByFileHash(this.cacheIndex, fileHash, parser);
   }
 
   parserCacheGetByDoc(docId: DocId): ParserCacheRow | undefined {
-    return this.state.parserCacheByDoc.get(docId);
+    return parserCacheGetByDoc(this.cacheIndex, docId);
   }
 
   parserCacheSet(row: Omit<ParserCacheRow, "createdAt"> & { createdAt?: number }): void {
     const payload: ParserCacheRow = { ...row, createdAt: row.createdAt ?? Date.now() };
-    this.indexParserRow(payload);
+    indexParserRow(this.cacheIndex, payload);
     if (!this.hasParserCacheTable) return;
     this.pending.push(
       this.db.from("doc_parser_cache").upsert(
@@ -273,12 +269,12 @@ export class SupabaseStore implements Store {
   }
 
   visionCacheGet(key: VisionCacheKey): VisionCacheRow | undefined {
-    return this.state.visionCache.get(key);
+    return visionCacheGet(this.cacheIndex, key);
   }
 
   visionCacheSet(row: Omit<VisionCacheRow, "createdAt"> & { createdAt?: number }): void {
     const payload: VisionCacheRow = { ...row, createdAt: row.createdAt ?? Date.now() };
-    this.indexVisionRow(payload);
+    indexVisionRow(this.cacheIndex, payload);
     if (!this.hasVisionCacheTable) return;
     this.pending.push(
       this.db.from("doc_vision_cache").upsert(
@@ -297,9 +293,7 @@ export class SupabaseStore implements Store {
   }
 
   visionCachesForDoc(docId: DocId): VisionCacheRow[] {
-    return [...this.state.visionCache.values()]
-      .filter((r) => r.docId === docId)
-      .sort((a, b) => b.createdAt - a.createdAt);
+    return visionCachesForDoc(this.cacheIndex, docId);
   }
 
   addDoc(name: string, type: InputType, content: string, label: DocLabel): DocRef {
@@ -340,16 +334,7 @@ export class SupabaseStore implements Store {
     if (i === -1) return false;
     this.state.docs.splice(i, 1);
     this.state.contents.delete(id);
-    for (const [key, row] of this.state.parserCache) {
-      if (row.docId === id) {
-        this.state.parserCache.delete(key);
-        this.state.parserCacheByFile.delete(`${row.parser}:${row.fileHash}`);
-      }
-    }
-    this.state.parserCacheByDoc.delete(id);
-    for (const [key, row] of this.state.visionCache) {
-      if (row.docId === id) this.state.visionCache.delete(key);
-    }
+    purgeParserVisionCacheForDoc(this.cacheIndex, id);
     this.pending.push(this.db.from("docs").delete().eq("id", id));
     if (this.hasParserCacheTable) {
       this.pending.push(this.db.from("doc_parser_cache").delete().eq("doc_id", id));

@@ -30,7 +30,7 @@ export async function pdfToText(path: string): Promise<PdfText> {
   return pdfBytesToText(new Uint8Array(readFileSync(path)));
 }
 
-// AI : DeepSeek OCR placeholder — use doc-to-text step with docParseMode "llm" instead.
+// AI : DeepSeek OCR placeholder — use input step with useOcr instead.
 export async function docToTextOcrPlaceholder(path: string): Promise<PdfText> {
   return pdfToText(path);
 }

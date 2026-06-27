@@ -79,7 +79,6 @@ export type InputTypeSpec = InputType | InputType[];
 
 export type ModuleKind =
   | "input"
-  | "doc-to-text"
   | "llm"
   | "llm-batch" // AI : backend addition — one structured call per list item, merged typed list out
   | "quote" // AI : deterministic — resolve LLM quote strings → source-linked spans
@@ -87,6 +86,7 @@ export type ModuleKind =
   | "combine"
   | "custom-code"
   | "assert" // AI : validate pipeline state — passthrough spine; code reads step["Label"] keys
+  | "human-review" // AI : pause in Inference — operator approves or rejects before continuing
   | "output";
 
 export type CustomCodeLanguage = "typescript" | "python";
@@ -94,14 +94,18 @@ export type CustomCodeLanguage = "typescript" | "python";
 // AI : one language key per entry — e.g. { "typescript": "(input) => input" } or { "python": "..." }.
 export type CustomCodeEntry = { typescript?: string; python?: string };
 
-// AI : doc-to-text — prebuilt PDF/text parser vs OpenRouter vision OCR (handwriting, scans).
+// AI : input — built-in PDF/text parser at upload vs OpenRouter vision OCR (handwriting, scans).
 export type DocParseMode = "parser" | "llm";
+
+// AI : legacy run logs may still reference folded doc-to-text steps.
+export type LegacyModuleKind = "doc-to-text";
+export type RunStepKind = ModuleKind | LegacyModuleKind;
 
 export interface PipelineModule {
   id: ModuleId;
   kind: ModuleKind;
   label: string;
-  note?: string; // annotation, e.g. the "purpose" of a doc-to-text step
+  note?: string; // annotation — e.g. document purpose for materialized output
   // io contract — every step declares the structure it consumes and emits
   inStructureId?: StructureModelId;
   outStructureId?: StructureModelId;
@@ -115,8 +119,7 @@ export interface PipelineModule {
   code?: string; // AI : transform steps with custom code only
   fallbackList?: CustomCodeEntry[]; // AI : custom-code — ordered attempts, first is primary
   model?: ModelId; // per-step model override
-  docParseMode?: DocParseMode; // doc-to-text only — parser (default) or vision LLM
-  useOcr?: boolean; // input only — OpenRouter vision OCR when PDF/image is an accepted type
+  useOcr?: boolean; // input only — vision OCR when PDF/image is accepted (built-in parser when off)
   cached: boolean;
   // AI : backend-only — llm/transform steps may emit a list of `outStructure` rather than one.
   outIsList?: boolean;
@@ -227,17 +230,18 @@ export type StepDescriptionFields = {
 
 export interface RunStep extends Omit<StepDescriptionFields, "outputPreview"> {
   moduleId: ModuleId;
-  kind: ModuleKind;
+  kind: RunStepKind;
   label: string;
   model?: ModelId;
   status: RunStepStatus;
   ms: number;
   costCents: number;
+  savedCostCents?: number; // AI : cache hit — original step cost avoided this run (costCents stays 0)
   inputPreview: string;
   outputPreview: string;
   outputJson?: string;
   inputDescription?: string; // AI : snapshot at run time — expected input for this step
-  docId?: DocId; // AI : source doc for input / doc-to-text steps — powers logging trace links
+  docId?: DocId; // AI : source doc for input steps — powers logging trace links
   llmCalls?: LlmCallRecord[];
   failures?: RunFailureRecord[];
   serverLogs?: import("@/lib/run-types").JobLogEntry[]; // AI : mirrored ServerLogger lines for this step
@@ -304,7 +308,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
 // AI : for large structured outputs (qwen-2.5-72b on OpenRouter is markedly slower here).
 export const DEFAULT_MODEL: ModelId = "deepseek-v3";
 
-// AI : default vision model for doc-to-text LLM mode — Gemini reads images/PDFs/handwriting well.
+// AI : default vision model for input OCR — Gemini reads images/PDFs/handwriting well.
 export const DEFAULT_VISION_DOC_PARSE_MODEL: ModelId = "gemini-3-flash";
 
 // AI : input-description guard — DeepSeek V3 is reliable on OpenRouter (gemini-2-flash-lite slug 404s).
@@ -316,17 +320,17 @@ export const DOC_PARSE_MODES: { value: DocParseMode; label: string; hint: string
 ];
 
 export function docParseModeForModule(m: PipelineModule): DocParseMode {
-  return m.docParseMode ?? "parser";
+  if (m.kind === "input") return m.useOcr ? "llm" : "parser";
+  return "parser";
 }
 
-export function isDocToTextLlm(m: PipelineModule): boolean {
-  return m.kind === "doc-to-text" && docParseModeForModule(m) === "llm";
+export function inputUsesVisionOcr(m: PipelineModule): boolean {
+  return m.kind === "input" && docParseModeForModule(m) === "llm";
 }
 
 // AI : step-cache model slug — vision OCR steps must not share keys with the global run model.
 export function stepModelForCache(m: PipelineModule, globalModel: ModelId): ModelId {
-  if (m.kind === "input" && m.useOcr) return m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
-  if (isDocToTextLlm(m)) return m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
+  if (inputUsesVisionOcr(m)) return m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
   if (m.kind === "llm" || m.kind === "llm-batch") return m.model ?? globalModel;
   return m.model ?? globalModel;
 }
@@ -358,8 +362,10 @@ export const INPUT_TYPES: { value: InputType; label: string }[] = [
 ];
 
 export const MODULE_META: Record<ModuleKind, { label: string; description: string }> = {
-  input: { label: "Input", description: "Ingest a source (pdf, word, web, json…)" },
-  "doc-to-text": { label: "Doc → Text", description: "Prebuilt parser or OpenRouter vision LLM (scans & handwriting)" },
+  input: {
+    label: "Input",
+    description: "Ingest a source (pdf, word, web, json…) — built-in parser or optional vision OCR",
+  },
   llm: { label: "LLM Call", description: "Run a model against a prompt + schema" },
   "llm-batch": { label: "Batch LLM", description: "list in → list out (one structured call per item). Wrap with Custom TS before/after when upstream/downstream is a single object." },
   quote: {
@@ -378,6 +384,10 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   assert: {
     label: "Assert",
     description: "Check pipeline state (step[\"Label\"], len) — runs after referenced steps; passthrough",
+  },
+  "human-review": {
+    label: "Human Review",
+    description: "Pause in Inference for approve or reject — passthrough on approval",
   },
   output: {
     label: "Output",

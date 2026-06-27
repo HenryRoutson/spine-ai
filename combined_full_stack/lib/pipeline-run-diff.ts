@@ -4,7 +4,7 @@ import type { PipelineModule, RunStep } from "@/lib/types"
 export function modulesFromRunSteps(steps: RunStep[]): PipelineModule[] {
   return steps.map((step) => ({
     id: step.moduleId,
-    kind: step.kind,
+    kind: step.kind === "doc-to-text" ? "input" : step.kind,
     label: step.label,
     cached: true,
     avgMs: step.ms,

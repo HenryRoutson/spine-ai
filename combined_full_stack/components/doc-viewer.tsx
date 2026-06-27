@@ -8,9 +8,9 @@ import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { cn } from "@/lib/utils"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { MarkdownView } from "@/components/highlight"
-import { defaultDocViewMode, docViewerTabs, isPdfDoc } from "@/lib/doc-content"
+import { defaultDocViewMode, docViewerTabs, docViewTabLabel, isPdfDoc } from "@/lib/doc-content"
 import { API_ROUTES } from "@/lib/api-routes"
-import type { DocId } from "@/lib/types"
+import type { DocId, DocRef } from "@/lib/types"
 
 // AI : de-mocked — source text comes from GET /api/docs/:id/text (the stored content-hash
 // AI : file), not the hardcoded LEGAL_SOURCE_TEXT. Offsets are validated with an indexOf
@@ -29,6 +29,10 @@ const TAB_LABEL: Record<DocViewMode, string> = {
   formatted: "formatted",
   pdf: "pdf",
   json: "json",
+}
+
+function tabLabel(mode: DocViewMode, doc: Pick<DocRef, "name" | "type"> | undefined, hasPdf: boolean): string {
+  return doc ? docViewTabLabel(mode, doc, hasPdf) : TAB_LABEL[mode]
 }
 
 type VisionEntry = { key: string; model: string; text: string; createdAt: number }
@@ -157,7 +161,7 @@ export function DocViewer() {
                       view === m ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {TAB_LABEL[m]}
+                    {tabLabel(m, docRef, hasPdf)}
                   </button>
                 ))}
               </div>
@@ -254,7 +258,9 @@ export function DocViewer() {
                   ? "formatted markdown — rendered via GFM (tables, lists, code, links)"
                   : view === "vision"
                     ? `vision OCR — ${visionEntries[visionIndex]?.model ?? "—"}${visionEntries.length ? " (cached)" : ""}`
-                    : `built-in parser — ${parserMeta.parser ?? "upload"}${parserMeta.fromCache ? " (cached)" : ""}`}
+                    : showPdf
+                      ? `raw markdown — ${parserMeta.parser ?? "pdf.js"}${parserMeta.fromCache ? " (cached)" : ""}`
+                      : `built-in parser — ${parserMeta.parser ?? "upload"}${parserMeta.fromCache ? " (cached)" : ""}`}
           </span>
           <OpenInDocumentsLink docId={target.docId as DocId} label="saved in documents" className="shrink-0" />
         </div>

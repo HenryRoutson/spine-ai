@@ -1,5 +1,6 @@
-// AI : TODO refactor — align with apiError/HTTP where applicable (see app/api/billing/route.ts).
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/server/api_context";
+import { HTTP } from "@/lib/server/api-errors";
 import { handleStripeWebhook, verifyStripeWebhookPayload } from "@/lib/server/billing_account";
 import { logger } from "@/lib/server/server_logger";
 
@@ -18,6 +19,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ received: true });
   } catch (err) {
     apiLog.error(`webhook rejected`, { error: (err as Error).message });
-    return NextResponse.json({ error: (err as Error).message }, { status: 400 });
+    return apiError((err as Error).message, HTTP.BAD_REQUEST);
   }
 }

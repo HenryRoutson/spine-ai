@@ -11,10 +11,11 @@ import {
   Link2,
   Lock,
   ShieldCheck,
+  UserCheck,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { MODULE_META, type ModuleKind } from "@/lib/types"
+import { MODULE_META, type ModuleKind, type RunStepKind } from "@/lib/types"
 
 // AI : batch llm is a 2×2 sparkle grid so it reads as "many calls" vs single Sparkle.
 export function BatchSparkleIcon({ className }: { className?: string }) {
@@ -37,7 +38,6 @@ export type ModuleIcon = LucideIcon | typeof BatchSparkleIcon
 
 export const KIND_ICON: Record<ModuleKind, ModuleIcon> = {
   input: FileInput,
-  "doc-to-text": FileText,
   llm: Sparkle,
   "llm-batch": BatchSparkleIcon,
   quote: Link2,
@@ -45,12 +45,12 @@ export const KIND_ICON: Record<ModuleKind, ModuleIcon> = {
   combine: Merge,
   "custom-code": Code2,
   assert: ShieldCheck,
+  "human-review": UserCheck,
   output: FileOutput,
 }
 
 export const KIND_COLOR: Record<ModuleKind, string> = {
   input: "text-chart-2",
-  "doc-to-text": "text-chart-3",
   llm: "text-primary",
   "llm-batch": "text-primary",
   quote: "text-chart-2",
@@ -58,7 +58,16 @@ export const KIND_COLOR: Record<ModuleKind, string> = {
   combine: "text-chart-3",
   "custom-code": "text-chart-1",
   assert: "text-chart-2",
+  "human-review": "text-chart-1",
   output: "text-output",
+}
+
+const LEGACY_KIND_ICON: Partial<Record<RunStepKind, ModuleIcon>> = {
+  "doc-to-text": FileText,
+}
+
+export function stepKindIcon(kind: RunStepKind): ModuleIcon {
+  return KIND_ICON[kind as ModuleKind] ?? LEGACY_KIND_ICON[kind] ?? FileInput
 }
 
 export function KindIcon({ kind, size = "md" }: { kind: ModuleKind; size?: "sm" | "md" }) {

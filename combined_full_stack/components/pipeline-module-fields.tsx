@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { llmSchemaJson } from "@/lib/structure"
-import { isLlmKind } from "@/lib/module-kinds"
+import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds"
 import {
   DOC_PARSE_MODES,
   INPUT_TYPES,
@@ -33,7 +33,7 @@ import {
   type StructureModelId,
 } from "@/lib/types"
 import { codeOfEntry, languageOfEntry, makeCustomCodeEntry } from "@/lib/custom_code_entries"
-import { inputTypeLabel, inputNameRestrictionLabel, inputTypesForModule, inputTypesNeedOcr, inputModuleNeedsOcr, upstreamInputModule } from "@/lib/inference-input"
+import { inputTypeLabel, inputNameRestrictionLabel, inputTypesForModule, inputTypesNeedOcr, inputModuleNeedsOcr } from "@/lib/inference-input"
 import {
   invalidStepMessage,
   warningStepMessages,
@@ -245,12 +245,6 @@ export function PipelineModuleFields({
   }, [])
   const hasNoPromptWarning = warnings?.some((w) => w.kind === "no-prompt")
   const inputOcrAvailable = selected.kind === "input" && inputModuleNeedsOcr(selected)
-  const docToTextOcrAvailable =
-    selected.kind === "doc-to-text" &&
-    (() => {
-      const upstream = upstreamInputModule(selected, modules)
-      return upstream ? inputTypesNeedOcr(inputTypesForModule(upstream)) : false
-    })()
 
   if (isAutoQuoteStep(selected)) {
     return (
@@ -371,7 +365,7 @@ export function PipelineModuleFields({
         </PipelineField>
       ) : null}
 
-      {(selected.kind === "doc-to-text" || selected.kind === "combine" || isLlmKind(selected.kind)) && (
+      {(selected.kind === "input" || selected.kind === "combine" || isLlmKind(selected.kind)) && (
         <PipelineField label="Annotation / purpose">
           {edit ? (
             <Input
@@ -384,52 +378,6 @@ export function PipelineModuleFields({
             <StaticValue>{selected.note}</StaticValue>
           )}
         </PipelineField>
-      )}
-
-      {selected.kind === "doc-to-text" && docToTextOcrAvailable && (
-        <>
-          <PipelineField
-            label="Conversion"
-            hint={edit ? "Use OCR for scanned PDFs and handwriting (OpenRouter vision)" : undefined}
-          >
-            {edit ? (
-              <div className="flex flex-wrap gap-1.5">
-                {DOC_PARSE_MODES.map((mode) => {
-                  const active = docParseModeForModule(selected) === mode.value
-                  return (
-                    <button
-                      key={mode.value}
-                      type="button"
-                      onClick={() =>
-                        onUpdate!({
-                          docParseMode: mode.value === "parser" ? undefined : mode.value,
-                          model: mode.value === "llm" ? selected.model ?? "gemini-3-flash" : undefined,
-                        })
-                      }
-                      className={cn(
-                        "rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
-                        active
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border text-muted-foreground hover:border-muted-foreground/40",
-                      )}
-                      title={mode.hint}
-                    >
-                      {mode.label}
-                    </button>
-                  )
-                })}
-              </div>
-            ) : (
-              <StaticValue>
-                {DOC_PARSE_MODES.find((m) => m.value === docParseModeForModule(selected))?.label ??
-                  "Built-in parser"}
-              </StaticValue>
-            )}
-          </PipelineField>
-          {docParseModeForModule(selected) === "llm" && onUpdate && (
-            <OcrExtraFields selected={selected} edit={!!edit} onUpdate={onUpdate} />
-          )}
-        </>
       )}
 
       {selected.kind === "input" && (
@@ -477,40 +425,50 @@ export function PipelineModuleFields({
           </PipelineField>
           {inputOcrAvailable && (
             <PipelineField
-              label="Vision OCR"
-              hint={edit ? "Separate from built-in parser (docs.content) — cached in doc_vision_cache" : undefined}
+              label="Conversion"
+              hint={edit ? "Built-in parser at upload, or vision OCR for scans and handwriting" : undefined}
             >
               {edit ? (
                 <div className="space-y-3 rounded-md border border-dashed border-chart-3/40 bg-chart-3/5 p-3">
                   <p className="font-mono text-[10px] text-muted-foreground">
                     Built-in parser runs at upload (PDF.js → docs.content). Vision OCR runs via OpenRouter and is cached separately.
                   </p>
-                  <div className="flex items-center justify-between rounded-md border border-border bg-secondary/30 px-3 py-2.5">
-                    <div>
-                      <p className="text-xs font-medium">Enable vision OCR</p>
-                      <p className="font-mono text-[10px] text-muted-foreground">
-                        {selected.useOcr
-                          ? "OpenRouter vision — cached per doc + model + prompt"
-                          : "use built-in parser text only"}
-                      </p>
-                    </div>
-                    <Switch
-                      checked={!!selected.useOcr}
-                      onCheckedChange={(v) =>
-                        onUpdate!({
-                          useOcr: v || undefined,
-                          model: v ? selected.model ?? "gemini-3-flash" : undefined,
-                          prompt: v ? selected.prompt : undefined,
-                        })
-                      }
-                    />
+                  <div className="flex flex-wrap gap-1.5">
+                    {DOC_PARSE_MODES.map((mode) => {
+                      const active = docParseModeForModule(selected) === mode.value
+                      return (
+                        <button
+                          key={mode.value}
+                          type="button"
+                          onClick={() =>
+                            onUpdate!({
+                              useOcr: mode.value === "llm" ? true : undefined,
+                              model: mode.value === "llm" ? selected.model ?? "gemini-3-flash" : undefined,
+                              prompt: mode.value === "llm" ? selected.prompt : undefined,
+                            })
+                          }
+                          className={cn(
+                            "rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
+                            active
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border text-muted-foreground hover:border-muted-foreground/40",
+                          )}
+                          title={mode.hint}
+                        >
+                          {mode.label}
+                        </button>
+                      )
+                    })}
                   </div>
-                  {selected.useOcr && onUpdate && (
+                  {docParseModeForModule(selected) === "llm" && onUpdate && (
                     <OcrExtraFields selected={selected} edit={!!edit} onUpdate={onUpdate} />
                   )}
                 </div>
               ) : (
-                <StaticValue>{selected.useOcr ? "Vision OCR on" : "Built-in parser only"}</StaticValue>
+                <StaticValue>
+                  {DOC_PARSE_MODES.find((m) => m.value === docParseModeForModule(selected))?.label ??
+                    "Built-in parser"}
+                </StaticValue>
               )}
             </PipelineField>
           )}
@@ -627,22 +585,26 @@ export function PipelineModuleFields({
 
       {selected.kind !== "input" && (
         <PipelineField
-          label={selected.kind === "output" || selected.kind === "assert" ? "Structure to materialize" : "Input model"}
+          label={usesPassthroughStructure(selected.kind) ? "Structure to materialize" : "Input model"}
           hint={
             selected.kind === "output" && invalid?.kind === "no-output"
               ? "required — pick the structure this step snapshots"
               : selected.kind === "assert" && invalid?.kind === "no-output"
                 ? "required — passthrough structure (matches upstream)"
-                : undefined
+                : selected.kind === "human-review" && invalid?.kind === "no-output"
+                  ? "required — data shape shown for review (matches upstream)"
+                  : selected.kind === "human-review"
+                    ? "pipeline pauses in Inference — approve to continue or reject to stop"
+                    : undefined
           }
-          hintTone={selected.kind === "output" || selected.kind === "assert" ? (invalid?.kind === "no-output" ? "error" : "warning") : "warning"}
+          hintTone={usesPassthroughStructure(selected.kind) ? (invalid?.kind === "no-output" ? "error" : "warning") : "warning"}
         >
           {edit ? (
             <StructureModelSelect
               models={models}
               value={selected.inStructureId}
               onValueChange={(v) => onUpdate!({ inStructureId: v })}
-              invalid={(selected.kind === "output" || selected.kind === "assert") && invalid?.kind === "no-output"}
+              invalid={usesPassthroughStructure(selected.kind) && invalid?.kind === "no-output"}
             />
           ) : (
             <StaticValue mono>
@@ -663,7 +625,7 @@ export function PipelineModuleFields({
         </PipelineField>
       )}
 
-      {selected.kind !== "input" && selected.kind !== "output" && (
+      {selected.kind !== "input" && selected.kind !== "output" && selected.kind !== "human-review" && (
         <PipelineField
           label="Output model"
           hint={invalid?.kind === "no-output" ? "required — step must emit a structure" : undefined}

@@ -162,8 +162,8 @@ function mergeSeedPipelineIntoProject(existing: Project, seed: Project): Project
       model: em.model ?? sm.model,
       prompt: em.prompt ?? sm.prompt,
       inputDescription: em.inputDescription ?? sm.inputDescription,
-      docParseMode: em.docParseMode ?? sm.docParseMode,
       useOcr: em.useOcr ?? sm.useOcr,
+      note: em.note ?? sm.note,
     };
   });
   modules = syncAutoQuoteSteps(modules, models);
@@ -387,7 +387,7 @@ export class JsonStore implements Store {
     return existsSync(path) ? readFileSync(path, "utf8") : undefined;
   }
 
-  // AI : TODO refactor — parser/vision cache mirrors supabase_store.ts; share one ParserVisionCache impl.
+  // AI : TODO refactor — parser/vision cache mirrors supabase_store index; JsonStore uses filesystem backend.
   parserCacheGetByFileHash(fileHash: FileContentHash, parser: ParserKind): ParserCacheRow | undefined {
     const path = join(parserCacheDir(), `${parserCacheKey(fileHash, parser)}.json`);
     if (!existsSync(path)) return undefined;

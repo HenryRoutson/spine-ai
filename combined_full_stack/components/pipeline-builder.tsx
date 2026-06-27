@@ -30,7 +30,8 @@ import { PipelineSummaryBox } from "@/components/pipeline-summary-box"
 import { PipelineModuleFields } from "@/components/pipeline-module-fields"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { formatSecondsShort, formatUsdFromCents } from "@/lib/format"
+import { formatCostCents, formatSecondsShort } from "@/lib/format"
+import { runBilledCents, runTotalMs } from "@/lib/run-metrics"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { cn } from "@/lib/utils"
 import {
@@ -67,9 +68,9 @@ export function PipelineBuilder() {
   const metrics = moduleMetrics(runs)
   const okRuns = runs.filter((r) => r.status === "ok")
   const totalMs =
-    okRuns.length > 0 ? okRuns.reduce((a, r) => a + r.totalMs, 0) / okRuns.length : null
+    okRuns.length > 0 ? okRuns.reduce((a, r) => a + runTotalMs(r), 0) / okRuns.length : null
   const totalCost =
-    okRuns.length > 0 ? okRuns.reduce((a, r) => a + r.billedCents, 0) / okRuns.length : null
+    okRuns.length > 0 ? okRuns.reduce((a, r) => a + runBilledCents(r), 0) / okRuns.length : null
   const cachedCount = modules.filter((m) => m.cached).length
 
   function insertModule(kind: ModuleKind, at = modules.length) {
@@ -168,7 +169,7 @@ export function PipelineBuilder() {
                 {totalMs != null ? `~${formatSecondsShort(totalMs)} avg` : "— avg"}
               </span>
               <span className="text-muted-foreground">
-                {totalCost != null ? `${formatUsdFromCents(totalCost)}/run` : "—/run"}
+                {totalCost != null ? `${formatCostCents(totalCost)}/run` : "—/run"}
               </span>
               <Badge variant="outline" className="gap-1 text-[10px]">
                 <Zap className="h-3 w-3 text-primary" /> {cachedCount} cached
@@ -301,7 +302,7 @@ export function PipelineBuilder() {
                       label="avg cost"
                       value={
                         metrics.has(selected.id)
-                          ? formatUsdFromCents(metrics.get(selected.id)!.avgCostCents)
+                          ? formatCostCents(metrics.get(selected.id)!.avgCostCents)
                           : "—"
                       }
                     />

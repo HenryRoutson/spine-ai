@@ -17,7 +17,8 @@ import { StepProfiling } from "@/components/step-profiling"
 import { InputDocumentLink } from "@/components/input-document-link"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { QuoteLinks, quotesFromJson } from "@/components/quote-links"
-import { formatSecondsShort, formatUsdFromCents } from "@/lib/format"
+import { formatCostCents, formatSecondsShort } from "@/lib/format"
+import { runBilledCents, runSavedCents, runTotalMs } from "@/lib/run-metrics"
 import { cn } from "@/lib/utils"
 import { useDocViewer, type DocViewMode } from "@/lib/doc-viewer"
 import { useAppShell } from "@/lib/app-shell"
@@ -31,8 +32,8 @@ import { computeInvalid } from "@/lib/validity"
 import { RunNotesEditor } from "@/components/run-notes-editor"
 import { StepServerLogsSection, ServerLogLines } from "@/components/server-logs-panel"
 import { StepInputDescription, resolveStepInputDescription } from "@/components/step-input-description"
-import { KIND_ICON } from "@/lib/module-ui"
-import { Search, Cpu, Maximize2, X, GitCompareArrows, Zap, Link2 } from "lucide-react"
+import { stepKindIcon } from "@/lib/module-ui"
+import { Search, Maximize2, X, GitCompareArrows, Zap, Link2 } from "lucide-react"
 import { resolveRunInputDocIds, runInputDocsSummary } from "@/lib/inference-input"
 import { stepIoLabels } from "@/lib/module-kinds"
 import { compactPreview, PREVIEW_RUN_NOTES_CHARS, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
@@ -151,7 +152,7 @@ function RunPickerColumn({
                   <div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground">
                     <span>{run.model}</span>
                     <span>
-                      {formatSecondsShort(run.totalMs)} · {formatUsdFromCents(run.billedCents)}
+                      {formatSecondsShort(runTotalMs(run))} · {formatCostCents(runBilledCents(run))}
                     </span>
                   </div>
                   <span className="font-mono text-[10px] text-muted-foreground">
@@ -394,7 +395,7 @@ export function Logging() {
                       <div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground">
                         <span>{run.model}</span>
                         <span>
-                          {formatSecondsShort(run.totalMs)} · {formatUsdFromCents(run.billedCents)}
+                          {formatSecondsShort(runTotalMs(run))} · {formatCostCents(runBilledCents(run))}
                         </span>
                       </div>
                       <span className="font-mono text-[10px] text-muted-foreground">
@@ -436,9 +437,9 @@ export function Logging() {
 
                 <div className="grid grid-cols-4 gap-2">
                   {[
-                    { label: "Latency", value: formatSecondsShort(active.totalMs) },
-                    { label: "Billed", value: formatUsdFromCents(active.billedCents) },
-                    { label: "Saved (cache)", value: formatUsdFromCents(active.savedCents) },
+                    { label: "Latency", value: formatSecondsShort(runTotalMs(active)) },
+                    { label: "Billed", value: formatCostCents(runBilledCents(active)) },
+                    { label: "Saved (cache)", value: formatCostCents(runSavedCents(active)) },
                     {
                       label: "Cache hits",
                       value: `${active.steps.filter((s) => s.status === "cached").length}/${active.steps.length}`,
@@ -461,7 +462,7 @@ export function Logging() {
                   </h3>
                   <ol className="space-y-1.5">
                     {active.steps.map((step, i) => {
-                      const Icon = KIND_ICON[step.kind] ?? Cpu
+                      const Icon = stepKindIcon(step.kind)
                       const { inTitle, outTitle } = stepIoLabels(step.kind)
                       const stepLlmCalls = llmCallsFromStep(step)
                       const descCheckLlmCalls = descriptionCheckLlmCallsFromStep(step)
@@ -472,7 +473,7 @@ export function Logging() {
                       const stepDocLinks = stepDocLinkLabels(stepDocRef)
                       const hasStepDocLink =
                         !!stepDoc &&
-                        (step.kind === "input" || step.kind === "doc-to-text" || step.kind === "quote")
+                        (step.kind === "input" || step.kind === "quote" || step.kind === "doc-to-text")
                       return (
                         <li
                           key={step.moduleId}
@@ -497,7 +498,9 @@ export function Logging() {
                               {step.ms}ms
                             </span>
                             <span className="w-16 text-right font-mono text-[10px] text-muted-foreground">
-                              {formatUsdFromCents(step.costCents, 4)}
+                              {step.status === "cached" && (step.savedCostCents ?? 0) > 0
+                                ? `saved ${formatCostCents(step.savedCostCents!)}`
+                                : formatCostCents(step.costCents)}
                             </span>
                           </div>
 

@@ -105,7 +105,7 @@ export function stepEmitsList(m: PipelineModule | undefined): boolean {
 
 export function stepSpineOutType(m: PipelineModule | undefined): TypeExpr | undefined {
   if (!m) return undefined;
-  if (m.kind === "output" || m.kind === "assert") {
+  if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review") {
     const id = m.inStructureId ?? m.outStructureId;
     return id ? structureSpineType(id, false) : undefined;
   }
@@ -205,7 +205,6 @@ export function formatTypeExpr(expr: TypeExpr, models: StructureModel[] = []): s
   }
 }
 
-// AI : TODO refactor — canonical copy; export and delete duplicate in structure.ts.
 function fieldDescribe(f: ModelField): string | undefined {
   const parts: string[] = [];
   if (f.description.trim()) parts.push(f.description.trim());
@@ -214,7 +213,7 @@ function fieldDescribe(f: ModelField): string | undefined {
   return parts.length ? parts.join(" — ") : undefined;
 }
 
-function withFieldMeta(schema: ZodType, f: ModelField): ZodType {
+export function withFieldMeta(schema: ZodType, f: ModelField): ZodType {
   const d = fieldDescribe(f);
   return d ? schema.describe(d) : schema;
 }

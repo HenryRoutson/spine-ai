@@ -28,8 +28,8 @@ function moduleForFingerprint(m: PipelineModule) {
     code: m.code ?? null,
     fallbackList: m.fallbackList?.length ? m.fallbackList : null,
     model: m.model ?? null,
-    docParseMode: m.docParseMode ?? null,
     useOcr: m.useOcr ?? null,
+    note: m.note ?? null,
     outIsList: m.outIsList ?? null,
   }
 }

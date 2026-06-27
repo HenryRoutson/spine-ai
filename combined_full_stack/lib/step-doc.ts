@@ -2,7 +2,7 @@ import type { DocId, DocRef, RunStep } from "@/lib/types"
 import type { DocViewMode } from "@/lib/doc-viewer"
 import { isMarkdownDoc, isPdfDoc } from "@/lib/doc-content"
 
-// AI : resolve the source doc for an input / doc-to-text step — new runs store docId; older runs parse the preview.
+// AI : resolve the source doc for an input step — new runs store docId; older runs parse the preview.
 export function stepDocId(step: RunStep): DocId | undefined {
   if (step.docId) return step.docId
   if (step.outputJson) {

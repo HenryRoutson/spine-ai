@@ -214,6 +214,12 @@ flag and block uploads if they contain 'confidential' until you click approve
 
 uploading a new document will check if it matches any of the existing structs and display this. you have the option to add any new structures in the document.
 
+when viewing a pdf or image you need to options to see 
+1. raw markdown text
+2. formatted markdown
+3. pdf
+4. OCR labelled
+
 # Billing 
 current credit.
 brekadown of spend between different models sorted by most spend. 

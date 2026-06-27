@@ -1,13 +1,17 @@
-// AI : TODO refactor — align with apiError/HTTP + requireAuthStore (see app/api/billing/route.ts).
 import { NextResponse, type NextRequest } from "next/server";
-import { confirmCheckoutSession, getBillingUserKey } from "@/lib/server/billing_account";
+import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { HTTP } from "@/lib/server/api-errors";
+import { type BillingUserKey, confirmCheckoutSession } from "@/lib/server/billing_account";
 
 export async function POST(req: NextRequest) {
+  const ctx = await requireAuthStore();
+  if (ctx instanceof NextResponse) return ctx;
+
   const { sessionId } = (await req.json()) as { sessionId?: string };
-  if (!sessionId) return NextResponse.json({ error: "sessionId required" }, { status: 400 });
+  if (!sessionId) return apiError("sessionId required", HTTP.BAD_REQUEST);
 
   try {
-    const key = await getBillingUserKey();
+    const key = ctx.auth.userId as unknown as BillingUserKey;
     const { account, creditedCents } = await confirmCheckoutSession(key, sessionId);
     return NextResponse.json({
       balanceCents: account.balanceCents,
@@ -16,6 +20,6 @@ export async function POST(req: NextRequest) {
       creditedCents,
     });
   } catch (err) {
-    return NextResponse.json({ error: (err as Error).message }, { status: 500 });
+    return apiError((err as Error).message, HTTP.INTERNAL);
   }
 }

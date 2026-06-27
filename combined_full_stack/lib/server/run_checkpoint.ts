@@ -38,12 +38,18 @@ export type RunCheckpoint = {
     moduleId: ModuleId;
     label: string;
     kind: PipelineModule["kind"];
-    code: string;
-    entries: ParsedCustomCodeEntry[];
+    code?: string;
+    entries?: ParsedCustomCodeEntry[];
     input: unknown;
     pipelineState?: import("../run-types").PipelineState;
   };
 };
+
+export class HumanReviewPendingError extends Error {
+  constructor(readonly input: unknown) {
+    super("human review pending");
+  }
+}
 
 export class ClientStepPendingError extends Error {
   constructor(

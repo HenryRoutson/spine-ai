@@ -109,6 +109,7 @@
       "id": "mod_input_legal",
       "kind": "input",
       "label": "Legal Document",
+      "note": "Parse the contract and annotate its governing purpose.",
       "inputType": [
         "text",
         "pdf"
@@ -119,18 +120,6 @@
       "cached": true,
       "avgMs": 110,
       "avgCostCents": 0
-    },
-    {
-      "id": "mod_doc2text",
-      "kind": "doc-to-text",
-      "label": "Doc → Text",
-      "note": "Parse the contract and annotate its governing purpose.",
-      "inputDescription": "Legal contract Document from the upload step, ready for text extraction",
-      "inStructureId": "m_builtin_document",
-      "outStructureId": "m_builtin_document",
-      "cached": true,
-      "avgMs": 460,
-      "avgCostCents": 1
     },
     {
       "id": "mod_extract_rules",

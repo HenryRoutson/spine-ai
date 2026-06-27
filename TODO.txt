@@ -393,6 +393,8 @@ how does SOURCE DOCUMENT: work?
 SOURCE DOCUMENT: needs to be highlighted in logging.  need a quote step to add which handles stuff.
 
 
+do i need the 2 llm call thing? output json in not formatted first.
+
 setup as an agent API, decouple UI
 
 
@@ -495,6 +497,3 @@ External write-back — CRM, ERP, ticketing (export CSV/JSON is enough for v1)
 Retrieval connector — live KB/vector search instead of static uploads
 Better OCR / images — receipts, scanned clinical forms
 Tabular join step — reconciliation without bespoke Custom TS every time
-
-
-
