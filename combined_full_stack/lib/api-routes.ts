@@ -24,6 +24,7 @@ export const API_ROUTES = {
   pipelineAssistant: "/api/pipeline-assistant",
   pipelineSummary: "/api/pipeline-summary",
   structureAssistant: "/api/structure-assistant",
+  feedback: "/api/feedback",
   supabaseEnv: "/api/supabase-env",
 } as const
 

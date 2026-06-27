@@ -41,6 +41,7 @@ import { Documents } from "@/components/documents"
 import { Billing } from "@/components/billing"
 import { Settings as SettingsPanel } from "@/components/settings"
 import { Projects } from "@/components/projects"
+import { FeedbackButton } from "@/components/feedback-button"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -324,6 +325,7 @@ function Shell() {
             default model
           </span>
           <ModelSelector value={model} onChange={setModel} />
+          <FeedbackButton />
           <AccountMenu />
         </div>
       </header>

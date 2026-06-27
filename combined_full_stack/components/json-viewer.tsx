@@ -9,38 +9,43 @@ import {
   JSON_VIEWER_SETTINGS_CHANGED_EVENT,
   readJsonViewerDefaultView,
   readJsonViewerSyntaxTheme,
+  type JsonViewerHumanViewId,
 } from "@/lib/json-viewer"
 
 interface JsonViewerEmbedProps {
   json: string
   className?: string
+  // AI : per-embed override — inference final output defaults to table without changing global prefs
+  defaultView?: JsonViewerHumanViewId
 }
 
-export function JsonViewerEmbed({ json, className }: JsonViewerEmbedProps) {
+export function JsonViewerEmbed({ json, className, defaultView }: JsonViewerEmbedProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   function post(payload: object) {
     iframeRef.current?.contentWindow?.postMessage(payload, "*")
   }
 
+  const resolvedDefaultView = defaultView ?? readJsonViewerDefaultView()
+
   function sendLoad() {
     post({
       type: "json-viewer:load",
       json,
-      defaultView: readJsonViewerDefaultView(),
+      defaultView: resolvedDefaultView,
       syntaxTheme: readJsonViewerSyntaxTheme(),
     })
   }
 
   useEffect(() => {
     sendLoad()
-  }, [json]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [json, resolvedDefaultView]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const onSettings = () => {
       post({
         type: "json-viewer:settings",
-        defaultView: readJsonViewerDefaultView(),
+        defaultView: resolvedDefaultView,
         syntaxTheme: readJsonViewerSyntaxTheme(),
       })
     }

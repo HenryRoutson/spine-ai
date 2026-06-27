@@ -27,7 +27,7 @@ import { useAppShell } from "@/lib/app-shell"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
-import type { DocId, DocRef, InputDescriptionCheckResult, LlmCallRecord, ModuleId, PipelineModule, PipelineRun, StepProgress, StepSubProgress } from "@/lib/types"
+import type { DocId, DocRef, InputDescriptionCheckResult, LlmCallRecord, ModuleId, PipelineModule, PipelineRun, RunStep, StepProgress, StepSubProgress } from "@/lib/types"
 import type { StepUiState } from "@/lib/run-engine"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
@@ -46,8 +46,13 @@ import { RunNotesPad } from "@/components/run-notes-pad"
 import { StepServerLogsSection } from "@/components/server-logs-panel"
 import { StepInputDescription, moduleInputDescription } from "@/components/step-input-description"
 import { JsonHighlight } from "@/components/highlight"
+import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { LlmCallDistribution } from "@/components/llm-call-distribution"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
+import {
+  INFERENCE_SETTINGS_CHANGED_EVENT,
+  readInferenceOutputStepsOnly,
+} from "@/lib/inference-settings"
 import type { JobLogEntry } from "@/lib/types"
 import type { ClientStepSpec } from "@/lib/run-types"
 
@@ -69,10 +74,17 @@ export function Inference() {
   const { setActiveWindow, openLogging } = useAppShell()
   const { open } = useDocViewer()
   const [, bumpValidityPrefs] = useState(0)
+  const [outputStepsOnly, setOutputStepsOnly] = useState(false)
   useEffect(() => {
     const onChange = () => bumpValidityPrefs((n) => n + 1)
     window.addEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
     return () => window.removeEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
+  }, [])
+  useEffect(() => {
+    setOutputStepsOnly(readInferenceOutputStepsOnly())
+    const onChange = () => setOutputStepsOnly(readInferenceOutputStepsOnly())
+    window.addEventListener(INFERENCE_SETTINGS_CHANGED_EVENT, onChange)
+    return () => window.removeEventListener(INFERENCE_SETTINGS_CHANGED_EVENT, onChange)
   }, [])
   const pipelineInvalid = computeInvalidForUi(modules, models).size > 0
   const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
@@ -96,12 +108,18 @@ export function Inference() {
     refreshBilling().catch(console.error)
   }, [refreshBilling])
 
+  const outputSteps = useMemo(() => {
+    const all = run.run?.steps.filter((s) => s.outputJson || s.outputPreview.trim()) ?? []
+    if (!outputStepsOnly) return all
+    return all.filter((s) => s.kind === "output" && s.outputJson)
+  }, [run.run, outputStepsOnly])
+
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
         step="04 / Inference"
         title="Run Pipeline"
-        description="Assign inputs and run the pipeline. Full output and traces live in Logging."
+        description="Assign inputs and run the pipeline. Final output appears here when the run finishes."
         actions={
           run.phase !== "idle" ? (
             <Button variant="outline" size="sm" className="bg-transparent" onClick={run.reset} disabled={run.phase === "running"}>
@@ -131,7 +149,7 @@ export function Inference() {
         </div>
       ) : (
       <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-2xl space-y-4 p-5">
+          <div className="mx-auto max-w-4xl space-y-4 p-5">
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -224,112 +242,104 @@ export function Inference() {
 
             {run.error && run.phase !== "done" && <ErrorBanner text={run.error} />}
 
-            {run.run && run.phase === "done" && (
-              <div className="rounded-lg border border-border bg-card px-6 py-8 text-center">
-                {run.run.status === "ok" ? (
-                  <CheckCircle2 className="mx-auto h-10 w-10 text-primary" />
-                ) : (
-                  <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
-                )}
-                {run.run.status === "ok" ? (
-                  <>
-                    <p className="mt-4 text-sm font-medium">Pipeline finished</p>
-                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                      Output, step traces, and costs are in Logging.
-                    </p>
-                  </>
-                ) : run.runErrorDisplay ? (
-                  <RunErrorSummary display={run.runErrorDisplay} technical={run.runErr} className="mt-4 text-left" />
-                ) : (
-                  <>
-                    <p className="mt-4 text-sm font-medium">Pipeline could not finish</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Something went wrong during the run. Open Logging for step details.
-                    </p>
-                  </>
-                )}
-                <GoToLoggingButton
-                  className="mt-4"
-                  onClick={() => openLogging(run.run!.id)}
-                />
-              </div>
-            )}
-
             {(run.phase === "running" || run.phase === "done") && (
-              <div className="rounded-lg border border-border p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    progress
-                  </span>
-                  <span className="font-mono text-[11px] text-primary">{run.progressPct}%</span>
-                </div>
-                <Progress value={run.progressPct} className="h-1.5" />
-                {run.phase === "running" && (
-                  <CyclingWaitPhrase phrase={run.waitPhrase} className="mt-3" />
+              <>
+                {run.phase === "done" && outputSteps.length > 0 && (
+                  <InferenceRunOutputs steps={outputSteps} />
                 )}
-                {run.phase === "done" && run.run && (
-                  <GoToLoggingButton
-                    className="mt-4"
-                    onClick={() => openLogging(run.run!.id)}
-                  />
+
+                {run.phase === "done" && run.run && run.run.status !== "ok" && (
+                  <div className="rounded-lg border border-border bg-card px-6 py-6">
+                    {run.runErrorDisplay ? (
+                      <RunErrorSummary display={run.runErrorDisplay} technical={run.runErr} />
+                    ) : (
+                      <div className="text-center">
+                        <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
+                        <p className="mt-4 text-sm font-medium">Pipeline could not finish</p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          Something went wrong during the run. See step trace below.
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
-                <div className="mt-4 space-y-2.5">
-                  {segmentPipeline(modules).map((seg) => {
-                    if (seg.kind === "combine") {
-                      const combineUi = run.stepStates.get(seg.combine.id)
-                      const inputUi = run.stepStates.get(seg.input.id)
-                      const inputState = inputUi?.status ?? "idle"
-                      const state = mergeCombineSegmentStatus(
-                        combineUi?.status ?? "idle",
-                        inputState,
-                      )
-                      const combineDesc = stepDescriptionMeta(seg.combine.id, run.run, combineUi)
-                      const inputDesc = stepDescriptionMeta(seg.input.id, run.run, inputUi)
+
+                <div className="rounded-lg border border-border p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      {run.phase === "done" ? "step trace" : "progress"}
+                    </span>
+                    <span className="font-mono text-[11px] text-primary">{run.progressPct}%</span>
+                  </div>
+                  <Progress value={run.progressPct} className="h-1.5" />
+                  {run.phase === "running" && (
+                    <CyclingWaitPhrase phrase={run.waitPhrase} className="mt-3" />
+                  )}
+                  {run.phase === "done" && run.run && (
+                    <GoToLoggingButton
+                      className="mt-4"
+                      onClick={() => openLogging(run.run!.id)}
+                    />
+                  )}
+                  <div className="mt-4 space-y-2.5">
+                    {segmentPipeline(modules).map((seg) => {
+                      if (seg.kind === "combine") {
+                        const combineUi = run.stepStates.get(seg.combine.id)
+                        const inputUi = run.stepStates.get(seg.input.id)
+                        const inputState = inputUi?.status ?? "idle"
+                        const state = mergeCombineSegmentStatus(
+                          combineUi?.status ?? "idle",
+                          inputState,
+                        )
+                        const combineDesc = stepDescriptionMeta(seg.combine.id, run.run, combineUi)
+                        const inputDesc = stepDescriptionMeta(seg.input.id, run.run, inputUi)
+                        return (
+                          <div key={seg.combine.id} className="space-y-1">
+                            <StepRow
+                              label={seg.combine.label}
+                              state={state}
+                              sub={combineUi?.sub}
+                              inputDescription={moduleInputDescription(seg.combine)}
+                              inputDescriptionCheck={combineDesc.check}
+                              descriptionCheckLlmCalls={combineDesc.descriptionCheckLlmCalls}
+                              descriptionCheckCostCents={combineDesc.descriptionCheckCostCents}
+                              serverLogs={run.logsByModule.get(seg.combine.id) ?? []}
+                            />
+                            <StepRow
+                              label={seg.input.label}
+                              state={inputState}
+                              sub={inputUi?.sub}
+                              nested
+                              inputDescription={moduleInputDescription(seg.input)}
+                              inputDescriptionCheck={inputDesc.check}
+                              descriptionCheckLlmCalls={inputDesc.descriptionCheckLlmCalls}
+                              descriptionCheckCostCents={inputDesc.descriptionCheckCostCents}
+                              serverLogs={run.logsByModule.get(seg.input.id) ?? []}
+                            />
+                          </div>
+                        )
+                      }
+                      const moduleUi = run.stepStates.get(seg.module.id)
+                      const moduleDesc = stepDescriptionMeta(seg.module.id, run.run, moduleUi)
                       return (
-                        <div key={seg.combine.id} className="space-y-1">
-                          <StepRow
-                            label={seg.combine.label}
-                            state={state}
-                            sub={combineUi?.sub}
-                            inputDescription={moduleInputDescription(seg.combine)}
-                            inputDescriptionCheck={combineDesc.check}
-                            descriptionCheckLlmCalls={combineDesc.descriptionCheckLlmCalls}
-                            descriptionCheckCostCents={combineDesc.descriptionCheckCostCents}
-                            serverLogs={run.logsByModule.get(seg.combine.id) ?? []}
-                          />
-                          <StepRow
-                            label={seg.input.label}
-                            state={inputState}
-                            sub={inputUi?.sub}
-                            nested
-                            inputDescription={moduleInputDescription(seg.input)}
-                            inputDescriptionCheck={inputDesc.check}
-                            descriptionCheckLlmCalls={inputDesc.descriptionCheckLlmCalls}
-                            descriptionCheckCostCents={inputDesc.descriptionCheckCostCents}
-                            serverLogs={run.logsByModule.get(seg.input.id) ?? []}
-                          />
-                        </div>
+                        <StepRow
+                          key={seg.module.id}
+                          label={seg.module.label}
+                          state={moduleUi?.status ?? "idle"}
+                          sub={moduleUi?.sub}
+                          isOutputStep={seg.module.kind === "output"}
+                          inputDescription={moduleInputDescription(seg.module)}
+                          inputDescriptionCheck={moduleDesc.check}
+                          descriptionCheckLlmCalls={moduleDesc.descriptionCheckLlmCalls}
+                          descriptionCheckCostCents={moduleDesc.descriptionCheckCostCents}
+                          serverLogs={run.logsByModule.get(seg.module.id) ?? []}
+                        />
                       )
-                    }
-                    const moduleUi = run.stepStates.get(seg.module.id)
-                    const moduleDesc = stepDescriptionMeta(seg.module.id, run.run, moduleUi)
-                    return (
-                      <StepRow
-                        key={seg.module.id}
-                        label={seg.module.label}
-                        state={moduleUi?.status ?? "idle"}
-                        sub={moduleUi?.sub}
-                        inputDescription={moduleInputDescription(seg.module)}
-                        inputDescriptionCheck={moduleDesc.check}
-                        descriptionCheckLlmCalls={moduleDesc.descriptionCheckLlmCalls}
-                        descriptionCheckCostCents={moduleDesc.descriptionCheckCostCents}
-                        serverLogs={run.logsByModule.get(seg.module.id) ?? []}
-                      />
-                    )
-                  })}
+                    })}
+                  </div>
+                  <div ref={run.logEndRef} />
                 </div>
-                <div ref={run.logEndRef} />
-              </div>
+              </>
             )}
           </div>
       </div>
@@ -432,6 +442,81 @@ function InferenceInputSlot({
       )}
       {issue && (
         <p className="mt-2 font-mono text-[10px] text-destructive">{issue.message}</p>
+      )}
+    </div>
+  )
+}
+
+function OutputStepLabel() {
+  return (
+    <span className="shrink-0 rounded border border-white/70 bg-white/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-foreground">
+      output
+    </span>
+  )
+}
+
+function outputStepOutlineClass(isOutputStep: boolean) {
+  return isOutputStep ? "border-white/55 ring-1 ring-white/35" : "border-border"
+}
+
+function InferenceRunOutputs({ steps }: { steps: RunStep[] }) {
+  return (
+    <div className="space-y-3">
+      <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">outputs</p>
+      {steps.map((step, i) => (
+        <InferenceStepOutput
+          key={step.moduleId}
+          step={step}
+          expanded={i === steps.length - 1}
+          isOutputStep={step.kind === "output"}
+        />
+      ))}
+    </div>
+  )
+}
+
+function InferenceStepOutput({
+  step,
+  expanded,
+  isOutputStep,
+}: {
+  step: RunStep
+  expanded: boolean
+  isOutputStep: boolean
+}) {
+  const ok = step.status === "ok" || step.status === "cached"
+  return (
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-lg border bg-card",
+        outputStepOutlineClass(isOutputStep),
+      )}
+    >
+      {isOutputStep && (
+        <span className="absolute bottom-0 left-0 top-0 w-1 bg-white/90 shadow-[2px_0_8px_rgba(255,255,255,0.15)]" aria-hidden />
+      )}
+      <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+        {ok ? (
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
+        ) : (
+          <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+        )}
+        <p className="min-w-0 flex-1 truncate text-sm font-medium">{step.label}</p>
+        {isOutputStep && <OutputStepLabel />}
+        {step.status === "cached" && (
+          <span className="font-mono text-[10px] text-chart-3">cached</span>
+        )}
+      </div>
+      {step.outputJson ? (
+        <div className={expanded ? "h-[min(28rem,55vh)]" : "h-[min(16rem,32vh)]"}>
+          <JsonPreviewPanel json={step.outputJson} defaultView="table" className="h-full" />
+        </div>
+      ) : (
+        <div className="max-h-48 overflow-auto px-4 py-3">
+          <pre className="whitespace-pre-wrap font-mono text-[11px] text-muted-foreground">
+            {step.outputPreview}
+          </pre>
+        </div>
       )}
     </div>
   )
@@ -565,6 +650,7 @@ function StepRow({
   state,
   nested,
   sub,
+  isOutputStep = false,
   inputDescription,
   inputDescriptionCheck,
   descriptionCheckLlmCalls,
@@ -575,6 +661,7 @@ function StepRow({
   state: StepProgress["status"] | "idle"
   nested?: boolean
   sub?: StepSubProgress
+  isOutputStep?: boolean
   inputDescription?: string
   inputDescriptionCheck?: InputDescriptionCheckResult
   descriptionCheckLlmCalls?: LlmCallRecord[]
@@ -586,24 +673,36 @@ function StepRow({
     (state === "running" || state === "ok" || state === "error") &&
     (descriptionCheckLlmCalls?.length ?? 0) > 0
 
-  return (
-    <div className={cn(nested && "pl-5")}>
-      <div className="flex items-center gap-2.5">
-        {state === "ok" && <CheckCircle2 className="h-4 w-4 text-primary" />}
-        {state === "cached" && <Zap className="h-4 w-4 text-chart-3" />}
-        {state === "running" && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-        {state === "error" && <AlertTriangle className="h-4 w-4 text-destructive" />}
-        {state === "idle" && <Circle className="h-4 w-4 text-muted-foreground/40" />}
-        <span className={cn("flex-1 text-xs", state === "idle" ? "text-muted-foreground" : "text-foreground")}>
-          {label}
+  const header = (
+    <div className="flex items-center gap-2.5">
+      {state === "ok" && <CheckCircle2 className="h-4 w-4 text-primary" />}
+      {state === "cached" && <Zap className="h-4 w-4 text-chart-3" />}
+      {state === "running" && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+      {state === "error" && <AlertTriangle className="h-4 w-4 text-destructive" />}
+      {state === "idle" && <Circle className="h-4 w-4 text-muted-foreground/40" />}
+      <span className={cn("flex-1 text-xs", state === "idle" ? "text-muted-foreground" : "text-foreground")}>
+        {label}
+      </span>
+      {isOutputStep && <OutputStepLabel />}
+      {state === "cached" && <span className="font-mono text-[10px] text-chart-3">cache · $0.00</span>}
+      {descriptionCheckCostCents != null && descriptionCheckCostCents > 0 && state !== "idle" && state !== "cached" && (
+        <span className="font-mono text-[10px] text-muted-foreground">
+          desc check · {formatCostCents(descriptionCheckCostCents)}
         </span>
-        {state === "cached" && <span className="font-mono text-[10px] text-chart-3">cache · $0.00</span>}
-        {descriptionCheckCostCents != null && descriptionCheckCostCents > 0 && state !== "idle" && state !== "cached" && (
-          <span className="font-mono text-[10px] text-muted-foreground">
-            desc check · {formatCostCents(descriptionCheckCostCents)}
-          </span>
-        )}
-      </div>
+      )}
+    </div>
+  )
+
+  return (
+    <div className={cn("relative", nested && "pl-5")}>
+      {isOutputStep ? (
+        <div className={cn("relative rounded-md border px-2.5 py-2", outputStepOutlineClass(true))}>
+          <span className="absolute bottom-1 left-0 top-1 w-1 rounded-r bg-white/90" aria-hidden />
+          {header}
+        </div>
+      ) : (
+        header
+      )}
       <StepInputDescription
         description={inputDescription}
         check={inputDescriptionCheck}

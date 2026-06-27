@@ -29,6 +29,11 @@ import {
   writeHideInputDescriptionsDefault,
   writeRequireInputDescriptions,
 } from "@/lib/logging-settings"
+import {
+  DEFAULT_INFERENCE_OUTPUT_STEPS_ONLY,
+  readInferenceOutputStepsOnly,
+  writeInferenceOutputStepsOnly,
+} from "@/lib/inference-settings"
 import { Switch } from "@/components/ui/switch"
 
 // AI : vscode-style preview colors — mirror public/json-viewer.html theme "vscode"
@@ -76,6 +81,7 @@ export function Settings() {
   const [hideServerLogs, setHideServerLogs] = useState(DEFAULT_HIDE_SERVER_LOGS)
   const [hideInputDescriptions, setHideInputDescriptions] = useState(DEFAULT_HIDE_INPUT_DESCRIPTIONS)
   const [requireInputDescriptions, setRequireInputDescriptions] = useState(DEFAULT_REQUIRE_INPUT_DESCRIPTIONS)
+  const [inferenceOutputStepsOnly, setInferenceOutputStepsOnly] = useState(DEFAULT_INFERENCE_OUTPUT_STEPS_ONLY)
 
   useEffect(() => {
     setDefaultView(readJsonViewerDefaultView())
@@ -83,6 +89,7 @@ export function Settings() {
     setHideServerLogs(readHideServerLogsDefault())
     setHideInputDescriptions(readHideInputDescriptionsDefault())
     setRequireInputDescriptions(readRequireInputDescriptions())
+    setInferenceOutputStepsOnly(readInferenceOutputStepsOnly())
   }, [])
 
   function pickView(view: JsonViewerHumanViewId) {
@@ -108,6 +115,11 @@ export function Settings() {
   function pickRequireInputDescriptions(required: boolean) {
     writeRequireInputDescriptions(required)
     setRequireInputDescriptions(required)
+  }
+
+  function pickInferenceOutputStepsOnly(onlyOutputSteps: boolean) {
+    writeInferenceOutputStepsOnly(onlyOutputSteps)
+    setInferenceOutputStepsOnly(onlyOutputSteps)
   }
 
   return (
@@ -236,6 +248,28 @@ export function Settings() {
                 <span className="block text-sm font-medium">Require input descriptions on every step</span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
                   When on, the pipeline is invalid until each step has an expected-input note. Validation checks are still optional per step.
+                </span>
+              </span>
+            </label>
+          </section>
+
+          <section className="rounded-lg border border-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+              <h3 className="text-sm font-semibold">Inference</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Output panels shown after a pipeline run finishes.
+              </p>
+            </div>
+            <label className="flex cursor-pointer items-start gap-3 px-4 py-3">
+              <Switch
+                checked={inferenceOutputStepsOnly}
+                onCheckedChange={(checked) => pickInferenceOutputStepsOnly(!!checked)}
+                className="mt-0.5"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">Only show output-step tables</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  When on, the inference tab shows spreadsheet views only for pipeline output steps — not intermediate step results.
                 </span>
               </span>
             </label>

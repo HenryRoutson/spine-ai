@@ -66,22 +66,26 @@ ask an ai assistant to change the models for you
 A central visualisation of all steps of the pipeline with boxes for each step and a descrpition and associated icon.
 
 steps include 
-  input - select a any subset of input types like pdf, word not just 1. select doucment to be default.
-    PDF - add a is_use_ocr toggle if pdf is an option.
-    Word
-    Excel
-    JSON
-    Text
-    Web
-    Image - add a is_use_ocr toggle
-    n8n
-  custom function - typescript or python, with built in fallback system
-  single llm call
-  parallel llm call - ensuring this completes in a similar time to the single call.
-  doc to text
-  output (there can be multiple per pipeline)
+
+1. input - select a any subset of input types like pdf, word not just 1. select doucment to be default.
+2. custom function - typescript or python, with built in fallback system
+single llm call
+3. parallel llm call - ensuring this completes in a similar time to the single call.
+4. output (there can be multiple per pipeline)
+
 
   transform which converts a list into a single pydantic / zod model with a field containing that list
+
+
+Input types include 
+1. PDF - add a is_use_ocr toggle if pdf is an option.
+2. Word
+4. Excel
+5. JSON
+6. Text
+7. Web
+8. Image - add a is_use_ocr toggle
+
 
 each step has input and output types.
 input is different because it accepts pdfs for example, but everything else is validated json against pydantic models / zod defined in the structures.
