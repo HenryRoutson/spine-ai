@@ -1,3 +1,4 @@
+import { runBilledCents } from "@/lib/run-metrics";
 import { type BillingPoint, type ModuleId, type PipelineRun, modelOption } from "./types";
 
 type DayLabel = string; // e.g. "Jun 11"
@@ -18,13 +19,12 @@ export function billingFromRuns(runs: PipelineRun[]): BillingPoint[] {
     for (const step of run.steps) {
       if (step.costCents <= 0) continue;
       const key =
-        step.kind === "doc-to-text" && !step.model
-          ? "doc-parse svc"
-          : modelOption(step.model ?? run.model).label;
+        run.source === "shared_link"
+          ? "shared link"
+          : step.kind === "doc-to-text" && !step.model
+            ? "doc-parse svc"
+            : modelOption(step.model ?? run.model).label;
       bucket.spend[key] = +((bucket.spend[key] ?? 0) + step.costCents).toFixed(4);
-      if (run.source === "shared_link") {
-        bucket.spend["shared link"] = +((bucket.spend["shared link"] ?? 0) + step.costCents).toFixed(4);
-      }
     }
     byDay.set(day, bucket);
   }
@@ -51,6 +51,11 @@ export function spendSplit(runs: PipelineRun[]): { cheapCents: number; frontierC
 // AI : cache savings = cents avoided by cache hits (cross-checks Logging savedCents).
 export function totalSaved(runs: PipelineRun[]): number {
   return +runs.reduce((a, r) => a + r.savedCents, 0).toFixed(4);
+}
+
+// AI : sum run-level billed totals — matches billRunUsage deductions (sub-cent safe).
+export function totalUsageFromRuns(runs: PipelineRun[]): number {
+  return +runs.reduce((a, r) => a + runBilledCents(r), 0).toFixed(4);
 }
 
 // AI : real run history only — empty until the user has pipeline runs.

@@ -3,11 +3,11 @@
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { API_ROUTES } from "@/lib/api-routes"
 import { JSON_HEADERS } from "@/lib/api-client"
-import { formatUsdFromCents } from "@/lib/format"
+import { formatUsdFromCents, formatCostCents } from "@/lib/format"
 import { useMemo, useState } from "react"
 import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts"
 import { useStore } from "@/lib/store"
-import { billingPointsUsd, billingSeries, totalSaved } from "@/lib/billing"
+import { billingPointsUsd, billingSeries, totalSaved, totalUsageFromRuns } from "@/lib/billing"
 import { redirectToCheckout } from "@/lib/stripe-client"
 import { MODEL_OPTIONS } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
@@ -102,10 +102,12 @@ export function Billing() {
   }, [chartData, series])
 
   const grand = Object.values(totals).reduce((a, b) => a + b, 0)
-  const hasSpend = grand > 0
+  const usageFromRunsCents = useMemo(() => totalUsageFromRuns(scopedRuns), [scopedRuns])
+  const hasSpend = usageFromRunsCents > 0 || grand > 0
   const hasRuns = scopedRuns.length > 0
   const cheapSpend = series.filter((s) => isCheapKey(s.key)).reduce((a, s) => a + totals[s.key], 0)
   const frontierSpend = series.filter((s) => !isCheapKey(s.key)).reduce((a, s) => a + totals[s.key], 0)
+  const spendDenominator = usageFromRunsCents > 0 ? usageFromRunsCents : grand
   const savedCents = totalSaved(scopedRuns)
 
   const capReached = billingAccount
@@ -134,7 +136,9 @@ export function Billing() {
               <p className="font-mono text-[10px] uppercase text-muted-foreground">Credit balance</p>
               <p className="font-mono text-3xl font-semibold">{formatUsdFromCents(billingAccount.balanceCents)}</p>
               <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                {formatUsdFromCents(minRunBalanceCents)} minimum to run · billed {formatUsdFromCents(billingAccount.totalBilledCents)} of{" "}
+                {formatUsdFromCents(minRunBalanceCents)} minimum to run · usage{" "}
+                {formatCostCents(billingAccount.totalUsageCents ?? usageFromRunsCents)} · paid{" "}
+                {formatUsdFromCents(billingAccount.totalBilledCents)} of{" "}
                 {formatUsdFromCents(billingAccount.billingCapCents)} cap
                 {capReached ? " — cap reached" : ""}
               </p>
@@ -200,17 +204,17 @@ export function Billing() {
       )}
 
       <div className="shrink-0 grid grid-cols-2 gap-px border-b border-border bg-border lg:grid-cols-4">
-        <Stat label="Total spend" value={formatUsdFromCents(grand)} />
+        <Stat label="Total spend" value={formatCostCents(usageFromRunsCents)} />
         <Stat
           label="Open / cheap models"
           value={formatUsdFromCents(cheapSpend)}
-          sub={hasSpend ? `${Math.round((cheapSpend / grand) * 100)}% of spend` : hasRuns ? "cached runs only" : "no runs yet"}
+          sub={hasSpend ? `${Math.round((cheapSpend / spendDenominator) * 100)}% of spend` : hasRuns ? "cached runs only" : "no runs yet"}
           good
         />
         <Stat
           label="Frontier models"
           value={formatUsdFromCents(frontierSpend)}
-          sub={hasSpend ? `${Math.round((frontierSpend / grand) * 100)}% of spend` : hasRuns ? "cached runs only" : "no runs yet"}
+          sub={hasSpend ? `${Math.round((frontierSpend / spendDenominator) * 100)}% of spend` : hasRuns ? "cached runs only" : "no runs yet"}
         />
         <Stat label="Cache savings" value={formatUsdFromCents(savedCents)} sub="vs no caching" good />
       </div>
@@ -314,7 +318,7 @@ export function Billing() {
             <ul className="divide-y divide-border">
               {series.map((s) => {
                 const value = totals[s.key]
-                const pct = (value / grand) * 100
+                const pct = spendDenominator > 0 ? (value / spendDenominator) * 100 : 0
                 return (
                   <li key={s.key} className="flex items-center gap-3 px-4 py-2.5">
                     <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: s.color }} />
@@ -322,7 +326,7 @@ export function Billing() {
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
                       <div className="h-full rounded-full" style={{ width: `${pct}%`, background: s.color }} />
                     </div>
-                    <span className="w-16 text-right font-mono text-xs">{formatUsdFromCents(value)}</span>
+                    <span className="w-16 text-right font-mono text-xs">{formatCostCents(value)}</span>
                     <span className="w-12 text-right font-mono text-[10px] text-muted-foreground">
                       {pct.toFixed(0)}%
                     </span>

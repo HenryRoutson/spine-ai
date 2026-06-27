@@ -38,6 +38,8 @@ import { stripSharedModels, withSharedModels } from "@/lib/structure"
 export type BillingAccountView = {
   balanceCents: number
   totalBilledCents: number
+  totalUsageCents: number
+  freeCreditCents: number
   subscribed: boolean
   minRunBalanceCents: number
   topupOptionsCents: number[]

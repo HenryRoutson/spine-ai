@@ -11,7 +11,8 @@
     "check-openrouter": "node scripts/check_openrouter_key.mjs",
     "benchmark-parallel": "node scripts/benchmark_parallel_openrouter.mjs",
     "sync-seeds": "npx tsx scripts/sync_seeds_to_supabase.ts",
-    "sync-pricing": "node scripts/sync_openrouter_pricing.mjs"
+    "sync-pricing": "node scripts/sync_openrouter_pricing.mjs",
+    "db:push": "supabase db push"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

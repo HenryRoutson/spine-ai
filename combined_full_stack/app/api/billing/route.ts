@@ -1,4 +1,4 @@
-import { MIN_ACCOUNT_BALANCE_CENTS, MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config";
+import { MIN_ACCOUNT_BALANCE_CENTS, MIN_RUN_BALANCE_CENTS, NEW_ACCOUNT_BALANCE_CENTS } from "@/lib/billing_config";
 import { NextResponse } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import {
@@ -18,10 +18,17 @@ export async function GET() {
 
   const key = ctx.auth.userId as unknown as BillingUserKey;
   const account = await loadBillingAccount(key);
-  apiLog.debug(`GET /api/billing`, { key, balanceCents: account.balanceCents, subscribed: account.subscribed });
+  apiLog.debug(`GET /api/billing`, {
+    key,
+    balanceCents: account.balanceCents,
+    totalUsageCents: account.totalUsageCents,
+    subscribed: account.subscribed,
+  });
   return NextResponse.json({
     balanceCents: account.balanceCents,
     totalBilledCents: account.totalBilledCents,
+    totalUsageCents: account.totalUsageCents ?? 0,
+    freeCreditCents: NEW_ACCOUNT_BALANCE_CENTS,
     subscribed: account.subscribed,
     minRunBalanceCents: MIN_RUN_BALANCE_CENTS,
     minAccountBalanceCents: MIN_ACCOUNT_BALANCE_CENTS,

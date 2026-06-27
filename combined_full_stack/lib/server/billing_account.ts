@@ -30,6 +30,7 @@ export type BillingUserKey = string & { __brand: "BillingUserKey" };
 export type BillingAccount = {
   balanceCents: number;
   totalBilledCents: number;
+  totalUsageCents: number;
   subscribed: boolean;
   creditedSessions: string[];
 };
@@ -50,13 +51,18 @@ export class BillingError extends Error {
 const EMPTY: BillingAccount = {
   balanceCents: NEW_ACCOUNT_BALANCE_CENTS,
   totalBilledCents: 0,
+  totalUsageCents: 0,
   subscribed: false,
   creditedSessions: [],
 };
 
-// AI : Supabase billing_accounts uses int cents; run traces may carry sub-cent costCents.
+// AI : Stripe + cap checks stay whole cents; run usage matches sub-cent step traces (4 dp).
 function toWholeCents(cents: number): number {
   return Math.round(cents);
+}
+
+function toExactCents(cents: number): number {
+  return +Math.max(0, cents).toFixed(4);
 }
 
 function billingFile(): string {
@@ -87,17 +93,38 @@ async function loadSupabaseAccount(userId: BillingUserKey): Promise<BillingAccou
   const db = await createClient();
   const { data, error } = await db
     .from("billing_accounts")
-    .select("balance_cents, total_billed_cents, subscribed, credited_sessions")
+    .select("balance_cents, total_billed_cents, total_usage_cents, subscribed, credited_sessions")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) {
     if (!isMissingBillingTable(error)) console.error("billing_accounts:", error.message);
+    // AI : migration 008 not applied yet — read without total_usage_cents.
+    if ((error.message ?? "").includes("total_usage_cents")) {
+      const legacy = await db
+        .from("billing_accounts")
+        .select("balance_cents, total_billed_cents, subscribed, credited_sessions")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (legacy.error) {
+        if (!isMissingBillingTable(legacy.error)) console.error("billing_accounts:", legacy.error.message);
+        return null;
+      }
+      if (!legacy.data) return null;
+      return {
+        balanceCents: Number(legacy.data.balance_cents),
+        totalBilledCents: Number(legacy.data.total_billed_cents),
+        totalUsageCents: 0,
+        subscribed: legacy.data.subscribed,
+        creditedSessions: legacy.data.credited_sessions ?? [],
+      };
+    }
     return null;
   }
   if (!data) return null;
   return {
-    balanceCents: data.balance_cents,
-    totalBilledCents: data.total_billed_cents,
+    balanceCents: Number(data.balance_cents),
+    totalBilledCents: Number(data.total_billed_cents),
+    totalUsageCents: Number(data.total_usage_cents ?? 0),
     subscribed: data.subscribed,
     creditedSessions: data.credited_sessions ?? [],
   };
@@ -105,13 +132,25 @@ async function loadSupabaseAccount(userId: BillingUserKey): Promise<BillingAccou
 
 async function saveSupabaseAccount(userId: BillingUserKey, account: BillingAccount): Promise<void> {
   const db = await createClient();
-  const { error } = await db.from("billing_accounts").upsert({
+  const row = {
     user_id: userId,
-    balance_cents: toWholeCents(account.balanceCents),
-    total_billed_cents: toWholeCents(account.totalBilledCents),
+    balance_cents: toExactCents(account.balanceCents),
+    total_billed_cents: toExactCents(account.totalBilledCents),
+    total_usage_cents: toExactCents(account.totalUsageCents ?? 0),
     subscribed: account.subscribed,
     credited_sessions: account.creditedSessions,
-  });
+  };
+  const { error } = await db.from("billing_accounts").upsert(row);
+  if (error && (error.message ?? "").includes("total_usage_cents")) {
+    const { total_usage_cents: _drop, ...legacyRow } = row;
+    const legacy = await db.from("billing_accounts").upsert({
+      ...legacyRow,
+      balance_cents: toWholeCents(account.balanceCents),
+      total_billed_cents: toWholeCents(account.totalBilledCents),
+    });
+    if (legacy.error) throw legacy.error;
+    return;
+  }
   if (error) throw error;
 }
 
@@ -132,12 +171,14 @@ export function billingKeyForUser(userId: user_id_string): BillingUserKey {
 export async function loadBillingAccount(key: BillingUserKey): Promise<BillingAccount> {
   if (isLocalJsonBillingKey(key)) {
     const accounts = loadJsonAccounts();
-    return accounts[key] ?? accounts["anon" as BillingUserKey] ?? { ...EMPTY };
+    const row = accounts[key] ?? accounts["anon" as BillingUserKey] ?? { ...EMPTY };
+    return { ...EMPTY, ...row, totalUsageCents: row.totalUsageCents ?? 0 };
   }
   const row = await loadSupabaseAccount(key);
   if (row) return row;
   // AI : no Supabase row yet, or billing_accounts table missing — reuse local JSON keyed by user id.
-  return loadJsonAccounts()[key] ?? { ...EMPTY };
+  const local = loadJsonAccounts()[key] ?? { ...EMPTY };
+  return { ...EMPTY, ...local, totalUsageCents: local.totalUsageCents ?? 0 };
 }
 
 export async function saveBillingAccount(key: BillingUserKey, account: BillingAccount): Promise<void> {
@@ -186,15 +227,19 @@ export const chargeForRun = assertCanStartRun;
 
 // AI : deduct measured LLM / service cost after a run completes (skipped when billedCents is 0).
 export async function billRunUsage(key: BillingUserKey, cents: number): Promise<BillingAccount> {
-  const billed = toWholeCents(Math.max(0, cents));
+  const billed = toExactCents(cents);
   if (billed <= 0) return loadBillingAccount(key);
   const account = await loadBillingAccount(key);
-  const balanceAfter = toWholeCents(account.balanceCents - billed);
+  const balanceAfter = toExactCents(account.balanceCents - billed);
   if (balanceAfter < MIN_ACCOUNT_BALANCE_CENTS) {
     billLog.warn(`billRunUsage floor breached`, { key, balanceAfter, billed, floor: MIN_ACCOUNT_BALANCE_CENTS });
     throw new BillingError("insufficient_funds");
   }
-  const next: BillingAccount = { ...account, balanceCents: balanceAfter };
+  const next: BillingAccount = {
+    ...account,
+    balanceCents: balanceAfter,
+    totalUsageCents: toExactCents((account.totalUsageCents ?? 0) + billed),
+  };
   await saveBillingAccount(key, next);
   billLog.info(`billRunUsage ok`, { key, billed, balanceAfter, rawCents: cents });
   return next;
@@ -270,6 +315,7 @@ export async function confirmCheckoutSession(
   }
 
   const next: BillingAccount = {
+    ...account,
     balanceCents: account.balanceCents + session.amount_total,
     totalBilledCents: account.totalBilledCents + session.amount_total,
     subscribed: account.subscribed || session.mode === "subscription",
@@ -330,6 +376,7 @@ export async function handleStripeWebhook(event: Stripe.Event): Promise<void> {
   }
 
   const next: BillingAccount = {
+    ...account,
     balanceCents: account.balanceCents + creditCents,
     totalBilledCents: account.totalBilledCents + creditCents,
     subscribed: true,

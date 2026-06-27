@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       balanceCents: account.balanceCents,
       totalBilledCents: account.totalBilledCents,
+      totalUsageCents: account.totalUsageCents ?? 0,
       subscribed: account.subscribed,
       creditedCents,
     });
