@@ -4,7 +4,7 @@ import { HTTP, unknownDoc, unknownProject } from "@/lib/server/api-errors";
 import { assertCanStartRun, billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
-import { computeRunFingerprintForRequest, findMatchingRun } from "@/lib/server/run_fingerprint";
+import { computeRunFingerprintForRequest } from "@/lib/server/run_fingerprint";
 import {
   createJob,
   finishJob,
@@ -29,9 +29,6 @@ import {
 import type { DocId, DocRef, ModelId, ModuleId, ProjectId } from "@/lib/server/types";
 
 const apiLog = logger("api:runs");
-
-// AI : TODO refactor — RUN_DEDUP_ENABLED false but client still probes cache; re-enable or delete dead path.
-const RUN_DEDUP_ENABLED = false;
 
 // AI : todo §8 — after() keeps the pipeline alive once the response is sent (Vercel
 // AI : freezes plain dangling promises); maxDuration is the Fluid-compute ceiling.
@@ -119,24 +116,6 @@ export async function POST(req: NextRequest) {
     inputDocIds,
     resolvedByModule,
   );
-  const cachedRun = RUN_DEDUP_ENABLED ? findMatchingRun(store, project, projectId, fingerprint, model) : undefined;
-  if (cachedRun) {
-    apiLog.info(`run deduped — identical pipeline + inputs already completed`, {
-      fingerprint,
-      fingerprintInputDocIds,
-      cachedRunId: cachedRun.id,
-      projectId,
-    });
-    const jobDb = await openJobDb();
-    const jobId = await createJob(auth.userId, jobDb);
-    after(async () => {
-      await withJobLogging(auth.userId, jobId, jobDb, async () => {
-        apiLog.info(`deduped run — skipping pipeline`, { jobId, cachedRunId: cachedRun.id, fingerprint });
-        await finishJob(auth.userId, jobId, { run: cachedRun, deduped: true, cachedRunId: cachedRun.id }, jobDb);
-      });
-    });
-    return NextResponse.json({ jobId, deduped: true, cachedRunId: cachedRun.id, fingerprint });
-  }
 
   const billingKey = await getBillingUserKey();
   const jobDb = await openJobDb();

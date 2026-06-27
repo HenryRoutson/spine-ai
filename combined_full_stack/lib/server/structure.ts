@@ -163,6 +163,19 @@ function defaultTextForField(
   return "";
 }
 
+// AI : document fields accept {content,filename}, legacy {body,doc_id}, or structured rows → JSON text.
+function documentFieldValue(val: unknown, hints: MaterializeHints): { content: string; filename: string } {
+  const doc = documentValueFrom(val, hints);
+  if (doc.content.trim()) return doc;
+  if (val != null && typeof val === "object" && !Array.isArray(val)) {
+    const serialized = JSON.stringify(val);
+    if (serialized && serialized !== "{}") {
+      return { content: serialized, filename: doc.filename || "document.json" };
+    }
+  }
+  return doc;
+}
+
 function coerceFieldValue(
   val: unknown,
   field: ModelField,
@@ -181,6 +194,10 @@ function coerceFieldValue(
     if (field.type === "list[model]" && field.ref && Array.isArray(val)) {
       const ref = models.find((m) => m.id === field.ref);
       if (ref) return val.map((item) => materializeToModel(item, ref, models, hints));
+    }
+    if (field.type === "document") return documentFieldValue(val, hints);
+    if (field.type === "list[document]" && Array.isArray(val)) {
+      return val.map((item) => documentFieldValue(item, hints));
     }
     return val;
   }

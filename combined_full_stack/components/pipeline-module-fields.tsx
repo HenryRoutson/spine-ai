@@ -328,7 +328,14 @@ export function PipelineModuleFields({
         {edit ? (
           <Textarea
             value={selected.inputDescription ?? ""}
-            onChange={(e) => onUpdate!({ inputDescription: e.target.value.trim() || undefined })}
+            onChange={(e) =>
+              onUpdate!({ inputDescription: e.target.value === "" ? undefined : e.target.value })
+            }
+            onBlur={(e) => {
+              const trimmed = e.target.value.trim()
+              const current = selected.inputDescription ?? ""
+              if (trimmed !== current) onUpdate!({ inputDescription: trimmed || undefined })
+            }}
             placeholder='e.g. "A signed W-2 wage statement for tax year 2024"'
             className="min-h-[72px] font-mono text-xs"
           />

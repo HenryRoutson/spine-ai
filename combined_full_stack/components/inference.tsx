@@ -25,8 +25,8 @@ import { useAppShell } from "@/lib/app-shell"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
-import type { DocId, DocRef, InputDescriptionCheckResult, ModuleId, PipelineModule } from "@/lib/types"
-import type { StepProgress, StepSubProgress } from "@/lib/run-engine"
+import type { DocId, DocRef, InputDescriptionCheckResult, LlmCallRecord, ModuleId, PipelineModule, PipelineRun } from "@/lib/types"
+import type { StepProgress, StepSubProgress, StepUiState } from "@/lib/run-engine"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -37,10 +37,13 @@ import { inferenceInputIssueMessage } from "@/lib/inference-validity"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
 import { segmentPipeline, mergeCombineSegmentStatus } from "@/lib/pipeline-layout"
 import { useInferenceRun } from "@/lib/use-inference-run"
+import type { RunErrorDisplay } from "@/lib/run-errors"
+import { resolveInputDescriptionCheck } from "@/lib/input-description"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { RunNotesPad } from "@/components/run-notes-pad"
 import { StepServerLogsSection } from "@/components/server-logs-panel"
 import { StepInputDescription, moduleInputDescription } from "@/components/step-input-description"
+import { LlmCallDistribution } from "@/components/llm-call-distribution"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import type { JobLogEntry } from "@/lib/types"
 
@@ -187,8 +190,6 @@ export function Inference() {
               disabled={
                 !run.allInputsReady ||
                 run.inputsInvalid ||
-                run.validatingInputs ||
-                run.probingCache ||
                 run.phase === "running" ||
                 insufficientCredit
               }
@@ -204,7 +205,7 @@ export function Inference() {
             </>
             )}
 
-            {run.inputsInvalid && !run.validatingInputs && (
+            {run.inputsInvalid && (
               <ErrorBanner text={inferenceInputIssueMessage(run.inputIssues)} />
             )}
 
@@ -212,30 +213,32 @@ export function Inference() {
 
             {run.run && run.phase === "done" && (
               <div className="rounded-lg border border-border bg-card px-6 py-8 text-center">
-                {run.wasDeduped ? (
-                  <Zap className="mx-auto h-10 w-10 text-primary" />
-                ) : run.run.status === "ok" ? (
+                {run.run.status === "ok" ? (
                   <CheckCircle2 className="mx-auto h-10 w-10 text-primary" />
                 ) : (
                   <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
                 )}
-                <p className="mt-4 text-sm font-medium">
-                  {run.wasDeduped
-                    ? "Identical run already completed"
-                    : run.run.status === "ok"
-                      ? "Pipeline finished"
-                      : "Pipeline finished with errors"}
-                </p>
-                <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                  {run.wasDeduped
-                    ? "Pipeline and inputs match a previous run — no compute was used."
-                    : "Output, step traces, and costs are in Logging."}
-                </p>
-                {run.runErr && (
-                  <div className="mt-4 text-left">
-                    <ErrorBanner text={run.runErr} />
-                  </div>
+                {run.run.status === "ok" ? (
+                  <>
+                    <p className="mt-4 text-sm font-medium">Pipeline finished</p>
+                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                      Output, step traces, and costs are in Logging.
+                    </p>
+                  </>
+                ) : run.runErrorDisplay ? (
+                  <RunErrorSummary display={run.runErrorDisplay} technical={run.runErr} className="mt-4 text-left" />
+                ) : (
+                  <>
+                    <p className="mt-4 text-sm font-medium">Pipeline could not finish</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Something went wrong during the run. Open Logging for step details.
+                    </p>
+                  </>
                 )}
+                <GoToLoggingButton
+                  className="mt-4"
+                  onClick={() => openLogging(run.run!.id)}
+                />
               </div>
             )}
 
@@ -254,8 +257,7 @@ export function Inference() {
                 {run.phase === "done" && run.run && (
                   <GoToLoggingButton
                     className="mt-4"
-                    deduped={run.wasDeduped}
-                    onClick={() => openLogging(run.loggingRunId ?? run.run!.id)}
+                    onClick={() => openLogging(run.run!.id)}
                   />
                 )}
                 <div className="mt-4 space-y-2.5">
@@ -268,6 +270,8 @@ export function Inference() {
                         combineUi?.status ?? "idle",
                         inputState,
                       )
+                      const combineDesc = stepDescriptionMeta(seg.combine.id, run.run, combineUi)
+                      const inputDesc = stepDescriptionMeta(seg.input.id, run.run, inputUi)
                       return (
                         <div key={seg.combine.id} className="space-y-1">
                           <StepRow
@@ -275,7 +279,9 @@ export function Inference() {
                             state={state}
                             sub={combineUi?.sub}
                             inputDescription={moduleInputDescription(seg.combine)}
-                            inputDescriptionCheck={run.run?.steps.find((s) => s.moduleId === seg.combine.id)?.inputDescriptionCheck}
+                            inputDescriptionCheck={combineDesc.check}
+                            descriptionCheckLlmCalls={combineDesc.descriptionCheckLlmCalls}
+                            descriptionCheckCostCents={combineDesc.descriptionCheckCostCents}
                             serverLogs={run.logsByModule.get(seg.combine.id) ?? []}
                           />
                           <StepRow
@@ -284,13 +290,16 @@ export function Inference() {
                             sub={inputUi?.sub}
                             nested
                             inputDescription={moduleInputDescription(seg.input)}
-                            inputDescriptionCheck={run.run?.steps.find((s) => s.moduleId === seg.input.id)?.inputDescriptionCheck}
+                            inputDescriptionCheck={inputDesc.check}
+                            descriptionCheckLlmCalls={inputDesc.descriptionCheckLlmCalls}
+                            descriptionCheckCostCents={inputDesc.descriptionCheckCostCents}
                             serverLogs={run.logsByModule.get(seg.input.id) ?? []}
                           />
                         </div>
                       )
                     }
                     const moduleUi = run.stepStates.get(seg.module.id)
+                    const moduleDesc = stepDescriptionMeta(seg.module.id, run.run, moduleUi)
                     return (
                       <StepRow
                         key={seg.module.id}
@@ -298,7 +307,9 @@ export function Inference() {
                         state={moduleUi?.status ?? "idle"}
                         sub={moduleUi?.sub}
                         inputDescription={moduleInputDescription(seg.module)}
-                        inputDescriptionCheck={run.run?.steps.find((s) => s.moduleId === seg.module.id)?.inputDescriptionCheck}
+                        inputDescriptionCheck={moduleDesc.check}
+                        descriptionCheckLlmCalls={moduleDesc.descriptionCheckLlmCalls}
+                        descriptionCheckCostCents={moduleDesc.descriptionCheckCostCents}
                         serverLogs={run.logsByModule.get(seg.module.id) ?? []}
                       />
                     )
@@ -413,15 +424,25 @@ function InferenceInputSlot({
   )
 }
 
-function GoToLoggingButton({
-  deduped,
-  onClick,
-  className,
-}: {
-  deduped: boolean
-  onClick: () => void
-  className?: string
-}) {
+function stepDescriptionMeta(
+  moduleId: ModuleId,
+  run: PipelineRun | null | undefined,
+  stepUi?: StepUiState,
+) {
+  const runStep = run?.steps.find((s) => s.moduleId === moduleId)
+  return {
+    check: resolveInputDescriptionCheck(
+      runStep?.inputDescriptionCheck ?? stepUi?.inputDescriptionCheck,
+      runStep?.outputPreview ?? stepUi?.outputPreview,
+    ),
+    descriptionCheckLlmCalls:
+      runStep?.descriptionCheckLlmCalls ?? stepUi?.descriptionCheckLlmCalls,
+    descriptionCheckCostCents:
+      runStep?.descriptionCheckCostCents ?? stepUi?.descriptionCheckCostCents,
+  }
+}
+
+function GoToLoggingButton({ onClick, className }: { onClick: () => void; className?: string }) {
   return (
     <Button
       className={cn(
@@ -433,7 +454,7 @@ function GoToLoggingButton({
       onClick={onClick}
     >
       <ScrollText className="h-3.5 w-3.5" />
-      {deduped ? "View cached run in Logging" : "Go to logging"}
+      Go to logging
     </Button>
   )
 }
@@ -449,6 +470,46 @@ function CyclingWaitPhrase({ phrase, className }: { phrase: string; className?: 
     >
       {phrase}…
     </p>
+  )
+}
+
+function RunErrorSummary({
+  display,
+  technical,
+  className,
+}: {
+  display: RunErrorDisplay
+  technical?: string | null
+  className?: string
+}) {
+  const [showTechnical, setShowTechnical] = useState(false)
+  const copyText = technical ?? display.detail ?? display.message
+
+  return (
+    <div className={cn("mx-auto max-w-md space-y-3", className)}>
+      <div>
+        <p className="text-sm font-medium text-destructive">{display.title}</p>
+        <p className="mt-2 text-sm leading-relaxed text-foreground">{display.message}</p>
+      </div>
+      <p className="font-mono text-[10px] text-muted-foreground">
+        Fix the issue above, adjust inputs if needed, then run again. Step traces stay in Logging.
+      </p>
+      {(display.detail || technical) && (
+        <div className="space-y-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 bg-transparent px-2 text-[10px]"
+            onClick={() => setShowTechnical((v) => !v)}
+          >
+            {showTechnical ? "Hide technical details" : "Show technical details"}
+          </Button>
+          {showTechnical && (
+            <ErrorBanner text={copyText} />
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -493,6 +554,8 @@ function StepRow({
   sub,
   inputDescription,
   inputDescriptionCheck,
+  descriptionCheckLlmCalls,
+  descriptionCheckCostCents,
   serverLogs = [],
 }: {
   label: string
@@ -501,8 +564,15 @@ function StepRow({
   sub?: StepSubProgress
   inputDescription?: string
   inputDescriptionCheck?: InputDescriptionCheckResult
+  descriptionCheckLlmCalls?: LlmCallRecord[]
+  descriptionCheckCostCents?: number
   serverLogs?: JobLogEntry[]
 }) {
+  const descCheckFailed = inputDescriptionCheck?.matches === false
+  const showDescCheckCalls =
+    (state === "running" || state === "ok" || state === "error") &&
+    (descriptionCheckLlmCalls?.length ?? 0) > 0
+
   return (
     <div className={cn(nested && "pl-5")}>
       <div className="flex items-center gap-2.5">
@@ -515,13 +585,26 @@ function StepRow({
           {label}
         </span>
         {state === "cached" && <span className="font-mono text-[10px] text-chart-3">cache · $0.00</span>}
+        {descriptionCheckCostCents != null && descriptionCheckCostCents > 0 && state !== "idle" && state !== "cached" && (
+          <span className="font-mono text-[10px] text-muted-foreground">
+            desc check · {formatUsdFromCents(descriptionCheckCostCents, 4)}
+          </span>
+        )}
       </div>
       <StepInputDescription
         description={inputDescription}
         check={inputDescriptionCheck}
-        forceVisible={state === "error"}
+        forceVisible={descCheckFailed}
         className={nested ? "pl-5" : "pl-7"}
       />
+      {showDescCheckCalls && (
+        <LlmCallDistribution
+          calls={descriptionCheckLlmCalls}
+          compact
+          title="Description validation"
+          stepSucceeded={!descCheckFailed}
+        />
+      )}
       {state === "running" && sub && (
         <div className="mt-1 pl-7">
           <div className="mb-0.5 flex items-center justify-between gap-2">

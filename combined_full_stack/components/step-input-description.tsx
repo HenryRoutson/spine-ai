@@ -48,8 +48,13 @@ function InputDescriptionCheckPanel({
   }, [check])
 
   const activeItem = listItems?.[itemIndex]
-  const rejected = activeItem ? !activeItem.matches : check.matches === false
-  const reason = activeItem?.reason.trim() || check.reason.trim()
+  const failedItems = listItems?.filter((item) => !item.matches) ?? []
+  const rejected = check.matches === false
+  const reason = (() => {
+    if (!rejected) return activeItem?.reason.trim() ?? ""
+    if (activeItem && !activeItem.matches) return activeItem.reason.trim() || check.reason.trim()
+    return check.reason.trim() || failedItems[0]?.reason.trim() || ""
+  })()
 
   return (
     <>
@@ -112,6 +117,7 @@ export function StepInputDescription({
   const [open, setOpen] = useState(() => forceVisible || !hideByDefault)
   const text = description?.trim()
   const rejected = check?.matches === false
+  const descFailed = rejected
 
   useEffect(() => {
     if (forceVisible || rejected) setOpen(true)
@@ -121,6 +127,7 @@ export function StepInputDescription({
   if (!text && !rejected) return null
 
   const summary = text ? compactPreview(text, PREVIEW_STEP_IO_CHARS) : undefined
+  const showCheckPanel = !!check && (check.matches === false || (check.items?.length ?? 0) > 1)
 
   return (
     <div className={cn(className)}>
@@ -137,7 +144,7 @@ export function StepInputDescription({
           <span
             className={cn(
               "max-w-[220px] truncate font-mono text-[10px]",
-              forceVisible || rejected ? "text-destructive/90" : "text-muted-foreground/80",
+              descFailed ? "text-destructive/90" : "text-muted-foreground/80",
             )}
             title={text}
           >
@@ -145,19 +152,23 @@ export function StepInputDescription({
           </span>
         )}
       </div>
-      {check && (check.matches === false || (check.items?.length ?? 0) > 1) && (
-        <InputDescriptionCheckPanel check={check} forceVisible={forceVisible} />
-      )}
+      {showCheckPanel && <InputDescriptionCheckPanel check={check!} forceVisible={forceVisible} />}
       {open && text && (
         <p
           className={cn(
             "mt-1 rounded border px-2 py-1.5 font-mono text-[10px] leading-relaxed",
-            forceVisible || rejected
+            descFailed
               ? "border-destructive/40 bg-destructive/5 text-destructive"
               : "border-border bg-muted/20 text-muted-foreground",
           )}
         >
           {text}
+        </p>
+      )}
+      {rejected && !showCheckPanel && check?.reason.trim() && (
+        <p className="mt-1 rounded border border-destructive/40 bg-destructive/5 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-destructive">
+          <span className="font-medium">matches: false</span>
+          {` — ${check.reason.trim()}`}
         </p>
       )}
     </div>

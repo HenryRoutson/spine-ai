@@ -44,11 +44,13 @@ export function LlmCallDistribution({
   callGroups,
   compact,
   stepSucceeded = true,
+  title,
 }: {
   calls?: LlmCallRecord[]
   callGroups?: { calls: LlmCallRecord[]; stepSucceeded: boolean }[]
   compact?: boolean
   stepSucceeded?: boolean
+  title?: string
 }) {
   const groups =
     callGroups ??
@@ -80,7 +82,7 @@ export function LlmCallDistribution({
       {!compact && (
         <div className="mb-3 flex items-center justify-between gap-2 border-b border-border pb-2">
           <h4 className="font-mono text-[10px] font-medium uppercase tracking-wide text-foreground">
-            LLM call distributions
+            {title ?? "LLM call distributions"}
           </h4>
           <span className="font-mono text-[9px] text-muted-foreground">
             <LlmCallSummaryLine summary={summary} />
@@ -89,7 +91,7 @@ export function LlmCallDistribution({
       )}
       {compact && (
         <p className="mb-2 font-mono text-[10px] text-muted-foreground">
-          Call distributions · <LlmCallSummaryLine summary={summary} />
+          {title ?? "Call distributions"} · <LlmCallSummaryLine summary={summary} />
         </p>
       )}
       {summary.retried > 0 && (

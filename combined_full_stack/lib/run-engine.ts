@@ -9,17 +9,43 @@ import {
 } from "@/lib/custom_code"
 import { readApiErrorBody, formatApiError, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
-import type { DocId, ModelId, ModuleId, PipelineRun, ProjectId, RunStepStatus } from "@/lib/types"
+import type {
+  DocId,
+  ModelId,
+  ModuleId,
+  PipelineRun,
+  ProjectId,
+  RunStepStatus,
+} from "@/lib/types"
 import type { JobLogEntry, RunJob, RunJobId, StepProgress, StepSubProgress } from "@/lib/types"
 
 export type { JobLogEntry, RunJob, RunJobId, StepProgress, StepSubProgress }
 
-export type StepUiState = {
+export type StepUiState = Pick<
+  StepProgress,
+  "outputPreview" | "inputDescriptionCheck" | "descriptionCheckLlmCalls" | "descriptionCheckCostCents"
+> & {
   status: StepProgress["status"] | "idle"
   sub?: StepSubProgress
 }
 
 type StepUiStatus = StepProgress["status"] | RunStepStatus | "idle"
+
+function mergeStepDescriptionFields(
+  cur: StepUiState | undefined,
+  next: StepProgress,
+): Pick<
+  StepUiState,
+  "outputPreview" | "inputDescriptionCheck" | "descriptionCheckLlmCalls" | "descriptionCheckCostCents"
+> {
+  const stepDone = next.status !== "running"
+  return {
+    outputPreview: next.outputPreview ?? (stepDone ? cur?.outputPreview : cur?.outputPreview),
+    inputDescriptionCheck: next.inputDescriptionCheck ?? cur?.inputDescriptionCheck,
+    descriptionCheckLlmCalls: next.descriptionCheckLlmCalls ?? cur?.descriptionCheckLlmCalls,
+    descriptionCheckCostCents: next.descriptionCheckCostCents ?? cur?.descriptionCheckCostCents,
+  }
+}
 
 function stepStatusRank(s: StepUiStatus): number {
   if (s === "running") return 1
@@ -41,9 +67,11 @@ export function mergeStepStates(
     if (!cur || s.status === "error" || stepStatusRank(s.status) >= stepStatusRank(curStatus)) {
       status = s.status
     }
+    const descFields = mergeStepDescriptionFields(cur, s)
     next.set(s.moduleId, {
       status,
       sub: status === "running" ? s.sub ?? cur?.sub : undefined,
+      ...descFields,
     })
   }
   return next
@@ -74,39 +102,8 @@ function throwApiError(context: string, res: Response, body: Awaited<ReturnType<
 
 export type StartRunResult = {
   jobId: RunJobId;
-  deduped?: boolean;
-  cachedRunId?: PipelineRun["id"];
   fingerprint?: string;
 };
-
-export type MatchRunResult = {
-  fingerprint: string;
-  cachedRunId: PipelineRun["id"] | null;
-  run: PipelineRun | null;
-};
-
-export async function matchRun(
-  projectId: ProjectId,
-  inputDocId: DocId,
-  model: ModelId,
-  inputDocIds: DocId[] = [],
-): Promise<MatchRunResult> {
-  const res = await fetch(API_ROUTES.runsMatch, {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify({ projectId, inputDocId, inputDocIds, model }),
-  });
-  if (!res.ok) {
-    throw new Error(
-      formatApiError(
-        `Failed to match run for project ${projectId}, doc ${inputDocId}, model ${model}`,
-        res,
-        await readApiErrorBody(res),
-      ),
-    );
-  }
-  return (await res.json()) as MatchRunResult;
-}
 
 export async function startRun(
   projectId: ProjectId,

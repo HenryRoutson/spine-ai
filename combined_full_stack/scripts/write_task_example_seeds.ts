@@ -140,10 +140,12 @@ const AUDIT_TXN_SAMPLE_INPUT_DESC = "AP transaction sample markdown table drawn 
 const AUDIT_JE_INPUT_DESC = "Journal entry excerpt markdown table with refs and amounts";
 const HOMEWORK_MARKING_SCHEMA_INPUT_DESC =
   "MarkingSchema JSON — assignment_title and sections with nested RubricQuestion lists";
-const STUDENT_SUBMISSIONS_INPUT_DESC = "Completed student homework sheets — one Document per student";
+const STUDENT_SUBMISSIONS_INPUT_DESC =
+  "One student's completed homework sheet — markdown with question prompts and student work answers";
 const HOMEWORK_COMBINE_INPUT_DESC =
   "One student homework Document (new input) plus flat RubricQuestion list from Marking Questions List (pipeline state)";
-const SECTION_GRADES_OUTPUT_DESC = "List of SectionGrade records — one grade per student × rubric question";
+const SECTION_GRADES_OUTPUT_DESC =
+  "List of SectionGrade rows — student_label, section_id, score, max_score, feedback (one row per student × rubric question)";
 const FEEDBACK_DUMP_INPUT_DESC = "Raw product feedback dump — bullet list of user comments";
 const FEEDBACK_DUMP_SPLIT_DESC = "Product feedback Document from the upload step, ready to split into bullet items";
 const SLA_UPTIME_INPUT_DESC = "Vendor SLA uptime report markdown table with measured availability per service";
@@ -576,7 +578,7 @@ const seeds: Record<string, unknown> = {
       STRUCT({
         id: sid("m_schema"),
         name: "MarkingSchema",
-        description: "Dynamic rubric loaded from MarkingSchema JSON or inferred from template.",
+        description: "Structured rubric — assignment sections and questions to grade against.",
         dynamic: true,
         fields: [
           field("f_title", "assignment_title", "text", "Homework title"),
@@ -645,29 +647,11 @@ const seeds: Record<string, unknown> = {
         note: "Structured rubric JSON — sections and questions to grade against.",
         inputType: "json",
         inputNameContains: "marking_schema",
-        outStructureId: DOC_ID,
+        outStructureId: "m_schema",
         cached: true,
         avgMs: 90,
         avgCostCents: 0,
         ...DESC(HOMEWORK_MARKING_SCHEMA_INPUT_DESC),
-      },
-      {
-        id: "mod_load_schema",
-        kind: "custom-code",
-        label: "Load Marking Schema",
-        note: "Parse MarkingSchema JSON from the uploaded rubric file.",
-        inStructureId: DOC_ID,
-        outStructureId: "m_schema",
-        ...DESC(HOMEWORK_MARKING_SCHEMA_INPUT_DESC),
-        cached: true,
-        avgMs: 4,
-        avgCostCents: 0,
-        fallbackList: [
-          {
-            typescript:
-              '(doc) => { const raw = doc?.content ?? doc?.body ?? ""; return JSON.parse(typeof raw === "string" ? raw : JSON.stringify(raw)); }',
-          },
-        ],
       },
       {
         id: "mod_questions",
@@ -724,7 +708,7 @@ const seeds: Record<string, unknown> = {
         fallbackList: [
           {
             typescript:
-              '(_combined, state) => { const schema = state["Load Marking Schema"]; const subs = state["Student Submissions"]; const list = Array.isArray(subs) ? subs : subs ? [subs] : []; return { marking_schema: { filename: "marking_schema.json", content: JSON.stringify(schema) }, student_submissions: list.map((s) => ({ filename: s.filename ?? "student.md", content: s.content ?? "" })) }; }',
+              '(_combined, state) => { const schema = state["Marking Schema"]; const subs = state["Student Submissions"]; const list = Array.isArray(subs) ? subs : subs ? [subs] : []; const text = (s) => (typeof s?.content === "string" ? s.content : typeof s?.body === "string" ? s.body : ""); const name = (s, i) => (typeof s?.filename === "string" && s.filename ? s.filename : typeof s?.doc_id === "string" ? s.doc_id : `student_${i + 1}.md`); return { marking_schema: { filename: "marking_schema.json", content: JSON.stringify(schema ?? {}) }, student_submissions: list.map((s, i) => ({ filename: name(s, i), content: text(s) })) }; }',
           },
         ],
       },

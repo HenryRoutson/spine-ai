@@ -306,12 +306,14 @@ function buildClientResult(m: PipelineModule, project: Project, ctx: RunCtx, val
     const merged = out ? materializeStepOutput(m, project, value, materializeHints(m, ctx)) : value;
     return { value: merged, preview: "reshaped", json: JSON.stringify(merged, null, 2) };
   }
+  const out = modelById(project.models, m.outStructureId);
+  const merged = out ? materializeStepOutput(m, project, value, materializeHints(m, ctx)) : value;
   const entries = customCodeEntriesForModule(m);
   const primary = entries[0];
   return {
-    value,
+    value: merged,
     preview: `custom ${primary?.language ?? "typescript"} fn applied (${primary?.code.split("\n")[0].slice(0, 60) ?? ""})`,
-    json: JSON.stringify(value, null, 2),
+    json: JSON.stringify(merged, null, 2),
   };
 }
 
@@ -323,6 +325,12 @@ function materializeStepOutput(
 ): unknown {
   const out = modelById(project.models, m.outStructureId);
   if (!out) return partial;
+  // AI : outIsList steps emit arrays — materialize each item, not the array as one model row.
+  const isList = m.outIsList || m.kind === "llm-batch";
+  if (isList) {
+    const items = Array.isArray(partial) ? partial : partial == null ? [] : [partial];
+    return items.map((item) => materializeToModel(item, out, project.models, hints));
+  }
   return materializeToModel(partial, out, project.models, hints);
 }
 
@@ -376,7 +384,10 @@ function resolveStepInputForCheck(m: PipelineModule, ctx: RunCtx, store: Store):
         : undefined;
     return {
       value: items.length === 1 ? first : items,
-      vision: first ? { store, docId: firstDocId, docName: first.filename } : undefined,
+      vision:
+        items.length === 1 && firstDocId
+          ? { store, docId: firstDocId, docName: documentFilenameFrom(first, { docId: firstDocId }) }
+          : undefined,
       items: listItems,
     };
   }
@@ -880,24 +891,42 @@ async function runLinearStepsFrom(
       const cached = m.cached ? readStepCache(key) : undefined;
 
       let descriptionCheckCostCents = 0;
+      let descriptionCheckLlmCalls: LlmCallRecord[] | undefined;
       let inputDescriptionCheck: InputDescriptionCheckResult | undefined;
       try {
         if (!cached) {
           const inDesc = m.inputDescription?.trim();
           if (inDesc && shouldCheckInputDescription(m)) {
             const descBeforeCents = ledger.totalCents();
-            if (!ctx.stepLlmCalls) ctx.stepLlmCalls = [];
-            const { value, vision, items } = resolveStepInputForCheck(m, ctx, ctx.store);
-            inputDescriptionCheck = await assertInputMatchesDescription(
-              m.label,
-              inDesc,
-              value,
-              { model: DEFAULT_INPUT_CHECK_MODEL, ledger, llmCalls: ctx.stepLlmCalls },
-              log.child("input-desc"),
-              vision,
-              items,
-            );
+            ctx.stepLlmCalls = [];
+            try {
+              const { value, vision, items } = resolveStepInputForCheck(m, ctx, ctx.store);
+              inputDescriptionCheck = await assertInputMatchesDescription(
+                m.label,
+                inDesc,
+                value,
+                { model: DEFAULT_INPUT_CHECK_MODEL, ledger, llmCalls: ctx.stepLlmCalls },
+                log.child("input-desc"),
+                vision,
+                items,
+              );
+            } finally {
+              if (ctx.stepLlmCalls.length) {
+                descriptionCheckLlmCalls = [...ctx.stepLlmCalls];
+                ctx.stepLlmCalls = [];
+              }
+            }
             descriptionCheckCostCents = +(ledger.totalCents() - descBeforeCents).toFixed(4);
+            await opts.onStep?.({
+              index: i,
+              total: project.modules.length,
+              moduleId: m.id,
+              label: m.label,
+              status: "running",
+              inputDescriptionCheck,
+              descriptionCheckLlmCalls,
+              descriptionCheckCostCents: descriptionCheckCostCents > 0 ? descriptionCheckCostCents : undefined,
+            });
           }
         }
         if (cached) {
@@ -1020,11 +1049,17 @@ async function runLinearStepsFrom(
         costCents: +(status === "cached" ? 0 : ledger.totalCents() - beforeCents).toFixed(4),
         preview: result?.preview,
       });
-      return { status, result, descriptionCheckCostCents, inputDescriptionCheck };
+      return { status, result, descriptionCheckCostCents, descriptionCheckLlmCalls, inputDescriptionCheck };
       }),
     );
 
-    const { status, result, descriptionCheckCostCents = 0, inputDescriptionCheck } = stepOutcome;
+    const {
+      status,
+      result,
+      descriptionCheckCostCents = 0,
+      descriptionCheckLlmCalls,
+      inputDescriptionCheck,
+    } = stepOutcome;
 
     const ms = status === "cached" ? 0 : Date.now() - t0;
     const costCents = status === "cached" ? 0 : ledger.totalCents() - beforeCents;
@@ -1056,12 +1091,24 @@ async function runLinearStepsFrom(
       inputDescription: m.inputDescription?.trim() || undefined,
       inputDescriptionCheck,
       descriptionCheckCostCents: descriptionCheckCostCents > 0 ? descriptionCheckCostCents : undefined,
+      descriptionCheckLlmCalls: descriptionCheckLlmCalls?.length ? descriptionCheckLlmCalls : undefined,
       docId: result.docId,
       llmCalls: result.llmCalls?.length ? result.llmCalls : undefined,
       failures: stepFailuresFor(result, status, ctx.stepExtraFailures),
       serverLogs: stepServerLogs(serverLogs, m.id),
     });
-    await opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status });
+    const stepRecord = steps[steps.length - 1]!;
+    await opts.onStep?.({
+      index: i,
+      total: project.modules.length,
+      moduleId: m.id,
+      label: m.label,
+      status,
+      outputPreview: stepRecord.outputPreview,
+      inputDescriptionCheck: stepRecord.inputDescriptionCheck,
+      descriptionCheckLlmCalls: stepRecord.descriptionCheckLlmCalls,
+      descriptionCheckCostCents: stepRecord.descriptionCheckCostCents,
+    });
     ctx.reportSub = undefined;
     if (status === "error") {
       log.warn(`pipeline aborted after error`, { failedModule: m.id, stepsCompleted: steps.length });

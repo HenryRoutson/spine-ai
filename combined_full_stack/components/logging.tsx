@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils"
 import { useDocViewer, type DocViewMode } from "@/lib/doc-viewer"
 import { useAppShell } from "@/lib/app-shell"
 import { stepDocId, stepDocLinkLabels, stepSourceDocId } from "@/lib/step-doc"
-import { llmCallsFromStep } from "@/lib/llm-distribution"
+import { descriptionCheckLlmCallsFromStep, llmCallsFromStep } from "@/lib/llm-distribution"
 import { timeAgo } from "@/lib/time-ago"
 import { enrichRunModules, modulesFromRunSteps } from "@/lib/pipeline-run-diff"
 import { PipelineCanvas } from "@/components/pipeline-canvas"
@@ -464,6 +464,7 @@ export function Logging() {
                       const Icon = KIND_ICON[step.kind] ?? Cpu
                       const { inTitle, outTitle } = stepIoLabels(step.kind)
                       const stepLlmCalls = llmCallsFromStep(step)
+                      const descCheckLlmCalls = descriptionCheckLlmCallsFromStep(step)
                       const stepQuotes = quotesFromJson(step.outputJson)
                       const stepDoc = stepDocId(step)
                       const stepSourceDoc = stepSourceDocId(step)
@@ -508,6 +509,15 @@ export function Logging() {
                             forceVisible={step.status === "error"}
                             className="ml-7"
                           />
+
+                          {descCheckLlmCalls.length > 0 && (
+                            <LlmCallDistribution
+                              calls={descCheckLlmCalls}
+                              compact
+                              title="Description validation"
+                              stepSucceeded={step.inputDescriptionCheck?.matches !== false}
+                            />
+                          )}
 
                           {stepLlmCalls.length > 0 && (
                             <LlmCallDistribution

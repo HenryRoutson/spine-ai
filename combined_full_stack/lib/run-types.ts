@@ -1,5 +1,13 @@
 // AI : client-safe run progress / job DTOs — no server imports (fs, Supabase, etc.).
-import type { ModuleId, ModuleKind, PipelineRun, RunId, RunStepStatus } from "./types";
+import type {
+  InputDescriptionCheckResult,
+  LlmCallRecord,
+  ModuleId,
+  ModuleKind,
+  PipelineRun,
+  RunId,
+  RunStepStatus,
+} from "./types";
 import type { ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
 
 // AI : spec vision — accumulated step outputs keyed by module.label (see lib/server/pipeline_state.ts TODO).
@@ -29,6 +37,10 @@ export interface StepProgress {
   label: string;
   status: "running" | RunStepStatus;
   sub?: StepSubProgress;
+  outputPreview?: string;
+  inputDescriptionCheck?: InputDescriptionCheckResult;
+  descriptionCheckLlmCalls?: LlmCallRecord[];
+  descriptionCheckCostCents?: number;
 }
 
 export type RunJobId = string & { __brand: "RunJobId" };

@@ -201,6 +201,10 @@ export function llmCallsFromStep(step: RunStep): LlmCallRecord[] {
   ]
 }
 
+export function descriptionCheckLlmCallsFromStep(step: RunStep): LlmCallRecord[] {
+  return step.descriptionCheckLlmCalls ?? []
+}
+
 export function collectRunLlmCalls(steps: RunStep[]): LlmCallRecord[] {
   return steps.flatMap((s) => llmCallsFromStep(s))
 }
