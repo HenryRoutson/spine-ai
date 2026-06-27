@@ -3,6 +3,7 @@ import type {
   DocId,
   ModelId,
   ModuleId,
+  InputType,
   Project,
   SharedLinkFundingMode,
   SharedLinkId,
@@ -12,6 +13,9 @@ export type SharedLinkDefaultDoc = {
   moduleId: ModuleId;
   filename: string;
   docId: DocId;
+  // AI : persisted in Supabase default_docs jsonb for serverless — never sent to the client.
+  content?: string;
+  type?: InputType;
 };
 
 export type SharedLinkRecord = {

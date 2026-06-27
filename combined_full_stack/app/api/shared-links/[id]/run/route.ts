@@ -88,7 +88,7 @@ async function resolveAssignment(
     } else {
       const def = link.defaultDocs.find((d) => d.moduleId === m.id);
       if (def) {
-        const loaded = loadDefaultDocContent(linkId, m.id, def.filename);
+        const loaded = loadDefaultDocContent(linkId, m.id, def.filename, link.defaultDocs);
         if (loaded) {
           const id = defaultDocId(linkId, m.id, def.filename);
           const doc: DocRef = {

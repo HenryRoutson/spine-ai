@@ -30,6 +30,10 @@ const linkLog = logger("shared-links");
 
 const SHARED_LINK_PREFIX = "pub_";
 
+function isServerless(): boolean {
+  return !!process.env.VERCEL;
+}
+
 type StoredSharedLink = SharedLinkRecord & {
   ownerId: user_id_string;
   snapshot: Project;
@@ -148,6 +152,8 @@ async function loadSupabaseLink(id: SharedLinkId): Promise<StoredSharedLink | nu
 }
 
 export async function getSharedLink(id: SharedLinkId): Promise<StoredSharedLink | null> {
+  // AI : Vercel /tmp is per-instance — metadata must come from Supabase, not local JSON.
+  if (isServerless()) return loadSupabaseLink(id);
   const local = loadLocalLink(id);
   if (local && !local.revoked) return local;
   return loadSupabaseLink(id);
@@ -241,7 +247,13 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
           writeFileSync(join(defaultDocsDir(id), `${storageKey}.${ext}`), readFileSync(src));
         }
       }
-      defaultDocs.push({ moduleId: moduleId as ModuleId, filename: doc.name, docId });
+      defaultDocs.push({
+        moduleId: moduleId as ModuleId,
+        filename: doc.name,
+        docId,
+        content,
+        type: doc.type,
+      });
     }
   }
 
@@ -261,26 +273,34 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     revoked: false,
   };
 
-  saveLocalLink(row);
+  if (!isServerless()) saveLocalLink(row);
   const admin = await createAdminClient();
-  if (admin) {
-    const { error } = await admin.from("shared_links").upsert({
-      id: row.id,
-      owner_id: row.ownerId,
-      project_id: row.projectId,
-      snapshot: row.snapshot,
-      default_docs: row.defaultDocs,
-      default_model: row.defaultModel ?? null,
-      funding_mode: row.fundingMode,
-      viewer_name_required: row.viewerNameRequired,
-      revoked: false,
-      run_count: 0,
-      created_at: row.createdAt,
-    });
-    if (error) {
-      // AI : migration 007 may not be applied — local file is enough for dev; don't fail the request.
-      if (!isMissingSchemaError(error)) linkLog.warn(`supabase upsert failed`, { error: error.message });
+  if (!admin) {
+    if (isServerless()) {
+      throw new Error("SUPABASE_SERVICE_ROLE_KEY required to publish shared links in production");
     }
+    saveLocalLink(row);
+    return toPublicRecord(row);
+  }
+  const { error } = await admin.from("shared_links").upsert({
+    id: row.id,
+    owner_id: row.ownerId,
+    project_id: row.projectId,
+    snapshot: row.snapshot,
+    default_docs: row.defaultDocs,
+    default_model: row.defaultModel ?? null,
+    funding_mode: row.fundingMode,
+    viewer_name_required: row.viewerNameRequired,
+    revoked: false,
+    run_count: 0,
+    created_at: row.createdAt,
+  });
+  if (error) {
+    if (isServerless() || !isMissingSchemaError(error)) {
+      throw new Error(`shared link persistence failed: ${error.message}`);
+    }
+    linkLog.warn(`supabase upsert failed — saved locally`, { error: error.message });
+    saveLocalLink(row);
   }
   return toPublicRecord(row);
 }
@@ -339,7 +359,16 @@ export function loadDefaultDocContent(
   linkId: SharedLinkId,
   moduleId: ModuleId,
   filename: string,
+  inlineDocs?: SharedLinkDefaultDoc[],
 ): { content: string; type: InputType; name: string } | null {
+  const fromInline = inlineDocs?.find((d) => d.moduleId === moduleId && d.filename === filename);
+  if (fromInline?.content != null) {
+    return {
+      content: fromInline.content,
+      type: fromInline.type ?? "text",
+      name: filename,
+    };
+  }
   const storageKey = `${moduleId}_${filename}`;
   const textPath = join(defaultDocsDir(linkId), storageKey);
   if (!existsSync(textPath)) return null;
@@ -420,7 +449,7 @@ export function overlayStoreForSharedRun(
   const extraContent = new Map<DocId, string>();
 
   for (const def of link.defaultDocs) {
-    const loaded = loadDefaultDocContent(linkId, def.moduleId, def.filename);
+    const loaded = loadDefaultDocContent(linkId, def.moduleId, def.filename, link.defaultDocs);
     if (!loaded) continue;
     const id = hashContent(`shared_default:${linkId}:${def.moduleId}:${def.filename}`);
     extraDocs.set(id, {
