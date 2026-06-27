@@ -29,11 +29,10 @@ import {
   isRunBillingError,
   mergeStepStates,
   startRun,
-  type JobLogEntry,
   type StepUiState,
 } from "@/lib/run-engine"
 import { defaultInferenceDoc } from "@/lib/project-docs"
-import type { DocId, DocRef, ModelId, ModuleId, PipelineModule, PipelineRun, Project, ProjectId } from "@/lib/types"
+import type { DocId, DocRef, JobLogEntry, ModelId, ModuleId, PipelineModule, PipelineRun, Project, ProjectId } from "@/lib/types"
 
 export type InferencePhase = "idle" | "running" | "done"
 

@@ -1,7 +1,6 @@
-// AI : pure run fingerprint payload — shared by client cache probe and server dedup.
+// AI : pure run fingerprint payload — shared by server dedup and step-cache keying.
 import { orderedInputModules } from "@/lib/inference-input"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
-import { migrateProjectModules } from "@/lib/validity"
 import {
   DEFAULT_MODEL,
   type DocId,
@@ -9,7 +8,6 @@ import {
   type ModuleId,
   type PipelineModule,
   type Project,
-  type RunFingerprint,
   type StructureModel,
 } from "@/lib/types"
 
@@ -96,27 +94,6 @@ export function buildRunFingerprintPayload(
     ...buildRunConfigPayload(project, model),
     inputs: inputDocsBySlot(project, inputDocIds),
   }
-}
-
-// AI : sync config key for probe invalidation — changes when prompts/structures change, not just module ids.
-export function runConfigStableKey(project: Project, model: ModelId | undefined): string {
-  return stableJson(buildRunConfigPayload(migrateProjectModules(project), model))
-}
-
-async function sha256HexPrefix(input: string, prefixLen = 24): Promise<string> {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input))
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, prefixLen)
-}
-
-// AI : client-safe async fingerprint — must match server computeRunFingerprint digest.
-export async function computeRunFingerprint(
-  project: Project,
-  model: ModelId | undefined,
-  inputDocIds: DocId[],
-): Promise<RunFingerprint> {
-  const migrated = migrateProjectModules(project)
-  const hex = await sha256HexPrefix(stableJson(buildRunFingerprintPayload(migrated, model, inputDocIds)))
-  return (`runfp_${hex}`) as RunFingerprint
 }
 
 export function moduleConfigForStepCache(m: PipelineModule) {

@@ -46,6 +46,7 @@ import {
 } from "../inference-input";
 import { isLlmKind } from "@/lib/module-kinds";
 import { failuresFromLlmCalls } from "@/lib/llm-distribution";
+import { compactPreview } from "@/lib/text-preview";
 import { computeInvalid, migrateProjectModules, stepEmits } from "./validity";
 import { UsageLedger } from "./usage";
 import {
@@ -970,7 +971,7 @@ async function runLinearStepsFrom(
                 failureKind: "step_output",
                 structure: out.name,
                 detail: validationError,
-                failedJsonPreview: failedJson.slice(0, 500),
+                failedJsonPreview: compactPreview(failedJson, 500),
               });
               throw new Error(`output failed ${out.name} validation: ${validationError}`);
             }

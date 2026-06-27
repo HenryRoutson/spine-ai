@@ -1,6 +1,12 @@
 import type { DocRef, ModuleId, PipelineModule } from "./types";
 import { isUnavailableSeedDoc, looksLikeUnavailableSeedDoc } from "./seed-doc";
-import { docNameMatchesInputModule, inputTypeLabel, inputTypesForModule } from "./inference-input";
+import {
+  exclusionReasonForInputModule,
+  inputNameRestrictionLabel,
+  inputTypeLabel,
+  inputTypesForModule,
+  type InputDocExclusionReason,
+} from "./inference-input";
 
 export interface InferenceInputIssue {
   moduleId: ModuleId;
@@ -8,27 +14,28 @@ export interface InferenceInputIssue {
   message: string;
 }
 
+function assignmentIssueMessage(
+  reason: InputDocExclusionReason,
+  inputModule: PipelineModule,
+): string {
+  if (reason === "wrong-type") {
+    return `expected ${inputTypeLabel(inputModule.inputType)} document for this input step`;
+  }
+  const required = inputNameRestrictionLabel(inputModule);
+  return `filename must contain "${required ?? ""}"`;
+}
+
 export function validateInferenceDocAssignment(
   inputModule: PipelineModule,
   doc: DocRef,
 ): InferenceInputIssue | undefined {
-  const allowed = inputTypesForModule(inputModule);
-  if (allowed.length && !allowed.includes(doc.type)) {
-    return {
-      moduleId: inputModule.id,
-      docName: doc.name,
-      message: `expected ${inputTypeLabel(inputModule.inputType)} document for this input step`,
-    };
-  }
-  const required = inputModule.inputNameContains?.trim();
-  if (required && !docNameMatchesInputModule(doc, inputModule)) {
-    return {
-      moduleId: inputModule.id,
-      docName: doc.name,
-      message: `filename must contain "${required}"`,
-    };
-  }
-  return undefined;
+  const reason = exclusionReasonForInputModule(doc, inputModule);
+  if (!reason) return undefined;
+  return {
+    moduleId: inputModule.id,
+    docName: doc.name,
+    message: assignmentIssueMessage(reason, inputModule),
+  };
 }
 
 // AI : pre-run check — blocks inference when a seed placeholder or bad JSON would blow up custom-code JSON.parse.

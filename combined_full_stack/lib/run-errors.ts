@@ -12,8 +12,6 @@ export type RunErrorDisplay = {
   stepLabel?: string
 }
 
-export { resolveInputDescriptionCheck, describeInputDescriptionFailure } from "@/lib/input-description"
-
 type ZodIssue = {
   path?: (string | number)[]
   message?: string

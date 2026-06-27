@@ -1,3 +1,4 @@
+// AI : TODO refactor — ~680 lines; split HTTP transport/retry from structured parse/validation (llm.ts stays the facade).
 import { type ZodType } from "zod";
 import { Agent, fetch as undiciFetch, type Dispatcher } from "undici";
 import { structuredLlmPrompt } from "./structure";

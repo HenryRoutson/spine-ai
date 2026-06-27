@@ -810,9 +810,6 @@ export function syncAutoQuoteSteps(
   return modulesEqual(modules, out) ? modules : out;
 }
 
-// AI : alias — store migration and server init use the same sync.
-export const insertMissingQuoteSteps = syncAutoQuoteSteps;
-
 export function migrateProjectModules(project: Project): Project {
   const models = withSharedModels(stripSharedModels(project.models));
   const quoted = syncAutoQuoteSteps(project.modules, models);

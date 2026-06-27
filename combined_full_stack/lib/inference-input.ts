@@ -1,3 +1,4 @@
+// AI : TODO refactor — split assignment/resolution (buildRunInputDocIds, resolveInputDocs) from picker helpers (passableDocsForInputModule).
 import { docsForProject } from "@/lib/project-docs"
 import { INPUT_TYPES, type DocId, type DocRef, type InputType, type InputTypeSpec, type ModuleId, type PipelineModule, type PipelineRun, type Project } from "@/lib/types"
 

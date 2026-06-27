@@ -1,12 +1,11 @@
 // AI : client-safe run progress / job DTOs — no server imports (fs, Supabase, etc.).
 import type {
-  InputDescriptionCheckResult,
-  LlmCallRecord,
   ModuleId,
   ModuleKind,
   PipelineRun,
   RunId,
   RunStepStatus,
+  StepDescriptionFields,
 } from "./types";
 import type { ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
 
@@ -30,17 +29,13 @@ export interface StepSubProgress {
   total: number;
 }
 
-export interface StepProgress {
+export interface StepProgress extends StepDescriptionFields {
   index: number;
   total: number;
   moduleId: ModuleId;
   label: string;
   status: "running" | RunStepStatus;
   sub?: StepSubProgress;
-  outputPreview?: string;
-  inputDescriptionCheck?: InputDescriptionCheckResult;
-  descriptionCheckLlmCalls?: LlmCallRecord[];
-  descriptionCheckCostCents?: number;
 }
 
 export type RunJobId = string & { __brand: "RunJobId" };

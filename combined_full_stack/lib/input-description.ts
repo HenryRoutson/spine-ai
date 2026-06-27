@@ -2,9 +2,10 @@
 import type { InputDescriptionCheckResult } from "./types";
 
 export const INPUT_REJECTED_PREFIX = /^step "[^"]+" input rejected:\s*/i;
+const INPUT_REJECTED_CAPTURE = new RegExp(`${INPUT_REJECTED_PREFIX.source}(.+)$`, INPUT_REJECTED_PREFIX.flags);
 
 export function inputRejectedReasonFromMessage(message: string): string | undefined {
-  const match = message.match(/^step "[^"]+" input rejected:\s*(.+)$/i);
+  const match = message.match(INPUT_REJECTED_CAPTURE);
   return match?.[1]?.trim() || undefined;
 }
 

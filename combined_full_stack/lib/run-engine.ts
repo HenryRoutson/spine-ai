@@ -11,20 +11,20 @@ import { readApiErrorBody, formatApiError, JSON_HEADERS, FETCH_NO_STORE } from "
 import { API_ROUTES } from "@/lib/api-routes"
 import type {
   DocId,
+  JobLogEntry,
   ModelId,
   ModuleId,
   PipelineRun,
   ProjectId,
+  RunJob,
+  RunJobId,
   RunStepStatus,
-} from "@/lib/types"
-import type { JobLogEntry, RunJob, RunJobId, StepProgress, StepSubProgress } from "@/lib/types"
-
-export type { JobLogEntry, RunJob, RunJobId, StepProgress, StepSubProgress }
-
-export type StepUiState = Pick<
+  StepDescriptionFields,
   StepProgress,
-  "outputPreview" | "inputDescriptionCheck" | "descriptionCheckLlmCalls" | "descriptionCheckCostCents"
-> & {
+  StepSubProgress,
+} from "@/lib/types"
+
+export type StepUiState = StepDescriptionFields & {
   status: StepProgress["status"] | "idle"
   sub?: StepSubProgress
 }

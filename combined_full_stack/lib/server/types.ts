@@ -218,7 +218,14 @@ export type InputDescriptionCheckResult = {
   items?: InputDescriptionCheckItem[];
 };
 
-export interface RunStep {
+export type StepDescriptionFields = {
+  outputPreview?: string;
+  inputDescriptionCheck?: InputDescriptionCheckResult;
+  descriptionCheckLlmCalls?: LlmCallRecord[];
+  descriptionCheckCostCents?: number;
+};
+
+export interface RunStep extends Omit<StepDescriptionFields, "outputPreview"> {
   moduleId: ModuleId;
   kind: ModuleKind;
   label: string;
@@ -230,9 +237,6 @@ export interface RunStep {
   outputPreview: string;
   outputJson?: string;
   inputDescription?: string; // AI : snapshot at run time — expected input for this step
-  inputDescriptionCheck?: InputDescriptionCheckResult; // AI : LLM guard result — matches:false + reason when rejected
-  descriptionCheckCostCents?: number; // AI : billed input-description guard for this step (subset of costCents)
-  descriptionCheckLlmCalls?: LlmCallRecord[]; // AI : per-call telemetry for the input-description guard only
   docId?: DocId; // AI : source doc for input / doc-to-text steps — powers logging trace links
   llmCalls?: LlmCallRecord[];
   failures?: RunFailureRecord[];
