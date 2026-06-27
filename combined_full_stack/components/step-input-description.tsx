@@ -8,16 +8,11 @@ import {
   LOGGING_SETTINGS_CHANGED_EVENT,
   readHideInputDescriptionsDefault,
 } from "@/lib/logging-settings"
+import { useBrowserPrefEvent } from "@/lib/use-browser-pref-event"
 import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
 
 export function useHideInputDescriptionsDefault(): boolean {
-  const [hide, setHide] = useState(() => readHideInputDescriptionsDefault())
-  useEffect(() => {
-    const onChange = () => setHide(readHideInputDescriptionsDefault())
-    window.addEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
-    return () => window.removeEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
-  }, [])
-  return hide
+  return useBrowserPrefEvent(LOGGING_SETTINGS_CHANGED_EVENT, readHideInputDescriptionsDefault)
 }
 
 export function resolveStepInputDescription(

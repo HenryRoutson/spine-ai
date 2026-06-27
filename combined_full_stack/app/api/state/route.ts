@@ -24,10 +24,13 @@ export async function GET(req: NextRequest) {
     projectCount: projects.length,
     docCount: store.docs().length,
     runCount: store.runs(project?.id).length,
+    allRunCount: store.runs().length,
   });
   return NextResponse.json({
     projects,
     docs: store.docs(),
     runs: store.runs(project?.id),
+    // AI : account-wide run history — Billing tab aggregates spend across every project.
+    allRuns: store.runs(),
   });
 }

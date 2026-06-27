@@ -7,7 +7,7 @@ import { formatUsdFromCents } from "@/lib/format"
 import { useMemo, useState } from "react"
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import { useStore } from "@/lib/store"
-import { totalSaved } from "@/lib/billing"
+import { billingPointsUsd, billingSeries, totalSaved } from "@/lib/billing"
 import { redirectToCheckout } from "@/lib/stripe-client"
 import { MODEL_OPTIONS } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
@@ -32,10 +32,17 @@ function isCheapKey(key: string) {
   return key === "doc-parse svc" || MODEL_OPTIONS.some((m) => m.label === key && m.cheap)
 }
 
+type BillingScope = "all" | "project"
+
 export function Billing() {
-  const { billing, runs, billingAccount, refreshBilling } = useStore()
+  const { runs, billingRuns, project, billingAccount, refreshBilling } = useStore()
+  const [scope, setScope] = useState<BillingScope>("all")
   const [checkoutKey, setCheckoutKey] = useState<string | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
+
+  const scopedRuns = scope === "all" ? billingRuns : runs
+  const billing = useMemo(() => billingSeries(scopedRuns), [scopedRuns])
+  const scopeLabel = scope === "all" ? "All projects" : project.name
 
   async function startCheckout(mode: "payment" | "subscription", amountCents?: number) {
     const key = mode === "subscription" ? "subscription" : `topup:${amountCents}`
@@ -56,6 +63,8 @@ export function Billing() {
       setCheckoutKey(null)
     }
   }
+
+  const chartData = useMemo(() => billingPointsUsd(billing), [billing])
 
   const series = useMemo(() => {
     const keys = [...new Set(billing.flatMap((p) => Object.keys(p).filter((k) => k !== "day")))]
@@ -82,10 +91,10 @@ export function Billing() {
 
   const grand = Object.values(totals).reduce((a, b) => a + b, 0)
   const hasSpend = grand > 0
+  const hasRuns = scopedRuns.length > 0
   const cheapSpend = series.filter((s) => isCheapKey(s.key)).reduce((a, s) => a + totals[s.key], 0)
   const frontierSpend = series.filter((s) => !isCheapKey(s.key)).reduce((a, s) => a + totals[s.key], 0)
-  // AI : real cache savings from run history (replaces the hardcoded "$3.41").
-  const savedUsd = totalSaved(runs) / 100
+  const savedCents = totalSaved(scopedRuns)
 
   const capReached = billingAccount
     ? billingAccount.totalBilledCents >= billingAccount.billingCapCents
@@ -179,37 +188,62 @@ export function Billing() {
       )}
 
       <div className="shrink-0 grid grid-cols-2 gap-px border-b border-border bg-border lg:grid-cols-4">
-        <Stat label="Total spend" value={`$${grand.toFixed(2)}`} />
+        <Stat label="Total spend" value={formatUsdFromCents(grand)} />
         <Stat
           label="Open / cheap models"
-          value={`$${cheapSpend.toFixed(2)}`}
-          sub={hasSpend ? `${Math.round((cheapSpend / grand) * 100)}% of spend` : "no runs yet"}
+          value={formatUsdFromCents(cheapSpend)}
+          sub={hasSpend ? `${Math.round((cheapSpend / grand) * 100)}% of spend` : hasRuns ? "cached runs only" : "no runs yet"}
           good
         />
         <Stat
           label="Frontier models"
-          value={`$${frontierSpend.toFixed(2)}`}
-          sub={hasSpend ? `${Math.round((frontierSpend / grand) * 100)}% of spend` : "no runs yet"}
+          value={formatUsdFromCents(frontierSpend)}
+          sub={hasSpend ? `${Math.round((frontierSpend / grand) * 100)}% of spend` : hasRuns ? "cached runs only" : "no runs yet"}
         />
-        <Stat label="Cache savings" value={`$${savedUsd.toFixed(2)}`} sub="vs no caching" good />
+        <Stat label="Cache savings" value={formatUsdFromCents(savedCents)} sub="vs no caching" good />
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         <div className="rounded-lg border border-border bg-card p-4">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3 className="text-sm font-medium">Daily spend by model</h3>
-              <p className="font-mono text-[10px] text-muted-foreground">USD · stacked · from pipeline runs</p>
+              <p className="font-mono text-[10px] text-muted-foreground">
+                {scopeLabel} · USD · stacked · from pipeline runs
+              </p>
             </div>
-            {hasSpend && (
-              <Badge variant="outline" className="gap-1 font-mono text-[10px] text-primary">
-                <TrendingDown className="h-3 w-3" /> {runs.length} run{runs.length === 1 ? "" : "s"}
-              </Badge>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex rounded-md border border-border p-0.5">
+                <Button
+                  type="button"
+                  variant={scope === "all" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-7 px-2.5 font-mono text-[10px]"
+                  onClick={() => setScope("all")}
+                >
+                  All projects
+                </Button>
+                <Button
+                  type="button"
+                  variant={scope === "project" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-7 max-w-[10rem] truncate px-2.5 font-mono text-[10px]"
+                  title={project.name}
+                  onClick={() => setScope("project")}
+                >
+                  This project
+                </Button>
+              </div>
+              {hasRuns && (
+                <Badge variant="outline" className="gap-1 font-mono text-[10px] text-primary">
+                  <TrendingDown className="h-3 w-3" /> {scopedRuns.length} run{scopedRuns.length === 1 ? "" : "s"}
+                </Badge>
+              )}
+            </div>
           </div>
-          {hasSpend ? (
+          {hasRuns ? (
             <ChartContainer config={chartConfig} className="aspect-[3/1] w-full">
-              <AreaChart data={billing} margin={{ left: 4, right: 8, top: 8 }}>
+              <AreaChart data={chartData} margin={{ left: 4, right: 8, top: 8 }}>
                 <defs>
                   {series.map((s) => (
                     <linearGradient key={s.key} id={`fill-${s.key}`} x1="0" y1="0" x2="0" y2="1">
@@ -220,8 +254,21 @@ export function Billing() {
                 </defs>
                 <CartesianGrid vertical={false} stroke="var(--border)" />
                 <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={8} className="text-[10px]" />
-                <YAxis tickLine={false} axisLine={false} tickMargin={8} width={32} className="text-[10px]" tickFormatter={(v) => `$${v}`} />
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  width={40}
+                  className="text-[10px]"
+                  tickFormatter={(v) => formatUsdFromCents(v * 100)}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      formatter={(value) => formatUsdFromCents(Number(value) * 100)}
+                    />
+                  }
+                />
                 <ChartLegend content={<ChartLegendContent />} />
                 {series.map((s) => (
                   <Area
@@ -238,7 +285,9 @@ export function Billing() {
             </ChartContainer>
           ) : (
             <p className="py-12 text-center font-mono text-xs text-muted-foreground">
-              No spend yet — run a pipeline to see daily cost breakdown.
+              {scope === "project"
+                ? "No runs for this project yet — run a pipeline to see daily cost breakdown."
+                : "No runs yet — run a pipeline to see daily cost breakdown."}
             </p>
           )}
         </div>
@@ -259,7 +308,7 @@ export function Billing() {
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
                       <div className="h-full rounded-full" style={{ width: `${pct}%`, background: s.color }} />
                     </div>
-                    <span className="w-16 text-right font-mono text-xs">${value.toFixed(2)}</span>
+                    <span className="w-16 text-right font-mono text-xs">{formatUsdFromCents(value)}</span>
                     <span className="w-12 text-right font-mono text-[10px] text-muted-foreground">
                       {pct.toFixed(0)}%
                     </span>
@@ -268,7 +317,9 @@ export function Billing() {
               })}
             </ul>
           ) : (
-            <p className="px-4 py-6 font-mono text-xs text-muted-foreground">No cost data yet.</p>
+            <p className="px-4 py-6 font-mono text-xs text-muted-foreground">
+              {hasRuns ? "All recent runs were cache hits — no billed spend yet." : "No cost data yet."}
+            </p>
           )}
         </div>
       </div>

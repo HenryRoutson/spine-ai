@@ -1,9 +1,6 @@
 // AI : shared JSON viewer settings — keep localStorage key + view ids in sync with public/json-viewer.html
 
-import { appStorageKey } from "@/lib/storage-keys"
-
-export const JSON_VIEWER_DEFAULT_VIEW_KEY = appStorageKey("json-viewer-default-view")
-export const JSON_VIEWER_SYNTAX_THEME_KEY = appStorageKey("json-viewer-syntax-theme")
+import { stringBrowserPref } from "@/lib/browser-storage-pref"
 
 export type JsonViewerHumanViewId = "tree" | "table" | "json"
 export type JsonViewerSyntaxThemeId = "app" | "vscode"
@@ -41,38 +38,28 @@ export function isJsonViewerHumanViewId(v: string): v is JsonViewerHumanViewId {
   return JSON_VIEWER_HUMAN_VIEWS.some((x) => x.id === v)
 }
 
-export function readJsonViewerDefaultView(): JsonViewerHumanViewId {
-  if (typeof window === "undefined") return DEFAULT_JSON_VIEWER_HUMAN_VIEW
-  try {
-    const v = localStorage.getItem(JSON_VIEWER_DEFAULT_VIEW_KEY)
-    if (v && isJsonViewerHumanViewId(v)) return v
-  } catch {
-    /* ignore */
-  }
-  return DEFAULT_JSON_VIEWER_HUMAN_VIEW
-}
+const defaultViewPref = stringBrowserPref({
+  keySuffix: "json-viewer-default-view",
+  defaultValue: DEFAULT_JSON_VIEWER_HUMAN_VIEW,
+  changedEvent: JSON_VIEWER_SETTINGS_CHANGED_EVENT,
+  isValid: isJsonViewerHumanViewId,
+})
 
-export function writeJsonViewerDefaultView(view: JsonViewerHumanViewId): void {
-  localStorage.setItem(JSON_VIEWER_DEFAULT_VIEW_KEY, view)
-  window.dispatchEvent(new Event(JSON_VIEWER_SETTINGS_CHANGED_EVENT))
-}
+export const JSON_VIEWER_DEFAULT_VIEW_KEY = defaultViewPref.key
+export const readJsonViewerDefaultView = defaultViewPref.read
+export const writeJsonViewerDefaultView = defaultViewPref.write
 
 export function isJsonViewerSyntaxThemeId(v: string): v is JsonViewerSyntaxThemeId {
   return JSON_VIEWER_SYNTAX_THEMES.some((x) => x.id === v)
 }
 
-export function readJsonViewerSyntaxTheme(): JsonViewerSyntaxThemeId {
-  if (typeof window === "undefined") return DEFAULT_JSON_VIEWER_SYNTAX_THEME
-  try {
-    const v = localStorage.getItem(JSON_VIEWER_SYNTAX_THEME_KEY)
-    if (v && isJsonViewerSyntaxThemeId(v)) return v
-  } catch {
-    /* ignore */
-  }
-  return DEFAULT_JSON_VIEWER_SYNTAX_THEME
-}
+const syntaxThemePref = stringBrowserPref({
+  keySuffix: "json-viewer-syntax-theme",
+  defaultValue: DEFAULT_JSON_VIEWER_SYNTAX_THEME,
+  changedEvent: JSON_VIEWER_SETTINGS_CHANGED_EVENT,
+  isValid: isJsonViewerSyntaxThemeId,
+})
 
-export function writeJsonViewerSyntaxTheme(theme: JsonViewerSyntaxThemeId): void {
-  localStorage.setItem(JSON_VIEWER_SYNTAX_THEME_KEY, theme)
-  window.dispatchEvent(new Event(JSON_VIEWER_SETTINGS_CHANGED_EVENT))
-}
+export const JSON_VIEWER_SYNTAX_THEME_KEY = syntaxThemePref.key
+export const readJsonViewerSyntaxTheme = syntaxThemePref.read
+export const writeJsonViewerSyntaxTheme = syntaxThemePref.write

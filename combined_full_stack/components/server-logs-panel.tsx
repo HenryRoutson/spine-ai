@@ -9,16 +9,11 @@ import {
   LOGGING_SETTINGS_CHANGED_EVENT,
   readHideServerLogsDefault,
 } from "@/lib/logging-settings"
+import { useBrowserPrefEvent } from "@/lib/use-browser-pref-event"
 import { compactPreview, PREVIEW_SERVER_LOGS_CHARS } from "@/lib/text-preview"
 
 export function useHideServerLogsDefault(): boolean {
-  const [hide, setHide] = useState(() => readHideServerLogsDefault())
-  useEffect(() => {
-    const onChange = () => setHide(readHideServerLogsDefault())
-    window.addEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
-    return () => window.removeEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
-  }, [])
-  return hide
+  return useBrowserPrefEvent(LOGGING_SETTINGS_CHANGED_EVENT, readHideServerLogsDefault)
 }
 
 export function serverLogsPlainText(logs: JobLogEntry[]): string {

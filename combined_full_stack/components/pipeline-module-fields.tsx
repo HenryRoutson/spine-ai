@@ -1,7 +1,7 @@
 "use client"
 
 // AI : TODO refactor — split by ModuleKind into components/pipeline-fields/* (Input, Llm, CustomCode, …).
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { Plus, Trash2 } from "lucide-react"
 import { CustomCodeEditor } from "@/components/custom-code-editor"
@@ -48,6 +48,7 @@ import {
   LOGGING_SETTINGS_CHANGED_EVENT,
   readRequireInputDescriptions,
 } from "@/lib/logging-settings"
+import { useBrowserPrefEvent } from "@/lib/use-browser-pref-event"
 
 function llmModelLabel(id?: string) {
   return MODEL_OPTIONS.find((m) => m.id === id)?.label ?? id ?? "—"
@@ -237,12 +238,7 @@ export function PipelineModuleFields({
 }: PipelineModuleFieldsProps) {
   const llmSchemaPreview = useLlmSchemaPreview(selected, models)
   const edit = mode === "edit" && onUpdate
-  const [requireInputDescriptions, setRequireInputDescriptions] = useState(() => readRequireInputDescriptions())
-  useEffect(() => {
-    const onChange = () => setRequireInputDescriptions(readRequireInputDescriptions())
-    window.addEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
-    return () => window.removeEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
-  }, [])
+  const requireInputDescriptions = useBrowserPrefEvent(LOGGING_SETTINGS_CHANGED_EVENT, readRequireInputDescriptions)
   const hasNoPromptWarning = warnings?.some((w) => w.kind === "no-prompt")
   const inputOcrAvailable = selected.kind === "input" && inputModuleNeedsOcr(selected)
 

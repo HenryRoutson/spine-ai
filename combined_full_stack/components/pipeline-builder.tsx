@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import {
   Plus,
   Trash2,
@@ -17,6 +17,7 @@ import { useStore } from "@/lib/store"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { computeWarnings, ioMismatchInspectorFix, invalidForModule, invalidIssuesForModule, prevModuleId, type IoMismatchFixKind } from "@/lib/validity"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
+import { useRerenderOnEvent } from "@/lib/use-browser-pref-event"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { moduleMetrics } from "@/lib/billing"
 import { combinePairIds } from "@/lib/pipeline-layout"
@@ -54,12 +55,7 @@ export function PipelineBuilder() {
   const [selectedId, setSelectedId] = useState<string>(modules[0]?.id ?? "")
   const [copied, setCopied] = useState(false)
   const [asideTab, setAsideTab] = useState<AsideTab>("inspector")
-  const [, bumpValidityPrefs] = useState(0)
-  useEffect(() => {
-    const onChange = () => bumpValidityPrefs((n) => n + 1)
-    window.addEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
-    return () => window.removeEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
-  }, [])
+  useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
 
   const selected = modules.find((m) => m.id === selectedId)
   const invalid = computeInvalidForUi(modules, models)

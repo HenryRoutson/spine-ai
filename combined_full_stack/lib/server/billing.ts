@@ -55,6 +55,18 @@ export function billingSeries(runs: PipelineRun[]): BillingPoint[] {
   return billingFromRuns(runs);
 }
 
+// AI : chart/stats display — internal cents → USD (Billing tab recharts + stat cards).
+export function billingPointsUsd(points: BillingPoint[]): BillingPoint[] {
+  return points.map((point) => {
+    const out: BillingPoint = { day: point.day };
+    for (const [k, v] of Object.entries(point)) {
+      if (k === "day") continue;
+      out[k] = +(Number(v) / 100).toFixed(4);
+    }
+    return out;
+  });
+}
+
 // AI : metrics — recompute per-module avgMs/avgCostCents from historical runs (Pipeline tab).
 // AI : lives here (pure module) rather than run_engine so the client bundle can import it.
 // AI : TODO bug — averages include cached (ms=0, cost=0) and error steps, dragging the

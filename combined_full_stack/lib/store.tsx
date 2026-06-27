@@ -18,7 +18,6 @@ import {
 import { confidentialUploadWarning } from "@/lib/confidential-upload"
 import { uid } from "@/lib/id"
 import type {
-  BillingPoint,
   DocId,
   DocLabel,
   DocRef,
@@ -31,7 +30,6 @@ import type {
   StructureModel,
 } from "@/lib/types"
 import { DEFAULT_MODEL } from "@/lib/types"
-import { billingSeries } from "@/lib/billing"
 import { apiJson, apiPut, JSON_HEADERS } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { migrateProjectModules, syncAutoQuoteSteps } from "@/lib/quote-steps"
@@ -51,6 +49,7 @@ interface ServerState {
   projects: Project[]
   docs: DocRef[]
   runs: PipelineRun[]
+  allRuns: PipelineRun[]
 }
 
 interface StoreState {
@@ -84,8 +83,8 @@ interface StoreState {
   // AI : survives Inference tab unmount — doc ids only, resolved against hydrated docs on restore.
   inferenceInputDocIds: Partial<Record<ModuleId, DocId | DocId[]>>
   setInferenceInputDocIds: (docs: Partial<Record<ModuleId, DocId | DocId[]>>) => void
-  // billing (computed from real run history only)
-  billing: BillingPoint[]
+  // billing — run history for spend charts (project-scoped + account-wide)
+  billingRuns: PipelineRun[]
   billingAccount: BillingAccountView | null
   refreshBilling: () => Promise<void>
   refresh: () => Promise<void>
@@ -380,7 +379,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const addRun = useCallback((r: PipelineRun) => {
     setState((prev) => {
       if (!prev || prev.runs.some((x) => x.id === r.id)) return prev
-      return { ...prev, runs: [r, ...prev.runs] }
+      const allRuns = prev.allRuns.some((x) => x.id === r.id) ? prev.allRuns : [r, ...prev.allRuns]
+      return { ...prev, runs: [r, ...prev.runs], allRuns }
     })
   }, [])
 
@@ -410,7 +410,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const runs = state?.runs ?? []
-  const billing = useMemo(() => billingSeries(runs), [runs])
+  const billingRuns = state?.allRuns ?? state?.runs ?? []
 
   if (loadError) {
     return (
@@ -470,7 +470,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     updateRunNotes,
     inferenceInputDocIds: inferenceInputsByProject[project.id] ?? {},
     setInferenceInputDocIds: (docs) => setInferenceInputDocIds(project.id, docs),
-    billing,
+    billingRuns,
     billingAccount,
     refreshBilling,
     refresh,
