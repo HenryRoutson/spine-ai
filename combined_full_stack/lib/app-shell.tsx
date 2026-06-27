@@ -80,8 +80,12 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   )
 }
 
+export function useOptionalAppShell() {
+  return useContext(AppShellContext)
+}
+
 export function useAppShell() {
-  const ctx = useContext(AppShellContext)
+  const ctx = useOptionalAppShell()
   if (!ctx) throw new Error("useAppShell must be used within AppShellProvider")
   return ctx
 }

@@ -498,8 +498,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 }
 
+export function useOptionalStore() {
+  return useContext(StoreContext)
+}
+
 export function useStore() {
-  const ctx = useContext(StoreContext)
+  const ctx = useOptionalStore()
   if (!ctx) throw new Error("useStore must be used within StoreProvider")
   return ctx
 }

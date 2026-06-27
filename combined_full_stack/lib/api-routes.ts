@@ -32,12 +32,13 @@ export const API_ROUTES = {
   sharedLinkProgress: (id: string) => `/api/shared-links/${id}/progress`,
   sharedLinkDocs: (id: string) => `/api/shared-links/${id}/docs`,
   sharedLinkDownload: (id: string) => `/api/shared-links/${id}/download`,
+  sharedLinkClientStep: (id: string) => `/api/shared-links/${id}/client-step`,
 } as const
 
 function isSharedLinkPublicApi(pathname: string): boolean {
   return (
     /^\/api\/shared-links\/[^/]+$/.test(pathname) ||
-    /^\/api\/shared-links\/[^/]+\/(run|progress|docs|download)$/.test(pathname)
+    /^\/api\/shared-links\/[^/]+\/(run|progress|docs|download|client-step)$/.test(pathname)
   )
 }
 

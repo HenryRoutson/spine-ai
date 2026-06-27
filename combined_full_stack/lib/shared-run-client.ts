@@ -1,8 +1,21 @@
 import { readApiErrorBody, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
-import { mergeStepStates } from "@/lib/run-engine"
-import type { DocId, DocRef, ModuleId, PipelineRun, RunJobId, StepProgress } from "@/lib/types"
+import {
+  awaitJobCompletion,
+  mergeStepStates,
+  type ClientStepSubmitPayload,
+} from "@/lib/run-engine"
+import type {
+  DocId,
+  DocRef,
+  ModuleId,
+  PipelineRun,
+  RunJob,
+  RunJobId,
+  StepProgress,
+} from "@/lib/types"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
+import type { ClientStepSpec } from "@/lib/run-types"
 
 export async function fetchSharedLink(id: string): Promise<SharedLinkPublicView> {
   const res = await fetch(API_ROUTES.sharedLink(id), FETCH_NO_STORE)
@@ -44,28 +57,47 @@ export async function pollSharedProgress(
   linkId: string,
   jobId: RunJobId,
   token: string,
-): Promise<{ steps: StepProgress[]; run?: PipelineRun; error?: string }> {
+): Promise<RunJob> {
   const url = `${API_ROUTES.sharedLinkProgress(linkId)}?jobId=${encodeURIComponent(jobId)}&token=${encodeURIComponent(token)}`
   const res = await fetch(url, FETCH_NO_STORE)
   const body = await res.json()
   if (!res.ok) throw new Error(body.error ?? "Progress poll failed")
-  return body
+  return body as RunJob
+}
+
+async function submitSharedClientStep(
+  linkId: string,
+  jobId: RunJobId,
+  token: string,
+  payload: ClientStepSubmitPayload,
+): Promise<void> {
+  const res = await fetch(API_ROUTES.sharedLinkClientStep(linkId), {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ jobId, token, ...payload }),
+  })
+  if (res.ok) return
+  const body = await readApiErrorBody(res)
+  if (res.status === 409 && body?.error?.includes("not waiting for client code")) return
+  throw new Error(body?.error ?? "Client step failed")
 }
 
 export async function awaitSharedRun(
   linkId: string,
   jobId: RunJobId,
   token: string,
-  onStep: (steps: StepProgress[]) => void,
+  callbacks:
+    | { onStep: (steps: StepProgress[]) => void; onHumanReview?: (spec: ClientStepSpec) => Promise<"approved" | "rejected"> }
+    | ((steps: StepProgress[]) => void),
   intervalMs = 700,
 ): Promise<PipelineRun> {
-  for (;;) {
-    const job = await pollSharedProgress(linkId, jobId, token)
-    onStep(job.steps)
-    if (job.run) return job.run
-    if (job.error) throw new Error(job.error)
-    await new Promise((r) => setTimeout(r, intervalMs))
-  }
+  const { run } = await awaitJobCompletion(
+    () => pollSharedProgress(linkId, jobId, token),
+    (payload) => submitSharedClientStep(linkId, jobId, token, payload),
+    callbacks,
+    intervalMs,
+  )
+  return run
 }
 
 export function downloadBlob(filename: string, content: string, mime: string) {

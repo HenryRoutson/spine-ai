@@ -19,27 +19,20 @@ import { modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
 import { docsForInputModule } from "@/lib/inference-input"
 import { inferenceInputIssueMessage } from "@/lib/inference-validity"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
-import { segmentPipeline, mergeCombineSegmentStatus } from "@/lib/pipeline-layout"
 import { useInferenceRun } from "@/lib/use-inference-run"
 import { RunNotesPad } from "@/components/run-notes-pad"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
 import { InferenceRunOutputs } from "@/components/inference/inference-outputs"
 import {
-  CyclingWaitPhrase,
   ErrorBanner,
   GoToLoggingButton,
   HumanReviewPanel,
   RunErrorSummary,
 } from "@/components/inference/inference-run-chrome"
-import {
-  InferenceStepRow,
-  stepDescriptionMeta,
-} from "@/components/inference/inference-step-trace"
-import { moduleInputDescription } from "@/components/step-input-description"
+import { InferenceStepTracePanel } from "@/components/inference/inference-step-trace-panel"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import { ShareLinkDialog } from "@/components/share-link-dialog"
 import { useInferenceOutputStepsOnly } from "@/lib/inference-settings"
@@ -249,81 +242,24 @@ export function Inference() {
                   </div>
                 )}
 
-                <div className="rounded-lg border border-border p-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {run.phase === "done" ? "step trace" : "progress"}
-                    </span>
-                    <span className="font-mono text-[11px] text-primary">{run.progressPct}%</span>
-                  </div>
-                  <Progress value={run.progressPct} className="h-1.5" />
-                  {run.phase === "running" && (
-                    <CyclingWaitPhrase phrase={run.waitPhrase} className="mt-3" />
-                  )}
-                  {run.phase === "done" && run.run && (
-                    <GoToLoggingButton
-                      className="mt-4"
-                      onClick={() => openLogging(run.run!.id)}
-                    />
-                  )}
-                  <div className="mt-4 space-y-2.5">
-                    {segmentPipeline(modules).map((seg) => {
-                      if (seg.kind === "combine") {
-                        const combineUi = run.stepStates.get(seg.combine.id)
-                        const inputUi = run.stepStates.get(seg.input.id)
-                        const inputState = inputUi?.status ?? "idle"
-                        const state = mergeCombineSegmentStatus(
-                          combineUi?.status ?? "idle",
-                          inputState,
-                        )
-                        const combineDesc = stepDescriptionMeta(seg.combine.id, run.run, combineUi)
-                        const inputDesc = stepDescriptionMeta(seg.input.id, run.run, inputUi)
-                        return (
-                          <div key={seg.combine.id} className="space-y-1">
-                            <InferenceStepRow
-                              label={seg.combine.label}
-                              state={state}
-                              sub={combineUi?.sub}
-                              inputDescription={moduleInputDescription(seg.combine)}
-                              inputDescriptionCheck={combineDesc.check}
-                              descriptionCheckLlmCalls={combineDesc.descriptionCheckLlmCalls}
-                              descriptionCheckCostCents={combineDesc.descriptionCheckCostCents}
-                              serverLogs={run.logsByModule.get(seg.combine.id) ?? []}
-                            />
-                            <InferenceStepRow
-                              label={seg.input.label}
-                              state={inputState}
-                              sub={inputUi?.sub}
-                              nested
-                              inputDescription={moduleInputDescription(seg.input)}
-                              inputDescriptionCheck={inputDesc.check}
-                              descriptionCheckLlmCalls={inputDesc.descriptionCheckLlmCalls}
-                              descriptionCheckCostCents={inputDesc.descriptionCheckCostCents}
-                              serverLogs={run.logsByModule.get(seg.input.id) ?? []}
-                            />
-                          </div>
-                        )
-                      }
-                      const moduleUi = run.stepStates.get(seg.module.id)
-                      const moduleDesc = stepDescriptionMeta(seg.module.id, run.run, moduleUi)
-                      return (
-                        <InferenceStepRow
-                          key={seg.module.id}
-                          label={seg.module.label}
-                          state={moduleUi?.status ?? "idle"}
-                          sub={moduleUi?.sub}
-                          isOutputStep={seg.module.kind === "output"}
-                          inputDescription={moduleInputDescription(seg.module)}
-                          inputDescriptionCheck={moduleDesc.check}
-                          descriptionCheckLlmCalls={moduleDesc.descriptionCheckLlmCalls}
-                          descriptionCheckCostCents={moduleDesc.descriptionCheckCostCents}
-                          serverLogs={run.logsByModule.get(seg.module.id) ?? []}
-                        />
-                      )
-                    })}
-                  </div>
-                  <div ref={run.logEndRef} />
-                </div>
+                <InferenceStepTracePanel
+                  modules={modules}
+                  phase={run.phase}
+                  stepStates={run.stepStates}
+                  run={run.run}
+                  progressPct={run.progressPct}
+                  waitPhrase={run.waitPhrase}
+                  logsByModule={run.logsByModule}
+                  logEndRef={run.logEndRef}
+                  footer={
+                    run.phase === "done" && run.run ? (
+                      <GoToLoggingButton
+                        className="mt-4"
+                        onClick={() => openLogging(run.run!.id)}
+                      />
+                    ) : undefined
+                  }
+                />
               </>
             )}
           </div>

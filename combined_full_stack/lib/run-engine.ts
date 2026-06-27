@@ -169,25 +169,16 @@ export type AwaitRunResult = {
   cachedRunId?: PipelineRun["id"]
 }
 
-// AI : poll until the run finishes; callbacks stream progress + server logs to the UI / console.
-async function submitClientStep(
-  jobId: RunJobId,
-  payload: { output?: unknown; error?: string; clientLogs?: JobLogEntry[] },
-): Promise<void> {
-  const res = await fetch(API_ROUTES.runClientStep(jobId), {
-    method: "POST",
-    headers: JSON_HEADERS,
-    body: JSON.stringify(payload),
-  })
-  if (res.ok) return
-  const body = await readApiErrorBody(res)
-  // AI : race fix — stale progress can trigger a second POST after claim; 409 is harmless, keep polling.
-  if (res.status === 409 && body?.error?.includes("not waiting for client code")) return
-  throwApiError(`Client code step for job ${jobId} failed`, res, body)
+export type ClientStepSubmitPayload = {
+  output?: unknown
+  error?: string
+  clientLogs?: JobLogEntry[]
 }
 
-export async function awaitRun(
-  jobId: RunJobId,
+// AI : shared poll loop for dev runs and shared-link runs — handles browser client steps + human review.
+export async function awaitJobCompletion(
+  poll: () => Promise<RunJob>,
+  submitClientStep: (payload: ClientStepSubmitPayload) => Promise<void>,
   callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
   intervalMs = 700,
 ): Promise<AwaitRunResult> {
@@ -196,7 +187,7 @@ export async function awaitRun(
   let clientStepBusy = false
   let clientStepSubmittedFor: ModuleId | undefined
   for (;;) {
-    const job = await runProgress(jobId)
+    const job = await poll()
     onStep?.(job.steps)
     const logs = job.logs ?? []
     const newLines = logs.slice(seenLogs)
@@ -209,7 +200,6 @@ export async function awaitRun(
       seenLogs = logs.length
     }
     if (!job.clientStep) clientStepSubmittedFor = undefined
-    // AI : human-review — wait for operator decision in Inference, then POST passthrough or error.
     if (
       job.clientStep?.kind === "human-review" &&
       !job.run &&
@@ -223,9 +213,9 @@ export async function awaitRun(
         try {
           const decision = await onHumanReview(spec)
           if (decision === "approved") {
-            await submitClientStep(jobId, { output: spec.input })
+            await submitClientStep({ output: spec.input })
           } else {
-            await submitClientStep(jobId, { error: "Human review rejected" })
+            await submitClientStep({ error: "Human review rejected" })
           }
           clientStepSubmittedFor = spec.moduleId
         } finally {
@@ -233,8 +223,8 @@ export async function awaitRun(
         }
         continue
       }
+      throw new Error("This pipeline requires human review, which is not available on this page")
     }
-    // AI : race fix — track per moduleId so a stale poll can't re-fire the same client-step POST.
     if (
       job.clientStep &&
       job.clientStep.kind !== "human-review" &&
@@ -245,7 +235,7 @@ export async function awaitRun(
     ) {
       const { moduleId, entries, input, pipelineState, kind } = job.clientStep
       if (!entries?.length) {
-        await submitClientStep(jobId, { error: `${kind} step has no code configured` })
+        await submitClientStep({ error: `${kind} step has no code configured` })
         clientStepSubmittedFor = moduleId
         continue
       }
@@ -282,7 +272,7 @@ export async function awaitRun(
               : "custom code returned undefined — add a trailing (input) => output arrow or an explicit return",
           )
         }
-        await submitClientStep(jobId, { output, clientLogs })
+        await submitClientStep({ output, clientLogs })
         clientStepSubmittedFor = moduleId
       } catch (err) {
         const failures =
@@ -314,7 +304,7 @@ export async function awaitRun(
           line: `${tag} exhausted all ${entries.length} attempt(s)`,
           moduleId,
         })
-        await submitClientStep(jobId, {
+        await submitClientStep({
           error: (err as Error).message,
           clientLogs,
         })
@@ -324,7 +314,7 @@ export async function awaitRun(
       }
       continue
     }
-    if (job.error) throw new Error(`Pipeline run ${jobId} failed: ${job.error}`)
+    if (job.error) throw new Error(job.error)
     if (job.run) {
       return {
         run: job.run,
@@ -334,4 +324,34 @@ export async function awaitRun(
     }
     await new Promise((r) => setTimeout(r, intervalMs))
   }
+}
+
+// AI : poll until the run finishes; callbacks stream progress + server logs to the UI / console.
+async function submitClientStep(
+  jobId: RunJobId,
+  payload: ClientStepSubmitPayload,
+): Promise<void> {
+  const res = await fetch(API_ROUTES.runClientStep(jobId), {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload),
+  })
+  if (res.ok) return
+  const body = await readApiErrorBody(res)
+  // AI : race fix — stale progress can trigger a second POST after claim; 409 is harmless, keep polling.
+  if (res.status === 409 && body?.error?.includes("not waiting for client code")) return
+  throwApiError(`Client code step for job ${jobId} failed`, res, body)
+}
+
+export async function awaitRun(
+  jobId: RunJobId,
+  callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
+  intervalMs = 700,
+): Promise<AwaitRunResult> {
+  return awaitJobCompletion(
+    () => runProgress(jobId),
+    (payload) => submitClientStep(jobId, payload),
+    callbacks,
+    intervalMs,
+  )
 }

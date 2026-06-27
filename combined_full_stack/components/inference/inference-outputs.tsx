@@ -3,7 +3,7 @@
 import { AlertTriangle, CheckCircle2 } from "lucide-react"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { cn } from "@/lib/utils"
-import type { RunStep } from "@/lib/types"
+import type { RunStep, StructureModel } from "@/lib/types"
 
 function OutputStepLabel() {
   return (
@@ -17,7 +17,13 @@ function outputStepOutlineClass(isOutputStep: boolean) {
   return isOutputStep ? "border-white/55 ring-1 ring-white/35" : "border-border"
 }
 
-export function InferenceRunOutputs({ steps }: { steps: RunStep[] }) {
+export function InferenceRunOutputs({
+  steps,
+  models,
+}: {
+  steps: RunStep[]
+  models?: StructureModel[]
+}) {
   return (
     <div className="space-y-3">
       <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">outputs</p>
@@ -27,6 +33,7 @@ export function InferenceRunOutputs({ steps }: { steps: RunStep[] }) {
           step={step}
           expanded={i === steps.length - 1}
           isOutputStep={step.kind === "output"}
+          models={models}
         />
       ))}
     </div>
@@ -37,10 +44,12 @@ function InferenceStepOutput({
   step,
   expanded,
   isOutputStep,
+  models,
 }: {
   step: RunStep
   expanded: boolean
   isOutputStep: boolean
+  models?: StructureModel[]
 }) {
   const ok = step.status === "ok" || step.status === "cached"
   return (
@@ -67,7 +76,7 @@ function InferenceStepOutput({
       </div>
       {step.outputJson ? (
         <div className={expanded ? "h-[min(28rem,55vh)]" : "h-[min(16rem,32vh)]"}>
-          <JsonPreviewPanel json={step.outputJson} defaultView="table" className="h-full" />
+          <JsonPreviewPanel json={step.outputJson} models={models} defaultView="table" className="h-full" />
         </div>
       ) : (
         <div className="max-h-48 overflow-auto px-4 py-3">

@@ -326,7 +326,7 @@ uploading a new document will check if it matches any of the existing structs an
 
 each step of the pipeline should have an optional evaluate prompt where an llm can evaluate ?
 
-
+automatic AI reason for failure in pipeline
 
 allow creating alternate paths, and add testing option, then multiplex that with projects inside projects.
   create optional paths or steps
