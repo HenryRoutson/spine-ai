@@ -35,6 +35,7 @@ import { billingSeries } from "@/lib/billing"
 import { apiJson, apiPut, JSON_HEADERS } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { migrateProjectModules, syncAutoQuoteSteps } from "@/lib/quote-steps"
+import { stripSharedModels, withSharedModels } from "@/lib/structure"
 
 export type BillingAccountView = {
   balanceCents: number
@@ -240,9 +241,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [refreshBilling])
 
   const projects = state?.projects ?? []
+  const migratedProjects = useMemo(
+    () => projects.map((p) => migrateProjectModules(p)),
+    [projects],
+  )
   const project = useMemo(
-    () => projects.find((p) => p.id === activeProjectId) ?? projects[0],
-    [projects, activeProjectId],
+    () => migratedProjects.find((p) => p.id === activeProjectId) ?? migratedProjects[0],
+    [migratedProjects, activeProjectId],
   )
 
   // AI : optimistic local update + debounced PUT (builders patch on every keystroke).
@@ -445,8 +450,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     deleteProject,
     project,
     models: project.models,
-    setModels: (m) =>
-      patchProject({ models: m, modules: syncAutoQuoteSteps(project.modules, m) }),
+    setModels: (m) => {
+      const models = stripSharedModels(m)
+      patchProject({
+        models,
+        modules: syncAutoQuoteSteps(project.modules, withSharedModels(models)),
+      })
+    },
     modules: migrateProjectModules(project).modules,
     setModules: (m) => patchProject({ modules: syncAutoQuoteSteps(m, project.models) }),
     strategies: project.strategies,

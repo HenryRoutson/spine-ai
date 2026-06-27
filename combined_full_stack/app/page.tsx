@@ -24,7 +24,8 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { StoreProvider, useStore } from "@/lib/store"
-import { computeInvalid } from "@/lib/validity"
+import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
+import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import { createClient } from "@/utils/supabase/client"
 import { DocViewerProvider } from "@/lib/doc-viewer"
 import { AppShellProvider, useAppShell, type AppWindowId } from "@/lib/app-shell"
@@ -280,7 +281,13 @@ function ProjectSwitchLoading({ projectName }: { projectName: string }) {
 function Shell() {
   const { activeWindow, setActiveWindow } = useAppShell()
   const { model, setModel, modules, models, project, projectLoading } = useStore()
-  const pipelineInvalid = computeInvalid(modules, models).size > 0
+  const [, bumpValidityPrefs] = useState(0)
+  useEffect(() => {
+    const onChange = () => bumpValidityPrefs((n) => n + 1)
+    window.addEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
+    return () => window.removeEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
+  }, [])
+  const pipelineInvalid = computeInvalidForUi(modules, models).size > 0
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)

@@ -3,7 +3,7 @@ import { type VisionAttachment } from "./openrouter_llm";
 import { llmStructured, llmVisionString, type CallContext } from "./llm";
 import { structuredLlmPrompt } from "./structure";
 import { type Store } from "./store";
-import { DEFAULT_INPUT_CHECK_MODEL, type DocId } from "./types";
+import { DEFAULT_INPUT_CHECK_MODEL, type DocId, type PipelineModule } from "./types";
 import { type ServerLogger } from "./server_logger";
 import { loadDocBytesForVision } from "./doc_to_text";
 
@@ -33,6 +33,14 @@ function bytesToBase64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64");
 }
 
+// AI : per-step toggle — default on when a description is set.
+export function shouldCheckInputDescription(
+  m: Pick<PipelineModule, "inputDescription" | "checkInputDescription">,
+): boolean {
+  if (!m.inputDescription?.trim()) return false;
+  return m.checkInputDescription !== false;
+}
+
 function extractBodyText(value: unknown): string {
   const parts: string[] = [];
   const walk = (v: unknown) => {
@@ -47,6 +55,7 @@ function extractBodyText(value: unknown): string {
     }
     if (typeof v === "object") {
       const rec = v as Record<string, unknown>;
+      if (typeof rec.content === "string" && rec.content.trim()) parts.push(rec.content);
       if (typeof rec.body === "string" && rec.body.trim()) parts.push(rec.body);
       Object.values(rec).forEach(walk);
     }

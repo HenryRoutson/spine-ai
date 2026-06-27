@@ -9,6 +9,7 @@ import { blankProject } from "./seed";
 import { uid } from "../id";
 import { storeErrorMessage } from "./errors";
 import { migrateProjectModules } from "./validity";
+import { stripSharedModels } from "./builtin_models";
 import type {
   FileContentHash,
   ParserCacheKey,
@@ -209,11 +210,12 @@ export class SupabaseStore implements Store {
 
   saveProject(p: Project): void {
     const migrated = migrateProjectModules(p);
-    const i = this.state.projects.findIndex((x) => x.id === migrated.id);
-    if (i === -1) this.state.projects.push(migrated);
-    else this.state.projects[i] = migrated;
+    const toPersist = { ...migrated, models: stripSharedModels(migrated.models) };
+    const i = this.state.projects.findIndex((x) => x.id === toPersist.id);
+    if (i === -1) this.state.projects.push(toPersist);
+    else this.state.projects[i] = toPersist;
     this.pending.push(
-      this.db.from("projects").upsert({ id: migrated.id, data: migrated }, { onConflict: "user_id,id" }),
+      this.db.from("projects").upsert({ id: toPersist.id, data: toPersist }, { onConflict: "user_id,id" }),
     );
   }
 

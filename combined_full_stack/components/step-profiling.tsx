@@ -16,6 +16,8 @@ import {
   CHART_ERR,
   CHART_ERR_STROKE,
   CHART_ERR_TEXT_CLASS,
+  CHART_RETRY,
+  CHART_RETRY_STROKE,
   CHART_OK,
   CHART_OK_STROKE,
   CHART_OK_TEXT_CLASS,
@@ -38,12 +40,16 @@ function StepMetricBarChart({
   value,
   format,
   showStepLabels,
+  barFill,
+  barStroke,
 }: {
   title: string
   stats: StepMeanStats[]
   value: (step: StepMeanStats) => number
   format: (n: number) => string
   showStepLabels: boolean
+  barFill?: string
+  barStroke?: string
 }) {
   const maxVal = Math.max(...stats.map(value), 0.01)
   const plotW = Math.max(320, stats.length * 48)
@@ -83,7 +89,10 @@ function StepMetricBarChart({
           const barX = plotX + stepSpan * i
           const v = value(step)
           const barH = (v / maxVal) * PLOT_H
-          const color = barColor(step.failed)
+          const color =
+            barFill && barStroke
+              ? { fill: barFill, stroke: barStroke }
+              : barColor(step.failed)
           const centerX = barX + stepSpan / 2
 
           return (
@@ -206,6 +215,15 @@ export function StepProfiling({
           value={(s) => s.meanCostCents}
           format={formatCostCents}
           showStepLabels
+        />
+        <StepMetricBarChart
+          title="Description Validation cost"
+          stats={stats}
+          value={(s) => s.meanDescriptionCheckCostCents}
+          format={formatCostCents}
+          showStepLabels={false}
+          barFill={CHART_RETRY}
+          barStroke={CHART_RETRY_STROKE}
         />
       </div>
 

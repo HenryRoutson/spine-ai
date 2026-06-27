@@ -85,7 +85,7 @@ Rules:
 - Structures are pydantic models: name, description (docstring), and typed fields.
 - Use "text" for strings (not "str"). Use "tuple[text,quote]" when extracted text must link back to a source span; the quote offsets are resolved downstream — never ask for doc_id/start/end in the schema.
 - Use "model" / "list[model]" with ref set to another structure's exact name when nesting.
-- Use "document" for the standard { doc_id, purpose, body } document base.
+- Use "document" for the shared Document structure ({ content, filename }).
 - Optional fields: set optional true.
 - When the user asks to create or change structures, return a FULL replacement models array (all models that should exist after the change — include untouched models too).
 - When answering questions without schema changes, set models to null.

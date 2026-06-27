@@ -54,6 +54,8 @@ export interface StructureModel {
   description: string;
   fields: ModelField[];
   auto?: boolean; // generated automatically (e.g. by a combine step)
+  shared?: boolean; // AI : injected into every project — not persisted per project
+  locked?: boolean; // AI : read-only in Structure UI — cannot rename, edit fields, or delete
 }
 
 export type InputType = "pdf" | "excel" | "word" | "json" | "text" | "web" | "image";
@@ -93,6 +95,7 @@ export interface PipelineModule {
   inputType?: InputTypeSpec;
   inputNameContains?: string; // AI : optional filename substring — only matching docs can fill this input slot
   inputDescription?: string; // AI : optional expected input — Gemini Flash-Lite rejects mismatches before the step runs
+  checkInputDescription?: boolean; // AI : when false, skip the LLM guard even if inputDescription is set
   inputMinCount?: number; // AI : minimum documents for this input slot (default 1); pair with outIsList for N submissions
   prompt?: string;
   code?: string; // AI : transform steps with custom code only
@@ -200,6 +203,8 @@ export interface RunStep {
   inputPreview: string;
   outputPreview: string;
   outputJson?: string;
+  inputDescription?: string; // AI : snapshot at run time — expected input for this step
+  descriptionCheckCostCents?: number; // AI : billed Gemini Flash-Lite guard for this step (subset of costCents)
   docId?: DocId; // AI : source doc for input / doc-to-text steps — powers logging trace links
   llmCalls?: LlmCallRecord[];
   failures?: RunFailureRecord[];

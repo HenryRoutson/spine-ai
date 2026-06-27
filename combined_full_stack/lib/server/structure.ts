@@ -1,4 +1,6 @@
 import { z, type ZodError, type ZodType } from "zod";
+import { isBuiltinDocumentModel } from "./builtin_models";
+import { documentContentFrom, documentFilenameFrom, documentValueFrom } from "./document_value";
 import { modelHasQuoteFields } from "./quote_schema";
 import {
   fieldTypeToExpr,
@@ -21,6 +23,8 @@ export {
   typeExprToPy,
   typeExprToTs,
 } from "./type_expr";
+
+export { isBuiltinDocumentModel } from "./builtin_models";
 
 // AI : shared by run_engine wrap + pipeline validity — one definition for list-field detection.
 export function listFieldsForWrap(model: StructureModel): ModelField[] {
@@ -148,10 +152,12 @@ function asRecord(v: unknown): Record<string, unknown> {
 function defaultTextForField(
   field: ModelField,
   hints: MaterializeHints,
-  body: string,
+  content: string,
   purpose: string,
+  filename: string,
 ): string {
-  if (field.name === "body") return body;
+  if (field.name === "content" || field.name === "body") return content;
+  if (field.name === "filename") return filename;
   if (field.name === "purpose") return purpose;
   return "";
 }
@@ -161,8 +167,9 @@ function coerceFieldValue(
   field: ModelField,
   models: StructureModel[],
   hints: MaterializeHints,
-  body: string,
+  content: string,
   purpose: string,
+  filename: string,
   docId: string,
 ): unknown {
   if (val !== undefined && val !== null) {
@@ -178,7 +185,7 @@ function coerceFieldValue(
   }
   switch (field.type) {
     case "text":
-      return defaultTextForField(field, hints, body, purpose);
+      return defaultTextForField(field, hints, content, purpose, filename);
     case "int":
       return 0;
     case "float":
@@ -188,7 +195,7 @@ function coerceFieldValue(
     case "datetime":
       return "";
     case "document":
-      return { doc_id: docId, purpose, body };
+      return documentValueFrom(undefined, hints, content);
     case "list[document]":
       return [];
     case "json":
@@ -210,10 +217,8 @@ function coerceFieldValue(
   }
 }
 
-// AI : canonical raw-file wrapper — JSON/PDF/etc. inputs that keep full file text in body.
-export function isSourceDocumentModel(model: StructureModel | undefined): boolean {
-  return model?.name === "SourceDocument";
-}
+/** @deprecated use isBuiltinDocumentModel from builtin_models */
+export const isSourceDocumentModel = isBuiltinDocumentModel;
 
 // AI : input step — parse JSON file content into the declared I/O structure when possible.
 export function materializeInputDocument(
@@ -224,7 +229,7 @@ export function materializeInputDocument(
   hints: MaterializeHints = {},
 ): unknown {
   const out = models.find((x) => x.id === m.outStructureId);
-  if (!out) return { doc_id: docId, body: content };
+  if (!out) return documentValueFrom(undefined, { docId, docName: hints.docName }, content);
 
   const inputTypes = !m.inputType ? [] : Array.isArray(m.inputType) ? m.inputType : [m.inputType];
   const docHints = { ...hints, docId, sourceText: content };
@@ -250,7 +255,7 @@ export function materializeInputDocument(
     }
   }
 
-  return materializeToModel({ doc_id: docId, body: content }, out, models, docHints);
+  return materializeToModel(documentValueFrom({ content, filename: hints.docName ?? docId }, docHints, content), out, models, docHints);
 }
 
 // AI : map loose runtime values (file text, doc_id) into every field of a pydantic/zod StructureModel.
@@ -261,23 +266,24 @@ export function materializeToModel(
   hints: MaterializeHints = {},
 ): Record<string, unknown> {
   const raw = asRecord(partial);
-  const body =
-    typeof raw.body === "string"
-      ? raw.body
-      : hints.sourceText ?? (typeof partial === "string" ? partial : "");
+  const content = documentContentFrom(
+    raw,
+    hints.sourceText ?? (typeof partial === "string" ? partial : ""),
+  );
   const purpose =
     typeof raw.purpose === "string" && raw.purpose.trim()
       ? raw.purpose.trim()
       : hints.docName?.trim() ||
         hints.note?.trim() ||
         hints.label?.trim() ||
-        body.split("\n").find((l) => l.trim())?.trim() ||
+        content.split("\n").find((l) => l.trim())?.trim() ||
         "Document";
+  const filename = documentFilenameFrom(raw, hints, hints.docName ?? hints.docId ?? "document");
   const docId = typeof raw.doc_id === "string" ? raw.doc_id : hints.docId ?? "";
 
   const out: Record<string, unknown> = {};
   for (const f of model.fields) {
-    out[f.name] = coerceFieldValue(raw[f.name], f, models, hints, body, purpose, docId);
+    out[f.name] = coerceFieldValue(raw[f.name], f, models, hints, content, purpose, filename, docId);
   }
   return out;
 }

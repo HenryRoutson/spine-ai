@@ -38,7 +38,7 @@ export const QuoteSchema = z.object({
 });
 
 const TextQuoteSchema = z.object({ text: z.string(), quote: QuoteSchema });
-const DocumentSchema = z.object({ doc_id: z.string(), purpose: z.string(), body: z.string() });
+const DocumentSchema = z.object({ content: z.string(), filename: z.string() });
 const JsonStringSchema = z.string().refine(isValidJsonString, { message: "must be valid JSON" });
 
 function byId(models: StructureModel[]): Map<StructureModelId, StructureModel> {

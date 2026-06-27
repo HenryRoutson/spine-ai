@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Plus,
   Trash2,
@@ -14,7 +14,9 @@ import {
   Zap,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
-import { computeInvalid, computeWarnings, ioMismatchInspectorFix, invalidForModule, invalidIssuesForModule, prevModuleId, type IoMismatchFixKind } from "@/lib/validity"
+import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
+import { computeWarnings, ioMismatchInspectorFix, invalidForModule, invalidIssuesForModule, prevModuleId, type IoMismatchFixKind } from "@/lib/validity"
+import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { moduleMetrics } from "@/lib/billing"
 import { combinePairIds } from "@/lib/pipeline-layout"
@@ -51,9 +53,15 @@ export function PipelineBuilder() {
   const [selectedId, setSelectedId] = useState<string>(modules[0]?.id ?? "")
   const [copied, setCopied] = useState(false)
   const [asideTab, setAsideTab] = useState<AsideTab>("inspector")
+  const [, bumpValidityPrefs] = useState(0)
+  useEffect(() => {
+    const onChange = () => bumpValidityPrefs((n) => n + 1)
+    window.addEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
+    return () => window.removeEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
+  }, [])
 
   const selected = modules.find((m) => m.id === selectedId)
-  const invalid = computeInvalid(modules, models)
+  const invalid = computeInvalidForUi(modules, models)
   const warnings = computeWarnings(modules, models)
   const warningCount = [...warnings.values()].reduce((n, ws) => n + ws.length, 0)
   const metrics = moduleMetrics(runs)

@@ -4,27 +4,6 @@
   "kind": "procurement",
   "models": [
     {
-      "id": "m_doc",
-      "name": "SourceDocument",
-      "description": "Raw document annotated with its purpose.",
-      "fields": [
-        {
-          "id": "f_purpose",
-          "name": "purpose",
-          "type": "text",
-          "optional": false,
-          "description": "What this document contains"
-        },
-        {
-          "id": "f_body",
-          "name": "body",
-          "type": "text",
-          "optional": false,
-          "description": "Full extracted text"
-        }
-      ]
-    },
-    {
       "id": "m_row",
       "name": "TableRow",
       "description": "One markdown table row as JSON (parsed before LLM steps).",
@@ -176,7 +155,7 @@
       "label": "Purchase Order",
       "inputType": "text",
       "inputNameContains": "purchase_order",
-      "outStructureId": "m_doc",
+      "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
@@ -186,7 +165,7 @@
       "kind": "custom-code",
       "label": "Parse PO Table",
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
-      "inStructureId": "m_doc",
+      "inStructureId": "m_builtin_document",
       "outStructureId": "m_row",
       "outIsList": true,
       "cached": true,
@@ -194,7 +173,7 @@
       "avgCostCents": 0,
       "fallbackList": [
         {
-          "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(doc)=>mdFirstTableRows(doc.body).map((row,i)=>({row_id:String(i+1),cells_json:JSON.stringify(row)}))"
+          "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(doc)=>mdFirstTableRows(doc.content).map((row,i)=>({row_id:String(i+1),cells_json:JSON.stringify(row)}))"
         }
       ]
     },
@@ -204,7 +183,7 @@
       "label": "Delivery Note",
       "inputType": "text",
       "inputNameContains": "delivery_note",
-      "outStructureId": "m_doc",
+      "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
@@ -231,7 +210,7 @@
       "avgCostCents": 0,
       "fallbackList": [
         {
-          "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(c)=>({po_json:JSON.stringify(c.po_rows.map(r=>JSON.parse(r.cells_json))),delivery_json:JSON.stringify(mdFirstTableRows(c.delivery_note.body))})"
+          "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(c)=>({po_json:JSON.stringify(c.po_rows.map(r=>JSON.parse(r.cells_json))),delivery_json:JSON.stringify(mdFirstTableRows(c.delivery_note.content))})"
         }
       ]
     },
@@ -241,7 +220,7 @@
       "label": "Vendor Invoice",
       "inputType": "text",
       "inputNameContains": "vendor_invoice",
-      "outStructureId": "m_doc",
+      "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
@@ -268,7 +247,7 @@
       "avgCostCents": 0,
       "fallbackList": [
         {
-          "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(c)=>({po_json:c.po_and_delivery.po_json,delivery_json:c.po_and_delivery.delivery_json,invoice_json:JSON.stringify(mdFirstTableRows(c.vendor_invoice.body))})"
+          "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(c)=>({po_json:c.po_and_delivery.po_json,delivery_json:c.po_and_delivery.delivery_json,invoice_json:JSON.stringify(mdFirstTableRows(c.vendor_invoice.content))})"
         }
       ]
     },

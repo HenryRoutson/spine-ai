@@ -8,7 +8,8 @@ import type {
 } from "./types";
 import { migrateCustomCodeModule, customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
-import { hasQuoteField, listFieldsForWrap, isSourceDocumentModel } from "./structure";
+import { hasQuoteField, listFieldsForWrap, isBuiltinDocumentModel } from "./structure";
+import { stripSharedModels, withSharedModels } from "./builtin_models";
 import { isLlmKind } from "@/lib/module-kinds";
 import {
   cardinalityMismatch,
@@ -32,7 +33,8 @@ export type InvalidKind =
   | "unused-output"
   | "duplicate-input-struct"
   | "duplicate-output-struct"
-  | "state-key-missing";
+  | "state-key-missing"
+  | "missing-input-description";
 
 export interface InvalidStep {
   moduleId: ModuleId;
@@ -185,9 +187,34 @@ function computeStateKeyInvalid(modules: PipelineModule[]): InvalidMap {
   return invalid;
 }
 
+export type ComputeInvalidOpts = {
+  requireInputDescriptions?: boolean;
+};
+
+function computeInputDescriptionInvalid(modules: PipelineModule[]): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (const m of modules) {
+    if (isAutoQuoteStep(m)) continue;
+    if (m.inputDescription?.trim()) continue;
+    pushInvalid(invalid, { moduleId: m.id, kind: "missing-input-description" });
+  }
+  return invalid;
+}
+
 // AI : canonical I/O-validity check — strictly linear except combine (pipeline state + side doc).
-export function computeInvalid(modules: PipelineModule[], models: StructureModel[] = []): InvalidMap {
+export function computeInvalid(
+  modules: PipelineModule[],
+  models: StructureModel[] = [],
+  opts?: ComputeInvalidOpts,
+): InvalidMap {
   const invalid = computeLabelInvalid(modules);
+  if (opts?.requireInputDescriptions) {
+    for (const [moduleId, issues] of computeInputDescriptionInvalid(modules)) {
+      const list = invalid.get(moduleId) ?? [];
+      list.push(...issues);
+      invalid.set(moduleId, list);
+    }
+  }
   for (const m of modules) {
     if (m.kind === "output" || m.kind === "assert") {
       if (!m.inStructureId) pushInvalid(invalid, { moduleId: m.id, kind: "no-output" });
@@ -372,7 +399,7 @@ export function computeWarnings(
     const m = modules[i];
     if (m.kind === "input" && moduleInputTypes(m).includes("json")) {
       const out = models.find((x) => x.id === m.outStructureId);
-      if (isSourceDocumentModel(out)) {
+      if (isBuiltinDocumentModel(out)) {
         add(m.id, { moduleId: m.id, kind: "json-input-type" });
       }
     }
@@ -635,6 +662,9 @@ export function invalidStepMessage(
     const name = modelName(models, m?.inStructureId) ?? "structure";
     return `multiple output steps materialize ${name}`;
   }
+  if (issue.kind === "missing-input-description") {
+    return "input description is required — describe what data this step expects";
+  }
   return "invalid step";
 }
 
@@ -784,15 +814,18 @@ export function syncAutoQuoteSteps(
 export const insertMissingQuoteSteps = syncAutoQuoteSteps;
 
 export function migrateProjectModules(project: Project): Project {
-  const quoted = syncAutoQuoteSteps(project.modules, project.models);
+  const models = withSharedModels(stripSharedModels(project.models));
+  const quoted = syncAutoQuoteSteps(project.modules, models);
   const placed = syncAssertPlacement(quoted);
   const migrated = placed.map(migrateCustomCodeModule);
   // AI : cache is always on — normalize legacy projects that disabled it per step.
   const withCache = migrated.map((m) => (m.cached ? m : { ...m, cached: true }));
+  const modelsChanged = models.length !== project.models.length || models.some((m, i) => m !== project.models[i]);
   const changed =
+    modelsChanged ||
     placed !== project.modules ||
     migrated.some((m, i) => m !== placed[i]) ||
     withCache.some((m, i) => m !== migrated[i]);
   if (!changed) return project;
-  return { ...project, modules: withCache };
+  return { ...project, models, modules: withCache };
 }

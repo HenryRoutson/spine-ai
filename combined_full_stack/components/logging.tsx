@@ -30,6 +30,7 @@ import { PipelineInspector } from "@/components/pipeline-inspector"
 import { computeInvalid } from "@/lib/validity"
 import { RunNotesEditor } from "@/components/run-notes-editor"
 import { StepServerLogsSection, ServerLogLines } from "@/components/server-logs-panel"
+import { StepInputDescription, resolveStepInputDescription } from "@/components/step-input-description"
 import { KIND_ICON } from "@/lib/module-ui"
 import { Search, Cpu, Maximize2, X, GitCompareArrows, Zap, Link2 } from "lucide-react"
 import { resolveRunInputDocIds, runInputDocsSummary } from "@/lib/inference-input"
@@ -500,6 +501,12 @@ export function Logging() {
                           </div>
 
                           <StepFailuresSection step={step} className="ml-7" />
+
+                          <StepInputDescription
+                            description={resolveStepInputDescription(step, modules)}
+                            forceVisible={step.status === "error"}
+                            className="ml-7"
+                          />
 
                           {stepLlmCalls.length > 0 && (
                             <LlmCallDistribution

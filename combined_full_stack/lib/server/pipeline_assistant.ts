@@ -42,6 +42,7 @@ const moduleSpecSchema = z.object({
   inputType: z.enum(INPUT_TYPE_VALUES as [string, ...string[]]).optional(),
   inputNameContains: z.string().optional(),
   inputDescription: z.string().optional(),
+  checkInputDescription: z.boolean().optional(),
   prompt: z.string().optional(),
   code: z.string().optional(),
   model: z.string().optional(),
@@ -180,7 +181,7 @@ ${kinds}
 Rules:
 - Pipelines are strictly linear. Each step must consume ONLY the previous step's output — never an earlier structure with the same model name. combine is the exception: it reads pipeline state (by structure name) plus the document input immediately before it.
 - Every step needs an output structure (structureOut). Input steps only need structureOut.
-- Reference structures by exact name from the project's models list (e.g. "SourceDocument", "AtomicRule").
+- Reference structures by exact name from the project's models list (e.g. "Document", "AtomicRule").
 - Input steps may set inputNameContains so only documents whose filename includes that substring can fill that slot (useful when a pipeline has multiple inputs).
 - Any step may set inputDescription — before the step runs, Gemini Flash-Lite rejects input that doesn't match.
 - combine steps merge pipeline state with a new document — emit ONLY the combine step; a Document Input is auto-inserted before it.

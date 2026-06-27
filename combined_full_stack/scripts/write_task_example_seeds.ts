@@ -8,6 +8,9 @@ import {
   MD_TABLE_PARSER_PREAMBLE,
 } from "../lib/markdown_table_parse";
 import { loadProjectSeed, SEEDS_DIR } from "../lib/server/seed";
+import { BUILTIN_DOCUMENT_ID } from "../lib/server/builtin_models";
+
+const DOC_ID = BUILTIN_DOCUMENT_ID;
 
 const PARSE_TABLE = customCodeParseDocBodyToParsedTable();
 const PARSE_ROWS = customCodeParseDocToTableRows();
@@ -58,16 +61,6 @@ const STRATEGIES = (prefix: string) => [
     passRate: 89,
   },
 ];
-
-const SOURCE_DOC = {
-  id: "m_doc",
-  name: "SourceDocument",
-  description: "Raw document annotated with its purpose.",
-  fields: [
-    { id: "f_purpose", name: "purpose", type: "text", optional: false, description: "What this document contains" },
-    { id: "f_body", name: "body", type: "text", optional: false, description: "Full extracted text" },
-  ],
-};
 
 const TABLE_ROW = {
   id: "m_row",
@@ -130,7 +123,6 @@ const seeds: Record<string, unknown> = {
     name: "Expense Report Auditor",
     kind: "finance-compliance",
     models: [
-      SOURCE_DOC,
       TABLE_ROW,
       {
         id: "m_combined",
@@ -157,9 +149,9 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_policy", kind: "input", label: "Expense Policy", inputType: "text", inputNameContains: "expense_policy", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
-      parseStep("mod_parse_policy", "Parse Policy Table", "m_doc", "m_row", PARSE_ROWS, true),
-      { id: "mod_in_report", kind: "input", label: "Expense Report", inputType: "text", inputNameContains: "expense_report", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in_policy", kind: "input", label: "Expense Policy", inputType: "text", inputNameContains: "expense_policy", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
+      parseStep("mod_parse_policy", "Parse Policy Table", DOC_ID, "m_row", PARSE_ROWS, true),
+      { id: "mod_in_report", kind: "input", label: "Expense Report", inputType: "text", inputNameContains: "expense_report", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
       { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
       parseStep(
         "mod_merge",
@@ -196,7 +188,6 @@ const seeds: Record<string, unknown> = {
     name: "Bank Statement Reconciler",
     kind: "finance-ops",
     models: [
-      SOURCE_DOC,
       TABLE_ROW,
       {
         id: "m_combined",
@@ -223,9 +214,9 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_inv", kind: "input", label: "Open Invoices", inputType: "text", inputNameContains: "open_invoices", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
-      parseStep("mod_parse_inv", "Parse Invoice Table", "m_doc", "m_row", PARSE_ROWS, true),
-      { id: "mod_in_stmt", kind: "input", label: "Bank Statement", inputType: "text", inputNameContains: "bank_statement", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in_inv", kind: "input", label: "Open Invoices", inputType: "text", inputNameContains: "open_invoices", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
+      parseStep("mod_parse_inv", "Parse Invoice Table", DOC_ID, "m_row", PARSE_ROWS, true),
+      { id: "mod_in_stmt", kind: "input", label: "Bank Statement", inputType: "text", inputNameContains: "bank_statement", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
       { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
       parseStep(
         "mod_merge",
@@ -262,7 +253,6 @@ const seeds: Record<string, unknown> = {
     name: "Tax Workpaper Preparer",
     kind: "tax-prep",
     models: [
-      SOURCE_DOC,
       TABLE_ROW,
       {
         id: "m_combined",
@@ -288,9 +278,9 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_w2", kind: "input", label: "W-2", inputType: "text", inputNameContains: "w2_2024", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
-      parseStep("mod_parse_w2", "Parse W-2 Table", "m_doc", "m_row", PARSE_ROWS, true),
-      { id: "mod_in_1099", kind: "input", label: "1099-MISC", inputType: "text", inputNameContains: "1099", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in_w2", kind: "input", label: "W-2", inputType: "text", inputNameContains: "w2_2024", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
+      parseStep("mod_parse_w2", "Parse W-2 Table", DOC_ID, "m_row", PARSE_ROWS, true),
+      { id: "mod_in_1099", kind: "input", label: "1099-MISC", inputType: "text", inputNameContains: "1099", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
       { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
       parseStep(
         "mod_merge",
@@ -327,7 +317,6 @@ const seeds: Record<string, unknown> = {
     name: "Procurement Three-Way Match",
     kind: "procurement",
     models: [
-      SOURCE_DOC,
       TABLE_ROW,
       {
         id: "m_po_dn",
@@ -371,25 +360,25 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_po", kind: "input", label: "Purchase Order", inputType: "text", inputNameContains: "purchase_order", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
-      parseStep("mod_parse_po", "Parse PO Table", "m_doc", "m_row", PARSE_ROWS, true),
-      { id: "mod_in_dn", kind: "input", label: "Delivery Note", inputType: "text", inputNameContains: "delivery_note", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in_po", kind: "input", label: "Purchase Order", inputType: "text", inputNameContains: "purchase_order", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
+      parseStep("mod_parse_po", "Parse PO Table", DOC_ID, "m_row", PARSE_ROWS, true),
+      { id: "mod_in_dn", kind: "input", label: "Delivery Note", inputType: "text", inputNameContains: "delivery_note", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
       { id: "mod_combine_dn", kind: "combine", label: "Attach Delivery Note", inStructureId: "m_row", outStructureId: "m_po_dn", cached: true, avgMs: 40, avgCostCents: 0 },
       parseStep(
         "mod_merge_po_dn",
         "Parse PO + DN",
         "m_po_dn",
         "m_dual",
-        `${MD_TABLE_PARSER_PREAMBLE}(c)=>({po_json:JSON.stringify(c.po_rows.map(r=>JSON.parse(r.cells_json))),delivery_json:JSON.stringify(mdFirstTableRows(c.delivery_note.body))})`,
+        `${MD_TABLE_PARSER_PREAMBLE}(c)=>({po_json:JSON.stringify(c.po_rows.map(r=>JSON.parse(r.cells_json))),delivery_json:JSON.stringify(mdFirstTableRows(c.delivery_note.content))})`,
       ),
-      { id: "mod_in_inv", kind: "input", label: "Vendor Invoice", inputType: "text", inputNameContains: "vendor_invoice", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in_inv", kind: "input", label: "Vendor Invoice", inputType: "text", inputNameContains: "vendor_invoice", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
       { id: "mod_combine_inv", kind: "combine", label: "Attach Invoice", inStructureId: "m_dual", outStructureId: "m_inv_in", cached: true, avgMs: 40, avgCostCents: 0 },
       parseStep(
         "mod_merge_all",
         "Parse Invoice + Bundle",
         "m_inv_in",
         "m_merged3",
-        `${MD_TABLE_PARSER_PREAMBLE}(c)=>({po_json:c.po_and_delivery.po_json,delivery_json:c.po_and_delivery.delivery_json,invoice_json:JSON.stringify(mdFirstTableRows(c.vendor_invoice.body))})`,
+        `${MD_TABLE_PARSER_PREAMBLE}(c)=>({po_json:c.po_and_delivery.po_json,delivery_json:c.po_and_delivery.delivery_json,invoice_json:JSON.stringify(mdFirstTableRows(c.vendor_invoice.content))})`,
       ),
       {
         id: "mod_match",
@@ -420,7 +409,6 @@ const seeds: Record<string, unknown> = {
     name: "Audit Sample Tester",
     kind: "audit",
     models: [
-      SOURCE_DOC,
       TABLE_ROW,
       {
         id: "m_combined",
@@ -446,9 +434,9 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_txn", kind: "input", label: "Transaction Sample", inputType: "text", inputNameContains: "transaction_sample", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
-      parseStep("mod_parse_txn", "Parse Transaction Table", "m_doc", "m_row", PARSE_ROWS, true),
-      { id: "mod_in_je", kind: "input", label: "Journal Entries", inputType: "text", inputNameContains: "journal_entries", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in_txn", kind: "input", label: "Transaction Sample", inputType: "text", inputNameContains: "transaction_sample", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
+      parseStep("mod_parse_txn", "Parse Transaction Table", DOC_ID, "m_row", PARSE_ROWS, true),
+      { id: "mod_in_je", kind: "input", label: "Journal Entries", inputType: "text", inputNameContains: "journal_entries", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
       { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_row", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
       parseStep(
         "mod_merge",
@@ -485,7 +473,6 @@ const seeds: Record<string, unknown> = {
     name: "Homework Grader",
     kind: "education",
     models: [
-      SOURCE_DOC,
       {
         id: "m_section",
         name: "HomeworkSection",
@@ -509,13 +496,13 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in", kind: "input", label: "Homework Sheet", inputType: "text", inputNameContains: "algebra_homework", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in", kind: "input", label: "Homework Sheet", inputType: "text", inputNameContains: "algebra_homework", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
       {
         id: "mod_split",
         kind: "custom-code",
         label: "Split Sections",
         note: "Split markdown ## sections — no raw tables sent to LLM.",
-        inStructureId: "m_doc",
+        inStructureId: DOC_ID,
         outStructureId: "m_section",
         outIsList: true,
         cached: true,
@@ -524,7 +511,7 @@ const seeds: Record<string, unknown> = {
         fallbackList: [
           {
             typescript:
-              '(doc)=>doc.body.split(/\\n## /).filter((c)=>c.trim()).map((chunk,i)=>{const lines=chunk.split("\\n");const title=lines[0].replace(/^#+\\s*/,"").trim();return{section_id:String(i+1),title,body:lines.slice(1).join("\\n").trim()};})',
+              '(doc)=>doc.content.split(/\\n## /).filter((c)=>c.trim()).map((chunk,i)=>{const lines=chunk.split("\\n");const title=lines[0].replace(/^#+\\s*/,"").trim();return{section_id:String(i+1),title,body:lines.slice(1).join("\\n").trim()};})',
           },
         ],
       },
@@ -553,7 +540,6 @@ const seeds: Record<string, unknown> = {
     name: "Product Feedback Router",
     kind: "product-ops",
     models: [
-      SOURCE_DOC,
       {
         id: "m_item",
         name: "FeedbackItem",
@@ -575,12 +561,12 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in", kind: "input", label: "Feedback Dump", inputType: "text", inputNameContains: "product_feedback", outStructureId: "m_doc", cached: true, avgMs: 80, avgCostCents: 0 },
+      { id: "mod_in", kind: "input", label: "Feedback Dump", inputType: "text", inputNameContains: "product_feedback", outStructureId: DOC_ID, cached: true, avgMs: 80, avgCostCents: 0 },
       {
         id: "mod_split",
         kind: "custom-code",
         label: "Split Bullets",
-        inStructureId: "m_doc",
+        inStructureId: DOC_ID,
         outStructureId: "m_item",
         outIsList: true,
         cached: true,
@@ -589,7 +575,7 @@ const seeds: Record<string, unknown> = {
         fallbackList: [
           {
             typescript:
-              '(doc)=>doc.body.split("\\n").filter((l)=>l.trim().startsWith("-")).map((l,i)=>({feedback_id:String(i+1),text:l.replace(/^-\\s*/,"").trim()}))',
+              '(doc)=>doc.content.split("\\n").filter((l)=>l.trim().startsWith("-")).map((l,i)=>({feedback_id:String(i+1),text:l.replace(/^-\\s*/,"").trim()}))',
           },
         ],
       },
@@ -617,7 +603,6 @@ const seeds: Record<string, unknown> = {
     name: "Vendor SLA Breach Report",
     kind: "vendor-ops",
     models: [
-      SOURCE_DOC,
       PARSED_TABLE,
       {
         id: "m_breach",
@@ -632,8 +617,8 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in", kind: "input", label: "SLA Uptime Report", inputType: "text", inputNameContains: "sla_uptime", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
-      parseStep("mod_parse", "Parse Uptime Table", "m_doc", "m_parsed", PARSE_TABLE),
+      { id: "mod_in", kind: "input", label: "SLA Uptime Report", inputType: "text", inputNameContains: "sla_uptime", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
+      parseStep("mod_parse", "Parse Uptime Table", DOC_ID, "m_parsed", PARSE_TABLE),
       {
         id: "mod_breach",
         kind: "llm",
@@ -659,7 +644,6 @@ const seeds: Record<string, unknown> = {
     name: "Bug Report Enricher",
     kind: "engineering",
     models: [
-      SOURCE_DOC,
       {
         id: "m_combined",
         name: "BugEnrichInput",
@@ -667,7 +651,7 @@ const seeds: Record<string, unknown> = {
         description: "User report (pipeline) + log snippet document.",
         fields: [
           { id: "f_logs", name: "app_logs", type: "document", optional: false, description: "Log excerpt" },
-          { id: "f_report", name: "user_report", type: "model", optional: false, description: "Parsed bug report", ref: "m_doc" },
+          { id: "f_report", name: "user_report", type: "model", optional: false, description: "Parsed bug report", ref: DOC_ID },
         ],
       },
       {
@@ -683,9 +667,9 @@ const seeds: Record<string, unknown> = {
       },
     ],
     modules: [
-      { id: "mod_in_report", kind: "input", label: "Bug Report", inputType: "text", inputNameContains: "bug_report", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_in_logs", kind: "input", label: "App Logs", inputType: "text", inputNameContains: "app_logs", outStructureId: "m_doc", cached: true, avgMs: 90, avgCostCents: 0 },
-      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: "m_doc", outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_in_report", kind: "input", label: "Bug Report", inputType: "text", inputNameContains: "bug_report", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_in_logs", kind: "input", label: "App Logs", inputType: "text", inputNameContains: "app_logs", outStructureId: DOC_ID, cached: true, avgMs: 90, avgCostCents: 0 },
+      { id: "mod_combine", kind: "combine", label: "Combine Inputs", inStructureId: DOC_ID, outStructureId: "m_combined", cached: true, avgMs: 40, avgCostCents: 0 },
       {
         id: "mod_enrich",
         kind: "llm",
@@ -693,7 +677,7 @@ const seeds: Record<string, unknown> = {
         inStructureId: "m_combined",
         outStructureId: "m_enriched",
         prompt:
-          "user_report is the bug report SourceDocument (use user_report.body). app_logs is the log document (use app_logs.body). Infer repro_steps, severity, likely_component (e.g. export/pdf/fonts), and a concise summary.",
+          "user_report is the bug report Document (use user_report.content). app_logs is the log document (use app_logs.content). Infer repro_steps, severity, likely_component (e.g. export/pdf/fonts), and a concise summary.",
         model: "deepseek-v3",
         cached: true,
         avgMs: 2400,

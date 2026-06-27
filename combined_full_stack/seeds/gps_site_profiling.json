@@ -4,27 +4,6 @@
   "kind": "geospatial-intel",
   "models": [
     {
-      "id": "m_src",
-      "name": "SourceDocument",
-      "description": "Raw JSON file annotated with its purpose.",
-      "fields": [
-        {
-          "id": "f_purpose",
-          "name": "purpose",
-          "type": "text",
-          "optional": false,
-          "description": "What this file contains"
-        },
-        {
-          "id": "f_body",
-          "name": "body",
-          "type": "text",
-          "optional": false,
-          "description": "Full file text"
-        }
-      ]
-    },
-    {
       "id": "m_site",
       "name": "GPSLocation",
       "description": "One GPS site location from the input catalog.",
@@ -227,7 +206,7 @@
       "kind": "input",
       "label": "GPS Site Catalog",
       "inputType": "json",
-      "outStructureId": "m_src",
+      "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
@@ -237,7 +216,7 @@
       "kind": "custom-code",
       "label": "Parse GPS Sites",
       "note": "JSON catalog → list[GPSLocation]. No LLM cost.",
-      "inStructureId": "m_src",
+      "inStructureId": "m_builtin_document",
       "outStructureId": "m_site",
       "outIsList": true,
       "cached": true,
@@ -245,7 +224,7 @@
       "avgCostCents": 0,
       "fallbackList": [
         {
-          "typescript": "(d) => JSON.parse(d.body).sites"
+          "typescript": "(d) => JSON.parse(d.content).sites"
         }
       ]
     },

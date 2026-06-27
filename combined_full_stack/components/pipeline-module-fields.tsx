@@ -1,7 +1,7 @@
 "use client"
 
 // AI : TODO refactor — split by ModuleKind into components/pipeline-fields/* (Input, Llm, CustomCode, …).
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { Plus, Trash2 } from "lucide-react"
 import { CustomCodeEditor } from "@/components/custom-code-editor"
@@ -44,6 +44,10 @@ import {
 } from "@/lib/validity"
 import { StructureLink } from "@/components/structure-link"
 import { cn } from "@/lib/utils"
+import {
+  LOGGING_SETTINGS_CHANGED_EVENT,
+  readRequireInputDescriptions,
+} from "@/lib/logging-settings"
 
 function llmModelLabel(id?: string) {
   return MODEL_OPTIONS.find((m) => m.id === id)?.label ?? id ?? "—"
@@ -233,6 +237,12 @@ export function PipelineModuleFields({
 }: PipelineModuleFieldsProps) {
   const llmSchemaPreview = useLlmSchemaPreview(selected, models)
   const edit = mode === "edit" && onUpdate
+  const [requireInputDescriptions, setRequireInputDescriptions] = useState(() => readRequireInputDescriptions())
+  useEffect(() => {
+    const onChange = () => setRequireInputDescriptions(readRequireInputDescriptions())
+    window.addEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
+    return () => window.removeEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
+  }, [])
   const hasNoPromptWarning = warnings?.some((w) => w.kind === "no-prompt")
   const inputOcrAvailable = selected.kind === "input" && inputModuleNeedsOcr(selected)
   const docToTextOcrAvailable =
@@ -309,7 +319,9 @@ export function PipelineModuleFields({
         label="Input description"
         hint={
           edit
-            ? "optional — Gemini Flash-Lite rejects step input that doesn't match before processing"
+            ? requireInputDescriptions
+              ? "required — describe what data this step expects"
+              : "optional — Gemini Flash-Lite can reject step input that doesn't match before processing"
             : undefined
         }
       >
@@ -324,6 +336,33 @@ export function PipelineModuleFields({
           <StaticValue>{selected.inputDescription}</StaticValue>
         ) : null}
       </PipelineField>
+
+      {edit && selected.inputDescription?.trim() ? (
+        <PipelineField
+          label="Validate input"
+          hint="Gemini Flash-Lite check before this step runs — billed to your account"
+        >
+          <div className="flex items-center gap-2.5">
+            <Switch
+              checked={selected.checkInputDescription !== false}
+              onCheckedChange={(checked) =>
+                onUpdate!({ checkInputDescription: checked ? undefined : false })
+              }
+            />
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {selected.checkInputDescription !== false
+                ? "On — rejects mismatched input before processing"
+                : "Off — description stored only, no LLM check"}
+            </span>
+          </div>
+        </PipelineField>
+      ) : !edit && selected.inputDescription?.trim() ? (
+        <PipelineField label="Validate input">
+          <StaticValue>
+            {selected.checkInputDescription !== false ? "On" : "Off"}
+          </StaticValue>
+        </PipelineField>
+      ) : null}
 
       {(selected.kind === "doc-to-text" || selected.kind === "combine" || isLlmKind(selected.kind)) && (
         <PipelineField label="Annotation / purpose">

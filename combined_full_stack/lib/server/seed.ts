@@ -68,6 +68,7 @@ const SeedFileSchema = z.object({
       inputType: z.union([InputTypeSchema, z.array(InputTypeSchema).min(1)]).optional(),
       inputNameContains: z.string().optional(),
       inputDescription: z.string().optional(),
+      checkInputDescription: z.boolean().optional(),
       inputMinCount: z.number().int().min(1).optional(),
       prompt: z.string().optional(),
       code: z.string().optional(),

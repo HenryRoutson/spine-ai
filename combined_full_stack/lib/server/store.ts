@@ -15,6 +15,7 @@ import {
   type SeedDocSpec,
 } from "./seed";
 import { computeInvalid, migrateProjectModules, syncAutoQuoteSteps } from "./validity";
+import { stripSharedModels } from "./builtin_models";
 import type {
   DocId,
   DocLabel,
@@ -346,9 +347,10 @@ export class JsonStore implements Store {
 
   saveProject(p: Project): void {
     const migrated = migrateProjectModules(p);
-    const i = this.state.projects.findIndex((x) => x.id === migrated.id);
-    if (i === -1) this.state.projects.push(migrated);
-    else this.state.projects[i] = migrated;
+    const toPersist = { ...migrated, models: stripSharedModels(migrated.models) };
+    const i = this.state.projects.findIndex((x) => x.id === toPersist.id);
+    if (i === -1) this.state.projects.push(toPersist);
+    else this.state.projects[i] = toPersist;
     this.persist();
   }
 

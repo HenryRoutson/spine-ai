@@ -64,15 +64,15 @@ export const MD_TABLE_PARSER_PREAMBLE =
   "return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);";
 
 export function customCodeParseDocBodyToParsedTable(): string {
-  return `${MD_TABLE_PARSER_PREAMBLE}(doc)=>({rows_json:JSON.stringify(mdFirstTableRows(doc.body)),row_count:mdFirstTableRows(doc.body).length})`;
+  return `${MD_TABLE_PARSER_PREAMBLE}(doc)=>({rows_json:JSON.stringify(mdFirstTableRows(doc.content)),row_count:mdFirstTableRows(doc.content).length})`;
 }
 
 export function customCodeParseDocBodyAllTables(): string {
-  return `${MD_TABLE_PARSER_PREAMBLE}(doc)=>({rows_json:JSON.stringify(mdTableToRows(doc.body)),row_count:mdTableToRows(doc.body).reduce((n,t)=>n+t.rows.length,0)})`;
+  return `${MD_TABLE_PARSER_PREAMBLE}(doc)=>({rows_json:JSON.stringify(mdTableToRows(doc.content)),row_count:mdTableToRows(doc.content).reduce((n,t)=>n+t.rows.length,0)})`;
 }
 
 export function customCodeParseDocToTableRows(): string {
-  return `${MD_TABLE_PARSER_PREAMBLE}(doc)=>mdFirstTableRows(doc.body).map((row,i)=>({row_id:String(i+1),cells_json:JSON.stringify(row)}))`;
+  return `${MD_TABLE_PARSER_PREAMBLE}(doc)=>mdFirstTableRows(doc.content).map((row,i)=>({row_id:String(i+1),cells_json:JSON.stringify(row)}))`;
 }
 
 export function customCodeMergeTableRowsFromCombined(
@@ -81,5 +81,5 @@ export function customCodeMergeTableRowsFromCombined(
   outAKey: string,
   outBKey: string,
 ): string {
-  return `${MD_TABLE_PARSER_PREAMBLE}(combined)=>({${outAKey}:JSON.stringify(combined.${pipelineField}.map((r)=>JSON.parse(r.cells_json))),${outBKey}:JSON.stringify(mdFirstTableRows(combined.${documentField}.body))})`;
+  return `${MD_TABLE_PARSER_PREAMBLE}(combined)=>({${outAKey}:JSON.stringify(combined.${pipelineField}.map((r)=>JSON.parse(r.cells_json))),${outBKey}:JSON.stringify(mdFirstTableRows(combined.${documentField}.content))})`;
 }

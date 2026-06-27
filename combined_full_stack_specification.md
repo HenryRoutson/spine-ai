@@ -145,6 +145,9 @@ code should also be fully traceable. if a piece of code fails, this is stored fo
 Need dynamic scehmas. If you have a task to mark homework, you're provided with a doc to text conversion of homework to text. from this you need to create an output schema of what the marking should check like question 7 should have fields a, b, c maybe, and the question descriptoins and marking criteria is inside each of those fields. you can't hardcode this for every homework sheet. Allow the option to request llm calls to output in a dynamic format and validate in same way. Maybe a format that adheres to a certain generic structure.
 
 
+
+
+
 please add a warning if you add the same struct multiple times as an input or output in a pipeline 
 please make the connection which doesn't work red if input doesn't connect to output
 if input x and output y, please have buttons for either x->y on step n or y->x on step n + 1.
@@ -155,6 +158,8 @@ Please add a warning if you use json input type option, as ideally you should us
 please add a generate summary button which summarises the current pipeline and points out current issues. make this a button.
 
 add an optional input description which is evaluated by an llm if enabled to check data is ok before being passed in to avoid attributing errors to code rather than the wrong data. also holds for files being passed in and is an extra step on top of the type system. 
+pleaes make an option in settings to make input descriptoins mandatory. make sure to charge these llm checks to billing, create a seperate billing graph for this at the bottom of logging under Mean cost called Description Validation cost. then add a toggle inside each step for if the description will be checked, in case it's expensive but you want to run it occasitionally
+
 
 # inference
 

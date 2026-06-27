@@ -22,7 +22,8 @@ import { useStore } from "@/lib/store"
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { formatUsdFromCents } from "@/lib/format"
 import { useAppShell } from "@/lib/app-shell"
-import { computeInvalid, modelName } from "@/lib/validity"
+import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
+import { modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
 import type { DocId, DocRef, ModuleId, PipelineModule } from "@/lib/types"
 import type { StepProgress, StepSubProgress } from "@/lib/run-engine"
@@ -39,6 +40,8 @@ import { useInferenceRun } from "@/lib/use-inference-run"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { RunNotesPad } from "@/components/run-notes-pad"
 import { StepServerLogsSection } from "@/components/server-logs-panel"
+import { StepInputDescription, moduleInputDescription } from "@/components/step-input-description"
+import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import type { JobLogEntry } from "@/lib/types"
 
 export function Inference() {
@@ -58,7 +61,13 @@ export function Inference() {
   } = useStore()
   const { setActiveWindow, openLogging } = useAppShell()
   const { open } = useDocViewer()
-  const pipelineInvalid = computeInvalid(modules, models).size > 0
+  const [, bumpValidityPrefs] = useState(0)
+  useEffect(() => {
+    const onChange = () => bumpValidityPrefs((n) => n + 1)
+    window.addEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
+    return () => window.removeEventListener(LOGGING_SETTINGS_CHANGED_EVENT, onChange)
+  }, [])
+  const pipelineInvalid = computeInvalidForUi(modules, models).size > 0
   const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
   const insufficientCredit =
     billingAccount != null && billingAccount.balanceCents < minRunBalanceCents
@@ -265,6 +274,7 @@ export function Inference() {
                             label={seg.combine.label}
                             state={state}
                             sub={combineUi?.sub}
+                            inputDescription={moduleInputDescription(seg.combine)}
                             serverLogs={run.logsByModule.get(seg.combine.id) ?? []}
                           />
                           <StepRow
@@ -272,6 +282,7 @@ export function Inference() {
                             state={inputState}
                             sub={inputUi?.sub}
                             nested
+                            inputDescription={moduleInputDescription(seg.input)}
                             serverLogs={run.logsByModule.get(seg.input.id) ?? []}
                           />
                         </div>
@@ -284,6 +295,7 @@ export function Inference() {
                         label={seg.module.label}
                         state={moduleUi?.status ?? "idle"}
                         sub={moduleUi?.sub}
+                        inputDescription={moduleInputDescription(seg.module)}
                         serverLogs={run.logsByModule.get(seg.module.id) ?? []}
                       />
                     )
@@ -349,6 +361,11 @@ function InferenceInputSlot({
           </Badge>
         )}
       </div>
+      <StepInputDescription
+        description={moduleInputDescription(inputModule)}
+        forceVisible={!!issue}
+        className="mb-2"
+      />
       {docs.length ? (
         <div className="space-y-2">
           {docs.map((doc) => (
@@ -471,12 +488,14 @@ function StepRow({
   state,
   nested,
   sub,
+  inputDescription,
   serverLogs = [],
 }: {
   label: string
   state: StepProgress["status"] | "idle"
   nested?: boolean
   sub?: StepSubProgress
+  inputDescription?: string
   serverLogs?: JobLogEntry[]
 }) {
   return (
@@ -492,6 +511,11 @@ function StepRow({
         </span>
         {state === "cached" && <span className="font-mono text-[10px] text-chart-3">cache · $0.00</span>}
       </div>
+      <StepInputDescription
+        description={inputDescription}
+        forceVisible={state === "error"}
+        className={nested ? "pl-5" : "pl-7"}
+      />
       {state === "running" && sub && (
         <div className="mt-1 pl-7">
           <div className="mb-0.5 flex items-center justify-between gap-2">

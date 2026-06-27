@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Plus, Trash2, Code2, LayoutGrid, X, Sparkles, Sparkle, AlertTriangle } from "lucide-react"
+import { Plus, Trash2, Code2, LayoutGrid, X, Sparkles, Sparkle, AlertTriangle, Lock } from "lucide-react"
 import { StructureAssistant } from "@/components/structure-assistant"
 import { useAppShell } from "@/lib/app-shell"
 import { useStore, uid } from "@/lib/store"
@@ -13,6 +13,7 @@ import {
   type StructureModel,
 } from "@/lib/types"
 import { allModelsToPydantic } from "@/lib/pydantic"
+import { isLockedStructureModel } from "@/lib/structure"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -45,8 +46,10 @@ export function StructureBuilder() {
   }, [focusStructureId, models, clearFocusStructure])
 
   const selected = models.find((m) => m.id === selectedId) ?? models[0]
+  const selectedLocked = selected ? isLockedStructureModel(selected) : false
 
   function updateModel(next: StructureModel) {
+    if (isLockedStructureModel(next)) return
     setModels(models.map((m) => (m.id === next.id ? next : m)))
   }
 
@@ -64,6 +67,8 @@ export function StructureBuilder() {
   }
 
   function deleteModel(id: string) {
+    const target = models.find((m) => m.id === id)
+    if (target && isLockedStructureModel(target)) return
     const next = models.filter((m) => m.id !== id)
     setModels(next)
     if (selectedId === id) setSelectedId(next[0]?.id ?? "")
@@ -176,6 +181,7 @@ export function StructureBuilder() {
                   </p>
                 </div>
                 {m.auto && <Sparkles className="h-3 w-3 shrink-0 text-chart-3" />}
+                {isLockedStructureModel(m) && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
               </button>
             ))}
           </div>
@@ -185,6 +191,14 @@ export function StructureBuilder() {
         {view === "ui" && selected ? (
           <div className="min-w-0 flex-1 overflow-y-auto">
             <div className="mx-auto max-w-3xl px-5 py-5">
+              {selectedLocked && (
+                <div className="mb-4 flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-2">
+                  <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                  <p className="font-mono text-[11px] text-muted-foreground">
+                    shared built-in structure — available in every project and cannot be edited
+                  </p>
+                </div>
+              )}
               {selected.auto && (
                 <div className="mb-4 flex items-center gap-2 rounded-md border border-chart-3/40 bg-chart-3/10 px-3 py-2">
                   <Sparkles className="h-3.5 w-3.5 text-chart-3" />
@@ -206,6 +220,7 @@ export function StructureBuilder() {
                   <Input
                     value={selected.name}
                     onChange={(e) => updateModel({ ...selected, name: e.target.value })}
+                    readOnly={selectedLocked}
                     className="h-9 font-mono text-sm font-medium"
                   />
                   <Input
@@ -214,10 +229,11 @@ export function StructureBuilder() {
                     onChange={(e) =>
                       updateModel({ ...selected, description: e.target.value })
                     }
+                    readOnly={selectedLocked}
                     className="h-8 text-xs text-muted-foreground"
                   />
                 </div>
-                {models.length > 1 && (
+                {models.length > 1 && !selectedLocked && (
                   <Button
                     size="icon"
                     variant="ghost"
@@ -243,6 +259,7 @@ export function StructureBuilder() {
                       <Input
                         value={f.name}
                         onChange={(e) => updateField(f.id, { name: e.target.value })}
+                        readOnly={selectedLocked}
                         className="h-8 font-mono text-xs"
                       />
                       <Select
@@ -255,6 +272,7 @@ export function StructureBuilder() {
                               : undefined,
                           })
                         }
+                        disabled={selectedLocked}
                       >
                         <SelectTrigger className="h-8 font-mono text-xs">
                           <SelectValue />
@@ -273,6 +291,7 @@ export function StructureBuilder() {
                         onChange={(e) =>
                           updateField(f.id, { description: e.target.value })
                         }
+                        readOnly={selectedLocked}
                         className="h-8 text-xs"
                       />
                       <Input
@@ -281,11 +300,13 @@ export function StructureBuilder() {
                         onChange={(e) =>
                           updateField(f.id, { example: e.target.value || undefined })
                         }
+                        readOnly={selectedLocked}
                         className="h-8 font-mono text-xs"
                       />
                       <div className="flex w-14 items-center justify-center gap-1">
                         <button
                           onClick={() => updateField(f.id, { optional: !f.optional })}
+                          disabled={selectedLocked}
                           className={cn(
                             "h-5 w-5 rounded border text-[10px] font-medium",
                             f.optional
@@ -297,7 +318,8 @@ export function StructureBuilder() {
                         </button>
                         <button
                           onClick={() => removeField(f.id)}
-                          className="text-muted-foreground hover:text-destructive"
+                          disabled={selectedLocked}
+                          className="text-muted-foreground hover:text-destructive disabled:opacity-40"
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -318,6 +340,7 @@ export function StructureBuilder() {
                         <Select
                           value={f.ref}
                           onValueChange={(v) => updateField(f.id, { ref: v ?? undefined })}
+                          disabled={selectedLocked}
                         >
                           <SelectTrigger className="h-7 font-mono text-[11px]">
                             <SelectValue placeholder="pick model" />
@@ -342,14 +365,16 @@ export function StructureBuilder() {
                 ))}
               </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3 bg-transparent"
-                onClick={addField}
-              >
-                <Plus className="mr-1.5 h-3.5 w-3.5" /> Add field
-              </Button>
+              {!selectedLocked && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 bg-transparent"
+                  onClick={addField}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Add field
+                </Button>
+              )}
 
               <p className="mt-4 font-mono text-[10px] leading-relaxed text-muted-foreground">
                 {'`text` reads as a string for non-technical reviewers. `tuple[text, quote]` links extracted text back to its source span.'}

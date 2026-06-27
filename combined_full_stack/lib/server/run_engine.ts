@@ -8,7 +8,7 @@ import { runLogger } from "./server_logger";
 import { fileWriteHelper } from "./file_write_helper";
 import { llmBatchStructured, llmStructured } from "./llm";
 import { docToTextViaLlm } from "./doc_to_text";
-import { assertInputMatchesDescription } from "./input_description_check";
+import { assertInputMatchesDescription, shouldCheckInputDescription } from "./input_description_check";
 import { StructuredResponseError } from "./openrouter_llm";
 import { collectQuotes, resolveQuotesValue } from "./quotation";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
@@ -25,6 +25,12 @@ import {
   validateStepOutput,
   wrapListForOutputStructure,
 } from "./structure";
+import {
+  documentContentFrom,
+  documentDocIdFrom,
+  documentFilenameFrom,
+  documentValueFrom,
+} from "./document_value";
 import type { Store } from "./store";
 import { uid } from "../id";
 import { buildRunInputDocIds, computeRunFingerprint, stepCacheKey } from "./run_fingerprint";
@@ -229,9 +235,9 @@ function applyModuleSideEffects(
     return;
   }
   if (m.kind === "doc-to-text") {
-    const upstream = (ctx.prevModuleId && ctx.outputs.get(ctx.prevModuleId)) as { doc_id?: DocId; body?: string } | undefined;
-    const body = upstream?.body ?? ctx.sourceText;
-    const docId = upstream?.doc_id ?? ctx.sourceDocId;
+    const upstream = ctx.prevModuleId ? ctx.outputs.get(ctx.prevModuleId) : undefined;
+    const body = documentContentFrom(upstream, ctx.sourceText);
+    const docId = documentDocIdFrom(upstream, { docId: ctx.sourceDocId }) ?? ctx.sourceDocId;
     ctx.sourceText = body;
     ctx.sourceDocId = docId;
   }
@@ -342,16 +348,17 @@ function resolveStepInputForCheck(m: PipelineModule, ctx: RunCtx, store: Store):
     const docIds = ctx.inputByModule.get(m.id) ?? [];
     const items = docIds.map((docId) => {
       const doc = store.docs().find((d) => d.id === docId);
-      return {
-        doc_id: docId,
-        filename: doc?.name ?? docId,
-        body: store.docContent(docId) ?? "",
-      };
+      return documentValueFrom(
+        undefined,
+        { docId, docName: doc?.name },
+        store.docContent(docId) ?? "",
+      );
     });
     const first = items[0];
+    const firstDocId = docIds[0];
     return {
       value: items.length === 1 ? first : items,
-      vision: first ? { store, docId: first.doc_id, docName: first.filename } : undefined,
+      vision: first ? { store, docId: firstDocId, docName: first.filename } : undefined,
     };
   }
   if (m.kind === "combine") {
@@ -448,9 +455,9 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       const stepModel = m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
       let lastOcr: { model: string; fromVisionCache: boolean } | undefined;
 
-      const transcribeDoc = async (doc: { doc_id?: DocId; body?: string; purpose?: string }) => {
-        const docId = doc.doc_id ?? ctx.sourceDocId;
-        let body = doc.body ?? ctx.sourceText;
+      const transcribeDoc = async (doc: Record<string, unknown>) => {
+        const docId = documentDocIdFrom(doc, { docId: ctx.sourceDocId }) ?? ctx.sourceDocId;
+        let body = documentContentFrom(doc, ctx.sourceText);
         if (useLlm) {
           const ocr = await docToTextViaLlm(
             store,
@@ -467,7 +474,7 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
           ctx.ledger.recordService("doc-parse svc", ctx.model, 1);
         }
         const hints = materializeHints(m, ctx, docId, body);
-        return materializeStepOutput(m, project, { ...doc, doc_id: docId, body }, hints);
+        return materializeStepOutput(m, project, { ...doc, doc_id: docId, body, content: body }, hints);
       };
 
       if (Array.isArray(upstream)) {
@@ -475,10 +482,11 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         log.info(`doc-to-text batch`, { count: upstream.length, llm: useLlm, purpose: m.label });
         const items = [];
         for (const doc of upstream) {
-          items.push(await transcribeDoc(doc as { doc_id?: DocId; body?: string; purpose?: string }));
+          items.push(await transcribeDoc(doc as Record<string, unknown>));
         }
-        const first = items[0] as { body?: string; doc_id?: DocId } | undefined;
-        if (first?.body) ctx.sourceText = first.body;
+        const first = items[0] as { body?: string; content?: string; doc_id?: DocId } | undefined;
+        const firstBody = documentContentFrom(first, "");
+        if (firstBody) ctx.sourceText = firstBody;
         if (first?.doc_id) ctx.sourceDocId = first.doc_id;
         const value = m.outIsList || upstream.length > 1 ? items : items[0];
         const purpose = m.note ?? m.label;
@@ -494,15 +502,11 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
         };
       }
 
-      const single = (upstream ?? { body: ctx.sourceText, doc_id: ctx.sourceDocId }) as {
-        doc_id?: DocId;
-        body?: string;
-        purpose?: string;
-      };
+      const single = (upstream ?? { content: ctx.sourceText, doc_id: ctx.sourceDocId }) as Record<string, unknown>;
       if (useLlm) ctx.stepLlmCalls = [];
       const value = await transcribeDoc(single);
-      const body = (value as { body?: string }).body ?? single.body ?? "";
-      const docId = (value as { doc_id?: DocId }).doc_id ?? single.doc_id ?? ctx.sourceDocId;
+      const body = documentContentFrom(value, documentContentFrom(single, ctx.sourceText));
+      const docId = documentDocIdFrom(value, { docId: documentDocIdFrom(single, { docId: ctx.sourceDocId }) }) ?? ctx.sourceDocId;
       ctx.sourceText = body;
       ctx.sourceDocId = docId;
       log.info(useLlm ? `doc-to-text LLM` : `doc-to-text`, {
@@ -570,18 +574,19 @@ async function execModule(m: PipelineModule, ctx: RunCtx, log: ReturnType<typeof
       const purpose = project.modules.find((x) => x.id === ctx.prevModuleId)?.label ?? "Document";
       const value: Record<string, unknown> = {};
       const summary: Record<string, unknown> = {};
+      const newDocHints = { docId: documentDocIdFrom(newInput), docName: documentFilenameFrom(newInput) };
       for (const f of out.fields) {
         const isDoc = f.type === "document";
         value[f.name] = isDoc
-          ? { doc_id: newInput?.doc_id ?? "", purpose, body: newInput?.body ?? "" }
+          ? documentValueFrom(newInput, newDocHints, documentContentFrom(newInput))
           : pipelineData ?? [];
-        summary[f.name] = isDoc ? newInput?.doc_id : Array.isArray(pipelineData) ? `${pipelineData.length} items` : pipelineData;
+        summary[f.name] = isDoc ? documentFilenameFrom(newInput, newDocHints) : Array.isArray(pipelineData) ? `${pipelineData.length} items` : pipelineData;
       }
       const merged = materializeStepOutput(
         m,
         project,
         value,
-        materializeHints(m, ctx, newInput?.doc_id, newInput?.body ?? ""),
+        materializeHints(m, ctx, newDocHints.docId, documentContentFrom(newInput)),
       );
       return {
         value: merged,
@@ -854,10 +859,12 @@ async function runLinearStepsFrom(
       log.debug(`cache lookup`, { key, cachedFlag: !!m.cached });
       const cached = m.cached ? readStepCache(key) : undefined;
 
+      let descriptionCheckCostCents = 0;
       try {
         if (!cached) {
           const inDesc = m.inputDescription?.trim();
-          if (inDesc) {
+          if (inDesc && shouldCheckInputDescription(m)) {
+            const descBeforeCents = ledger.totalCents();
             if (!ctx.stepLlmCalls) ctx.stepLlmCalls = [];
             const { value, vision } = resolveStepInputForCheck(m, ctx, ctx.store);
             await assertInputMatchesDescription(
@@ -868,6 +875,7 @@ async function runLinearStepsFrom(
               log.child("input-desc"),
               vision,
             );
+            descriptionCheckCostCents = +(ledger.totalCents() - descBeforeCents).toFixed(4);
           }
         }
         if (cached) {
@@ -876,19 +884,19 @@ async function runLinearStepsFrom(
           // AI : cache hit — OCR text lives in cached value, not raw store content.
           if (m.kind === "input" && m.useOcr) {
             const v = cached.value;
-            const first = Array.isArray(v)
-              ? (v[0] as { body?: string; doc_id?: DocId } | undefined)
-              : (v as { body?: string; doc_id?: DocId } | undefined);
-            if (typeof first?.body === "string") ctx.sourceText = first.body;
-            if (first?.doc_id) ctx.sourceDocId = first.doc_id;
+            const first = Array.isArray(v) ? v[0] : v;
+            const body = documentContentFrom(first, "");
+            if (body) ctx.sourceText = body;
+            const docId = documentDocIdFrom(first, { docId: ctx.sourceDocId });
+            if (docId) ctx.sourceDocId = docId;
           }
           if (m.kind === "doc-to-text" && docParseModeForModule(m) === "llm") {
             const v = cached.value;
-            const first = Array.isArray(v)
-              ? (v[0] as { body?: string; doc_id?: DocId } | undefined)
-              : (v as { body?: string; doc_id?: DocId } | undefined);
-            if (typeof first?.body === "string") ctx.sourceText = first.body;
-            if (first?.doc_id) ctx.sourceDocId = first.doc_id;
+            const first = Array.isArray(v) ? v[0] : v;
+            const body = documentContentFrom(first, "");
+            if (body) ctx.sourceText = body;
+            const docId = documentDocIdFrom(first, { docId: ctx.sourceDocId });
+            if (docId) ctx.sourceDocId = docId;
           }
           status = "cached";
           savedCentsAcc.value += cached.costCents ?? 0;
@@ -987,11 +995,11 @@ async function runLinearStepsFrom(
         costCents: +(status === "cached" ? 0 : ledger.totalCents() - beforeCents).toFixed(4),
         preview: result?.preview,
       });
-      return { status, result };
+      return { status, result, descriptionCheckCostCents };
       }),
     );
 
-    const { status, result } = stepOutcome;
+    const { status, result, descriptionCheckCostCents = 0 } = stepOutcome;
 
     const ms = status === "cached" ? 0 : Date.now() - t0;
     const costCents = status === "cached" ? 0 : ledger.totalCents() - beforeCents;
@@ -1020,6 +1028,8 @@ async function runLinearStepsFrom(
       inputPreview: result.inputPreview ?? defaultInputPreview,
       outputPreview: result.preview,
       outputJson: result.json,
+      inputDescription: m.inputDescription?.trim() || undefined,
+      descriptionCheckCostCents: descriptionCheckCostCents > 0 ? descriptionCheckCostCents : undefined,
       docId: result.docId,
       llmCalls: result.llmCalls?.length ? result.llmCalls : undefined,
       failures: stepFailuresFor(result, status, ctx.stepExtraFailures),
@@ -1335,6 +1345,7 @@ export async function resumeRunPipeline(
     inputPreview: defaultInputPreview,
     outputPreview: result.preview,
     outputJson: result.json,
+    inputDescription: m.inputDescription?.trim() || undefined,
     llmCalls: result.llmCalls?.length ? result.llmCalls : undefined,
     failures: stepFailuresFor(result, status, ctx.stepExtraFailures),
     serverLogs: stepServerLogs(serverLogs, m.id),

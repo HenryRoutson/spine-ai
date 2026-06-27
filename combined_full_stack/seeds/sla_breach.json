@@ -4,27 +4,6 @@
   "kind": "vendor-ops",
   "models": [
     {
-      "id": "m_doc",
-      "name": "SourceDocument",
-      "description": "Raw document annotated with its purpose.",
-      "fields": [
-        {
-          "id": "f_purpose",
-          "name": "purpose",
-          "type": "text",
-          "optional": false,
-          "description": "What this document contains"
-        },
-        {
-          "id": "f_body",
-          "name": "body",
-          "type": "text",
-          "optional": false,
-          "description": "Full extracted text"
-        }
-      ]
-    },
-    {
       "id": "m_parsed",
       "name": "ParsedTable",
       "description": "Markdown table converted to JSON rows.",
@@ -88,7 +67,7 @@
       "label": "SLA Uptime Report",
       "inputType": "text",
       "inputNameContains": "sla_uptime",
-      "outStructureId": "m_doc",
+      "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
@@ -98,14 +77,14 @@
       "kind": "custom-code",
       "label": "Parse Uptime Table",
       "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
-      "inStructureId": "m_doc",
+      "inStructureId": "m_builtin_document",
       "outStructureId": "m_parsed",
       "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
       "fallbackList": [
         {
-          "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(doc)=>({rows_json:JSON.stringify(mdFirstTableRows(doc.body)),row_count:mdFirstTableRows(doc.body).length})"
+          "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(doc)=>({rows_json:JSON.stringify(mdFirstTableRows(doc.content)),row_count:mdFirstTableRows(doc.content).length})"
         }
       ]
     },

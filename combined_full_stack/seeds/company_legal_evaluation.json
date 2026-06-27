@@ -4,27 +4,6 @@
   "kind": "legal-compliance",
   "models": [
     {
-      "id": "m_doc",
-      "name": "SourceDocument",
-      "description": "Raw legal document annotated with its purpose.",
-      "fields": [
-        {
-          "id": "f_purpose",
-          "name": "purpose",
-          "type": "text",
-          "optional": false,
-          "description": "What this document governs"
-        },
-        {
-          "id": "f_body",
-          "name": "body",
-          "type": "text",
-          "optional": false,
-          "description": "Full extracted text"
-        }
-      ]
-    },
-    {
       "id": "m_rule",
       "name": "AtomicRule",
       "description": "A single rule plus the verbatim quote it was sourced from.",
@@ -135,7 +114,7 @@
         "pdf"
       ],
       "inputNameContains": "legal_requirements",
-      "outStructureId": "m_doc",
+      "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 110,
       "avgCostCents": 0
@@ -145,8 +124,8 @@
       "kind": "doc-to-text",
       "label": "Doc → Text",
       "note": "Parse the contract and annotate its governing purpose.",
-      "inStructureId": "m_doc",
-      "outStructureId": "m_doc",
+      "inStructureId": "m_builtin_document",
+      "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 460,
       "avgCostCents": 1
@@ -156,7 +135,7 @@
       "kind": "llm",
       "label": "Extract Atomic Rules",
       "note": "text → list[tuple[text, quote]]",
-      "inStructureId": "m_doc",
+      "inStructureId": "m_builtin_document",
       "outStructureId": "m_rule",
       "outIsList": true,
       "prompt": "Extract the 6 most important atomic, independently verifiable legal rules from the document. For each rule, give a stable rule_id (R-01, R-02, …), a concise plain-language description, the verbatim source quote it came from, and a 1-5 severity. Return at most 6 rules.",
@@ -204,7 +183,7 @@
         "word"
       ],
       "inputNameContains": "company_legal_compliance",
-      "outStructureId": "m_doc",
+      "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0

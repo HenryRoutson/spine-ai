@@ -6,6 +6,7 @@ export type StepSampleStatus = "ok" | "error"
 export type StepSample = {
   ms: number
   costCents: number
+  descriptionCheckCostCents: number
   status: StepSampleStatus
 }
 
@@ -20,6 +21,7 @@ export type StepMeanStats = {
   label: string
   meanMs: number
   meanCostCents: number
+  meanDescriptionCheckCostCents: number
   failed: number
   n: number
 }
@@ -46,6 +48,7 @@ export function buildStepProfiles(runs: PipelineRun[], stepOrder: RunStep[]): St
       samples.push({
         ms: step.ms,
         costCents: step.costCents,
+        descriptionCheckCostCents: step.descriptionCheckCostCents ?? 0,
         status: stepSampleStatus(step.status),
       })
     }
@@ -59,11 +62,13 @@ export function buildStepMeanStats(profiles: StepProfile[]): StepMeanStats[] {
     .map((p) => {
       const ms = p.samples.map((s) => s.ms)
       const cost = p.samples.map((s) => s.costCents)
+      const descCost = p.samples.map((s) => s.descriptionCheckCostCents)
       return {
         moduleId: p.moduleId,
         label: p.label,
         meanMs: distributionStats(ms).mean,
         meanCostCents: distributionStats(cost).mean,
+        meanDescriptionCheckCostCents: distributionStats(descCost).mean,
         failed: p.samples.filter((s) => s.status === "error").length,
         n: p.samples.length,
       }

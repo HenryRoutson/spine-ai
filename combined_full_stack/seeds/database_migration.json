@@ -4,27 +4,6 @@
   "kind": "database-migration",
   "models": [
     {
-      "id": "m_src",
-      "name": "SourceDocument",
-      "description": "Raw JSON file annotated with its purpose.",
-      "fields": [
-        {
-          "id": "f_purpose",
-          "name": "purpose",
-          "type": "text",
-          "optional": false,
-          "description": "What this file contains"
-        },
-        {
-          "id": "f_body",
-          "name": "body",
-          "type": "text",
-          "optional": false,
-          "description": "Full file text"
-        }
-      ]
-    },
-    {
       "id": "m_legacy",
       "name": "LegacyUser",
       "description": "One messy legacy CRM record (string booleans, DD/MM/YYYY dates, deprecated fields).",
@@ -215,7 +194,7 @@
       "label": "Field Mapping Input",
       "inputType": "json",
       "inputNameContains": "field_mapping",
-      "outStructureId": "m_src",
+      "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 80,
       "avgCostCents": 0
@@ -244,7 +223,7 @@
       "avgCostCents": 0,
       "fallbackList": [
         {
-          "typescript": "(input) => {\n  const spec = JSON.parse(input.mapping.body).fields;\n  const transforms = {\n    lowercase: (v) => String(v).toLowerCase(),\n    first_word: (v) => String(v).trim().split(/\\s+/)[0],\n    last_word: (v) => String(v).trim().split(/\\s+/).pop(),\n    yn_to_bool: (v) => v === 'Y',\n    ddmmyyyy_to_iso: (v) => { const [d, m, y] = String(v).split('/'); return y + '-' + m + '-' + d; }\n  };\n  const setPath = (obj, path, v) => {\n    const keys = path.split('.');\n    let cur = obj;\n    for (const k of keys.slice(0, -1)) cur = cur[k] = cur[k] ?? {};\n    cur[keys[keys.length - 1]] = v;\n  };\n  return input.legacy_users.map((rec) => {\n    const out = {};\n    for (const [target, s] of Object.entries(spec)) {\n      const raw = s.source === undefined ? undefined : rec[s.source];\n      setPath(out, target, raw === undefined ? (s.default === undefined ? null : s.default) : s.transform ? transforms[s.transform](raw) : raw);\n    }\n    return out;\n  });\n}"
+          "typescript": "(input) => {\n  const spec = JSON.parse(input.mapping.content).fields;\n  const transforms = {\n    lowercase: (v) => String(v).toLowerCase(),\n    first_word: (v) => String(v).trim().split(/\\s+/)[0],\n    last_word: (v) => String(v).trim().split(/\\s+/).pop(),\n    yn_to_bool: (v) => v === 'Y',\n    ddmmyyyy_to_iso: (v) => { const [d, m, y] = String(v).split('/'); return y + '-' + m + '-' + d; }\n  };\n  const setPath = (obj, path, v) => {\n    const keys = path.split('.');\n    let cur = obj;\n    for (const k of keys.slice(0, -1)) cur = cur[k] = cur[k] ?? {};\n    cur[keys[keys.length - 1]] = v;\n  };\n  return input.legacy_users.map((rec) => {\n    const out = {};\n    for (const [target, s] of Object.entries(spec)) {\n      const raw = s.source === undefined ? undefined : rec[s.source];\n      setPath(out, target, raw === undefined ? (s.default === undefined ? null : s.default) : s.transform ? transforms[s.transform](raw) : raw);\n    }\n    return out;\n  });\n}"
         }
       ]
     },

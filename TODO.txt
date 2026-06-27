@@ -151,6 +151,12 @@ Phase 4 — wire A/B strategy placeholder
 
 
 
+
+given this is a developing product, can you create a log of all user actions to record everything? this is for me to find issues users might have and where they get stuck
+
+
+
+
 please make a plan for how to have a complete type system in this project. currently the types are kind of vibes . if something is a list like an input step, somehow it doesn't matter if you change it to a list of not. don't code. ideally i would just compile a python script dervied from the json and see what errors come from that. what would be best? i still want to support generics and document types like word. i also want to see errors per step like they are not and not overall. be step specific. 
 
 

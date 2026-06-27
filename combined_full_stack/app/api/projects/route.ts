@@ -35,11 +35,11 @@ export async function POST(req: NextRequest) {
     project = migrateProjectModules(cloneProject(source, existing));
     apiLog.info(`POST /api/projects — clone project`, { cloneFrom: body.cloneFrom, projectId: project.id });
   } else {
-    project = blankProject(uid<ProjectId>("p_"));
+    project = migrateProjectModules(blankProject(uid<ProjectId>("p_")));
     apiLog.info(`POST /api/projects — blank project`, { projectId: project.id });
   }
 
   store.saveProject(project);
   await store.flush();
-  return NextResponse.json(project);
+  return NextResponse.json(migrateProjectModules(project));
 }

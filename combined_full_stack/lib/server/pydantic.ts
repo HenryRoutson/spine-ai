@@ -1,4 +1,5 @@
 import { fieldToPy } from "./type_expr";
+import { stripSharedModels } from "./builtin_models";
 import type { StructureModel } from "./types";
 
 export function modelToPydantic(model: StructureModel, models: StructureModel[]): string {
@@ -30,16 +31,14 @@ export function allModelsToPydantic(models: StructureModel[]): string {
     "    quote: Quote",
     "",
     "class Document(BaseModel):",
-    "    doc_id: str",
-    "    purpose: str",
-    "    body: str",
+    '    content: str = Field(description="Full extracted text of the file")',
+    '    filename: str = Field(description="Original upload filename")',
     "",
     "class FileInput(BaseModel):",
-    "    doc_id: str",
-    "    purpose: str",
-    "    body: str",
+    "    content: str",
+    "    filename: str",
     "",
   ].join("\n");
-  const classes = models.map((m) => modelToPydantic(m, models)).join("\n\n\n");
+  const classes = stripSharedModels(models).map((m) => modelToPydantic(m, models)).join("\n\n\n");
   return `${imports}\n\n${classes}\n`;
 }

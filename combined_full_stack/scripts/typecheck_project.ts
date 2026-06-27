@@ -31,7 +31,7 @@ writeFileSync(join(outDir, "pipeline_types.d.ts"), generated.pipelineDts);
 const modelsDts = [
   "export type Quote = { doc_id: string; start: number; end: number };",
   "export type TextQuote = { text: string; quote: Quote };",
-  "export type Document = { doc_id: string; purpose: string; body: string };",
+  "export type Document = { content: string; filename: string };",
   "export type FileInput = Document;",
   "",
   ...project.models.map((m) => {

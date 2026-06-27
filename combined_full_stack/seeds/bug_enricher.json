@@ -4,27 +4,6 @@
   "kind": "engineering",
   "models": [
     {
-      "id": "m_doc",
-      "name": "SourceDocument",
-      "description": "Raw document annotated with its purpose.",
-      "fields": [
-        {
-          "id": "f_purpose",
-          "name": "purpose",
-          "type": "text",
-          "optional": false,
-          "description": "What this document contains"
-        },
-        {
-          "id": "f_body",
-          "name": "body",
-          "type": "text",
-          "optional": false,
-          "description": "Full extracted text"
-        }
-      ]
-    },
-    {
       "id": "m_combined",
       "name": "BugEnrichInput",
       "auto": true,
@@ -43,7 +22,7 @@
           "type": "model",
           "optional": false,
           "description": "Parsed bug report",
-          "ref": "m_doc"
+          "ref": "m_builtin_document"
         }
       ]
     },
@@ -90,7 +69,7 @@
       "label": "Bug Report",
       "inputType": "text",
       "inputNameContains": "bug_report",
-      "outStructureId": "m_doc",
+      "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
@@ -101,7 +80,7 @@
       "label": "App Logs",
       "inputType": "text",
       "inputNameContains": "app_logs",
-      "outStructureId": "m_doc",
+      "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0
@@ -110,7 +89,7 @@
       "id": "mod_combine",
       "kind": "combine",
       "label": "Combine Inputs",
-      "inStructureId": "m_doc",
+      "inStructureId": "m_builtin_document",
       "outStructureId": "m_combined",
       "cached": true,
       "avgMs": 40,
@@ -122,7 +101,7 @@
       "label": "Enrich Bug",
       "inStructureId": "m_combined",
       "outStructureId": "m_enriched",
-      "prompt": "user_report is the bug report SourceDocument (use user_report.body). app_logs is the log document (use app_logs.body). Infer repro_steps, severity, likely_component (e.g. export/pdf/fonts), and a concise summary.",
+      "prompt": "user_report is the bug report Document (use user_report.content). app_logs is the log document (use app_logs.content). Infer repro_steps, severity, likely_component (e.g. export/pdf/fonts), and a concise summary.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2400,

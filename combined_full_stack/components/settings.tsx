@@ -20,8 +20,14 @@ import {
 } from "@/lib/json-viewer"
 import {
   DEFAULT_HIDE_SERVER_LOGS,
+  DEFAULT_HIDE_INPUT_DESCRIPTIONS,
+  DEFAULT_REQUIRE_INPUT_DESCRIPTIONS,
   readHideServerLogsDefault,
+  readHideInputDescriptionsDefault,
+  readRequireInputDescriptions,
   writeHideServerLogsDefault,
+  writeHideInputDescriptionsDefault,
+  writeRequireInputDescriptions,
 } from "@/lib/logging-settings"
 import { Switch } from "@/components/ui/switch"
 
@@ -68,11 +74,15 @@ export function Settings() {
   const [defaultView, setDefaultView] = useState<JsonViewerHumanViewId>(DEFAULT_JSON_VIEWER_HUMAN_VIEW)
   const [syntaxTheme, setSyntaxTheme] = useState<JsonViewerSyntaxThemeId>(DEFAULT_JSON_VIEWER_SYNTAX_THEME)
   const [hideServerLogs, setHideServerLogs] = useState(DEFAULT_HIDE_SERVER_LOGS)
+  const [hideInputDescriptions, setHideInputDescriptions] = useState(DEFAULT_HIDE_INPUT_DESCRIPTIONS)
+  const [requireInputDescriptions, setRequireInputDescriptions] = useState(DEFAULT_REQUIRE_INPUT_DESCRIPTIONS)
 
   useEffect(() => {
     setDefaultView(readJsonViewerDefaultView())
     setSyntaxTheme(readJsonViewerSyntaxTheme())
     setHideServerLogs(readHideServerLogsDefault())
+    setHideInputDescriptions(readHideInputDescriptionsDefault())
+    setRequireInputDescriptions(readRequireInputDescriptions())
   }, [])
 
   function pickView(view: JsonViewerHumanViewId) {
@@ -88,6 +98,16 @@ export function Settings() {
   function pickHideServerLogs(hide: boolean) {
     writeHideServerLogsDefault(hide)
     setHideServerLogs(hide)
+  }
+
+  function pickHideInputDescriptions(hide: boolean) {
+    writeHideInputDescriptionsDefault(hide)
+    setHideInputDescriptions(hide)
+  }
+
+  function pickRequireInputDescriptions(required: boolean) {
+    writeRequireInputDescriptions(required)
+    setRequireInputDescriptions(required)
   }
 
   return (
@@ -181,6 +201,41 @@ export function Settings() {
                 <span className="block text-sm font-medium">Hide server logs by default</span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
                   When on, per-step server logs start collapsed — expand any step to read them.
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 border-t border-border px-4 py-3">
+              <Switch
+                checked={hideInputDescriptions}
+                onCheckedChange={(checked) => pickHideInputDescriptions(!!checked)}
+                className="mt-0.5"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">Hide input descriptions by default</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  When on, expected-input notes on inference and logging steps start collapsed — always shown when a step errors.
+                </span>
+              </span>
+            </label>
+          </section>
+
+          <section className="rounded-lg border border-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+              <h3 className="text-sm font-semibold">Pipeline</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Builder and inference validation — stored locally in your browser.
+              </p>
+            </div>
+            <label className="flex cursor-pointer items-start gap-3 px-4 py-3">
+              <Switch
+                checked={requireInputDescriptions}
+                onCheckedChange={(checked) => pickRequireInputDescriptions(!!checked)}
+                className="mt-0.5"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">Require input descriptions on every step</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  When on, the pipeline is invalid until each step has an expected-input note. Validation checks are still optional per step.
                 </span>
               </span>
             </label>
