@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { invariant } from "@/lib/assert";
 import { uid } from "../../id";
 import { finalizeRunMetrics } from "../../run-metrics";
 import {
@@ -49,6 +50,7 @@ export async function runPipeline(
   const rawProject = opts.projectOverride ?? store.project(projectId);
   if (!rawProject) throw new Error(unknownProject(projectId));
   const project = migrateProjectModules(rawProject);
+  invariant(project.modules.length > 0, `project ${projectId} has no pipeline modules`);
   const model = opts.model ?? project.modules.find((m) => m.kind === "llm")?.model ?? DEFAULT_MODEL;
   const persist = opts.persist ?? true;
 

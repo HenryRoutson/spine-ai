@@ -1,3 +1,4 @@
+import { invariant } from "@/lib/assert";
 import { isLlmKind } from "@/lib/module-kinds";
 import { compactPreview } from "@/lib/text-preview";
 import { inputTypeLabel } from "../../inference-input";
@@ -29,6 +30,7 @@ export async function runLinearStepsFrom(
 
   for (let i = startIndex; i < project.modules.length; i++) {
     const m = project.modules[i];
+    invariant(m, `pipeline module missing at index ${i}`);
     await opts.onStep?.({ index: i, total: project.modules.length, moduleId: m.id, label: m.label, status: "running" });
     writeLive(i);
 
@@ -229,7 +231,8 @@ export async function runLinearStepsFrom(
           costCents: +(status === "cached" ? 0 : ledger.totalCents() - beforeCents).toFixed(4),
           preview: result?.preview,
         });
-        return { status, result: result!, descriptionCheckCostCents, descriptionCheckLlmCalls, inputDescriptionCheck, savedCostCents };
+        invariant(result, `step ${m.id} (${m.label}) finished without result`);
+        return { status, result, descriptionCheckCostCents, descriptionCheckLlmCalls, inputDescriptionCheck, savedCostCents };
       }),
     );
 

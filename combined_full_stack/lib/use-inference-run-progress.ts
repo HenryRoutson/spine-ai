@@ -1,5 +1,6 @@
 "use client"
 
+import { invariant } from "@/lib/assert"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   flattenInputDocIds,
@@ -112,6 +113,7 @@ export function useInferenceRunProgress({
     const orderedIds = flattenInputDocIds(inputModules, inputDocs)
     const byModule = inputDocsByModuleFromAssignment(inputModules, inputDocs)
     const [primary, ...rest] = orderedIds
+    invariant(primary, "start() called without primary input doc despite allInputsReady")
     if (phase === "done") {
       setRunNotes("")
       runNotesRef.current = ""

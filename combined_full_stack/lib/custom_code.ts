@@ -6,6 +6,7 @@
 // AI : Back-compat: if the compiled fn arity is 1, pass only `input` until migration completes.
 // AI : Python uses Pyodide in-browser; signature `def transform(input, state=None):`.
 
+import { invariant } from "@/lib/assert";
 import type { ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
 import type { CustomCodeLanguage } from "@/lib/types";
 import type { PipelineState } from "@/lib/run-types";
@@ -92,7 +93,7 @@ export function compileCustomFn(code: string): CustomFn {
     }
   }
   const fn = new Function(`return ${src}`)();
-  if (typeof fn !== "function") throw new Error("custom code must evaluate to a function (input) => output");
+  invariant(typeof fn === "function", "custom code must evaluate to a function (input) => output");
   return fn as CustomFn;
 }
 
@@ -155,7 +156,9 @@ json.dumps(_r, default=str)
     "python custom code",
   );
   if (typeof raw !== "string") throw new Error("python custom code did not return JSON");
-  return JSON.parse(raw) as unknown;
+  const parsed = JSON.parse(raw) as unknown;
+  invariant(parsed !== undefined, "python custom code returned undefined");
+  return parsed;
 }
 
 async function runCustomEntry(
@@ -206,6 +209,7 @@ export async function runAssertWithFallbacks(
     try {
       const result = await runCustomEntry(wrapped, input, state);
       if (result === false) throw new Error("assert returned false");
+      invariant(result === true || result === input, "assert must return true or pass input through unchanged");
       return { output: input, attemptIndex: i, language: entry.language, failures };
     } catch (err) {
       failures.push({

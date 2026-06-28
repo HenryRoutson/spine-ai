@@ -1746,6 +1746,41 @@ function wrapPrimitiveTableRows(rows, label) {
   };
 }
 
+// AI: table view must never show a row count with zero rendered rows — fail if row shape is unhandled
+function describeTableRowShape(rows) {
+  return [...new Set(rows.map(r => {
+    if (r === null) return 'null';
+    if (Array.isArray(r)) return 'array';
+    return typeof r;
+  }))].join(', ');
+}
+
+function assertTableTabulationHandled(label, rawRows, tableRows, cols, renderedRowCount) {
+  if (!rawRows?.length) return true;
+  const where = label || '(table)';
+  if (!cols.length) {
+    const msg = `[JSON Viewer] tabulation produced no columns for ${rawRows.length} row(s) at ${where} (${describeTableRowShape(rawRows)}) — add a table handler`;
+    console.assert(false, msg);
+    console.error(msg);
+    return false;
+  }
+  if (isPrimitiveTableRows(rawRows)) return true;
+  const unhandled = rawRows.filter(r => r === null || typeof r !== 'object');
+  if (unhandled.length) {
+    const msg = `[JSON Viewer] ${unhandled.length} primitive row(s) at ${where} were not wrapped — extend isPrimitiveTableRows/wrapPrimitiveTableRows`;
+    console.assert(false, msg);
+    console.error(msg);
+    return false;
+  }
+  if (renderedRowCount >= 0 && renderedRowCount !== tableRows.length) {
+    const msg = `[JSON Viewer] tabulation dropped rows at ${where}: ${tableRows.length} expected, ${renderedRowCount} rendered`;
+    console.assert(false, msg);
+    console.error(msg);
+    return false;
+  }
+  return true;
+}
+
 // AI: builds column definitions respecting expandedRefCols — expands object refs inline
 function buildTableColDefs(rows) {
   // Collect base flat keys and their ref types
@@ -1885,6 +1920,10 @@ function drawDataTable() {
   const wrappedPrimitive = primitiveTable ? wrapPrimitiveTableRows(rows, label) : null;
   const tableRows = wrappedPrimitive ? wrappedPrimitive.rows : rows;
   const cols = wrappedPrimitive ? wrappedPrimitive.cols : buildTableColDefs(rows);
+  if (!assertTableTabulationHandled(label, rows, tableRows, cols, -1)) {
+    root.innerHTML += '<div style="color:#f87171;padding:20px;font-size:13px">Table tabulation failed — see console.</div>';
+    return;
+  }
   const hasExpandedGroups = cols.some(c=>c.groupKey);
 
   const wrap=document.createElement('div'); wrap.className='excel-wrap';
@@ -2039,6 +2078,7 @@ function drawDataTable() {
     });
     tbody.appendChild(tr);
   });
+  assertTableTabulationHandled(label, rows, tableRows, cols, tbody.children.length);
   table.appendChild(tbody);
   wrap.appendChild(table);
   root.appendChild(wrap);

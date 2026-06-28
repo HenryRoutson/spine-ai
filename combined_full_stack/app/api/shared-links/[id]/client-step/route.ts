@@ -1,3 +1,4 @@
+import { invariant } from "@/lib/assert";
 import { NextResponse, after, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { apiError } from "@/lib/server/api_context";
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (isJobResuming(job)) return NextResponse.json({ ok: true, alreadyClaimed: true });
     return apiError(`job ${body.jobId} is not waiting for client code`, HTTP.CONFLICT);
   }
+  invariant(checkpoint.clientStep, `checkpoint for job ${jobId} missing clientStep`);
 
   const sharerStore = await openStoreForUser(link.ownerId);
   const overlay = overlayStoreForSharedRun(

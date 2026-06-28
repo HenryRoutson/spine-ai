@@ -1,3 +1,4 @@
+import { invariant } from "@/lib/assert";
 import { NextResponse, after, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, unknownJob } from "@/lib/server/api-errors";
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (isJobResuming(job)) return NextResponse.json({ ok: true, alreadyClaimed: true });
     return apiError(`job ${id} is not waiting for client code`, HTTP.CONFLICT);
   }
+  invariant(checkpoint.clientStep, `checkpoint for job ${jobId} missing clientStep`);
 
   apiLog.info(`POST client-step — scheduling resume`, {
     jobId,

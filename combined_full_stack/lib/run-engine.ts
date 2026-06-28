@@ -1,6 +1,7 @@
 // AI : client shim for the real server run engine — POST /api/runs starts the pipeline,
 // AI : then the Inference tab polls progress until the persisted PipelineRun arrives.
 // AI : user-authored transform/custom steps run here in the browser (never on the server).
+import { invariant } from "@/lib/assert"
 import {
   CustomCodeExhaustedError,
   formatCustomCodeFailureLog,
@@ -62,6 +63,7 @@ export function mergeStepStates(
 ): Map<ModuleId, StepUiState> {
   const next = new Map(prev)
   for (const s of polled) {
+    invariant(s.moduleId, "step progress missing moduleId")
     const cur = next.get(s.moduleId)
     const curStatus = cur?.status ?? "idle"
     let status: StepUiState["status"] = curStatus
@@ -130,7 +132,9 @@ export async function startRun(
       body?.code,
     )
   }
-  return (await res.json()) as StartRunResult
+  const body = (await res.json()) as StartRunResult
+  invariant(body.jobId, `POST /api/runs missing jobId for project ${projectId}`)
+  return body
 }
 
 export async function runProgress(jobId: RunJobId): Promise<RunJob> {
@@ -316,6 +320,8 @@ export async function awaitJobCompletion(
     }
     if (job.error) throw new Error(job.error)
     if (job.run) {
+      invariant(job.run.id, "completed job missing run.id")
+      invariant(!job.clientStep, `completed job still has pending client step ${job.clientStep?.moduleId}`)
       return {
         run: job.run,
         deduped: job.deduped,

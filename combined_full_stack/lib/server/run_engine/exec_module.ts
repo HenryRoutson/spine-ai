@@ -1,3 +1,4 @@
+import { assertNever } from "@/lib/assert";
 import type { PipelineModule } from "../types";
 import type { ExecResult, RunCtx, RunLogger } from "./engine_types";
 import { execInputStep } from "./steps/input";
@@ -36,5 +37,9 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
       return execAssertStep(m, ctx, log);
     case "human-review":
       return execHumanReviewStep(m, ctx, log);
+    default: {
+      const unreachable: never = m.kind;
+      return assertNever(unreachable, `unknown module kind: ${(m as PipelineModule).kind}`);
+    }
   }
 }

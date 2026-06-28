@@ -1,3 +1,4 @@
+import { invariant } from "@/lib/assert";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { assertEntriesForModule } from "@/lib/assert_steps";
 import { ClientStepPendingError, HumanReviewPendingError } from "../../run_checkpoint";
@@ -42,7 +43,8 @@ export async function execCombineStep(m: PipelineModule, ctx: RunCtx, _log: RunL
 
 export async function execTransformStep(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   const { project } = ctx;
-  const input = ctx.outputs.get(ctx.prevModuleId!) ?? null;
+  invariant(ctx.prevModuleId, `transform step ${m.id} has no previous module`);
+  const input = ctx.outputs.get(ctx.prevModuleId) ?? null;
   const out = modelById(project.models, m.outStructureId);
   let value: unknown = input;
 

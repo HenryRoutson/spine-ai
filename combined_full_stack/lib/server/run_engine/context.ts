@@ -1,3 +1,4 @@
+import { invariant } from "@/lib/assert";
 import { orderedInputModules } from "../../inference-input";
 import { documentFilenameFrom, documentValueFrom } from "../document_value";
 import { stepEmits } from "../validity";
@@ -60,7 +61,9 @@ export function requireLinearInput(m: PipelineModule, ctx: RunCtx): unknown {
     );
   }
   if (!ctx.prevModuleId) throw new Error(`step "${m.label}" has no previous step`);
-  return ctx.outputs.get(ctx.prevModuleId);
+  const value = ctx.outputs.get(ctx.prevModuleId);
+  invariant(value !== undefined, `step "${m.label}" previous output missing for module ${ctx.prevModuleId}`);
+  return value;
 }
 
 export function resolveStepInputForCheck(m: PipelineModule, ctx: RunCtx, store: Store): StepInputForCheck {

@@ -1,3 +1,4 @@
+import { invariant } from "@/lib/assert"
 import type { DocId, DocRef, ModuleId, PipelineModule, PipelineRun, Project } from "@/lib/types"
 import {
   docsForInputModule,
@@ -92,7 +93,8 @@ export function inputDocsByModuleFromFlat(
     if (i >= flatDocIds.length) break
     if (isMultiDocInputModule(m)) {
       const rest = flatDocIds.slice(i)
-      out[m.id] = rest.length ? rest : [flatDocIds[i]!]
+      invariant(rest.length > 0, `flat doc ids exhausted before multi-doc module ${m.id}`)
+      out[m.id] = rest
       break
     }
     out[m.id] = [flatDocIds[i]!]
