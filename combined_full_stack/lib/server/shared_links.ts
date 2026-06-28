@@ -8,6 +8,7 @@ import { createClient } from "@/utils/supabase/server";
 import { dataDir } from "./config";
 import { createAdminClient } from "./supabase_admin";
 import { hashContent, saveOriginalDocBytes, type Store } from "./store";
+import { shouldSaveOriginalBytes } from "./doc_upload_parse";
 import { migrateProjectModules } from "./validity";
 import { isMissingSchemaError } from "./supabase_store";
 import { LOCAL_DEV_USER_ID, type user_id_string } from "./require_auth";
@@ -397,6 +398,7 @@ export async function saveSessionUpload(
   file: File,
   content: string,
   type: InputType,
+  bytes?: Uint8Array,
 ): Promise<DocRef> {
   const id = hashContent(`${linkId}:${sessionId}:${file.name}:${content.slice(0, 64)}`);
   const doc: DocRef = {
@@ -412,11 +414,15 @@ export async function saveSessionUpload(
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${id}.txt`), content, "utf8");
   writeFileSync(join(dir, `${id}.meta.json`), JSON.stringify({ ...doc, moduleId }));
-  if (type === "pdf" || type === "image") {
-    const bytes = new Uint8Array(await file.arrayBuffer());
+  if (bytes && shouldSaveOriginalBytes(type)) {
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
     writeFileSync(join(dir, `${id}.${ext}`), bytes);
     saveOriginalDocBytes(id, bytes, ext);
+  } else if (type === "pdf" || type === "image") {
+    const fileBytes = bytes ?? new Uint8Array(await file.arrayBuffer());
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
+    writeFileSync(join(dir, `${id}.${ext}`), fileBytes);
+    saveOriginalDocBytes(id, fileBytes, ext);
   }
   const existing = readSessionDocs(linkId, sessionId).filter((d) => d.moduleId !== moduleId);
   existing.push({ id, name: doc.name, type, label: "inference", moduleId });

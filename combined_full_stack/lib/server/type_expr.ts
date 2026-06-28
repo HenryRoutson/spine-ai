@@ -1,4 +1,5 @@
 import { z, type ZodType } from "zod";
+import { isValidJsonString } from "@/lib/json-utils";
 import type {
   FieldType,
   InputType,
@@ -7,16 +8,6 @@ import type {
   StructureModel,
   StructureModelId,
 } from "./types";
-function isValidJsonString(s: string): boolean {
-  const t = s.trim();
-  if (!t) return false;
-  try {
-    JSON.parse(t);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 // AI : canonical type IR — one definition for static checks, zod, pydantic, and codegen.
 export type PrimName = "text" | "int" | "float" | "bool" | "datetime" | "json";

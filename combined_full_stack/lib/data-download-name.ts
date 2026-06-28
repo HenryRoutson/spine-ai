@@ -1,4 +1,4 @@
-import { findMatchingStructures } from "@/lib/structure-match"
+import { firstMatchingModelName } from "@/lib/structure-match-parse"
 import type { StructureModel } from "@/lib/types"
 
 function filenameSlug(raw: string): string {
@@ -24,17 +24,6 @@ export async function shortContentHash(content: string): Promise<string> {
   return `sha_${hex.slice(0, 16)}`
 }
 
-function resolveModelName(content: string, models?: StructureModel[]): string {
-  if (!models?.length) return "general"
-  try {
-    const parsed = JSON.parse(content) as unknown
-    const matches = findMatchingStructures(parsed, models)
-    return matches[0]?.modelName ?? "general"
-  } catch {
-    return "general"
-  }
-}
-
 export type DownloadBaseNameInput = {
   content: string
   projectName?: string
@@ -46,7 +35,7 @@ export type DownloadBaseNameInput = {
 // AI : autopipeline_project_user_datetime_pydantic_model_json_hash
 export async function buildDownloadBaseName(input: DownloadBaseNameInput): Promise<string> {
   const hash = await shortContentHash(input.content)
-  const model = input.modelName ?? resolveModelName(input.content, input.models)
+  const model = input.modelName ?? firstMatchingModelName(input.content, input.models ?? [])
   return [
     "autopipeline",
     filenameSlug(input.projectName ?? "project"),

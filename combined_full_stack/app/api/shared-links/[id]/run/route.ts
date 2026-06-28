@@ -50,7 +50,7 @@ export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 const SESSION_COOKIE = "shared_run_session";
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+import { MAX_UPLOAD_BYTES } from "@/lib/server/upload_constants";
 
 type RunBody = {
   inputDocsByModule?: Partial<Record<ModuleId, DocId[]>>;

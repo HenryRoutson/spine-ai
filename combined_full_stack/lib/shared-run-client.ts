@@ -100,8 +100,6 @@ export async function awaitSharedRun(
   return run
 }
 
-export { downloadBlob } from "@/lib/download-blob"
-
 export async function fetchSharedDownload(
   linkId: string,
   runId: string,

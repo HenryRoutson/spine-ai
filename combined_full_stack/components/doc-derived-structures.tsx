@@ -1,33 +1,20 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { Plus, Sparkles } from "lucide-react"
+import { useMemo } from "react"
+import { Sparkles, Plus } from "lucide-react"
 import { useAppShell } from "@/lib/app-shell"
 import { inferStructuresFromDocContent, type DerivedDocStructure } from "@/lib/doc-structure-infer"
-import { findMatchingStructures } from "@/lib/structure-match"
+import {
+  alreadyAdded,
+  openOrAddDerivedStructure,
+} from "@/lib/doc-derived-structures"
+import { parseAndMatchStructures } from "@/lib/structure-match-parse"
+import { useDocText } from "@/lib/use-doc-text"
 import { useStore, uid } from "@/lib/store"
-import { API_ROUTES } from "@/lib/api-routes"
 import { StructureMatchChips, STRUCTURE_MATCH_CHIP_CLASS } from "@/components/structure-match-chips"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import type { DocId, DocRef, StructureModel, StructureModelId } from "@/lib/types"
-
-function cloneDerivedForProject(
-  derived: DerivedDocStructure,
-  docId: DocId,
-): StructureModel {
-  return {
-    ...derived.model,
-    id: uid<StructureModelId>(),
-    sourceDocId: docId,
-    auto: true,
-    description: derived.model.description || `Inferred from document.`,
-  }
-}
-
-function alreadyAdded(models: StructureModel[], docId: DocId, name: string): boolean {
-  return models.some((m) => m.sourceDocId === docId && m.name === name)
-}
+import type { DocRef, StructureModelId } from "@/lib/types"
 
 export function DocDerivedStructures({
   doc,
@@ -38,52 +25,20 @@ export function DocDerivedStructures({
 }) {
   const { models, setModels } = useStore()
   const { openStructure } = useAppShell()
-  const [content, setContent] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    fetch(API_ROUTES.docText(doc.id))
-      .then((r) => r.json())
-      .then((d: { content?: string; text?: string }) => {
-        if (!cancelled) setContent(d.text ?? d.content ?? "")
-      })
-      .catch(() => {
-        if (!cancelled) setContent("")
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [doc.id])
+  const { content, loading } = useDocText(doc.id)
 
   const derived = useMemo(() => {
     if (!content) return []
     return inferStructuresFromDocContent(content, doc.name, doc.type, () => uid<StructureModelId>())
   }, [content, doc.name, doc.type])
 
-  const matches = useMemo(() => {
-    if (!content?.trim()) return []
-    try {
-      const parsed = JSON.parse(content) as unknown
-      return findMatchingStructures(parsed, models)
-    } catch {
-      return []
-    }
-  }, [content, models])
+  const { matches } = useMemo(
+    () => (content?.trim() ? parseAndMatchStructures(content, models) : { matches: [], error: null }),
+    [content, models],
+  )
 
   function addStructure(d: DerivedDocStructure) {
-    if (alreadyAdded(models, doc.id, d.model.name)) {
-      const existing = models.find((m) => m.sourceDocId === doc.id && m.name === d.model.name)
-      if (existing) openStructure(existing.id)
-      return
-    }
-    const next = cloneDerivedForProject(d, doc.id)
-    setModels([...models, next])
-    openStructure(next.id)
+    openOrAddDerivedStructure(d, doc.id, models, () => uid<StructureModelId>(), setModels, openStructure)
   }
 
   if (loading) {
@@ -118,11 +73,6 @@ export function DocDerivedStructures({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  if (added) {
-                    const existing = models.find((m) => m.sourceDocId === doc.id && m.name === d.model.name)
-                    if (existing) openStructure(existing.id)
-                    return
-                  }
                   addStructure(d)
                 }}
                 className={cn(

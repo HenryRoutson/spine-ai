@@ -8,9 +8,8 @@ import {
   orderedInputModules,
   type InputDocsAssignment,
 } from "@/lib/inference-input"
-import { segmentPipeline } from "@/lib/pipeline-layout"
-import { formatRunErrorForDisplay, pipelineRunError } from "@/lib/run-errors"
-import { useCyclingWaitPhrase } from "@/lib/inference-wait-phrases"
+import { pipelineRunError } from "@/lib/run-errors"
+import { useRunProgressUi } from "@/lib/use-run-progress-ui"
 import { mergeStepStates, type StepUiState } from "@/lib/run-engine"
 import { modelName } from "@/lib/validity"
 import type { DocId, DocRef, ModuleId, PipelineModule, PipelineRun, RunJobId } from "@/lib/types"
@@ -166,42 +165,14 @@ export function useSharedInferenceRun(link: SharedLinkPublicView, linkId: string
     setPendingHumanReview(null)
   }
 
-  const progressPct = useMemo(() => {
-    if (phase === "idle") return 0
-    if (phase === "done") return 100
-    const done = modules.filter((m) => {
-      const s = stepStates.get(m.id)?.status
-      return s !== undefined && s !== "idle" && s !== "running"
-    }).length
-    return Math.round((done / Math.max(1, modules.length)) * 100)
-  }, [phase, stepStates, modules])
-
-  const runningHints = useMemo(() => {
-    const hints: string[] = []
-    for (const seg of segmentPipeline(modules)) {
-      if (seg.kind === "combine") {
-        const combineUi = stepStates.get(seg.combine.id)
-        const inputUi = stepStates.get(seg.input.id)
-        if (combineUi?.status === "running") hints.push(combineUi.sub?.label ?? seg.combine.label)
-        if (inputUi?.status === "running") hints.push(inputUi.sub?.label ?? seg.input.label)
-        continue
-      }
-      const moduleUi = stepStates.get(seg.module.id)
-      if (moduleUi?.status === "running") hints.push(moduleUi.sub?.label ?? seg.module.label)
-    }
-    return hints
-  }, [stepStates, modules])
-
-  const waitPhrase = useCyclingWaitPhrase(phase === "running", runningHints)
-  const runErr = useMemo(() => (run ? pipelineRunError(run) : null), [run])
-  const runErrorDisplay = useMemo(() => (run ? formatRunErrorForDisplay(run) : null), [run])
-  const runButtonBusy = phase === "running" && !pendingHumanReview
-  const runButtonLabel =
-    pendingHumanReview != null
-      ? "Waiting for your review…"
-      : phase === "running"
-        ? `${waitPhrase}…`
-        : "Run pipeline"
+  const {
+    progressPct,
+    waitPhrase,
+    runErr,
+    runErrorDisplay,
+    runButtonBusy,
+    runButtonLabel,
+  } = useRunProgressUi({ modules, phase, stepStates, run, pendingHumanReview })
 
   const outputSteps = useMemo(
     () => run?.steps.filter((s) => s.outputJson || s.outputPreview.trim()) ?? [],

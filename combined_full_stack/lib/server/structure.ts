@@ -1,5 +1,6 @@
 import { z, type ZodError, type ZodType } from "zod";
 import { inferStructuresFromJson } from "@/lib/doc-structure-infer";
+import { isValidJsonString } from "@/lib/json-utils";
 import { isBuiltinDocumentModel } from "./builtin_models";
 import { documentContentFrom, documentFilenameFrom, documentValueFrom } from "@/lib/server/document_value";
 import { modelHasQuoteFields } from "./quote_schema";
@@ -33,17 +34,8 @@ export { isBuiltinDocumentModel } from "./builtin_models";
 export function listFieldsForWrap(model: StructureModel): ModelField[] {
   return model.fields.filter((f) => isListFieldType(f.type));
 }
-// AI : json field — string that must parse; prefer model / list[model] when shape is known
-export function isValidJsonString(s: string): boolean {
-  const t = s.trim();
-  if (!t) return false;
-  try {
-    JSON.parse(t);
-    return true;
-  } catch {
-    return false;
-  }
-}
+
+export { isValidJsonString } from "@/lib/json-utils";
 
 export function assertValidJsonFieldValue(val: unknown, fieldName?: string): asserts val is string {
   const label = fieldName ? `field "${fieldName}"` : "JSON field";

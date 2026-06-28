@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { X, FileText, Loader2 } from "lucide-react"
+import { X, FileText } from "lucide-react"
 import { useDocViewer, type DocViewMode } from "@/lib/doc-viewer"
 import { useStore } from "@/lib/store"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
+import { DocViewerLoading } from "@/components/doc-viewer-loading"
 import { cn } from "@/lib/utils"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { MarkdownView } from "@/components/highlight"
@@ -183,10 +184,7 @@ export function DocViewer() {
           />
         ) : view === "json" ? (
           parserText === null ? (
-            <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="font-mono text-[11px]">loading source…</span>
-            </div>
+            <DocViewerLoading />
           ) : (
             // AI: full interactive viewer — tree / table modes via the embedded iframe
             <JsonPreviewPanel json={parserText} className="min-h-0 flex-1" />
@@ -194,10 +192,7 @@ export function DocViewer() {
         ) : view === "formatted" ? (
           <div className="flex-1 overflow-auto px-6 py-5">
             {parserText === null ? (
-              <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="font-mono text-[11px]">loading source…</span>
-              </div>
+              <DocViewerLoading />
             ) : (
               <MarkdownView md={parserText} />
             )}
@@ -225,10 +220,7 @@ export function DocViewer() {
             ) : null}
             <div className="flex-1 overflow-auto px-6 py-5">
               {parserText === null && view !== "vision" ? (
-                <div className="flex h-full items-center justify-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="font-mono text-[11px]">loading source…</span>
-                </div>
+                <DocViewerLoading />
               ) : view === "vision" && !visionEntries.length ? (
                 <p className="font-mono text-[11px] text-muted-foreground">no vision OCR cached for this document</p>
               ) : (

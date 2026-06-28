@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx"
+import { isDownloadableJson, prettyJsonString, tryParseJson } from "@/lib/json-utils"
 import { downloadBlob } from "@/lib/download-blob"
 
 type tabular_row = Record<string, string | number | boolean | null>
@@ -52,23 +53,16 @@ export function rowsToCsv(rows: tabular_row[]): string {
   return [header, ...body].join("\n")
 }
 
-function parseJsonContent(content: string): unknown {
-  return JSON.parse(content) as unknown
-}
-
-function prettyJson(content: string): string {
-  return JSON.stringify(parseJsonContent(content), null, 2)
-}
-
 export type DataDownloadFormat = "json" | "csv" | "xlsx"
 
 export function downloadDataAs(content: string, format: DataDownloadFormat, baseName = "data") {
   if (format === "json") {
-    downloadBlob(`${baseName}.json`, prettyJson(content), "application/json")
+    downloadBlob(`${baseName}.json`, prettyJsonString(content), "application/json")
     return
   }
-  const parsed = parseJsonContent(content)
-  const rows = extractTabularRows(parsed)
+  const parsed = tryParseJson(content)
+  if (!parsed.ok) throw parsed.error
+  const rows = extractTabularRows(parsed.value)
   if (format === "csv") {
     downloadBlob(`${baseName}.csv`, rowsToCsv(rows), "text/csv")
     return
@@ -80,11 +74,4 @@ export function downloadDataAs(content: string, format: DataDownloadFormat, base
   downloadBlob(`${baseName}.xlsx`, buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 }
 
-export function isDownloadableJson(content: string): boolean {
-  try {
-    JSON.parse(content)
-    return true
-  } catch {
-    return false
-  }
-}
+export { isDownloadableJson }

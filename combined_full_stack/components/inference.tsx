@@ -231,7 +231,7 @@ export function Inference() {
               <>
                 {run.phase === "done" && outputSteps.length > 0 && (
                   <div ref={outputsRef}>
-                    <InferenceRunOutputs steps={outputSteps} />
+                    <InferenceRunOutputs steps={outputSteps} models={models} />
                   </div>
                 )}
 

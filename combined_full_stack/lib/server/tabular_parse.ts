@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx"
-import { parseCsv } from "@/lib/doc-structure-infer"
+import { parseCsv } from "@/lib/csv-parse"
 
 export type TabularSheet = {
   name: string

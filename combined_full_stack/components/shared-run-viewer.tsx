@@ -21,7 +21,8 @@ import {
   RunErrorSummary,
 } from "@/components/inference/inference-run-chrome"
 import { InferenceStepTracePanel } from "@/components/inference/inference-step-trace-panel"
-import { fetchSharedLink, fetchSharedDownload, downloadBlob } from "@/lib/shared-run-client"
+import { downloadBlob } from "@/lib/download-blob"
+import { fetchSharedDownload, fetchSharedLink } from "@/lib/shared-run-client"
 import { useSharedInferenceRun } from "@/lib/use-shared-inference-run"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
 

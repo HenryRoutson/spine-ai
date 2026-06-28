@@ -2,7 +2,7 @@
 
 import { useMemo } from "react"
 import { useOptionalAppShell } from "@/lib/app-shell"
-import { findMatchingStructures } from "@/lib/structure-match"
+import { parseAndMatchStructures } from "@/lib/structure-match-parse"
 import { useOptionalStore } from "@/lib/store"
 import { StructureMatchChips } from "@/components/structure-match-chips"
 import { cn } from "@/lib/utils"
@@ -24,15 +24,10 @@ export function JsonStructureMatches({
   const models = modelsProp ?? store?.models
   const openStructure = shell?.openStructure
 
-  const { error, matches } = useMemo(() => {
-    if (!models?.length) return { error: null as string | null, matches: [] }
-    try {
-      const parsed = JSON.parse(json) as unknown
-      return { error: null as string | null, matches: findMatchingStructures(parsed, models) }
-    } catch (e) {
-      return { error: (e as Error).message, matches: [] }
-    }
-  }, [json, models])
+  const { error, matches } = useMemo(
+    () => (models?.length ? parseAndMatchStructures(json, models) : { matches: [], error: null }),
+    [json, models],
+  )
 
   if (!models?.length) return null
 
