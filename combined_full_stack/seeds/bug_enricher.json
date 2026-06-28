@@ -104,7 +104,7 @@
       "label": "Enrich Bug",
       "inStructureId": "m_combined",
       "outStructureId": "m_enriched",
-      "inputDescription": "Combined bug input — user_report document plus app_logs log excerpt",
+      "inputDescription": "Combined bug input \u2014 user_report document plus app_logs log excerpt",
       "prompt": "user_report is the bug report Document (use user_report.content). app_logs is the log document (use app_logs.content). Infer repro_steps, severity, likely_component (e.g. export/pdf/fonts), and a concise summary.",
       "model": "deepseek-v3",
       "cached": true,
@@ -120,7 +120,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "Single EnrichedBug object — structured ticket ready for engineering triage"
+      "inputDescription": "Single EnrichedBug object \u2014 structured ticket ready for engineering triage"
     }
   ],
   "strategies": [
@@ -134,17 +134,6 @@
       "latencyMs": 3200,
       "costCents": 8,
       "passRate": 90
-    },
-    {
-      "id": "s_rlm_bug",
-      "kind": "rlm",
-      "name": "Recursive LM",
-      "enabled": true,
-      "model": "deepseek-v3",
-      "accuracy": 86,
-      "latencyMs": 9800,
-      "costCents": 21,
-      "passRate": 94
     },
     {
       "id": "s_agent_bug",

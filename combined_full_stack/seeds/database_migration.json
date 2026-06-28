@@ -62,7 +62,7 @@
           "name": "fax",
           "type": "text",
           "optional": true,
-          "description": "Deprecated — dropped by the mapping"
+          "description": "Deprecated \u2014 dropped by the mapping"
         }
       ]
     },
@@ -163,7 +163,7 @@
           "name": "active",
           "type": "bool",
           "optional": false,
-          "description": "Y/N → bool"
+          "description": "Y/N \u2192 bool"
         },
         {
           "id": "f_plan",
@@ -195,7 +195,7 @@
       "label": "Field Mapping Input",
       "inputType": "json",
       "inputNameContains": "field_mapping",
-      "inputDescription": "JSON field-mapping spec — source columns, transforms, defaults, and target paths",
+      "inputDescription": "JSON field-mapping spec \u2014 source columns, transforms, defaults, and target paths",
       "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 80,
@@ -217,8 +217,8 @@
       "id": "mod_migrate",
       "kind": "custom-code",
       "label": "Apply Field Mapping",
-      "note": "Driven entirely by the mapping spec: transform registry, dotted targets nest, missing source → default else null, unmapped legacy fields dropped.",
-      "inputDescription": "Migration bundle — mapping spec document plus legacy_users JSON array",
+      "note": "Driven entirely by the mapping spec: transform registry, dotted targets nest, missing source \u2192 default else null, unmapped legacy fields dropped.",
+      "inputDescription": "Migration bundle \u2014 mapping spec document plus legacy_users JSON array",
       "inStructureId": "m_mig",
       "outStructureId": "m_user",
       "outIsList": true,
@@ -235,7 +235,7 @@
       "id": "mod_output_db",
       "kind": "output",
       "label": "Migrated Users",
-      "inputDescription": "List of User objects — normalized records after applying the field mapping",
+      "inputDescription": "List of User objects \u2014 normalized records after applying the field mapping",
       "inStructureId": "m_user",
       "outStructureId": "m_user",
       "outIsList": true,
@@ -255,17 +255,6 @@
       "latencyMs": 2900,
       "costCents": 6,
       "passRate": 92
-    },
-    {
-      "id": "s_rlm_db",
-      "kind": "rlm",
-      "name": "Recursive LM",
-      "enabled": true,
-      "model": "deepseek-v3",
-      "accuracy": 90,
-      "latencyMs": 8400,
-      "costCents": 17,
-      "passRate": 97
     },
     {
       "id": "s_agent_db",

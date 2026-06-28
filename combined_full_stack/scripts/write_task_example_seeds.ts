@@ -49,17 +49,6 @@ const STRATEGIES = (prefix: string) => [
     passRate: 90,
   },
   {
-    id: `s_rlm_${prefix}`,
-    kind: "rlm",
-    name: "Recursive LM",
-    enabled: true,
-    model: "deepseek-v3",
-    accuracy: 86,
-    latencyMs: 9800,
-    costCents: 21,
-    passRate: 94,
-  },
-  {
     id: `s_agent_${prefix}`,
     kind: "claude-code",
     name: "Agent (Frontier)",

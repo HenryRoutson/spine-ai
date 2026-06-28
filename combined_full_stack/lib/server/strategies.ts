@@ -23,7 +23,7 @@ import {
 export const BENCH_CHEAP_MODEL: ModelId = DEFAULT_MODEL; // deepseek-v3
 export const BENCH_FALLBACK_MODEL: ModelId = "sonnet-4.7";
 
-// AI : benchmark runs 4 environments × several calls — truncate the doc to stay demo-fast.
+// AI : benchmark runs 3 environments × several calls — truncate the doc to stay demo-fast.
 const BENCH_DOC_CHARS = 4000;
 
 export interface StrategyResult {
@@ -68,7 +68,7 @@ function resultKeyFor(strategy: Strategy, model: ModelId, isFallback = false): s
   return isFallback ? `fallback:${strategy.id}@${model}` : `${strategy.id}@${model}`;
 }
 
-// ---- the four LLL environments ----
+// ---- the three LLL environments ----
 
 // 1. single-llm — one direct structured call.
 async function envSingleLlm(task: BenchTask): Promise<unknown[]> {
@@ -80,7 +80,7 @@ async function envSingleLlm(task: BenchTask): Promise<unknown[]> {
 }
 
 
-// 3+4. agent loop — draft, self-validate, critique-and-revise. Shared by claude-code & cheap-agent.
+// 2+3. agent loop — draft, self-validate, critique-and-revise. Shared by claude-code & cheap-agent.
 // AI : TODO placeholder — "claude-code" should spawn a real Claude Code instance with tools;
 // AI : the demo runs this same critique loop, just under the claude-code label.
 async function envAgentLoop(task: BenchTask, label: string): Promise<unknown[]> {
@@ -100,7 +100,6 @@ async function envAgentLoop(task: BenchTask, label: string): Promise<unknown[]> 
 
 const ENV_RUNNERS: Record<StrategyKind, (task: BenchTask) => Promise<unknown[]>> = {
   "single-llm": envSingleLlm,
-  rlm: envRlm,
   "claude-code": (t) => envAgentLoop(t, "claude-code · TODO placeholder: same loop, not a spawned Claude Code instance"),
   "cheap-agent": (t) => envAgentLoop(t, "cheap-agent"),
 };

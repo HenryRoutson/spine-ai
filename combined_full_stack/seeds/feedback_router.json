@@ -64,7 +64,7 @@
       "cached": true,
       "avgMs": 80,
       "avgCostCents": 0,
-      "inputDescription": "Raw product feedback dump — bullet list of user comments"
+      "inputDescription": "Raw product feedback dump \u2014 bullet list of user comments"
     },
     {
       "id": "mod_split",
@@ -90,7 +90,7 @@
       "inStructureId": "m_item",
       "outStructureId": "m_route",
       "outIsList": true,
-      "inputDescription": "List of FeedbackItem objects — one bullet of verbatim user feedback",
+      "inputDescription": "List of FeedbackItem objects \u2014 one bullet of verbatim user feedback",
       "prompt": "Classify product feedback into eng, design, docs, sales, or praise. Include a short representative_quote. Keep feedback_id.",
       "model": "deepseek-v3",
       "cached": true,
@@ -107,7 +107,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of RoutedFeedback records — bucket and quote per feedback item"
+      "inputDescription": "List of RoutedFeedback records \u2014 bucket and quote per feedback item"
     }
   ],
   "strategies": [
@@ -121,17 +121,6 @@
       "latencyMs": 3200,
       "costCents": 8,
       "passRate": 90
-    },
-    {
-      "id": "s_rlm_fb",
-      "kind": "rlm",
-      "name": "Recursive LM",
-      "enabled": true,
-      "model": "deepseek-v3",
-      "accuracy": 86,
-      "latencyMs": 9800,
-      "costCents": 21,
-      "passRate": 94
     },
     {
       "id": "s_agent_fb",

@@ -84,7 +84,7 @@
     {
       "id": "m_schema",
       "name": "MarkingSchema",
-      "description": "Structured rubric — assignment sections and questions to grade against.",
+      "description": "Structured rubric \u2014 assignment sections and questions to grade against.",
       "dynamic": true,
       "fields": [
         {
@@ -152,7 +152,7 @@
     {
       "id": "m_gradable",
       "name": "GradableSection",
-      "description": "One student × question row ready for batch grading.",
+      "description": "One student \u00d7 question row ready for batch grading.",
       "fields": [
         {
           "id": "f_student",
@@ -246,21 +246,21 @@
       "id": "mod_in_schema",
       "kind": "input",
       "label": "Marking Schema",
-      "note": "Structured rubric JSON — sections and questions to grade against.",
+      "note": "Structured rubric JSON \u2014 sections and questions to grade against.",
       "inputType": "json",
       "inputNameContains": "marking_schema",
       "outStructureId": "m_schema",
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "MarkingSchema JSON — assignment_title and sections with nested RubricQuestion lists"
+      "inputDescription": "MarkingSchema JSON \u2014 assignment_title and sections with nested RubricQuestion lists"
     },
     {
       "id": "mod_questions",
       "kind": "custom-code",
       "label": "Marking Questions List",
-      "note": "Flatten rubric questions — one list item per gradable question.",
-      "inputDescription": "MarkingSchema object — sections with nested RubricQuestion lists",
+      "note": "Flatten rubric questions \u2014 one list item per gradable question.",
+      "inputDescription": "MarkingSchema object \u2014 sections with nested RubricQuestion lists",
       "inStructureId": "m_schema",
       "outStructureId": "m_rubric_q",
       "outIsList": true,
@@ -286,7 +286,7 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "One student's completed homework sheet — markdown with question prompts and student work answers"
+      "inputDescription": "One student's completed homework sheet \u2014 markdown with question prompts and student work answers"
     },
     {
       "id": "mod_combine",
@@ -305,7 +305,7 @@
       "kind": "custom-code",
       "label": "Assemble Grader Work",
       "note": "Merge derived schema with all student submissions from pipeline state.",
-      "inputDescription": "HomeworkGraderInput from combine — schema JSON plus student submission documents in pipeline state",
+      "inputDescription": "HomeworkGraderInput from combine \u2014 schema JSON plus student submission documents in pipeline state",
       "inStructureId": "m_hw_combined",
       "outStructureId": "m_work",
       "cached": true,
@@ -321,8 +321,8 @@
       "id": "mod_flatten",
       "kind": "custom-code",
       "label": "Flatten Sections",
-      "note": "One gradable row per student × rubric question.",
-      "inputDescription": "GraderWork — marking_schema Document plus list of student submission Documents",
+      "note": "One gradable row per student \u00d7 rubric question.",
+      "inputDescription": "GraderWork \u2014 marking_schema Document plus list of student submission Documents",
       "inStructureId": "m_work",
       "outStructureId": "m_gradable",
       "outIsList": true,
@@ -331,7 +331,7 @@
       "avgCostCents": 0,
       "fallbackList": [
         {
-          "typescript": "(work) => { let sections = []; const ms = work.marking_schema; if (ms?.sections) sections = ms.sections; else if (typeof ms?.content === \"string\") { try { sections = JSON.parse(ms.content).sections ?? []; } catch {} } const out = []; for (const sub of work.student_submissions ?? []) { const content = sub.content ?? \"\"; const student = (content.match(/Student:\\s*([^\\n]+)/i) || [])[1]?.trim() || sub.filename?.replace(/\\.md$/i, \"\") || \"student\"; for (const sec of sections) { for (const q of sec.questions ?? []) { const qRe = new RegExp(`\\\\*\\\\*${q.question_id}\\\\.\\\\*\\\\*[\\\\s\\\\S]*?(Student work:[^\\\\n]*)`, \"i\"); const workLine = (content.match(qRe) || [])[1]?.trim() ?? \"\"; out.push({ student_label: student, section_id: sec.section_id, title: `${sec.title} — ${q.question_id}`, body: `${q.prompt ?? \"\"}${workLine ? \"\\n\" + workLine : \"\"}`, max_score: q.max_score ?? 1, criteria: q.marking_criteria ?? sec.criteria ?? \"\" }); } } } return out; }"
+          "typescript": "(work) => { let sections = []; const ms = work.marking_schema; if (ms?.sections) sections = ms.sections; else if (typeof ms?.content === \"string\") { try { sections = JSON.parse(ms.content).sections ?? []; } catch {} } const out = []; for (const sub of work.student_submissions ?? []) { const content = sub.content ?? \"\"; const student = (content.match(/Student:\\s*([^\\n]+)/i) || [])[1]?.trim() || sub.filename?.replace(/\\.md$/i, \"\") || \"student\"; for (const sec of sections) { for (const q of sec.questions ?? []) { const qRe = new RegExp(`\\\\*\\\\*${q.question_id}\\\\.\\\\*\\\\*[\\\\s\\\\S]*?(Student work:[^\\\\n]*)`, \"i\"); const workLine = (content.match(qRe) || [])[1]?.trim() ?? \"\"; out.push({ student_label: student, section_id: sec.section_id, title: `${sec.title} \u2014 ${q.question_id}`, body: `${q.prompt ?? \"\"}${workLine ? \"\\n\" + workLine : \"\"}`, max_score: q.max_score ?? 1, criteria: q.marking_criteria ?? sec.criteria ?? \"\" }); } } } return out; }"
         }
       ]
     },
@@ -342,7 +342,7 @@
       "inStructureId": "m_gradable",
       "outStructureId": "m_grade",
       "outIsList": true,
-      "inputDescription": "List of GradableSection objects — student_label, question body, max_score, and criteria",
+      "inputDescription": "List of GradableSection objects \u2014 student_label, question body, max_score, and criteria",
       "prompt": "Grade this student's homework section using max_score and criteria. Award partial credit for correct method. Return student_label and section_id exactly matching the input (do not change them).",
       "model": "deepseek-v3",
       "cached": true,
@@ -359,26 +359,26 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of SectionGrade rows — student_label, section_id, score, max_score, feedback (one row per student × rubric question)"
+      "inputDescription": "List of SectionGrade rows \u2014 student_label, section_id, score, max_score, feedback (one row per student \u00d7 rubric question)"
     },
     {
       "id": "mod_assert",
       "kind": "assert",
       "label": "Grade Count Check",
-      "note": "len(Student Submissions) × len(Marking Questions List) = len(Final Output)",
+      "note": "len(Student Submissions) \u00d7 len(Marking Questions List) = len(Final Output)",
       "inStructureId": "m_grade",
       "outStructureId": "m_grade",
       "outIsList": true,
-      "inputDescription": "List of SectionGrade rows — student_label, section_id, score, max_score, feedback (one row per student × rubric question)",
+      "inputDescription": "List of SectionGrade rows \u2014 student_label, section_id, score, max_score, feedback (one row per student \u00d7 rubric question)",
       "cached": true,
       "avgMs": 2,
       "avgCostCents": 0,
       "fallbackList": [
         {
-          "typescript": "const nStudents = len(step(\"Student Submissions\"));\nconst nQuestions = len(step(\"Marking Questions List\"));\nconst nOut = len(step(\"Final Output\"));\nif (nStudents * nQuestions !== nOut) {\n  throw new Error(`expected ${nStudents}×${nQuestions}=${nStudents * nQuestions} grades, got ${nOut}`);\n}"
+          "typescript": "const nStudents = len(step(\"Student Submissions\"));\nconst nQuestions = len(step(\"Marking Questions List\"));\nconst nOut = len(step(\"Final Output\"));\nif (nStudents * nQuestions !== nOut) {\n  throw new Error(`expected ${nStudents}\u00d7${nQuestions}=${nStudents * nQuestions} grades, got ${nOut}`);\n}"
         },
         {
-          "python": "n_students = len_of(step('Student Submissions'))\nn_questions = len_of(step('Marking Questions List'))\nn_out = len_of(step('Final Output'))\nif n_students * n_questions != n_out:\n    raise ValueError(f'expected {n_students}×{n_questions}={n_students * n_questions} grades, got {n_out}')"
+          "python": "n_students = len_of(step('Student Submissions'))\nn_questions = len_of(step('Marking Questions List'))\nn_out = len_of(step('Final Output'))\nif n_students * n_questions != n_out:\n    raise ValueError(f'expected {n_students}\u00d7{n_questions}={n_students * n_questions} grades, got {n_out}')"
         }
       ]
     }
@@ -394,17 +394,6 @@
       "latencyMs": 3200,
       "costCents": 8,
       "passRate": 90
-    },
-    {
-      "id": "s_rlm_hw",
-      "kind": "rlm",
-      "name": "Recursive LM",
-      "enabled": true,
-      "model": "deepseek-v3",
-      "accuracy": 86,
-      "latencyMs": 9800,
-      "costCents": 21,
-      "passRate": 94
     },
     {
       "id": "s_agent_hw",

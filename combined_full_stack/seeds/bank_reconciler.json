@@ -128,7 +128,7 @@
       "id": "mod_parse_inv",
       "kind": "custom-code",
       "label": "Parse Invoice Table",
-      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "note": "Markdown table \u2192 CSV-style cells \u2192 JSON rows (no raw markdown to LLM).",
       "inputDescription": "TableRow list parsed from the open accounts-payable invoice markdown table",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_row",
@@ -169,8 +169,8 @@
       "id": "mod_merge",
       "kind": "custom-code",
       "label": "Merge Tables",
-      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
-      "inputDescription": "Combined reconcile input — parsed invoice rows plus bank statement document",
+      "note": "Markdown table \u2192 CSV-style cells \u2192 JSON rows (no raw markdown to LLM).",
+      "inputDescription": "Combined reconcile input \u2014 parsed invoice rows plus bank statement document",
       "inStructureId": "m_combined",
       "outStructureId": "m_merged2",
       "cached": true,
@@ -189,7 +189,7 @@
       "inStructureId": "m_merged2",
       "outStructureId": "m_match",
       "outIsList": true,
-      "inputDescription": "Merged JSON — bank statement rows in table_a_json and open invoices in table_b_json",
+      "inputDescription": "Merged JSON \u2014 bank statement rows in table_a_json and open invoices in table_b_json",
       "prompt": "table_a_json is bank statement rows; table_b_json is open invoices. For each bank outflow (negative amount), output one ReconcileLine with matched=true if an invoice explains it, else matched=false with explanation.",
       "model": "deepseek-v3",
       "cached": true,
@@ -206,7 +206,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of ReconcileLine records — one match verdict per bank outflow"
+      "inputDescription": "List of ReconcileLine records \u2014 one match verdict per bank outflow"
     }
   ],
   "strategies": [
@@ -220,17 +220,6 @@
       "latencyMs": 3200,
       "costCents": 8,
       "passRate": 90
-    },
-    {
-      "id": "s_rlm_bank",
-      "kind": "rlm",
-      "name": "Recursive LM",
-      "enabled": true,
-      "model": "deepseek-v3",
-      "accuracy": 86,
-      "latencyMs": 9800,
-      "costCents": 21,
-      "passRate": 94
     },
     {
       "id": "s_agent_bank",

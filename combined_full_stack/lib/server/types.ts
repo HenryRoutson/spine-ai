@@ -148,7 +148,6 @@ export type StrategyKind = "single-llm" |"claude-code" | "cheap-agent";
 
 export const STRATEGY_KINDS = [
   "single-llm",
-  "rlm",
   "claude-code",
   "cheap-agent",
 ] as const satisfies readonly StrategyKind[];
