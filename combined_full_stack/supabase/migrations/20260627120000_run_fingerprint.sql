@@ -1,4 +1,3 @@
--- AI : TODO refactor — consolidate with `supabase/migrations/`; one source of truth for `db:push`.
 -- AI : indexed run fingerprint for dedup — hash of pipeline config + input doc content ids.
 alter table public.runs add column if not exists fingerprint text;
 

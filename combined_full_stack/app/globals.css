@@ -1,8 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
-/* AI : TODO refactor — use `shadcn/dist/tailwind.css` (package name); `../node_modules/shadcn/...`
-   resolves to repo-root node_modules and breaks the build when shadcn is only installed here. */
-@import '../node_modules/shadcn/dist/tailwind.css';
+@import 'shadcn/dist/tailwind.css';
 
 @custom-variant dark (&:is(.dark *));
 

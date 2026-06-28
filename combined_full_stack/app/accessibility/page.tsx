@@ -1,21 +1,11 @@
-import Link from "next/link"
-import { LegalDocument } from "@/lib/legal/legal-document"
-import { ACCESSIBILITY_SECTIONS } from "@/lib/legal/content"
-import { LegalPageShell } from "@/components/legal-page-shell"
+import { ACCESSIBILITY_SECTIONS } from "@shared/legal/content"
+import { createLegalPage } from "@/lib/legal/create-legal-page"
 
-export const metadata = {
-  title: "Accessibility — auto pipeline",
-}
+const { metadata, Page } = createLegalPage({
+  metadataTitle: "Accessibility — auto pipeline",
+  documentTitle: "Accessibility Statement",
+  sections: ACCESSIBILITY_SECTIONS,
+})
 
-export default function AccessibilityPage() {
-  return (
-    <LegalPageShell>
-      <LegalDocument title="Accessibility Statement" sections={ACCESSIBILITY_SECTIONS} />
-      <p className="mt-8 text-sm text-muted-foreground">
-        <Link href="/login" className="underline underline-offset-2">
-          Back to sign in
-        </Link>
-      </p>
-    </LegalPageShell>
-  )
-}
+export { metadata }
+export default Page

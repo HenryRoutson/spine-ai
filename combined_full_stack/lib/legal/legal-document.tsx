@@ -1,6 +1,6 @@
-import type { LegalSection } from "@/lib/legal/content"
-import { LEGAL_DISCLAIMER } from "@/lib/legal/content"
-import { LEGAL } from "@/lib/legal/site"
+import type { LegalSection } from "@shared/legal/content"
+import { LEGAL_DISCLAIMER } from "@shared/legal/content"
+import { LEGAL } from "@shared/legal/site"
 
 type LegalDocumentProps = {
   title: string

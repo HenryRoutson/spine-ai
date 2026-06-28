@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
 import { authErrorMessage, type AuthMode } from "@/utils/supabase/auth_messages";
-import { LEGAL } from "@/lib/legal/site";
+import { LEGAL } from "@shared/legal/site";
 
 export type AuthActionState = { error?: string; notice?: string } | null;
 

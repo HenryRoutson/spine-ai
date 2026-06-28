@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { LEGAL, LEGAL_ROUTES } from "@/lib/legal/site"
+import { LEGAL, LEGAL_ROUTES } from "@shared/legal/site"
 
 type SignupConsentsProps = {
   disabled?: boolean

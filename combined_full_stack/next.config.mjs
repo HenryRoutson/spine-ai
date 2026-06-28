@@ -1,3 +1,9 @@
+import path from "path"
+import { fileURLToPath } from "url"
+
+// AI : repo root — shared/legal lives outside this app dir; Turbopack blocks parent imports otherwise.
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
 // AI : bridge SUPABASE_* → NEXT_PUBLIC_* so Vercel builds inline client config even when
 // AI : only the non-prefixed names are set in the dashboard.
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL
@@ -8,6 +14,9 @@ const supabaseKey =
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  turbopack: {
+    root: path.join(__dirname, ".."),
+  },
   env: {
     ...(supabaseUrl ? { NEXT_PUBLIC_SUPABASE_URL: supabaseUrl } : {}),
     ...(supabaseKey ? { NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: supabaseKey } : {}),

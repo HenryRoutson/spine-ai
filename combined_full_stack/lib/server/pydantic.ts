@@ -1,5 +1,6 @@
 import { fieldToPy } from "./type_expr";
 import { stripSharedModels } from "./builtin_models";
+import { modelsForPydanticExport } from "../structure-shape";
 import type { StructureModel } from "./types";
 
 export function modelToPydantic(model: StructureModel, models: StructureModel[]): string {
@@ -39,6 +40,8 @@ export function allModelsToPydantic(models: StructureModel[]): string {
     "    filename: str",
     "",
   ].join("\n");
-  const classes = stripSharedModels(models).map((m) => modelToPydantic(m, models)).join("\n\n\n");
+  const userModels = stripSharedModels(models);
+  const exportModels = modelsForPydanticExport(userModels);
+  const classes = exportModels.map((m) => modelToPydantic(m, exportModels)).join("\n\n\n");
   return `${imports}\n\n${classes}\n`;
 }

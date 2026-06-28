@@ -1,4 +1,3 @@
-// AI : TODO refactor — duplicate of `combined_full_stack/lib/legal/content.ts`; consolidate via shared import.
 import { LEGAL } from "./site"
 
 export type LegalSection = {

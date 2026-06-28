@@ -1,23 +1,13 @@
-import Link from "next/link"
-import { LegalDocument } from "@/lib/legal/legal-document"
-import { COOKIE_SECTIONS } from "@/lib/legal/content"
-import { LegalPageShell } from "@/components/legal-page-shell"
+import { COOKIE_SECTIONS } from "@shared/legal/content"
 import { CookiePreferences } from "@/components/cookie-preferences"
+import { createLegalPage } from "@/lib/legal/create-legal-page"
 
-export const metadata = {
-  title: "Cookie Policy — auto pipeline",
-}
+const { metadata, Page } = createLegalPage({
+  metadataTitle: "Cookie Policy — auto pipeline",
+  documentTitle: "Cookie Policy",
+  sections: COOKIE_SECTIONS,
+  extra: <CookiePreferences />,
+})
 
-export default function CookiesPage() {
-  return (
-    <LegalPageShell>
-      <LegalDocument title="Cookie Policy" sections={COOKIE_SECTIONS} />
-      <CookiePreferences />
-      <p className="mt-8 text-sm text-muted-foreground">
-        <Link href="/login" className="underline underline-offset-2">
-          Back to sign in
-        </Link>
-      </p>
-    </LegalPageShell>
-  )
-}
+export { metadata }
+export default Page

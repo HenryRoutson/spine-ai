@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { LEGAL_ROUTES } from "@/lib/legal/site"
+import { LEGAL_ROUTES } from "@shared/legal/site"
 
 export type cookie_consent_choice = "essential_only" | "all"
 

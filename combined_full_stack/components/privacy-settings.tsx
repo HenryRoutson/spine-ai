@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { createClient } from "@/utils/supabase/client"
-import { LEGAL, LEGAL_ROUTES } from "@/lib/legal/site"
+import { LEGAL, LEGAL_ROUTES } from "@shared/legal/site"
 import { LegalFooterLinks } from "@/lib/legal/chrome"
 import { Switch } from "@/components/ui/switch"
 
