@@ -79,7 +79,7 @@ const FEATURE_CARDS: FeatureCard[] = [
   },
   {
     title: "A/B Strategy Testing",
-    body: "Benchmark single LLM calls, RLM, frontier agents, or cheap open models. An LLM judge picks the winner on accuracy, pass-rate, latency and cost.",
+    body: "Benchmark single LLM calls, frontier agents, or cheap open models. An LLM judge picks the winner on accuracy, pass-rate, latency and cost.",
   },
   {
     title: "Shareable Inference",

@@ -97,12 +97,11 @@ json_helper > find json blocks, extract dictionaries
 Merge > merge dictionaries with OVERWRITE, KEEP FIRST, combine to list if shared key, or combine to list always, or error
 Prompt size profiler > evaluate the size of your prompt, shared parts of your prompt 
 Quotation > extract and validate quotes, find closest quote if not an exact match and export into linked structures with original text linked
-RLM > recursive language model
 Simple cache > handle caching of slow operations like llm calls or pdf reads 
 Sliding window > slide a window over context to extract things like quotes
 Split string > used in sliding window, split a string into n parts with overlap or at a certain regex break point with min gap
 Tree.py > generic tree module, useful for representing web scraping data
-llm.py > formatted response, RLM response, claude code response. 
+llm.py > formatted response, claude code response. 
 Logging > all logs into convenient logging locations like folder and _latest.md. progress bars in terminal. Ideally output to json
 File processing > able to easily load any file, handle extension, convert to text and standard format with options like page seperation and pydantic inference.
 Config.py > load all env variables into a single constant for easy intellisense, additionally add config options into a json file with validation. Raise errors early if you are missing a config or environment required. Config is useful for global constants 

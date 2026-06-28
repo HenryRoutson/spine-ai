@@ -144,7 +144,7 @@ export interface Project {
   createdAt?: number; // AI : ms since epoch — set when blank/cloned; templates from seeds/*.json omit this
 }
 
-export type StrategyKind = "single-llm" | "rlm" | "claude-code" | "cheap-agent";
+export type StrategyKind = "single-llm" |"claude-code" | "cheap-agent";
 
 export const STRATEGY_KINDS = [
   "single-llm",
@@ -406,7 +406,6 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
 
 export const STRATEGY_META: Record<StrategyKind, { name: string; description: string }> = {
   "single-llm": { name: "Single LLM Call", description: "One direct call to the model." },
-  rlm: { name: "Recursive LM (RLM)", description: "Recursively decompose then synthesize." },
   "claude-code": { name: "Agent (Frontier)", description: "A full coding-agent instance on the task." },
   "cheap-agent": { name: "Agent (Cheap Model)", description: "Agent loop on a low-cost open model." },
 };
