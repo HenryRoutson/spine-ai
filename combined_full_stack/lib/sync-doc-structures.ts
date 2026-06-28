@@ -3,22 +3,24 @@ import {
   cloneDerivedForProject,
 } from "@/lib/doc-derived-structures"
 import { inferStructuresFromDocContent } from "@/lib/doc-structure-infer"
+import {
+  dedupeInferredModelsByShape,
+  findModelByBundleShape,
+  nextSharedStructureName,
+} from "@/lib/structure-shape"
+import { repairOrphanModelRefs } from "@/lib/structure-ref"
 import { tabularRowSetsFromContent } from "@/lib/tabular-row-sets"
 import type { DocId, DocRef, StructureModel, StructureModelId } from "@/lib/types"
 
-function modelFieldSignature(m: StructureModel): string {
-  return m.fields
-    .map((f) => `${f.name}:${f.type}${f.ref ? `@${f.ref}` : ""}`)
-    .sort()
-    .join("|")
+function shapeAlreadyPresent(
+  models: StructureModel[],
+  root: StructureModel,
+  companions: StructureModel[],
+): boolean {
+  return findModelByBundleShape(models, root, companions) !== undefined
 }
 
-function hasGlobalDuplicate(models: StructureModel[], candidate: StructureModel): boolean {
-  const sig = modelFieldSignature(candidate)
-  return models.some((m) => m.name === candidate.name && modelFieldSignature(m) === sig)
-}
-
-// AI : auto-add inferred structures from stored doc text — dedupe by doc+name and identical global name+fields.
+// AI : auto-add inferred structures — dedupe identical shapes as numbered Structure N models.
 export function mergeInferredStructuresForDoc(
   models: StructureModel[],
   doc: Pick<DocRef, "id" | "name" | "type">,
@@ -30,25 +32,33 @@ export function mergeInferredStructuresForDoc(
 
   const rowSets = tabularRowSetsFromContent(trimmed, doc.name, doc.type)
   const derived = inferStructuresFromDocContent(trimmed, doc.name, doc.type, idGen, rowSets)
-  if (!derived.length) return models
+  if (!derived.length) return repairOrphanModelRefs(dedupeInferredModelsByShape(models), idGen)
 
   let next = models
   for (const d of derived) {
     if (alreadyAdded(next, doc.id as DocId, d.model.name)) continue
+    if (shapeAlreadyPresent(next, d.model, d.companionModels)) continue
 
-    const cloned = cloneDerivedForProject(d, doc.id as DocId, idGen)
-    const toAdd = cloned.filter((m) => {
-      if (next.some((x) => x.sourceDocId === doc.id && x.name === m.name)) return false
-      if (hasGlobalDuplicate(next, m)) return false
-      return true
+    const sharedName = nextSharedStructureName(next)
+    const cloned = cloneDerivedForProject(d, idGen, {
+      sharedName,
+      description: "Inferred document shape.",
     })
-    if (toAdd.length) next = [...next, ...toAdd]
+    if (cloned.length) next = [...next, ...cloned]
   }
-  return next
+  return repairOrphanModelRefs(dedupeInferredModelsByShape(next), idGen)
 }
 
 export function modelsChanged(before: StructureModel[], after: StructureModel[]): boolean {
   if (before.length !== after.length) return true
-  const beforeIds = new Set(before.map((m) => m.id))
-  return after.some((m) => !beforeIds.has(m.id))
+  const beforeById = new Map(before.map((m) => [m.id, m]))
+  return after.some((m) => {
+    const prev = beforeById.get(m.id)
+    if (!prev) return true
+    if (prev.name !== m.name || prev.sourceDocId !== m.sourceDocId) return true
+    return prev.fields.some((f, i) => {
+      const next = m.fields[i]
+      return !next || f.ref !== next.ref || f.type !== next.type
+    })
+  })
 }

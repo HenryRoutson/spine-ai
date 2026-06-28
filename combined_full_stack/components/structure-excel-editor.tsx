@@ -6,9 +6,10 @@ import {
   type FieldType,
   type ModelField,
   type StructureModel,
-  type StructureModelId,
 } from "@/lib/types"
 import { isLockedStructureModel } from "@/lib/structure"
+import { StructureFieldRefPicker, isRefFieldType } from "@/components/structure-field-ref-picker"
+import { modelsForRefPicker } from "@/lib/structure-ref"
 import { FIELD_TYPE_OPTIONS, fieldTypeLabel } from "@/lib/structure-field-labels"
 import { Button } from "@/components/ui/button"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
@@ -168,6 +169,7 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
               <FieldRow
                 key={f.id}
                 field={f}
+                fields={selected.fields}
                 rowIdx={rowIdx}
                 locked={selectedLocked}
                 models={models}
@@ -220,6 +222,7 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
 
 type FieldRowProps = {
   field: ModelField
+  fields: ModelField[]
   rowIdx: number
   locked: boolean
   models: StructureModel[]
@@ -228,9 +231,9 @@ type FieldRowProps = {
   onRemove: () => void
 }
 
-function FieldRow({ field, rowIdx, locked, models, selectedId, onUpdate, onRemove }: FieldRowProps) {
+function FieldRow({ field, fields, rowIdx, locked, models, selectedId, onUpdate, onRemove }: FieldRowProps) {
   const stripe = rowIdx % 2 === 1
-  const refModels = models.filter((m) => m.id !== selectedId)
+  const refModels = modelsForRefPicker(models, selectedId, fields)
 
   return (
     <>
@@ -246,25 +249,38 @@ function FieldRow({ field, rowIdx, locked, models, selectedId, onUpdate, onRemov
             locked={locked}
           />
         </td>
-        <td className="border-b border-r border-border p-0">
-          <select
-            value={field.type}
-            onChange={(e) => {
-              const type = e.target.value as FieldType
-              onUpdate({
-                type,
-                ref: REF_TYPES.includes(type) ? refModels[0]?.id : undefined,
-              })
-            }}
-            disabled={locked}
-            className="h-8 w-full border-0 bg-transparent px-2 text-[11.5px] outline-none disabled:cursor-default disabled:opacity-70"
-          >
-            {FIELD_TYPE_OPTIONS.map(({ value, label }) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
+        <td className="border-b border-r border-border p-0 align-top">
+          <div className="space-y-0.5 px-1 py-1">
+            <select
+              value={field.type}
+              onChange={(e) => {
+                const type = e.target.value as FieldType
+                onUpdate({
+                  type,
+                  ref: REF_TYPES.includes(type) ? refModels[0]?.id : undefined,
+                })
+              }}
+              disabled={locked}
+              className="h-7 w-full border-0 bg-transparent px-1 text-[11.5px] outline-none disabled:cursor-default disabled:opacity-70"
+            >
+              {FIELD_TYPE_OPTIONS.map(({ value, label }) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            {isRefFieldType(field.type) && (
+              <StructureFieldRefPicker
+                field={field}
+                fields={fields}
+                models={models}
+                selectedId={selectedId}
+                locked={locked}
+                onRefChange={(ref) => onUpdate({ ref })}
+                compact
+              />
+            )}
+          </div>
         </td>
         <td className="border-b border-r border-border p-0">
           <CellInput
@@ -311,29 +327,6 @@ function FieldRow({ field, rowIdx, locked, models, selectedId, onUpdate, onRemov
           )}
         </td>
       </tr>
-      {REF_TYPES.includes(field.type) && (
-        <tr className={cn(stripe && "bg-secondary/15")}>
-          <td className="border-b border-r border-border bg-secondary/25" />
-          <td colSpan={5} className="border-b border-r border-border px-2 py-1 text-[10px] text-muted-foreground">
-            Links to
-          </td>
-          <td className="border-b border-border p-0">
-            <select
-              value={field.ref ?? ""}
-              onChange={(e) => onUpdate({ ref: (e.target.value || undefined) as StructureModelId | undefined })}
-              disabled={locked}
-              className="h-7 w-full min-w-[120px] border-0 bg-transparent px-2 text-[11px] outline-none disabled:cursor-default disabled:opacity-70"
-            >
-              <option value="">Pick a structure…</option>
-              {refModels.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </td>
-        </tr>
-      )}
       {field.type === "json" && (
         <tr className={cn(stripe && "bg-secondary/15")}>
           <td className="border-b border-r border-border bg-secondary/25" />

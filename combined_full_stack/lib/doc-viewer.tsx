@@ -4,7 +4,7 @@
 // AI : character offsets into the stored docs/<hash>.txt; the optional `text` lets the
 // AI : viewer fall back to indexOf when offsets went stale (doc re-uploaded).
 
-import { createContext, useContext, useState, type ReactNode } from "react"
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react"
 
 export type DocViewMode = "pdf" | "parser" | "vision" | "json" | "formatted"
 
@@ -26,17 +26,10 @@ const DocViewerContext = createContext<DocViewerState | null>(null)
 
 export function DocViewerProvider({ children }: { children: ReactNode }) {
   const [target, setTarget] = useState<DocJumpTarget | null>(null)
-  return (
-    <DocViewerContext.Provider
-      value={{
-        target,
-        open: (t) => setTarget(t),
-        close: () => setTarget(null),
-      }}
-    >
-      {children}
-    </DocViewerContext.Provider>
-  )
+  const open = useCallback((t: DocJumpTarget) => setTarget(t), [])
+  const close = useCallback(() => setTarget(null), [])
+  const value = useMemo(() => ({ target, open, close }), [target, open, close])
+  return <DocViewerContext.Provider value={value}>{children}</DocViewerContext.Provider>
 }
 
 export function useDocViewer() {

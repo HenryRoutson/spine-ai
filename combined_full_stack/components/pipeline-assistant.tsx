@@ -30,17 +30,24 @@ export function PipelineAssistant() {
     <AssistantChat<PipelineProposal>
       title="Pipeline assistant"
       subtitle={`${modules.length} steps · ${models.length} models · propose → approve or reject`}
+      showDebug
       initialMessage="Describe the pipeline you want — I'll propose steps you can approve or reject. Reference your structure models by name."
       starters={STARTERS}
       placeholder="Describe the pipeline you want…"
-      loadingLabel={(phase) => (phase === "retrying" ? "retrying…" : "designing pipeline…")}
+      loadingLabel={(phase) =>
+        phase === "retrying"
+          ? "retrying…"
+          : phase === "structuring"
+            ? "designing pipeline…"
+            : "thinking…"
+      }
       onApprove={(msg) => {
         if (!msg.proposal) return
         setModels(msg.proposal.models)
         setModules(msg.proposal.modules)
       }}
       onReject={() => {}}
-      requestAssistant={async (text, history, { setLoadingPhase }) => {
+      requestAssistant={async (text, history, { setLoadingPhase, onThinkingDelta, onDebugEntry }) => {
         const res = await fetch(API_ROUTES.pipelineAssistant, {
           method: "POST",
           headers: JSON_HEADERS,
@@ -56,7 +63,11 @@ export function PipelineAssistant() {
           const data = await res.json()
           throw new Error(data.error ?? assistantRequestFailed(res.status))
         }
-        return readPipelineAssistantStream<PipelineProposal>(res, () => setLoadingPhase("retrying"))
+        return readPipelineAssistantStream<PipelineProposal>(res, {
+          onThinkingDelta,
+          onPhase: setLoadingPhase,
+          onDebugEntry,
+        })
       }}
       renderProposal={(m) => (
         <>
@@ -92,6 +103,11 @@ export function PipelineAssistant() {
               </Badge>
             )}
           </div>
+          {m.validationErrors && (
+            <pre className="mb-2 max-h-24 overflow-auto rounded border border-destructive/30 bg-destructive/5 p-2 font-mono text-[9px] leading-relaxed whitespace-pre-wrap text-destructive">
+              {m.validationErrors}
+            </pre>
+          )}
           <ol className="space-y-1">
             {m.proposal!.modules.map((step, i) => (
               <li

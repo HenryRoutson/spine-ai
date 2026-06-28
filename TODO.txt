@@ -34,8 +34,6 @@ Error: Can't resolve '../node_modules/shadcn/dist/tailwind.css' in '/Users/henry
 
 
 
-
-
 ================================================================================
 PLAN: OpenHands agent tier (separate server) — managed, minimal complexity
 ================================================================================

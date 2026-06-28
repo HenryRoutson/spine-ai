@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { API_ROUTES } from "@/lib/api-routes"
+import { docTextContent, fetchDocText } from "@/lib/doc-text-cache"
 import type { DocId } from "@/lib/types"
 
 export function useDocText(docId: DocId | null | undefined) {
@@ -16,10 +16,9 @@ export function useDocText(docId: DocId | null | undefined) {
     }
     let cancelled = false
     setLoading(true)
-    fetch(API_ROUTES.docText(docId))
-      .then((r) => r.json())
-      .then((d: { content?: string; text?: string }) => {
-        if (!cancelled) setContent(d.text ?? d.content ?? "")
+    fetchDocText(docId)
+      .then((data) => {
+        if (!cancelled) setContent(docTextContent(data))
       })
       .catch(() => {
         if (!cancelled) setContent("")

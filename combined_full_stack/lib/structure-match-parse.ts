@@ -1,6 +1,7 @@
 import { inferStructuresFromDocContent, isInferrableDocContent } from "@/lib/doc-structure-infer"
 import { tryParseJson } from "@/lib/json-utils"
 import { findMatchingStructures, type StructureMatch } from "@/lib/structure-match"
+import { findModelByBundleShape } from "@/lib/structure-shape"
 import { tabularRowSetsFromContent } from "@/lib/tabular-row-sets"
 import type { DocRef, StructureModel, StructureModelId } from "@/lib/types"
 
@@ -59,6 +60,19 @@ export function findStructureMatchesForDoc(
 
   for (const d of derived) {
     matches = [...matches, ...findMatchingStructures(d.sample, models)]
+  }
+
+  for (const d of derived) {
+    const existing = findModelByBundleShape(models, d.model, d.companionModels)
+    if (existing) {
+      const kind = d.matchKind
+      matches.push({
+        modelId: existing.id,
+        modelName: existing.name,
+        fieldCount: existing.fields.length,
+        matchKind: kind,
+      })
+    }
   }
 
   for (const m of models.filter((x) => x.sourceDocId === doc.id)) {

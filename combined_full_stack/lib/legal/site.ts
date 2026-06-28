@@ -1,3 +1,4 @@
+// AI : TODO refactor — duplicate of `shared/legal/site.ts`; import from shared via tsconfig path or delete one copy.
 export type policy_version_string = string
 export type contact_email_string = string
 

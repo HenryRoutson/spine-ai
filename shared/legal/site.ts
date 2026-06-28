@@ -1,3 +1,4 @@
+// AI : TODO refactor — duplicate of `combined_full_stack/lib/legal/site.ts`; consolidate via shared import.
 export type policy_version_string = string
 export type contact_email_string = string
 

@@ -5,6 +5,7 @@ import { useStore } from "@/lib/store"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { useAppShell } from "@/lib/app-shell"
 import { docsForProject } from "@/lib/project-docs"
+import { DocProjectPicker } from "@/components/doc-project-picker"
 import { WindowHeader } from "@/components/window-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,8 +25,9 @@ import {
   Eye,
   Search,
   TriangleAlert,
+  Trash2,
 } from "lucide-react"
-import type { DocLabel, InputType } from "@/lib/types"
+import type { DocId, DocLabel, InputType } from "@/lib/types"
 
 const TYPE_ICON: Record<InputType, typeof FileText> = {
   pdf: FileText,
@@ -38,8 +40,8 @@ const TYPE_ICON: Record<InputType, typeof FileText> = {
 }
 
 export function Documents() {
-  const { docs, addDoc, project } = useStore()
-  const { open } = useDocViewer()
+  const { docs, addDoc, removeDoc, project, projects } = useStore()
+  const { open, close, target } = useDocViewer()
   const { focusDocId, clearFocusDoc } = useAppShell()
   const fileRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState("")
@@ -99,12 +101,22 @@ export function Documents() {
 
   const totalKb = projectDocs.reduce((a, d) => a + d.sizeKb, 0)
 
+  async function handleDelete(docId: DocId, e: React.MouseEvent) {
+    e.stopPropagation()
+    try {
+      await removeDoc(docId, project.id)
+      if (target?.docId === docId) close()
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
         step="06 / Documents"
         title="Document Store"
-        description={`Content-addressed storage for ${project.name}. Uploads and example files stay scoped to this pipeline.`}
+        description={`Content-addressed storage for ${project.name}. Uploads default to this pipeline — share to others from each row.`}
       />
 
       <div className="grid grid-cols-3 gap-px border-b border-border bg-border">
@@ -211,13 +223,28 @@ export function Documents() {
                     </span>
                   </p>
                 </div>
+                {projects.length > 1 && (
+                  <DocProjectPicker doc={doc} activeProjectId={project.id} />
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
                   className="shrink-0"
-                  onClick={() => open({ docId: doc.id, start: 0, end: 0 })}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    open({ docId: doc.id, start: 0, end: 0 })
+                  }}
                 >
                   <Eye className="mr-1.5 h-3.5 w-3.5" /> View
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="shrink-0 text-destructive hover:text-destructive"
+                  onClick={(e) => void handleDelete(doc.id, e)}
+                  aria-label={`Delete ${doc.name}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </li>
             )

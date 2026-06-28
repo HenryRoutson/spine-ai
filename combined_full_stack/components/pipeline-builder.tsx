@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO refactor — only extract shared pipeline chrome if a third layout consumer appears (Logging already uses PipelineCanvas).
 import { useState } from "react"
 import {
   Plus,

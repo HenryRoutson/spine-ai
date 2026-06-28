@@ -36,6 +36,7 @@ import { API_ROUTES } from "@/lib/api-routes"
 import { migrateProjectModules, syncAutoQuoteSteps } from "@/lib/quote-steps"
 import { stripSharedModels, withSharedModels } from "@/lib/structure"
 import { mergeInferredStructuresForDoc, modelsChanged } from "@/lib/sync-doc-structures"
+import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
 
 export type BillingAccountView = {
   balanceCents: number
@@ -80,6 +81,8 @@ interface StoreState {
   // documents — real upload through POST /api/docs (content-hash dedupe server-side)
   docs: DocRef[]
   addDoc: (file: File, label: DocLabel, projectId?: string) => Promise<DocRef>
+  removeDoc: (docId: DocId, projectId?: string) => Promise<void>
+  setDocProjects: (docId: DocId, projectIds: ProjectId[]) => Promise<void>
   // runs / logs
   runs: PipelineRun[]
   addRun: (r: PipelineRun) => void
@@ -191,8 +194,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let alive = true
-    // AI : always gate the main shell on project switch — prefetched data still needs applyState.
-    if (hydratedRef.current && activeProjectId) setProjectLoading(true)
+    const cached = activeProjectId ? prefetchCache.current.get(activeProjectId) : undefined
+    const instant = !!cached?.data
+    // AI : prefetched project data applies without blanking the main pane.
+    if (hydratedRef.current && activeProjectId && !instant) setProjectLoading(true)
 
     loadProjectState(activeProjectId)
       .then((data) => {
@@ -364,6 +369,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     form.append("label", label)
     if (projectId) form.append("projectId", projectId)
     const doc = await apiJson<DocRef>(API_ROUTES.docs, { method: "POST", body: form })
+    invalidateDocText(doc.id)
     const pid = projectId ?? activeProjectId
 
     setState((prev) => {
@@ -381,8 +387,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     if (pid) {
       try {
-        const data = await apiJson<{ text?: string; content?: string }>(API_ROUTES.docText(doc.id))
-        const content = data.text ?? data.content ?? ""
+        const data = await fetchDocText(doc.id)
+        const content = docTextContent(data)
         setState((prev) => {
           if (!prev) return prev
           const p = prev.projects.find((x) => x.id === pid)
@@ -416,6 +422,66 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     return doc
   }, [activeProjectId, persistProject])
+
+  const removeDoc = useCallback(async (docId: DocId, projectId?: string) => {
+    const pid = projectId ?? activeProjectId
+    const q = pid ? `?projectId=${encodeURIComponent(pid)}` : ""
+    await apiJson<{ ok: true }>(`${API_ROUTES.doc(docId)}${q}`, { method: "DELETE" })
+    invalidateDocText(docId)
+    setState((prev) => {
+      if (!prev) return prev
+      const doc = prev.docs.find((d) => d.id === docId)
+      if (!doc) return prev
+      const p = pid ? prev.projects.find((x) => x.id === pid) : undefined
+      const names = p?.seedDocNames ?? []
+      const unlinked = names.includes(doc.name)
+      const nextProjects =
+        unlinked && p
+          ? prev.projects.map((x) =>
+              x.id === pid ? { ...p, seedDocNames: names.filter((n) => n !== doc.name) } : x,
+            )
+          : prev.projects
+      const stillLinked = prev.projects.some(
+        (x) => x.id !== pid && (x.seedDocNames?.includes(doc.name) ?? false),
+      )
+      if (stillLinked) return { ...prev, projects: nextProjects }
+      return {
+        ...prev,
+        docs: prev.docs.filter((d) => d.id !== docId),
+        projects: nextProjects,
+      }
+    })
+  }, [activeProjectId])
+
+  const setDocProjects = useCallback(async (docId: DocId, projectIds: ProjectId[]) => {
+    const { projectIds: saved } = await apiJson<{ projectIds: ProjectId[] }>(API_ROUTES.doc(docId), {
+      method: "PATCH",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ projectIds }),
+    })
+    setState((prev) => {
+      if (!prev) return prev
+      const doc = prev.docs.find((d) => d.id === docId)
+      if (!doc) return prev
+      const want = new Set(saved)
+      const nextProjects = prev.projects.map((p) => {
+        const names = p.seedDocNames ?? []
+        const has = names.includes(doc.name)
+        const should = want.has(p.id)
+        if (has === should) return p
+        return {
+          ...p,
+          seedDocNames: should ? [...names, doc.name] : names.filter((n) => n !== doc.name),
+        }
+      })
+      const stillLinked = nextProjects.some((p) => p.seedDocNames?.includes(doc.name))
+      return {
+        ...prev,
+        projects: nextProjects,
+        docs: stillLinked ? prev.docs : prev.docs.filter((d) => d.id !== docId),
+      }
+    })
+  }, [])
 
   // AI : the server already persisted the run (run engine) — just mirror it locally.
   const addRun = useCallback((r: PipelineRun) => {
@@ -453,6 +519,117 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const runs = state?.runs ?? []
   const billingRuns = state?.allRuns ?? state?.runs ?? []
+  const modules = useMemo(
+    () => (project ? migrateProjectModules(project).modules : []),
+    [project],
+  )
+
+  const setModels = useCallback(
+    (m: StructureModel[]) => {
+      if (!project) return
+      const nextModels = stripSharedModels(m)
+      patchProject({
+        models: nextModels,
+        modules: syncAutoQuoteSteps(project.modules, withSharedModels(nextModels)),
+      })
+    },
+    [patchProject, project],
+  )
+
+  const setModules = useCallback(
+    (m: PipelineModule[]) => {
+      if (!project) return
+      patchProject({ modules: syncAutoQuoteSteps(m, project.models) })
+    },
+    [patchProject, project],
+  )
+
+  const setStrategies = useCallback(
+    (s: Strategy[]) => {
+      patchProject({ strategies: s })
+    },
+    [patchProject],
+  )
+
+  const boundSetInferenceInputDocIds = useCallback(
+    (docs: Partial<Record<ModuleId, DocId | DocId[]>>) => {
+      if (!project) return
+      setInferenceInputDocIds(project.id, docs)
+    },
+    [project, setInferenceInputDocIds],
+  )
+
+  const value = useMemo<StoreState | null>(() => {
+    if (!state || !project) return null
+    return {
+      projects,
+      activeProjectId: project.id,
+      setActiveProjectId,
+      addProject,
+      cloneFromTemplate,
+      cloneProject: cloneProjectById,
+      resyncExamples,
+      renameProject,
+      deleteProject,
+      project,
+      models: project.models,
+      setModels,
+      modules,
+      setModules,
+      strategies: project.strategies,
+      setStrategies,
+      model,
+      setModel,
+      docs: state.docs,
+      addDoc,
+      removeDoc,
+      setDocProjects,
+      runs,
+      addRun,
+      updateRunNotes,
+      inferenceInputDocIds: inferenceInputsByProject[project.id] ?? {},
+      setInferenceInputDocIds: boundSetInferenceInputDocIds,
+      billingRuns,
+      billingAccount,
+      refreshBilling,
+      refresh,
+      prefetchProject,
+      projectLoading,
+      saveError,
+      clearSaveError,
+    }
+  }, [
+    state,
+    projects,
+    project,
+    modules,
+    setModels,
+    setModules,
+    setStrategies,
+    model,
+    addDoc,
+    removeDoc,
+    setDocProjects,
+    runs,
+    addRun,
+    updateRunNotes,
+    inferenceInputsByProject,
+    boundSetInferenceInputDocIds,
+    billingRuns,
+    billingAccount,
+    refreshBilling,
+    refresh,
+    prefetchProject,
+    projectLoading,
+    saveError,
+    clearSaveError,
+    addProject,
+    cloneFromTemplate,
+    cloneProjectById,
+    resyncExamples,
+    renameProject,
+    deleteProject,
+  ])
 
   if (loadError) {
     return (
@@ -472,54 +649,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     )
   }
 
-  if (!state || !project) {
+  if (!state || !project || !value) {
     return (
       <div className="flex h-dvh items-center justify-center bg-background">
         <p className="font-mono text-xs text-muted-foreground">loading store…</p>
       </div>
     )
-  }
-
-  const value: StoreState = {
-    projects,
-    activeProjectId: project.id,
-    setActiveProjectId,
-    addProject,
-    cloneFromTemplate,
-    cloneProject: cloneProjectById,
-    resyncExamples,
-    renameProject,
-    deleteProject,
-    project,
-    models: project.models,
-    setModels: (m) => {
-      const models = stripSharedModels(m)
-      patchProject({
-        models,
-        modules: syncAutoQuoteSteps(project.modules, withSharedModels(models)),
-      })
-    },
-    modules: migrateProjectModules(project).modules,
-    setModules: (m) => patchProject({ modules: syncAutoQuoteSteps(m, project.models) }),
-    strategies: project.strategies,
-    setStrategies: (s) => patchProject({ strategies: s }),
-    model,
-    setModel,
-    docs: state.docs,
-    addDoc,
-    runs,
-    addRun,
-    updateRunNotes,
-    inferenceInputDocIds: inferenceInputsByProject[project.id] ?? {},
-    setInferenceInputDocIds: (docs) => setInferenceInputDocIds(project.id, docs),
-    billingRuns,
-    billingAccount,
-    refreshBilling,
-    refresh,
-    prefetchProject,
-    projectLoading,
-    saveError,
-    clearSaveError,
   }
 
   return (

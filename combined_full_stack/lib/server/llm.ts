@@ -1,3 +1,4 @@
+// AI : facade over openrouter_llm — keep thin when openrouter_llm.ts splits transport vs parse.
 import { type ZodType } from "zod";
 import {
   getStringResponse,
@@ -20,6 +21,7 @@ export interface CallContext {
   system?: string;
   maxTokens?: number;
   llmCalls?: LlmCallRecord[];
+  onStructuredFailure?: ChatOptions["onStructuredFailure"];
 }
 
 function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
@@ -54,6 +56,7 @@ function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
         failureKind: detail.kind,
         failureDetail: detail.error,
       });
+      ctx.onStructuredFailure?.(detail);
     },
   };
 }

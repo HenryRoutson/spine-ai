@@ -1,6 +1,6 @@
 "use client"
 
-// AI : composes use-inference-docs + use-inference-run-progress (see TODO.txt refactor backlog).
+// AI : composes use-inference-docs + use-inference-run-progress.
 import { useCallback, useRef } from "react"
 import { useInferenceDocs } from "@/lib/use-inference-docs"
 import { useInferenceRunProgress, type InferencePhase } from "@/lib/use-inference-run-progress"

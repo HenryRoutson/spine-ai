@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { defaultDocViewMode } from "@/lib/doc-content"
 import type { DocViewMode } from "@/lib/doc-viewer"
 import { API_ROUTES } from "@/lib/api-routes"
+import { docTextContent, fetchDocText } from "@/lib/doc-text-cache"
 import type { DocId, DocRef } from "@/lib/types"
 
 export type VisionEntry = { key: string; model: string; text: string; createdAt: number }
@@ -47,8 +48,10 @@ export function useDocViewerData({
     setVisionIndex(0)
     const hasSpan = spanStart !== spanEnd
     Promise.all([
-      fetch(API_ROUTES.docText(docId, "parser")).then((r) =>
-        r.ok ? r.json() : { text: `⚠ source not found for ${docId}` },
+      fetchDocText(docId, "parser").then((parser) =>
+        parser.text !== undefined || parser.content !== undefined
+          ? parser
+          : { text: `⚠ source not found for ${docId}` },
       ),
       fetch(API_ROUTES.docText(docId, "vision")).then((r) =>
         r.ok ? r.json() : { entries: [] as VisionEntry[] },
@@ -56,7 +59,7 @@ export function useDocViewerData({
     ])
       .then(([parser, vision]) => {
         const visionRows: VisionEntry[] = vision.entries ?? []
-        setParserText(parser.text ?? "")
+        setParserText(docTextContent(parser))
         setParserMeta({ parser: parser.parser, fromCache: parser.fromCache })
         setVisionEntries(visionRows)
         setView(

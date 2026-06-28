@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { API_ROUTES } from "@/lib/api-routes"
-import { apiJson } from "@/lib/api-client"
 import { docsForProject } from "@/lib/project-docs"
+import { docTextContent, fetchDocText } from "@/lib/doc-text-cache"
 import { mergeInferredStructuresForDoc, modelsChanged } from "@/lib/sync-doc-structures"
+import { dedupeInferredModelsByShape } from "@/lib/structure-shape"
+import { repairOrphanModelRefs } from "@/lib/structure-ref"
 import { useStore, uid } from "@/lib/store"
 import type { StructureModelId } from "@/lib/types"
 
@@ -18,6 +19,16 @@ export function useSyncProjectDocStructures() {
   useEffect(() => {
     syncedRef.current = new Set()
   }, [project.id])
+
+  // AI : collapse legacy per-doc duplicates (HomeworkStudentAlexRow, …) into numbered Structure N.
+  useEffect(() => {
+    if (projectLoading) return
+    const deduped = repairOrphanModelRefs(
+      dedupeInferredModelsByShape(modelsRef.current),
+      () => uid<StructureModelId>(),
+    )
+    if (modelsChanged(modelsRef.current, deduped)) setModels(deduped)
+  }, [project.id, projectLoading, setModels])
 
   useEffect(() => {
     if (projectLoading) return
@@ -33,8 +44,8 @@ export function useSyncProjectDocStructures() {
 
       for (const doc of pending) {
         try {
-          const data = await apiJson<{ text?: string; content?: string }>(API_ROUTES.docText(doc.id))
-          const content = data.text ?? data.content ?? ""
+          const data = await fetchDocText(doc.id)
+          const content = docTextContent(data)
           const merged = mergeInferredStructuresForDoc(
             next,
             doc,

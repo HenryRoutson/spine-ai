@@ -1,5 +1,6 @@
 "use client"
 
+import dynamic from "next/dynamic"
 import { useEffect, useRef, useState } from "react"
 import {
   Boxes,
@@ -25,22 +26,12 @@ import {
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
-import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import { createClient } from "@/utils/supabase/client"
 import { useAppShell, type AppWindowId } from "@/lib/app-shell"
 import { useSyncProjectDocStructures } from "@/lib/use-sync-project-doc-structures"
-import { useRerenderOnEvent } from "@/lib/use-browser-pref-event"
 import { ModelSelector } from "@/components/model-selector"
-import { DocViewer } from "@/components/doc-viewer"
-import { StructureBuilder } from "@/components/structure-builder"
-import { PipelineBuilder } from "@/components/pipeline-builder"
-import { Inference } from "@/components/inference"
-import { Logging } from "@/components/logging"
-import { Cache } from "@/components/cache"
-import { Documents } from "@/components/documents"
-import { Billing } from "@/components/billing"
-import { Settings as SettingsPanel } from "@/components/settings"
-import { Projects } from "@/components/projects"
+import { LazyDocViewer } from "@/components/lazy-doc-viewer"
+import { PanelLoading } from "@/components/panel-loading"
 import { FeedbackButton } from "@/components/feedback-button"
 import {
   DropdownMenu,
@@ -56,6 +47,37 @@ import { Button, buttonVariants } from "@/components/ui/button"
 
 // AI : marketing site lives on a separate deploy from the app
 const LANDING_PAGE_URL = "https://auto-pipeline.dev/"
+
+// AI : code-split heavy tabs — only Structure ships on first paint.
+const Projects = dynamic(() => import("@/components/projects").then((m) => ({ default: m.Projects })), {
+  loading: () => <PanelLoading label="loading projects…" />,
+})
+const StructureBuilder = dynamic(
+  () => import("@/components/structure-builder").then((m) => ({ default: m.StructureBuilder })),
+  { loading: () => <PanelLoading label="loading structure…" /> },
+)
+const PipelineBuilder = dynamic(
+  () => import("@/components/pipeline-builder").then((m) => ({ default: m.PipelineBuilder })),
+  { loading: () => <PanelLoading label="loading pipeline…" /> },
+)
+const Inference = dynamic(() => import("@/components/inference").then((m) => ({ default: m.Inference })), {
+  loading: () => <PanelLoading label="loading inference…" />,
+})
+const Logging = dynamic(() => import("@/components/logging").then((m) => ({ default: m.Logging })), {
+  loading: () => <PanelLoading label="loading logging…" />,
+})
+const Cache = dynamic(() => import("@/components/cache").then((m) => ({ default: m.Cache })), {
+  loading: () => <PanelLoading label="loading cache…" />,
+})
+const Documents = dynamic(() => import("@/components/documents").then((m) => ({ default: m.Documents })), {
+  loading: () => <PanelLoading label="loading documents…" />,
+})
+const Billing = dynamic(() => import("@/components/billing").then((m) => ({ default: m.Billing })), {
+  loading: () => <PanelLoading label="loading billing…" />,
+})
+const SettingsPanel = dynamic(() => import("@/components/settings").then((m) => ({ default: m.Settings })), {
+  loading: () => <PanelLoading label="loading settings…" />,
+})
 
 type WindowId = AppWindowId
 
@@ -269,11 +291,13 @@ function AccountMenu() {
   )
 }
 
-function ProjectSwitchLoading({ projectName }: { projectName: string }) {
+function ProjectSwitchOverlay({ projectName }: { projectName: string }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 bg-background">
-      <Loader2 className="h-6 w-6 animate-spin text-primary" />
-      <p className="font-mono text-xs text-muted-foreground">loading {projectName}…</p>
+    <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center bg-background/40 pt-16 backdrop-blur-[1px]">
+      <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2 shadow-sm">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+        <p className="font-mono text-[11px] text-muted-foreground">switching to {projectName}…</p>
+      </div>
     </div>
   )
 }
@@ -282,7 +306,6 @@ export function AppShellLayout() {
   const { activeWindow, setActiveWindow } = useAppShell()
   const { model, setModel, modules, models, project, projectLoading } = useStore()
   useSyncProjectDocStructures()
-  useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
   const pipelineInvalid = computeInvalidForUi(modules, models).size > 0
 
   useEffect(() => {
@@ -377,26 +400,21 @@ export function AppShellLayout() {
           </div>
         </nav>
 
-        <main className="flex-1 overflow-hidden" id="main-content">
-          {projectLoading ? (
-            <ProjectSwitchLoading projectName={project.name} />
-          ) : (
-            <>
-              {activeWindow === "projects" && <Projects />}
-              {activeWindow === "structure" && <StructureBuilder />}
-              {activeWindow === "pipeline" && <PipelineBuilder />}
-              {activeWindow === "inference" && <Inference />}
-              {activeWindow === "logging" && <Logging />}
-              {activeWindow === "cache" && <Cache />}
-              {activeWindow === "documents" && <Documents />}
-              {activeWindow === "billing" && <Billing />}
-              {activeWindow === "settings" && <SettingsPanel />}
-            </>
-          )}
+        <main className="relative flex-1 overflow-hidden" id="main-content">
+          {projectLoading && <ProjectSwitchOverlay projectName={project.name} />}
+          {activeWindow === "projects" && <Projects />}
+          {activeWindow === "structure" && <StructureBuilder />}
+          {activeWindow === "pipeline" && <PipelineBuilder />}
+          {activeWindow === "inference" && <Inference />}
+          {activeWindow === "logging" && <Logging />}
+          {activeWindow === "cache" && <Cache />}
+          {activeWindow === "documents" && <Documents />}
+          {activeWindow === "billing" && <Billing />}
+          {activeWindow === "settings" && <SettingsPanel />}
         </main>
       </div>
 
-      <DocViewer />
+      <LazyDocViewer />
     </div>
   )
 }

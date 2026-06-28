@@ -74,7 +74,7 @@ export function useInferenceRunProgress({
 
   useEffect(() => {
     if (phase !== "running") return
-    logEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    logEndRef.current?.scrollIntoView({ behavior: "auto" })
   }, [debugLogs.length, phase])
 
   useEffect(() => {

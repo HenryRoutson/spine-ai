@@ -1,59 +1,87 @@
 import {
   ASSISTANT_REQUEST_FAILED,
   ASSISTANT_STREAM_EVENT,
-} from "@/lib/assistant-chat-types";
+  type AssistantDebugEntry,
+  type AssistantLoadingPhase,
+} from "@/lib/assistant-chat-types"
+import { appendAssistantDebugEntry, streamEventToDebugEntry } from "@/lib/assistant-debug"
+
+type PipelineAssistantStreamHandlers = {
+  onDebugEntry?: (entry: AssistantDebugEntry) => void
+  onThinkingDelta?: (delta: string) => void
+  onPhase?: (phase: AssistantLoadingPhase) => void
+}
 
 export async function readPipelineAssistantStream<TProposal>(
   res: Response,
-  onRetrying?: () => void,
+  handlers: PipelineAssistantStreamHandlers = {},
 ): Promise<{
-  message: string;
-  proposal?: TProposal;
-  invalidCount: number;
-  retryCount: number;
+  message: string
+  proposal?: TProposal
+  invalidCount: number
+  retryCount: number
+  validationErrors: string | null
+  debugTrace: AssistantDebugEntry[]
 }> {
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error("empty response body");
+  const reader = res.body?.getReader()
+  if (!reader) throw new Error("empty response body")
 
-  const decoder = new TextDecoder();
-  let buffer = "";
+  const decoder = new TextDecoder()
+  let buffer = ""
+  let debugTrace: AssistantDebugEntry[] = []
   let result: {
-    message: string;
-    proposal?: TProposal;
-    invalidCount: number;
-    retryCount: number;
-  } | null = null;
+    message: string
+    proposal?: TProposal
+    invalidCount: number
+    retryCount: number
+    validationErrors: string | null
+  } | null = null
+
+  const push = (entry: AssistantDebugEntry) => {
+    debugTrace = appendAssistantDebugEntry(debugTrace, entry)
+    handlers.onDebugEntry?.(entry)
+  }
 
   while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split("\n")
+    buffer = lines.pop() ?? ""
     for (const line of lines) {
-      if (!line.trim()) continue;
-      const evt = JSON.parse(line) as {
-        type: string;
-        attempt?: number;
-        error?: string;
-        message?: string;
-        proposal?: TProposal;
-        invalidCount?: number;
-        retryCount?: number;
-      };
-      if (evt.type === ASSISTANT_STREAM_EVENT.RETRYING) onRetrying?.();
-      if (evt.type === ASSISTANT_STREAM_EVENT.ERROR) throw new Error(evt.error ?? ASSISTANT_REQUEST_FAILED);
+      if (!line.trim()) continue
+      const evt = JSON.parse(line) as Record<string, unknown> & { type: string }
+      const entry = streamEventToDebugEntry(evt)
+      if (entry) push(entry)
+
+      if (evt.type === ASSISTANT_STREAM_EVENT.THINKING_DELTA && typeof evt.text === "string") {
+        handlers.onThinkingDelta?.(evt.text)
+      }
+      if (evt.type === ASSISTANT_STREAM_EVENT.PHASE && typeof evt.phase === "string") {
+        handlers.onPhase?.(evt.phase as AssistantLoadingPhase)
+      }
+      if (evt.type === ASSISTANT_STREAM_EVENT.VALIDATION_FAILED) {
+        handlers.onPhase?.("retrying")
+      }
+
+      if (evt.type === ASSISTANT_STREAM_EVENT.ERROR) {
+        throw new Error(
+          typeof evt.error === "string" ? evt.error : ASSISTANT_REQUEST_FAILED,
+        )
+      }
       if (evt.type === ASSISTANT_STREAM_EVENT.DONE) {
         result = {
-          message: evt.message ?? "",
-          proposal: evt.proposal ?? undefined,
-          invalidCount: evt.invalidCount ?? 0,
-          retryCount: evt.retryCount ?? 0,
-        };
+          message: typeof evt.message === "string" ? evt.message : "",
+          proposal: (evt.proposal as TProposal | undefined) ?? undefined,
+          invalidCount: typeof evt.invalidCount === "number" ? evt.invalidCount : 0,
+          retryCount: typeof evt.retryCount === "number" ? evt.retryCount : 0,
+          validationErrors:
+            typeof evt.validationErrors === "string" ? evt.validationErrors : null,
+        }
       }
     }
   }
 
-  if (!result) throw new Error("Assistant stream ended without a result");
-  return result;
+  if (!result) throw new Error("Assistant stream ended without a result")
+  return { ...result, debugTrace }
 }

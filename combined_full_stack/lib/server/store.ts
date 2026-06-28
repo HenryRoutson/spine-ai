@@ -256,6 +256,55 @@ export function linkDocToProject(store: Store, projectId: ProjectId, docName: st
   store.saveProject({ ...p, seedDocNames: [...names, docName] });
 }
 
+function docNameReferencedByProject(store: Store, docName: string, exceptProjectId?: ProjectId): boolean {
+  return store.projects().some(
+    (p) => p.id !== exceptProjectId && (p.seedDocNames?.includes(docName) ?? false),
+  );
+}
+
+export function projectsForDocName(store: Store, docName: string): ProjectId[] {
+  return store
+    .projects()
+    .filter((p) => p.seedDocNames?.includes(docName))
+    .map((p) => p.id);
+}
+
+// AI : set which pipelines include this document; bytes are removed only when no project still references the filename.
+export function setDocProjectAvailability(
+  store: Store,
+  docId: DocId,
+  projectIds: ProjectId[],
+): boolean {
+  const doc = store.docs().find((d) => d.id === docId);
+  if (!doc) return false;
+  const want = new Set(projectIds);
+  for (const p of store.projects()) {
+    const names = p.seedDocNames ?? [];
+    const has = names.includes(doc.name);
+    const should = want.has(p.id);
+    if (has === should) continue;
+    store.saveProject({
+      ...p,
+      seedDocNames: should ? [...names, doc.name] : names.filter((n) => n !== doc.name),
+    });
+  }
+  return true;
+}
+
+// AI : scoped pipelines unlink seedDocNames first; global bytes drop only when no project still references the filename.
+export function deleteDocForProject(store: Store, projectId: ProjectId, docId: DocId): boolean {
+  const doc = store.docs().find((d) => d.id === docId);
+  if (!doc) return false;
+  const project = store.project(projectId);
+  if (!project) return false;
+
+  const names = project.seedDocNames ?? [];
+  if (!names.includes(doc.name)) return false;
+  store.saveProject({ ...project, seedDocNames: names.filter((n) => n !== doc.name) });
+  if (docNameReferencedByProject(store, doc.name, projectId)) return true;
+  return store.removeDoc(docId);
+}
+
 // AI : numbered clones stay aligned with seeds/*.json (seedDocNames + module graph).
 export function syncAllUserProjectsFromSeeds(store: Store): void {
   const seeds = allProjectSeeds();

@@ -272,6 +272,7 @@ export function StructureBuilder() {
                   <StructureFieldRow
                     key={f.id}
                     field={f}
+                    fields={selected.fields}
                     models={models}
                     selectedId={selected.id}
                     locked={selectedLocked}

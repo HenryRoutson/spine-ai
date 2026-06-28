@@ -8,23 +8,34 @@ function remapFields(fields: ModelField[], idMap: Map<StructureModelId, Structur
   }))
 }
 
+type CloneOpts = {
+  sharedName?: string
+  description?: string
+}
+
 export function cloneDerivedForProject(
   derived: DerivedDocStructure,
-  docId: DocId,
   idGen: () => StructureModelId,
+  opts: CloneOpts = {},
 ): StructureModel[] {
   const all = [...derived.companionModels, derived.model]
   const idMap = new Map<StructureModelId, StructureModelId>(
     all.map((m) => [m.id, idGen()]),
   )
-  return all.map((m) => ({
-    ...m,
-    id: idMap.get(m.id)!,
-    sourceDocId: docId,
-    auto: true,
-    description: m.description || "Inferred from document.",
-    fields: remapFields(m.fields, idMap),
-  }))
+  return all.map((m) => {
+    const isRoot = m.id === derived.model.id
+    return {
+      ...m,
+      id: idMap.get(m.id)!,
+      name: isRoot && opts.sharedName ? opts.sharedName : m.name,
+      sourceDocId: undefined,
+      auto: true,
+      description: isRoot
+        ? opts.description ?? m.description ?? "Inferred document shape."
+        : m.description || "Inferred from document.",
+      fields: remapFields(m.fields, idMap),
+    }
+  })
 }
 
 export function findExistingDerivedModel(

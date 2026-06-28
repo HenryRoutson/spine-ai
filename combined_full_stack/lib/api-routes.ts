@@ -11,6 +11,7 @@ export const API_ROUTES = {
   projectsResyncExamples: "/api/projects/resync-examples",
   projectTemplates: "/api/project-templates",
   docs: "/api/docs",
+  doc: (id: string) => `/api/docs/${id}`,
   docText: (id: string, layer: "parser" | "vision" = "parser") =>
     `/api/docs/${id}/text${layer === "vision" ? "?layer=vision" : ""}`,
   docFile: (id: string) => `/api/docs/${id}/file`,

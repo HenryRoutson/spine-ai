@@ -1,3 +1,4 @@
+// AI : TODO refactor — ~580 lines; split Supabase row CRUD from snapshot/run orchestration.
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

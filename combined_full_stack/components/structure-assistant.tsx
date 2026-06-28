@@ -36,7 +36,7 @@ export function StructureAssistant() {
         setModels(msg.proposal.models)
       }}
       onReject={() => {}}
-      requestAssistant={async (text, history) => {
+      requestAssistant={async (text, history, _opts) => {
         const res = await fetch(API_ROUTES.structureAssistant, {
           method: "POST",
           headers: JSON_HEADERS,

@@ -1,4 +1,5 @@
 // AI : pure run fingerprint payload — shared by server dedup and step-cache keying.
+// AI : TODO refactor — vitest target: fingerprint stability (pairs with lib/server/run_fingerprint.ts).
 import { orderedInputModules } from "@/lib/inference-input"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
 import {

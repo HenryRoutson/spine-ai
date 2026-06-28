@@ -1,3 +1,4 @@
+// AI : TODO refactor — duplicate of `shared/legal/content.ts`; import from shared via tsconfig path or delete one copy.
 import { LEGAL } from "./site"
 
 export type LegalSection = {

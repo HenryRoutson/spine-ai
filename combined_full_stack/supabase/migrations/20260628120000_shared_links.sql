@@ -1,3 +1,4 @@
+-- AI : TODO refactor — consolidate with legacy `migrations/*.sql`; avoid duplicate shared_links DDL.
 -- AI : published pipeline snapshots — public run links billed to the owner.
 create table if not exists public.shared_links (
   id text not null,

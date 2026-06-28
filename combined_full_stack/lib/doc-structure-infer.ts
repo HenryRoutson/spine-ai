@@ -72,6 +72,26 @@ function mergeObjectSamples(values: Record<string, unknown>[]): Record<string, u
   return merged
 }
 
+const MAPPING_RULE_NAME = "MappingRule"
+const MAPPING_RULE_KEYS = new Set(["source", "transform", "default", "optional"])
+
+function isMappingRuleObject(val: Record<string, unknown>): boolean {
+  const keys = Object.keys(val)
+  return keys.length > 0 && keys.every((k) => MAPPING_RULE_KEYS.has(k))
+}
+
+function ensureMappingRuleCompanion(
+  val: Record<string, unknown>,
+  idGen: () => StructureModelId,
+  companions: StructureModel[],
+): StructureModelId {
+  const hit = companions.find((c) => c.name === MAPPING_RULE_NAME)
+  if (hit) return hit.id
+  const child = inferModelsFromObject(val, MAPPING_RULE_NAME, idGen(), idGen)
+  companions.push(...child.companions, child.root)
+  return child.root.id
+}
+
 // AI : recursively infer nested model / list[model] refs — avoid json except for serialized strings.
 function inferFieldFromValue(
   key: string,
@@ -108,6 +128,16 @@ function inferFieldFromValue(
   }
 
   if (isPlainObject(val)) {
+    if (isMappingRuleObject(val)) {
+      return {
+        id: `f_${name}`,
+        name,
+        type: "model",
+        ref: ensureMappingRuleCompanion(val, idGen, companions),
+        optional,
+        description: "",
+      }
+    }
     const childName = nestedModelName(parentName, key)
     const child = inferModelsFromObject(val, childName, idGen(), idGen)
     companions.push(...child.companions, child.root)
@@ -281,6 +311,11 @@ export function inferStructuresFromJson(
 
   if (parsed && typeof parsed === "object") {
     const rec = parsed as Record<string, unknown>
+    const onlyFields =
+      Object.keys(rec).length === 1 && isPlainObject(rec.fields) ? (rec.fields as Record<string, unknown>) : null
+    if (onlyFields) {
+      return inferStructuresFromJson(onlyFields, docName, idGen, opts)
+    }
     const arrayEntries = Object.entries(rec).filter(([, v]) => isRowArray(v))
     if (arrayEntries.length > 1) {
       return arrayEntries.flatMap(([sheetName, rows]) =>
@@ -315,7 +350,7 @@ export function isTabularDocType(type: InputType, name: string): boolean {
 export function inferStructuresFromDocContent(
   content: string,
   docName: string,
-  _docType: InputType,
+  docType: InputType,
   idGen: () => StructureModelId,
   rowSets?: { name: string; rows: Record<string, unknown>[] }[],
 ): DerivedDocStructure[] {
@@ -336,7 +371,28 @@ export function inferStructuresFromDocContent(
   const rows = parseCsv(trimmed)
   if (rows.length) return inferStructuresFromJson(rows, docName, idGen)
 
+  const prose = inferPlainTextDocSample(trimmed, docName, docType)
+  if (prose) {
+    return inferStructuresFromJson(prose, docName, idGen)
+  }
+
   return []
+}
+
+// AI : markdown / plain-text uploads — one text field keyed by the first H1 (or filename).
+function inferPlainTextDocSample(
+  content: string,
+  docName: string,
+  docType: InputType,
+): Record<string, unknown> | null {
+  if (docType !== "text") return null
+  const ext = docName.split(".").pop()?.toLowerCase() ?? ""
+  if (ext !== "md" && ext !== "txt") return null
+
+  const h1 = content.split(/\r?\n/).find((l) => /^#\s+\S/.test(l))
+  const title = h1?.replace(/^#\s+/, "").trim() ?? docName.replace(/\.[^.]+$/, "")
+  const key = sanitizeFieldName(h1 ?? title)
+  return { [key]: content }
 }
 
 export function isInferrableDocContent(

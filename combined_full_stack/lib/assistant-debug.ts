@@ -1,0 +1,109 @@
+// AI : pipeline assistant debug trace — streamed to client for live + copy-all debugging.
+
+import {
+  ASSISTANT_STREAM_EVENT,
+  type AssistantDebugEntry,
+  type AssistantLoadingPhase,
+} from "@/lib/assistant-debug-types"
+
+export type {
+  AssistantDebugEntry,
+  AssistantLoadingPhase,
+} from "@/lib/assistant-debug-types"
+
+export { ASSISTANT_STREAM_EVENT } from "@/lib/assistant-debug-types"
+
+export function appendAssistantDebugEntry(
+  entries: AssistantDebugEntry[],
+  entry: AssistantDebugEntry,
+): AssistantDebugEntry[] {
+  return [...entries, entry]
+}
+
+export function streamEventToDebugEntry(
+  evt: Record<string, unknown> & { type: string },
+): AssistantDebugEntry | null {
+  switch (evt.type) {
+    case ASSISTANT_STREAM_EVENT.PHASE:
+      return typeof evt.phase === "string"
+        ? { kind: "phase", phase: evt.phase as AssistantLoadingPhase }
+        : null
+    case ASSISTANT_STREAM_EVENT.THINKING_DONE:
+      return typeof evt.text === "string" ? { kind: "thinking", text: evt.text } : null
+    case ASSISTANT_STREAM_EVENT.LLM_RESPONSE:
+      return typeof evt.label === "string"
+        ? { kind: "llm_response", label: evt.label, response: evt.response }
+        : null
+    case ASSISTANT_STREAM_EVENT.STRUCTURED_FAILURE:
+      return typeof evt.attempt === "number" &&
+        typeof evt.failureKind === "string" &&
+        typeof evt.error === "string"
+        ? {
+            kind: "structured_failure",
+            attempt: evt.attempt,
+            failureKind: evt.failureKind,
+            error: evt.error,
+          }
+        : null
+    case ASSISTANT_STREAM_EVENT.VALIDATION_FAILED:
+      return typeof evt.attempt === "number" && typeof evt.errors === "string"
+        ? { kind: "validation_failed", attempt: evt.attempt, errors: evt.errors }
+        : null
+    case ASSISTANT_STREAM_EVENT.DONE:
+      return {
+        kind: "done",
+        message: typeof evt.message === "string" ? evt.message : "",
+        retryCount: typeof evt.retryCount === "number" ? evt.retryCount : 0,
+        invalidCount: typeof evt.invalidCount === "number" ? evt.invalidCount : 0,
+        validationErrors:
+          typeof evt.validationErrors === "string" ? evt.validationErrors : null,
+        proposal: evt.proposal ?? null,
+      }
+    case ASSISTANT_STREAM_EVENT.ERROR:
+      return typeof evt.error === "string" ? { kind: "error", error: evt.error } : null
+    default:
+      return null
+  }
+}
+
+export function formatAssistantDebugTrace(entries: AssistantDebugEntry[]): string {
+  const lines: string[] = ["=== Pipeline assistant debug trace ===", ""]
+  for (const e of entries) {
+    switch (e.kind) {
+      case "phase":
+        lines.push(`--- ${e.phase} ---`, "")
+        break
+      case "thinking":
+        lines.push("--- thinking ---", e.text, "")
+        break
+      case "llm_response":
+        lines.push(`--- llm response (${e.label}) ---`, JSON.stringify(e.response, null, 2), "")
+        break
+      case "structured_failure":
+        lines.push(
+          `--- structured failure (attempt ${e.attempt}, ${e.failureKind}) ---`,
+          e.error,
+          "",
+        )
+        break
+      case "validation_failed":
+        lines.push(`--- validation failed (retry ${e.attempt}) ---`, e.errors, "")
+        break
+      case "done":
+        lines.push(
+          "--- done ---",
+          `message: ${e.message}`,
+          `retryCount: ${e.retryCount}`,
+          `invalidCount: ${e.invalidCount}`,
+        )
+        if (e.validationErrors) lines.push(`validationErrors:\n${e.validationErrors}`)
+        if (e.proposal) lines.push("proposal:", JSON.stringify(e.proposal, null, 2))
+        lines.push("")
+        break
+      case "error":
+        lines.push("--- error ---", e.error, "")
+        break
+    }
+  }
+  return lines.join("\n").trimEnd()
+}

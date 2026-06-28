@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { llmStructured } from "./llm";
+import { llmStreamString, llmStructured } from "./llm";
 import {
   ChatTurn,
   resolveStructureIdFromModels,
@@ -76,7 +76,16 @@ export type PipelineAssistantResult = {
 export type PipelineAssistantOpts = {
   fixValidationErrors?: string;
   fixAttempt?: number;
-  onRetry?: (attempt: number) => void;
+  onThinkingDelta?: (delta: string) => void;
+  onPhase?: (phase: "thinking" | "structuring" | "retrying") => void;
+  onThinkingDone?: (text: string) => void;
+  onLlmResponse?: (label: string, response: unknown) => void;
+  onStructuredFailure?: (detail: {
+    attempt: number;
+    failureKind: string;
+    error: string;
+  }) => void;
+  onValidationFailed?: (attempt: number, errors: string) => void;
 };
 
 const MAX_VALIDATION_RETRIES = 2;
@@ -168,6 +177,41 @@ function materializeModels(
   return next;
 }
 
+function buildThinkingSystemPrompt(): string {
+  return `You are a pipeline design assistant for "auto pipeline" — a linear left-to-right document processing system.
+
+Reason step-by-step about the user's request: required steps, data flow, which structure models to use or create, and edge cases.
+Plain text only — no JSON, no markdown headings. Be concise (roughly 150–300 words).`;
+}
+
+function buildThinkingUserPrompt(
+  project: Project,
+  message: string,
+  history: ChatTurn[],
+  globalModel: ModelId,
+): string {
+  const modelsBlock = project.models.length
+    ? project.models.map((m) => `- ${m.name}: ${m.description ?? "(no description)"}`).join("\n")
+    : "(none yet)";
+  const stepsBlock = project.modules.length
+    ? project.modules.map((m, i) => `${i + 1}. ${m.label} (${m.kind})`).join("\n")
+    : "(empty pipeline)";
+  const historyBlock =
+    history.length > 0
+      ? `\nRecent conversation:\n${history.map((t) => `${t.role}: ${t.content}`).join("\n")}\n`
+      : "";
+  return `Project: ${project.name} (${project.kind})
+Default model: ${globalModel}
+${historyBlock}
+Structure models:
+${modelsBlock}
+
+Current pipeline (${project.modules.length} steps):
+${stepsBlock}
+
+User request: ${message}`;
+}
+
 function buildSystemPrompt(): string {
   const kinds = MODULE_KINDS.map(
     (k) => `- ${k}: ${MODULE_META[k].label} — ${MODULE_META[k].description}`,
@@ -206,6 +250,7 @@ function buildUserPrompt(
   history: ChatTurn[],
   globalModel: ModelId,
   opts?: PipelineAssistantOpts,
+  thinking?: string,
 ): string {
   const modelsJson = JSON.stringify(
     project.models.map((m) => ({
@@ -244,6 +289,9 @@ function buildUserPrompt(
   const fixBlock = opts?.fixValidationErrors?.trim()
     ? `\nYour previous proposal failed validation (attempt ${opts.fixAttempt ?? 1}). Fix ALL errors below and return a corrected FULL replacement modules array:\n${opts.fixValidationErrors.trim()}\n`
     : "";
+  const thinkingBlock = thinking?.trim()
+    ? `\nYour prior reasoning (use this; do not repeat it in message):\n${thinking.trim()}\n`
+    : "";
   return `Project: ${project.name} (${project.kind})
 Default model: ${globalModel}
 ${historyBlock}
@@ -252,7 +300,7 @@ ${modelsJson}
 
 Current pipeline (${project.modules.length} steps):
 ${modulesJson}
-${currentValidationBlock}${fixBlock}
+${currentValidationBlock}${thinkingBlock}${fixBlock}
 User request: ${message}`;
 }
 
@@ -280,18 +328,47 @@ export async function proposePipelineChange(
   const ledger = new UsageLedger();
   let fixErrors = opts?.fixValidationErrors;
   let fixAttempt = opts?.fixAttempt ?? 0;
+
+  let thinking = "";
+  let llmAttempt = 0;
+  if (!fixErrors) {
+    opts?.onPhase?.("thinking");
+    thinking = await llmStreamString(
+      buildThinkingUserPrompt(project, message, history, globalModel),
+      {
+        model: globalModel,
+        ledger,
+        system: buildThinkingSystemPrompt(),
+        maxTokens: 1024,
+      },
+      (delta) => opts?.onThinkingDelta?.(delta),
+    );
+    opts?.onThinkingDone?.(thinking);
+  }
+
+  opts?.onPhase?.("structuring");
   let raw = await llmStructured(
     buildUserPrompt(project, message, history, globalModel, {
       fixValidationErrors: fixErrors,
       fixAttempt: fixAttempt || undefined,
-    }),
+    }, thinking),
     assistantResponseSchema,
     {
       model: globalModel,
       ledger,
       system: buildSystemPrompt(),
+      onStructuredFailure: (detail) => {
+        llmAttempt += 1;
+        opts?.onStructuredFailure?.({
+          attempt: llmAttempt,
+          failureKind: detail.kind,
+          error: detail.error,
+        });
+      },
     },
   );
+  llmAttempt += 1;
+  opts?.onLlmResponse?.(fixErrors ? `retry-${fixAttempt}` : "initial", raw);
 
   let proposal = materializeProposal(raw, project, globalModel);
   let retryCount = 0;
@@ -303,19 +380,30 @@ export async function proposePipelineChange(
     retryCount += 1;
     fixAttempt = retryCount;
     fixErrors = validationErrors;
-    opts?.onRetry?.(retryCount);
+    opts?.onValidationFailed?.(retryCount, validationErrors);
+    opts?.onPhase?.("retrying");
     raw = await llmStructured(
       buildUserPrompt(project, message, history, globalModel, {
         fixValidationErrors: fixErrors,
         fixAttempt,
-      }),
+      }, thinking),
       assistantResponseSchema,
       {
         model: globalModel,
         ledger,
         system: buildSystemPrompt(),
+        onStructuredFailure: (detail) => {
+          llmAttempt += 1;
+          opts?.onStructuredFailure?.({
+            attempt: llmAttempt,
+            failureKind: detail.kind,
+            error: detail.error,
+          });
+        },
       },
     );
+    llmAttempt += 1;
+    opts?.onLlmResponse?.(`retry-${retryCount}`, raw);
     proposal = materializeProposal(raw, project, globalModel);
   }
 

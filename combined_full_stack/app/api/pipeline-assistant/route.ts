@@ -56,9 +56,26 @@ export async function POST(req: NextRequest) {
         };
         try {
           const result = await proposePipelineChange(project, message.trim(), trimmedHistory, model, {
-            onRetry: (attempt) => push({ type: ASSISTANT_STREAM_EVENT.RETRYING, attempt }),
+            onThinkingDelta: (text) =>
+              push({ type: ASSISTANT_STREAM_EVENT.THINKING_DELTA, text }),
+            onThinkingDone: (text) =>
+              push({ type: ASSISTANT_STREAM_EVENT.THINKING_DONE, text }),
+            onPhase: (phase) => push({ type: ASSISTANT_STREAM_EVENT.PHASE, phase }),
+            onLlmResponse: (label, response) =>
+              push({ type: ASSISTANT_STREAM_EVENT.LLM_RESPONSE, label, response }),
+            onStructuredFailure: (detail) =>
+              push({ type: ASSISTANT_STREAM_EVENT.STRUCTURED_FAILURE, ...detail }),
+            onValidationFailed: (attempt, errors) =>
+              push({ type: ASSISTANT_STREAM_EVENT.VALIDATION_FAILED, attempt, errors }),
           });
-          push({ type: ASSISTANT_STREAM_EVENT.DONE, ...result });
+          push({
+            type: ASSISTANT_STREAM_EVENT.DONE,
+            message: result.message,
+            proposal: result.proposal,
+            invalidCount: result.invalidCount,
+            retryCount: result.retryCount,
+            validationErrors: result.validationErrors,
+          });
         } catch (err) {
           push({ type: ASSISTANT_STREAM_EVENT.ERROR, error: (err as Error).message });
         } finally {

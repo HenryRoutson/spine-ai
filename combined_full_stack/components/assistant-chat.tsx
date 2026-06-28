@@ -7,8 +7,12 @@ import {
   ASSISTANT_HISTORY_LIMIT,
   ASSISTANT_REQUEST_FAILED,
   type AssistantChatRole,
+  type AssistantDebugEntry,
+  type AssistantLoadingPhase,
   type ProposalStatus,
 } from "@/lib/assistant-chat-types"
+import { appendAssistantDebugEntry } from "@/lib/assistant-debug"
+import { AssistantDebugPanel } from "@/components/assistant-debug-panel"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -22,6 +26,8 @@ export type AssistantChatMessage<TProposal> = {
   status?: ProposalStatus
   invalidCount?: number
   retryCount?: number
+  validationErrors?: string | null
+  debugTrace?: AssistantDebugEntry[]
 }
 
 type AssistantRequestResult<TProposal> = {
@@ -29,6 +35,8 @@ type AssistantRequestResult<TProposal> = {
   proposal?: TProposal
   invalidCount?: number
   retryCount?: number
+  validationErrors?: string | null
+  debugTrace?: AssistantDebugEntry[]
 }
 
 type AssistantChatProps<TProposal> = {
@@ -37,14 +45,19 @@ type AssistantChatProps<TProposal> = {
   initialMessage: string
   starters: string[]
   placeholder: string
-  loadingLabel: string | ((phase: string) => string)
+  loadingLabel: string | ((phase: AssistantLoadingPhase) => string)
+  showDebug?: boolean
   renderProposal: (msg: AssistantChatMessage<TProposal>) => ReactNode
   onApprove: (msg: AssistantChatMessage<TProposal>) => void
   onReject: (msg: AssistantChatMessage<TProposal>) => void
   requestAssistant: (
     text: string,
     history: { role: AssistantChatRole; content: string }[],
-    opts: { setLoadingPhase: (phase: string) => void },
+    opts: {
+      setLoadingPhase: (phase: AssistantLoadingPhase) => void
+      onThinkingDelta: (delta: string) => void
+      onDebugEntry: (entry: AssistantDebugEntry) => void
+    },
   ) => Promise<AssistantRequestResult<TProposal>>
 }
 
@@ -55,6 +68,7 @@ export function AssistantChat<TProposal>({
   starters,
   placeholder,
   loadingLabel,
+  showDebug = false,
   renderProposal,
   onApprove,
   onReject,
@@ -65,15 +79,23 @@ export function AssistantChat<TProposal>({
   ])
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
-  const [loadingPhase, setLoadingPhase] = useState("default")
+  const [loadingPhase, setLoadingPhase] = useState<AssistantLoadingPhase>("thinking")
+  const [liveThinking, setLiveThinking] = useState("")
+  const [debugTrace, setDebugTrace] = useState<AssistantDebugEntry[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [errorDebugTrace, setErrorDebugTrace] = useState<AssistantDebugEntry[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const pending = [...messages].reverse().find((m) => m.proposal && m.status === "pending")
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, loading, loadingPhase])
+  }, [messages, loading, loadingPhase, liveThinking, debugTrace])
+
+  function handleDebugEntry(entry: AssistantDebugEntry) {
+    setDebugTrace((prev) => appendAssistantDebugEntry(prev, entry))
+    if (entry.kind === "thinking") setLiveThinking("")
+  }
 
   async function send(text: string) {
     const trimmed = text.trim()
@@ -91,8 +113,11 @@ export function AssistantChat<TProposal>({
     setMessages((prev) => [...prev, userMsg])
     setInput("")
     setLoading(true)
-    setLoadingPhase("default")
+    setLoadingPhase("thinking")
+    setLiveThinking("")
+    setDebugTrace([])
     setError(null)
+    setErrorDebugTrace([])
 
     const history = [...messages, userMsg]
       .filter((m) => m.role === "user" || (m.role === "assistant" && !m.proposal))
@@ -100,7 +125,11 @@ export function AssistantChat<TProposal>({
       .map((m) => ({ role: m.role, content: m.content }))
 
     try {
-      const data = await requestAssistant(trimmed, history, { setLoadingPhase })
+      const data = await requestAssistant(trimmed, history, {
+        setLoadingPhase,
+        onThinkingDelta: (delta) => setLiveThinking((prev) => prev + delta),
+        onDebugEntry: handleDebugEntry,
+      })
       const assistantMsg: AssistantChatMessage<TProposal> = {
         id: uid(),
         role: "assistant",
@@ -108,13 +137,22 @@ export function AssistantChat<TProposal>({
         proposal: data.proposal,
         invalidCount: data.invalidCount,
         retryCount: data.retryCount,
+        validationErrors: data.validationErrors,
+        debugTrace: data.debugTrace,
         status: data.proposal ? "pending" : undefined,
       }
       setMessages((prev) => [...prev, assistantMsg])
     } catch (err) {
-      setError(err instanceof Error ? err.message : ASSISTANT_REQUEST_FAILED)
+      const msg = err instanceof Error ? err.message : ASSISTANT_REQUEST_FAILED
+      setError(msg)
+      setDebugTrace((trace) => {
+        const next = appendAssistantDebugEntry(trace, { kind: "error", error: msg })
+        setErrorDebugTrace(next)
+        return next
+      })
     } finally {
       setLoading(false)
+      setLiveThinking("")
     }
   }
 
@@ -200,19 +238,48 @@ export function AssistantChat<TProposal>({
                     )}
                   </div>
                 )}
+                {showDebug && m.debugTrace && m.debugTrace.length > 0 && (
+                  <AssistantDebugPanel entries={m.debugTrace} className="mt-3" />
+                )}
               </div>
             </div>
           ))}
 
           {loading && (
-            <div className="flex items-center gap-2 px-2 font-mono text-[10px] text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {loadingText}
+            <div className="space-y-2 px-2">
+              {showDebug ? (
+                <AssistantDebugPanel
+                  entries={debugTrace}
+                  liveThinking={liveThinking}
+                  thinkingActive={loadingPhase === "thinking"}
+                />
+              ) : liveThinking ? (
+                <div className="rounded-lg border border-border/60 bg-secondary/30 px-3 py-2">
+                  <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                    Thinking
+                  </p>
+                  <p className="max-h-40 overflow-y-auto font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                    {liveThinking}
+                    {loadingPhase === "thinking" && (
+                      <span className="inline-block animate-pulse text-primary">▍</span>
+                    )}
+                  </p>
+                </div>
+              ) : null}
+              <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {loadingText}
+              </div>
             </div>
           )}
 
           {error && (
-            <p className="px-2 font-mono text-[10px] text-destructive">{error}</p>
+            <div className="space-y-2 px-2">
+              <p className="font-mono text-[10px] text-destructive">{error}</p>
+              {showDebug && errorDebugTrace.length > 0 && (
+                <AssistantDebugPanel entries={errorDebugTrace} />
+              )}
+            </div>
           )}
 
           <div ref={bottomRef} />

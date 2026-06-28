@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { StructureFieldRefPicker, isRefFieldType } from "@/components/structure-field-ref-picker"
 import { JSON_FIELD_PREFER_STRUCTURE_MSG, FIELD_TYPES, type FieldType, type ModelField, type StructureModel } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -16,6 +17,7 @@ const REF_TYPES: FieldType[] = ["model", "list[model]"]
 
 export function StructureFieldRow({
   field,
+  fields,
   models,
   selectedId,
   locked,
@@ -23,6 +25,7 @@ export function StructureFieldRow({
   onRemove,
 }: {
   field: ModelField
+  fields: ModelField[]
   models: StructureModel[]
   selectedId: string
   locked: boolean
@@ -38,29 +41,42 @@ export function StructureFieldRow({
           readOnly={locked}
           className="h-8 font-mono text-xs"
         />
-        <Select
-          value={field.type}
-          onValueChange={(v) =>
-            onUpdate({
-              type: v as FieldType,
-              ref: REF_TYPES.includes(v as FieldType)
-                ? models.find((m) => m.id !== selectedId)?.id
-                : undefined,
-            })
-          }
-          disabled={locked}
-        >
-          <SelectTrigger className="h-8 font-mono text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {FIELD_TYPES.map((t) => (
-              <SelectItem key={t} value={t} className="font-mono text-xs">
-                {t}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="min-w-0 space-y-1">
+          <Select
+            value={field.type}
+            onValueChange={(v) =>
+              onUpdate({
+                type: v as FieldType,
+                ref: REF_TYPES.includes(v as FieldType)
+                  ? models.find((m) => m.id !== selectedId)?.id
+                  : undefined,
+              })
+            }
+            disabled={locked}
+          >
+            <SelectTrigger className="h-8 font-mono text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {FIELD_TYPES.map((t) => (
+                <SelectItem key={t} value={t} className="font-mono text-xs">
+                  {t}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {isRefFieldType(field.type) && (
+            <StructureFieldRefPicker
+              field={field}
+              fields={fields}
+              models={models}
+              selectedId={selectedId}
+              locked={locked}
+              onRefChange={(ref) => onUpdate({ ref })}
+              compact
+            />
+          )}
+        </div>
         <Input
           value={field.description}
           placeholder="—"
@@ -102,29 +118,6 @@ export function StructureFieldRow({
           <p className="font-mono text-[10px] text-amber-700 dark:text-amber-500">
             {JSON_FIELD_PREFER_STRUCTURE_MSG}
           </p>
-        </div>
-      )}
-      {REF_TYPES.includes(field.type) && (
-        <div className="grid grid-cols-[1.3fr_auto] items-center gap-2 border-b border-border bg-secondary/20 px-3 py-1.5">
-          <span className="font-mono text-[10px] text-muted-foreground">↳ references model</span>
-          <Select
-            value={field.ref}
-            onValueChange={(v) => onUpdate({ ref: v ?? undefined })}
-            disabled={locked}
-          >
-            <SelectTrigger className="h-7 font-mono text-[11px]">
-              <SelectValue placeholder="pick model" />
-            </SelectTrigger>
-            <SelectContent>
-              {models
-                .filter((m) => m.id !== selectedId)
-                .map((m) => (
-                  <SelectItem key={m.id} value={m.id} className="font-mono text-xs">
-                    {m.name}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
         </div>
       )}
     </div>

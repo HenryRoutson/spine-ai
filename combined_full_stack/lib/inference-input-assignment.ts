@@ -1,4 +1,5 @@
 import { invariant } from "@/lib/assert"
+import { docsForProject } from "@/lib/project-docs"
 import type { DocId, DocRef, ModuleId, PipelineModule, PipelineRun, Project } from "@/lib/types"
 import {
   docsForInputModule,
@@ -126,8 +127,9 @@ export function buildRunInputDocIds(
   if (explicit.length > inputMods.length) {
     return explicit
   }
-  const names = seedDocNames ?? project.seedDocNames
-  const scoped = names?.length ? docs.filter((d) => new Set(names).has(d.name)) : docs
+  const scoped = seedDocNames?.length
+    ? docs.filter((d) => new Set(seedDocNames).has(d.name))
+    : docsForProject(docs, project)
   const inputQueue: DocId[] = []
   const used = new Set<DocId>()
   for (let i = 0; i < inputMods.length; i++) {

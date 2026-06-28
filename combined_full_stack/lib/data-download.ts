@@ -1,4 +1,3 @@
-import * as XLSX from "xlsx"
 import { isDownloadableJson, prettyJsonString, tryParseJson } from "@/lib/json-utils"
 import { downloadBlob } from "@/lib/download-blob"
 
@@ -67,11 +66,14 @@ export function downloadDataAs(content: string, format: DataDownloadFormat, base
     downloadBlob(`${baseName}.csv`, rowsToCsv(rows), "text/csv")
     return
   }
-  const ws = XLSX.utils.json_to_sheet(rows)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, "Sheet1")
-  const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" }) as ArrayBuffer
-  downloadBlob(`${baseName}.xlsx`, buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+  void (async () => {
+    const XLSX = await import("xlsx")
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1")
+    const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" }) as ArrayBuffer
+    downloadBlob(`${baseName}.xlsx`, buf, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+  })()
 }
 
 export { isDownloadableJson }

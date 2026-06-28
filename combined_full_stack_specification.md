@@ -230,6 +230,8 @@ on any tab if you are viewing some json, in the unified viewer where you can swi
 
 for any json structure or excel csv, if you load a file into the system, it auto finds which structs match and also derives any parts of the structure that do no match. like say you had an existing struct Tree[Node] but you input CyclicGraph[Node]. the system would match Node as the same but add the new Cyclic graph struct immedialy after uploading. this would also be done for existing files already uploaded
 
+by default documents are tied to the project they're uploaded to. however they can be selected in a list what projects they're available in.
+
 
 # Billing 
 current credit.
