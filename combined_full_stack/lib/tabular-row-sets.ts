@@ -20,7 +20,8 @@ export function tabularRowSetsFromContent(
   docName: string,
   docType: InputType,
 ): TabularRowSet[] | undefined {
-  if (docType !== "excel" && !docName.toLowerCase().endsWith(".csv")) return undefined
+  const ext = docName.split(".").pop()?.toLowerCase() ?? ""
+  if (docType !== "excel" && docType !== "json" && ext !== "csv" && ext !== "json") return undefined
   const parsed = tryParseJson(content.trim())
   if (!parsed.ok) return undefined
 

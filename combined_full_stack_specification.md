@@ -228,7 +228,7 @@ an option for csvs and also for files like excel, csv or json to automatically d
 
 on any tab if you are viewing some json, in the unified viewer where you can switch between json, excel and a tree structure, you have a download button
 
-
+for any json structure or excel csv, if you load a file into the system, it auto finds which structs match and also derives any parts of the structure that do no match. like say you had an existing struct Tree[Node] but you input CyclicGraph[Node]. the system would match Node as the same but add the new Cyclic graph struct immedialy after uploading. this would also be done for existing files already uploaded
 
 
 # Billing 

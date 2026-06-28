@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { LayoutGrid } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -13,15 +14,23 @@ export function StructureMatchChips({
   matches,
   onOpenStructure,
   error,
+  expectMatches = false,
   showGeneralBadge = false,
   label = "Validates as",
 }: {
   matches: StructureMatch[]
   onOpenStructure?: (modelId: StructureModelId) => void
   error?: string | null
+  expectMatches?: boolean
   showGeneralBadge?: boolean
   label?: string
 }) {
+  useEffect(() => {
+    if (!error && expectMatches && matches.length === 0) {
+      console.assert(false, "Validates as: no matching structures — auto-sync should have created one")
+    }
+  }, [matches, error, expectMatches])
+
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
       <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -30,7 +39,9 @@ export function StructureMatchChips({
       {error ? (
         <span className="font-mono text-[10px] text-destructive">invalid JSON</span>
       ) : matches.length === 0 ? (
-        <span className="font-mono text-[10px] text-muted-foreground">no matching structures</span>
+        expectMatches ? null : (
+          <span className="font-mono text-[10px] text-muted-foreground">no matching structures</span>
+        )
       ) : (
         matches.map((m) => {
           const chipLabel = (

@@ -28,6 +28,7 @@ import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import { createClient } from "@/utils/supabase/client"
 import { useAppShell, type AppWindowId } from "@/lib/app-shell"
+import { useSyncProjectDocStructures } from "@/lib/use-sync-project-doc-structures"
 import { useRerenderOnEvent } from "@/lib/use-browser-pref-event"
 import { ModelSelector } from "@/components/model-selector"
 import { DocViewer } from "@/components/doc-viewer"
@@ -280,6 +281,7 @@ function ProjectSwitchLoading({ projectName }: { projectName: string }) {
 export function AppShellLayout() {
   const { activeWindow, setActiveWindow } = useAppShell()
   const { model, setModel, modules, models, project, projectLoading } = useStore()
+  useSyncProjectDocStructures()
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
   const pipelineInvalid = computeInvalidForUi(modules, models).size > 0
 

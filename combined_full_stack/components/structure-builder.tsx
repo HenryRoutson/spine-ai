@@ -181,7 +181,7 @@ export function StructureBuilder() {
                   </p>
                 </div>
                 {m.auto && <Sparkles className="h-3 w-3 shrink-0 text-chart-3" />}
-                {m.sourceDocId && !m.auto && (
+                {m.sourceDocId && (
                   <Badge variant="outline" className="h-4 shrink-0 px-1 font-mono text-[8px]">
                     doc
                   </Badge>

@@ -1,26 +1,34 @@
 @import "tailwindcss";
 
-/* AI : palette pulled from the auto pipeline product screenshots — near-black bg, emerald accent */
+/* AI : zeeroday-style palette — pure black, white text, subtle grid lines */
 :root {
-  --background: #0a0c0b;
-  --foreground: #e6ebe8;
-  --panel: #101413;
-  --line: #1e2622;
-  --accent: #34d399;
-  --primary: #34d399;
-  --primary-foreground: #0a0c0b;
-  --muted: #7d8a83;
+  --background: #000000;
+  --foreground: #fafafa;
+  --panel: #0a0a0a;
+  --panel-raised: #121212;
+  --line: #1a1a1a;
+  --line-bright: #fafafa1f;
+  --accent: #4ade80;
+  --accent-dim: #4ade8040;
+  --primary: #fafafa;
+  --primary-foreground: #0a0a0a;
+  --muted: #a3a3a3;
+  --muted-dim: #737373;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-panel: var(--panel);
+  --color-panel-raised: var(--panel-raised);
   --color-line: var(--line);
+  --color-line-bright: var(--line-bright);
   --color-accent: var(--accent);
+  --color-accent-dim: var(--accent-dim);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-muted: var(--muted);
+  --color-muted-dim: var(--muted-dim);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -29,13 +37,140 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* AI : subtle grid texture behind the hero, like an engineering blueprint */
-.grid-bg {
-  background-image:
-    linear-gradient(var(--line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--line) 1px, transparent 1px);
-  background-size: 48px 48px;
-  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 100%);
+/* AI : subtle film grain like zeeroday */
+.grain-bg::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.zeero-grid {
+  border: 1px solid var(--line);
+}
+
+.zeero-badge {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--line-bright);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.zeero-badge-new {
+  padding: 6px 10px;
+  background: var(--foreground);
+  color: var(--background);
+  font-weight: 600;
+}
+
+.zeero-badge-label {
+  padding: 6px 12px;
+  color: var(--foreground);
+}
+
+.zeero-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 10px 20px;
+  transition: opacity 0.15s;
+}
+
+.zeero-btn:hover {
+  opacity: 0.88;
+}
+
+.zeero-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  border: 1px solid var(--line-bright);
+  color: var(--foreground);
+  font-size: 14px;
+  padding: 10px 20px;
+  transition: background 0.15s;
+}
+
+.zeero-btn-ghost:hover {
+  background: var(--panel-raised);
+}
+
+.terminal-window {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.terminal-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 14px;
+}
+
+.terminal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.log-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 12px;
+}
+
+.log-line:last-child {
+  border-bottom: none;
+}
+
+.log-tag {
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.faq-item summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.faq-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.faq-item[open] summary .faq-chevron {
+  transform: rotate(180deg);
 }

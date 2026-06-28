@@ -9,9 +9,12 @@ import { useDocViewerData } from "@/lib/use-doc-viewer-data"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { DocViewerLoading } from "@/components/doc-viewer-loading"
 import { cn } from "@/lib/utils"
+import { DataDownloadMenu } from "@/components/data-download-menu"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { MarkdownView } from "@/components/highlight"
 import { docViewerTabs, docViewTabLabel, isPdfDoc } from "@/lib/doc-content"
+import { isTabularDocType } from "@/lib/doc-structure-infer"
+import { isDownloadableJson } from "@/lib/json-utils"
 import { API_ROUTES } from "@/lib/api-routes"
 import type { DocId, DocRef } from "@/lib/types"
 
@@ -29,7 +32,7 @@ function tabLabel(mode: DocViewMode, doc: Pick<DocRef, "name" | "type"> | undefi
 
 export function DocViewer() {
   const { target, close } = useDocViewer()
-  const { docs } = useStore()
+  const { docs, models } = useStore()
   const markRef = useRef<HTMLSpanElement>(null)
 
   const docId = target?.docId ?? null
@@ -55,6 +58,7 @@ export function DocViewer() {
   const hasVisionText = visionEntries.length > 0
   const tabs = docViewerTabs(docRef, hasPdf, hasVisionText)
   const showPdf = isPdfDoc(docRef, hasPdf)
+  const tabularDoc = docRef ? isTabularDocType(docRef.type, docRef.name) : false
   const displayText =
     view === "vision" ? (visionEntries[visionIndex]?.text ?? "") : (parserText ?? "")
 
@@ -140,7 +144,13 @@ export function DocViewer() {
           parserText === null ? (
             <DocViewerLoading />
           ) : (
-            <JsonPreviewPanel json={parserText} className="min-h-0 flex-1" />
+            <JsonPreviewPanel
+              json={parserText}
+              doc={docRef}
+              models={models}
+              defaultView={tabularDoc ? "table" : undefined}
+              className="min-h-0 flex-1"
+            />
           )
         ) : view === "formatted" ? (
           <div className="flex-1 overflow-auto px-6 py-5">
@@ -165,6 +175,11 @@ export function DocViewer() {
                     {entry.model}
                   </button>
                 ))}
+              </div>
+            ) : null}
+            {view === "parser" && parserText !== null && isDownloadableJson(parserText) ? (
+              <div className="flex justify-end border-b border-border bg-secondary/20 px-4 py-2.5">
+                <DataDownloadMenu content={parserText} models={models} />
               </div>
             ) : null}
             <div className="flex-1 overflow-auto px-6 py-5">

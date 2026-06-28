@@ -28,12 +28,14 @@ import type {
   ProjectId,
   Strategy,
   StructureModel,
+  StructureModelId,
 } from "@/lib/types"
 import { DEFAULT_MODEL } from "@/lib/types"
 import { apiJson, apiPut, JSON_HEADERS } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { migrateProjectModules, syncAutoQuoteSteps } from "@/lib/quote-steps"
 import { stripSharedModels, withSharedModels } from "@/lib/structure"
+import { mergeInferredStructuresForDoc, modelsChanged } from "@/lib/sync-doc-structures"
 
 export type BillingAccountView = {
   balanceCents: number
@@ -362,11 +364,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     form.append("label", label)
     if (projectId) form.append("projectId", projectId)
     const doc = await apiJson<DocRef>(API_ROUTES.docs, { method: "POST", body: form })
+    const pid = projectId ?? activeProjectId
+
     setState((prev) => {
       if (!prev) return prev
       const hasDoc = prev.docs.some((d) => d.id === doc.id)
       const nextDocs = hasDoc ? prev.docs : [doc, ...prev.docs]
-      const pid = projectId ?? activeProjectId
       if (!pid) return hasDoc ? prev : { ...prev, docs: nextDocs }
       const names = prev.projects.find((p) => p.id === pid)?.seedDocNames ?? []
       if (names.includes(doc.name)) return hasDoc ? prev : { ...prev, docs: nextDocs }
@@ -375,8 +378,44 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       )
       return { ...prev, docs: nextDocs, projects: nextProjects }
     })
+
+    if (pid) {
+      try {
+        const data = await apiJson<{ text?: string; content?: string }>(API_ROUTES.docText(doc.id))
+        const content = data.text ?? data.content ?? ""
+        setState((prev) => {
+          if (!prev) return prev
+          const p = prev.projects.find((x) => x.id === pid)
+          if (!p) return prev
+          const merged = mergeInferredStructuresForDoc(
+            p.models,
+            doc,
+            content,
+            () => uid<StructureModelId>(),
+          )
+          if (!modelsChanged(p.models, merged)) return prev
+          const models = stripSharedModels(merged)
+          const modules = syncAutoQuoteSteps(
+            migrateProjectModules(p).modules,
+            withSharedModels(models),
+          )
+          const nextProjects = prev.projects.map((x) =>
+            x.id === pid ? { ...p, models, modules } : x,
+          )
+          if (saveTimer.current) clearTimeout(saveTimer.current)
+          const body = JSON.stringify(nextProjects.find((x) => x.id === pid))
+          saveTimer.current = setTimeout(() => {
+            void persistProject(pid, body!)
+          }, 500)
+          return { ...prev, projects: nextProjects }
+        })
+      } catch (err) {
+        console.error("structure sync after upload failed", err)
+      }
+    }
+
     return doc
-  }, [activeProjectId])
+  }, [activeProjectId, persistProject])
 
   // AI : the server already persisted the run (run engine) — just mirror it locally.
   const addRun = useCallback((r: PipelineRun) => {

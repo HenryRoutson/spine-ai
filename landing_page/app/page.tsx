@@ -1,6 +1,6 @@
 import Image from "next/image";
+import { LandingNav } from "../components/landing-nav";
 
-// AI : nominal aliases so paths/copy aren't interchangeable plain strings
 type ImagePath = string;
 type SectionId = string;
 type AppLoginUrl = string;
@@ -11,340 +11,482 @@ const APP_LOGIN_URL: AppLoginUrl = "https://auto-pipeline-app.dev/login?next=%2F
 
 type Feature = {
   id: SectionId;
-  num: string;
   name: string;
   headline: string;
   body: string;
-  bullets: string[];
   image: ImagePath;
 };
 
-const FEATURES: Feature[] = [
+type FeatureCard = {
+  title: string;
+  body: string;
+};
+
+type FaqItem = {
+  num: string;
+  q: string;
+  a: string;
+};
+
+type Testimonial = {
+  quote: string;
+  handle: string;
+};
+
+type LogStep = {
+  action: string;
+  time: string;
+  status: string;
+  agent: string;
+};
+
+const NAV_LINKS = [
+  { href: "#features", label: "Features" },
+  { href: "#preview", label: "Preview" },
+  { href: "#faq", label: "FAQs" },
+];
+
+const HERO_LOG: LogStep[] = [
+  { action: "Opened pipeline builder", time: "12:41:03", status: "step.ok", agent: "pipeline-agent" },
+  { action: "Defined LegalConsiderations schema", time: "12:41:07", status: "step.ok", agent: "structure-agent" },
+  { action: "Wired PDF → extract → combine", time: "12:41:09", status: "step.ok", agent: "pipeline-agent" },
+  { action: "Dropped legal.pdf on input slot", time: "12:41:13", status: "step.ok", agent: "inference-agent" },
+  { action: "Cache hit on steps 1–3", time: "12:41:18", status: "$0.00", agent: "cache-agent" },
+  { action: "Output validated against schema", time: "12:41:20", status: "pass.confirmed", agent: "schema-agent" },
+];
+
+const OVERVIEW: Feature[] = [
   {
     id: "structure",
-    num: "01",
     name: "Structure",
     headline: "Define the shape of every answer.",
-    body: "Build pydantic / zod models in a UI or in code. Every step's input and output is validated against a structure — schema validation is implicit on all I/O, never a separate step you can forget.",
-    bullets: [
-      "UI builder and code view of the same models",
-      "`text` instead of `string` for non-technical reviewers",
-      "`tuple[text, quote]` links extractions back to the source",
-    ],
+    body: "Build pydantic / zod models in a UI or in code. Every step's input and output is validated against a structure — schema validation is implicit on all I/O.",
     image: "/screens/s-structure.png",
   },
   {
     id: "pipeline",
-    num: "02",
     name: "Pipeline",
     headline: "Linear pipelines that flag their own breakages.",
-    body: "Each step declares its input and output model. When an output flows into a step expecting something else, the UI marks the pipeline invalid and run buttons go dark — before you spend a cent on inference.",
-    bullets: [
-      "PDF, Word, Excel, JSON and web inputs",
-      "Custom TypeScript function steps and batch LLM steps",
-      "Per-step caching: never recompute or re-bill a finished step",
-    ],
+    body: "Each step declares its input and output model. When types don't match, the UI marks the pipeline invalid and run buttons go dark — before you spend a cent.",
     image: "/screens/s-pipeline.png",
   },
   {
-    id: "abtest",
-    num: "03",
-    name: "A/B Test",
-    headline: "Benchmark strategies, not vibes.",
-    body: "Run the same task as a single LLM call, a Recursive Language Model, a frontier coding agent, or an agent loop on a cheap open model. An LLM judge picks the winner on accuracy, schema pass-rate, latency and cost.",
-    bullets: [
-      "Cheap Chinese models first, frontier only if needed",
-      "Syntax-highlighted logs from RLM and agent runs",
-      "Accuracy / pass / latency / cost on every strategy card",
-    ],
-    image: "/screens/s-abtest.png",
-  },
-  {
     id: "inference",
-    num: "04",
     name: "Inference",
     headline: "Drag a document on. No deploy.",
-    body: "Run the live pipeline by dropping a file onto an input slot, then share a link to just this page. Cached steps return instantly at $0.00; progress streams in as each step completes.",
-    bullets: [
-      "Shareable run page — nothing to deploy",
-      "Per-step run buttons, dark when the pipeline is invalid",
-      "Validated output with click-to-source quotes",
-    ],
+    body: "Run the live pipeline by dropping a file onto an input slot, then share a link. Cached steps return instantly at $0.00; progress streams as each step completes.",
     image: "/screens/s-infer-done.png",
   },
+];
+
+const FEATURE_CARDS: FeatureCard[] = [
   {
-    id: "logging",
+    title: "Validated Structures",
+    body: "UI builder and code view of the same models. text instead of string for reviewers. tuple[text, quote] links extractions back to the source.",
+  },
+  {
+    title: "Smart Pipelines",
+    body: "PDF, Word, Excel, JSON and web inputs. Custom TypeScript steps and batch LLM steps. Per-step caching — never recompute or re-bill finished work.",
+  },
+  {
+    title: "A/B Strategy Testing",
+    body: "Benchmark single LLM calls, RLM, frontier agents, or cheap open models. An LLM judge picks the winner on accuracy, pass-rate, latency and cost.",
+  },
+  {
+    title: "Shareable Inference",
+    body: "Drag-and-drop run page with nothing to deploy. Per-step run buttons go dark when invalid. Validated output with click-to-source quotes.",
+  },
+  {
+    title: "Full Run Tracing",
+    body: "Every inference recorded with per-step trace, token counts and cost. Syntax-highlighted technical logs plus a high-level HTML view.",
+  },
+  {
+    title: "Cost Attribution",
+    body: "Spend per model and service. Open vs frontier split, daily spend by model, and cache savings computed against a no-cache baseline.",
+  },
+];
+
+const TESTIMONIALS: Testimonial[] = [
+  {
+    quote:
+      "Being able to validate every step before inference is huge. auto pipeline marks broken pipelines dark and gives me schema pass-rates I can actually act on.",
+    handle: "@pipeline-fndr",
+  },
+  {
+    quote:
+      "The cache makes the product feel safe on cost. I can rerun aggressively without recomputing finished steps or re-billing the same document.",
+    handle: "@ship-labs",
+  },
+  {
+    quote:
+      "The A/B test view is the difference. It does not feel like guessing on model choice — it feels like a controlled benchmark on real pipeline steps.",
+    handle: "@frontend-pilot",
+  },
+  {
+    quote:
+      "The best part is seeing every step traced. Token counts, costs, schema passes — it feels like proper engineering, but without the grind.",
+    handle: "@mamuli23",
+  },
+];
+
+const FAQS: FaqItem[] = [
+  {
+    num: "01",
+    q: "Does auto pipeline replace my LLM code?",
+    a: "No. It wraps your LLM work in typed, cached pipeline steps with implicit schema validation. You still write prompts and custom functions — the pipeline handles wiring, validation, caching and cost tracking.",
+  },
+  {
+    num: "02",
+    q: "Can I ship inference without deploying?",
+    a: "Yes. Drop a document on an input slot and share the run page link. Cached steps return at $0.00 instantly; progress streams as each step completes.",
+  },
+  {
+    num: "03",
+    q: "Is this just a prompt playground?",
+    a: "No. auto pipeline does not just chat with models. It validates every step's I/O against pydantic/zod structures, flags broken pipelines before run, and attributes cost per model and step.",
+  },
+  {
+    num: "04",
+    q: "What does A/B testing actually compare?",
+    a: "The same task as a single LLM call, Recursive Language Model, frontier coding agent, or agent loop on a cheap open model. A judge scores accuracy, schema pass-rate, latency and cost.",
+  },
+  {
     num: "05",
-    name: "Logging",
-    headline: "Every run, fully traced.",
-    body: "Each inference run is recorded with a per-step trace, token counts and cost. Detailed technical logs with syntax highlighting, plus a high-level HTML view with progress bars for everyone else.",
-    bullets: [
-      "Filter by model, step or run id",
-      "Download any run's logs",
-      "`_latest` plus timestamped artifacts for every step",
-    ],
-    image: "/screens/s-logging.png",
+    q: "What do I get after a pipeline run?",
+    a: "Validated JSON output, per-step traces with token counts and cost, syntax-highlighted logs, and click-to-source quotes linking extractions back to the original document.",
   },
   {
-    id: "documents",
     num: "06",
-    name: "Documents",
-    headline: "Content-addressed. Never pay twice.",
-    body: "Every uploaded document hashes to one id, so identical files dedupe automatically and cached work is reused. PDFs get both a PDF view and a text view; runs save their inputs and outputs alongside.",
-    bullets: [
-      "Hash-based dedupe across inference and training uploads",
-      "Previous runs stored as typed JSON with their structure attached",
-      "Inference / training labels on every file",
-    ],
-    image: "/screens/s-documents.png",
-  },
-  {
-    id: "billing",
-    num: "07",
-    name: "Billing",
-    headline: "See exactly where spend goes.",
-    body: "Cost is attributed per model and per processing service. Watch the cheap/open vs frontier split, daily spend by model, and how much caching saved you versus recomputing everything.",
-    bullets: [
-      "Daily spend stacked by model",
-      "Open / cheap vs frontier model split",
-      "Cache savings computed against a no-cache baseline",
-    ],
-    image: "/screens/s-billing4.png",
+    q: "How does caching work?",
+    a: "Every uploaded document hashes to one id, so identical files dedupe automatically. Finished steps are never recomputed or re-billed — cached work returns at $0.00.",
   },
 ];
 
-type Stat = { value: string; label: string };
-
-const STATS: Stat[] = [
-  { value: "3×", label: "typical overspend from using frontier models to patch one-time engineering problems" },
-  { value: "$0.00", label: "cost of a cached step — finished work is never recomputed or re-billed" },
-  { value: "100%", label: "of step I/O schema-validated, implicitly, on every run" },
-];
-
-// AI : framed screenshot with fake window chrome so raw pngs read as product UI
-function Shot({ src, alt, priority = false }: { src: ImagePath; alt: string; priority?: boolean }) {
+function TerminalPreview({ title, steps }: { title: string; steps: LogStep[] }) {
   return (
-    <div className="rounded-xl border border-line bg-panel overflow-hidden shadow-[0_0_60px_-20px_rgba(52,211,153,0.25)]">
-      <div className="flex items-center gap-1.5 border-b border-line px-3 py-2">
-        <span className="h-2.5 w-2.5 rounded-full bg-line" />
-        <span className="h-2.5 w-2.5 rounded-full bg-line" />
-        <span className="h-2.5 w-2.5 rounded-full bg-line" />
-        <span className="ml-2 font-mono text-[10px] text-muted truncate">{alt}</span>
+    <div className="terminal-window h-full">
+      <div className="terminal-titlebar">
+        <span className="terminal-dot bg-[#ff5f57]" />
+        <span className="terminal-dot bg-[#febc2e]" />
+        <span className="terminal-dot bg-[#28c840]" />
+        <span className="ml-2 flex items-center gap-2 font-mono text-xs text-muted">
+          {title}
+          <span className="live-dot" />
+          <span className="text-accent">live</span>
+        </span>
       </div>
-      <Image src={src} alt={alt} width={1024} height={461} priority={priority} className="w-full h-auto" />
+      <div className="px-4 py-2">
+        {steps.map((step: LogStep) => (
+          <div key={step.time + step.action} className="log-line">
+            <div>
+              <p className="text-foreground/90">
+                <span className="text-muted">&gt;-</span> {step.action}
+              </p>
+              <p className="mt-0.5 text-[10px] text-muted-dim">
+                {step.time} / {step.status}
+              </p>
+            </div>
+            <span className="log-tag">{step.agent}</span>
+          </div>
+        ))}
+        <p className="py-3 font-mono text-[10px] text-muted-dim">watching pipeline</p>
+      </div>
     </div>
   );
 }
 
-function FeatureRow({ feature, flip }: { feature: Feature; flip: boolean }) {
+function Shot({ src, alt, priority = false }: { src: ImagePath; alt: string; priority?: boolean }) {
   return (
-    <div id={feature.id} className="grid items-center gap-10 lg:grid-cols-2 scroll-mt-24">
-      <div className={flip ? "lg:order-2" : ""}>
-        <p className="font-mono text-sm text-accent">
-          {feature.num} / {feature.name}
-        </p>
-        <h3 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">{feature.headline}</h3>
-        <p className="mt-4 text-muted leading-relaxed">{feature.body}</p>
-        <ul className="mt-6 space-y-2.5">
-          {feature.bullets.map((b: string) => (
-            <li key={b} className="flex gap-3 text-sm text-foreground/85">
-              <span className="mt-0.5 text-accent">▸</span>
-              <span>{b}</span>
-            </li>
-          ))}
-        </ul>
+    <div className="terminal-window overflow-hidden">
+      <div className="terminal-titlebar">
+        <span className="terminal-dot bg-[#ff5f57]" />
+        <span className="terminal-dot bg-[#febc2e]" />
+        <span className="terminal-dot bg-[#28c840]" />
+        <span className="ml-2 truncate font-mono text-[10px] text-muted">{alt}</span>
       </div>
-      <div className={flip ? "lg:order-1" : ""}>
-        <Shot src={feature.image} alt={`auto pipeline — ${feature.name.toLowerCase()}`} />
-      </div>
+      <Image src={src} alt={alt} width={1024} height={461} priority={priority} className="h-auto w-full" />
     </div>
   );
 }
 
 export default function Home() {
   return (
-    <main className="flex-1">
-      {/* nav */}
-      <header className="sticky top-0 z-50 border-b border-line bg-background/80 backdrop-blur">
-        <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-          <a href="#" className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <span className="font-mono text-sm font-bold">|</span>
-            </div>
-            <div className="hidden leading-tight sm:block">
-              <h1 className="text-sm font-semibold tracking-tight">auto pipeline</h1>
-            </div>
-          </a>
-          <div className="hidden items-center gap-6 font-mono text-xs text-muted md:flex">
-            {FEATURES.slice(0, 4).map((f: Feature) => (
-              <a key={f.id} href={`#${f.id}`} className="hover:text-foreground transition-colors">
-                {f.name}
-              </a>
-            ))}
-            <a
-              href={APP_LOGIN_URL}
-              className="rounded bg-accent px-3 py-1.5 font-semibold text-background hover:bg-accent/85 transition-colors"
-            >
-              Get a demo
-            </a>
-          </div>
-        </nav>
-      </header>
+    <main className="grain-bg flex-1">
+      <LandingNav links={NAV_LINKS} loginUrl={APP_LOGIN_URL} />
 
-      {/* hero */}
-      <section className="relative overflow-hidden">
-        <div className="grid-bg absolute inset-0" aria-hidden />
-        <div className="relative mx-auto max-w-6xl px-6 pt-20 pb-16 text-center sm:pt-28">
-          <p className="mx-auto inline-block rounded-full border border-line bg-panel px-4 py-1.5 font-mono text-xs text-accent">
-            ● validated AI, from input to output
-          </p>
-          <h1 className="mx-auto mt-6 max-w-3xl text-4xl font-semibold tracking-tight sm:text-6xl">
-            AI engineering is hard.
-            <br />
-            <span className="text-accent">Your pipeline shouldn&apos;t be.</span>
-          </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-muted sm:text-lg">
-            auto pipeline turns LLM work into typed, cached, validated pipeline steps. Define structures, wire steps together,
-            A/B test strategies on cheap open models, and ship a drag-and-drop inference page — no deploy required.
-          </p>
-          <div className="mt-8 flex items-center justify-center">
+      {/* hero — zeeroday split grid */}
+      <section className="mx-auto max-w-[1200px] border-x border-line">
+        <div className="grid md:grid-cols-2">
+          <div className="flex flex-col justify-center border-b border-line p-8 sm:p-12 md:border-b-0 md:border-r">
+            <div className="zeero-badge mb-8 w-fit">
+              <span className="zeero-badge-new">New</span>
+              <span className="zeero-badge-label">Validated AI pipelines</span>
+            </div>
+            <h1 className="text-4xl font-normal leading-[1.08] tracking-tight sm:text-[52px]">
+              AI engineering is hard.
+              <br />
+              Your pipeline shouldn&apos;t be.
+            </h1>
+            <p className="mt-5 max-w-md text-base leading-relaxed text-muted">
+              auto pipeline turns LLM work into typed, cached, validated pipeline steps. Define structures, wire steps
+              together, A/B test strategies, and ship a drag-and-drop inference page — no deploy required.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-3">
+              <a href={APP_URL} className="zeero-btn">
+                Try now
+              </a>
+              <a href={APP_LOGIN_URL} className="zeero-btn-ghost">
+                Get a demo
+              </a>
+            </div>
             <a
-              id="cta-top"
-              href={APP_URL}
-              className="rounded bg-accent px-6 py-3 font-mono text-sm font-semibold text-background hover:bg-accent/85 transition-colors"
+              href="https://www.antler.co/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-10 inline-flex items-center gap-2.5 text-xs text-muted transition-colors hover:text-foreground"
             >
-              Try now
+              <span>built at the</span>
+              <Image src="/antler-logo.svg" alt="Antler" width={67} height={16} className="brightness-0 invert opacity-70" />
+              <span>hackathon · independent, not funded</span>
             </a>
           </div>
-          {/* AI : hackathon credit only — deliberately worded to avoid implying funding/affiliation */}
-          <a
-            href="https://www.antler.co/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-10 inline-flex items-center gap-2.5 font-mono text-xs text-muted hover:text-foreground transition-colors"
+          <div className="border-b border-line p-6 sm:p-8">
+            <TerminalPreview title="Pipeline Run Preview" steps={HERO_LOG} />
+          </div>
+        </div>
+
+        {/* logo grid */}
+        <div className="grid grid-cols-3 border-b border-line sm:grid-cols-6">
+          {["Your Company", "Your Company", "Your Company", "Your Company", "Your Company", "Your Company"].map(
+            (label: string, i: number) => (
+              <div
+                key={i}
+                className="flex h-16 items-center justify-center border-r border-line px-4 last:border-r-0 sm:h-20"
+              >
+                <span className="text-xs text-muted-dim">{label}</span>
+              </div>
+            ),
+          )}
+        </div>
+      </section>
+
+      {/* 3-step overview — zeeroday feature rows */}
+      <section className="mx-auto max-w-[1200px] border-x border-line">
+        {OVERVIEW.map((feature: Feature, i: number) => (
+          <div
+            key={feature.id}
+            id={feature.id}
+            className={`grid scroll-mt-24 md:grid-cols-2 ${i < OVERVIEW.length - 1 ? "border-b border-line" : ""}`}
           >
-            <span>built at the</span>
-            <Image
-              src="/antler-logo.svg"
-              alt="Antler"
-              width={67}
-              height={16}
-              className="brightness-0 invert opacity-80"
-            />
-            <span>hackathon · independent, not funded</span>
-          </a>
-          <div className="mt-14 text-left">
+            <div
+              className={`flex min-h-[280px] items-center justify-center border-b border-line p-10 md:min-h-[360px] md:border-b-0 ${
+                i % 2 === 1 ? "md:order-2 md:border-l" : "md:border-r"
+              }`}
+            >
+              <div className="relative w-full max-w-sm">
+                <div className="absolute inset-0 rounded-xl border border-accent/20 bg-accent/5" />
+                <div className="relative p-6">
+                  <div className="mx-auto h-32 w-32 rounded-lg border border-accent/40 bg-accent/10 shadow-[0_0_40px_-10px_var(--accent-dim)]" />
+                  <div className="mt-4 grid grid-cols-3 gap-2">
+                    {[0, 1, 2].map((n: number) => (
+                      <div key={n} className="h-2 rounded-full bg-accent/30" />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className={`flex flex-col justify-center p-8 sm:p-12 ${i % 2 === 1 ? "md:order-1" : ""}`}>
+              <h3 className="text-2xl font-normal tracking-tight sm:text-3xl">{feature.headline}</h3>
+              <p className="mt-4 max-w-md leading-relaxed text-muted">{feature.body}</p>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      {/* live preview */}
+      <section id="preview" className="mx-auto max-w-[1200px] scroll-mt-24 border-x border-b border-line">
+        <div className="border-b border-line px-8 py-10 sm:px-12">
+          <h2 className="text-3xl font-normal tracking-tight sm:text-4xl">Watch the pipeline live</h2>
+        </div>
+        <div className="grid md:grid-cols-2">
+          <div className="border-b border-line p-6 sm:p-8 md:border-b-0 md:border-r">
             <Shot src="/screens/s-pipeline.png" alt="auto pipeline — pipeline builder" priority />
+          </div>
+          <div className="flex flex-col justify-center p-8 sm:p-12">
+            <h3 className="text-2xl font-normal tracking-tight">Pipeline builder</h3>
+            <p className="mt-4 leading-relaxed text-muted">
+              Wire typed steps left to right. Invalid connections mark the pipeline broken and disable run buttons —
+              before you spend a cent on inference.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-2">
+              {["Structure Agent", "Pipeline Agent", "Inference Agent"].map((tag: string) => (
+                <span key={tag} className="log-tag">
+                  {tag}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* stats */}
-      <section className="border-y border-line bg-panel/50">
-        <div className="mx-auto grid max-w-6xl gap-8 px-6 py-12 sm:grid-cols-3">
-          {STATS.map((s: Stat) => (
-            <div key={s.value}>
-              <p className="font-mono text-4xl font-semibold text-accent">{s.value}</p>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{s.label}</p>
+      {/* feature grid */}
+      <section id="features" className="mx-auto max-w-[1200px] scroll-mt-24 border-x border-line">
+        <div className="border-b border-line px-8 py-10 sm:px-12">
+          <h2 className="text-3xl font-normal tracking-tight sm:text-4xl">
+            AI engineering built for production pipelines
+          </h2>
+        </div>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3">
+          {FEATURE_CARDS.map((card: FeatureCard, i: number) => (
+            <div
+              key={card.title}
+              className={`p-8 sm:p-10 ${
+                i % 3 !== 2 ? "lg:border-r lg:border-line" : ""
+              } ${i % 2 === 0 ? "sm:border-r sm:border-line" : ""} ${
+                i < FEATURE_CARDS.length - (FEATURE_CARDS.length % 3 || 3) ? "border-b border-line" : ""
+              } ${i < FEATURE_CARDS.length - 2 ? "sm:border-b sm:border-line lg:border-b" : ""}`}
+            >
+              <h4 className="text-lg font-medium">{card.title}</h4>
+              <p className="mt-3 text-sm leading-relaxed text-muted">{card.body}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* features */}
-      <section className="mx-auto max-w-6xl space-y-28 px-6 py-24">
-        <div className="text-center">
-          <p className="font-mono text-sm text-accent">the whole loop, one tool</p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
-            Structure → Pipeline → Test → Ship
-          </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-muted">
-            Seven windows per project. Each one removes a piece of AI engineering you&apos;d otherwise hand-roll.
-          </p>
-        </div>
-        {FEATURES.map((f: Feature, i: number) => (
-          <FeatureRow key={f.id} feature={f} flip={i % 2 === 1} />
-        ))}
-      </section>
-
       {/* validated text spotlight */}
-      <section className="border-y border-line bg-panel/50">
-        <div className="mx-auto grid max-w-6xl items-center gap-10 px-6 py-24 lg:grid-cols-2">
-          <div>
-            <p className="font-mono text-sm text-accent">✓ validated text</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+      <section className="mx-auto max-w-[1200px] border-x border-b border-line">
+        <div className="grid md:grid-cols-2">
+          <div className="flex flex-col justify-center border-b border-line p-8 sm:p-12 md:border-b-0 md:border-r">
+            <h2 className="text-3xl font-normal tracking-tight sm:text-4xl">
               Click any extracted quote.
               <br />
               Jump to its source.
             </h2>
             <p className="mt-4 leading-relaxed text-muted">
-              Every span an LLM extracts is validated against the original document and stored with langextract-style
-              character offsets. One click takes a reviewer from the model&apos;s claim to the exact highlighted passage —
-              that&apos;s what makes the output trustworthy enough to act on.
+              Every span an LLM extracts is validated against the original document and stored with character offsets.
+              One click takes a reviewer from the model&apos;s claim to the exact highlighted passage.
             </p>
-            <p className="mt-4 font-mono text-xs text-muted">
-              text → list[tuple[text, quote]] · closest-match fallback · offsets stored with the run
-            </p>
-          </div>
-          <Shot src="/screens/s-docviewer.png" alt="auto pipeline — source document viewer" />
-        </div>
-      </section>
-
-      {/* default example pipeline */}
-      <section className="mx-auto max-w-6xl px-6 py-24">
-        <div className="grid items-center gap-10 lg:grid-cols-2">
-          <div>
-            <p className="font-mono text-sm text-accent">default project</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Company Legal Evaluation</h2>
-            <p className="mt-4 leading-relaxed text-muted">
-              auto pipeline ships with a working example: ingest a legal PDF, extract atomic rules with source quotes, combine
-              with company data, and output a legal considerations report — every step typed and cached.
+            <p className="mt-4 font-mono text-xs text-muted-dim">
+              text → list[tuple[text, quote]] · offsets stored with the run
             </p>
           </div>
-          <div className="rounded-xl border border-line bg-panel p-6 font-mono text-sm leading-7">
-            {[
-              ["01", "Legal Document", "pdf → SourceDocument"],
-              ["02", "Doc → Text", "SourceDocument → SourceDocument"],
-              ["03", "Extract Atomic Rules", "SourceDocument → list[AtomicRule]"],
-              ["04", "Sort Rules by Severity", "custom ts fn · $0 LLM cost"],
-              ["05", "Company Data + Combine", "word → EvaluationInput"],
-              ["06", "Legal Considerations", "EvaluationInput → LegalConsiderations"],
-            ].map(([num, name, io]: string[]) => (
-              <div key={num} className="flex items-baseline gap-3 border-b border-line/60 py-2 last:border-0">
-                <span className="text-muted">{num}</span>
-                <span className="text-foreground">{name}</span>
-                <span className="ml-auto text-right text-xs text-accent/80">{io}</span>
-              </div>
-            ))}
+          <div className="p-6 sm:p-8">
+            <Shot src="/screens/s-docviewer.png" alt="auto pipeline — source document viewer" />
           </div>
         </div>
       </section>
 
-      {/* cta */}
-      <section id="cta" className="border-t border-line">
-        <div className="mx-auto max-w-3xl px-6 py-24 text-center">
-          <h2 className="text-3xl font-semibold tracking-tight sm:text-5xl">
+      {/* stats row */}
+      <section className="mx-auto max-w-[1200px] border-x border-b border-line">
+        <div className="grid sm:grid-cols-3">
+          {[
+            { value: "3×", label: "typical overspend from using frontier models to patch one-time engineering problems" },
+            { value: "$0.00", label: "cost of a cached step — finished work is never recomputed or re-billed" },
+            { value: "100%", label: "of step I/O schema-validated, implicitly, on every run" },
+          ].map((stat: { value: string; label: string }, i: number) => (
+            <div
+              key={stat.value}
+              className={`p-8 sm:p-10 ${i < 2 ? "border-b border-line sm:border-b-0 sm:border-r" : ""}`}
+            >
+              <p className="font-mono text-4xl font-normal text-foreground">{stat.value}</p>
+              <p className="mt-3 text-sm leading-relaxed text-muted">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* testimonials */}
+      <section className="mx-auto max-w-[1200px] border-x border-b border-line">
+        <div className="border-b border-line px-8 py-10 sm:px-12">
+          <h2 className="text-3xl font-normal tracking-tight sm:text-4xl">Trusted by devs shipping pipelines</h2>
+        </div>
+        <div className="grid sm:grid-cols-2">
+          {TESTIMONIALS.map((t: Testimonial, i: number) => (
+            <div
+              key={t.handle}
+              className={`p-8 sm:p-10 ${i % 2 === 0 ? "sm:border-r sm:border-line" : ""} ${
+                i < TESTIMONIALS.length - 2 ? "border-b border-line sm:border-b-0" : ""
+              } ${i < TESTIMONIALS.length - 1 ? "border-b border-line sm:border-b" : ""}`}
+            >
+              <p className="text-base leading-relaxed text-foreground/90">&ldquo;{t.quote}&rdquo;</p>
+              <p className="mt-4 text-sm text-muted">{t.handle}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* faq */}
+      <section id="faq" className="mx-auto max-w-[1200px] scroll-mt-24 border-x border-line">
+        <div className="border-b border-line px-8 py-10 sm:px-12">
+          <h2 className="text-3xl font-normal tracking-tight sm:text-4xl">
+            Got questions?
+            <br />
+            We&apos;ve got answers.
+          </h2>
+        </div>
+        <div>
+          {FAQS.map((faq: FaqItem) => (
+            <details key={faq.num} className="faq-item group border-b border-line">
+              <summary className="flex cursor-pointer items-start gap-6 px-8 py-6 sm:px-12 sm:py-7">
+                <span className="font-mono text-sm text-muted-dim">{faq.num}</span>
+                <span className="flex-1 text-base font-medium">{faq.q}</span>
+                <span className="faq-chevron text-muted transition-transform group-open:rotate-180">▾</span>
+              </summary>
+              <p className="px-8 pb-7 pl-[4.5rem] text-sm leading-relaxed text-muted sm:px-12 sm:pb-8">{faq.a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      {/* final cta */}
+      <section className="mx-auto max-w-[1200px] border-x border-b border-line">
+        <div className="px-8 py-20 text-center sm:px-12 sm:py-28">
+          <h2 className="text-3xl font-normal tracking-tight sm:text-5xl">
             Stop paying frontier prices
             <br />
-            for <span className="text-accent">pipeline problems.</span>
+            for pipeline problems.
           </h2>
-          <p className="mx-auto mt-5 max-w-xl text-muted">
-            Cheap open models, properly structured and validated, beat an expensive model on a messy prompt. auto pipeline is
-            how you get there.
+          <p className="mx-auto mt-5 max-w-lg text-muted">
+            Cheap open models, properly structured and validated, beat an expensive model on a messy prompt.
           </p>
-          <a
-            href={APP_LOGIN_URL}
-            className="mt-8 inline-block rounded bg-accent px-8 py-3.5 font-mono text-sm font-semibold text-background hover:bg-accent/85 transition-colors"
-          >
-            ⚡ Book a demo
+          <a href={APP_LOGIN_URL} className="zeero-btn mt-8 inline-flex">
+            Get a demo
           </a>
         </div>
       </section>
 
-      <footer className="border-t border-line">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-8 font-mono text-xs text-muted sm:flex-row">
-          <span>auto pipeline — ai engineering pipeline builder</span>
-          <span>pipelines are linear. left to right.</span>
+      {/* footer */}
+      <footer className="mx-auto max-w-[1200px] border-x border-line">
+        <div className="grid gap-8 border-b border-line px-8 py-12 sm:grid-cols-3 sm:px-12">
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-dim">Quick Menu</p>
+            <div className="mt-4 flex flex-col gap-2">
+              {NAV_LINKS.map((link) => (
+                <a key={link.href} href={link.href} className="text-sm text-muted hover:text-foreground">
+                  {link.label}
+                </a>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-dim">Product</p>
+            <div className="mt-4 flex flex-col gap-2">
+              <a href={APP_URL} className="text-sm text-muted hover:text-foreground">
+                Try now
+              </a>
+              <a href={APP_LOGIN_URL} className="text-sm text-muted hover:text-foreground">
+                Get a demo
+              </a>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-dim">Information</p>
+            <p className="mt-4 text-sm text-muted">auto pipeline — ai engineering pipeline builder</p>
+            <p className="mt-2 text-sm text-muted-dim">pipelines are linear. left to right.</p>
+          </div>
+        </div>
+        <div className="px-8 py-6 sm:px-12">
+          <p className="text-xs text-muted-dim">© 2026 auto pipeline. All rights reserved.</p>
         </div>
       </footer>
     </main>

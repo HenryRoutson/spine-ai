@@ -1,18 +1,30 @@
 import type { DerivedDocStructure } from "@/lib/doc-structure-infer"
-import type { DocId, StructureModel, StructureModelId } from "@/lib/types"
+import type { DocId, ModelField, StructureModel, StructureModelId } from "@/lib/types"
+
+function remapFields(fields: ModelField[], idMap: Map<StructureModelId, StructureModelId>): ModelField[] {
+  return fields.map((f) => ({
+    ...f,
+    ref: f.ref ? idMap.get(f.ref) : undefined,
+  }))
+}
 
 export function cloneDerivedForProject(
   derived: DerivedDocStructure,
   docId: DocId,
   idGen: () => StructureModelId,
-): StructureModel {
-  return {
-    ...derived.model,
-    id: idGen(),
+): StructureModel[] {
+  const all = [...derived.companionModels, derived.model]
+  const idMap = new Map<StructureModelId, StructureModelId>(
+    all.map((m) => [m.id, idGen()]),
+  )
+  return all.map((m) => ({
+    ...m,
+    id: idMap.get(m.id)!,
     sourceDocId: docId,
     auto: true,
-    description: derived.model.description || `Inferred from document.`,
-  }
+    description: m.description || "Inferred from document.",
+    fields: remapFields(m.fields, idMap),
+  }))
 }
 
 export function findExistingDerivedModel(
@@ -25,22 +37,4 @@ export function findExistingDerivedModel(
 
 export function alreadyAdded(models: StructureModel[], docId: DocId, name: string): boolean {
   return findExistingDerivedModel(models, docId, name) !== undefined
-}
-
-export function openOrAddDerivedStructure(
-  derived: DerivedDocStructure,
-  docId: DocId,
-  models: StructureModel[],
-  idGen: () => StructureModelId,
-  setModels: (next: StructureModel[]) => void,
-  openStructure: (modelId: StructureModelId) => void,
-): void {
-  const existing = findExistingDerivedModel(models, docId, derived.model.name)
-  if (existing) {
-    openStructure(existing.id)
-    return
-  }
-  const next = cloneDerivedForProject(derived, docId, idGen)
-  setModels([...models, next])
-  openStructure(next.id)
 }
