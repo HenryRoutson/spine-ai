@@ -11,6 +11,35 @@ import {
   type Project,
 } from "./types";
 import type { ChatTurn } from "./assistant-shared";
+import type { ModuleKind, PipelineModule, StructureModel } from "./types";
+
+function structureName(models: StructureModel[], id: string | undefined): string | undefined {
+  if (!id) return undefined;
+  return models.find((m) => m.id === id)?.name;
+}
+
+function stepEmitsList(kind: ModuleKind, outIsList: boolean | undefined): boolean {
+  if (kind === "llm-batch") return true;
+  return !!outIsList;
+}
+
+/** AI : human-readable spine type for assistant context — matches validity.ts rules. */
+export function spineEmitsLabel(m: PipelineModule, models: StructureModel[]): string | undefined {
+  const name = structureName(models, m.outStructureId);
+  if (!name || m.kind === "output" || m.kind === "assert" || m.kind === "human-review") {
+    const passthrough = structureName(models, m.inStructureId ?? m.outStructureId);
+    return passthrough ?? undefined;
+  }
+  return stepEmitsList(m.kind, m.outIsList) ? `list[${name}]` : name;
+}
+
+export function spineExpectsLabel(m: PipelineModule, models: StructureModel[]): string | undefined {
+  if (m.kind === "input") return undefined;
+  const name = structureName(models, m.inStructureId);
+  if (!name) return undefined;
+  if (m.kind === "llm-batch") return `list[${name}]`;
+  return name;
+}
 
 export function buildModuleKindsPromptBlock(): string {
   return USER_ADDABLE_MODULE_KINDS.map(
@@ -36,22 +65,55 @@ export function buildStructureRulesPromptBlock(): string {
 - Use "text" for strings (not "str"). Use "tuple[text,quote]" when extracted text must link back to a source span; quote offsets are resolved downstream — never ask for doc_id/start/end in the schema.
 - Use "model" / "list[model]" with ref set to another structure's exact name when nesting.
 - Use "document" for the shared Document structure ({ content, filename }).
+- Field types must be from the Field types list — no "dict", "str", or ad-hoc types.
+- Every field needs a description string (use "" if nothing to add).
 - Optional fields: set optional true.
 - When changing structures, return a FULL replacement models array (include untouched models too) — not a patch.
 - When answering questions without schema changes, set models to null.`;
+}
+
+/** AI : spine typing — the #1 source of invalid pipelines; explain without task-specific hardcoding. */
+export function buildLinearIoPromptBlock(): string {
+  return `Linear spine I/O (CRITICAL — validate mentally before returning modules):
+The pipeline is strictly left-to-right. Step N+1 consumes ONLY what step N puts on the spine — both the structure NAME and whether it is a single object or a list.
+
+Spine notation (for reasoning only — never put this in structureIn/structureOut JSON fields):
+- Single object: Document
+- List of objects: list[ChunkItem]
+
+What each step puts on the spine (emits):
+- input → single structureOut (e.g. Document)
+- llm / transform (no code) with outIsList false → single structureOut
+- llm / transform / custom-code with outIsList true → list[structureOut]
+- llm-batch → ALWAYS list[structureOut] (outIsList is implied true)
+
+What each step requires from the previous step (expects):
+- Most steps → single structureIn matching the previous step's emit
+- llm-batch → list[structureIn] — the previous step MUST emit that list, not a single object
+
+structureIn and structureOut in your JSON are structure NAMES only (e.g. "ChunkItem"). Never write "list[ChunkItem]" there — set outIsList: true on the emitting step instead.
+
+Common mistakes that fail validation:
+1. llm-batch after llm without outIsList — e.g. chunking llm emits single Document but batch expects list[ChunkItem]. Fix: add outIsList: true on the chunking step (or use custom-code to emit the list).
+2. Wrong item type on a list — e.g. upstream emits list[Document] but batch expects list[ChunkItem]. Fix: align structureOut on the upstream step.
+3. list → single object without a reshape — e.g. list[ExtractedRow] → SummaryRow needs custom-code, or a SummaryRow model with a list[model] field + transform, not a bare transform.
+4. Map-reduce on paper but linear types not wired — design the spine chain first: Document → list[Chunk] → list[Candidate] → list[Extracted] → Summary.
+
+Before returning modules, walk the chain: for each adjacent pair, confirm previous emits exactly what next expects. If the user prompt lists validation errors, fix every listed mismatch.`;
 }
 
 export function buildPipelineRulesPromptBlock(globalModel: ModelId): string {
   return `Pipeline rules:
 - Pipelines are strictly linear. Each step must consume ONLY the previous step's output — never an earlier structure with the same model name. combine is the exception: it reads pipeline state (by structure name) plus the document input immediately before it.
 - Every step needs an output structure (structureOut). Input steps only need structureOut.
-- Reference structures by exact name from the project's models list (e.g. "Document", "ClauseExtraction").
+
+${buildLinearIoPromptBlock()}
+
 - Input steps: set inputType from supported types; optional inputNameContains so only matching filenames fill that slot (useful with multiple inputs).
 - Any step may set inputDescription — before the step runs, a guard LLM rejects input that doesn't match.
 - combine steps merge pipeline state with a new document — emit ONLY the combine step; a Document Input is auto-inserted before it.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
-- llm-batch consumes a list and emits a list — set outIsList: true. Use custom-code for chunking, map/reduce, or reshapes that aren't a simple list wrap.
-- transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically.
+- transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically, or use custom-code.
 - Add output steps wherever a named artifact snapshot is needed — pipelines may have several.
 - Use model ids from:\n${buildModelOptionsPromptBlock()}
 - Default LLM model: ${globalModel}
@@ -93,9 +155,11 @@ ${buildPipelineRulesPromptBlock(globalModel)}
 
 ${buildDocumentRulesPromptBlock()}
 
-For large-document workflows (contracts, tickets, resumes): design section-aware chunking via custom-code or llm-batch map steps, then a reduce/consolidation llm step — do not assume the whole document fits one context window.
+For large-document workflows (contracts, tickets, resumes): design section-aware chunking, then map (llm-batch per item) and reduce (custom-code or llm) — walk the linear spine chain first (see Linear spine I/O); do not assume the whole document fits one context window.
 
+The user prompt includes current pipeline JSON with spineExpects / spineEmits per step — use it to verify adjacent steps match.
 The user prompt includes current validation errors when present — fix them when revising.
+When validation errors are listed and the user asks to fix them, return a FULL replacement modules array (and models if needed) — modules MUST NOT be null. Do not reply with only a high-level plan.
 Keep step prompts concise and task-specific. Be conversational in message.`;
 }
 
@@ -125,8 +189,10 @@ export function buildProjectContextBlock(
       kind: m.kind,
       label: m.label,
       note: m.note,
-      structureIn: project.models.find((x) => x.id === m.inStructureId)?.name,
-      structureOut: project.models.find((x) => x.id === m.outStructureId)?.name,
+      structureIn: structureName(project.models, m.inStructureId),
+      structureOut: structureName(project.models, m.outStructureId),
+      spineExpects: spineExpectsLabel(m, project.models),
+      spineEmits: spineEmitsLabel(m, project.models),
       inputType: m.inputType,
       inputNameContains: m.inputNameContains,
       inputDescription: m.inputDescription,

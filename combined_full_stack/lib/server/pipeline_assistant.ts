@@ -2,8 +2,11 @@ import { z } from "zod";
 import { llmStreamString, llmStructured } from "./llm";
 import {
   ChatTurn,
+  formatValidationBlock,
+  parseStructureHint,
   resolveStructureIdFromModels,
   structureModelSpecSchema,
+  wantsValidationFix,
 } from "./assistant-shared";
 import {
   buildProjectAssistantSystemPrompt,
@@ -125,8 +128,13 @@ function makeModuleFromSpec(
   models: StructureModel[],
   globalModel: ModelId,
 ): PipelineModule {
-  const inId = resolveStructureIdFromModels(spec.structureIn, models);
-  const outId = resolveStructureIdFromModels(spec.structureOut, models) ?? defaultOutForKind(spec.kind, models);
+  const inHint = parseStructureHint(spec.structureIn);
+  const outHint = parseStructureHint(spec.structureOut);
+  const inId = resolveStructureIdFromModels(inHint?.name ?? spec.structureIn, models);
+  const outId =
+    resolveStructureIdFromModels(outHint?.name ?? spec.structureOut, models) ??
+    defaultOutForKind(spec.kind, models);
+  const outIsList = spec.outIsList ?? outHint?.isList ?? false;
   const modelOpt = MODEL_OPTIONS.find((m) => m.id === spec.model);
   return createPipelineModule(
     {
@@ -139,7 +147,7 @@ function makeModuleFromSpec(
       inputDescription: spec.inputDescription,
       inStructureId: spec.kind !== "input" ? inId ?? defaultOutForKind(spec.kind, models) : undefined,
       outStructureId: outId,
-      outIsList: spec.outIsList,
+      outIsList,
       prompt: spec.prompt,
       code: spec.code,
       model: modelOpt?.id,
@@ -193,10 +201,12 @@ function materializeDocs(
   }));
 }
 
-function buildThinkingSystemPrompt(): string {
+function buildThinkingSystemPrompt(hasValidationErrors: boolean): string {
   return `You are the project assistant for "auto pipeline" — structures, pipeline steps, and inference test documents.
 
-Reason step-by-step: required structures, linear data flow, chunking/map-reduce if inputs may exceed context, which test documents to synthesize, and edge cases.
+${hasValidationErrors
+    ? "The live project has pipeline validation errors — focus on diagnosing and fixing those I/O mismatches. Do not propose a greenfield architecture."
+    : "Reason step-by-step: required structures, linear data flow, chunking/map-reduce if inputs may exceed context, which test documents to synthesize, and edge cases."}
 Plain text only — no JSON, no markdown headings. Be concise (roughly 150–300 words).`;
 }
 
@@ -205,20 +215,31 @@ function buildThinkingUserPrompt(
   message: string,
   history: ChatTurn[],
   globalModel: ModelId,
+  liveValidation: string,
 ): string {
   const modelsBlock = project.models.length
     ? project.models.map((m) => `- ${m.name}: ${m.description ?? "(no description)"}`).join("\n")
     : "(none yet)";
   const stepsBlock = project.modules.length
-    ? project.modules.map((m, i) => `${i + 1}. ${m.label} (${m.kind})`).join("\n")
+    ? project.modules
+        .map((m, i) => {
+          const outName = project.models.find((x) => x.id === m.outStructureId)?.name;
+          const list = m.outIsList ? "list" : "single";
+          return `${i + 1}. ${m.label} (${m.kind}) → ${outName ?? "?"} [${list}]`;
+        })
+        .join("\n")
     : "(empty pipeline)";
   const historyBlock =
     history.length > 0
       ? `\nRecent conversation:\n${history.map((t) => `${t.role}: ${t.content}`).join("\n")}\n`
       : "";
+  const validationBlock = formatValidationBlock(
+    liveValidation,
+    "Current pipeline validation errors (address these if the user wants fixes):",
+  );
   return `Project: ${project.name} (${project.kind})
 Default model: ${globalModel}
-${historyBlock}
+${historyBlock}${validationBlock}
 Structure models:
 ${modelsBlock}
 
@@ -239,18 +260,26 @@ function buildUserPrompt(
   globalModel: ModelId,
   opts?: PipelineAssistantOpts,
   thinking?: string,
+  liveValidation?: string,
+  forceFix?: boolean,
 ): string {
-  const currentValidation = formatPipelineValidationErrors(project.modules, project.models);
-  const currentValidationBlock = currentValidation
-    ? `\nCurrent pipeline validation errors (fix when changing the pipeline; do not replicate these mistakes):\n${currentValidation}\n`
-    : "\nCurrent pipeline: valid (no I/O errors).\n";
+  const currentValidation =
+    liveValidation ?? formatPipelineValidationErrors(project.modules, project.models);
+  const currentValidationBlock = formatValidationBlock(
+    currentValidation,
+    "Current pipeline validation errors (fix when changing the pipeline; do not replicate these mistakes):",
+  );
   const fixBlock = opts?.fixValidationErrors?.trim()
     ? `\nYour previous proposal failed validation (attempt ${opts.fixAttempt ?? 1}). Fix ALL errors below and return a corrected FULL replacement modules array:\n${opts.fixValidationErrors.trim()}\n`
     : "";
+  const forceFixBlock =
+    forceFix && currentValidation
+      ? `\nThe user asked to fix validation errors on the LIVE project. You MUST return a FULL replacement modules array and models array if needed — modules MUST NOT be null. Fix every error above (e.g. add outIsList on upstream steps, align structureIn/structureOut names). In message, briefly say what you fixed — not a generic greenfield overview.\n`
+      : "";
   const thinkingBlock = thinking?.trim()
     ? `\nYour prior reasoning (use this; do not repeat it in message):\n${thinking.trim()}\n`
     : "";
-  return `${buildProjectContextBlock(project, globalModel, history, `${currentValidationBlock}${thinkingBlock}${fixBlock}`)}
+  return `${buildProjectContextBlock(project, globalModel, history, `${currentValidationBlock}${thinkingBlock}${fixBlock}${forceFixBlock}`)}
 User request: ${message}`;
 }
 
@@ -292,17 +321,20 @@ export async function proposePipelineChange(
   let fixErrors = opts?.fixValidationErrors;
   let fixAttempt = opts?.fixAttempt ?? 0;
 
+  const liveValidation = formatPipelineValidationErrors(project.modules, project.models);
+  const forceFix = !fixErrors && !!liveValidation && wantsValidationFix(message);
+
   let thinking = "";
   let llmAttempt = 0;
   try {
-    if (!fixErrors) {
+    if (!fixErrors && !forceFix) {
       opts?.onPhase?.("thinking");
       thinking = await llmStreamString(
-        buildThinkingUserPrompt(project, message, history, globalModel),
+        buildThinkingUserPrompt(project, message, history, globalModel, liveValidation),
         {
           model: globalModel,
           ledger,
-          system: buildThinkingSystemPrompt(),
+          system: buildThinkingSystemPrompt(!!liveValidation),
           maxTokens: 1024,
         },
         (delta) => opts?.onThinkingDelta?.(delta),
@@ -312,10 +344,19 @@ export async function proposePipelineChange(
 
     opts?.onPhase?.("structuring");
     let raw = await llmStructured(
-      buildUserPrompt(project, message, history, globalModel, {
-        fixValidationErrors: fixErrors,
-        fixAttempt: fixAttempt || undefined,
-      }, thinking),
+      buildUserPrompt(
+        project,
+        message,
+        history,
+        globalModel,
+        {
+          fixValidationErrors: fixErrors,
+          fixAttempt: fixAttempt || undefined,
+        },
+        thinking,
+        liveValidation,
+        forceFix,
+      ),
       assistantResponseSchema,
       {
         model: globalModel,
@@ -346,11 +387,20 @@ export async function proposePipelineChange(
       fixErrors = validationErrors;
       opts?.onValidationFailed?.(retryCount, validationErrors);
       opts?.onPhase?.("retrying");
-      raw = await llmStructured(
-        buildUserPrompt(project, message, history, globalModel, {
+    raw = await llmStructured(
+      buildUserPrompt(
+        project,
+        message,
+        history,
+        globalModel,
+        {
           fixValidationErrors: fixErrors,
           fixAttempt,
-        }, thinking),
+        },
+        thinking,
+        liveValidation,
+        forceFix,
+      ),
         assistantResponseSchema,
         {
           model: globalModel,

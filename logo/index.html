@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spine — logo</title>
+    <style>
+      :root {
+        --bg: #000000;
+        --fg: #fafafa;
+        --muted: #737373;
+        --line: #1a1a1a;
+        --line-bright: #fafafa1f;
+        --panel: #0a0a0a;
+        --accent: #fafafa;
+        --accent-dim: #fafafa40;
+        --accent-glow: #fafafa26;
+        --font: "Geist", "Inter", system-ui, -apple-system, sans-serif;
+        --mono: "Geist Mono", "SF Mono", ui-monospace, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--font);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .page {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 48px 24px 80px;
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 14px;
+        font-weight: 500;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      .lead {
+        margin: 0 0 40px;
+        font-size: 15px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      .grid {
+        display: grid;
+        gap: 20px;
+      }
+
+      @media (min-width: 640px) {
+        .grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .grid .span-2 {
+          grid-column: span 2;
+        }
+      }
+
+      .card {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        padding: 32px 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 180px;
+      }
+
+      .card.light {
+        background: #f4f4f5;
+        border-color: #e4e4e7;
+      }
+
+      .card-label {
+        margin-top: 10px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      /* AI : spine mark — central column + vertebra nodes (pipeline steps on the spine) */
+      .spine-mark {
+        --mark-size: 32px;
+        --spine-w: 2px;
+        --node-w: 14px;
+        --node-h: 3px;
+        position: relative;
+        width: var(--mark-size);
+        height: var(--mark-size);
+        flex-shrink: 0;
+      }
+
+      .spine-mark::before {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: 3px;
+        bottom: 3px;
+        width: var(--spine-w);
+        transform: translateX(-50%);
+        border-radius: 999px;
+        background: linear-gradient(
+          180deg,
+          var(--accent-dim) 0%,
+          var(--accent) 42%,
+          var(--accent) 58%,
+          var(--accent-dim) 100%
+        );
+        box-shadow: 0 0 18px var(--accent-glow);
+      }
+
+      .spine-mark .node {
+        position: absolute;
+        left: 50%;
+        width: var(--node-w);
+        height: var(--node-h);
+        transform: translateX(-50%);
+        border-radius: 999px;
+        background: var(--fg);
+        opacity: 0.92;
+      }
+
+      .spine-mark .node:nth-child(1) {
+        top: 5px;
+        width: 10px;
+        opacity: 0.45;
+      }
+
+      .spine-mark .node:nth-child(2) {
+        top: 50%;
+        margin-top: -1.5px;
+        width: 18px;
+        background: var(--accent);
+        box-shadow: 0 0 10px var(--accent-dim);
+      }
+
+      .spine-mark .node:nth-child(3) {
+        bottom: 5px;
+        width: 10px;
+        opacity: 0.45;
+      }
+
+      .spine-mark.on-light::before {
+        background: linear-gradient(180deg, #a1a1aa 0%, #18181b 50%, #a1a1aa 100%);
+        box-shadow: none;
+      }
+
+      .spine-mark.on-light .node {
+        background: #18181b;
+      }
+
+      .spine-mark.on-light .node:nth-child(2) {
+        background: #18181b;
+      }
+
+      .spine-mark.on-light .node:nth-child(1),
+      .spine-mark.on-light .node:nth-child(3) {
+        opacity: 0.35;
+      }
+
+      .spine-mark.lg {
+        --mark-size: 48px;
+        --node-w: 20px;
+        --node-h: 4px;
+      }
+
+      .spine-mark.lg .node:nth-child(1),
+      .spine-mark.lg .node:nth-child(3) {
+        width: 14px;
+      }
+
+      .spine-mark.lg .node:nth-child(2) {
+        width: 26px;
+      }
+
+      .spine-wordmark {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        line-height: 1;
+        color: var(--fg);
+      }
+
+      .spine-wordmark.on-light {
+        color: #18181b;
+      }
+
+      .spine-wordmark .dot {
+        color: var(--accent);
+      }
+
+      .spine-logo {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        text-decoration: none;
+        color: inherit;
+      }
+
+      .spine-logo.boxed .spine-mark-wrap {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border: 1px solid var(--line-bright);
+        background: var(--panel);
+      }
+
+      .spine-logo.boxed.on-light .spine-mark-wrap {
+        background: #fff;
+        border-color: #d4d4d8;
+      }
+
+      .spine-tagline {
+        margin-top: 2px;
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--muted);
+        letter-spacing: 0.02em;
+      }
+
+      .spine-tagline.on-light {
+        color: #71717a;
+      }
+
+      .stack {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 28px;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .sizes .spine-mark {
+        --mark-size: 20px;
+        --node-w: 9px;
+        --node-h: 2px;
+      }
+
+      .sizes .spine-mark.md {
+        --mark-size: 28px;
+        --node-w: 12px;
+        --node-h: 2.5px;
+      }
+
+      .sizes .spine-mark.lg {
+        --mark-size: 40px;
+        --node-w: 18px;
+        --node-h: 3.5px;
+      }
+
+      .sizes .spine-mark.xl {
+        --mark-size: 56px;
+        --node-w: 24px;
+        --node-h: 4px;
+      }
+
+      .size-label {
+        margin-top: 8px;
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--muted);
+        text-align: center;
+      }
+
+      .size-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <h1>Spine</h1>
+      <p class="lead">HTML logo mark — vertical spine with vertebra nodes for the linear pipeline backbone.</p>
+
+      <div class="grid">
+        <section>
+          <div class="card">
+            <a class="spine-logo boxed" href="#" aria-label="Spine">
+              <span class="spine-mark-wrap">
+                <span class="spine-mark" aria-hidden="true">
+                  <span class="node"></span>
+                  <span class="node"></span>
+                  <span class="node"></span>
+                </span>
+              </span>
+              <span class="spine-wordmark">Spine</span>
+            </a>
+          </div>
+          <p class="card-label">nav / app shell (dark)</p>
+        </section>
+
+        <section>
+          <div class="card light">
+            <a class="spine-logo boxed on-light" href="#" aria-label="Spine">
+              <span class="spine-mark-wrap">
+                <span class="spine-mark on-light" aria-hidden="true">
+                  <span class="node"></span>
+                  <span class="node"></span>
+                  <span class="node"></span>
+                </span>
+              </span>
+              <span class="spine-wordmark on-light">Spine</span>
+            </a>
+          </div>
+          <p class="card-label">light surface</p>
+        </section>
+
+        <section class="span-2">
+          <div class="card">
+            <a class="spine-logo" href="#" aria-label="Spine">
+              <span class="spine-mark lg" aria-hidden="true">
+                <span class="node"></span>
+                <span class="node"></span>
+                <span class="node"></span>
+              </span>
+              <span class="stack">
+                <span class="spine-wordmark" style="font-size: 28px">Spine</span>
+                <span class="spine-tagline">validated AI pipelines</span>
+              </span>
+            </a>
+          </div>
+          <p class="card-label">hero lockup</p>
+        </section>
+
+        <section class="span-2">
+          <div class="card">
+            <div class="row sizes">
+              <div class="size-item">
+                <span class="spine-mark" aria-hidden="true">
+                  <span class="node"></span>
+                  <span class="node"></span>
+                  <span class="node"></span>
+                </span>
+                <span class="size-label">20px</span>
+              </div>
+              <div class="size-item">
+                <span class="spine-mark md" aria-hidden="true">
+                  <span class="node"></span>
+                  <span class="node"></span>
+                  <span class="node"></span>
+                </span>
+                <span class="size-label">28px</span>
+              </div>
+              <div class="size-item">
+                <span class="spine-mark lg" aria-hidden="true">
+                  <span class="node"></span>
+                  <span class="node"></span>
+                  <span class="node"></span>
+                </span>
+                <span class="size-label">40px</span>
+              </div>
+              <div class="size-item">
+                <span class="spine-mark xl" aria-hidden="true">
+                  <span class="node"></span>
+                  <span class="node"></span>
+                  <span class="node"></span>
+                </span>
+                <span class="size-label">56px</span>
+              </div>
+            </div>
+          </div>
+          <p class="card-label">mark only — scales via --mark-size</p>
+        </section>
+
+        <section class="span-2">
+          <div class="card">
+            <span class="spine-mark lg" aria-hidden="true">
+              <span class="node"></span>
+              <span class="node"></span>
+              <span class="node"></span>
+            </span>
+          </div>
+          <p class="card-label">favicon / avatar (mark only)</p>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

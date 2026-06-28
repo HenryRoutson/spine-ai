@@ -12,6 +12,7 @@ import {
   type ProposalStatus,
 } from "@/lib/assistant-chat-types"
 import { appendAssistantDebugEntry } from "@/lib/assistant-debug"
+import { buildAssistantHistory } from "@/lib/assistant-history"
 import { AssistantDebugPanel } from "@/components/assistant-debug-panel"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -127,10 +128,7 @@ export function AssistantChat<TProposal>({
     setError(null)
     setErrorDebugTrace([])
 
-    const history = [...messages, userMsg]
-      .filter((m) => m.role === "user" || (m.role === "assistant" && !m.proposal))
-      .slice(-ASSISTANT_HISTORY_LIMIT)
-      .map((m) => ({ role: m.role, content: m.content }))
+    const history = buildAssistantHistory([...messages, userMsg], ASSISTANT_HISTORY_LIMIT)
 
     try {
       const data = await requestAssistant(trimmed, history, {

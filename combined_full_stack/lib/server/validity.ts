@@ -6,6 +6,7 @@ import type {
   StructureModel,
   StructureModelId,
 } from "./types";
+import { MODULE_META } from "./types";
 import { migrateCustomCodeModule, customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { usesPassthroughStructure } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
@@ -138,6 +139,36 @@ export function stepEmits(m: PipelineModule | undefined): StructureModelId | und
   return m?.outStructureId ?? m?.inStructureId;
 }
 
+// AI : managed steps may share MODULE_META[kind].label until sync assigns unique labels.
+function isKindDefaultLabel(m: PipelineModule): boolean {
+  return m.label.trim() === MODULE_META[m.kind].label;
+}
+
+function skipDuplicateLabelCheck(m: PipelineModule): boolean {
+  return isAutoQuoteStep(m) && isKindDefaultLabel(m);
+}
+
+function uniqueStepLabel(base: string, taken: Set<string>, disambiguator?: string): string {
+  if (!disambiguator && !taken.has(base)) {
+    taken.add(base);
+    return base;
+  }
+  const seed = disambiguator?.trim() ? `${base} · ${disambiguator.trim()}` : base;
+  if (!taken.has(seed)) {
+    taken.add(seed);
+    return seed;
+  }
+  let n = 2;
+  while (taken.has(`${seed} (${n})`)) n++;
+  const out = `${seed} (${n})`;
+  taken.add(out);
+  return out;
+}
+
+function autoQuoteStepLabel(llm: PipelineModule, taken: Set<string>): string {
+  return uniqueStepLabel(MODULE_META.quote.label, taken, llm.label.trim() || llm.id);
+}
+
 function computeLabelInvalid(modules: PipelineModule[]): InvalidMap {
   const invalid: InvalidMap = new Map();
   const byLabel = new Map<string, ModuleId[]>();
@@ -147,6 +178,7 @@ function computeLabelInvalid(modules: PipelineModule[]): InvalidMap {
       pushInvalid(invalid, { moduleId: m.id, kind: "empty-label" });
       continue;
     }
+    if (skipDuplicateLabelCheck(m)) continue;
     const ids = byLabel.get(label) ?? [];
     ids.push(m.id);
     byLabel.set(label, ids);
@@ -787,6 +819,8 @@ export function syncAutoQuoteSteps(
   models: StructureModel[],
 ): PipelineModule[] {
   const stripped = modules.filter((m) => !isAutoQuoteStep(m));
+  const taken = new Set(stripped.map((m) => m.label.trim()).filter(Boolean));
+  const quoteLlms = stripped.filter((m) => llmEmitsQuotes(m, models) && m.outStructureId);
   const out: PipelineModule[] = [];
 
   for (const m of stripped) {
@@ -794,10 +828,18 @@ export function syncAutoQuoteSteps(
     if (!llmEmitsQuotes(m, models) || !m.outStructureId) continue;
     const outModel = models.find((x) => x.id === m.outStructureId)!;
     const existing = existingQuoteForLlm(modules, m.id);
+    const preferred = existing?.label.trim();
+    const label =
+      preferred && !taken.has(preferred)
+        ? preferred
+        : quoteLlms.length === 1
+          ? uniqueStepLabel(MODULE_META.quote.label, taken)
+          : autoQuoteStepLabel(m, taken);
+    taken.add(label);
     out.push({
       id: (existing?.id ?? (`mod_quote_${m.id}` as ModuleId)) as ModuleId,
       kind: "quote",
-      label: "Link Quotes",
+      label,
       auto: true,
       note: `Auto · ${outModel.name} → ${outModel.name} · links LLM quote strings to source spans.`,
       inStructureId: m.outStructureId,
