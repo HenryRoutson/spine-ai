@@ -224,6 +224,13 @@ when viewing a pdf or image you need to options to see
 3. pdf
 4. OCR labelled
 
+an option for csvs and also for files like excel, csv or json to automatically derive their excel structures . you should be able to go into the doucments tab and click any of the derived pydantic zod models to add to strcutres, then those structures should link back to the original document with a clickable link to show where they came from
+
+on any tab if you are viewing some json, in the unified viewer where you can switch between json, excel and a tree structure, you have a download button
+
+
+
+
 # Billing 
 current credit.
 brekadown of spend between different models sorted by most spend. 
