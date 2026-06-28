@@ -59,6 +59,7 @@ export type StructureDef = {
   fields: StructureFieldDef[];
   auto?: boolean;
   dynamic?: boolean; // AI : inferred at runtime (e.g. homework MarkingSchema from template)
+  sourceDocId?: DocId; // AI : document this structure was inferred from
 };
 
 export interface StructureModel {
@@ -70,6 +71,7 @@ export interface StructureModel {
   dynamic?: boolean; // AI : content shape varies per run — validated against this generic schema
   shared?: boolean; // AI : injected into every project — not persisted per project
   locked?: boolean; // AI : read-only in Structure UI — cannot rename, edit fields, or delete
+  sourceDocId?: DocId; // AI : document this structure was inferred from — links back in Structure tab
 }
 
 export type InputType = "pdf" | "excel" | "word" | "json" | "text" | "web" | "image";

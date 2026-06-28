@@ -1,4 +1,5 @@
 import { z, type ZodError, type ZodType } from "zod";
+import { inferStructuresFromJson } from "@/lib/doc-structure-infer";
 import { isBuiltinDocumentModel } from "./builtin_models";
 import { documentContentFrom, documentFilenameFrom, documentValueFrom } from "@/lib/server/document_value";
 import { modelHasQuoteFields } from "./quote_schema";
@@ -358,17 +359,10 @@ export function removeModel(models: StructureModel[], id: StructureModelId): Str
   return models.filter((m) => m.id !== id);
 }
 
-// AI : auto-structure (combine step / excel infer) — infer a StructureModel from a sample JSON value.
-// AI : TODO placeholder beyond flat objects — nested inference is not built for the demo.
+// AI : auto-structure (combine step / doc infer) — infer a StructureModel from a sample JSON value.
 export function inferModel(sample: Record<string, unknown>, name: string, id: StructureModelId): StructureModel {
-  const fields: ModelField[] = Object.entries(sample).map(([key, val], i) => ({
-    id: `f_${i}`,
-    name: key,
-    type: inferType(val),
-    optional: false,
-    description: "",
-  }));
-  return { id, name, description: "Auto-generated structure.", auto: true, fields };
+  const derived = inferStructuresFromJson(sample, name, () => id)
+  return derived[0]?.model ?? { id, name, description: "Auto-generated structure.", auto: true, fields: [] }
 }
 
 // AI : human-readable schema line for logs — e.g. MarkingSchema { assignment_title: text, sections: list[RubricSection] }
@@ -407,12 +401,4 @@ export function logDynamicStructureCreated(
     }
   }
   log.info(`dynamic structure created — downstream steps format to: ${schemaLine}`, meta);
-}
-
-function inferType(val: unknown): FieldType {
-  if (typeof val === "boolean") return "bool";
-  if (typeof val === "number") return Number.isInteger(val) ? "int" : "float";
-  if (typeof val === "string" && isValidJsonString(val)) return "json";
-  if (Array.isArray(val)) return "list[text]";
-  return "text";
 }

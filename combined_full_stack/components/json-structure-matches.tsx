@@ -1,11 +1,10 @@
 "use client"
 
 import { useMemo } from "react"
-import { LayoutGrid } from "lucide-react"
 import { useOptionalAppShell } from "@/lib/app-shell"
 import { findMatchingStructures } from "@/lib/structure-match"
 import { useOptionalStore } from "@/lib/store"
-import { Badge } from "@/components/ui/badge"
+import { StructureMatchChips } from "@/components/structure-match-chips"
 import { cn } from "@/lib/utils"
 import type { StructureModel } from "@/lib/types"
 
@@ -13,10 +12,12 @@ export function JsonStructureMatches({
   json,
   models: modelsProp,
   className,
+  bare = false,
 }: {
   json: string
   models?: StructureModel[]
   className?: string
+  bare?: boolean
 }) {
   const store = useOptionalStore()
   const shell = useOptionalAppShell()
@@ -35,54 +36,18 @@ export function JsonStructureMatches({
 
   if (!models?.length) return null
 
+  const chips = (
+    <StructureMatchChips
+      matches={matches}
+      error={error}
+      showGeneralBadge
+      onOpenStructure={openStructure}
+    />
+  )
+
+  if (bare) return <div className={className}>{chips}</div>
+
   return (
-    <div className={cn("border-b border-border bg-secondary/20 px-4 py-2.5", className)}>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
-        <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          Validates as
-        </span>
-        {error ? (
-          <span className="font-mono text-[10px] text-destructive">invalid JSON</span>
-        ) : matches.length === 0 ? (
-          <span className="font-mono text-[10px] text-muted-foreground">no matching structures</span>
-        ) : (
-          matches.map((m) => {
-            const label = (
-              <>
-                <LayoutGrid className="h-3 w-3 shrink-0 text-primary" />
-                <span className="truncate">{m.modelName}</span>
-                {m.matchKind === "list" && (
-                  <Badge variant="outline" className="h-4 px-1 font-mono text-[9px]">
-                    list
-                  </Badge>
-                )}
-                {m.fieldCount <= 2 && (
-                  <Badge variant="outline" className="h-4 px-1 font-mono text-[9px] text-muted-foreground">
-                    general
-                  </Badge>
-                )}
-              </>
-            )
-            const chipClass =
-              "inline-flex max-w-full items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 font-mono text-[10px] text-foreground"
-            return openStructure ? (
-              <button
-                key={`${m.modelId}:${m.matchKind}`}
-                type="button"
-                onClick={() => openStructure(m.modelId)}
-                className={cn(chipClass, "transition-colors hover:border-primary/40 hover:bg-primary/5")}
-                title={`Open ${m.modelName} in Structure tab`}
-              >
-                {label}
-              </button>
-            ) : (
-              <span key={`${m.modelId}:${m.matchKind}`} className={chipClass} title={m.modelName}>
-                {label}
-              </span>
-            )
-          })
-        )}
-      </div>
-    </div>
+    <div className={cn("border-b border-border bg-secondary/20 px-4 py-2.5", className)}>{chips}</div>
   )
 }

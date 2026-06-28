@@ -55,6 +55,7 @@ export function InferenceStepRow({
   descriptionCheckLlmCalls,
   descriptionCheckCostCents,
   serverLogs = [],
+  forceCollapsedLogs = false,
 }: {
   label: string
   state: StepProgress["status"] | "idle"
@@ -66,6 +67,7 @@ export function InferenceStepRow({
   descriptionCheckLlmCalls?: LlmCallRecord[]
   descriptionCheckCostCents?: number
   serverLogs?: JobLogEntry[]
+  forceCollapsedLogs?: boolean
 }) {
   const descCheckFailed = inputDescriptionCheck?.matches === false
   const showDescCheckCalls =
@@ -136,7 +138,11 @@ export function InferenceStepRow({
         </div>
       )}
       {serverLogs.length > 0 && (
-        <StepServerLogsSection logs={serverLogs} className={nested ? "pl-5" : "pl-7"} />
+        <StepServerLogsSection
+          logs={serverLogs}
+          className={nested ? "pl-5" : "pl-7"}
+          forceCollapsed={forceCollapsedLogs}
+        />
       )}
     </div>
   )

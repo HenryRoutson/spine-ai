@@ -51,6 +51,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     content = await pdfBytesToText(bytes);
   } else if (type === "image") {
     content = "";
+  } else if (type === "excel") {
+    const { tabularBytesToContent } = await import("@/lib/server/tabular_parse");
+    content = tabularBytesToContent(bytes, file.name).content;
+  } else if (type === "json") {
+    const raw = new TextDecoder().decode(bytes);
+    try {
+      content = JSON.stringify(JSON.parse(raw), null, 2);
+    } catch {
+      content = raw;
+    }
   } else {
     content = new TextDecoder().decode(bytes);
   }

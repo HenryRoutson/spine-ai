@@ -74,6 +74,33 @@ export async function POST(req: NextRequest) {
     } else if (type === "image") {
       // AI : images have no built-in parser text — vision OCR fills doc_vision_cache at run time.
       content = "";
+    } else if (type === "excel") {
+      parserKind = "plain";
+      const cached = store.parserCacheGetByFileHash(fileHash, parserKind);
+      if (cached) {
+        content = cached.content;
+        apiLog.info(`parser cache HIT`, { name: file.name, parser: parserKind, fileHash });
+      } else {
+        const { tabularBytesToContent } = await import("@/lib/server/tabular_parse");
+        content = tabularBytesToContent(bytes, file.name).content;
+        parsedFresh = true;
+        apiLog.info(`tabular parsed`, { name: file.name, chars: content.length });
+      }
+    } else if (type === "json") {
+      parserKind = "plain";
+      const cached = store.parserCacheGetByFileHash(fileHash, parserKind);
+      if (cached) {
+        content = cached.content;
+        apiLog.info(`parser cache HIT`, { name: file.name, parser: parserKind, fileHash });
+      } else {
+        const raw = new TextDecoder().decode(bytes);
+        try {
+          content = JSON.stringify(JSON.parse(raw), null, 2);
+        } catch {
+          content = raw;
+        }
+        parsedFresh = true;
+      }
     } else {
       parserKind = "plain";
       const cached = store.parserCacheGetByFileHash(fileHash, parserKind);
@@ -103,7 +130,9 @@ export async function POST(req: NextRequest) {
   }
   if (projectId) linkDocToProject(store, projectId, file.name);
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  if (type === "pdf" || type === "image") saveOriginalDocBytes(doc.id, bytes, ext);
+  if (type === "pdf" || type === "image" || type === "excel" || type === "json") {
+    saveOriginalDocBytes(doc.id, bytes, ext);
+  }
   await store.flush();
   apiLog.info(`doc saved`, { docId: doc.id, name: file.name, label });
   return NextResponse.json(doc);

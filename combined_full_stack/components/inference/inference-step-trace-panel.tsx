@@ -1,6 +1,8 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import type { RefObject } from "react"
+import { ChevronDown } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { segmentPipeline, mergeCombineSegmentStatus } from "@/lib/pipeline-layout"
 import type { StepUiState } from "@/lib/run-engine"
@@ -11,6 +13,7 @@ import {
 } from "@/components/inference/inference-step-trace"
 import { moduleInputDescription } from "@/components/step-input-description"
 import { CyclingWaitPhrase } from "@/components/inference/inference-run-chrome"
+import { cn } from "@/lib/utils"
 
 export function InferenceStepTracePanel({
   modules,
@@ -33,19 +36,36 @@ export function InferenceStepTracePanel({
   logEndRef?: RefObject<HTMLDivElement | null>
   footer?: React.ReactNode
 }) {
+  const [stepsExpanded, setStepsExpanded] = useState(true)
+
+  useEffect(() => {
+    if (phase === "done") setStepsExpanded(false)
+    else if (phase === "running") setStepsExpanded(true)
+  }, [phase])
+
   if (phase !== "running" && phase !== "done") return null
+
+  const collapseLogs = phase === "done"
 
   return (
     <div className="rounded-lg border border-border p-4">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+      <div className={cn("flex items-center justify-between", stepsExpanded && "mb-2")}>
+        <button
+          type="button"
+          onClick={() => setStepsExpanded((v) => !v)}
+          className="inline-flex min-w-0 items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
+        >
+          <ChevronDown
+            className={cn("h-3 w-3 shrink-0 transition-transform", stepsExpanded && "rotate-180")}
+          />
           {phase === "done" ? "step trace" : "progress"}
-        </span>
+        </button>
         <span className="font-mono text-[11px] text-primary">{progressPct}%</span>
       </div>
-      <Progress value={progressPct} className="h-1.5" />
-      {phase === "running" && <CyclingWaitPhrase phrase={waitPhrase} className="mt-3" />}
-      {footer}
+      {stepsExpanded && <Progress value={progressPct} className="h-1.5" />}
+      {stepsExpanded && phase === "running" && <CyclingWaitPhrase phrase={waitPhrase} className="mt-3" />}
+      {stepsExpanded && footer}
+      {stepsExpanded && (
       <div className="mt-4 space-y-2.5">
         {segmentPipeline(modules).map((seg) => {
           if (seg.kind === "combine") {
@@ -66,6 +86,7 @@ export function InferenceStepTracePanel({
                   descriptionCheckLlmCalls={combineDesc.descriptionCheckLlmCalls}
                   descriptionCheckCostCents={combineDesc.descriptionCheckCostCents}
                   serverLogs={logsByModule?.get(seg.combine.id) ?? []}
+                  forceCollapsedLogs={collapseLogs}
                 />
                 <InferenceStepRow
                   label={seg.input.label}
@@ -77,6 +98,7 @@ export function InferenceStepTracePanel({
                   descriptionCheckLlmCalls={inputDesc.descriptionCheckLlmCalls}
                   descriptionCheckCostCents={inputDesc.descriptionCheckCostCents}
                   serverLogs={logsByModule?.get(seg.input.id) ?? []}
+                  forceCollapsedLogs={collapseLogs}
                 />
               </div>
             )
@@ -95,11 +117,13 @@ export function InferenceStepTracePanel({
               descriptionCheckLlmCalls={moduleDesc.descriptionCheckLlmCalls}
               descriptionCheckCostCents={moduleDesc.descriptionCheckCostCents}
               serverLogs={logsByModule?.get(seg.module.id) ?? []}
+              forceCollapsedLogs={collapseLogs}
             />
           )
         })}
       </div>
-      {logEndRef ? <div ref={logEndRef} /> : null}
+      )}
+      {stepsExpanded && logEndRef ? <div ref={logEndRef} /> : null}
     </div>
   )
 }

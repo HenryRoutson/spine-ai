@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import {
   FileText,
   Loader2,
@@ -84,6 +84,13 @@ export function Inference() {
     if (!outputStepsOnly) return all
     return all.filter((s) => s.kind === "output" && s.outputJson)
   }, [run.run, outputStepsOnly])
+
+  const outputsRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (run.phase !== "done" || outputSteps.length === 0) return
+    outputsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [run.phase, run.run?.id, outputSteps.length])
 
   return (
     <div className="flex h-full flex-col">
@@ -223,7 +230,9 @@ export function Inference() {
             {(run.phase === "running" || run.phase === "done") && (
               <>
                 {run.phase === "done" && outputSteps.length > 0 && (
-                  <InferenceRunOutputs steps={outputSteps} />
+                  <div ref={outputsRef}>
+                    <InferenceRunOutputs steps={outputSteps} />
+                  </div>
                 )}
 
                 {run.phase === "done" && run.run && run.run.status !== "ok" && (

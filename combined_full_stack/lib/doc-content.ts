@@ -22,6 +22,7 @@ export function docViewerTabs(
   hasVisionText = false,
 ): DocViewMode[] {
   if (doc?.type === "json") return ["json", "parser"]
+  if (doc?.type === "excel") return ["json", "parser"]
   if (isMarkdownDoc(doc)) return ["parser", "formatted"]
   if (isPdfDoc(doc, hasPdfFile)) {
     const tabs: DocViewMode[] = ["parser", "formatted"]
@@ -46,7 +47,7 @@ export function docViewTabLabel(mode: DocViewMode, doc: DocMeta, hasPdfFile = fa
     case "vision":
       return "vision OCR"
     case "json":
-      return "json"
+      return doc?.type === "excel" ? "table" : "json"
   }
 }
 
@@ -58,7 +59,7 @@ export function defaultDocViewMode(
   const tabs = docViewerTabs(doc, hasPdfFile, opts.hasVisionText)
   if (opts.requested && tabs.includes(opts.requested)) return opts.requested
   if (opts.hasSpan) return "parser"
-  if (doc?.type === "json") return "json"
+  if (doc?.type === "json" || doc?.type === "excel") return "json"
   if (isPdfDoc(doc, hasPdfFile) && hasPdfFile) return "pdf"
   if (isMarkdownDoc(doc)) return "formatted"
   return "parser"

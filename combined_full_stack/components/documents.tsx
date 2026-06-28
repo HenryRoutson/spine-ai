@@ -26,6 +26,8 @@ import {
   TriangleAlert,
 } from "lucide-react"
 import type { DocLabel, InputType } from "@/lib/types"
+import { DocDerivedStructures } from "@/components/doc-derived-structures"
+import { isTabularDocType } from "@/lib/doc-structure-infer"
 
 const TYPE_ICON: Record<InputType, typeof FileText> = {
   pdf: FileText,
@@ -210,6 +212,9 @@ export function Documents() {
                       {new Date(doc.uploadedAt).toLocaleString()} · {timeAgo(doc.uploadedAt)}
                     </span>
                   </p>
+                  {isTabularDocType(doc.type, doc.name) && (
+                    <DocDerivedStructures doc={doc} compact />
+                  )}
                 </div>
                 <Button
                   variant="ghost"

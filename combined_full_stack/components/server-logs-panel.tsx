@@ -46,17 +46,20 @@ export function StepServerLogsSection({
   logs,
   onExpand,
   className,
+  forceCollapsed = false,
 }: {
   logs: JobLogEntry[]
   onExpand?: (logs: JobLogEntry[]) => void
   className?: string
+  forceCollapsed?: boolean
 }) {
   const hideByDefault = useHideServerLogsDefault()
   const [open, setOpen] = useState(() => !hideByDefault)
 
   useEffect(() => {
-    setOpen(!hideByDefault)
-  }, [hideByDefault])
+    if (forceCollapsed) setOpen(false)
+    else setOpen(!hideByDefault)
+  }, [hideByDefault, forceCollapsed])
 
   if (!logs.length) return null
 
