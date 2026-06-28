@@ -1732,6 +1732,20 @@ function colHeaderLabel(col) {
   return col.group ? col.name : (col.name || humanize(col.key));
 }
 
+// AI: list[text] and other primitive arrays drill into string/number rows — tabulate as single-column objects
+function isPrimitiveTableRows(rows) {
+  if (!Array.isArray(rows) || !rows.length) return false;
+  return !rows.some(r => r !== null && typeof r === 'object');
+}
+
+function wrapPrimitiveTableRows(rows, label) {
+  const colName = label || 'Value';
+  return {
+    rows: rows.map(v => ({ value: v })),
+    cols: [{ type: 'leaf', key: 'value', name: colName, group: null, groupKey: null }],
+  };
+}
+
 // AI: builds column definitions respecting expandedRefCols — expands object refs inline
 function buildTableColDefs(rows) {
   // Collect base flat keys and their ref types
@@ -1867,7 +1881,10 @@ function drawDataTable() {
     root.innerHTML+='<div style="color:var(--muted);padding:20px;font-size:13px">No rows.</div>'; return;
   }
 
-  const cols = buildTableColDefs(rows);
+  const primitiveTable = isPrimitiveTableRows(rows);
+  const wrappedPrimitive = primitiveTable ? wrapPrimitiveTableRows(rows, label) : null;
+  const tableRows = wrappedPrimitive ? wrappedPrimitive.rows : rows;
+  const cols = wrappedPrimitive ? wrappedPrimitive.cols : buildTableColDefs(rows);
   const hasExpandedGroups = cols.some(c=>c.groupKey);
 
   const wrap=document.createElement('div'); wrap.className='excel-wrap';
@@ -1916,7 +1933,7 @@ function drawDataTable() {
       const lbl=col.group && !col.key.includes('.')?`<span class="th-group">${esc(col.group)}</span>`:'';
       const inner=document.createElement('div'); inner.className='th-inner';
       const headerName=colHeaderLabel(col);
-      const sampleVal=col.type==='leaf'||col.type==='sub-leaf'?sampleValueForCol(rows,col):null;
+      const sampleVal=col.type==='leaf'||col.type==='sub-leaf'?sampleValueForCol(tableRows,col):null;
       const typeHint=sampleVal!==null?friendlyTypeName(inferType(sampleVal)):null;
 
       if (col.type==='ref-obj') {
@@ -1952,7 +1969,7 @@ function drawDataTable() {
       th.style.cssText=`background:${col.color.dark};border-top:2px solid ${col.color.bar}`;
       const inner=document.createElement('div'); inner.className='th-inner';
       const subPath=joinJsonPath(col.key,col.subKey);
-      const subSample=sampleValueForCol(rows,col);
+      const subSample=sampleValueForCol(tableRows,col);
       const subType=subSample!==null?friendlyTypeName(inferType(subSample)):null;
       inner.innerHTML=`<span class="th-name th-path" style="font-weight:500;color:#d0e8ff">${esc(subPath)}</span>${subType?`<span class="th-type">${esc(subType)}</span>`:''}`;
       appendThStructureLink(inner, subPath);
@@ -1967,7 +1984,7 @@ function drawDataTable() {
 
   // ── Body ──────────────────────────────────────────────────────────────────
   const tbody=document.createElement('tbody');
-  rows.forEach((row,rowIdx)=>{
+  tableRows.forEach((row,rowIdx)=>{
     if (row===null||typeof row!=='object') return;
     const tr=document.createElement('tr');
     const td0=document.createElement('td');
