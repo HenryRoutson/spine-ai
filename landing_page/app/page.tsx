@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { LandingNav } from "../components/landing-nav";
+import { LegalFooterLinks } from "@/lib/legal/chrome";
 
 type SectionId = string;
 type AppLoginUrl = string;
@@ -163,7 +164,7 @@ function TerminalPreview({ title, steps }: { title: string; steps: LogStep[] }) 
 
 export default function Home() {
   return (
-    <main className="grain-bg flex-1">
+    <main className="grain-bg flex-1" id="main-content">
       <LandingNav links={NAV_LINKS} loginUrl={APP_LOGIN_URL} />
 
       {/* hero — zeeroday split grid */}
@@ -337,7 +338,7 @@ export default function Home() {
 
       {/* footer */}
       <footer className="mx-auto max-w-[1200px] border-x border-line">
-        <div className="grid gap-8 border-b border-line px-8 py-12 sm:grid-cols-3 sm:px-12">
+        <div className="grid gap-8 border-b border-line px-8 py-12 sm:grid-cols-2 lg:grid-cols-4 sm:px-12">
           <div>
             <p className="text-xs uppercase tracking-wider text-muted-dim">Quick Menu</p>
             <div className="mt-4 flex flex-col gap-2">
@@ -354,6 +355,12 @@ export default function Home() {
               <a href={APP_URL} className="text-sm text-muted hover:text-foreground">
                 Try now
               </a>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wider text-muted-dim">Legal</p>
+            <div className="mt-4">
+              <LegalFooterLinks linkClassName="text-sm text-muted hover:text-foreground" />
             </div>
           </div>
           <div>

@@ -7,7 +7,8 @@ export type { JobLogEntry };
 type JobLogSink = (entry: JobLogEntry) => void;
 
 let sink: JobLogSink | undefined;
-const taps: JobLogSink[] = [];
+// AI : per-step log capture — must be ALS-scoped so concurrent runs/users don't share a tap array.
+const stepLogCollector = new AsyncLocalStorage<JobLogEntry[]>();
 const stepModule = new AsyncLocalStorage<ModuleId | undefined>();
 
 export function installJobLogSink(s: JobLogSink): void {
@@ -27,19 +28,14 @@ export function withStepModuleContext<T>(moduleId: ModuleId | undefined, fn: () 
 export function pushJobLog(entry: JobLogEntry): void {
   const stamped = stampModuleId(entry);
   sink?.(stamped);
-  for (const tap of taps) tap(stamped);
+  stepLogCollector.getStore()?.push(stamped);
 }
 
 // AI : run_engine captures per-step logs without replacing the job-level sink.
 export async function collectLogsDuring<T>(fn: () => Promise<T>): Promise<{ value: T; logs: JobLogEntry[] }> {
   const logs: JobLogEntry[] = [];
-  const tap = (entry: JobLogEntry) => logs.push(entry);
-  taps.push(tap);
-  try {
+  return stepLogCollector.run(logs, async () => {
     const value = await fn();
     return { value, logs };
-  } finally {
-    const i = taps.indexOf(tap);
-    if (i >= 0) taps.splice(i, 1);
-  }
+  });
 }

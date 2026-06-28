@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label"
 // import { Separator } from "@/components/ui/separator"
 import { authAction, type AuthActionState } from "@/app/login/actions"
 import type { AuthMode } from "@/utils/supabase/auth_messages"
+import { SignupConsents } from "@/components/signup-consents"
+import { LegalFooterLinks } from "@/lib/legal/chrome"
 
 // type OAuthProvider = "github" | "google"
 
@@ -63,8 +65,8 @@ export default function LoginPage() {
   const notice = state?.notice ?? null
 
   return (
-    <div className="flex h-dvh items-center justify-center bg-background text-foreground">
-      <div className="w-full max-w-sm rounded-lg border border-border bg-card p-6">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-4 py-8 text-foreground">
+      <div className="w-full max-w-sm rounded-lg border border-border bg-card p-6" id="main-content">
         <div className="mb-5 flex items-center gap-2.5">
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <span className="font-mono text-sm font-bold">|</span>
@@ -132,6 +134,8 @@ export default function LoginPage() {
             />
           </div>
 
+          {mode === "sign-up" ? <SignupConsents disabled={pending} /> : null}
+
           {notice && <p className="text-xs text-primary">{notice}</p>}
           {error && <p className="text-xs text-destructive">{error}</p>}
 
@@ -153,6 +157,11 @@ export default function LoginPage() {
           </button>
         </div>
       </div>
+      <footer className="mt-6">
+        <LegalFooterLinks
+          linkClassName="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        />
+      </footer>
     </div>
   )
 }

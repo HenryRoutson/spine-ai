@@ -7,7 +7,7 @@ import {
   inputDocsByModuleFromAssignment,
   type InputDocsAssignment,
 } from "@/lib/inference-input"
-import { partitionLogsByModule } from "@/lib/step-logs"
+import { logsByModuleFromRun, partitionLogsByModule } from "@/lib/step-logs"
 import { pipelineRunError } from "@/lib/run-errors"
 import { useRunProgressUi } from "@/lib/use-run-progress-ui"
 import {
@@ -18,7 +18,7 @@ import {
   type StepUiState,
 } from "@/lib/run-engine"
 import { useRunNotesFlushOnLeave } from "@/lib/run-notes-flush"
-import type { DocId, JobLogEntry, ModuleId, PipelineModule, PipelineRun, ProjectId } from "@/lib/types"
+import type { DocId, JobLogEntry, ModuleId, PipelineModule, PipelineRun, ProjectId, RunJobId } from "@/lib/types"
 import type { ClientStepSpec } from "@/lib/run-types"
 
 export type InferencePhase = "idle" | "running" | "done"
@@ -64,6 +64,7 @@ export function useInferenceRunProgress({
   const savedNotesRef = useRef<string | undefined>(undefined)
   const logEndRef = useRef<HTMLDivElement>(null)
   const activeJobGenRef = useRef(0)
+  const activeJobIdRef = useRef<RunJobId | null>(null)
   const runsRef = useRef(runs)
   runsRef.current = runs
 
@@ -95,6 +96,7 @@ export function useInferenceRunProgress({
 
   function resetRunState() {
     activeJobGenRef.current++
+    activeJobIdRef.current = null
     setPhase("idle")
     setStepStates(new Map())
     setRun(null)
@@ -126,14 +128,15 @@ export function useInferenceRunProgress({
     try {
       const { jobId } = await startRun(projectId, primary, model, rest, byModule)
       if (jobGen !== activeJobGenRef.current) return
+      activeJobIdRef.current = jobId
       refreshBilling().catch(console.error)
       const { run: finished } = await awaitRun(jobId, {
         onStep: (steps) => {
-          if (jobGen !== activeJobGenRef.current) return
+          if (jobGen !== activeJobGenRef.current || activeJobIdRef.current !== jobId) return
           setStepStates((prev) => mergeStepStates(prev, steps))
         },
         onLogs: (logs) => {
-          if (jobGen !== activeJobGenRef.current) return
+          if (jobGen !== activeJobGenRef.current || activeJobIdRef.current !== jobId) return
           setDebugLogs(logs)
         },
         onHumanReview: (spec) => {
@@ -191,10 +194,14 @@ export function useInferenceRunProgress({
     }
     return undefined
   }, [stepStates, modules])
-  const logsByModule = useMemo(
-    () => partitionLogsByModule(debugLogs, modules.map((m) => m.id), activeModuleId),
-    [debugLogs, modules, activeModuleId],
-  )
+  const moduleIds = useMemo(() => modules.map((m) => m.id), [modules])
+  const logsByModule = useMemo(() => {
+    if (phase === "done" && run) {
+      const fromRun = logsByModuleFromRun(run, moduleIds)
+      if ([...fromRun.values()].some((logs) => logs.length > 0)) return fromRun
+    }
+    return partitionLogsByModule(debugLogs, moduleIds, activeModuleId)
+  }, [phase, run, debugLogs, moduleIds, activeModuleId])
 
   return {
     phase,

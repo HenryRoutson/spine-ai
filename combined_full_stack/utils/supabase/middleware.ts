@@ -5,7 +5,7 @@ import { isPublicApiPath } from "@/lib/api-routes";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { sanitizeRedirectPath } from "@/utils/sanitize_redirect";
 
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/run"];
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/run", "/privacy", "/terms", "/cookies", "/accessibility"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

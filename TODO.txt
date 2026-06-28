@@ -1,3 +1,41 @@
+
+
+
+
+}
+Error: Can't resolve '../node_modules/shadcn/dist/tailwind.css' in '/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack'
+    [at finishWithoutResolve (/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/Resolver.js:943:18)]
+    [at /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/Resolver.js:1035:14]
+    [at /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/Resolver.js:1112:5]
+    [at eval (eval at create (/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/tapable/lib/HookCodeFactory.js:31:10), <anonymous>:15:1)]
+    [at /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/Resolver.js:1112:5]
+    [at eval (eval at create (/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/tapable/lib/HookCodeFactory.js:31:10), <anonymous>:27:1)]
+    [at /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/DescriptionFilePlugin.js:94:43]
+    [at /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/Resolver.js:1112:5]
+    [at eval (eval at create (/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/tapable/lib/HookCodeFactory.js:31:10), <anonymous>:15:1)]
+    [at /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/Resolver.js:1112:5] {
+  details: "resolve '../node_modules/shadcn/dist/tailwind.css' in '/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack'\n" +
+    '  using description file: /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/package.json (relative path: .)\n' +
+    '    No description file found in /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/node_modules/shadcn/dist or above\n' +
+    '    no extension\n' +
+    "      /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/node_modules/shadcn/dist/tailwind.css doesn't exist\n" +
+    '    .css\n' +
+    "      /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/node_modules/shadcn/dist/tailwind.css.css doesn't exist\n" +
+    '    as directory\n' +
+    "      /Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/node_modules/shadcn/dist/tailwind.css doesn't exist"
+}
+
+
+
+
+
+
+
+
+
+
+
+
 ================================================================================
 PLAN: OpenHands agent tier (separate server) — managed, minimal complexity
 ================================================================================

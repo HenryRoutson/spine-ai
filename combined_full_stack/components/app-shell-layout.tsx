@@ -377,7 +377,7 @@ export function AppShellLayout() {
           </div>
         </nav>
 
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 overflow-hidden" id="main-content">
           {projectLoading ? (
             <ProjectSwitchLoading projectName={project.name} />
           ) : (

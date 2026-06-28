@@ -35,6 +35,7 @@ import {
   writeInferenceOutputStepsOnly,
 } from "@/lib/inference-settings"
 import { Switch } from "@/components/ui/switch"
+import { PrivacySettings } from "@/components/privacy-settings"
 
 // AI : vscode-style preview colors — mirror public/json-viewer.html theme "vscode"
 function VscodeSyntaxPreview({ json }: { json: string }) {
@@ -274,6 +275,8 @@ export function Settings() {
               </span>
             </label>
           </section>
+
+          <PrivacySettings />
         </div>
       </div>
     </div>

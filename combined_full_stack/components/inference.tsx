@@ -113,6 +113,9 @@ export function Inference() {
           </div>
         }
       />
+      <p className="border-b border-border px-5 py-2 text-[11px] text-muted-foreground">
+        AI outputs are not professional, medical, or legal advice — verify before acting.
+      </p>
 
       {pipelineInvalid ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
