@@ -4,6 +4,9 @@ rename everything to spine
 
 
 
+ensure you can't change the input type away from document in the input step in the pipeline, unless it's json. don't try to load a pdf into some random json format without an explicit call. however json to structured model is ok.
+
+
 }
 Error: Can't resolve '../node_modules/shadcn/dist/tailwind.css' in '/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack'
     [at finishWithoutResolve (/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack/node_modules/enhanced-resolve/lib/Resolver.js:943:18)]
