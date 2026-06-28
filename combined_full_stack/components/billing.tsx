@@ -3,13 +3,12 @@
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { API_ROUTES } from "@/lib/api-routes"
 import { JSON_HEADERS } from "@/lib/api-client"
-import { formatUsdFromCents, formatCostCents } from "@/lib/format"
+import { formatCents } from "@/lib/format"
 import { useMemo, useState } from "react"
 import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts"
 import { useStore } from "@/lib/store"
-import { billingPointsUsd, billingSeries, totalSaved, totalUsageFromRuns } from "@/lib/billing"
+import { billingSeries, totalSaved, totalUsageFromRuns } from "@/lib/billing"
 import { redirectToCheckout } from "@/lib/stripe-client"
-import { MODEL_OPTIONS } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import {
@@ -27,11 +26,11 @@ import { CreditCard, Loader2, TrendingDown, TrendingUp } from "lucide-react"
 // AI : de-mocked — series keys come from the real billing aggregation (one line per model
 // AI : + the doc-parse service), so new models show up without touching this file.
 const CHART_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-4)", "var(--chart-3)", "var(--chart-5)"]
-// AI : Y floor — $1 is at most 10% chart height so sub-dollar pipeline spend reads as cheap.
-const CHART_Y_FLOOR_USD = 10
 
-function isCheapKey(key: string) {
-  return key === "doc-parse svc" || MODEL_OPTIONS.some((m) => m.label === key && m.cheap)
+// AI : pad peak daily spend (cents) so stacked areas aren't clipped.
+function chartYMaxCents(peakCents: number): number {
+  if (peakCents <= 0) return 100
+  return +(peakCents * 1.2).toFixed(4)
 }
 
 type BillingScope = "all" | "project"
@@ -66,7 +65,7 @@ export function Billing() {
     }
   }
 
-  const chartData = useMemo(() => billingPointsUsd(billing), [billing])
+  const chartData = billing
 
   const series = useMemo(() => {
     const keys = [...new Set(billing.flatMap((p) => Object.keys(p).filter((k) => k !== "day")))]
@@ -91,23 +90,23 @@ export function Billing() {
     return t
   }, [billing, series])
 
-  const yMaxUsd = useMemo(() => {
+  const yMaxCents = useMemo(() => {
     let peak = 0
     for (const point of chartData) {
       let dayTotal = 0
       for (const s of series) dayTotal += Number(point[s.key] ?? 0)
       peak = Math.max(peak, dayTotal)
     }
-    return Math.max(peak, CHART_Y_FLOOR_USD)
+    return chartYMaxCents(peak)
   }, [chartData, series])
 
   const grand = Object.values(totals).reduce((a, b) => a + b, 0)
   const usageFromRunsCents = useMemo(() => totalUsageFromRuns(scopedRuns), [scopedRuns])
-  const hasSpend = usageFromRunsCents > 0 || grand > 0
+  // AI : step-level billing aggregate is canonical; run.billedCents can lag on legacy rows.
+  const usageCents = grand > 0 ? grand : usageFromRunsCents
+  const hasSpend = usageCents > 0
   const hasRuns = scopedRuns.length > 0
-  const cheapSpend = series.filter((s) => isCheapKey(s.key)).reduce((a, s) => a + totals[s.key], 0)
-  const frontierSpend = series.filter((s) => !isCheapKey(s.key)).reduce((a, s) => a + totals[s.key], 0)
-  const spendDenominator = usageFromRunsCents > 0 ? usageFromRunsCents : grand
+  const spendDenominator = usageCents
   const savedCents = totalSaved(scopedRuns)
 
   const capReached = billingAccount
@@ -121,7 +120,7 @@ export function Billing() {
       <WindowHeader
         step="07 / Billing"
         title="Spend & Inference Cost"
-        description={`Credit-based billing — subscribe for monthly credit, top up when you run out. Actual run cost depends on models and pipeline length; you need at least ${formatUsdFromCents(minRunBalanceCents)} credit to start a run.`}
+        description={`Credit-based billing — subscribe for monthly credit, top up when you run out. Actual run cost depends on models and pipeline length; you need at least ${formatCents(minRunBalanceCents)} credit to start a run.`}
       />
 
       {billingAccount && (
@@ -134,12 +133,12 @@ export function Billing() {
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <p className="font-mono text-[10px] uppercase text-muted-foreground">Credit balance</p>
-              <p className="font-mono text-3xl font-semibold">{formatUsdFromCents(billingAccount.balanceCents)}</p>
+              <p className="font-mono text-3xl font-semibold">{formatCents(billingAccount.balanceCents)}</p>
               <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                {formatUsdFromCents(minRunBalanceCents)} minimum to run · usage{" "}
-                {formatCostCents(billingAccount.totalUsageCents ?? usageFromRunsCents)} · paid{" "}
-                {formatUsdFromCents(billingAccount.totalBilledCents)} of{" "}
-                {formatUsdFromCents(billingAccount.billingCapCents)} cap
+                {formatCents(minRunBalanceCents)} minimum to run · usage{" "}
+                {formatCents(billingAccount.totalUsageCents ?? usageCents)} · paid{" "}
+                {formatCents(billingAccount.totalBilledCents)} of{" "}
+                {formatCents(billingAccount.billingCapCents)} cap
                 {capReached ? " — cap reached" : ""}
               </p>
             </div>
@@ -157,8 +156,8 @@ export function Billing() {
                   <CreditCard className="h-3.5 w-3.5" />
                 )}
                 {billingAccount.subscribed
-                  ? `Subscribed — ${formatUsdFromCents(billingAccount.subCentsPerMonth)}/mo`
-                  : `Subscribe ${formatUsdFromCents(billingAccount.subCentsPerMonth)}/mo`}
+                  ? `Subscribed — ${formatCents(billingAccount.subCentsPerMonth)}/mo`
+                  : `Subscribe ${formatCents(billingAccount.subCentsPerMonth)}/mo`}
               </Button>
               {billingAccount.topupOptionsCents.map((amountCents) => {
                 const topupKey = `topup:${amountCents}`
@@ -176,12 +175,12 @@ export function Billing() {
                       capReached
                         ? "Billing cap reached"
                         : topupCapReached
-                          ? `Would exceed ${formatUsdFromCents(billingAccount.billingCapCents)} cap`
+                          ? `Would exceed ${formatCents(billingAccount.billingCapCents)} cap`
                           : undefined
                     }
                   >
                     {checkoutKey === topupKey ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                    Top up {formatUsdFromCents(amountCents)}
+                    Top up {formatCents(amountCents)}
                   </Button>
                 )
               })}
@@ -203,20 +202,9 @@ export function Billing() {
         </div>
       )}
 
-      <div className="shrink-0 grid grid-cols-2 gap-px border-b border-border bg-border lg:grid-cols-4">
-        <Stat label="Total spend" value={formatCostCents(usageFromRunsCents)} />
-        <Stat
-          label="Open / cheap models"
-          value={formatUsdFromCents(cheapSpend)}
-          sub={hasSpend ? `${Math.round((cheapSpend / spendDenominator) * 100)}% of spend` : hasRuns ? "cached runs only" : "no runs yet"}
-          good
-        />
-        <Stat
-          label="Frontier models"
-          value={formatUsdFromCents(frontierSpend)}
-          sub={hasSpend ? `${Math.round((frontierSpend / spendDenominator) * 100)}% of spend` : hasRuns ? "cached runs only" : "no runs yet"}
-        />
-        <Stat label="Cache savings" value={formatUsdFromCents(savedCents)} sub="vs no caching" good />
+      <div className="shrink-0 grid grid-cols-2 gap-px border-b border-border bg-border">
+        <Stat label="Total spend" value={formatCents(usageCents)} />
+        <Stat label="Cache savings" value={formatCents(savedCents)} sub="vs no caching" good />
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
@@ -276,13 +264,13 @@ export function Billing() {
                   tickMargin={8}
                   width={40}
                   className="text-[10px]"
-                  domain={[0, yMaxUsd]}
-                  tickFormatter={(v) => formatUsdFromCents(v * 100)}
+                  domain={[0, yMaxCents]}
+                  tickFormatter={(v) => formatCents(v)}
                 />
                 <ChartTooltip
                   content={
                     <ChartTooltipContent
-                      formatter={(value) => formatUsdFromCents(Number(value) * 100)}
+                      formatter={(value) => formatCents(Number(value))}
                     />
                   }
                 />
@@ -296,6 +284,21 @@ export function Billing() {
                     stroke={s.color}
                     fill={`url(#fill-${s.key})`}
                     strokeWidth={1.5}
+                    dot={(props) => {
+                      const { cx, cy, value } = props
+                      if (cx == null || cy == null || !value || Number(value) <= 0) return null
+                      return (
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={3.5}
+                          fill={s.color}
+                          stroke="var(--background)"
+                          strokeWidth={1.5}
+                        />
+                      )
+                    }}
+                    activeDot={{ r: 5, stroke: "var(--background)", strokeWidth: 1.5 }}
                   />
                 ))}
                 <ReferenceLine y={0} stroke="#fff" strokeWidth={1.5} ifOverflow="visible" />
@@ -326,7 +329,7 @@ export function Billing() {
                     <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
                       <div className="h-full rounded-full" style={{ width: `${pct}%`, background: s.color }} />
                     </div>
-                    <span className="w-16 text-right font-mono text-xs">{formatCostCents(value)}</span>
+                    <span className="w-16 text-right font-mono text-xs">{formatCents(value)}</span>
                     <span className="w-12 text-right font-mono text-[10px] text-muted-foreground">
                       {pct.toFixed(0)}%
                     </span>

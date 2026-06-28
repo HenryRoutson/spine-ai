@@ -164,7 +164,7 @@ export function formatChars(n: number): string {
   return String(Math.round(n))
 }
 
-export { formatCostCents, formatMs } from "@/lib/format"
+export { formatCents, formatCostCents, formatUsdFromCents, formatMs } from "@/lib/format"
 
 const METRIC_FORMAT: Record<MetricField, (n: number) => string> = {
   inputChars: formatChars,

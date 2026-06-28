@@ -1,7 +1,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { uid } from "@/lib/id";
+import { getSupabasePublicEnv } from "@/utils/supabase/env";
+import { createClient } from "@/utils/supabase/server";
 import { dataDir } from "./config";
 import { createAdminClient } from "./supabase_admin";
 import { hashContent, saveOriginalDocBytes, type Store } from "./store";
@@ -32,6 +35,14 @@ const SHARED_LINK_PREFIX = "pub_";
 
 function isServerless(): boolean {
   return !!process.env.VERCEL;
+}
+
+// AI : service role bypasses RLS for cross-user runs; session/anon client covers owner + public read policies.
+async function supabaseForSharedLinks(): Promise<SupabaseClient | null> {
+  const admin = await createAdminClient();
+  if (admin) return admin;
+  if (!getSupabasePublicEnv()) return null;
+  return createClient();
 }
 
 type StoredSharedLink = SharedLinkRecord & {
@@ -125,9 +136,9 @@ function saveLocalLink(row: StoredSharedLink): void {
 }
 
 async function loadSupabaseLink(id: SharedLinkId): Promise<StoredSharedLink | null> {
-  const admin = await createAdminClient();
-  if (!admin) return loadLocalLink(id);
-  const { data, error } = await admin
+  const db = await supabaseForSharedLinks();
+  if (!db) return loadLocalLink(id);
+  const { data, error } = await db
     .from("shared_links")
     .select("*")
     .eq("id", id)
@@ -169,9 +180,9 @@ function listLocalLinksForOwner(ownerId: user_id_string): SharedLinkRecord[] {
 }
 
 export async function listSharedLinksForOwner(ownerId: user_id_string): Promise<SharedLinkRecord[]> {
-  const admin = await createAdminClient();
-  if (!admin) return listLocalLinksForOwner(ownerId);
-  const { data, error } = await admin.from("shared_links").select("*").eq("owner_id", ownerId);
+  const db = await supabaseForSharedLinks();
+  if (!db) return listLocalLinksForOwner(ownerId);
+  const { data, error } = await db.from("shared_links").select("*").eq("owner_id", ownerId);
   if (error) {
     if (isMissingSchemaError(error)) return listLocalLinksForOwner(ownerId);
     throw error;
@@ -274,15 +285,15 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
   };
 
   if (!isServerless()) saveLocalLink(row);
-  const admin = await createAdminClient();
-  if (!admin) {
+  const db = await supabaseForSharedLinks();
+  if (!db) {
     if (isServerless()) {
-      throw new Error("SUPABASE_SERVICE_ROLE_KEY required to publish shared links in production");
+      throw new Error("Supabase env required to publish shared links in production");
     }
     saveLocalLink(row);
     return toPublicRecord(row);
   }
-  const { error } = await admin.from("shared_links").upsert({
+  const { error } = await db.from("shared_links").upsert({
     id: row.id,
     owner_id: row.ownerId,
     project_id: row.projectId,
@@ -310,9 +321,9 @@ export async function revokeSharedLink(ownerId: user_id_string, id: SharedLinkId
   if (!link || link.ownerId !== ownerId) return false;
   link.revoked = true;
   saveLocalLink(link);
-  const admin = await createAdminClient();
-  if (admin) {
-    await admin.from("shared_links").update({ revoked: true }).eq("id", id).eq("owner_id", ownerId);
+  const db = await supabaseForSharedLinks();
+  if (db) {
+    await db.from("shared_links").update({ revoked: true }).eq("id", id).eq("owner_id", ownerId);
   }
   return true;
 }

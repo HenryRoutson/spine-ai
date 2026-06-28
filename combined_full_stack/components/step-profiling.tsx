@@ -23,14 +23,16 @@ import {
   CHART_OK_TEXT_CLASS,
   CHART_STAT,
 } from "@/lib/chart-colors"
-const PAD = { t: 12, r: 8, b: 48, l: 52 }
-const PLOT_H = 132
+// AI : fixed cell width — rigid grid; value row + plot + label row baked into padding.
+const STEP_W = 40
+const PLOT_H = 96
+const PAD = { t: 12, r: 4, b: 36, l: 24 }
 
 function barColor(failed: number): { fill: string; stroke: string } {
   return failed > 0 ? { fill: CHART_ERR, stroke: CHART_ERR_STROKE } : { fill: CHART_OK, stroke: CHART_OK_STROKE }
 }
 
-function truncateLabel(label: string, max = 14): string {
+function truncateLabel(label: string, max = 12): string {
   return label.length <= max ? label : `${label.slice(0, max - 1)}…`
 }
 
@@ -39,7 +41,6 @@ function StepMetricBarChart({
   stats,
   value,
   format,
-  showStepLabels,
   barFill,
   barStroke,
 }: {
@@ -47,28 +48,27 @@ function StepMetricBarChart({
   stats: StepMeanStats[]
   value: (step: StepMeanStats) => number
   format: (n: number) => string
-  showStepLabels: boolean
   barFill?: string
   barStroke?: string
 }) {
   const maxVal = Math.max(...stats.map(value), 0.01)
-  const plotW = Math.max(320, stats.length * 48)
+  const plotW = stats.length * STEP_W
   const w = PAD.l + plotW + PAD.r
   const h = PAD.t + PLOT_H + PAD.b
   const plotX = PAD.l
-  const baselineY = PAD.t + PLOT_H
-  const stepSpan = plotW / stats.length
+  const plotTop = PAD.t
+  const baselineY = plotTop + PLOT_H
 
   return (
-    <div className="rounded-md border border-border bg-background p-2.5">
-      <div className="mb-2 flex items-baseline justify-between gap-2">
-        <p className="font-mono text-[10px] font-medium uppercase tracking-wide text-foreground">{title}</p>
-        <span className="font-mono text-[9px] text-muted-foreground">max {format(maxVal)}</span>
+    <div className="min-w-0 rounded border border-border bg-background p-1.5">
+      <div className="mb-1 flex items-baseline justify-between gap-1">
+        <p className="truncate font-mono text-[9px] font-medium uppercase tracking-wide text-foreground">{title}</p>
+        <span className="shrink-0 font-mono text-[8px] text-muted-foreground">{format(maxVal)}</span>
       </div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full text-border" aria-hidden>
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full text-border" aria-hidden preserveAspectRatio="xMinYMin meet">
         <rect
           x={plotX}
-          y={PAD.t}
+          y={plotTop}
           width={plotW}
           height={PLOT_H}
           className="fill-muted/15"
@@ -76,81 +76,72 @@ function StepMetricBarChart({
           strokeWidth={1}
         />
 
-        <line x1={plotX} y1={baselineY} x2={plotX + plotW} y2={baselineY} stroke={CHART_AXIS} strokeWidth={1} />
+        <line x1={plotX} y1={baselineY} x2={plotX + plotW} y2={baselineY} stroke={CHART_AXIS} strokeWidth={1.25} />
+        <line x1={plotX} y1={plotTop} x2={plotX} y2={baselineY} stroke={CHART_AXIS} strokeWidth={1} />
 
-        <text x={plotX - 6} y={baselineY + 3} fill={CHART_STAT} fontSize={8} fontFamily="ui-monospace, monospace" textAnchor="end">
+        <text x={plotX - 4} y={baselineY + 3} fill={CHART_STAT} fontSize={8} fontFamily="ui-monospace, monospace" textAnchor="end">
           0
         </text>
-        <text x={plotX - 6} y={PAD.t + 9} fill={CHART_STAT} fontSize={8} fontFamily="ui-monospace, monospace" textAnchor="end">
+        <text x={plotX - 4} y={plotTop + 8} fill={CHART_STAT} fontSize={8} fontFamily="ui-monospace, monospace" textAnchor="end">
           {format(maxVal)}
         </text>
 
         {stats.map((step, i) => {
-          const barX = plotX + stepSpan * i
+          const barX = plotX + STEP_W * i
           const v = value(step)
-          const barH = (v / maxVal) * PLOT_H
+          const barH = v > 0 ? (v / maxVal) * PLOT_H : 0
           const color =
             barFill && barStroke
               ? { fill: barFill, stroke: barStroke }
               : barColor(step.failed)
-          const centerX = barX + stepSpan / 2
+          const centerX = barX + STEP_W / 2
+          const valueY = v > 0 ? baselineY - barH - 3 : baselineY - 3
 
           return (
             <g key={step.moduleId}>
-              <rect
-                x={barX}
-                y={baselineY - barH}
-                width={stepSpan}
-                height={Math.max(barH, v > 0 ? 1 : 0)}
-                fill={color.fill}
-              />
-              {barH > 0 && (
-                <line
-                  x1={barX}
-                  y1={baselineY - barH}
-                  x2={barX + stepSpan}
-                  y2={baselineY - barH}
-                  stroke={color.stroke}
-                  strokeWidth={1}
-                />
-              )}
-              {barH >= 16 && (
-                <text
-                  x={centerX}
-                  y={baselineY - barH - 4}
-                  fill={CHART_STAT}
-                  fontSize={7}
-                  fontFamily="ui-monospace, monospace"
-                  textAnchor="middle"
-                >
-                  {format(v)}
-                </text>
-              )}
-              {showStepLabels && (
+              {v > 0 && (
                 <>
-                  <text
-                    x={centerX}
-                    y={baselineY + 14}
-                    fill={CHART_STAT}
-                    fontSize={8}
-                    fontFamily="ui-monospace, monospace"
-                    textAnchor="middle"
-                  >
-                    {i + 1}
-                  </text>
-                  <text
-                    x={centerX}
-                    y={baselineY + 28}
-                    fill={CHART_STAT}
-                    fontSize={7}
-                    fontFamily="ui-monospace, monospace"
-                    textAnchor="end"
-                    transform={`rotate(-40, ${centerX}, ${baselineY + 28})`}
-                  >
-                    {truncateLabel(step.label)}
-                  </text>
+                  <rect x={barX} y={baselineY - barH} width={STEP_W} height={barH} fill={color.fill} />
+                  <line
+                    x1={barX}
+                    y1={baselineY - barH}
+                    x2={barX + STEP_W}
+                    y2={baselineY - barH}
+                    stroke={color.stroke}
+                    strokeWidth={1}
+                  />
                 </>
               )}
+              <text
+                x={centerX}
+                y={valueY}
+                fill={CHART_STAT}
+                fontSize={7}
+                fontFamily="ui-monospace, monospace"
+                textAnchor="middle"
+              >
+                {format(v)}
+              </text>
+              <text
+                x={centerX}
+                y={baselineY + 12}
+                fill={CHART_STAT}
+                fontSize={7}
+                fontFamily="ui-monospace, monospace"
+                textAnchor="middle"
+              >
+                {i + 1}
+              </text>
+              <text
+                x={centerX}
+                y={baselineY + 24}
+                fill={CHART_STAT}
+                fontSize={6}
+                fontFamily="ui-monospace, monospace"
+                textAnchor="middle"
+              >
+                {truncateLabel(step.label)}
+              </text>
             </g>
           )
         })}
@@ -179,8 +170,8 @@ export function StepProfiling({
   const failed = stats.reduce((n, s) => n + s.failed, 0)
 
   return (
-    <div className="rounded-md border-2 border-border bg-muted/10 p-3">
-      <div className="mb-3 flex items-center justify-between gap-2 border-b border-border pb-2">
+    <div className="rounded-md border-2 border-border bg-muted/10 p-2">
+      <div className="mb-2 flex items-center justify-between gap-2 border-b border-border pb-1.5">
         <div>
           <h4 className="font-mono text-[10px] font-medium uppercase tracking-wide text-foreground">
             Step profiling
@@ -201,27 +192,24 @@ export function StepProfiling({
         </span>
       </div>
 
-      <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-3">
         <StepMetricBarChart
           title="Mean latency"
           stats={stats}
           value={(s) => s.meanMs}
           format={formatMs}
-          showStepLabels={false}
         />
         <StepMetricBarChart
           title="Mean cost"
           stats={stats}
           value={(s) => s.meanCostCents}
           format={formatCostCents}
-          showStepLabels
         />
         <StepMetricBarChart
           title="Description Validation cost"
           stats={stats}
           value={(s) => s.meanDescriptionCheckCostCents}
           format={formatCostCents}
-          showStepLabels={false}
           barFill={CHART_RETRY}
           barStroke={CHART_RETRY_STROKE}
         />

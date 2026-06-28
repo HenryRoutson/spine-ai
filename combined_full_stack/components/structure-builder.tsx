@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Plus, Trash2, Code2, LayoutGrid, X, Sparkles, Sparkle, AlertTriangle, Lock } from "lucide-react"
+import { Plus, Trash2, Code2, LayoutGrid, FileSpreadsheet, X, Sparkles, Sparkle, AlertTriangle, Lock } from "lucide-react"
 import { StructureAssistant } from "@/components/structure-assistant"
+import { StructureExcelEditor } from "@/components/structure-excel-editor"
 import { useAppShell } from "@/lib/app-shell"
 import { useStore, uid } from "@/lib/store"
 import {
@@ -34,7 +35,7 @@ export function StructureBuilder() {
   const { models, setModels } = useStore()
   const { focusStructureId, clearFocusStructure } = useAppShell()
   const [selectedId, setSelectedId] = useState<string>(models[0]?.id ?? "")
-  const [view, setView] = useState<"ui" | "code" | "ai">("ui")
+  const [view, setView] = useState<"ui" | "excel" | "code" | "ai">("ui")
 
   // AI : jump here from JSON preview "validates as" links.
   useEffect(() => {
@@ -120,7 +121,18 @@ export function StructureBuilder() {
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              <LayoutGrid className="h-3.5 w-3.5" /> UI
+              <LayoutGrid className="h-3.5 w-3.5" /> Form
+            </button>
+            <button
+              onClick={() => setView("excel")}
+              className={cn(
+                "flex items-center gap-1.5 rounded px-2 py-1 text-xs",
+                view === "excel"
+                  ? "bg-secondary text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
             </button>
             <button
               onClick={() => setView("code")}
@@ -149,7 +161,8 @@ export function StructureBuilder() {
       />
 
       <div className="flex min-h-0 flex-1">
-        {/* model list */}
+        {/* model list — hidden in excel view (sheet tabs handle navigation) */}
+        {view !== "excel" && (
         <aside className="flex w-52 shrink-0 flex-col border-r border-border">
           <div className="flex items-center justify-between px-3 py-2">
             <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -186,9 +199,12 @@ export function StructureBuilder() {
             ))}
           </div>
         </aside>
+        )}
 
         {/* editor */}
-        {view === "ui" && selected ? (
+        {view === "excel" ? (
+          <StructureExcelEditor selectedId={selectedId} onSelectId={setSelectedId} />
+        ) : view === "ui" && selected ? (
           <div className="min-w-0 flex-1 overflow-y-auto">
             <div className="mx-auto max-w-3xl px-5 py-5">
               {selectedLocked && (

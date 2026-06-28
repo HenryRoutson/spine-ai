@@ -474,9 +474,9 @@ const seeds: Record<string, unknown> = {
     ],
     strategies: STRATEGIES("proc"),
     docs: [
-      { name: "po_77821.md", type: "text", label: "inference", file: "procurement_match/purchase_order.md" },
-      { name: "dn_99214.md", type: "text", label: "inference", file: "procurement_match/delivery_note.md" },
-      { name: "inv_44102.md", type: "text", label: "inference", file: "procurement_match/vendor_invoice.md" },
+      { name: "acme_purchase_order_po77821.md", type: "text", label: "inference", file: "procurement_match/purchase_order.md" },
+      { name: "acme_delivery_note_dn99214.md", type: "text", label: "inference", file: "procurement_match/delivery_note.md" },
+      { name: "acme_vendor_invoice_inv44102.md", type: "text", label: "inference", file: "procurement_match/vendor_invoice.md" },
     ],
   },
 

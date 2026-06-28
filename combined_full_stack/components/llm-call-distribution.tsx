@@ -76,11 +76,11 @@ export function LlmCallDistribution({
       className={
         compact
           ? "mt-2 pl-7"
-          : "rounded-md border-2 border-border bg-muted/10 p-3"
+          : "rounded-md border-2 border-border bg-muted/10 p-2"
       }
     >
       {!compact && (
-        <div className="mb-3 flex items-center justify-between gap-2 border-b border-border pb-2">
+        <div className="mb-2 flex items-center justify-between gap-2 border-b border-border pb-1.5">
           <h4 className="font-mono text-[10px] font-medium uppercase tracking-wide text-foreground">
             {title ?? "LLM call distributions"}
           </h4>
@@ -90,7 +90,7 @@ export function LlmCallDistribution({
         </div>
       )}
       {compact && (
-        <p className="mb-2 font-mono text-[10px] text-muted-foreground">
+        <p className="mb-1.5 font-mono text-[10px] text-muted-foreground">
           {title ?? "Call distributions"} · <LlmCallSummaryLine summary={summary} />
         </p>
       )}
@@ -106,7 +106,7 @@ export function LlmCallDistribution({
             : `${summary.failed} LLM requests failed with no successful retry — this step errored.`}
         </p>
       )}
-      <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:gap-3">
+      <div className="grid grid-cols-3 gap-1.5">
         {(["inputChars", "outputChars", "latencyMs"] as MetricField[]).map((field) => (
           <MetricScatter
             field={field}

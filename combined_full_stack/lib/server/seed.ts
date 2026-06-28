@@ -172,9 +172,8 @@ export function allProjectSeeds(): ProjectSeed[] {
     .map((f) => loadProjectSeed(join(SEEDS_DIR, f)));
 }
 
-// AI : resolve seeded doc filenames for a project (persisted field, template id, or numbered clone name).
-export function projectSeedDocNames(project: Project): string[] {
-  if (project.seedDocNames?.length) return project.seedDocNames;
+// AI : bundled template docs for this project id or numbered clone name (e.g. "… Match 1" → "… Match").
+function templateSeedDocNamesForProject(project: Project): string[] {
   const byId = allProjectSeeds().find((s) => s.project.id === project.id);
   if (byId) return byId.docSpecs.map((d) => d.name);
   const baseName = project.name.replace(/ \d+$/, "");
@@ -182,15 +181,24 @@ export function projectSeedDocNames(project: Project): string[] {
   return byTemplate?.docSpecs.map((d) => d.name) ?? [];
 }
 
-// AI : numbered clones inherit template seedDocNames; merge in any new bundled example filenames.
-export function backfillSeedDocNames(project: Project): Project {
-  const names = projectSeedDocNames(project);
-  if (!names.length) return project;
+// AI : resolve seeded doc filenames for a project (persisted field + latest template bundled examples).
+export function projectSeedDocNames(project: Project): string[] {
+  const template = templateSeedDocNamesForProject(project);
   const existing = project.seedDocNames ?? [];
+  if (!template.length) return existing;
+  if (!existing.length) return template;
   const merged = [...existing];
-  for (const n of names) {
+  for (const n of template) {
     if (!merged.includes(n)) merged.push(n);
   }
+  return merged;
+}
+
+// AI : numbered clones inherit template seedDocNames; merge in any new bundled example filenames.
+export function backfillSeedDocNames(project: Project): Project {
+  const merged = projectSeedDocNames(project);
+  if (!merged.length) return project;
+  const existing = project.seedDocNames ?? [];
   if (merged.join() === existing.join()) return project;
   return { ...project, seedDocNames: merged };
 }

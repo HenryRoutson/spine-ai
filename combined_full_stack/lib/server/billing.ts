@@ -33,21 +33,6 @@ export function billingFromRuns(runs: PipelineRun[]): BillingPoint[] {
     .map(([day, { spend }]) => ({ day, ...spend }));
 }
 
-// AI : split spend into cheap/open vs frontier models (Billing tab).
-export function spendSplit(runs: PipelineRun[]): { cheapCents: number; frontierCents: number } {
-  let cheapCents = 0;
-  let frontierCents = 0;
-  for (const run of runs) {
-    for (const step of run.steps) {
-      if (step.kind === "doc-to-text" && !step.model) continue;
-      const opt = modelOption(step.model ?? run.model);
-      if (opt.cheap) cheapCents += step.costCents;
-      else frontierCents += step.costCents;
-    }
-  }
-  return { cheapCents: +cheapCents.toFixed(4), frontierCents: +frontierCents.toFixed(4) };
-}
-
 // AI : cache savings = cents avoided by cache hits (cross-checks Logging savedCents).
 export function totalSaved(runs: PipelineRun[]): number {
   return +runs.reduce((a, r) => a + r.savedCents, 0).toFixed(4);
@@ -63,7 +48,7 @@ export function billingSeries(runs: PipelineRun[]): BillingPoint[] {
   return billingFromRuns(runs);
 }
 
-// AI : chart/stats display — internal cents → USD (Billing tab recharts + stat cards).
+// AI : chart recharts layer expects USD floats — prefer formatCents(cents) at the UI boundary instead.
 export function billingPointsUsd(points: BillingPoint[]): BillingPoint[] {
   return points.map((point) => {
     const out: BillingPoint = { day: point.day };

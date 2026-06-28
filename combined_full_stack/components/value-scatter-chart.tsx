@@ -3,9 +3,9 @@
 import { useMemo } from "react"
 import { buildValueScatter, normalCurvePoints, type LlmCallDisplayStatus, type MetricScatter } from "@/lib/llm-distribution"
 
-const W = 300
-const H = 120
-const PAD = { l: 8, r: 8, t: 10, b: 20 }
+const W = 280
+const H = 108
+const PAD = { l: 6, r: 6, t: 6, b: 28 }
 import {
   CHART_ERR,
   CHART_ERR_STROKE,
@@ -64,16 +64,16 @@ export function ValueScatterChart({
   const plotY = PAD.t
 
   return (
-    <div className="min-w-0 flex-1 rounded-md border-2 border-border bg-background p-2.5">
-      <div className="mb-2 flex items-baseline justify-between gap-2 border-b border-border pb-1.5">
-        <span className="font-mono text-[10px] font-medium uppercase tracking-wide text-foreground">
+    <div className="min-w-0 rounded border border-border bg-background p-1.5">
+      <div className="mb-1 flex items-baseline justify-between gap-1 border-b border-border pb-1">
+        <span className="truncate font-mono text-[9px] font-medium uppercase tracking-wide text-foreground">
           {title}
         </span>
-        <span className="font-mono text-[9px] text-muted-foreground">
+        <span className="shrink-0 font-mono text-[8px] text-muted-foreground">
           μ={fmt(scatter.mean)} · σ={fmt(scatter.std)} · n={count}
         </span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-[120px] w-full text-border" aria-hidden>
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-[108px] w-full text-border" aria-hidden>
         <rect
           x={plotX}
           y={plotY}
@@ -155,14 +155,14 @@ export function ValueScatterChart({
             />
           )
         })}
-        <text x={plotX + 2} y={H - 5} fill={CHART_STAT} fontSize={8} fontFamily="ui-monospace, monospace">
+        <text x={plotX + 2} y={H - 14} fill={CHART_STAT} fontSize={7} fontFamily="ui-monospace, monospace">
           {fmt(xMin)}
         </text>
         <text
           x={plotX + plotW - 2}
-          y={H - 5}
+          y={H - 14}
           fill={CHART_STAT}
-          fontSize={8}
+          fontSize={7}
           fontFamily="ui-monospace, monospace"
           textAnchor="end"
         >
@@ -170,9 +170,9 @@ export function ValueScatterChart({
         </text>
         <text
           x={W / 2}
-          y={H - 5}
+          y={H - 4}
           fill={CHART_STAT}
-          fontSize={8}
+          fontSize={7}
           fontFamily="ui-monospace, monospace"
           textAnchor="middle"
         >
