@@ -1,36 +1,22 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Plus, Trash2, Code2, LayoutGrid, FileSpreadsheet, X, Sparkles, Sparkle, AlertTriangle, Lock } from "lucide-react"
+import { Plus, Trash2, Code2, LayoutGrid, FileSpreadsheet, Sparkles, Sparkle, AlertTriangle, Lock } from "lucide-react"
+import { StructureFieldRow } from "@/components/structure-field-row"
 import { StructureAssistant } from "@/components/structure-assistant"
 import { StructureExcelEditor } from "@/components/structure-excel-editor"
 import { StructureSourceDocLink } from "@/components/structure-source-doc-link"
-import { useAppShell } from "@/lib/app-shell"
-import { useStore, uid } from "@/lib/store"
-import {
-  FIELD_TYPES,
-  JSON_FIELD_PREFER_STRUCTURE_MSG,
-  type FieldType,
-  type ModelField,
-  type StructureModel,
-} from "@/lib/types"
-import { allModelsToPydantic } from "@/lib/pydantic"
-import { isLockedStructureModel } from "@/lib/structure"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
+import { useAppShell } from "@/lib/app-shell"
+import { useStore, uid } from "@/lib/store"
+import { allModelsToPydantic } from "@/lib/pydantic"
+import { isLockedStructureModel } from "@/lib/structure"
+import type { ModelField, StructureModel } from "@/lib/types"
 import { cn } from "@/lib/utils"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-
-const REF_TYPES: FieldType[] = ["model", "list[model]"]
 
 export function StructureBuilder() {
   const { models, setModels } = useStore()
@@ -283,114 +269,15 @@ export function StructureBuilder() {
                   <span className="w-14 text-center">Opt</span>
                 </div>
                 {selected.fields.map((f) => (
-                  <div key={f.id}>
-                    <div className="grid grid-cols-[1.1fr_1fr_1.2fr_1fr_auto] items-center gap-2 border-b border-border px-3 py-2">
-                      <Input
-                        value={f.name}
-                        onChange={(e) => updateField(f.id, { name: e.target.value })}
-                        readOnly={selectedLocked}
-                        className="h-8 font-mono text-xs"
-                      />
-                      <Select
-                        value={f.type}
-                        onValueChange={(v) =>
-                          updateField(f.id, {
-                            type: v as FieldType,
-                            ref: REF_TYPES.includes(v as FieldType)
-                              ? models.find((m) => m.id !== selected.id)?.id
-                              : undefined,
-                          })
-                        }
-                        disabled={selectedLocked}
-                      >
-                        <SelectTrigger className="h-8 font-mono text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {FIELD_TYPES.map((t) => (
-                            <SelectItem key={t} value={t} className="font-mono text-xs">
-                              {t}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        value={f.description}
-                        placeholder="—"
-                        onChange={(e) =>
-                          updateField(f.id, { description: e.target.value })
-                        }
-                        readOnly={selectedLocked}
-                        className="h-8 text-xs"
-                      />
-                      <Input
-                        value={f.example ?? ""}
-                        placeholder="e.g. Acme Ltd"
-                        onChange={(e) =>
-                          updateField(f.id, { example: e.target.value || undefined })
-                        }
-                        readOnly={selectedLocked}
-                        className="h-8 font-mono text-xs"
-                      />
-                      <div className="flex w-14 items-center justify-center gap-1">
-                        <button
-                          onClick={() => updateField(f.id, { optional: !f.optional })}
-                          disabled={selectedLocked}
-                          className={cn(
-                            "h-5 w-5 rounded border text-[10px] font-medium",
-                            f.optional
-                              ? "border-primary bg-primary/15 text-primary"
-                              : "border-border text-muted-foreground",
-                          )}
-                        >
-                          {f.optional ? "?" : "·"}
-                        </button>
-                        <button
-                          onClick={() => removeField(f.id)}
-                          disabled={selectedLocked}
-                          className="text-muted-foreground hover:text-destructive disabled:opacity-40"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                    {f.type === "json" && (
-                      <div className="border-b border-border bg-amber-500/5 px-3 py-1.5">
-                        <p className="font-mono text-[10px] text-amber-700 dark:text-amber-500">
-                          {JSON_FIELD_PREFER_STRUCTURE_MSG}
-                        </p>
-                      </div>
-                    )}
-                    {REF_TYPES.includes(f.type) && (
-                      <div className="grid grid-cols-[1.3fr_auto] items-center gap-2 border-b border-border bg-secondary/20 px-3 py-1.5">
-                        <span className="font-mono text-[10px] text-muted-foreground">
-                          ↳ references model
-                        </span>
-                        <Select
-                          value={f.ref}
-                          onValueChange={(v) => updateField(f.id, { ref: v ?? undefined })}
-                          disabled={selectedLocked}
-                        >
-                          <SelectTrigger className="h-7 font-mono text-[11px]">
-                            <SelectValue placeholder="pick model" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {models
-                              .filter((m) => m.id !== selected.id)
-                              .map((m) => (
-                                <SelectItem
-                                  key={m.id}
-                                  value={m.id}
-                                  className="font-mono text-xs"
-                                >
-                                  {m.name}
-                                </SelectItem>
-                              ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                  </div>
+                  <StructureFieldRow
+                    key={f.id}
+                    field={f}
+                    models={models}
+                    selectedId={selected.id}
+                    locked={selectedLocked}
+                    onUpdate={(patch) => updateField(f.id, patch)}
+                    onRemove={() => removeField(f.id)}
+                  />
                 ))}
               </div>
 

@@ -1,28 +1,19 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import { X, FileText } from "lucide-react"
 import { useDocViewer, type DocViewMode } from "@/lib/doc-viewer"
 import { useStore } from "@/lib/store"
+import { resolveSpan } from "@/lib/doc-span"
+import { useDocViewerData } from "@/lib/use-doc-viewer-data"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { DocViewerLoading } from "@/components/doc-viewer-loading"
 import { cn } from "@/lib/utils"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { MarkdownView } from "@/components/highlight"
-import { defaultDocViewMode, docViewerTabs, docViewTabLabel, isPdfDoc } from "@/lib/doc-content"
+import { docViewerTabs, docViewTabLabel, isPdfDoc } from "@/lib/doc-content"
 import { API_ROUTES } from "@/lib/api-routes"
 import type { DocId, DocRef } from "@/lib/types"
-
-// AI : de-mocked — source text comes from GET /api/docs/:id/text (the stored content-hash
-// AI : file), not the hardcoded LEGAL_SOURCE_TEXT. Offsets are validated with an indexOf
-// AI : fallback when the expected quote text no longer matches (stale offsets guard rail).
-function resolveSpan(text: string, start: number, end: number, expected?: string): { start: number; end: number } {
-  if (start === end) return { start, end }
-  if (!expected || text.slice(start, end) === expected) return { start, end }
-  const idx = text.indexOf(expected)
-  if (idx !== -1) return { start: idx, end: idx + expected.length }
-  return { start: 0, end: 0 } // offsets unrecoverable — show the doc un-highlighted
-}
 
 const TAB_LABEL: Record<DocViewMode, string> = {
   parser: "built-in",
@@ -36,72 +27,36 @@ function tabLabel(mode: DocViewMode, doc: Pick<DocRef, "name" | "type"> | undefi
   return doc ? docViewTabLabel(mode, doc, hasPdf) : TAB_LABEL[mode]
 }
 
-type VisionEntry = { key: string; model: string; text: string; createdAt: number }
-
 export function DocViewer() {
   const { target, close } = useDocViewer()
   const { docs } = useStore()
   const markRef = useRef<HTMLSpanElement>(null)
-  const [parserText, setParserText] = useState<string | null>(null)
-  const [parserMeta, setParserMeta] = useState<{ parser?: string; fromCache?: boolean }>({})
-  const [visionEntries, setVisionEntries] = useState<VisionEntry[]>([])
-  const [visionIndex, setVisionIndex] = useState(0)
-  const [view, setView] = useState<DocViewMode>("parser")
 
   const docId = target?.docId ?? null
-  const spanStart = target?.start ?? 0
-  const spanEnd = target?.end ?? 0
-  const requestedMode = target?.mode ?? null
   const docRef = docId ? docs.find((d) => d.id === docId) : undefined
-  const docName = docRef?.name ?? null
-  const docType = docRef?.type ?? null
-  const [hasPdf, setHasPdf] = useState(false)
+
+  const {
+    hasPdf,
+    parserText,
+    parserMeta,
+    visionEntries,
+    visionIndex,
+    setVisionIndex,
+    view,
+    setView,
+  } = useDocViewerData({
+    docId: docId as DocId | null,
+    docRef,
+    requestedMode: target?.mode ?? null,
+    spanStart: target?.start ?? 0,
+    spanEnd: target?.end ?? 0,
+  })
+
   const hasVisionText = visionEntries.length > 0
   const tabs = docViewerTabs(docRef, hasPdf, hasVisionText)
   const showPdf = isPdfDoc(docRef, hasPdf)
   const displayText =
     view === "vision" ? (visionEntries[visionIndex]?.text ?? "") : (parserText ?? "")
-
-  // AI : TODO refactor (prod) — PDF tab depends on /file bytes; fix when Supabase Storage ships (store.ts).
-  useEffect(() => {
-    if (!docId) return
-    setHasPdf(false)
-    fetch(API_ROUTES.docFile(docId), { method: "HEAD" })
-      .then((r) => setHasPdf(r.ok))
-      .catch(() => setHasPdf(false))
-  }, [docId])
-
-  useEffect(() => {
-    if (!docId) return
-    setParserText(null)
-    setParserMeta({})
-    setVisionEntries([])
-    setVisionIndex(0)
-    const hasSpan = spanStart !== spanEnd
-    let visionRows: VisionEntry[] = []
-    Promise.all([
-      fetch(API_ROUTES.docText(docId, "parser")).then((r) =>
-        r.ok ? r.json() : { text: `⚠ source not found for ${docId}` },
-      ),
-      fetch(API_ROUTES.docText(docId, "vision")).then((r) =>
-        r.ok ? r.json() : { entries: [] as VisionEntry[] },
-      ),
-    ])
-      .then(([parser, vision]) => {
-        visionRows = vision.entries ?? []
-        setParserText(parser.text ?? "")
-        setParserMeta({ parser: parser.parser, fromCache: parser.fromCache })
-        setVisionEntries(visionRows)
-        setView(
-          defaultDocViewMode(docRef, hasPdf, {
-            hasSpan,
-            requested: requestedMode ?? undefined,
-            hasVisionText: visionRows.length > 0,
-          }),
-        )
-      })
-      .catch(() => setParserText("⚠ failed to load source document"))
-  }, [docId, requestedMode, spanStart, spanEnd, hasPdf, docName, docType])
 
   useEffect(() => {
     if (!docId || parserText === null || view !== "parser" || !markRef.current) return
@@ -176,7 +131,6 @@ export function DocViewer() {
           </div>
         </div>
         {view === "pdf" ? (
-          // AI: browser-native PDF viewer over the stored original (GET /api/docs/:id/file).
           <iframe
             src={API_ROUTES.docFile(target.docId)}
             title={`PDF ${target.docId}`}
@@ -186,16 +140,11 @@ export function DocViewer() {
           parserText === null ? (
             <DocViewerLoading />
           ) : (
-            // AI: full interactive viewer — tree / table modes via the embedded iframe
             <JsonPreviewPanel json={parserText} className="min-h-0 flex-1" />
           )
         ) : view === "formatted" ? (
           <div className="flex-1 overflow-auto px-6 py-5">
-            {parserText === null ? (
-              <DocViewerLoading />
-            ) : (
-              <MarkdownView md={parserText} />
-            )}
+            {parserText === null ? <DocViewerLoading /> : <MarkdownView md={parserText} />}
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

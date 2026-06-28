@@ -9,6 +9,7 @@ import {
   openOrAddDerivedStructure,
 } from "@/lib/doc-derived-structures"
 import { parseAndMatchStructures } from "@/lib/structure-match-parse"
+import { tabularRowSetsFromContent } from "@/lib/tabular-row-sets"
 import { useDocText } from "@/lib/use-doc-text"
 import { useStore, uid } from "@/lib/store"
 import { StructureMatchChips, STRUCTURE_MATCH_CHIP_CLASS } from "@/components/structure-match-chips"
@@ -29,7 +30,8 @@ export function DocDerivedStructures({
 
   const derived = useMemo(() => {
     if (!content) return []
-    return inferStructuresFromDocContent(content, doc.name, doc.type, () => uid<StructureModelId>())
+    const rowSets = tabularRowSetsFromContent(content, doc.name, doc.type)
+    return inferStructuresFromDocContent(content, doc.name, doc.type, () => uid<StructureModelId>(), rowSets)
   }, [content, doc.name, doc.type])
 
   const { matches } = useMemo(
