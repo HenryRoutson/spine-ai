@@ -1,7 +1,6 @@
 import Image from "next/image";
 import { LandingNav } from "../components/landing-nav";
 
-type ImagePath = string;
 type SectionId = string;
 type AppLoginUrl = string;
 type AppUrl = string;
@@ -14,7 +13,6 @@ type Feature = {
   name: string;
   headline: string;
   body: string;
-  image: ImagePath;
 };
 
 type FeatureCard = {
@@ -28,11 +26,6 @@ type FaqItem = {
   a: string;
 };
 
-type Testimonial = {
-  quote: string;
-  handle: string;
-};
-
 type LogStep = {
   action: string;
   time: string;
@@ -42,7 +35,6 @@ type LogStep = {
 
 const NAV_LINKS = [
   { href: "#features", label: "Features" },
-  { href: "#preview", label: "Preview" },
   { href: "#faq", label: "FAQs" },
 ];
 
@@ -61,21 +53,18 @@ const OVERVIEW: Feature[] = [
     name: "Structure",
     headline: "Define the shape of every answer.",
     body: "Build pydantic / zod models in a UI or in code. Every step's input and output is validated against a structure — schema validation is implicit on all I/O.",
-    image: "/screens/s-structure.png",
   },
   {
     id: "pipeline",
     name: "Pipeline",
     headline: "Linear pipelines that flag their own breakages.",
     body: "Each step declares its input and output model. When types don't match, the UI marks the pipeline invalid and run buttons go dark — before you spend a cent.",
-    image: "/screens/s-pipeline.png",
   },
   {
     id: "inference",
     name: "Inference",
     headline: "Drag a document on. No deploy.",
     body: "Run the live pipeline by dropping a file onto an input slot, then share a link. Cached steps return instantly at $0.00; progress streams as each step completes.",
-    image: "/screens/s-infer-done.png",
   },
 ];
 
@@ -103,29 +92,6 @@ const FEATURE_CARDS: FeatureCard[] = [
   {
     title: "Cost Attribution",
     body: "Spend per model and service. Open vs frontier split, daily spend by model, and cache savings computed against a no-cache baseline.",
-  },
-];
-
-const TESTIMONIALS: Testimonial[] = [
-  {
-    quote:
-      "Being able to validate every step before inference is huge. auto pipeline marks broken pipelines dark and gives me schema pass-rates I can actually act on.",
-    handle: "@pipeline-fndr",
-  },
-  {
-    quote:
-      "The cache makes the product feel safe on cost. I can rerun aggressively without recomputing finished steps or re-billing the same document.",
-    handle: "@ship-labs",
-  },
-  {
-    quote:
-      "The A/B test view is the difference. It does not feel like guessing on model choice — it feels like a controlled benchmark on real pipeline steps.",
-    handle: "@frontend-pilot",
-  },
-  {
-    quote:
-      "The best part is seeing every step traced. Token counts, costs, schema passes — it feels like proper engineering, but without the grind.",
-    handle: "@mamuli23",
   },
 ];
 
@@ -195,20 +161,6 @@ function TerminalPreview({ title, steps }: { title: string; steps: LogStep[] }) 
   );
 }
 
-function Shot({ src, alt, priority = false }: { src: ImagePath; alt: string; priority?: boolean }) {
-  return (
-    <div className="terminal-window overflow-hidden">
-      <div className="terminal-titlebar">
-        <span className="terminal-dot bg-[#ff5f57]" />
-        <span className="terminal-dot bg-[#febc2e]" />
-        <span className="terminal-dot bg-[#28c840]" />
-        <span className="ml-2 truncate font-mono text-[10px] text-muted">{alt}</span>
-      </div>
-      <Image src={src} alt={alt} width={1024} height={461} priority={priority} className="h-auto w-full" />
-    </div>
-  );
-}
-
 export default function Home() {
   return (
     <main className="grain-bg flex-1">
@@ -235,9 +187,6 @@ export default function Home() {
               <a href={APP_URL} className="zeero-btn">
                 Try now
               </a>
-              <a href={APP_LOGIN_URL} className="zeero-btn-ghost">
-                Get a demo
-              </a>
             </div>
             <a
               href="https://www.antler.co/"
@@ -255,19 +204,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* logo grid */}
-        <div className="grid grid-cols-3 border-b border-line sm:grid-cols-6">
-          {["Your Company", "Your Company", "Your Company", "Your Company", "Your Company", "Your Company"].map(
-            (label: string, i: number) => (
-              <div
-                key={i}
-                className="flex h-16 items-center justify-center border-r border-line px-4 last:border-r-0 sm:h-20"
-              >
-                <span className="text-xs text-muted-dim">{label}</span>
-              </div>
-            ),
-          )}
-        </div>
       </section>
 
       {/* 3-step overview — zeeroday feature rows */}
@@ -303,32 +239,6 @@ export default function Home() {
         ))}
       </section>
 
-      {/* live preview */}
-      <section id="preview" className="mx-auto max-w-[1200px] scroll-mt-24 border-x border-b border-line">
-        <div className="border-b border-line px-8 py-10 sm:px-12">
-          <h2 className="text-3xl font-normal tracking-tight sm:text-4xl">Watch the pipeline live</h2>
-        </div>
-        <div className="grid md:grid-cols-2">
-          <div className="border-b border-line p-6 sm:p-8 md:border-b-0 md:border-r">
-            <Shot src="/screens/s-pipeline.png" alt="auto pipeline — pipeline builder" priority />
-          </div>
-          <div className="flex flex-col justify-center p-8 sm:p-12">
-            <h3 className="text-2xl font-normal tracking-tight">Pipeline builder</h3>
-            <p className="mt-4 leading-relaxed text-muted">
-              Wire typed steps left to right. Invalid connections mark the pipeline broken and disable run buttons —
-              before you spend a cent on inference.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-2">
-              {["Structure Agent", "Pipeline Agent", "Inference Agent"].map((tag: string) => (
-                <span key={tag} className="log-tag">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* feature grid */}
       <section id="features" className="mx-auto max-w-[1200px] scroll-mt-24 border-x border-line">
         <div className="border-b border-line px-8 py-10 sm:px-12">
@@ -354,26 +264,19 @@ export default function Home() {
       </section>
 
       {/* validated text spotlight */}
-      <section className="mx-auto max-w-[1200px] border-x border-b border-line">
-        <div className="grid md:grid-cols-2">
-          <div className="flex flex-col justify-center border-b border-line p-8 sm:p-12 md:border-b-0 md:border-r">
-            <h2 className="text-3xl font-normal tracking-tight sm:text-4xl">
-              Click any extracted quote.
-              <br />
-              Jump to its source.
-            </h2>
-            <p className="mt-4 leading-relaxed text-muted">
-              Every span an LLM extracts is validated against the original document and stored with character offsets.
-              One click takes a reviewer from the model&apos;s claim to the exact highlighted passage.
-            </p>
-            <p className="mt-4 font-mono text-xs text-muted-dim">
-              text → list[tuple[text, quote]] · offsets stored with the run
-            </p>
-          </div>
-          <div className="p-6 sm:p-8">
-            <Shot src="/screens/s-docviewer.png" alt="auto pipeline — source document viewer" />
-          </div>
-        </div>
+      <section className="mx-auto max-w-[1200px] border-x border-b border-line px-8 py-12 sm:px-12 sm:py-16">
+        <h2 className="text-3xl font-normal tracking-tight sm:text-4xl">
+          Click any extracted quote.
+          <br />
+          Jump to its source.
+        </h2>
+        <p className="mt-4 max-w-2xl leading-relaxed text-muted">
+          Every span an LLM extracts is validated against the original document and stored with character offsets. One
+          click takes a reviewer from the model&apos;s claim to the exact highlighted passage.
+        </p>
+        <p className="mt-4 font-mono text-xs text-muted-dim">
+          text → list[tuple[text, quote]] · offsets stored with the run
+        </p>
       </section>
 
       {/* stats row */}
@@ -390,26 +293,6 @@ export default function Home() {
             >
               <p className="font-mono text-4xl font-normal text-foreground">{stat.value}</p>
               <p className="mt-3 text-sm leading-relaxed text-muted">{stat.label}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* testimonials */}
-      <section className="mx-auto max-w-[1200px] border-x border-b border-line">
-        <div className="border-b border-line px-8 py-10 sm:px-12">
-          <h2 className="text-3xl font-normal tracking-tight sm:text-4xl">Trusted by devs shipping pipelines</h2>
-        </div>
-        <div className="grid sm:grid-cols-2">
-          {TESTIMONIALS.map((t: Testimonial, i: number) => (
-            <div
-              key={t.handle}
-              className={`p-8 sm:p-10 ${i % 2 === 0 ? "sm:border-r sm:border-line" : ""} ${
-                i < TESTIMONIALS.length - 2 ? "border-b border-line sm:border-b-0" : ""
-              } ${i < TESTIMONIALS.length - 1 ? "border-b border-line sm:border-b" : ""}`}
-            >
-              <p className="text-base leading-relaxed text-foreground/90">&ldquo;{t.quote}&rdquo;</p>
-              <p className="mt-4 text-sm text-muted">{t.handle}</p>
             </div>
           ))}
         </div>
@@ -449,9 +332,6 @@ export default function Home() {
           <p className="mx-auto mt-5 max-w-lg text-muted">
             Cheap open models, properly structured and validated, beat an expensive model on a messy prompt.
           </p>
-          <a href={APP_LOGIN_URL} className="zeero-btn mt-8 inline-flex">
-            Get a demo
-          </a>
         </div>
       </section>
 
@@ -473,9 +353,6 @@ export default function Home() {
             <div className="mt-4 flex flex-col gap-2">
               <a href={APP_URL} className="text-sm text-muted hover:text-foreground">
                 Try now
-              </a>
-              <a href={APP_LOGIN_URL} className="text-sm text-muted hover:text-foreground">
-                Get a demo
               </a>
             </div>
           </div>

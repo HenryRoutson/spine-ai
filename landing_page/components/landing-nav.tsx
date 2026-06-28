@@ -29,9 +29,6 @@ export function LandingNav({ links, loginUrl }: LandingNavProps) {
               {link.label}
             </a>
           ))}
-          <a href={loginUrl} className="zeero-btn text-sm">
-            Get a demo
-          </a>
         </div>
 
         <button
@@ -59,9 +56,6 @@ export function LandingNav({ links, loginUrl }: LandingNavProps) {
                 {link.label}
               </a>
             ))}
-            <a href={loginUrl} className="zeero-btn w-fit text-sm" onClick={() => setOpen(false)}>
-              Get a demo
-            </a>
           </div>
         </div>
       ) : null}
