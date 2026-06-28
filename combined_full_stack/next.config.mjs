@@ -12,10 +12,12 @@ const supabaseKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
   process.env.SUPABASE_ANON_KEY
 
+// AI : app root only — repo-wide root made Turbopack watch old/, landing_page/, etc.
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   turbopack: {
-    root: path.join(__dirname, ".."),
+    root: __dirname,
   },
   env: {
     ...(supabaseUrl ? { NEXT_PUBLIC_SUPABASE_URL: supabaseUrl } : {}),

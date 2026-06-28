@@ -6,6 +6,10 @@ import {
   structureModelSpecSchema,
 } from "./assistant-shared";
 import {
+  buildProjectAssistantSystemPrompt,
+  buildProjectContextBlock,
+} from "./assistant-prompt";
+import {
   computeInvalid,
   formatPipelineValidationErrors,
   syncAutoQuoteSteps,
@@ -14,12 +18,14 @@ import { UsageLedger } from "./usage";
 import { createPipelineModule } from "@/lib/pipeline-module-factory";
 import { uid } from "@/lib/id";
 import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds";
+import { materializeStructureModels } from "./structure_assistant";
+import { attachAssistantUsage } from "./assistant_billing";
 import {
   DEFAULT_MODEL,
   INPUT_TYPES,
   MODEL_OPTIONS,
-  MODULE_META,
-  type ModelField,
+  type DocLabel,
+  type InputType,
   type ModelId,
   type ModuleId,
   type ModuleKind,
@@ -51,18 +57,35 @@ const moduleSpecSchema = z.object({
 
 const modelSpecSchema = structureModelSpecSchema;
 
+const ASSISTANT_DOC_TYPES = ["text", "json"] as const satisfies readonly InputType[];
+
+const docSpecSchema = z.object({
+  name: z.string(),
+  type: z.enum(ASSISTANT_DOC_TYPES),
+  content: z.string().max(32_000),
+  label: z.enum(["inference", "training"]).optional(),
+});
+
 const assistantResponseSchema = z.object({
   message: z.string(),
   modules: z.array(moduleSpecSchema).nullable(),
   models: z.array(modelSpecSchema).nullable(),
+  docs: z.array(docSpecSchema).nullable(),
 });
 
 export type PipelineAssistantModuleSpec = z.infer<typeof moduleSpecSchema>;
 export type PipelineAssistantModelSpec = z.infer<typeof modelSpecSchema>;
+export type ProjectAssistantDocSpec = z.infer<typeof docSpecSchema>;
 
 export type PipelineAssistantProposal = {
   modules: PipelineModule[];
   models: StructureModel[];
+  docs: ProjectAssistantDocSpec[];
+  changed: {
+    modules: boolean;
+    models: boolean;
+    docs: boolean;
+  };
 };
 
 export type PipelineAssistantResult = {
@@ -71,6 +94,7 @@ export type PipelineAssistantResult = {
   invalidCount: number;
   validationErrors: string | null;
   retryCount: number;
+  usageCents: number;
 };
 
 export type PipelineAssistantOpts = {
@@ -156,31 +180,23 @@ function materializeModels(
   existing: StructureModel[],
 ): StructureModel[] {
   if (!specs?.length) return existing;
-  const byName = new Map(existing.map((m) => [m.name.toLowerCase(), m]));
-  const next = [...existing];
-  for (const spec of specs) {
-    const key = spec.name.toLowerCase();
-    if (byName.has(key)) continue;
-    const id = uid<StructureModelId>();
-    const fields: ModelField[] = spec.fields.map((f) => ({
-      id: uid(),
-      name: f.name,
-      type: f.type as ModelField["type"],
-      optional: f.optional,
-      description: f.description,
-      ref: resolveStructureIdFromModels(f.ref, next),
-    }));
-    const model: StructureModel = { id, name: spec.name, description: spec.description, fields };
-    next.push(model);
-    byName.set(key, model);
-  }
-  return next;
+  return materializeStructureModels(specs, existing);
+}
+
+function materializeDocs(
+  specs: ProjectAssistantDocSpec[] | null | undefined,
+): ProjectAssistantDocSpec[] {
+  if (!specs?.length) return [];
+  return specs.map((d) => ({
+    ...d,
+    label: (d.label ?? "inference") as DocLabel,
+  }));
 }
 
 function buildThinkingSystemPrompt(): string {
-  return `You are a pipeline design assistant for "auto pipeline" — a linear left-to-right document processing system.
+  return `You are the project assistant for "auto pipeline" — structures, pipeline steps, and inference test documents.
 
-Reason step-by-step about the user's request: required steps, data flow, which structure models to use or create, and edge cases.
+Reason step-by-step: required structures, linear data flow, chunking/map-reduce if inputs may exceed context, which test documents to synthesize, and edge cases.
 Plain text only — no JSON, no markdown headings. Be concise (roughly 150–300 words).`;
 }
 
@@ -212,36 +228,8 @@ ${stepsBlock}
 User request: ${message}`;
 }
 
-function buildSystemPrompt(): string {
-  const kinds = MODULE_KINDS.map(
-    (k) => `- ${k}: ${MODULE_META[k].label} — ${MODULE_META[k].description}`,
-  ).join("\n");
-  const models = MODEL_OPTIONS.map((m) => `- ${m.id}: ${m.label}`).join("\n");
-  return `You are a pipeline design assistant for "auto pipeline" — a linear left-to-right document processing system.
-
-Module kinds:
-${kinds}
-
-Rules:
-- Pipelines are strictly linear. Each step must consume ONLY the previous step's output — never an earlier structure with the same model name. combine is the exception: it reads pipeline state (by structure name) plus the document input immediately before it.
-- Every step needs an output structure (structureOut). Input steps only need structureOut.
-- Reference structures by exact name from the project's models list (e.g. "Document", "AtomicRule").
-- Input steps may set inputNameContains so only documents whose filename includes that substring can fill that slot (useful when a pipeline has multiple inputs).
-- Any step may set inputDescription — before the step runs, Gemini Flash-Lite rejects input that doesn't match.
-- combine steps merge pipeline state with a new document — emit ONLY the combine step; a Document Input is auto-inserted before it.
-- llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
-- llm-batch consumes a list and emits a list — set outIsList: true.
-- transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically. For matrix/summary reshapes beyond auto-wrap, use custom-code with \`code\` or an llm step — not a bare transform.
-- Add output steps wherever a named artifact snapshot is needed — pipelines may have several; each output's structureIn is the structure it materializes (not necessarily the last step).
-- Use model ids from: ${models}
-- Default LLM model: ${DEFAULT_MODEL}
-
-When the user asks to create or change the pipeline, return a FULL replacement modules array (not a patch).
-To clear or remove all steps, return modules as an empty array [] — never null.
-When answering questions without pipeline changes, set modules to null.
-When new data structures are needed, return models array with field definitions; otherwise null.
-The user prompt includes current pipeline validation errors when present — address them when revising the pipeline.
-Keep prompts concise and task-specific. Be conversational in message.`;
+function buildSystemPrompt(globalModel: ModelId): string {
+  return buildProjectAssistantSystemPrompt(globalModel);
 }
 
 function buildUserPrompt(
@@ -252,36 +240,6 @@ function buildUserPrompt(
   opts?: PipelineAssistantOpts,
   thinking?: string,
 ): string {
-  const modelsJson = JSON.stringify(
-    project.models.map((m) => ({
-      id: m.id,
-      name: m.name,
-      description: m.description,
-      fields: m.fields.map((f) => ({ name: f.name, type: f.type, optional: f.optional, ref: f.ref })),
-    })),
-    null,
-    2,
-  );
-  const modulesJson = JSON.stringify(
-    project.modules.map((m) => ({
-      kind: m.kind,
-      label: m.label,
-      note: m.note,
-      structureIn: project.models.find((x) => x.id === m.inStructureId)?.name,
-      structureOut: project.models.find((x) => x.id === m.outStructureId)?.name,
-      inputType: m.inputType,
-      prompt: m.prompt,
-      code: m.code,
-      model: m.model,
-      outIsList: m.outIsList,
-    })),
-    null,
-    2,
-  );
-  const historyBlock =
-    history.length > 0
-      ? `\nRecent conversation:\n${history.map((t) => `${t.role}: ${t.content}`).join("\n")}\n`
-      : "";
   const currentValidation = formatPipelineValidationErrors(project.modules, project.models);
   const currentValidationBlock = currentValidation
     ? `\nCurrent pipeline validation errors (fix when changing the pipeline; do not replicate these mistakes):\n${currentValidation}\n`
@@ -292,15 +250,7 @@ function buildUserPrompt(
   const thinkingBlock = thinking?.trim()
     ? `\nYour prior reasoning (use this; do not repeat it in message):\n${thinking.trim()}\n`
     : "";
-  return `Project: ${project.name} (${project.kind})
-Default model: ${globalModel}
-${historyBlock}
-Current structure models:
-${modelsJson}
-
-Current pipeline (${project.modules.length} steps):
-${modulesJson}
-${currentValidationBlock}${thinkingBlock}${fixBlock}
+  return `${buildProjectContextBlock(project, globalModel, history, `${currentValidationBlock}${thinkingBlock}${fixBlock}`)}
 User request: ${message}`;
 }
 
@@ -309,13 +259,26 @@ function materializeProposal(
   project: Project,
   globalModel: ModelId,
 ): PipelineAssistantProposal | null {
-  if (raw.modules === null) return null;
+  const hasPipelineChange = raw.modules !== null;
+  const hasModelChange = raw.models !== null;
+  const hasDocChange = raw.docs !== null;
+  if (!hasPipelineChange && !hasModelChange && !hasDocChange) return null;
+
   const models = materializeModels(raw.models, project.models);
-  const modules = syncAutoQuoteSteps(
-    expandModuleSpecs(raw.modules, models, globalModel),
+  const modules = hasPipelineChange
+    ? syncAutoQuoteSteps(expandModuleSpecs(raw.modules ?? [], models, globalModel), models) ?? []
+    : project.modules;
+  const docs = materializeDocs(raw.docs);
+  return {
+    modules: modules ?? [],
     models,
-  );
-  return { modules: modules ?? [], models };
+    docs,
+    changed: {
+      modules: hasPipelineChange,
+      models: hasModelChange,
+      docs: hasDocChange,
+    },
+  };
 }
 
 export async function proposePipelineChange(
@@ -331,67 +294,33 @@ export async function proposePipelineChange(
 
   let thinking = "";
   let llmAttempt = 0;
-  if (!fixErrors) {
-    opts?.onPhase?.("thinking");
-    thinking = await llmStreamString(
-      buildThinkingUserPrompt(project, message, history, globalModel),
-      {
-        model: globalModel,
-        ledger,
-        system: buildThinkingSystemPrompt(),
-        maxTokens: 1024,
-      },
-      (delta) => opts?.onThinkingDelta?.(delta),
-    );
-    opts?.onThinkingDone?.(thinking);
-  }
+  try {
+    if (!fixErrors) {
+      opts?.onPhase?.("thinking");
+      thinking = await llmStreamString(
+        buildThinkingUserPrompt(project, message, history, globalModel),
+        {
+          model: globalModel,
+          ledger,
+          system: buildThinkingSystemPrompt(),
+          maxTokens: 1024,
+        },
+        (delta) => opts?.onThinkingDelta?.(delta),
+      );
+      opts?.onThinkingDone?.(thinking);
+    }
 
-  opts?.onPhase?.("structuring");
-  let raw = await llmStructured(
-    buildUserPrompt(project, message, history, globalModel, {
-      fixValidationErrors: fixErrors,
-      fixAttempt: fixAttempt || undefined,
-    }, thinking),
-    assistantResponseSchema,
-    {
-      model: globalModel,
-      ledger,
-      system: buildSystemPrompt(),
-      onStructuredFailure: (detail) => {
-        llmAttempt += 1;
-        opts?.onStructuredFailure?.({
-          attempt: llmAttempt,
-          failureKind: detail.kind,
-          error: detail.error,
-        });
-      },
-    },
-  );
-  llmAttempt += 1;
-  opts?.onLlmResponse?.(fixErrors ? `retry-${fixAttempt}` : "initial", raw);
-
-  let proposal = materializeProposal(raw, project, globalModel);
-  let retryCount = 0;
-
-  for (let retry = 0; retry < MAX_VALIDATION_RETRIES && proposal; retry++) {
-    const validationErrors = formatPipelineValidationErrors(proposal.modules, proposal.models);
-    if (!validationErrors) break;
-
-    retryCount += 1;
-    fixAttempt = retryCount;
-    fixErrors = validationErrors;
-    opts?.onValidationFailed?.(retryCount, validationErrors);
-    opts?.onPhase?.("retrying");
-    raw = await llmStructured(
+    opts?.onPhase?.("structuring");
+    let raw = await llmStructured(
       buildUserPrompt(project, message, history, globalModel, {
         fixValidationErrors: fixErrors,
-        fixAttempt,
+        fixAttempt: fixAttempt || undefined,
       }, thinking),
       assistantResponseSchema,
       {
         model: globalModel,
         ledger,
-        system: buildSystemPrompt(),
+        system: buildSystemPrompt(globalModel),
         onStructuredFailure: (detail) => {
           llmAttempt += 1;
           opts?.onStructuredFailure?.({
@@ -403,15 +332,64 @@ export async function proposePipelineChange(
       },
     );
     llmAttempt += 1;
-    opts?.onLlmResponse?.(`retry-${retryCount}`, raw);
-    proposal = materializeProposal(raw, project, globalModel);
+    opts?.onLlmResponse?.(fixErrors ? `retry-${fixAttempt}` : "initial", raw);
+
+    let proposal = materializeProposal(raw, project, globalModel);
+    let retryCount = 0;
+
+    for (let retry = 0; retry < MAX_VALIDATION_RETRIES && proposal; retry++) {
+      const validationErrors = formatPipelineValidationErrors(proposal.modules, proposal.models);
+      if (!validationErrors) break;
+
+      retryCount += 1;
+      fixAttempt = retryCount;
+      fixErrors = validationErrors;
+      opts?.onValidationFailed?.(retryCount, validationErrors);
+      opts?.onPhase?.("retrying");
+      raw = await llmStructured(
+        buildUserPrompt(project, message, history, globalModel, {
+          fixValidationErrors: fixErrors,
+          fixAttempt,
+        }, thinking),
+        assistantResponseSchema,
+        {
+          model: globalModel,
+          ledger,
+          system: buildSystemPrompt(globalModel),
+          onStructuredFailure: (detail) => {
+            llmAttempt += 1;
+            opts?.onStructuredFailure?.({
+              attempt: llmAttempt,
+              failureKind: detail.kind,
+              error: detail.error,
+            });
+          },
+        },
+      );
+      llmAttempt += 1;
+      opts?.onLlmResponse?.(`retry-${retryCount}`, raw);
+      proposal = materializeProposal(raw, project, globalModel);
+    }
+
+    const invalidCount = proposal ? computeInvalid(proposal.modules, proposal.models).size : 0;
+    const validationErrors =
+      proposal && invalidCount > 0
+        ? formatPipelineValidationErrors(proposal.modules, proposal.models)
+        : null;
+
+    return {
+      message: raw.message,
+      proposal,
+      invalidCount,
+      validationErrors,
+      retryCount,
+      usageCents: ledger.totalCents(),
+    };
+  } catch (err) {
+    attachAssistantUsage(err, ledger.totalCents());
+    throw err;
   }
-
-  const invalidCount = proposal ? computeInvalid(proposal.modules, proposal.models).size : 0;
-  const validationErrors =
-    proposal && invalidCount > 0
-      ? formatPipelineValidationErrors(proposal.modules, proposal.models)
-      : null;
-
-  return { message: raw.message, proposal, invalidCount, validationErrors, retryCount };
 }
+
+// AI : unified entry point — structures + pipeline + test docs.
+export const proposeProjectChange = proposePipelineChange;

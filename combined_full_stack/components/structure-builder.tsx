@@ -1,9 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Plus, Trash2, Code2, LayoutGrid, FileSpreadsheet, Sparkles, Sparkle, AlertTriangle, Lock } from "lucide-react"
+import { Plus, Trash2, Code2, LayoutGrid, FileSpreadsheet, Sparkles, AlertTriangle, Lock } from "lucide-react"
 import { StructureFieldRow } from "@/components/structure-field-row"
-import { StructureAssistant } from "@/components/structure-assistant"
 import { StructureExcelEditor } from "@/components/structure-excel-editor"
 import { StructureSourceDocLink } from "@/components/structure-source-doc-link"
 import { WindowHeader } from "@/components/window-header"
@@ -22,7 +21,7 @@ export function StructureBuilder() {
   const { models, setModels } = useStore()
   const { focusStructureId, clearFocusStructure } = useAppShell()
   const [selectedId, setSelectedId] = useState<string>(models[0]?.id ?? "")
-  const [view, setView] = useState<"ui" | "excel" | "code" | "ai">("ui")
+  const [view, setView] = useState<"ui" | "excel" | "code">("ui")
 
   // AI : jump here from JSON preview "validates as" links.
   useEffect(() => {
@@ -131,17 +130,6 @@ export function StructureBuilder() {
               )}
             >
               <Code2 className="h-3.5 w-3.5" /> Code
-            </button>
-            <button
-              onClick={() => setView("ai")}
-              className={cn(
-                "flex items-center gap-1.5 rounded px-2 py-1 text-xs",
-                view === "ai"
-                  ? "bg-secondary text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Sparkle className="h-3.5 w-3.5" /> AI
             </button>
           </div>
         }
@@ -297,10 +285,6 @@ export function StructureBuilder() {
                 {'`text` reads as a string for non-technical reviewers. `tuple[text, quote]` links extracted text back to its source span.'}
               </p>
             </div>
-          </div>
-        ) : view === "ai" ? (
-          <div className="min-w-0 flex-1 overflow-hidden">
-            <StructureAssistant />
           </div>
         ) : view === "code" ? (
           <div className="min-w-0 flex-1 overflow-y-auto bg-[oklch(0.14_0.004_264)]">

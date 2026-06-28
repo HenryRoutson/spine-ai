@@ -8,8 +8,11 @@ import {
 import { uid } from "@/lib/id";
 import { UsageLedger } from "./usage";
 import {
+  buildFieldTypesPromptBlock,
+  buildStructureRulesPromptBlock,
+} from "./assistant-prompt";
+import {
   DEFAULT_MODEL,
-  FIELD_TYPES,
   type FieldType,
   type ModelField,
   type ModelId,
@@ -38,7 +41,7 @@ export type StructureAssistantResult = {
 
 export type { ChatTurn };
 
-function materializeStructures(
+export function materializeStructureModels(
   specs: StructureAssistantModelSpec[],
   existing: StructureModel[],
 ): StructureModel[] {
@@ -75,22 +78,12 @@ function materializeStructures(
 }
 
 function buildSystemPrompt(): string {
-  const types = FIELD_TYPES.map((t) => `- ${t}`).join("\n");
   return `You are a structure design assistant for "auto pipeline" — pydantic/zod output schemas for LLM pipeline steps.
 
 Field types:
-${types}
+${buildFieldTypesPromptBlock()}
 
-Rules:
-- Structures are pydantic models: name, description (docstring), and typed fields.
-- Use "text" for strings (not "str"). Use "tuple[text,quote]" when extracted text must link back to a source span; the quote offsets are resolved downstream — never ask for doc_id/start/end in the schema.
-- Use "model" / "list[model]" with ref set to another structure's exact name when nesting.
-- Use "document" for the shared Document structure ({ content, filename }).
-- Optional fields: set optional true.
-- When the user asks to create or change structures, return a FULL replacement models array (all models that should exist after the change — include untouched models too).
-- When answering questions without schema changes, set models to null.
-- Keep descriptions concise and useful as LLM field hints.
-- Be conversational in message.`;
+${buildStructureRulesPromptBlock()}`;
 }
 
 function buildUserPrompt(project: Project, message: string, history: ChatTurn[]): string {
@@ -140,7 +133,7 @@ export async function proposeStructureChange(
   );
 
   const proposal: StructureAssistantProposal | null =
-    raw.models == null ? null : { models: materializeStructures(raw.models, project.models) };
+    raw.models == null ? null : { models: materializeStructureModels(raw.models, project.models) };
 
   return { message: raw.message, proposal };
 }

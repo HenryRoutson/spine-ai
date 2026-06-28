@@ -27,7 +27,7 @@
         "./*"
       ],
       "@shared/*": [
-        "../shared/*"
+        "./lib/shared/*"
       ]
     }
   },
@@ -35,7 +35,7 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    "../shared/**/*.ts",
+    "lib/shared/**/*.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],

@@ -137,9 +137,13 @@ function saveLocalLink(row: StoredSharedLink): void {
   writeFileSync(linkFile(row.id), JSON.stringify(row, null, 2));
 }
 
+// AI : public link fetch by id — service role only; anon RLS no longer grants blanket SELECT.
 async function loadSupabaseLink(id: SharedLinkId): Promise<StoredSharedLink | null> {
-  const db = await supabaseForSharedLinks();
-  if (!db) return loadLocalLink(id);
+  const db = await createAdminClient();
+  if (!db) {
+    if (isServerless()) return null;
+    return loadLocalLink(id);
+  }
   const { data, error } = await db
     .from("shared_links")
     .select("*")

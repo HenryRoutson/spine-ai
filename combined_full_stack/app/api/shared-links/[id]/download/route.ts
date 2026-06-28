@@ -12,14 +12,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
   const url = new URL(req.url);
   const runId = url.searchParams.get("runId") as RunId | null;
-  const token = url.searchParams.get("token");
-  if (!runId || !token) return apiError("runId and token required", 400);
-
   const jobId = url.searchParams.get("jobId");
-  if (jobId) {
-    const entry = verifySharedProgressToken(linkId as SharedLinkId, jobId, token);
-    if (!entry) return apiError("invalid token", 403);
-  }
+  const token = url.searchParams.get("token");
+  if (!runId || !jobId || !token) return apiError("runId, jobId, and token required", 400);
+
+  const entry = verifySharedProgressToken(linkId as SharedLinkId, jobId, token);
+  if (!entry) return apiError("invalid token", 403);
 
   const store = await openStoreForUser(link.ownerId);
   const run = store.runs(link.projectId).find((r) => r.id === runId);

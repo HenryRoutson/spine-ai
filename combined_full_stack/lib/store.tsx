@@ -29,6 +29,7 @@ import type {
   Strategy,
   StructureModel,
   StructureModelId,
+  InputType,
 } from "@/lib/types"
 import { DEFAULT_MODEL } from "@/lib/types"
 import { apiJson, apiPut, JSON_HEADERS } from "@/lib/api-client"
@@ -73,6 +74,11 @@ interface StoreState {
   setModels: (m: StructureModel[]) => void
   modules: PipelineModule[]
   setModules: (m: PipelineModule[]) => void
+  // AI : atomic models+modules patch — avoids stale closure when assistant changes both at once
+  applyProjectChanges: (changes: {
+    models?: StructureModel[]
+    modules?: PipelineModule[]
+  }) => void
   strategies: Strategy[]
   setStrategies: (s: Strategy[]) => void
   // global model
@@ -81,6 +87,13 @@ interface StoreState {
   // documents — real upload through POST /api/docs (content-hash dedupe server-side)
   docs: DocRef[]
   addDoc: (file: File, label: DocLabel, projectId?: string) => Promise<DocRef>
+  addDocContent: (
+    name: string,
+    type: InputType,
+    content: string,
+    label: DocLabel,
+    projectId?: string,
+  ) => Promise<DocRef>
   removeDoc: (docId: DocId, projectId?: string) => Promise<void>
   setDocProjects: (docId: DocId, projectIds: ProjectId[]) => Promise<void>
   // runs / logs
@@ -423,6 +436,76 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return doc
   }, [activeProjectId, persistProject])
 
+  const addDocContent = useCallback(
+    async (
+      name: string,
+      type: InputType,
+      content: string,
+      label: DocLabel,
+      projectId?: string,
+    ) => {
+      const blocked = confidentialUploadWarning(name)
+      if (blocked) throw new Error(blocked)
+
+      const doc = await apiJson<DocRef>(API_ROUTES.docsContent, {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ name, type, content, label, projectId: projectId ?? activeProjectId }),
+      })
+      invalidateDocText(doc.id)
+      const pid = projectId ?? activeProjectId
+
+      setState((prev) => {
+        if (!prev) return prev
+        const hasDoc = prev.docs.some((d) => d.id === doc.id)
+        const nextDocs = hasDoc ? prev.docs : [doc, ...prev.docs]
+        if (!pid) return hasDoc ? prev : { ...prev, docs: nextDocs }
+        const names = prev.projects.find((p) => p.id === pid)?.seedDocNames ?? []
+        if (names.includes(doc.name)) return hasDoc ? prev : { ...prev, docs: nextDocs }
+        const nextProjects = prev.projects.map((p) =>
+          p.id === pid ? { ...p, seedDocNames: [...(p.seedDocNames ?? []), doc.name] } : p,
+        )
+        return { ...prev, docs: nextDocs, projects: nextProjects }
+      })
+
+      if (pid) {
+        try {
+          setState((prev) => {
+            if (!prev) return prev
+            const p = prev.projects.find((x) => x.id === pid)
+            if (!p) return prev
+            const merged = mergeInferredStructuresForDoc(
+              p.models,
+              doc,
+              content,
+              () => uid<StructureModelId>(),
+            )
+            if (!modelsChanged(p.models, merged)) return prev
+            const models = stripSharedModels(merged)
+            const modules = syncAutoQuoteSteps(
+              migrateProjectModules(p).modules,
+              withSharedModels(models),
+            )
+            const nextProjects = prev.projects.map((x) =>
+              x.id === pid ? { ...p, models, modules } : x,
+            )
+            if (saveTimer.current) clearTimeout(saveTimer.current)
+            const body = JSON.stringify(nextProjects.find((x) => x.id === pid))
+            saveTimer.current = setTimeout(() => {
+              void persistProject(pid, body!)
+            }, 500)
+            return { ...prev, projects: nextProjects }
+          })
+        } catch (err) {
+          console.error("structure sync after content upload failed", err)
+        }
+      }
+
+      return doc
+    },
+    [activeProjectId, persistProject],
+  )
+
   const removeDoc = useCallback(async (docId: DocId, projectId?: string) => {
     const pid = projectId ?? activeProjectId
     const q = pid ? `?projectId=${encodeURIComponent(pid)}` : ""
@@ -544,6 +627,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [patchProject, project],
   )
 
+  const applyProjectChanges = useCallback(
+    (changes: { models?: StructureModel[]; modules?: PipelineModule[] }) => {
+      if (!project || (!changes.models && !changes.modules)) return
+
+      const nextModels = changes.models ? stripSharedModels(changes.models) : project.models
+      const modelsForSync = withSharedModels(nextModels)
+      const nextModules = changes.modules
+        ? syncAutoQuoteSteps(changes.modules, modelsForSync)
+        : changes.models
+          ? syncAutoQuoteSteps(project.modules, modelsForSync)
+          : undefined
+
+      patchProject({
+        ...(changes.models ? { models: nextModels } : {}),
+        ...(nextModules !== undefined ? { modules: nextModules } : {}),
+      })
+    },
+    [patchProject, project],
+  )
+
   const setStrategies = useCallback(
     (s: Strategy[]) => {
       patchProject({ strategies: s })
@@ -576,12 +679,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setModels,
       modules,
       setModules,
+      applyProjectChanges,
       strategies: project.strategies,
       setStrategies,
       model,
       setModel,
       docs: state.docs,
       addDoc,
+      addDocContent,
       removeDoc,
       setDocProjects,
       runs,
@@ -605,9 +710,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     modules,
     setModels,
     setModules,
+    applyProjectChanges,
     setStrategies,
     model,
     addDoc,
+    addDocContent,
     removeDoc,
     setDocProjects,
     runs,

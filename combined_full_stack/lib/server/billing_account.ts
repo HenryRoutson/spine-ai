@@ -12,6 +12,7 @@ import { join } from "node:path";
 import type Stripe from "stripe";
 import { createClient } from "@/utils/supabase/server";
 import { dataDir } from "./config";
+import { createAdminClient } from "./supabase_admin";
 import {
   isAuthSession,
   LOCAL_DEV_USER_ID,
@@ -89,8 +90,15 @@ function isMissingBillingTable(error: { message?: string }): boolean {
   return msg.includes("billing_accounts") || msg.includes("schema cache");
 }
 
+// AI : prefer service role — webhooks and shared-link runs bill users without their session.
+async function billingDb() {
+  const admin = await createAdminClient();
+  if (admin) return admin;
+  return createClient();
+}
+
 async function loadSupabaseAccount(userId: BillingUserKey): Promise<BillingAccount | null> {
-  const db = await createClient();
+  const db = await billingDb();
   const { data, error } = await db
     .from("billing_accounts")
     .select("balance_cents, total_billed_cents, total_usage_cents, subscribed, credited_sessions")
@@ -131,7 +139,7 @@ async function loadSupabaseAccount(userId: BillingUserKey): Promise<BillingAccou
 }
 
 async function saveSupabaseAccount(userId: BillingUserKey, account: BillingAccount): Promise<void> {
-  const db = await createClient();
+  const db = await billingDb();
   const row = {
     user_id: userId,
     balance_cents: toExactCents(account.balanceCents),

@@ -19,11 +19,13 @@ export function billingFromRuns(runs: PipelineRun[]): BillingPoint[] {
     for (const step of run.steps) {
       if (step.costCents <= 0) continue;
       const key =
-        run.source === "shared_link"
-          ? "shared link"
-          : step.kind === "doc-to-text" && !step.model
-            ? "doc-parse svc"
-            : modelOption(step.model ?? run.model).label;
+        run.source === "assistant"
+          ? "project assistant"
+          : run.source === "shared_link"
+            ? "shared link"
+            : step.kind === "doc-to-text" && !step.model
+              ? "doc-parse svc"
+              : modelOption(step.model ?? run.model).label;
       bucket.spend[key] = +((bucket.spend[key] ?? 0) + step.costCents).toFixed(4);
     }
     byDay.set(day, bucket);
@@ -62,13 +64,11 @@ export function billingPointsUsd(points: BillingPoint[]): BillingPoint[] {
 
 // AI : metrics — recompute per-module avgMs/avgCostCents from historical runs (Pipeline tab).
 // AI : lives here (pure module) rather than run_engine so the client bundle can import it.
-// AI : TODO bug — averages include cached (ms=0, cost=0) and error steps, dragging the
-// AI : Pipeline tab's "avg latency / avg cost" below the real execution numbers.
 export function moduleMetrics(runs: PipelineRun[]): Map<ModuleId, { avgMs: number; avgCostCents: number }> {
   const agg = new Map<ModuleId, { ms: number; cents: number; n: number }>();
   for (const r of runs) {
     for (const s of r.steps) {
-      // AI : cached/error steps skew averages toward 0 — only count real executions.
+      // AI : skip cached/error steps — only count real executions (status ok).
       if (s.status !== "ok") continue;
       const cur = agg.get(s.moduleId) ?? { ms: 0, cents: 0, n: 0 };
       agg.set(s.moduleId, { ms: cur.ms + s.ms, cents: cur.cents + s.costCents, n: cur.n + 1 });

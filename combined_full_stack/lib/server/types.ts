@@ -250,7 +250,7 @@ export interface RunStep extends Omit<StepDescriptionFields, "outputPreview"> {
 
 export type RunFingerprint = string & { __brand: "RunFingerprint" };
 export type SharedLinkId = string & { __brand: "SharedLinkId" };
-export type RunSource = "app" | "shared_link";
+export type RunSource = "app" | "shared_link" | "assistant";
 export type SharedLinkFundingMode = "sharer_pays" | "viewer_pays" | "viewer_signs_in";
 
 export interface PipelineRun {

@@ -21,6 +21,8 @@ export async function readPipelineAssistantStream<TProposal>(
   invalidCount: number
   retryCount: number
   validationErrors: string | null
+  billedCents: number
+  usageCents: number
   debugTrace: AssistantDebugEntry[]
 }> {
   const reader = res.body?.getReader()
@@ -35,6 +37,8 @@ export async function readPipelineAssistantStream<TProposal>(
     invalidCount: number
     retryCount: number
     validationErrors: string | null
+    billedCents: number
+    usageCents: number
   } | null = null
 
   const push = (entry: AssistantDebugEntry) => {
@@ -77,11 +81,18 @@ export async function readPipelineAssistantStream<TProposal>(
           retryCount: typeof evt.retryCount === "number" ? evt.retryCount : 0,
           validationErrors:
             typeof evt.validationErrors === "string" ? evt.validationErrors : null,
+          billedCents: typeof evt.billedCents === "number" ? evt.billedCents : 0,
+          usageCents: typeof evt.usageCents === "number" ? evt.usageCents : 0,
         }
       }
     }
   }
 
   if (!result) throw new Error("Assistant stream ended without a result")
-  return { ...result, debugTrace }
+  return {
+    ...result,
+    billedCents: result.billedCents ?? 0,
+    usageCents: result.usageCents ?? 0,
+    debugTrace,
+  }
 }

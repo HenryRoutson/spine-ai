@@ -11,7 +11,6 @@ import {
   Copy,
   Check,
   Lock,
-  Sparkle,
   Zap,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
@@ -26,7 +25,6 @@ import { KIND_COLOR, KIND_ICON } from "@/lib/module-ui"
 import { makeModule } from "@/lib/pipeline-module-factory"
 import { MODULE_META, type ModuleKind, type PipelineModule, type ModuleId } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
-import { PipelineAssistant } from "@/components/pipeline-assistant"
 import { PipelineCanvas } from "@/components/pipeline-canvas"
 import { PipelineSummaryBox } from "@/components/pipeline-summary-box"
 import { PipelineModuleFields } from "@/components/pipeline-module-fields"
@@ -49,13 +47,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 
-type AsideTab = "inspector" | "assistant"
-
 export function PipelineBuilder() {
   const { modules, setModules, models, model: globalModel, runs } = useStore()
   const [selectedId, setSelectedId] = useState<string>(modules[0]?.id ?? "")
   const [copied, setCopied] = useState(false)
-  const [asideTab, setAsideTab] = useState<AsideTab>("inspector")
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
 
   const selected = modules.find((m) => m.id === selectedId)
@@ -217,37 +212,13 @@ export function PipelineBuilder() {
           </div>
 
           <aside className="flex min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-border">
-            <div className="flex border-b border-border">
-              <button
-                type="button"
-                onClick={() => setAsideTab("inspector")}
-                className={cn(
-                  "flex-1 px-3 py-2 font-mono text-[10px] uppercase tracking-wider transition-colors",
-                  asideTab === "inspector"
-                    ? "border-b-2 border-primary text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
+            <div className="border-b border-border px-3 py-2">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                 Inspector
-              </button>
-              <button
-                type="button"
-                onClick={() => setAsideTab("assistant")}
-                className={cn(
-                  "flex flex-1 items-center justify-center gap-1.5 px-3 py-2 font-mono text-[10px] uppercase tracking-wider transition-colors",
-                  asideTab === "assistant"
-                    ? "border-b-2 border-primary text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <Sparkle className="h-3 w-3" />
-                Assistant
-              </button>
+              </span>
             </div>
 
-            {asideTab === "assistant" ? (
-              <PipelineAssistant />
-            ) : selected ? (
+            {selected ? (
               <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -309,7 +280,7 @@ export function PipelineBuilder() {
             ) : (
               <div className="flex flex-1 items-center justify-center p-6 text-center">
                 <p className="text-xs text-muted-foreground">
-                  Add a module and select it to configure, or use the Assistant tab.
+                  Add a module and select it to configure.
                 </p>
               </div>
             )}

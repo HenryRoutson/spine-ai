@@ -33,6 +33,7 @@ import { ModelSelector } from "@/components/model-selector"
 import { LazyDocViewer } from "@/components/lazy-doc-viewer"
 import { PanelLoading } from "@/components/panel-loading"
 import { FeedbackButton } from "@/components/feedback-button"
+import { ProjectAssistantDock } from "@/components/project-assistant-dock"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -343,6 +344,7 @@ export function AppShellLayout() {
             default model
           </span>
           <ModelSelector value={model} onChange={setModel} />
+          <ProjectAssistantDock />
           <FeedbackButton />
           <AccountMenu />
         </div>

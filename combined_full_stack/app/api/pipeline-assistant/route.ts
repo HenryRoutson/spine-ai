@@ -4,17 +4,16 @@ import { HTTP } from "@/lib/server/api-errors";
 import {
   requireAssistantMessage,
   requireProjectOr404,
+  runBilledProjectAssistant,
   trimAssistantHistory,
   type AssistantRequestBody,
 } from "@/lib/server/assistant-route";
-import { proposePipelineChange } from "@/lib/server/pipeline_assistant";
 import { ASSISTANT_STREAM_EVENT } from "@/lib/assistant-chat-types";
 import { logger } from "@/lib/server/server_logger";
 import { DEFAULT_MODEL } from "@/lib/server/types";
 
 const apiLog = logger("api:pipeline-assistant");
 
-// AI : keep in sync with ROUTE_MAX_DURATION_ASSISTANT in lib/server/route-config.ts.
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
@@ -44,7 +43,14 @@ export async function POST(req: NextRequest) {
 
   try {
     if (!stream) {
-      const result = await proposePipelineChange(project, message.trim(), trimmedHistory, model);
+      const result = await runBilledProjectAssistant(
+        store,
+        project,
+        message,
+        trimmedHistory,
+        model,
+      );
+      if (result instanceof NextResponse) return result;
       return NextResponse.json(result);
     }
 
@@ -55,19 +61,35 @@ export async function POST(req: NextRequest) {
           controller.enqueue(encoder.encode(`${JSON.stringify(payload)}\n`));
         };
         try {
-          const result = await proposePipelineChange(project, message.trim(), trimmedHistory, model, {
-            onThinkingDelta: (text) =>
-              push({ type: ASSISTANT_STREAM_EVENT.THINKING_DELTA, text }),
-            onThinkingDone: (text) =>
-              push({ type: ASSISTANT_STREAM_EVENT.THINKING_DONE, text }),
-            onPhase: (phase) => push({ type: ASSISTANT_STREAM_EVENT.PHASE, phase }),
-            onLlmResponse: (label, response) =>
-              push({ type: ASSISTANT_STREAM_EVENT.LLM_RESPONSE, label, response }),
-            onStructuredFailure: (detail) =>
-              push({ type: ASSISTANT_STREAM_EVENT.STRUCTURED_FAILURE, ...detail }),
-            onValidationFailed: (attempt, errors) =>
-              push({ type: ASSISTANT_STREAM_EVENT.VALIDATION_FAILED, attempt, errors }),
-          });
+          const result = await runBilledProjectAssistant(
+            store,
+            project,
+            message,
+            trimmedHistory,
+            model,
+            {
+              onThinkingDelta: (text) =>
+                push({ type: ASSISTANT_STREAM_EVENT.THINKING_DELTA, text }),
+              onThinkingDone: (text) =>
+                push({ type: ASSISTANT_STREAM_EVENT.THINKING_DONE, text }),
+              onPhase: (phase) => push({ type: ASSISTANT_STREAM_EVENT.PHASE, phase }),
+              onLlmResponse: (label, response) =>
+                push({ type: ASSISTANT_STREAM_EVENT.LLM_RESPONSE, label, response }),
+              onStructuredFailure: (detail) =>
+                push({ type: ASSISTANT_STREAM_EVENT.STRUCTURED_FAILURE, ...detail }),
+              onValidationFailed: (attempt, errors) =>
+                push({ type: ASSISTANT_STREAM_EVENT.VALIDATION_FAILED, attempt, errors }),
+            },
+          );
+          if (result instanceof NextResponse) {
+            const errBody = await result.json().catch(() => ({ error: "Assistant billing failed" }));
+            push({
+              type: ASSISTANT_STREAM_EVENT.ERROR,
+              error: typeof errBody.error === "string" ? errBody.error : "Assistant billing failed",
+              status: result.status,
+            });
+            return;
+          }
           push({
             type: ASSISTANT_STREAM_EVENT.DONE,
             message: result.message,
@@ -75,6 +97,8 @@ export async function POST(req: NextRequest) {
             invalidCount: result.invalidCount,
             retryCount: result.retryCount,
             validationErrors: result.validationErrors,
+            billedCents: result.billedCents,
+            usageCents: result.usageCents,
           });
         } catch (err) {
           push({ type: ASSISTANT_STREAM_EVENT.ERROR, error: (err as Error).message });

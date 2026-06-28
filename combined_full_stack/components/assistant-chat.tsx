@@ -48,7 +48,7 @@ type AssistantChatProps<TProposal> = {
   loadingLabel: string | ((phase: AssistantLoadingPhase) => string)
   showDebug?: boolean
   renderProposal: (msg: AssistantChatMessage<TProposal>) => ReactNode
-  onApprove: (msg: AssistantChatMessage<TProposal>) => void
+  onApprove: (msg: AssistantChatMessage<TProposal>) => void | Promise<void>
   onReject: (msg: AssistantChatMessage<TProposal>) => void
   requestAssistant: (
     text: string,
@@ -59,6 +59,9 @@ type AssistantChatProps<TProposal> = {
       onDebugEntry: (entry: AssistantDebugEntry) => void
     },
   ) => Promise<AssistantRequestResult<TProposal>>
+  /** AI : shared session — when set, chat history persists across tab mounts */
+  messages?: AssistantChatMessage<TProposal>[]
+  onMessagesChange?: React.Dispatch<React.SetStateAction<AssistantChatMessage<TProposal>[]>>
 }
 
 export function AssistantChat<TProposal>({
@@ -73,10 +76,14 @@ export function AssistantChat<TProposal>({
   onApprove,
   onReject,
   requestAssistant,
+  messages: controlledMessages,
+  onMessagesChange,
 }: AssistantChatProps<TProposal>) {
-  const [messages, setMessages] = useState<AssistantChatMessage<TProposal>[]>([
+  const [internalMessages, setInternalMessages] = useState<AssistantChatMessage<TProposal>[]>([
     { id: uid(), role: "assistant", content: initialMessage },
   ])
+  const messages = controlledMessages ?? internalMessages
+  const setMessages = onMessagesChange ?? setInternalMessages
   const [input, setInput] = useState("")
   const [loading, setLoading] = useState(false)
   const [loadingPhase, setLoadingPhase] = useState<AssistantLoadingPhase>("thinking")
@@ -84,6 +91,7 @@ export function AssistantChat<TProposal>({
   const [debugTrace, setDebugTrace] = useState<AssistantDebugEntry[]>([])
   const [error, setError] = useState<string | null>(null)
   const [errorDebugTrace, setErrorDebugTrace] = useState<AssistantDebugEntry[]>([])
+  const [approvingId, setApprovingId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const pending = [...messages].reverse().find((m) => m.proposal && m.status === "pending")
@@ -156,12 +164,20 @@ export function AssistantChat<TProposal>({
     }
   }
 
-  function approve(msg: AssistantChatMessage<TProposal>) {
-    if (!msg.proposal) return
-    onApprove(msg)
-    setMessages((prev) =>
-      prev.map((m) => (m.id === msg.id ? { ...m, status: "approved" } : m)),
-    )
+  async function approve(msg: AssistantChatMessage<TProposal>) {
+    if (!msg.proposal || approvingId) return
+    setApprovingId(msg.id)
+    try {
+      await onApprove(msg)
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? { ...m, status: "approved" } : m)),
+      )
+    } catch (err) {
+      const approveErr = err instanceof Error ? err.message : "Failed to apply proposal"
+      setError(approveErr)
+    } finally {
+      setApprovingId(null)
+    }
   }
 
   function reject(msg: AssistantChatMessage<TProposal>) {
@@ -220,7 +236,8 @@ export function AssistantChat<TProposal>({
                         <Button
                           size="sm"
                           className="h-7 flex-1 gap-1.5 text-[11px]"
-                          onClick={() => approve(m)}
+                          disabled={approvingId === m.id}
+                          onClick={() => void approve(m)}
                         >
                           <Check className="h-3 w-3" />
                           Approve
