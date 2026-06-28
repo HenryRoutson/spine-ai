@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
   if (!projectId?.trim()) return apiError("projectId required", HTTP.BAD_REQUEST);
 
-  const ctx = await requireAuthStore();
+  const ctx = await requireAuthStore("llm");
   if (ctx instanceof NextResponse) return ctx;
   const { store } = ctx;
 

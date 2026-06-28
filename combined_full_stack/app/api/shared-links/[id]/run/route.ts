@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest, after } from "next/server";
 import { cookies } from "next/headers";
 import { apiError } from "@/lib/server/api_context";
+import { HTTP } from "@/lib/server/api-errors";
 import {
   assertCanStartRun,
   billRunUsage,
@@ -24,6 +25,8 @@ import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
 import { computeRunFingerprintForRequest } from "@/lib/server/run_fingerprint";
 import {
+  MAX_CONCURRENT_RUNS_PER_USER,
+  countActiveJobs,
   createJob,
   finishJob,
   jobProgress,
@@ -191,6 +194,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       );
     }
     throw err;
+  }
+
+  if (countActiveJobs(link.ownerId) >= MAX_CONCURRENT_RUNS_PER_USER) {
+    return apiError("Too many runs in progress — wait for one to finish.", HTTP.TOO_MANY_REQUESTS, "concurrent_runs");
   }
 
   const jobDb = await openJobDb();

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { apiError } from "@/lib/server/api_context";
+import { apiError, enforceUserRateLimit } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
 import { isAuthSession, requireAuth } from "@/lib/server/require_auth";
 import { saveUserFeedback } from "@/lib/server/user_feedback";
@@ -7,6 +7,9 @@ import { saveUserFeedback } from "@/lib/server/user_feedback";
 export async function POST(req: Request) {
   const auth = await requireAuth();
   if (!isAuthSession(auth)) return auth;
+
+  const limited = await enforceUserRateLimit(auth.userId, "feedback");
+  if (limited) return limited;
 
   let body: { message?: string };
   try {

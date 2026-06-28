@@ -364,6 +364,18 @@ export function isJobResuming(job: RunJob): boolean {
   return !job.paused && !job.clientStep && !job.run && !job.error;
 }
 
+export const MAX_CONCURRENT_RUNS_PER_USER = 2;
+
+export function countActiveJobs(ownerId: JobOwnerId): number {
+  const prefix = `${ownerId}:`;
+  let n = 0;
+  for (const [key, job] of jobs()) {
+    if (!key.startsWith(prefix)) continue;
+    if (!job.run && !job.error) n++;
+  }
+  return n;
+}
+
 export async function createJob(ownerId: JobOwnerId, db: JobDb): Promise<RunJobId> {
   const id = uid<RunJobId>("job_");
   jobLog.info(`createJob`, { jobId: id, ownerId, backend: db ? "supabase" : "local" });

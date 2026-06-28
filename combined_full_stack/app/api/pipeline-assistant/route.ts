@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   const messageErr = requireAssistantMessage(message);
   if (messageErr) return messageErr;
 
-  const ctx = await requireAuthStore();
+  const ctx = await requireAuthStore("llm");
   if (ctx instanceof NextResponse) return ctx;
   const { store } = ctx;
 

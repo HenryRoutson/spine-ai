@@ -6,6 +6,8 @@ import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
 import { computeRunFingerprintForRequest } from "@/lib/server/run_fingerprint";
 import {
+  MAX_CONCURRENT_RUNS_PER_USER,
+  countActiveJobs,
   createJob,
   finishJob,
   jobProgress,
@@ -45,7 +47,7 @@ interface RunRequest {
 }
 
 export async function POST(req: NextRequest) {
-  const ctx = await requireAuthStore();
+  const ctx = await requireAuthStore("llm");
   if (ctx instanceof NextResponse) return ctx;
   const { auth, store } = ctx;
 
@@ -119,8 +121,6 @@ export async function POST(req: NextRequest) {
 
   const billingKey = await getBillingUserKey();
   const jobDb = await openJobDb();
-  const jobId = await createJob(auth.userId, jobDb);
-  apiLog.info(`job created — charging then scheduling pipeline`, { jobId, ownerId: auth.userId });
 
   try {
     apiLog.info(`billing gate`, { billingKey });
@@ -131,13 +131,19 @@ export async function POST(req: NextRequest) {
     const message = (err as Error).message;
     if (billed) {
       apiLog.warn(`billing rejected`, { code: (err as { code?: string }).code, message });
-      await finishJob(auth.userId, jobId, { error: message }, jobDb);
       return billed;
     }
     apiLog.error(`billing error`, { error: message });
-    await finishJob(auth.userId, jobId, { error: message }, jobDb);
     throw err;
   }
+
+  if (countActiveJobs(auth.userId) >= MAX_CONCURRENT_RUNS_PER_USER) {
+    apiLog.warn(`concurrent run limit`, { ownerId: auth.userId, max: MAX_CONCURRENT_RUNS_PER_USER });
+    return apiError("Too many runs in progress — wait for one to finish.", HTTP.TOO_MANY_REQUESTS, "concurrent_runs");
+  }
+
+  const jobId = await createJob(auth.userId, jobDb);
+  apiLog.info(`job created — scheduling pipeline`, { jobId, ownerId: auth.userId });
 
   after(async () => {
     await withJobLogging(auth.userId, jobId, jobDb, async () => {

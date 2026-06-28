@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
+import { checkRateLimit } from "@/lib/rate_limit";
+import { type RateLimitKey, type RateLimitTier } from "@/lib/rate_limit_config";
 import { HTTP } from "./api-errors";
 import { getStore } from "./app_store";
 import { BillingError } from "./billing_account";
 import { storeErrorMessage } from "./errors";
-import { isAuthSession, requireAuth, type AuthSession } from "./require_auth";
+import { isAuthSession, requireAuth, type AuthSession, type user_id_string } from "./require_auth";
 import type { Store } from "./store";
 
 export function apiError(message: string, status: number, code?: string): NextResponse {
@@ -18,10 +20,31 @@ export function storeAuthError(err: unknown): NextResponse {
   return apiError(message, HTTP.INTERNAL);
 }
 
+export function rateLimitResponse(retryAfterSec: number): NextResponse {
+  return NextResponse.json(
+    { error: "Too many requests — try again shortly.", code: "rate_limited" },
+    { status: HTTP.TOO_MANY_REQUESTS, headers: { "Retry-After": String(retryAfterSec) } },
+  );
+}
+
+export async function enforceUserRateLimit(
+  userId: user_id_string,
+  tier: RateLimitTier,
+): Promise<NextResponse | null> {
+  const key = `user:${userId}:${tier}` as RateLimitKey;
+  const hit = await checkRateLimit(key, tier);
+  if (hit.ok) return null;
+  return rateLimitResponse(hit.retryAfterSec);
+}
+
 // AI : one entry point for routes that need both session identity and the data store.
-export async function requireAuthStore(): Promise<{ auth: AuthSession; store: Store } | NextResponse> {
+export async function requireAuthStore(
+  tier: RateLimitTier = "default",
+): Promise<{ auth: AuthSession; store: Store } | NextResponse> {
   const auth = await requireAuth();
   if (!isAuthSession(auth)) return auth;
+  const limited = await enforceUserRateLimit(auth.userId, tier);
+  if (limited) return limited;
   try {
     return { auth, store: await getStore() };
   } catch (err) {

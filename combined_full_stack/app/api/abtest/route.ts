@@ -14,7 +14,7 @@ const apiLog = logger("api:abtest");
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
-  const ctx = await requireAuthStore();
+  const ctx = await requireAuthStore("llm");
   if (ctx instanceof NextResponse) return ctx;
   const { store } = ctx;
 

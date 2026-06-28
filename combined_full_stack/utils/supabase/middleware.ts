@@ -2,6 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
 import { isPublicApiPath } from "@/lib/api-routes";
+import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate_limit";
+import { type RateLimitKey, publicApiTier } from "@/lib/rate_limit_config";
+import { HTTP } from "@/lib/server/api-errors";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { sanitizeRedirectPath } from "@/utils/sanitize_redirect";
 
@@ -32,11 +35,29 @@ function redirectUnauthenticated(
   return redirectResponse;
 }
 
+async function publicApiRateLimit(request: NextRequest, pathname: string): Promise<NextResponse | null> {
+  const tier = publicApiTier(pathname);
+  if (!tier) return null;
+  const ip = clientIpFromHeaders(request.headers);
+  const key = `ip:${ip}:${tier}` as RateLimitKey;
+  const hit = await checkRateLimit(key, tier);
+  if (hit.ok) return null;
+  return NextResponse.json(
+    { error: "Too many requests — try again shortly.", code: "rate_limited" },
+    { status: HTTP.TOO_MANY_REQUESTS, headers: { "Retry-After": String(hit.retryAfterSec) } },
+  );
+}
+
 // AI : refreshes expired auth tokens, rewrites session cookies, and gates pages behind sign-in.
 export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isApiRoute = pathname.startsWith("/api/");
   const isPublic = isPublicPath(pathname);
+
+  if (isApiRoute && isPublicApiPathLocal(pathname)) {
+    const limited = await publicApiRateLimit(request, pathname);
+    if (limited) return limited;
+  }
 
   const supabaseEnv = getSupabasePublicEnv();
   if (!supabaseEnv) {
