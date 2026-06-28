@@ -141,6 +141,7 @@ export interface Store {
   visionCacheSet(row: Omit<VisionCacheRow, "createdAt"> & { createdAt?: number }): void;
   visionCachesForDoc(docId: DocId): VisionCacheRow[];
   addDoc(name: string, type: InputType, content: string, label: DocLabel): DocRef;
+  repointDocName(id: DocId, name: string): boolean;
   removeDoc(id: DocId): boolean;
   runs(projectId?: ProjectId): PipelineRun[];
   findRunByFingerprint(projectId: ProjectId, fingerprint: RunFingerprint): PipelineRun | undefined;
@@ -255,11 +256,8 @@ export function linkDocToProject(store: Store, projectId: ProjectId, docName: st
   store.saveProject({ ...p, seedDocNames: [...names, docName] });
 }
 
-// AI : ingest bundled docs + migrate user projects — templates are cloned via POST /api/projects only.
-export async function ensureSeeded(store: Store): Promise<void> {
-  await ensureSeedDocs(store);
-  purgeSeedTemplateProjects(store);
-  backfillAllProjectSeedDocNames(store);
+// AI : numbered clones stay aligned with seeds/*.json (seedDocNames + module graph).
+export function syncAllUserProjectsFromSeeds(store: Store): void {
   const seeds = allProjectSeeds();
   for (const p of store.projects()) {
     const seed = seeds.find(
@@ -272,6 +270,14 @@ export async function ensureSeeded(store: Store): Promise<void> {
   }
 }
 
+// AI : ingest bundled docs + migrate user projects — templates are cloned via POST /api/projects only.
+export async function ensureSeeded(store: Store): Promise<void> {
+  await ensureSeedDocs(store);
+  purgeSeedTemplateProjects(store);
+  backfillAllProjectSeedDocNames(store);
+  syncAllUserProjectsFromSeeds(store);
+}
+
 // AI : add missing seed docs; replace stale Vercel placeholder rows when real content is available.
 async function ingestSeedDoc(store: Store, spec: SeedDocSpec): Promise<void> {
   let fresh: string;
@@ -282,20 +288,26 @@ async function ingestSeedDoc(store: Store, spec: SeedDocSpec): Promise<void> {
     console.error(`seed doc missing (${spec.name}):`, err);
     fresh = unavailableSeedDocMessage(spec.name);
   }
-  const existing = store.docs().find((d) => d.name === spec.name);
-  if (!existing) {
-    store.addDoc(spec.name, spec.type, fresh, spec.label);
+  const existingByName = store.docs().find((d) => d.name === spec.name);
+  if (existingByName) {
+    const content = store.docContent(existingByName.id);
+    if (
+      content &&
+      isUnavailableSeedDoc(content, spec.name) &&
+      !isUnavailableSeedDoc(fresh, spec.name)
+    ) {
+      store.removeDoc(existingByName.id);
+      store.addDoc(spec.name, spec.type, fresh, spec.label);
+    }
     return;
   }
-  const content = store.docContent(existing.id);
-  if (
-    content &&
-    isUnavailableSeedDoc(content, spec.name) &&
-    !isUnavailableSeedDoc(fresh, spec.name)
-  ) {
-    store.removeDoc(existing.id);
-    store.addDoc(spec.name, spec.type, fresh, spec.label);
+  const existingByHash = store.docs().find((d) => d.id === hashContent(fresh));
+  if (existingByHash) {
+    // AI : seeds/*.json renamed a bundled example — same bytes, new filename for inputNameContains.
+    store.repointDocName(existingByHash.id, spec.name);
+    return;
   }
+  store.addDoc(spec.name, spec.type, fresh, spec.label);
 }
 
 export class JsonStore implements Store {
@@ -457,6 +469,14 @@ export class JsonStore implements Store {
     const doc = this.ingest(name, type, content, label);
     this.persist();
     return doc;
+  }
+
+  repointDocName(id: DocId, name: string): boolean {
+    const i = this.state.docs.findIndex((d) => d.id === id);
+    if (i === -1 || this.state.docs[i]!.name === name) return false;
+    this.state.docs[i] = { ...this.state.docs[i]!, name };
+    this.persist();
+    return true;
   }
 
   removeDoc(id: DocId): boolean {

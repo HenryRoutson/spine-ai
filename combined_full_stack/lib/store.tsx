@@ -287,16 +287,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       headers: JSON_HEADERS,
       body: JSON.stringify(body),
     })
-      .then((fresh) => {
-        setState((prev) => (prev ? { ...prev, projects: [...prev.projects, fresh] } : prev))
+      .then(async (fresh) => {
         setActiveProjectId(fresh.id)
+        // AI : clone may ingest/rename bundled seed docs server-side — reload docs + backfilled seedDocNames.
+        await refresh(fresh.id)
         return fresh
       })
       .catch((err) => {
         setSaveError(err instanceof Error ? err.message : "Failed to create project")
         throw err
       })
-  }, [])
+  }, [refresh])
 
   const cloneFromTemplate = useCallback(
     (templateId: string) => postNewProject({ templateId }),

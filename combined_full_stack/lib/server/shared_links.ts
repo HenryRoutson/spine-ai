@@ -518,6 +518,14 @@ export function overlayStoreForSharedRun(
       extraContent.set(id, content);
       return doc;
     },
+    repointDocName: (id, name) => {
+      const extra = extraDocs.get(id);
+      if (extra) {
+        extraDocs.set(id, { ...extra, name });
+        return true;
+      }
+      return base.repointDocName(id, name);
+    },
     removeDoc: (id) => extraDocs.delete(id) || base.removeDoc(id),
     runs: (pid) => base.runs(pid),
     findRunByFingerprint: (pid, fp) => base.findRunByFingerprint(pid, fp),

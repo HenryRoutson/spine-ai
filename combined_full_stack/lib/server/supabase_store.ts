@@ -317,6 +317,33 @@ export class SupabaseStore implements Store {
     return visionCachesForDoc(this.cacheIndex, docId);
   }
 
+  repointDocName(id: DocId, name: string): boolean {
+    const i = this.state.docs.findIndex((d) => d.id === id);
+    if (i === -1 || this.state.docs[i]!.name === name) return false;
+    const prev = this.state.docs[i]!;
+    const doc = { ...prev, name };
+    this.state.docs[i] = doc;
+    const content = this.state.contents.get(id);
+    if (content !== undefined) {
+      this.pending.push(
+        this.db.from("docs").upsert(
+          this.withUserId({
+            id,
+            name,
+            type: doc.type,
+            label: doc.label,
+            size_kb: doc.sizeKb,
+            uploaded_at: doc.uploadedAt,
+            preview: doc.preview,
+            content,
+          }),
+          { onConflict: "user_id,id" },
+        ),
+      );
+    }
+    return true;
+  }
+
   addDoc(name: string, type: InputType, content: string, label: DocLabel): DocRef {
     const id = hashContent(content);
     const existing = this.state.docs.find((d) => d.id === id);
