@@ -79,26 +79,6 @@ async function envSingleLlm(task: BenchTask): Promise<unknown[]> {
   return rows as unknown[];
 }
 
-// 2. rlm — recursive language model: decompose the doc, solve each part, synthesize.
-async function envRlm(task: BenchTask): Promise<unknown[]> {
-  task.log.push("## rlm (recursive language model)", "Decompose → solve sub-tasks → synthesize.");
-  const mid = Math.floor(task.source.length / 2);
-  const cut = task.source.indexOf("\n", mid);
-  const chunks = cut === -1 ? [task.source] : [task.source.slice(0, cut), task.source.slice(cut)];
-
-  const partials: unknown[] = [];
-  for (let i = 0; i < chunks.length; i++) {
-    const prompt = `${task.taskBrief}\nOnly process content present in this document SECTION.\n\nSECTION ${i + 1}/${chunks.length}:\n${chunks[i]}`;
-    const rows = (await llmStructured(prompt, rowSchema(task), { model: task.model, ledger: task.ledger })) as unknown[];
-    task.log.push(`### recursive call ${i + 1}/${chunks.length} → ${rows.length} rows`, fence("json", JSON.stringify(rows, null, 2)));
-    partials.push(...rows);
-  }
-
-  const synth = `${task.taskBrief}\nMerge these partial results: dedupe overlaps, keep distinct ids, prefer the stricter or more complete answer.\n\nPARTIALS:\n${JSON.stringify(partials, null, 2)}`;
-  const rows = await llmStructured(synth, rowSchema(task), { model: task.model, ledger: task.ledger });
-  task.log.push("### synthesis", fence("json", JSON.stringify(rows, null, 2)));
-  return rows as unknown[];
-}
 
 // 3+4. agent loop — draft, self-validate, critique-and-revise. Shared by claude-code & cheap-agent.
 // AI : TODO placeholder — "claude-code" should spawn a real Claude Code instance with tools;

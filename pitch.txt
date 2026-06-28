@@ -19,7 +19,6 @@ Validated output - ‘getting json without decreasing accuracy requires advanced
 Quotes, - ‘validated AI’  nope langextract.
 Sliding window / splitting string, - ‘context window management’
 Web scraping, 
-Recursive language models, - ‘’better than rag’
 OCR, - ‘most chatbots can’t ready full documents, azure OCR is terrible and breaks all the time! deepseek OCR is open source’
 Cloud deployment - ‘we’re starting to use ray (used by open-ai) but most people don’t even know this exists’
 Auto structure - json to a structured class - shorten prompts by extracting out with regex 

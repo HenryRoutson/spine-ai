@@ -114,7 +114,7 @@ const FAQS: FaqItem[] = [
   {
     num: "04",
     q: "What does A/B testing actually compare?",
-    a: "The same task as a single LLM call, Recursive Language Model, frontier coding agent, or agent loop on a cheap open model. A judge scores accuracy, schema pass-rate, latency and cost.",
+    a: "The same task as a single LLM call, frontier coding agent, or agent loop on a cheap open model. A judge scores accuracy, schema pass-rate, latency and cost.",
   },
   {
     num: "05",

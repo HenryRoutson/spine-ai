@@ -174,7 +174,7 @@ The frontend is presentation-only — it imports a `lib/` (`store`, `types`, `ru
 
 2. **Pipeline** — CRUD of the ordered `PipelineModule[]`; canonical I/O-validity check (upstream output model must equal a step's input model) driving the invalid badges + dark run buttons; per-kind executors: `input`, `doc-to-text` (JS PDF reader default, **DeepSeek OCR placeholder**), `llm` (`getStructuredResponse`), `llm-batch` (one structured call per list item → typed list), `transform`, `combine` (auto `{Company data, Company legal requirements}`), `custom-code` (saved TypeScript `(input) => output` function), `output`; per-module `avgMs`/`avgCostCents` from history. Seeds the default Company Legal Evaluation pipeline (incl. a custom-fn severity sort).
 
-3. **A/B Test** — runner per `StrategyKind`: `single-llm` (real), `rlm`, `claude-code`, `cheap-claude-code` (**TODO placeholders**); metrics (accuracy, schema pass-rate, latency, cost) + an LLM judge that picks the winner.
+3. **A/B Test** — runner per `StrategyKind`: `single-llm` (real), `claude-code`, `cheap-claude-code` (**TODO placeholders**); metrics (accuracy, schema pass-rate, latency, cost) + an LLM judge that picks the winner.
 
 4. **Inference** — `runPipeline(projectId, inputDocId, model)` executes the linear pipeline step-by-step, honours the cache, streams progress, and returns a `PipelineRun` (per-step trace, totals, `savedCents`). Output rules carry `{quote, start, end}` offsets for the clickable doc jump. Share link is a **TODO placeholder**.
 
