@@ -13,8 +13,9 @@ import { StepFailuresSection } from "@/components/step-failures-panel"
 import { StepProfiling } from "@/components/step-profiling"
 import { InputDocumentLink } from "@/components/input-document-link"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
-import { quotesFromJson } from "@/components/quote-links"
+import { quotesFromJson, QuoteLinks } from "@/components/quote-links"
 import { formatCostCents, formatSecondsShort } from "@/lib/format"
+import { timeAgo } from "@/lib/time-ago"
 import { runBilledCents, runSavedCents, runTotalMs } from "@/lib/run-metrics"
 import { isSharedRun } from "@/lib/shared-link-types"
 import { cn } from "@/lib/utils"
@@ -29,11 +30,12 @@ import { RunNotesEditor } from "@/components/run-notes-editor"
 import { StepServerLogsSection } from "@/components/server-logs-panel"
 import { StepInputDescription, resolveStepInputDescription } from "@/components/step-input-description"
 import { stepKindIcon } from "@/lib/module-ui"
-import { Search, GitCompareArrows, Zap } from "lucide-react"
+import { Search, GitCompareArrows, Zap, Copy, Check } from "lucide-react"
 import { resolveRunInputDocIds, runInputDocsSummary } from "@/lib/inference-input"
 import { stepIoLabels } from "@/lib/module-kinds"
 import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
 import type { DocRef, ModuleId, PipelineRun, RunStepStatus } from "@/lib/types"
+import { runLogText } from "@/lib/run-log-text"
 import { IoSection } from "@/components/logging/io-section"
 import { filterRuns, RunNotesPreview } from "@/components/logging/run-picker-column"
 import { CompareModal } from "@/components/logging/compare-modal"
@@ -47,6 +49,7 @@ export function Logging() {
   const [popup, setPopup] = useState<PopupPayload | null>(null)
   const [selectedPipelineModuleId, setSelectedPipelineModuleId] = useState<ModuleId | undefined>()
   const [compareOpen, setCompareOpen] = useState(false)
+  const [logCopied, setLogCopied] = useState(false)
 
   useEffect(() => {
     if (!focusRunId) return
@@ -225,9 +228,25 @@ export function Logging() {
                 )}
 
                 <div>
-                  <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Step trace
-                  </h3>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Step trace
+                    </h3>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 gap-1 font-mono text-[10px]"
+                      onClick={() => {
+                        navigator.clipboard.writeText(runLogText(active))
+                        setLogCopied(true)
+                        setTimeout(() => setLogCopied(false), 2000)
+                      }}
+                    >
+                      {logCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      {logCopied ? "copied" : "copy_log"}
+                    </Button>
+                  </div>
                   <ol className="space-y-1.5">
                     {active.steps.map((step, i) => {
                       const Icon = stepKindIcon(step.kind)

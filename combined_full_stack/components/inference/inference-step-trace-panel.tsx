@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react"
 import type { RefObject } from "react"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, Copy, Check } from "lucide-react"
+import { runLogText } from "@/lib/run-log-text"
 import { Progress } from "@/components/ui/progress"
 import { segmentPipeline, mergeCombineSegmentStatus } from "@/lib/pipeline-layout"
 import type { StepUiState } from "@/lib/run-engine"
@@ -37,6 +38,7 @@ export function InferenceStepTracePanel({
   footer?: React.ReactNode
 }) {
   const [stepsExpanded, setStepsExpanded] = useState(true)
+  const [logCopied, setLogCopied] = useState(false)
 
   useEffect(() => {
     if (phase === "done") setStepsExpanded(false)
@@ -60,7 +62,23 @@ export function InferenceStepTracePanel({
           />
           {phase === "done" ? "step trace" : "progress"}
         </button>
-        <span className="font-mono text-[11px] text-primary">{progressPct}%</span>
+        <div className="flex items-center gap-2">
+          {phase === "done" && run && (
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(runLogText(run))
+                setLogCopied(true)
+                setTimeout(() => setLogCopied(false), 2000)
+              }}
+              className="inline-flex items-center gap-1 font-mono text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              {logCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              {logCopied ? "copied" : "copy_log"}
+            </button>
+          )}
+          <span className="font-mono text-[11px] text-primary">{progressPct}%</span>
+        </div>
       </div>
       {stepsExpanded && <Progress value={progressPct} className="h-1.5" />}
       {stepsExpanded && phase === "running" && <CyclingWaitPhrase phrase={waitPhrase} className="mt-3" />}

@@ -6,6 +6,9 @@ name might already be taken https://www.getspine.ai/
 todo check XSS
 
 
+use viridis colour scheme and have selectors in settings for colour blindness
+
+
 ensure you can't change the input type away from document in the input step in the pipeilne if there is a pdf, but still be able to take in json and convert to struct easily
 
 ensure you can't change the input type away from document in the input step in the pipeline, unless it's json. don't try to load a pdf into some random json format without an explicit call. however json to structured model is ok.

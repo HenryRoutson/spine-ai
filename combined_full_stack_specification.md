@@ -211,6 +211,8 @@ please include the server logs in addition to input and output at each step with
 please make sure you attribute server logs to different steps in the pipeline, not just putting it in one blob
 
 
+There should be a single button to click to copy the whole log of a run.
+
 # documents
 
 the documents tab contains all documents and their size with the ability to view them. you can also view pdf documents markdown in raw text or as formatted or as the original pdf and the same for word and other more complex documents. 

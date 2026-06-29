@@ -4,6 +4,7 @@ import './globals.css'
 import { getSupabasePublicEnv } from '@/utils/supabase/env'
 import { SkipLink } from '@/lib/legal/chrome'
 import { CookieConsentBanner } from '@/lib/legal/cookie-consent'
+import { LEGAL } from '@shared/legal/site'
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
 const geistMono = Geist_Mono({
@@ -16,7 +17,7 @@ const geistMono = Geist_Mono({
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: 'Spine',
+  title: LEGAL.productName,
   description:
     'Define structured outputs, compose linear pipelines, A/B test strategies, and run validated AI inference.',
 }

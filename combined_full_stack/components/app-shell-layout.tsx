@@ -47,6 +47,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { SpineLogoBox } from "@/components/spine-mark"
+import { LEGAL } from "@shared/legal/site"
 
 // AI : marketing site lives on a separate deploy from the app
 const LANDING_PAGE_URL = "https://withspine.dev/"
@@ -338,7 +339,7 @@ export function AppShellLayout() {
           <div className="flex items-center gap-2.5">
             <SpineLogoBox />
             <div className="hidden leading-tight sm:block">
-              <h1 className="text-sm font-semibold tracking-tight">Spine</h1>
+              <h1 className="text-sm font-semibold tracking-tight">{LEGAL.productName}</h1>
             </div>
           </div>
           <div className="mx-1 h-6 w-px bg-border" />
