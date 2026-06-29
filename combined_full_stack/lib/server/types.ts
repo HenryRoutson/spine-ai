@@ -142,6 +142,7 @@ export interface Project {
   strategies: Strategy[];
   seedDocNames?: string[]; // AI : filenames from seeds/*.json — scopes inference inputs to this project
   createdAt?: number; // AI : ms since epoch — set when blank/cloned; templates from seeds/*.json omit this
+  documentation?: string; // AI : freeform markdown — prepended to every agent/assistant prompt call to prevent regressions
 }
 
 export type StrategyKind = "single-llm" |"claude-code" | "cheap-agent";
@@ -308,7 +309,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
   { id: "claude-opus-4.6", label: "Claude Opus 4.6", provider: "anthropic", flag: "US", costPer1k: 12.6, promptUsdPerToken: 0.000015, completionUsdPerToken: 0.000075, slug: "anthropic/claude-opus-4.1" as OpenRouterSlug },
   // AI : demo_outline §3 — the A/B fallback model "if nothing else works well".
   { id: "sonnet-4.7", label: "Claude Sonnet 4.7", provider: "anthropic", flag: "US", costPer1k: 2.52, promptUsdPerToken: 0.000003, completionUsdPerToken: 0.000015, slug: "anthropic/claude-sonnet-4.5" as OpenRouterSlug },
-  { id: "gemini-2-flash-lite", label: "Gemini 2.0 Flash-Lite", provider: "google", flag: "US", costPer1k: 0.0518, promptUsdPerToken: 7e-8, completionUsdPerToken: 3e-7, cheap: true, slug: "google/gemini-2.0-flash-lite-001" as OpenRouterSlug },
+  // AI : gemini-2-flash-lite removed — slug google/gemini-2.0-flash-lite-001 404s on OpenRouter; steps that referenced it fall back to deepseek-v3 via slugFor().
   { id: "gemini-3-flash", label: "Gemini 3 Flash", provider: "google", flag: "US", costPer1k: 0.49, promptUsdPerToken: 5e-7, completionUsdPerToken: 0.000003, slug: "google/gemini-3-flash-preview" as OpenRouterSlug },
 ];
 

@@ -13,6 +13,7 @@ export type AppWindowId =
   | "logging"
   | "cache"
   | "documents"
+  | "docs"
   | "billing"
   | "settings"
 

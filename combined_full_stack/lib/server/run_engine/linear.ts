@@ -1,5 +1,5 @@
 import { invariant } from "@/lib/assert";
-import { isLlmKind } from "@/lib/module-kinds";
+import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds";
 import { compactPreview } from "@/lib/text-preview";
 import { inputTypeLabel } from "../../inference-input";
 import { assertInputMatchesDescription, InputDescriptionRejectedError, shouldCheckInputDescription } from "../input_description_check";
@@ -116,7 +116,10 @@ export async function runLinearStepsFrom(
             log.info(`cache HIT`, { moduleId: m.id, key, savedCents: savedCostCents });
           } else {
             result = await execModule(m, ctx, log);
-            const out = modelById(project.models, m.outStructureId);
+            // AI : passthrough steps (output/assert/human-review) are validated against inStructureId,
+            // not outStructureId — outStructureId on those kinds is display-only and may be stale.
+            const validationStructId = usesPassthroughStructure(m.kind) ? m.inStructureId : m.outStructureId;
+            const out = modelById(project.models, validationStructId);
             if (out) {
               const isList = m.outIsList || m.kind === "llm-batch";
               const rawQuotes = isLlmKind(m.kind) && hasQuoteField(out, project.models);

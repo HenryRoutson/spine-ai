@@ -37,8 +37,9 @@ project was created and give a date in the ui.
 
 
 
-# description
-text editor and optional markdown preview for a description of a project
+# description / documentation
+text editor and optional markdown preview for a description of a project.
+This is to ensure that the agent has a high level understanding of the project instantly.
 
 # structure
 create new structure

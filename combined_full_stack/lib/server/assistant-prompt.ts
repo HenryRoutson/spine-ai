@@ -117,8 +117,9 @@ ${buildLinearIoPromptBlock()}
 - Add output steps wherever a named artifact snapshot is needed — pipelines may have several.
 - Use model ids from:\n${buildModelOptionsPromptBlock()}
 - Default LLM model: ${globalModel}
-- When changing the pipeline, return a FULL replacement modules array (not a patch). To clear all steps, return modules as [] — never null.
-- When answering questions without pipeline changes, set modules to null.`;
+- For large changes (restructuring, new steps, changing the overall flow): set modules to the FULL replacement array and modulePatch to null. To clear all steps, return modules as [] — never null.
+- For small targeted changes (fixing a prompt, swapping a model, adding outIsList, editing 1–3 steps): set modules to null and use modulePatch instead. Each entry must include the step's 0-based index (shown in the current pipeline JSON) and ONLY the fields you want to change — untouched fields are preserved as-is.
+- When answering questions without pipeline changes, set both modules and modulePatch to null.`;
 }
 
 export function buildDocumentRulesPromptBlock(): string {
@@ -185,7 +186,8 @@ export function buildProjectContextBlock(
     2,
   );
   const modulesJson = JSON.stringify(
-    project.modules.map((m) => ({
+    project.modules.map((m, i) => ({
+      index: i,
       kind: m.kind,
       label: m.label,
       note: m.note,
@@ -208,7 +210,11 @@ export function buildProjectContextBlock(
     history.length > 0
       ? `\nRecent conversation:\n${history.map((t) => `${t.role}: ${t.content}`).join("\n")}\n`
       : "";
-  return `Project: ${project.name} (${project.kind})
+  // AI : documentation block — prepended first so the model sees project constraints before anything else.
+  const docsBlock = project.documentation?.trim()
+    ? `PROJECT DOCUMENTATION (read first — treat as hard constraints):\n${project.documentation.trim()}\n\n`
+    : "";
+  return `${docsBlock}Project: ${project.name} (${project.kind})
 Default model: ${globalModel}
 ${historyBlock}
 Current structure models (${project.models.length}):

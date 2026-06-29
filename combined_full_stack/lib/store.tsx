@@ -81,6 +81,8 @@ interface StoreState {
   }) => void
   strategies: Strategy[]
   setStrategies: (s: Strategy[]) => void
+  documentation: string
+  setDocumentation: (text: string) => void
   // global model
   model: string
   setModel: (m: string) => void
@@ -112,6 +114,8 @@ interface StoreState {
   projectLoading: boolean
   saveError: string | null
   clearSaveError: () => void
+  // AI : flush debounced project save immediately — call before startRun to avoid stale server state.
+  flushPendingSave: () => Promise<void>
 }
 
 type PrefetchEntry = {
@@ -133,6 +137,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     Record<string, Partial<Record<ModuleId, DocId | DocId[]>>>
   >({})
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingSaveRef = useRef<{ id: string; body: string } | null>(null)
   const hydratedRef = useRef(false)
   const prefetchCache = useRef(new Map<string, PrefetchEntry>())
 
@@ -282,7 +287,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (next) {
           if (saveTimer.current) clearTimeout(saveTimer.current)
           const body = JSON.stringify(next)
+          pendingSaveRef.current = { id, body }
           saveTimer.current = setTimeout(() => {
+            pendingSaveRef.current = null
             void persistProject(id, body)
           }, 500)
         }
@@ -291,6 +298,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     [activeProjectId, persistProject],
   )
+
+  // AI : cancel the debounce and persist immediately — call before startRun to avoid stale server state.
+  const flushPendingSave = useCallback(async () => {
+    const pending = pendingSaveRef.current
+    if (!pending) return
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = null
+    pendingSaveRef.current = null
+    await persistProject(pending.id, pending.body)
+  }, [persistProject])
 
   const addProject = useCallback(() => {
     apiJson<Project>(API_ROUTES.projects, { method: "POST" })
@@ -654,6 +671,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [patchProject],
   )
 
+  const setDocumentation = useCallback(
+    (text: string) => {
+      patchProject({ documentation: text || undefined })
+    },
+    [patchProject],
+  )
+
   const boundSetInferenceInputDocIds = useCallback(
     (docs: Partial<Record<ModuleId, DocId | DocId[]>>) => {
       if (!project) return
@@ -682,6 +706,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       applyProjectChanges,
       strategies: project.strategies,
       setStrategies,
+      documentation: project.documentation ?? "",
+      setDocumentation,
       model,
       setModel,
       docs: state.docs,
@@ -702,6 +728,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       projectLoading,
       saveError,
       clearSaveError,
+      flushPendingSave,
     }
   }, [
     state,
@@ -712,6 +739,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setModules,
     applyProjectChanges,
     setStrategies,
+    setDocumentation,
     model,
     addDoc,
     addDocContent,
@@ -730,6 +758,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     projectLoading,
     saveError,
     clearSaveError,
+    flushPendingSave,
     addProject,
     cloneFromTemplate,
     cloneProjectById,

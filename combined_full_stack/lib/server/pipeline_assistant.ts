@@ -58,6 +58,23 @@ const moduleSpecSchema = z.object({
   outIsList: z.boolean().optional(),
 });
 
+// AI : patch entry — only the fields the agent wants to change; matched by 0-based index in current pipeline.
+const modulePatchEntrySchema = z.object({
+  index: z.number().int(),
+  label: z.string().optional(),
+  note: z.string().optional(),
+  structureIn: z.string().optional(),
+  structureOut: z.string().optional(),
+  inputType: z.enum(INPUT_TYPE_VALUES as [string, ...string[]]).optional(),
+  inputNameContains: z.string().optional(),
+  inputDescription: z.string().optional(),
+  checkInputDescription: z.boolean().optional(),
+  prompt: z.string().optional(),
+  code: z.string().optional(),
+  model: z.string().optional(),
+  outIsList: z.boolean().optional(),
+});
+
 const modelSpecSchema = structureModelSpecSchema;
 
 const ASSISTANT_DOC_TYPES = ["text", "json"] as const satisfies readonly InputType[];
@@ -71,12 +88,15 @@ const docSpecSchema = z.object({
 
 const assistantResponseSchema = z.object({
   message: z.string(),
+  // AI : full replacement wins when non-null; use modulePatch for targeted edits to 1–3 steps.
   modules: z.array(moduleSpecSchema).nullable(),
+  modulePatch: z.array(modulePatchEntrySchema).nullable(),
   models: z.array(modelSpecSchema).nullable(),
   docs: z.array(docSpecSchema).nullable(),
 });
 
 export type PipelineAssistantModuleSpec = z.infer<typeof moduleSpecSchema>;
+export type PipelineAssistantModulePatchEntry = z.infer<typeof modulePatchEntrySchema>;
 export type PipelineAssistantModelSpec = z.infer<typeof modelSpecSchema>;
 export type ProjectAssistantDocSpec = z.infer<typeof docSpecSchema>;
 
@@ -191,6 +211,48 @@ function materializeModels(
   return materializeStructureModels(specs, existing);
 }
 
+// AI : apply a single patch entry onto an existing module — preserves id and all unpatched fields.
+function applyModulePatch(
+  existing: PipelineModule,
+  patch: PipelineAssistantModulePatchEntry,
+  models: StructureModel[],
+): PipelineModule {
+  const inHint = patch.structureIn ? parseStructureHint(patch.structureIn) : undefined;
+  const outHint = patch.structureOut ? parseStructureHint(patch.structureOut) : undefined;
+  const inId = inHint ? resolveStructureIdFromModels(inHint.name ?? patch.structureIn!, models) : undefined;
+  const outId = outHint ? resolveStructureIdFromModels(outHint.name ?? patch.structureOut!, models) : undefined;
+  const modelOpt = patch.model ? MODEL_OPTIONS.find((m) => m.id === patch.model) : undefined;
+  return { // human - this looks hardcoded
+    ...existing,
+    ...(patch.label !== undefined ? { label: patch.label } : {}),
+    ...(patch.note !== undefined ? { note: patch.note } : {}),
+    ...(inId !== undefined ? { inStructureId: inId } : {}),
+    ...(outId !== undefined ? { outStructureId: outId } : {}),
+    ...(patch.inputType !== undefined ? { inputType: patch.inputType as PipelineModule["inputType"] } : {}),
+    ...(patch.inputNameContains !== undefined ? { inputNameContains: patch.inputNameContains } : {}),
+    ...(patch.inputDescription !== undefined ? { inputDescription: patch.inputDescription } : {}),
+    ...(patch.checkInputDescription !== undefined ? { checkInputDescription: patch.checkInputDescription } : {}),
+    ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
+    ...(patch.code !== undefined ? { code: patch.code } : {}),
+    ...(modelOpt !== undefined ? { model: modelOpt.id } : {}),
+    ...(patch.outIsList !== undefined ? { outIsList: patch.outIsList } : {}),
+  };
+}
+
+function applyModulePatches(
+  existing: PipelineModule[],
+  patches: PipelineAssistantModulePatchEntry[],
+  models: StructureModel[],
+): PipelineModule[] {
+  const result = [...existing];
+  for (const patch of patches) {
+    if (patch.index >= 0 && patch.index < result.length) {
+      result[patch.index] = applyModulePatch(result[patch.index], patch, models);
+    }
+  }
+  return result;
+}
+
 function materializeDocs(
   specs: ProjectAssistantDocSpec[] | null | undefined,
 ): ProjectAssistantDocSpec[] {
@@ -270,11 +332,11 @@ function buildUserPrompt(
     "Current pipeline validation errors (fix when changing the pipeline; do not replicate these mistakes):",
   );
   const fixBlock = opts?.fixValidationErrors?.trim()
-    ? `\nYour previous proposal failed validation (attempt ${opts.fixAttempt ?? 1}). Fix ALL errors below and return a corrected FULL replacement modules array:\n${opts.fixValidationErrors.trim()}\n`
+    ? `\nYour previous proposal failed validation (attempt ${opts.fixAttempt ?? 1}). Fix ALL errors below and return a corrected FULL replacement modules array (modulePatch MUST be null for validation fixes):\n${opts.fixValidationErrors.trim()}\n`
     : "";
   const forceFixBlock =
     forceFix && currentValidation
-      ? `\nThe user asked to fix validation errors on the LIVE project. You MUST return a FULL replacement modules array and models array if needed — modules MUST NOT be null. Fix every error above (e.g. add outIsList on upstream steps, align structureIn/structureOut names). In message, briefly say what you fixed — not a generic greenfield overview.\n`
+      ? `\nThe user asked to fix validation errors on the LIVE project. You MUST return a FULL replacement modules array and models array if needed — modules MUST NOT be null, modulePatch MUST be null. Fix every error above (e.g. add outIsList on upstream steps, align structureIn/structureOut names). In message, briefly say what you fixed — not a generic greenfield overview.\n`
       : "";
   const thinkingBlock = thinking?.trim()
     ? `\nYour prior reasoning (use this; do not repeat it in message):\n${thinking.trim()}\n`
@@ -288,15 +350,23 @@ function materializeProposal(
   project: Project,
   globalModel: ModelId,
 ): PipelineAssistantProposal | null {
-  const hasPipelineChange = raw.modules !== null;
+  // AI : full rewrite takes priority; patch applies when modules is null but modulePatch has entries.
+  const hasPipelineRewrite = raw.modules !== null;
+  const hasPipelinePatch = !hasPipelineRewrite && (raw.modulePatch?.length ?? 0) > 0;
+  const hasPipelineChange = hasPipelineRewrite || hasPipelinePatch;
   const hasModelChange = raw.models !== null;
   const hasDocChange = raw.docs !== null;
   if (!hasPipelineChange && !hasModelChange && !hasDocChange) return null;
 
   const models = materializeModels(raw.models, project.models);
-  const modules = hasPipelineChange
-    ? syncAutoQuoteSteps(expandModuleSpecs(raw.modules ?? [], models, globalModel), models) ?? []
-    : project.modules;
+  let modules: PipelineModule[];
+  if (hasPipelineRewrite) {
+    modules = syncAutoQuoteSteps(expandModuleSpecs(raw.modules ?? [], models, globalModel), models) ?? [];
+  } else if (hasPipelinePatch) {
+    modules = syncAutoQuoteSteps(applyModulePatches(project.modules, raw.modulePatch!, models), models) ?? project.modules;
+  } else {
+    modules = project.modules;
+  }
   const docs = materializeDocs(raw.docs);
   return {
     modules: modules ?? [],

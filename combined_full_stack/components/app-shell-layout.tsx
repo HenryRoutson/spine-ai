@@ -22,6 +22,7 @@ import {
   FolderKanban,
   LayoutGrid,
   ChevronDown,
+  BookOpen,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
@@ -79,6 +80,10 @@ const Billing = dynamic(() => import("@/components/billing").then((m) => ({ defa
 const SettingsPanel = dynamic(() => import("@/components/settings").then((m) => ({ default: m.Settings })), {
   loading: () => <PanelLoading label="loading settings…" />,
 })
+const DocumentationPanel = dynamic(
+  () => import("@/components/documentation").then((m) => ({ default: m.Documentation })),
+  { loading: () => <PanelLoading label="loading docs…" /> },
+)
 
 type WindowId = AppWindowId
 
@@ -90,8 +95,9 @@ const WINDOWS: { id: WindowId; label: string; hint: string; icon: typeof Boxes }
   { id: "logging", label: "Logging", hint: "04", icon: ScrollText },
   { id: "cache", label: "Cache", hint: "05", icon: Database },
   { id: "documents", label: "Documents", hint: "06", icon: Files },
-  { id: "billing", label: "Billing", hint: "07", icon: CreditCard },
-  { id: "settings", label: "Settings", hint: "08", icon: Settings },
+  { id: "docs", label: "Docs", hint: "07", icon: BookOpen },
+  { id: "billing", label: "Billing", hint: "08", icon: CreditCard },
+  { id: "settings", label: "Settings", hint: "09", icon: Settings },
 ]
 
 function ProjectRenameInput({
@@ -411,6 +417,7 @@ export function AppShellLayout() {
           {activeWindow === "logging" && <Logging />}
           {activeWindow === "cache" && <Cache />}
           {activeWindow === "documents" && <Documents />}
+          {activeWindow === "docs" && <DocumentationPanel />}
           {activeWindow === "billing" && <Billing />}
           {activeWindow === "settings" && <SettingsPanel />}
         </main>

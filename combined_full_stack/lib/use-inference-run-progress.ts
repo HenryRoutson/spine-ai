@@ -36,6 +36,7 @@ type UseInferenceRunProgressArgs = {
   updateRunNotes: (runId: PipelineRun["id"], notes: string | undefined) => Promise<void>
   refreshBilling: () => Promise<void>
   resetInputs?: () => void
+  flushPendingSave?: () => Promise<void>
 }
 
 export function useInferenceRunProgress({
@@ -51,6 +52,7 @@ export function useInferenceRunProgress({
   updateRunNotes,
   refreshBilling,
   resetInputs,
+  flushPendingSave,
 }: UseInferenceRunProgressArgs) {
   const [phase, setPhase] = useState<InferencePhase>("idle")
   const [stepStates, setStepStates] = useState<Map<ModuleId, StepUiState>>(new Map())
@@ -126,6 +128,8 @@ export function useInferenceRunProgress({
     setStepStates(new Map())
     setDebugLogs([])
     try {
+      // AI : flush any debounced project save before starting — prevents stale server state causing 400.
+      await flushPendingSave?.()
       const { jobId } = await startRun(projectId, primary, model, rest, byModule)
       if (jobGen !== activeJobGenRef.current) return
       activeJobIdRef.current = jobId

@@ -21,4 +21,8 @@ reducto - https://reducto.ai/
 Vellum AI - https://www.vellum.ai/
 human loop - https://humanloop.com/home
 Pydantic Logfire - https://github.com/pydantic/logfire
-
+https://streamlit.io/
+LlamaExtract (part of LlamaCloud)
+https://www.extend.ai/
+https://retool.com/
+claude managed agents

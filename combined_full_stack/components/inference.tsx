@@ -52,6 +52,7 @@ export function Inference() {
     refreshBilling,
     inferenceInputDocIds,
     setInferenceInputDocIds,
+    flushPendingSave,
   } = useStore()
   const { setActiveWindow, openLogging } = useAppShell()
   const { open } = useDocViewer()
@@ -73,6 +74,7 @@ export function Inference() {
     addRun,
     updateRunNotes,
     refreshBilling,
+    flushPendingSave,
   })
 
   useEffect(() => {

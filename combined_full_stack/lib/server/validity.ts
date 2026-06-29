@@ -879,6 +879,17 @@ function foldDocToTextSteps(modules: PipelineModule[]): PipelineModule[] {
   return modulesEqual(modules, out) ? modules : out;
 }
 
+// AI : outStructureId on passthrough steps is display-only and must equal inStructureId to avoid
+// runtime validation failures. Remove the mismatch rather than blocking the user.
+function normalizePassthroughStructureIds(modules: PipelineModule[]): PipelineModule[] {
+  return modules.map((m) => {
+    if (!usesPassthroughStructure(m.kind)) return m;
+    if (!m.outStructureId || m.outStructureId === m.inStructureId) return m;
+    const { outStructureId: _, ...rest } = m;
+    return { ...rest, outStructureId: m.inStructureId };
+  });
+}
+
 export function migrateProjectModules(project: Project): Project {
   const models = withSharedModels(stripSharedModels(project.models));
   const folded = foldDocToTextSteps(project.modules);
@@ -887,13 +898,15 @@ export function migrateProjectModules(project: Project): Project {
   const migrated = placed.map(migrateCustomCodeModule);
   // AI : cache is always on — normalize legacy projects that disabled it per step.
   const withCache = migrated.map((m) => (m.cached ? m : { ...m, cached: true }));
+  const normalized = normalizePassthroughStructureIds(withCache);
   const modelsChanged = models.length !== project.models.length || models.some((m, i) => m !== project.models[i]);
   const changed =
     modelsChanged ||
     folded !== project.modules ||
     placed !== folded ||
     migrated.some((m, i) => m !== placed[i]) ||
-    withCache.some((m, i) => m !== migrated[i]);
+    withCache.some((m, i) => m !== migrated[i]) ||
+    normalized.some((m, i) => m !== withCache[i]);
   if (!changed) return project;
-  return { ...project, models, modules: withCache };
+  return { ...project, models, modules: normalized };
 }
