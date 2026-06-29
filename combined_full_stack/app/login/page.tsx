@@ -13,6 +13,7 @@ import type { AuthMode } from "@/utils/supabase/auth_messages"
 import { SignupConsents } from "@/components/signup-consents"
 import { LegalFooterLinks } from "@/lib/legal/chrome"
 import { SpineLogoBox } from "@/components/spine-mark"
+import { LEGAL } from "@/lib/shared/legal/site"
 
 // type OAuthProvider = "github" | "google"
 
@@ -71,7 +72,7 @@ export default function LoginPage() {
         <div className="mb-5 flex items-center gap-2.5">
           <SpineLogoBox />
           <div className="leading-tight">
-            <h1 className="text-sm font-semibold tracking-tight">Spine</h1>
+            <h1 className="text-sm font-semibold tracking-tight">{LEGAL.productName}</h1>
             <p className="font-mono text-[10px] text-muted-foreground">
               {mode === "sign-in" ? "sign in to your workspace" : "create an account"}
             </p>

@@ -6,7 +6,7 @@ type SectionId = string;
 type AppLoginUrl = string;
 type AppUrl = string;
 
-const APP_URL: AppUrl = "https://app.usespine.com/";
+const APP_URL: AppUrl = "https://www.spine-ai-app.dev/";
 const APP_LOGIN_URL: AppLoginUrl = "https://app.usespine.com/login?next=%2F";
 
 type Feature = {

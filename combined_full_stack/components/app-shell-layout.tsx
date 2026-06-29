@@ -400,11 +400,6 @@ export function AppShellLayout() {
               </button>
             )
           })}
-          <div className="mt-auto hidden px-2.5 lg:block">
-            <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
-              pipelines are linear. left to right.
-            </p>
-          </div>
         </nav>
 
         <main className="relative flex-1 overflow-hidden" id="main-content">

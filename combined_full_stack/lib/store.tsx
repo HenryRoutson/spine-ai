@@ -123,6 +123,33 @@ type PrefetchEntry = {
   data?: ServerState
 }
 
+// AI : shared pure computation for auto-inferring structures immediately after any doc upload.
+function computeDocStructureSync(
+  prev: ServerState,
+  pid: string,
+  doc: DocRef,
+  content: string,
+): { nextProjects: Project[]; changed: boolean } {
+  const p = prev.projects.find((x) => x.id === pid)
+  if (!p) return { nextProjects: prev.projects, changed: false }
+  const merged = mergeInferredStructuresForDoc(
+    p.models,
+    doc,
+    content,
+    () => uid<StructureModelId>(),
+  )
+  if (!modelsChanged(p.models, merged)) return { nextProjects: prev.projects, changed: false }
+  const models = stripSharedModels(merged)
+  const modules = syncAutoQuoteSteps(
+    migrateProjectModules(p).modules,
+    withSharedModels(models),
+  )
+  return {
+    nextProjects: prev.projects.map((x) => (x.id === pid ? { ...p, models, modules } : x)),
+    changed: true,
+  }
+}
+
 const StoreContext = createContext<StoreState | null>(null)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
@@ -421,28 +448,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const content = docTextContent(data)
         setState((prev) => {
           if (!prev) return prev
-          const p = prev.projects.find((x) => x.id === pid)
-          if (!p) return prev
-          const merged = mergeInferredStructuresForDoc(
-            p.models,
-            doc,
-            content,
-            () => uid<StructureModelId>(),
-          )
-          if (!modelsChanged(p.models, merged)) return prev
-          const models = stripSharedModels(merged)
-          const modules = syncAutoQuoteSteps(
-            migrateProjectModules(p).modules,
-            withSharedModels(models),
-          )
-          const nextProjects = prev.projects.map((x) =>
-            x.id === pid ? { ...p, models, modules } : x,
-          )
+          const { nextProjects, changed } = computeDocStructureSync(prev, pid, doc, content)
+          if (!changed) return prev
           if (saveTimer.current) clearTimeout(saveTimer.current)
           const body = JSON.stringify(nextProjects.find((x) => x.id === pid))
-          saveTimer.current = setTimeout(() => {
-            void persistProject(pid, body!)
-          }, 500)
+          saveTimer.current = setTimeout(() => { void persistProject(pid, body!) }, 500)
           return { ...prev, projects: nextProjects }
         })
       } catch (err) {
@@ -489,28 +499,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         try {
           setState((prev) => {
             if (!prev) return prev
-            const p = prev.projects.find((x) => x.id === pid)
-            if (!p) return prev
-            const merged = mergeInferredStructuresForDoc(
-              p.models,
-              doc,
-              content,
-              () => uid<StructureModelId>(),
-            )
-            if (!modelsChanged(p.models, merged)) return prev
-            const models = stripSharedModels(merged)
-            const modules = syncAutoQuoteSteps(
-              migrateProjectModules(p).modules,
-              withSharedModels(models),
-            )
-            const nextProjects = prev.projects.map((x) =>
-              x.id === pid ? { ...p, models, modules } : x,
-            )
+            const { nextProjects, changed } = computeDocStructureSync(prev, pid, doc, content)
+            if (!changed) return prev
             if (saveTimer.current) clearTimeout(saveTimer.current)
             const body = JSON.stringify(nextProjects.find((x) => x.id === pid))
-            saveTimer.current = setTimeout(() => {
-              void persistProject(pid, body!)
-            }, 500)
+            saveTimer.current = setTimeout(() => { void persistProject(pid, body!) }, 500)
             return { ...prev, projects: nextProjects }
           })
         } catch (err) {
