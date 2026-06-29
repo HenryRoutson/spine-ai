@@ -16,11 +16,15 @@ export function LandingNav({ links, loginUrl }: LandingNavProps) {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-background/95 backdrop-blur-sm">
       <nav className="mx-auto flex max-w-[1200px] items-center justify-between px-5 py-3.5">
-        <a href="#" className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center border border-line-bright bg-panel">
-            <span className="font-mono text-sm font-medium text-foreground">|</span>
-          </div>
-          <span className="hidden text-sm font-medium sm:inline">auto pipeline</span>
+        <a href="#" className="spine-logo boxed" aria-label="Spine">
+          <span className="spine-mark-wrap">
+            <span className="spine-mark" aria-hidden="true">
+              <span className="node" />
+              <span className="node" />
+              <span className="node" />
+            </span>
+          </span>
+          <span className="spine-wordmark hidden sm:inline" style={{ fontSize: "14px" }}>Spine</span>
         </a>
 
         <div className="hidden items-center gap-8 md:flex">

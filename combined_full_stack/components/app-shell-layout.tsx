@@ -46,9 +46,10 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { SpineLogoBox } from "@/components/spine-mark"
 
 // AI : marketing site lives on a separate deploy from the app
-const LANDING_PAGE_URL = "https://auto-pipeline.dev/"
+const LANDING_PAGE_URL = "https://withspine.dev/"
 
 // AI : code-split heavy tabs — only Structure ships on first paint.
 const Projects = dynamic(() => import("@/components/projects").then((m) => ({ default: m.Projects })), {
@@ -335,11 +336,9 @@ export function AppShellLayout() {
             <ArrowLeft className="h-4 w-4" />
           </a>
           <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <span className="font-mono text-sm font-bold">|</span>
-            </div>
+            <SpineLogoBox />
             <div className="hidden leading-tight sm:block">
-              <h1 className="text-sm font-semibold tracking-tight">auto pipeline</h1>
+              <h1 className="text-sm font-semibold tracking-tight">Spine</h1>
             </div>
           </div>
           <div className="mx-1 h-6 w-px bg-border" />

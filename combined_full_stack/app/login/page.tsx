@@ -12,6 +12,7 @@ import { authAction, type AuthActionState } from "@/app/login/actions"
 import type { AuthMode } from "@/utils/supabase/auth_messages"
 import { SignupConsents } from "@/components/signup-consents"
 import { LegalFooterLinks } from "@/lib/legal/chrome"
+import { SpineLogoBox } from "@/components/spine-mark"
 
 // type OAuthProvider = "github" | "google"
 
@@ -68,13 +69,11 @@ export default function LoginPage() {
     <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-4 py-8 text-foreground">
       <div className="w-full max-w-sm rounded-lg border border-border bg-card p-6" id="main-content">
         <div className="mb-5 flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-            <span className="font-mono text-sm font-bold">|</span>
-          </div>
+          <SpineLogoBox />
           <div className="leading-tight">
-            <h1 className="text-sm font-semibold tracking-tight">auto pipeline</h1>
+            <h1 className="text-sm font-semibold tracking-tight">Spine</h1>
             <p className="font-mono text-[10px] text-muted-foreground">
-              {mode === "sign-in" ? "sign in to your pipelines" : "create an account"}
+              {mode === "sign-in" ? "sign in to your workspace" : "create an account"}
             </p>
           </div>
         </div>

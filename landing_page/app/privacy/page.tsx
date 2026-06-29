@@ -4,7 +4,7 @@ import { PRIVACY_SECTIONS } from "@/lib/legal/content"
 import { LegalPageShell } from "@/components/legal-page-shell"
 
 export const metadata = {
-  title: "Privacy Policy — auto pipeline",
+  title: "Privacy Policy — Spine",
 }
 
 export default function PrivacyPage() {

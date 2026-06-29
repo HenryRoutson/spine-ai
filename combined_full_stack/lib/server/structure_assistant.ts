@@ -78,7 +78,7 @@ export function materializeStructureModels(
 }
 
 function buildSystemPrompt(): string {
-  return `You are a structure design assistant for "auto pipeline" — pydantic/zod output schemas for LLM pipeline steps.
+  return `You are a structure design assistant for "Spine" — pydantic/zod output schemas for LLM pipeline steps.
 
 Field types:
 ${buildFieldTypesPromptBlock()}

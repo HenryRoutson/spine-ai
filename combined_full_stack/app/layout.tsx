@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: 'auto pipeline',
+  title: 'Spine',
   description:
-    'Define structured outputs, compose linear pipelines, A/B test strategies, and run inference.',
+    'Define structured outputs, compose linear pipelines, A/B test strategies, and run validated AI inference.',
 }
 
 export default function RootLayout({

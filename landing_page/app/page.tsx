@@ -6,8 +6,8 @@ type SectionId = string;
 type AppLoginUrl = string;
 type AppUrl = string;
 
-const APP_URL: AppUrl = "https://auto-pipeline-app.dev/";
-const APP_LOGIN_URL: AppLoginUrl = "https://auto-pipeline-app.dev/login?next=%2F";
+const APP_URL: AppUrl = "https://app.usespine.com/";
+const APP_LOGIN_URL: AppLoginUrl = "https://app.usespine.com/login?next=%2F";
 
 type Feature = {
   id: SectionId;
@@ -99,8 +99,8 @@ const FEATURE_CARDS: FeatureCard[] = [
 const FAQS: FaqItem[] = [
   {
     num: "01",
-    q: "Does auto pipeline replace my LLM code?",
-    a: "No. It wraps your LLM work in typed, cached pipeline steps with implicit schema validation. You still write prompts and custom functions — the pipeline handles wiring, validation, caching and cost tracking.",
+    q: "Does Spine replace my LLM code?",
+    a: "No. It wraps your LLM work in typed, cached pipeline steps with implicit schema validation. You still write prompts and custom functions — Spine handles wiring, validation, caching and cost tracking.",
   },
   {
     num: "02",
@@ -110,7 +110,7 @@ const FAQS: FaqItem[] = [
   {
     num: "03",
     q: "Is this just a prompt playground?",
-    a: "No. auto pipeline does not just chat with models. It validates every step's I/O against pydantic/zod structures, flags broken pipelines before run, and attributes cost per model and step.",
+    a: "No. Spine does not just chat with models. It validates every step's I/O against pydantic/zod structures, flags broken pipelines before run, and attributes cost per model and step.",
   },
   {
     num: "04",
@@ -173,7 +173,7 @@ export default function Home() {
           <div className="flex flex-col justify-center border-b border-line p-8 sm:p-12 md:border-b-0 md:border-r">
             <div className="zeero-badge mb-8 w-fit">
               <span className="zeero-badge-new">New</span>
-              <span className="zeero-badge-label">Validated AI pipelines</span>
+              <span className="zeero-badge-label">Validated AI</span>
             </div>
             <h1 className="text-4xl font-normal leading-[1.08] tracking-tight sm:text-[52px]">
               AI engineering is hard.
@@ -181,11 +181,11 @@ export default function Home() {
               Your pipeline shouldn&apos;t be.
             </h1>
             <p className="mt-5 max-w-md text-base leading-relaxed text-muted">
-              auto pipeline turns LLM work into typed, cached, validated pipeline steps. Define structures, wire steps
+              Spine turns LLM work into typed, cached, validated pipeline steps. Define structures, wire steps
               together, A/B test strategies, and ship a drag-and-drop inference page — no deploy required.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <a href={APP_URL} className="zeero-btn">
+              <a href={APP_URL} className="zeero-btn !text-lg !px-8 !py-4">
                 Try now
               </a>
             </div>
@@ -201,7 +201,7 @@ export default function Home() {
             </a>
           </div>
           <div className="border-b border-line p-6 sm:p-8">
-            <TerminalPreview title="Pipeline Run Preview" steps={HERO_LOG} />
+            <TerminalPreview title="Spine · Pipeline Run" steps={HERO_LOG} />
           </div>
         </div>
 
@@ -365,12 +365,12 @@ export default function Home() {
           </div>
           <div>
             <p className="text-xs uppercase tracking-wider text-muted-dim">Information</p>
-            <p className="mt-4 text-sm text-muted">auto pipeline — ai engineering pipeline builder</p>
+            <p className="mt-4 text-sm text-muted">Spine — validated AI</p>
             <p className="mt-2 text-sm text-muted-dim">pipelines are linear. left to right.</p>
           </div>
         </div>
         <div className="px-8 py-6 sm:px-12">
-          <p className="text-xs text-muted-dim">© 2026 auto pipeline. All rights reserved.</p>
+          <p className="text-xs text-muted-dim">© 2026 Spine. All rights reserved.</p>
         </div>
       </footer>
     </main>

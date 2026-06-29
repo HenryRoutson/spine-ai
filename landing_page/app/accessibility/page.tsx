@@ -4,7 +4,7 @@ import { ACCESSIBILITY_SECTIONS } from "@/lib/legal/content"
 import { LegalPageShell } from "@/components/legal-page-shell"
 
 export const metadata = {
-  title: "Accessibility — auto pipeline",
+  title: "Accessibility — Spine",
 }
 
 export default function AccessibilityPage() {

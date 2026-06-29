@@ -1,8 +1,6 @@
 "use client"
 
-// AI : TODO refactor — extract run list, step detail panel, compare mode, JSON/excel popups.
 import { useMemo, useState, useEffect } from "react"
-import { createPortal } from "react-dom"
 import { useStore } from "@/lib/store"
 import { WindowHeader } from "@/components/window-header"
 import { Badge } from "@/components/ui/badge"
@@ -10,263 +8,36 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { JsonHighlight, PromptText } from "@/components/highlight"
-import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { LlmCallDistribution } from "@/components/llm-call-distribution"
 import { StepFailuresSection } from "@/components/step-failures-panel"
 import { StepProfiling } from "@/components/step-profiling"
 import { InputDocumentLink } from "@/components/input-document-link"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
-import { QuoteLinks, quotesFromJson } from "@/components/quote-links"
+import { quotesFromJson } from "@/components/quote-links"
 import { formatCostCents, formatSecondsShort } from "@/lib/format"
 import { runBilledCents, runSavedCents, runTotalMs } from "@/lib/run-metrics"
 import { isSharedRun } from "@/lib/shared-link-types"
 import { cn } from "@/lib/utils"
-import { useDocViewer, type DocViewMode } from "@/lib/doc-viewer"
 import { useAppShell } from "@/lib/app-shell"
 import { stepDocId, stepDocLinkLabels, stepSourceDocId } from "@/lib/step-doc"
 import { descriptionCheckLlmCallsFromStep, llmCallsFromStep } from "@/lib/llm-distribution"
-import { timeAgo } from "@/lib/time-ago"
 import { enrichRunModules, modulesFromRunSteps } from "@/lib/pipeline-run-diff"
 import { PipelineCanvas } from "@/components/pipeline-canvas"
 import { PipelineInspector } from "@/components/pipeline-inspector"
 import { computeInvalid } from "@/lib/validity"
 import { RunNotesEditor } from "@/components/run-notes-editor"
-import { StepServerLogsSection, ServerLogLines } from "@/components/server-logs-panel"
+import { StepServerLogsSection } from "@/components/server-logs-panel"
 import { StepInputDescription, resolveStepInputDescription } from "@/components/step-input-description"
 import { stepKindIcon } from "@/lib/module-ui"
-import { Search, Maximize2, X, GitCompareArrows, Zap, Link2 } from "lucide-react"
+import { Search, GitCompareArrows, Zap } from "lucide-react"
 import { resolveRunInputDocIds, runInputDocsSummary } from "@/lib/inference-input"
 import { stepIoLabels } from "@/lib/module-kinds"
-import { compactPreview, PREVIEW_RUN_NOTES_CHARS, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
-import type { DocId, DocRef, JobLogEntry, ModuleId, PipelineRun, RunStepStatus } from "@/lib/types"
-
-type PopupPayload = {
-  json?: string
-  text?: string
-  serverLogs?: JobLogEntry[]
-  title: string
-  sourceDocId?: DocId
-}
-
-function filterRuns(runs: PipelineRun[], query: string): PipelineRun[] {
-  if (!query.trim()) return runs
-  const q = query.toLowerCase()
-  return runs.filter(
-    (r) =>
-      r.model.toLowerCase().includes(q) ||
-      r.id.toLowerCase().includes(q) ||
-      (r.notes?.toLowerCase().includes(q) ?? false) ||
-      r.steps.some((s) => s.label.toLowerCase().includes(q)),
-  )
-}
-
-function previewRunNotes(notes: string): string {
-  return compactPreview(notes, PREVIEW_RUN_NOTES_CHARS)
-}
-
-function RunNotesPreview({ notes }: { notes: string }) {
-  return (
-    <p className="truncate text-[10px] text-muted-foreground/90" title={notes}>
-      {previewRunNotes(notes)}
-    </p>
-  )
-}
-
-function RunPickerColumn({
-  label,
-  runs,
-  runInputLabel,
-  runInputDocIds,
-  selectedId,
-  onSelect,
-  query,
-  onQueryChange,
-}: {
-  label: string
-  runs: PipelineRun[]
-  runInputLabel: (run: PipelineRun) => string
-  runInputDocIds: (run: PipelineRun) => DocId[]
-  selectedId: string
-  onSelect: (id: string) => void
-  query: string
-  onQueryChange: (q: string) => void
-}) {
-  const filtered = useMemo(() => filterRuns(runs, query), [runs, query])
-
-  return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div className="border-b border-border px-3 py-2">
-        <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
-      </div>
-      <div className="border-b border-border p-3">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Filter by model, step, run id…"
-            className="h-8 pl-8 font-mono text-xs"
-          />
-        </div>
-      </div>
-      <ScrollArea className="min-h-0 flex-1">
-        {filtered.length === 0 ? (
-          <p className="p-4 text-xs text-muted-foreground">No matching runs.</p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {filtered.map((run) => (
-              <li key={run.id}>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => onSelect(run.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault()
-                      onSelect(run.id)
-                    }
-                  }}
-                  className={cn(
-                    "flex w-full cursor-pointer flex-col gap-1 px-3 py-2.5 text-left transition-colors hover:bg-accent",
-                    selectedId === run.id && "bg-accent",
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate font-mono text-xs">{runInputLabel(run)}</span>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      {isSharedRun(run) && (
-                        <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
-                          shared run
-                        </Badge>
-                      )}
-                      {runInputDocIds(run).map((docId) => (
-                        <OpenInDocumentsLink key={docId} docId={docId} label="store" className="text-[9px]" />
-                      ))}
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "shrink-0 font-mono text-[10px]",
-                          run.status === "ok"
-                            ? "border-primary/40 text-primary"
-                            : "border-destructive/40 text-destructive",
-                        )}
-                      >
-                        {run.status}
-                      </Badge>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground">
-                    <span>{run.model}</span>
-                    <span>
-                      {formatSecondsShort(runTotalMs(run))} · {formatCostCents(runBilledCents(run))}
-                    </span>
-                  </div>
-                  <span className="font-mono text-[10px] text-muted-foreground">
-                    {new Date(run.startedAt).toLocaleString()} · {timeAgo(run.startedAt)} · {run.id}
-                  </span>
-                  {run.notes && <RunNotesPreview notes={run.notes} />}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </ScrollArea>
-    </div>
-  )
-}
-
-function IoSection({
-  title,
-  qualifier,
-  summary,
-  children,
-  onExpand,
-  docLink,
-}: {
-  title: string
-  qualifier: "input" | "output" | "error"
-  summary?: string
-  children?: React.ReactNode
-  onExpand?: () => void
-  docLink?: { docId: DocId; mode: DocViewMode; label: string }
-}) {
-  const { open } = useDocViewer()
-
-  function openDoc() {
-    if (!docLink) return
-    open({ docId: docLink.docId, start: 0, end: 0, mode: docLink.mode })
-  }
-
-  return (
-    <div className="mt-2 pl-7">
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-          {title}{" "}
-          <span className="normal-case text-muted-foreground/70">({qualifier})</span>
-        </span>
-        <div className="flex shrink-0 items-center gap-2">
-          {summary &&
-            (docLink ? (
-              <button
-                type="button"
-                onClick={openDoc}
-                className="max-w-[220px] truncate font-mono text-[10px] text-primary hover:underline"
-                title={docLink.label}
-              >
-                {summary}
-              </button>
-            ) : (
-              <span className="max-w-[200px] truncate font-mono text-[10px] text-muted-foreground/80">
-                {summary}
-              </span>
-            ))}
-          {docLink && (
-            <>
-              <button
-                type="button"
-                onClick={openDoc}
-                className="inline-flex items-center gap-1 font-mono text-[10px] text-primary hover:underline"
-              >
-                <Link2 className="h-3 w-3" />
-                {docLink.label}
-              </button>
-              <OpenInDocumentsLink docId={docLink.docId} label="store" />
-            </>
-          )}
-          {onExpand && (
-            <button
-              onClick={onExpand}
-              className="rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
-              title="Open in full-screen viewer"
-            >
-              <Maximize2 className="h-3 w-3" />
-            </button>
-          )}
-        </div>
-      </div>
-      {docLink ? (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={openDoc}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault()
-              openDoc()
-            }
-          }}
-          className="cursor-pointer rounded border border-border bg-muted/20 p-2 font-mono text-[10px] leading-snug whitespace-pre-wrap text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5"
-        >
-          {children}
-        </div>
-      ) : (
-        <div className="rounded border border-border bg-muted/20 p-2 font-mono text-[10px] leading-snug whitespace-pre-wrap text-muted-foreground">
-          {children}
-        </div>
-      )}
-    </div>
-  )
-}
+import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
+import type { DocRef, ModuleId, PipelineRun, RunStepStatus } from "@/lib/types"
+import { IoSection } from "@/components/logging/io-section"
+import { filterRuns, RunNotesPreview } from "@/components/logging/run-picker-column"
+import { CompareModal } from "@/components/logging/compare-modal"
+import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
 
 export function Logging() {
   const { runs, docs, modules, models, project } = useStore()
@@ -276,10 +47,6 @@ export function Logging() {
   const [popup, setPopup] = useState<PopupPayload | null>(null)
   const [selectedPipelineModuleId, setSelectedPipelineModuleId] = useState<ModuleId | undefined>()
   const [compareOpen, setCompareOpen] = useState(false)
-  const [compareRunA, setCompareRunA] = useState<string>("")
-  const [compareRunB, setCompareRunB] = useState<string>("")
-  const [compareQueryA, setCompareQueryA] = useState("")
-  const [compareQueryB, setCompareQueryB] = useState("")
 
   useEffect(() => {
     if (!focusRunId) return
@@ -309,8 +76,6 @@ export function Logging() {
       }))
       .filter((g) => g.calls.length > 0)
   }, [active])
-  const popupQuotes = popup?.json ? quotesFromJson(popup.json) : []
-
   const runPipeline = useMemo(() => {
     if (!active) return null
     const modulesAtRun = enrichRunModules(modulesFromRunSteps(active.steps), modules)
@@ -321,14 +86,6 @@ export function Logging() {
   }, [active, modules])
 
   const selectedPipelineModule = runPipeline?.modules.find((m) => m.id === selectedPipelineModuleId)
-
-  function openCompare() {
-    setCompareRunA(active?.id ?? runs[0]?.id ?? "")
-    setCompareRunB(runs.find((r) => r.id !== active?.id)?.id ?? runs[1]?.id ?? "")
-    setCompareQueryA("")
-    setCompareQueryB("")
-    setCompareOpen(true)
-  }
 
   return (
     <div className="flex h-full flex-col">
@@ -646,7 +403,7 @@ export function Logging() {
                         variant="outline"
                         size="sm"
                         className="shrink-0 font-mono text-[10px]"
-                        onClick={openCompare}
+                        onClick={() => setCompareOpen(true)}
                         disabled={runs.length < 2}
                       >
                         <GitCompareArrows className="mr-1.5 h-3.5 w-3.5" />
@@ -687,88 +444,17 @@ export function Logging() {
         </div>
       </div>
 
-      {compareOpen && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-          <button
-            aria-label="Close compare"
-            className="absolute inset-0 bg-background/70 backdrop-blur-sm"
-            onClick={() => setCompareOpen(false)}
-          />
-          <div className="relative flex max-h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-            <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-              <span className="font-mono text-xs text-muted-foreground">compare_logs</span>
-              <button
-                onClick={() => setCompareOpen(false)}
-                className="rounded p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="grid h-[min(32rem,52vh)] min-h-[16rem] grid-cols-2 divide-x divide-border">
-              <RunPickerColumn
-                label="Pipeline A"
-                runs={runs}
-                runInputLabel={runInputLabel}
-                runInputDocIds={runInputDocIds}
-                selectedId={compareRunA}
-                onSelect={setCompareRunA}
-                query={compareQueryA}
-                onQueryChange={setCompareQueryA}
-              />
-              <RunPickerColumn
-                label="Pipeline B"
-                runs={runs}
-                runInputLabel={runInputLabel}
-                runInputDocIds={runInputDocIds}
-                selectedId={compareRunB}
-                onSelect={setCompareRunB}
-                query={compareQueryB}
-                onQueryChange={setCompareQueryB}
-              />
-            </div>
-            <div className="border-t border-border px-4 py-3">
-              <p className="text-center text-xs text-muted-foreground">Not yet implemented.</p>
-            </div>
-          </div>
-        </div>,
-        document.body,
+      {compareOpen && (
+        <CompareModal
+          runs={runs}
+          runInputLabel={runInputLabel}
+          runInputDocIds={runInputDocIds}
+          initialRunId={active?.id}
+          onClose={() => setCompareOpen(false)}
+        />
       )}
 
-      {popup && createPortal(
-        <div className="fixed inset-0 z-50 flex flex-col">
-          <button
-            aria-label="Close viewer"
-            className="absolute inset-0 bg-background/70 backdrop-blur-sm"
-            onClick={() => setPopup(null)}
-          />
-          <div className="relative m-6 flex flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-            <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-              <span className="font-mono text-xs text-muted-foreground">{popup.title}</span>
-              <button
-                onClick={() => setPopup(null)}
-                className="rounded p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            {popup.json ? (
-              <div className="flex min-h-0 flex-1 flex-col">
-                {popupQuotes.length > 0 && <QuoteLinks quotes={popupQuotes} className="border-b border-border px-4 py-3" />}
-                <JsonPreviewPanel json={popup.json} className="min-h-0 flex-1" />
-              </div>
-            ) : popup.serverLogs ? (
-              <div className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed">
-                <ServerLogLines logs={popup.serverLogs} />
-              </div>
-            ) : (
-              <div className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground">
-                <PromptText text={popup.text ?? ""} sourceDocId={popup.sourceDocId} />
-              </div>
-            )}
-          </div>
-        </div>,
-        document.body,
-      )}
+      {popup && <PopupModal payload={popup} onClose={() => setPopup(null)} />}
     </div>
   )
 }

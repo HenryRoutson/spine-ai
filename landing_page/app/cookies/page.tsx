@@ -5,7 +5,7 @@ import { LegalPageShell } from "@/components/legal-page-shell"
 import { CookiePreferences } from "@/components/cookie-preferences"
 
 export const metadata = {
-  title: "Cookie Policy — auto pipeline",
+  title: "Cookie Policy — Spine",
 }
 
 export default function CookiesPage() {

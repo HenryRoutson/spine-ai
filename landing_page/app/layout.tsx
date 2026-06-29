@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "auto pipeline — AI Engineering Pipeline Builder",
+  title: "Spine — Validated AI",
   description:
     "Build validated AI pipelines. Structured output, implicit schema validation, A/B tested strategies, caching and cost attribution — without the engineering grind.",
 };

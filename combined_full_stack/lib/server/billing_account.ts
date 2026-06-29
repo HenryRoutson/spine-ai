@@ -285,7 +285,7 @@ export async function createCheckoutSession(
             currency: "usd",
             unit_amount: SUB_CENTS_PER_MONTH,
             recurring: { interval: "month" as const },
-            product_data: { name: "AI Pipeline Builder monthly" },
+            product_data: { name: "Spine monthly" },
           },
         };
 

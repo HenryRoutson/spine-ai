@@ -174,3 +174,84 @@ body {
 .faq-item[open] summary .faq-chevron {
   transform: rotate(180deg);
 }
+
+/* AI : spine mark — vertical spine column + vertebra node bars; always b&w regardless of accent */
+.spine-mark {
+  --mark-size: 32px;
+  --spine-w: 3px;
+  --node-w: 14px;
+  --node-h: 3px;
+  --mark-fg: var(--foreground);
+  --mark-fg-dim: #fafafa40;
+  position: relative;
+  width: var(--mark-size);
+  height: var(--mark-h, var(--mark-size));
+  flex-shrink: 0;
+}
+
+.spine-mark::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: var(--spine-w);
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    var(--mark-fg-dim) 0%,
+    var(--mark-fg) 42%,
+    var(--mark-fg) 58%,
+    var(--mark-fg-dim) 100%
+  );
+  box-shadow: 0 0 18px var(--mark-fg-dim);
+}
+
+.spine-mark .node {
+  position: absolute;
+  left: 50%;
+  width: var(--node-w);
+  height: var(--node-h);
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--mark-fg);
+  opacity: 0.92;
+}
+
+.spine-mark .node:nth-child(1) { top: 5px; opacity: 0.55; }
+.spine-mark .node:nth-child(2) {
+  top: 50%;
+  margin-top: -1.5px;
+  width: calc(var(--node-w) + 6px);
+  background: var(--mark-fg);
+  box-shadow: 0 0 10px var(--mark-fg-dim);
+}
+.spine-mark .node:nth-child(3) { bottom: 5px; opacity: 0.55; }
+
+.spine-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: inherit;
+}
+
+/* AI : boxed variant — mark sits in a bordered panel tile */
+.spine-logo.boxed .spine-mark-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line-bright);
+  background: var(--panel);
+}
+
+.spine-wordmark {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--foreground);
+}

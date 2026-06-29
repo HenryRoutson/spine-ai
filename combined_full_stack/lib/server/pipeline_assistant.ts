@@ -264,7 +264,7 @@ function materializeDocs(
 }
 
 function buildThinkingSystemPrompt(hasValidationErrors: boolean): string {
-  return `You are the project assistant for "auto pipeline" — structures, pipeline steps, and inference test documents.
+  return `You are the project assistant for "Spine" — structures, pipeline steps, and inference test documents.
 
 ${hasValidationErrors
     ? "The live project has pipeline validation errors — focus on diagnosing and fixing those I/O mismatches. Do not propose a greenfield architecture."

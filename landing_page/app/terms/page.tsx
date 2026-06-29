@@ -4,7 +4,7 @@ import { TERMS_SECTIONS } from "@/lib/legal/content"
 import { LegalPageShell } from "@/components/legal-page-shell"
 
 export const metadata = {
-  title: "Terms of Service — auto pipeline",
+  title: "Terms of Service — Spine",
 }
 
 export default function TermsPage() {

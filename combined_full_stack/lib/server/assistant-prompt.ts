@@ -134,7 +134,7 @@ export function buildDocumentRulesPromptBlock(): string {
 }
 
 export function buildProjectAssistantSystemPrompt(globalModel: ModelId): string {
-  return `You are the project assistant for "auto pipeline" — a linear document-processing IDE with structure models, a step pipeline, and a document store for inference.
+  return `You are the project assistant for "Spine" — a linear document-processing IDE with structure models, a step pipeline, and a document store for inference.
 
 You can propose changes to ALL of the following in one response:
 1. Structure models (pydantic schemas for LLM I/O)
