@@ -92,14 +92,15 @@
       }
 
       /* AI : spine mark — central column + vertebra nodes (pipeline steps on the spine) */
+      /* AI : --mark-h allows non-square tall variants for vertical lockup */
       .spine-mark {
         --mark-size: 32px;
-        --spine-w: 2px;
+        --spine-w: 3px;
         --node-w: 14px;
         --node-h: 3px;
         position: relative;
         width: var(--mark-size);
-        height: var(--mark-size);
+        height: var(--mark-h, var(--mark-size));
         flex-shrink: 0;
       }
 
@@ -107,8 +108,8 @@
         content: "";
         position: absolute;
         left: 50%;
-        top: 3px;
-        bottom: 3px;
+        top: -2px;
+        bottom: -2px;
         width: var(--spine-w);
         transform: translateX(-50%);
         border-radius: 999px;
@@ -135,22 +136,20 @@
 
       .spine-mark .node:nth-child(1) {
         top: 5px;
-        width: 10px;
-        opacity: 0.45;
+        opacity: 0.55;
       }
 
       .spine-mark .node:nth-child(2) {
         top: 50%;
         margin-top: -1.5px;
-        width: 18px;
+        width: calc(var(--node-w) + 6px);
         background: var(--accent);
         box-shadow: 0 0 10px var(--accent-dim);
       }
 
       .spine-mark .node:nth-child(3) {
         bottom: 5px;
-        width: 10px;
-        opacity: 0.45;
+        opacity: 0.55;
       }
 
       .spine-mark.on-light::before {
@@ -162,28 +161,65 @@
         background: #18181b;
       }
 
-      .spine-mark.on-light .node:nth-child(2) {
+      .spine-mark.on-light .node:nth-child(2),
+      .spine-mark.on-light.tall .node:nth-child(3) {
         background: #18181b;
+        box-shadow: none;
       }
 
-      .spine-mark.on-light .node:nth-child(1),
-      .spine-mark.on-light .node:nth-child(3) {
-        opacity: 0.35;
-      }
 
       .spine-mark.lg {
         --mark-size: 48px;
+        --spine-w: 3px;
         --node-w: 20px;
         --node-h: 4px;
       }
 
-      .spine-mark.lg .node:nth-child(1),
-      .spine-mark.lg .node:nth-child(3) {
-        width: 14px;
+      /* AI : tall 5-node mark — one vertebra per letter, for vertical letter lockup */
+      .spine-mark.tall {
+        --mark-size: 18px;
+        --mark-h: 88px;
+        --spine-w: 3px;
+        --node-w: 12px;
+        --node-h: 3px;
       }
 
-      .spine-mark.lg .node:nth-child(2) {
-        width: 26px;
+      /* AI : override base nth-child positions for 5-node layout; nth-child(3) is the mid node */
+      .spine-mark.tall .node:nth-child(1) { top: 4px; opacity: 0.55; }
+      .spine-mark.tall .node:nth-child(2) { top: 22px; margin-top: 0; width: var(--node-w) !important; opacity: 0.55; }
+      .spine-mark.tall .node:nth-child(3) { top: 42px; bottom: auto; width: calc(var(--node-w) + 6px) !important; background: var(--accent); box-shadow: 0 0 10px var(--accent-dim); opacity: 0.92; }
+      .spine-mark.tall .node:nth-child(4) { top: 62px; opacity: 0.55; }
+      .spine-mark.tall .node:nth-child(5) { bottom: 4px; opacity: 0.55; }
+
+      /* AI : vertical letter lockup — spine mark with SPINE stacked beside each node */
+      .spine-logo-vertical {
+        display: inline-flex;
+        align-items: stretch;
+        gap: 12px;
+        text-decoration: none;
+        color: inherit;
+      }
+
+      .spine-vertical-letters {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        padding: 3px 0;
+      }
+
+      .spine-vertical-letters span {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        line-height: 1;
+        color: var(--fg);
+        opacity: 0.55;
+      }
+
+      /* AI : middle letter (I) is the spine mid-point — full brightness */
+      .spine-vertical-letters span.mid {
+        color: var(--accent);
+        opacity: 1;
       }
 
       .spine-wordmark {
@@ -338,7 +374,7 @@
               </span>
               <span class="stack">
                 <span class="spine-wordmark" style="font-size: 28px">Spine</span>
-                <span class="spine-tagline">validated AI pipelines</span>
+                <span class="spine-tagline">validated AI</span>
               </span>
             </a>
           </div>
@@ -394,6 +430,50 @@
             </span>
           </div>
           <p class="card-label">favicon / avatar (mark only)</p>
+        </section>
+
+        <section>
+          <div class="card">
+            <a class="spine-logo-vertical" href="#" aria-label="Spine">
+              <span class="spine-mark tall" aria-hidden="true">
+                <span class="node"></span>
+                <span class="node"></span>
+                <span class="node"></span>
+                <span class="node"></span>
+                <span class="node"></span>
+              </span>
+              <span class="spine-vertical-letters">
+                <span>S</span>
+                <span>P</span>
+                <span class="mid">I</span>
+                <span>N</span>
+                <span>E</span>
+              </span>
+            </a>
+          </div>
+          <p class="card-label">vertical letter lockup (dark)</p>
+        </section>
+
+        <section>
+          <div class="card light">
+            <a class="spine-logo-vertical" href="#" aria-label="Spine" style="--fg: #18181b; --accent: #18181b; --accent-dim: #18181b40; --accent-glow: transparent;">
+              <span class="spine-mark tall on-light" aria-hidden="true">
+                <span class="node"></span>
+                <span class="node"></span>
+                <span class="node"></span>
+                <span class="node"></span>
+                <span class="node"></span>
+              </span>
+              <span class="spine-vertical-letters" style="--fg: #18181b; --accent: #18181b;">
+                <span>S</span>
+                <span>P</span>
+                <span class="mid">I</span>
+                <span>N</span>
+                <span>E</span>
+              </span>
+            </a>
+          </div>
+          <p class="card-label">vertical letter lockup (light)</p>
         </section>
       </div>
     </main>

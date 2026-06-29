@@ -35,7 +35,7 @@ export class InputDescriptionRejectedError extends Error {
 }
 
 const CHECK_SYSTEM =
-  "You judge whether data about to enter a pipeline step matches a required description. Be strict but reasonable — the input should clearly fit the described type, format, or content. When the input is JSON, judge the object shape and field names; nested string fields are expected and do not make the input unstructured prose. Combine-step payloads may include newDocument (the uploaded file) and pipelineState (upstream structured data) — judge both parts against the description. When checking a single list item, only that item is shown — do not expect other list members in the same payload; plural wording in the description still applies to each item individually. Uploaded files are often wrapped as { filename, content } or raw text — judge the file content, not the wrapper. Structured model rows may include long text in body or feedback fields — that prose is expected, not a sign the row is a raw upload. Set matches=true when the input clearly fits the description.";
+  "You judge whether data about to enter a pipeline step matches a required description. Be strict but reasonable — the input should clearly fit the described type, format, or content. When the input is JSON, judge the object shape and field names; nested string fields are expected and do not make the input unstructured prose. Combine-step payloads may include newDocument (the uploaded file) and pipelineState (upstream structured data) — judge both parts against the description. When checking a single list item, only that item is shown — do not expect other list members in the same payload; plural wording in the description still applies to each item individually. Uploaded files are often wrapped as { filename, content } or raw text — judge the file content, not the wrapper. Structured model rows may include long text in body or feedback fields — that prose is expected, not a sign the row is a raw upload. IMPORTANT: For steps whose label or description suggests they PRODUCE an output format (e.g. Export CSV, Generate Report, Format PDF, Write Summary) the input is the raw structured data to be converted — accept it if it contains appropriate underlying content for the described output, even if the input is JSON rather than the final output format. Set matches=true when the input clearly fits the description.";
 
 const STOPWORDS = new Set([
   "with",
@@ -66,6 +66,13 @@ const STOPWORDS = new Set([
   "description",
 ]);
 
+// AI : steps whose label implies they produce an output format — the input is always raw data to convert.
+const OUTPUT_PRODUCING_STEP_RE = /\b(export|generate|format|write|create|produce|build|render|output)\b/i;
+
+function isOutputProducingStep(label: string): boolean {
+  return OUTPUT_PRODUCING_STEP_RE.test(label);
+}
+
 // AI : LLM sometimes rejects while its reason affirms the described type — treat as pass.
 function rejectionContradictsDescription(reason: string, description: string): boolean {
   const r = reason.toLowerCase();
@@ -86,6 +93,14 @@ function rejectionContradictsDescription(reason: string, description: string): b
   return overlap.length >= 2 || (overlap.length >= 1 && descTerms.length <= 4);
 }
 
+// AI : when the step label implies output production and rejection only complains about format mismatch
+// (e.g. "it's JSON not a CSV"), treat as a false rejection — the input is raw data to convert.
+function isFormatOnlyRejection(stepLabel: string, reason: string): boolean {
+  if (!isOutputProducingStep(stepLabel)) return false;
+  const r = reason.toLowerCase();
+  return /\bjson\b/.test(r) && /\b(not a?|instead of|rather than)\b/.test(r) && !/\b(missing|wrong|invalid|incorrect|unrelated|empty)\b/.test(r);
+}
+
 function buildCheckPrompt(
   stepLabel: string,
   description: string,
@@ -97,7 +112,11 @@ function buildCheckPrompt(
   const listLine = oneListItem
     ? "\nNote: you are checking ONE element from a list — plural wording in the description still applies to this single item."
     : "";
-  return `${base}${nameLine}${listLine}\n\nDoes this step input match the description?`;
+  // AI : when the step label implies output production, remind the checker that the input is raw data — not the final format.
+  const exportLine = isOutputProducingStep(stepLabel)
+    ? "\nIMPORTANT: This step PRODUCES the described format — its INPUT is raw structured data (e.g. JSON) to be converted. Accept any input whose content is appropriate for the described output, even if the input is JSON rather than the final format."
+    : "";
+  return `${base}${nameLine}${listLine}${exportLine}\n\nDoes this step input match the description?`;
 }
 
 function parseMatchReply(raw: string): InputDescriptionCheckResult {
@@ -185,7 +204,7 @@ export async function runInputDescriptionCheck(
 
   if (!result.matches) {
     const reason = result.reason.trim() || "input does not match the required description";
-    if (rejectionContradictsDescription(reason, desc)) {
+    if (rejectionContradictsDescription(reason, desc) || isFormatOnlyRejection(stepLabel, reason)) {
       log.info(`input description check override`, { stepLabel, reason, requiredDescription: desc });
       return { matches: true, reason: `accepted: ${reason}` };
     }
