@@ -9,7 +9,7 @@ todo check XSS
 remove outIsList as it's not generic and won't scale to other types
 
 
-
+move manage projects button to be dedicated
 
 create a single file for all colours to use, color pallete
 
