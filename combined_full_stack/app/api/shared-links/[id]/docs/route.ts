@@ -6,7 +6,8 @@ import {
   parseUploadedBytes,
   validateUploadFile,
 } from "@/lib/server/doc_upload_parse";
-import { getSharedLink, newSessionId, saveSessionUpload } from "@/lib/server/shared_links";
+import { getSharedLink, newSessionId } from "@/lib/server/shared_links";
+import { saveSessionUpload } from "@/lib/server/shared-link-session";
 import type { ModuleId, SharedLinkId } from "@/lib/server/types";
 
 const SESSION_COOKIE = "shared_run_session";

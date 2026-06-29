@@ -9,6 +9,8 @@ import { appendAssistantDebugEntry, streamEventToDebugEntry } from "@/lib/assist
 type PipelineAssistantStreamHandlers = {
   onDebugEntry?: (entry: AssistantDebugEntry) => void
   onThinkingDelta?: (delta: string) => void
+  // AI : fires as the assistant message text streams during the structuring phase.
+  onMessageDelta?: (delta: string) => void
   onPhase?: (phase: AssistantLoadingPhase) => void
 }
 
@@ -60,6 +62,9 @@ export async function readPipelineAssistantStream<TProposal>(
 
       if (evt.type === ASSISTANT_STREAM_EVENT.THINKING_DELTA && typeof evt.text === "string") {
         handlers.onThinkingDelta?.(evt.text)
+      }
+      if (evt.type === ASSISTANT_STREAM_EVENT.MESSAGE_DELTA && typeof evt.text === "string") {
+        handlers.onMessageDelta?.(evt.text)
       }
       if (evt.type === ASSISTANT_STREAM_EVENT.PHASE && typeof evt.phase === "string") {
         handlers.onPhase?.(evt.phase as AssistantLoadingPhase)

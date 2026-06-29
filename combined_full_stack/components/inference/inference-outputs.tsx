@@ -3,6 +3,7 @@
 import { AlertTriangle, CheckCircle2 } from "lucide-react"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { cn } from "@/lib/utils"
+import { useStatusPalette } from "@/lib/chart-colors"
 import type { RunStep, StructureModel } from "@/lib/types"
 
 function OutputStepLabel() {
@@ -52,6 +53,7 @@ function InferenceStepOutput({
   models?: StructureModel[]
 }) {
   const ok = step.status === "ok" || step.status === "cached"
+  const palette = useStatusPalette()
   return (
     <div
       className={cn(
@@ -64,9 +66,9 @@ function InferenceStepOutput({
       )}
       <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
         {ok ? (
-          <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" />
+          <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: palette.ok }} />
         ) : (
-          <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+          <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: palette.err }} />
         )}
         <p className="min-w-0 flex-1 truncate text-sm font-medium">{step.label}</p>
         {isOutputStep && <OutputStepLabel />}

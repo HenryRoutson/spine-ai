@@ -1,13 +1,29 @@
 "use client"
 
-import { Sparkles, X } from "lucide-react"
+import { useState } from "react"
+import { Check, Copy, Sparkles } from "lucide-react"
 import { ProjectAssistant } from "@/components/project-assistant"
 import { Button } from "@/components/ui/button"
 import { useProjectAssistant } from "@/lib/project-assistant-context"
+import { PROJECT_ASSISTANT_INITIAL_MESSAGE } from "@/lib/project-assistant-types"
+import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
 export function ProjectAssistantDock() {
-  const { open, setOpen, toggle } = useProjectAssistant()
+  const { open, toggle, getSession } = useProjectAssistant()
+  const { project } = useStore()
+  const { messages } = getSession(project.id, PROJECT_ASSISTANT_INITIAL_MESSAGE)
+  const [copied, setCopied] = useState(false)
+
+  function copyConversation() {
+    const text = messages
+      .map((m) => `${m.role === "user" ? "You" : "Assistant"}: ${m.content}`)
+      .join("\n\n")
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
 
   return (
     <>
@@ -33,10 +49,11 @@ export function ProjectAssistantDock() {
               type="button"
               size="icon-sm"
               variant="ghost"
-              onClick={() => setOpen(false)}
-              aria-label="Close project assistant"
+              onClick={copyConversation}
+              aria-label="Copy conversation"
+              title="Copy conversation"
             >
-              <X className="h-4 w-4" />
+              {copied ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
             </Button>
           </div>
           <div className={cn("min-h-0 flex-1")}>

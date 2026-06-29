@@ -12,6 +12,7 @@ import { isSharedRun } from "@/lib/shared-link-types"
 import { timeAgo } from "@/lib/time-ago"
 import { cn } from "@/lib/utils"
 import { compactPreview, PREVIEW_RUN_NOTES_CHARS } from "@/lib/text-preview"
+import { useStatusPalette } from "@/lib/chart-colors"
 import type { DocId, PipelineRun } from "@/lib/types"
 
 export function filterRuns(runs: PipelineRun[], query: string): PipelineRun[] {
@@ -54,6 +55,7 @@ export function RunPickerColumn({
   onQueryChange: (q: string) => void
 }) {
   const filtered = useMemo(() => filterRuns(runs, query), [runs, query])
+  const palette = useStatusPalette()
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -106,12 +108,10 @@ export function RunPickerColumn({
                       ))}
                       <Badge
                         variant="outline"
-                        className={cn(
-                          "shrink-0 font-mono text-[10px]",
-                          run.status === "ok"
-                            ? "border-primary/40 text-primary"
-                            : "border-destructive/40 text-destructive",
-                        )}
+                        className="shrink-0 font-mono text-[10px]"
+                        style={run.status === "ok"
+                          ? { color: palette.ok, borderColor: `${palette.ok}66` }
+                          : { color: palette.err, borderColor: `${palette.err}66` }}
                       >
                         {run.status}
                       </Badge>

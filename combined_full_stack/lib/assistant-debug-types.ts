@@ -26,6 +26,8 @@ export type AssistantDebugEntry =
 export const ASSISTANT_STREAM_EVENT = {
   THINKING_DELTA: "thinking_delta",
   THINKING_DONE: "thinking_done",
+  // AI : emitted as the assistant message text streams during the structuring phase.
+  MESSAGE_DELTA: "message_delta",
   PHASE: "phase",
   LLM_RESPONSE: "llm_response",
   STRUCTURED_FAILURE: "structured_failure",

@@ -10,26 +10,16 @@ import {
   runStepSignature,
   type StepMeanStats,
 } from "@/lib/step-profiling"
+import { CHART_AXIS, CHART_STAT, useStatusPalette } from "@/lib/chart-colors"
+import type { StatusPalette } from "@/lib/color-scheme"
 
-import {
-  CHART_AXIS,
-  CHART_ERR,
-  CHART_ERR_STROKE,
-  CHART_ERR_TEXT_CLASS,
-  CHART_RETRY,
-  CHART_RETRY_STROKE,
-  CHART_OK,
-  CHART_OK_STROKE,
-  CHART_OK_TEXT_CLASS,
-  CHART_STAT,
-} from "@/lib/chart-colors"
 // AI : fixed cell width — rigid grid; value row + plot + label row baked into padding.
 const STEP_W = 40
 const PLOT_H = 96
 const PAD = { t: 12, r: 4, b: 36, l: 24 }
 
-function barColor(failed: number): { fill: string; stroke: string } {
-  return failed > 0 ? { fill: CHART_ERR, stroke: CHART_ERR_STROKE } : { fill: CHART_OK, stroke: CHART_OK_STROKE }
+function barColor(failed: number, palette: StatusPalette): { fill: string; stroke: string } {
+  return failed > 0 ? { fill: palette.err, stroke: palette.errStroke } : { fill: palette.ok, stroke: palette.okStroke }
 }
 
 function truncateLabel(label: string, max = 12): string {
@@ -43,6 +33,7 @@ function StepMetricBarChart({
   format,
   barFill,
   barStroke,
+  palette,
 }: {
   title: string
   stats: StepMeanStats[]
@@ -50,6 +41,7 @@ function StepMetricBarChart({
   format: (n: number) => string
   barFill?: string
   barStroke?: string
+  palette: StatusPalette
 }) {
   const maxVal = Math.max(...stats.map(value), 0.01)
   const plotW = stats.length * STEP_W
@@ -93,7 +85,7 @@ function StepMetricBarChart({
           const color =
             barFill && barStroke
               ? { fill: barFill, stroke: barStroke }
-              : barColor(step.failed)
+              : barColor(step.failed, palette)
           const centerX = barX + STEP_W / 2
           const valueY = v > 0 ? baselineY - barH - 3 : baselineY - 3
 
@@ -157,6 +149,7 @@ export function StepProfiling({
   runs: PipelineRun[]
   stepOrder: RunStep[]
 }) {
+  const palette = useStatusPalette()
   const signature = useMemo(() => runStepSignature(stepOrder), [stepOrder])
   const matchingRuns = useMemo(() => runsMatchingSignature(runs, signature), [runs, signature])
   const stats = useMemo(() => {
@@ -182,11 +175,11 @@ export function StepProfiling({
           </p>
         </div>
         <span className="shrink-0 font-mono text-[9px] text-muted-foreground">
-          <span className={CHART_OK_TEXT_CLASS}>{ok} ok</span>
+          <span className={palette.okText}>{ok} ok</span>
           {failed > 0 && (
             <>
               {" · "}
-              <span className={CHART_ERR_TEXT_CLASS}>{failed} failed</span>
+              <span className={palette.errText}>{failed} failed</span>
             </>
           )}
         </span>
@@ -198,25 +191,31 @@ export function StepProfiling({
           stats={stats}
           value={(s) => s.meanMs}
           format={formatMs}
+          palette={palette}
         />
         <StepMetricBarChart
           title="Mean cost"
           stats={stats}
           value={(s) => s.meanCostCents}
           format={formatCostCents}
+          palette={palette}
         />
         <StepMetricBarChart
           title="Description Validation cost"
           stats={stats}
           value={(s) => s.meanDescriptionCheckCostCents}
           format={formatCostCents}
-          barFill={CHART_RETRY}
-          barStroke={CHART_RETRY_STROKE}
+          barFill={palette.retry}
+          barStroke={palette.retryStroke}
+          palette={palette}
         />
       </div>
 
       <p className="mt-2 font-mono text-[9px] text-muted-foreground/70">
-        Connected bars = steps in order · green = ok · red = any failed run
+        Connected bars = steps in order ·{" "}
+        <span className={palette.okText}>ok</span>
+        {" · "}
+        <span className={palette.errText}>any failed</span>
       </p>
     </div>
   )

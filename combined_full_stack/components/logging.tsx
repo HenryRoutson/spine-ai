@@ -17,6 +17,7 @@ import { quotesFromJson, QuoteLinks } from "@/components/quote-links"
 import { formatCostCents, formatSecondsShort } from "@/lib/format"
 import { timeAgo } from "@/lib/time-ago"
 import { runBilledCents, runSavedCents, runTotalMs } from "@/lib/run-metrics"
+import { useStatusPalette } from "@/lib/chart-colors"
 import { isSharedRun } from "@/lib/shared-link-types"
 import { cn } from "@/lib/utils"
 import { useAppShell } from "@/lib/app-shell"
@@ -42,6 +43,7 @@ import { CompareModal } from "@/components/logging/compare-modal"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
 
 export function Logging() {
+  const palette = useStatusPalette()
   const { runs, docs, modules, models, project } = useStore()
   const { focusRunId, clearFocusRun } = useAppShell()
   const [query, setQuery] = useState("")
@@ -151,13 +153,11 @@ export function Logging() {
                             <OpenInDocumentsLink key={docId} docId={docId} label="store" className="text-[9px]" />
                           ))}
                           <Badge
-                          variant="outline"
-                          className={cn(
-                            "shrink-0 font-mono text-[10px]",
-                            run.status === "ok"
-                              ? "border-primary/40 text-primary"
-                              : "border-destructive/40 text-destructive",
-                          )}
+                            variant="outline"
+                            className="shrink-0 font-mono text-[10px]"
+                            style={run.status === "ok"
+                              ? { color: palette.ok, borderColor: `${palette.ok}66` }
+                              : { color: palette.err, borderColor: `${palette.err}66` }}
                           >
                             {run.status}
                           </Badge>

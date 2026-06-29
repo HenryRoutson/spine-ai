@@ -37,14 +37,16 @@ import {
 import {
   getSharedLink,
   incrementSharedLinkRunCount,
-  loadDefaultDocContent,
   newSessionId,
   openStoreForUser,
-  overlayStoreForSharedRun,
   registerSharedProgressToken,
+} from "@/lib/server/shared_links";
+import {
+  loadDefaultDocContent,
+  overlayStoreForSharedRun,
   sessionDocContent,
   sessionDocsForModule,
-} from "@/lib/server/shared_links";
+} from "@/lib/server/shared-link-session";
 import { isAuthSession, requireAuth } from "@/lib/server/require_auth";
 import { logger } from "@/lib/server/server_logger";
 import type { DocId, DocRef, ModuleId, SharedLinkId } from "@/lib/server/types";
@@ -137,7 +139,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     sharerStore,
     link.id,
     sessionId,
-    link,
+    link.defaultDocs,
     orderedInputModules(link.snapshot.modules),
   );
 

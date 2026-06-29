@@ -6,15 +6,7 @@ import { buildValueScatter, normalCurvePoints, type LlmCallDisplayStatus, type M
 const W = 280
 const H = 108
 const PAD = { l: 6, r: 6, t: 6, b: 28 }
-import {
-  CHART_ERR,
-  CHART_ERR_STROKE,
-  CHART_OK,
-  CHART_OK_STROKE,
-  CHART_RETRY,
-  CHART_RETRY_STROKE,
-  CHART_STAT,
-} from "@/lib/chart-colors"
+import { CHART_STAT, useStatusPalette } from "@/lib/chart-colors"
 const PLOT_STROKE = "currentColor"
 const R = 5
 
@@ -44,6 +36,7 @@ export function ValueScatterChart({
   count: number
   axisMin?: number
 }) {
+  const palette = useStatusPalette()
   const scatter = useMemo(
     () => scatterProp ?? (items ? buildValueScatter(items) : null),
     [scatterProp, items],
@@ -136,13 +129,13 @@ export function ValueScatterChart({
           const cx = xScale(xMin, xMax, pt.x)
           const cy = yScale(pt.y, plotH)
           const fill =
-            pt.status === "ok" ? CHART_OK : pt.status === "retried" ? CHART_RETRY : CHART_ERR
+            pt.status === "ok" ? palette.ok : pt.status === "retried" ? palette.retry : palette.err
           const stroke =
             pt.status === "ok"
-              ? CHART_OK_STROKE
+              ? palette.okStroke
               : pt.status === "retried"
-                ? CHART_RETRY_STROKE
-                : CHART_ERR_STROKE
+                ? palette.retryStroke
+                : palette.errStroke
           return (
             <circle
               key={pt.index}

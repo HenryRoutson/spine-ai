@@ -14,6 +14,7 @@ import { Progress } from "@/components/ui/progress"
 import { formatCostCents } from "@/lib/format"
 import { resolveInputDescriptionCheck } from "@/lib/input-description"
 import { cn } from "@/lib/utils"
+import { useStatusPalette } from "@/lib/chart-colors"
 import type { StepUiState } from "@/lib/run-engine"
 import type {
   InputDescriptionCheckResult,
@@ -69,6 +70,7 @@ export function InferenceStepRow({
   serverLogs?: JobLogEntry[]
   forceCollapsedLogs?: boolean
 }) {
+  const palette = useStatusPalette()
   const descCheckFailed = inputDescriptionCheck?.matches === false
   const showDescCheckCalls =
     (state === "running" || state === "ok" || state === "error") &&
@@ -76,10 +78,10 @@ export function InferenceStepRow({
 
   const header = (
     <div className="flex items-center gap-2.5">
-      {state === "ok" && <CheckCircle2 className="h-4 w-4 text-primary" />}
+      {state === "ok" && <CheckCircle2 className="h-4 w-4" style={{ color: palette.ok }} />}
       {state === "cached" && <Zap className="h-4 w-4 text-chart-3" />}
-      {state === "running" && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-      {state === "error" && <AlertTriangle className="h-4 w-4 text-destructive" />}
+      {state === "running" && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+      {state === "error" && <AlertTriangle className="h-4 w-4" style={{ color: palette.err }} />}
       {state === "idle" && <Circle className="h-4 w-4 text-muted-foreground/40" />}
       <span className={cn("flex-1 text-xs", state === "idle" ? "text-muted-foreground" : "text-foreground")}>
         {label}

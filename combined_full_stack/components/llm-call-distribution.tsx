@@ -10,21 +10,18 @@ import {
   type LlmCallDisplayStatus,
   type MetricField,
 } from "@/lib/llm-distribution"
-import {
-  CHART_ERR_TEXT_CLASS,
-  CHART_OK_TEXT_CLASS,
-  CHART_RETRY_TEXT_CLASS,
-} from "@/lib/chart-colors"
+import { useStatusPalette } from "@/lib/chart-colors"
 import { ValueScatterChart } from "@/components/value-scatter-chart"
 
 function LlmCallSummaryLine({ summary }: { summary: ReturnType<typeof summarizeLlmCalls> }) {
+  const palette = useStatusPalette()
   return (
     <>
-      <span className={CHART_OK_TEXT_CLASS}>{summary.ok} ok</span>
+      <span className={palette.okText}>{summary.ok} ok</span>
       {summary.retried > 0 && (
         <>
           {" · "}
-          <span className={CHART_RETRY_TEXT_CLASS}>
+          <span className={palette.retryText}>
             {summary.retried} retried (recovered)
           </span>
         </>
@@ -32,7 +29,7 @@ function LlmCallSummaryLine({ summary }: { summary: ReturnType<typeof summarizeL
       {summary.failed > 0 && (
         <>
           {" · "}
-          <span className={CHART_ERR_TEXT_CLASS}>{summary.failed} failed</span>
+          <span className={palette.errText}>{summary.failed} failed</span>
         </>
       )}
     </>
@@ -117,7 +114,7 @@ export function LlmCallDistribution({
         ))}
       </div>
       <p className="mt-2 font-mono text-[9px] text-muted-foreground/70">
-        Each dot = one HTTP attempt · green = ok · amber = retried (recovered) · red = failed · gray = μ ± σ
+        Each dot = one HTTP attempt · gray = μ ± σ
       </p>
     </div>
   )

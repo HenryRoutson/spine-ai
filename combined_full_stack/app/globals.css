@@ -49,6 +49,27 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* AI : status color custom properties — match COLOR_SCHEMES in lib/color-scheme.ts.
+   data-color-scheme is set on <html> by writeColorScheme() so server-generated HTML
+   inline styles using var(--status-ok) etc. update reactively. */
+:root {
+  --status-ok: #22c55e;
+  --status-err: #ef4444;
+  --status-retry: #f59e0b;
+}
+
+[data-color-scheme="deuteranopia"] {
+  --status-ok: #3b82f6;
+  --status-err: #f97316;
+  --status-retry: #a855f7;
+}
+
+[data-color-scheme="tritanopia"] {
+  --status-ok: #0891b2;
+  --status-err: #db2777;
+  --status-retry: #f59e0b;
+}
+
 :root {
   --background: oklch(0.16 0.004 264);
   --foreground: oklch(0.96 0.003 264);

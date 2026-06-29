@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
+import Script from 'next/script'
 import './globals.css'
 import { getSupabasePublicEnv } from '@/utils/supabase/env'
 import { SkipLink } from '@/lib/legal/chrome'
@@ -33,15 +34,27 @@ export default function RootLayout({
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} bg-background`}
+      suppressHydrationWarning
     >
       <head>
+        {/* AI : next/script with beforeInteractive avoids the React 19 warning about raw <script> tags in components */}
         {supabasePublic ? (
-          <script
+          <Script
+            id="supabase-public-config"
+            strategy="beforeInteractive"
             dangerouslySetInnerHTML={{
               __html: `window.__SUPABASE_PUBLIC__=${JSON.stringify(supabasePublic)}`,
             }}
           />
         ) : null}
+        {/* AI : apply saved color scheme before first paint — mirrors writeColorScheme() in lib/color-scheme.ts */}
+        <Script
+          id="color-scheme-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var s=localStorage.getItem('spine:color-scheme');if(s&&s!=='default')document.documentElement.dataset.colorScheme=s;}catch(e){}})()`,
+          }}
+        />
       </head>
       <body className="font-sans antialiased">
         <SkipLink />

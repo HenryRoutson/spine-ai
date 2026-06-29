@@ -72,6 +72,8 @@ export async function POST(req: NextRequest) {
                 push({ type: ASSISTANT_STREAM_EVENT.THINKING_DELTA, text }),
               onThinkingDone: (text) =>
                 push({ type: ASSISTANT_STREAM_EVENT.THINKING_DONE, text }),
+              onMessageDelta: (text) =>
+                push({ type: ASSISTANT_STREAM_EVENT.MESSAGE_DELTA, text }),
               onPhase: (phase) => push({ type: ASSISTANT_STREAM_EVENT.PHASE, phase }),
               onLlmResponse: (label, response) =>
                 push({ type: ASSISTANT_STREAM_EVENT.LLM_RESPONSE, label, response }),

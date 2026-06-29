@@ -1,4 +1,5 @@
-// AI : Pipeline I/O graph validation, warning messages, inspector fixes, and pipeline utilities.
+// AI : Pipeline I/O graph validation — core computation and pipeline utilities.
+// AI : Types + messages → validity-types.ts / validity-messages.ts / validity-inspect.ts.
 import type {
   ModuleId,
   PipelineModule,
@@ -28,6 +29,28 @@ import {
   syncAssertPlacement,
   migrateProjectModules,
 } from "./validity-sync";
+import {
+  type InvalidKind,
+  type InvalidStep,
+  type InvalidMap,
+  type PipelineWarning,
+  invalidForModule,
+  invalidIssuesForModule,
+  modelName,
+} from "./validity-types";
+import { invalidStepMessage, warningStepMessage, warningStepMessages } from "./validity-messages";
+import {
+  type IoMismatchFixKind,
+  type IoMismatchFixHint,
+  type IoMismatchInspectorFix,
+  ioMismatchFixHints,
+  ioMismatchAtModuleIndex,
+  ioMismatchUpstreamOf,
+  stepIoMismatchLinked,
+  ioMismatchInspectorFix,
+  stepIoMismatchMessage,
+  prevModuleId,
+} from "./validity-inspect";
 
 export { stepEmitsList } from "./type_expr";
 export {
@@ -38,39 +61,23 @@ export {
   syncAssertPlacement,
   migrateProjectModules,
 } from "./validity-sync";
-
-export type InvalidKind =
-  | "io-mismatch"
-  | "cardinality-mismatch"
-  | "no-output"
-  | "transform-list-wrap"
-  | "empty-label"
-  | "duplicate-label"
-  | "unused-output"
-  | "duplicate-input-struct"
-  | "duplicate-output-struct"
-  | "state-key-missing"
-  | "missing-input-description";
-
-export interface InvalidStep {
-  moduleId: ModuleId;
-  kind: InvalidKind;
-  expects?: StructureModelId;
-  upstreamEmits?: StructureModelId;
-  expectsType?: string;
-  upstreamType?: string;
-  missingLabel?: string;
-}
-
-export type InvalidMap = Map<ModuleId, InvalidStep[]>;
-
-export function invalidForModule(invalid: InvalidMap, moduleId: ModuleId): InvalidStep | undefined {
-  return invalid.get(moduleId)?.[0];
-}
-
-export function invalidIssuesForModule(invalid: InvalidMap, moduleId: ModuleId): InvalidStep[] {
-  return invalid.get(moduleId) ?? [];
-}
+export type { InvalidKind, InvalidStep, InvalidMap, PipelineWarning } from "./validity-types";
+export {
+  invalidForModule,
+  invalidIssuesForModule,
+  modelName,
+  prevModuleId,
+} from "./validity-types";
+export { invalidStepMessage, warningStepMessage, warningStepMessages } from "./validity-messages";
+export type { IoMismatchFixKind, IoMismatchFixHint, IoMismatchInspectorFix } from "./validity-inspect";
+export {
+  ioMismatchFixHints,
+  ioMismatchAtModuleIndex,
+  ioMismatchUpstreamOf,
+  stepIoMismatchLinked,
+  ioMismatchInspectorFix,
+  stepIoMismatchMessage,
+} from "./validity-inspect";
 
 function pushInvalid(invalid: InvalidMap, issue: InvalidStep): void {
   const list = invalid.get(issue.moduleId) ?? [];
@@ -137,11 +144,6 @@ export function transformListWrapInvalid(
   if (m.inStructureId === m.outStructureId) return undefined;
   if (listFieldsForWrap(out).length > 0) return undefined;
   return { moduleId: m.id, kind: "transform-list-wrap", expects: m.inStructureId, upstreamEmits: m.outStructureId };
-}
-
-export interface PipelineWarning {
-  moduleId: ModuleId;
-  kind: "no-prompt" | "quote-no-fields" | "transform-multi-list" | "json-input-type";
 }
 
 function computeLabelInvalid(modules: PipelineModule[]): InvalidMap {
@@ -439,30 +441,6 @@ export function computeWarnings(
   return warnings;
 }
 
-export function warningStepMessage(
-  issue: PipelineWarning,
-  models: StructureModel[],
-  modules: PipelineModule[],
-): string {
-  if (issue.kind === "no-prompt") return "no prompt — schema-only call at runtime";
-  if (issue.kind === "json-input-type") return "JSON file type is not typed — set I/O model to a structure";
-  if (issue.kind === "quote-no-fields") return "output model has no quote fields";
-  if (issue.kind === "transform-multi-list") {
-    const m = modules.find((x) => x.id === issue.moduleId);
-    const name = modelName(models, m?.outStructureId) ?? "output";
-    return `upstream list → ${name} only auto-unwraps one item — add a list field or custom TS if batch size may exceed 1`;
-  }
-  return "warning";
-}
-
-export function warningStepMessages(
-  issues: PipelineWarning[] | undefined,
-  models: StructureModel[],
-  modules: PipelineModule[],
-): string[] {
-  return (issues ?? []).map((issue) => warningStepMessage(issue, models, modules));
-}
-
 // AI : human-readable validation report for assistants and retry prompts.
 export function formatPipelineValidationErrors(
   modules: PipelineModule[],
@@ -480,201 +458,6 @@ export function formatPipelineValidationErrors(
     }
   }
   return lines.join("\n");
-}
-
-export type IoMismatchFixKind = "adopt-upstream" | "align-upstream";
-
-export type IoMismatchFixHint = {
-  kind: IoMismatchFixKind;
-  label: string;
-};
-
-export type IoMismatchInspectorFix = {
-  mismatchModuleId: ModuleId;
-  kind: IoMismatchFixKind;
-  label: string;
-  message: string;
-};
-
-// AI : when step input expects X but upstream emits Y — two one-click alignments.
-export function ioMismatchFixHints(
-  issue: InvalidStep,
-  models: StructureModel[],
-): IoMismatchFixHint[] | undefined {
-  if (issue.kind !== "io-mismatch" || !issue.expects || !issue.upstreamEmits) return undefined;
-  const expected = modelName(models, issue.expects);
-  const upstream = modelName(models, issue.upstreamEmits);
-  if (!expected || !upstream || expected === upstream) return undefined;
-  return [
-    { kind: "adopt-upstream", label: `${expected} → ${upstream}` },
-    { kind: "align-upstream", label: `${upstream} → ${expected}` },
-  ];
-}
-
-export function prevModuleId(modules: PipelineModule[], moduleId: ModuleId): ModuleId | undefined {
-  const i = modules.findIndex((m) => m.id === moduleId);
-  return i > 0 ? modules[i - 1]!.id : undefined;
-}
-
-function isSpineMismatchKind(kind: InvalidKind): boolean {
-  return kind === "io-mismatch" || kind === "cardinality-mismatch";
-}
-
-// AI : red connector / upstream border — downstream step index carries the io-mismatch invalid flag.
-export function ioMismatchAtModuleIndex(
-  modules: PipelineModule[],
-  invalid: InvalidMap | undefined,
-  moduleIndex: number,
-): boolean {
-  if (!invalid || moduleIndex < 0 || moduleIndex >= modules.length) return false;
-  const m = modules[moduleIndex]!;
-  if (m.kind === "input" && modules[moduleIndex + 1]?.kind === "combine") {
-    const issue = invalidForModule(invalid, modules[moduleIndex + 1]!.id);
-    return !!issue && isSpineMismatchKind(issue.kind);
-  }
-  const issue = invalidForModule(invalid, m.id);
-  return !!issue && isSpineMismatchKind(issue.kind);
-}
-
-export function ioMismatchUpstreamOf(
-  moduleId: ModuleId,
-  modules: PipelineModule[],
-  invalid: InvalidMap | undefined,
-): boolean {
-  if (!invalid) return false;
-  for (const [downId, issues] of invalid) {
-    for (const issue of issues) {
-      if (!isSpineMismatchKind(issue.kind)) continue;
-      if (prevModuleId(modules, downId) === moduleId) return true;
-      const downIdx = modules.findIndex((m) => m.id === downId);
-      const down = modules[downIdx];
-      if (down?.kind === "combine" && downIdx >= 2 && modules[downIdx - 1]?.kind === "input") {
-        if (modules[downIdx - 2]?.id === moduleId) return true;
-      }
-    }
-  }
-  return false;
-}
-
-export function stepIoMismatchLinked(
-  moduleId: ModuleId,
-  modules: PipelineModule[],
-  invalid: InvalidMap | undefined,
-): boolean {
-  if (!invalid) return false;
-  const issue = invalidForModule(invalid, moduleId);
-  if (issue && isSpineMismatchKind(issue.kind)) return true;
-  return ioMismatchUpstreamOf(moduleId, modules, invalid);
-}
-
-// AI : one inspector fix per step — downstream gets adopt-upstream, upstream gets align-upstream.
-export function ioMismatchInspectorFix(
-  moduleId: ModuleId,
-  modules: PipelineModule[],
-  invalid: InvalidMap,
-  models: StructureModel[],
-): IoMismatchInspectorFix | undefined {
-  const own = invalidForModule(invalid, moduleId);
-  if (own && isSpineMismatchKind(own.kind)) {
-    const adopt = ioMismatchFixHints(own, models)?.find((h) => h.kind === "adopt-upstream");
-    return {
-      mismatchModuleId: moduleId,
-      kind: "adopt-upstream",
-      label: adopt?.label ?? "",
-      message: invalidStepMessage(own, models, modules),
-    };
-  }
-
-  for (const [downId, issues] of invalid) {
-    for (const issue of issues) {
-      if (!isSpineMismatchKind(issue.kind) || prevModuleId(modules, downId) !== moduleId) continue;
-      const align = ioMismatchFixHints(issue, models)?.find((h) => h.kind === "align-upstream");
-      return {
-        mismatchModuleId: downId,
-        kind: "align-upstream",
-        label: align?.label ?? "",
-        message: invalidStepMessage(issue, models, modules),
-      };
-    }
-  }
-
-  return undefined;
-}
-
-export function stepIoMismatchMessage(
-  moduleId: ModuleId,
-  modules: PipelineModule[],
-  invalid: InvalidMap,
-  models: StructureModel[],
-): string | undefined {
-  const fix = ioMismatchInspectorFix(moduleId, modules, invalid, models);
-  if (fix) return fix.message;
-  const own = invalidForModule(invalid, moduleId);
-  if (own && isSpineMismatchKind(own.kind)) return invalidStepMessage(own, models, modules);
-  return undefined;
-}
-
-export function invalidStepMessage(
-  issue: InvalidStep,
-  models: StructureModel[],
-  modules: PipelineModule[],
-): string {
-  if (issue.kind === "no-output") {
-    const m = modules.find((x) => x.id === issue.moduleId);
-    if (m?.kind === "output") return "select a structure to materialize";
-    if (m?.kind === "assert") return "select passthrough structure";
-    if (m?.kind === "human-review") return "select passthrough structure for review";
-    return "select an output model";
-  }
-  if (issue.kind === "io-mismatch") {
-    const m = modules.find((x) => x.id === issue.moduleId);
-    const expected = issue.expectsType ?? modelName(models, issue.expects);
-    if (m?.kind === "combine" && issue.expects) {
-      if (!issue.upstreamEmits) {
-        return `pipeline state has no ${expected ?? "structure"} — no upstream step has emitted this structure`;
-      }
-      const upstream = issue.upstreamType ?? modelName(models, issue.upstreamEmits) ?? "?";
-      return `pipeline state expects ${expected}, spine carries ${upstream}`;
-    }
-    const upstream = issue.upstreamType ?? modelName(models, issue.upstreamEmits) ?? "?";
-    return `input expects ${expected ?? "?"}, upstream emits ${upstream}`;
-  }
-  if (issue.kind === "cardinality-mismatch") {
-    return `input expects ${issue.expectsType ?? "?"}, upstream emits ${issue.upstreamType ?? "?"}`;
-  }
-  if (issue.kind === "state-key-missing") {
-    return `references unknown step label "${issue.missingLabel ?? "?"}" — no prior step has this label`;
-  }
-  if (issue.kind === "transform-list-wrap") {
-    const m = modules.find((x) => x.id === issue.moduleId);
-    const inName = modelName(models, issue.expects) ?? "item";
-    const outName = modelName(models, issue.upstreamEmits) ?? "output";
-    return `list[${inName}] → ${outName} needs a list field (prefer list[model] ref ${inName}) or custom TS code`;
-  }
-  if (issue.kind === "empty-label") {
-    return "step label is required — labels key the accumulated pipeline state";
-  }
-  if (issue.kind === "duplicate-label") {
-    const step = modules.find((x) => x.id === issue.moduleId);
-    return `duplicate label "${step?.label ?? "?"}" — each step label must be unique`;
-  }
-  if (issue.kind === "unused-output") {
-    const name = modelName(models, issue.expects) ?? "output";
-    return `${name} is never consumed by a downstream step`;
-  }
-  if (issue.kind === "duplicate-input-struct") {
-    const name = modelName(models, issue.expects) ?? "structure";
-    return `multiple input steps emit ${name} — use distinct structures or a combine step`;
-  }
-  if (issue.kind === "duplicate-output-struct") {
-    const m = modules.find((x) => x.id === issue.moduleId);
-    const name = modelName(models, m?.inStructureId) ?? "structure";
-    return `multiple output steps materialize ${name}`;
-  }
-  if (issue.kind === "missing-input-description") {
-    return "input description is required — describe what data this step expects";
-  }
-  return "invalid step";
 }
 
 // AI : A/B strategies use the pipeline's own LLM prompt — not a hardcoded legal brief.
@@ -722,8 +505,3 @@ export function canRunStep(
   if (!m) return false;
   return m.cached || m.kind === "input" || hasInput;
 }
-
-export function modelName(models: StructureModel[], id?: StructureModelId): string | undefined {
-  return models.find((m) => m.id === id)?.name;
-}
-

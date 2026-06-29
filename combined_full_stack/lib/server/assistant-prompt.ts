@@ -86,6 +86,7 @@ What each step puts on the spine (emits):
 - llm / transform (no code) with outIsList false → single structureOut
 - llm / transform / custom-code with outIsList true → list[structureOut]
 - llm-batch → ALWAYS list[structureOut] (outIsList is implied true)
+- quote (auto-inserted "Link Quotes") → INHERITS outIsList from its upstream LLM step. If the LLM has outIsList true the quote step also emits list[structureOut]. Do NOT create transform or quote steps named "Link Quotes ·…" yourself — they are inserted automatically.
 
 What each step requires from the previous step (expects):
 - Most steps → single structureIn matching the previous step's emit
@@ -98,6 +99,7 @@ Common mistakes that fail validation:
 2. Wrong item type on a list — e.g. upstream emits list[Document] but batch expects list[ChunkItem]. Fix: align structureOut on the upstream step.
 3. list → single object without a reshape — e.g. list[ExtractedRow] → SummaryRow needs custom-code, or a SummaryRow model with a list[model] field + transform, not a bare transform.
 4. Map-reduce on paper but linear types not wired — design the spine chain first: Document → list[Chunk] → list[Candidate] → list[Extracted] → Summary.
+5. LLM with outIsList: true followed by a bare transform that expects a single item — the auto-quote step (if the LLM has quote fields) ALSO emits list[T], so every step downstream still sees a list. A bare transform (no code) CANNOT fold list[T] → single T. Fix options: (a) add custom-code or m.code on the transform to fold the list; (b) add a list[model] field on the output structure and let the bare transform auto-wrap; (c) keep outIsList: false on the LLM and put the list field inside the output structure instead; (d) use llm-batch to process each list item downstream.
 
 Before returning modules, walk the chain: for each adjacent pair, confirm previous emits exactly what next expects. If the user prompt lists validation errors, fix every listed mismatch.`;
 }

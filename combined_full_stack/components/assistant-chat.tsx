@@ -57,6 +57,7 @@ type AssistantChatProps<TProposal> = {
     opts: {
       setLoadingPhase: (phase: AssistantLoadingPhase) => void
       onThinkingDelta: (delta: string) => void
+      onMessageDelta: (delta: string) => void
       onDebugEntry: (entry: AssistantDebugEntry) => void
     },
   ) => Promise<AssistantRequestResult<TProposal>>
@@ -89,6 +90,7 @@ export function AssistantChat<TProposal>({
   const [loading, setLoading] = useState(false)
   const [loadingPhase, setLoadingPhase] = useState<AssistantLoadingPhase>("thinking")
   const [liveThinking, setLiveThinking] = useState("")
+  const [liveResponse, setLiveResponse] = useState("")
   const [debugTrace, setDebugTrace] = useState<AssistantDebugEntry[]>([])
   const [error, setError] = useState<string | null>(null)
   const [errorDebugTrace, setErrorDebugTrace] = useState<AssistantDebugEntry[]>([])
@@ -124,6 +126,7 @@ export function AssistantChat<TProposal>({
     setLoading(true)
     setLoadingPhase("thinking")
     setLiveThinking("")
+    setLiveResponse("")
     setDebugTrace([])
     setError(null)
     setErrorDebugTrace([])
@@ -134,6 +137,7 @@ export function AssistantChat<TProposal>({
       const data = await requestAssistant(trimmed, history, {
         setLoadingPhase,
         onThinkingDelta: (delta) => setLiveThinking((prev) => prev + delta),
+        onMessageDelta: (delta) => setLiveResponse((prev) => prev + delta),
         onDebugEntry: handleDebugEntry,
       })
       const assistantMsg: AssistantChatMessage<TProposal> = {
@@ -159,6 +163,7 @@ export function AssistantChat<TProposal>({
     } finally {
       setLoading(false)
       setLiveThinking("")
+      setLiveResponse("")
     }
   }
 
@@ -281,6 +286,14 @@ export function AssistantChat<TProposal>({
                   </p>
                 </div>
               ) : null}
+              {liveResponse && (
+                <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
+                  <p className="text-xs leading-relaxed whitespace-pre-wrap text-foreground/80">
+                    {liveResponse}
+                    <span className="inline-block animate-pulse text-primary">▍</span>
+                  </p>
+                </div>
+              )}
               <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 {loadingText}

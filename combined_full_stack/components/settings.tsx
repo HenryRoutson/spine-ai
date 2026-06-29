@@ -34,6 +34,14 @@ import {
   readInferenceOutputStepsOnly,
   writeInferenceOutputStepsOnly,
 } from "@/lib/inference-settings"
+import {
+  COLOR_SCHEME_IDS,
+  COLOR_SCHEMES,
+  DEFAULT_COLOR_SCHEME,
+  readColorScheme,
+  writeColorScheme,
+  type ColorSchemeId,
+} from "@/lib/color-scheme"
 import { Switch } from "@/components/ui/switch"
 import { PrivacySettings } from "@/components/privacy-settings"
 
@@ -83,6 +91,7 @@ export function Settings() {
   const [hideInputDescriptions, setHideInputDescriptions] = useState(DEFAULT_HIDE_INPUT_DESCRIPTIONS)
   const [requireInputDescriptions, setRequireInputDescriptions] = useState(DEFAULT_REQUIRE_INPUT_DESCRIPTIONS)
   const [inferenceOutputStepsOnly, setInferenceOutputStepsOnly] = useState(DEFAULT_INFERENCE_OUTPUT_STEPS_ONLY)
+  const [colorScheme, setColorScheme] = useState<ColorSchemeId>(DEFAULT_COLOR_SCHEME)
 
   useEffect(() => {
     setDefaultView(readJsonViewerDefaultView())
@@ -91,6 +100,7 @@ export function Settings() {
     setHideInputDescriptions(readHideInputDescriptionsDefault())
     setRequireInputDescriptions(readRequireInputDescriptions())
     setInferenceOutputStepsOnly(readInferenceOutputStepsOnly())
+    setColorScheme(readColorScheme())
   }, [])
 
   function pickView(view: JsonViewerHumanViewId) {
@@ -121,6 +131,11 @@ export function Settings() {
   function pickInferenceOutputStepsOnly(onlyOutputSteps: boolean) {
     writeInferenceOutputStepsOnly(onlyOutputSteps)
     setInferenceOutputStepsOnly(onlyOutputSteps)
+  }
+
+  function pickColorScheme(scheme: ColorSchemeId) {
+    writeColorScheme(scheme)
+    setColorScheme(scheme)
   }
 
   return (
@@ -274,6 +289,44 @@ export function Settings() {
                 </span>
               </span>
             </label>
+          </section>
+
+          <section className="rounded-lg border border-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+              <h3 className="text-sm font-semibold">Status colours</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Colour scheme used for ok / error / retry indicators in charts and traces.
+              </p>
+            </div>
+            <div className="flex flex-col gap-1 p-2">
+              {COLOR_SCHEME_IDS.map((id) => {
+                const scheme = COLOR_SCHEMES[id]
+                const active = colorScheme === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => pickColorScheme(id)}
+                    className={cn(
+                      "flex items-start gap-3 rounded-md px-3 py-2.5 text-left transition-colors",
+                      active ? "bg-secondary" : "hover:bg-secondary/50",
+                    )}
+                  >
+                    {/* AI : three colour swatches showing ok / err / retry for each scheme */}
+                    <span className="mt-0.5 flex shrink-0 gap-1">
+                      <span className="h-3.5 w-3.5 rounded-full border border-border/60" style={{ background: scheme.palette.ok }} />
+                      <span className="h-3.5 w-3.5 rounded-full border border-border/60" style={{ background: scheme.palette.err }} />
+                      <span className="h-3.5 w-3.5 rounded-full border border-border/60" style={{ background: scheme.palette.retry }} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">{scheme.label}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">{scheme.description}</span>
+                    </span>
+                    {active && <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />}
+                  </button>
+                )
+              })}
+            </div>
           </section>
 
           <PrivacySettings />

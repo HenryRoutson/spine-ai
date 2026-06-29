@@ -73,7 +73,7 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
           await applyProposal(msg.proposal)
         }}
         onReject={() => {}}
-        requestAssistant={async (text, history, { setLoadingPhase, onThinkingDelta, onDebugEntry }) => {
+        requestAssistant={async (text, history, { setLoadingPhase, onThinkingDelta, onMessageDelta, onDebugEntry }) => {
           const res = await fetch(API_ROUTES.projectAssistant, {
             method: "POST",
             headers: JSON_HEADERS,
@@ -93,6 +93,7 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
           }
           const data = await readPipelineAssistantStream<ProjectProposal>(res, {
             onThinkingDelta,
+            onMessageDelta,
             onPhase: setLoadingPhase,
             onDebugEntry,
           })

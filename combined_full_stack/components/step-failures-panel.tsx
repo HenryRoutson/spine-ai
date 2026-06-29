@@ -2,7 +2,7 @@
 
 import type { RunFailureRecord, RunStep } from "@/lib/types"
 import { failureKindLabel, stepFailures } from "@/lib/llm-distribution"
-import { CHART_ERR_TEXT_CLASS, CHART_RETRY_TEXT_CLASS } from "@/lib/chart-colors"
+import { useStatusPalette } from "@/lib/chart-colors"
 import { cn } from "@/lib/utils"
 
 export function StepFailuresSection({
@@ -30,7 +30,8 @@ export function StepFailuresSection({
 }
 
 function FailureRow({ failure }: { failure: RunFailureRecord }) {
-  const statusClass = failure.recovered ? CHART_RETRY_TEXT_CLASS : CHART_ERR_TEXT_CLASS
+  const palette = useStatusPalette()
+  const statusClass = failure.recovered ? palette.retryText : palette.errText
   const statusLabel = failure.recovered ? "recovered" : "failed"
 
   return (

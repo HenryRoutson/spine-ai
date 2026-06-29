@@ -35,6 +35,7 @@ import {
 } from "@/lib/validity"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { cn } from "@/lib/utils"
+import { useStatusPalette } from "@/lib/chart-colors"
 import { Badge } from "@/components/ui/badge"
 import { StructureLink } from "@/components/structure-link"
 
@@ -440,11 +441,14 @@ function StepTrailingIcon({
   status?: RunStepStatus
   editMode: boolean
 }) {
-  if (invalid) return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+  const palette = useStatusPalette()
+  if (invalid) return <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color: palette.err }} />
   if (!editMode) return <RunStatusIcon status={status} />
   return <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
 }
 
+// AI : returns className for border/bg — uses destructive/chart-3/primary CSS vars (subtle cues).
+// Icon colors (the primary status signal) are handled by RunStatusIcon/StepTrailingIcon via useStatusPalette.
 function statusBorder(status?: RunStepStatus): string | undefined {
   if (status === "error") return "border-destructive/70 bg-destructive/5"
   if (status === "cached") return "border-chart-3/50 bg-chart-3/5"
@@ -453,7 +457,8 @@ function statusBorder(status?: RunStepStatus): string | undefined {
 }
 
 function RunStatusIcon({ status }: { status?: RunStepStatus }) {
+  const palette = useStatusPalette()
   if (status === "cached") return <Zap className="h-3.5 w-3.5 shrink-0 text-chart-3" />
-  if (status === "error") return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-destructive" />
+  if (status === "error") return <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color: palette.err }} />
   return <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
 }

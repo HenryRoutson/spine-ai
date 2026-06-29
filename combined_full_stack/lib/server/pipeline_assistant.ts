@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { llmStreamString, llmStructured } from "./llm";
+import { llmStreamString, llmStructured, llmStreamStructured } from "./llm";
 import {
   ChatTurn,
   formatValidationBlock,
@@ -126,6 +126,8 @@ export type PipelineAssistantOpts = {
   onThinkingDelta?: (delta: string) => void;
   onPhase?: (phase: "thinking" | "structuring" | "retrying") => void;
   onThinkingDone?: (text: string) => void;
+  // AI : streams the assistant message text as it arrives during the structuring phase.
+  onMessageDelta?: (delta: string) => void;
   onLlmResponse?: (label: string, response: unknown) => void;
   onStructuredFailure?: (detail: {
     attempt: number;
@@ -380,6 +382,63 @@ function materializeProposal(
   };
 }
 
+// AI : parses streaming raw JSON and emits only the "message" field value character by character.
+// AI : handles JSON string escapes so the emitted text is human-readable, not raw JSON.
+function makeMessageExtractor(onMessageDelta: (delta: string) => void): (rawDelta: string) => void {
+  let buf = "";
+  type State = "searching" | "emitting" | "done";
+  let state: State = "searching";
+
+  return (delta: string) => {
+    if (state === "done") return;
+    buf += delta;
+
+    if (state === "searching") {
+      const idx = buf.indexOf('"message"');
+      if (idx === -1) {
+        // Keep trailing chars in case the key spans a chunk boundary.
+        if (buf.length > 20) buf = buf.slice(-20);
+        return;
+      }
+      const after = buf.slice(idx + '"message"'.length);
+      const m = after.match(/^\s*:\s*"/);
+      if (!m) {
+        buf = buf.slice(idx);
+        return;
+      }
+      state = "emitting";
+      buf = after.slice(m[0].length);
+    }
+
+    if (state === "emitting") {
+      let i = 0;
+      let toEmit = "";
+      while (i < buf.length) {
+        const ch = buf[i];
+        if (ch === "\\" && i + 1 < buf.length) {
+          const esc = buf[i + 1];
+          if (esc === "n") toEmit += "\n";
+          else if (esc === "t") toEmit += "\t";
+          else if (esc === "r") toEmit += "\r";
+          else if (esc === '"') toEmit += '"';
+          else if (esc === "\\") toEmit += "\\";
+          else toEmit += esc;
+          i += 2;
+        } else if (ch === '"') {
+          state = "done";
+          i++;
+          break;
+        } else {
+          toEmit += ch;
+          i++;
+        }
+      }
+      buf = buf.slice(i);
+      if (toEmit) onMessageDelta(toEmit);
+    }
+  };
+}
+
 export async function proposePipelineChange(
   project: Project,
   message: string,
@@ -413,7 +472,10 @@ export async function proposePipelineChange(
     }
 
     opts?.onPhase?.("structuring");
-    let raw = await llmStructured(
+    const msgExtractor = opts?.onMessageDelta
+      ? makeMessageExtractor(opts.onMessageDelta)
+      : null;
+    let raw = await llmStreamStructured(
       buildUserPrompt(
         project,
         message,
@@ -441,6 +503,7 @@ export async function proposePipelineChange(
           });
         },
       },
+      (rawDelta) => msgExtractor?.(rawDelta),
     );
     llmAttempt += 1;
     opts?.onLlmResponse?.(fixErrors ? `retry-${fixAttempt}` : "initial", raw);

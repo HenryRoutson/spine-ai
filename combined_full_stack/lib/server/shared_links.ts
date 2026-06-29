@@ -1,4 +1,5 @@
-// AI : TODO refactor — ~580 lines; split Supabase row CRUD from snapshot/run orchestration.
+// AI : Shared link CRUD, progress tokens, and store orchestration.
+// AI : Session doc management lives in shared-link-session.ts.
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -8,20 +9,15 @@ import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { createClient } from "@/utils/supabase/server";
 import { dataDir } from "./config";
 import { createAdminClient } from "./supabase_admin";
-import { hashContent, saveOriginalDocBytes, type Store } from "./store";
-import { shouldSaveOriginalBytes } from "./doc_upload_parse";
+import { hashContent, type Store } from "./store";
 import { migrateProjectModules } from "./validity";
 import { isMissingSchemaError } from "./supabase_store";
 import { LOCAL_DEV_USER_ID, type user_id_string } from "./require_auth";
 import { logger } from "./server_logger";
 import type {
   DocId,
-  DocLabel,
-  DocRef,
-  InputType,
   ModelId,
   ModuleId,
-  PipelineModule,
   Project,
   ProjectId,
   SharedLinkFundingMode,
@@ -70,10 +66,6 @@ function linkFile(id: SharedLinkId): string {
 
 function linkDocsDir(id: SharedLinkId): string {
   return join(linksDir(), "docs", id);
-}
-
-function sessionDocsDir(linkId: SharedLinkId, sessionId: string): string {
-  return join(linkDocsDir(linkId), "sessions", sessionId);
 }
 
 function defaultDocsDir(linkId: SharedLinkId): string {
@@ -347,203 +339,6 @@ export async function incrementSharedLinkRunCount(id: SharedLinkId): Promise<voi
       await admin.from("shared_links").update({ run_count: (data.run_count ?? 0) + 1 }).eq("id", id);
     }
   }
-}
-
-type SessionDocMeta = {
-  id: DocId;
-  name: string;
-  type: InputType;
-  label: DocLabel;
-  moduleId: ModuleId;
-};
-
-function sessionMetaPath(linkId: SharedLinkId, sessionId: string): string {
-  return join(sessionDocsDir(linkId, sessionId), "meta.json");
-}
-
-function readSessionDocs(linkId: SharedLinkId, sessionId: string): SessionDocMeta[] {
-  const path = sessionMetaPath(linkId, sessionId);
-  if (!existsSync(path)) return [];
-  return JSON.parse(readFileSync(path, "utf8")) as SessionDocMeta[];
-}
-
-function writeSessionDocs(linkId: SharedLinkId, sessionId: string, docs: SessionDocMeta[]): void {
-  mkdirSync(sessionDocsDir(linkId, sessionId), { recursive: true });
-  writeFileSync(sessionMetaPath(linkId, sessionId), JSON.stringify(docs, null, 2));
-}
-
-export function loadDefaultDocContent(
-  linkId: SharedLinkId,
-  moduleId: ModuleId,
-  filename: string,
-  inlineDocs?: SharedLinkDefaultDoc[],
-): { content: string; type: InputType; name: string } | null {
-  const fromInline = inlineDocs?.find((d) => d.moduleId === moduleId && d.filename === filename);
-  if (fromInline?.content != null) {
-    return {
-      content: fromInline.content,
-      type: fromInline.type ?? "text",
-      name: filename,
-    };
-  }
-  const storageKey = `${moduleId}_${filename}`;
-  const textPath = join(defaultDocsDir(linkId), storageKey);
-  if (!existsSync(textPath)) return null;
-  const metaPath = `${textPath}.meta.json`;
-  const meta = existsSync(metaPath)
-    ? (JSON.parse(readFileSync(metaPath, "utf8")) as { type: InputType; filename: string })
-    : { type: "text" as InputType, filename };
-  return { content: readFileSync(textPath, "utf8"), type: meta.type, name: meta.filename ?? filename };
-}
-
-export async function saveSessionUpload(
-  linkId: SharedLinkId,
-  sessionId: string,
-  moduleId: ModuleId,
-  file: File,
-  content: string,
-  type: InputType,
-  bytes?: Uint8Array,
-): Promise<DocRef> {
-  const id = hashContent(`${linkId}:${sessionId}:${file.name}:${content.slice(0, 64)}`);
-  const doc: DocRef = {
-    id,
-    name: file.name,
-    type,
-    label: "inference",
-    sizeKb: Math.max(1, Math.round(content.length / 1024)),
-    uploadedAt: Date.now(),
-    preview: content.slice(0, 180),
-  };
-  const dir = sessionDocsDir(linkId, sessionId);
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, `${id}.txt`), content, "utf8");
-  writeFileSync(join(dir, `${id}.meta.json`), JSON.stringify({ ...doc, moduleId }));
-  if (bytes && shouldSaveOriginalBytes(type)) {
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
-    writeFileSync(join(dir, `${id}.${ext}`), bytes);
-    saveOriginalDocBytes(id, bytes, ext);
-  } else if (type === "pdf" || type === "image") {
-    const fileBytes = bytes ?? new Uint8Array(await file.arrayBuffer());
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
-    writeFileSync(join(dir, `${id}.${ext}`), fileBytes);
-    saveOriginalDocBytes(id, fileBytes, ext);
-  }
-  const existing = readSessionDocs(linkId, sessionId).filter((d) => d.moduleId !== moduleId);
-  existing.push({ id, name: doc.name, type, label: "inference", moduleId });
-  writeSessionDocs(linkId, sessionId, existing);
-  return doc;
-}
-
-export function sessionDocsForModule(
-  linkId: SharedLinkId,
-  sessionId: string,
-  moduleId: ModuleId,
-): DocRef[] {
-  return readSessionDocs(linkId, sessionId)
-    .filter((d) => d.moduleId === moduleId)
-    .map((d) => ({
-      id: d.id,
-      name: d.name,
-      type: d.type,
-      label: d.label,
-      sizeKb: Math.max(1, 1),
-      uploadedAt: Date.now(),
-      preview: "",
-    }));
-}
-
-export function sessionDocContent(linkId: SharedLinkId, sessionId: string, docId: DocId): string | undefined {
-  const path = join(sessionDocsDir(linkId, sessionId), `${docId}.txt`);
-  if (!existsSync(path)) return undefined;
-  return readFileSync(path, "utf8");
-}
-
-// AI : overlay session + default docs onto the sharer's store for runPipeline.
-export function overlayStoreForSharedRun(
-  base: Store,
-  linkId: SharedLinkId,
-  sessionId: string,
-  link: StoredSharedLink,
-  inputModules: PipelineModule[],
-): Store {
-  const extraDocs = new Map<DocId, DocRef>();
-  const extraContent = new Map<DocId, string>();
-
-  for (const def of link.defaultDocs) {
-    const loaded = loadDefaultDocContent(linkId, def.moduleId, def.filename, link.defaultDocs);
-    if (!loaded) continue;
-    const id = hashContent(`shared_default:${linkId}:${def.moduleId}:${def.filename}`);
-    extraDocs.set(id, {
-      id,
-      name: loaded.name,
-      type: loaded.type,
-      label: "inference",
-      sizeKb: Math.max(1, Math.round(loaded.content.length / 1024)),
-      uploadedAt: Date.now(),
-      preview: loaded.content.slice(0, 180),
-    });
-    extraContent.set(id, loaded.content);
-  }
-
-  for (const meta of readSessionDocs(linkId, sessionId)) {
-    const content = sessionDocContent(linkId, sessionId, meta.id);
-    if (content === undefined) continue;
-    extraDocs.set(meta.id, {
-      id: meta.id,
-      name: meta.name,
-      type: meta.type,
-      label: meta.label,
-      sizeKb: Math.max(1, Math.round(content.length / 1024)),
-      uploadedAt: Date.now(),
-      preview: content.slice(0, 180),
-    });
-    extraContent.set(meta.id, content);
-  }
-
-  return {
-    projects: () => base.projects(),
-    project: (id) => base.project(id),
-    saveProject: (p) => base.saveProject(p),
-    deleteProject: (id) => base.deleteProject(id),
-    docs: () => [...extraDocs.values(), ...base.docs()],
-    docContent: (id) => extraContent.get(id) ?? base.docContent(id),
-    parserCacheGetByFileHash: (h, p) => base.parserCacheGetByFileHash(h, p),
-    parserCacheGetByDoc: (id) => base.parserCacheGetByDoc(id),
-    parserCacheSet: (row) => base.parserCacheSet(row),
-    visionCacheGet: (key) => base.visionCacheGet(key),
-    visionCacheSet: (row) => base.visionCacheSet(row),
-    visionCachesForDoc: (id) => base.visionCachesForDoc(id),
-    addDoc: (name, type, content, label) => {
-      const id = hashContent(content);
-      const doc: DocRef = {
-        id,
-        name,
-        type,
-        label,
-        sizeKb: Math.max(1, Math.round(content.length / 1024)),
-        uploadedAt: Date.now(),
-        preview: content.slice(0, 180),
-      };
-      extraDocs.set(id, doc);
-      extraContent.set(id, content);
-      return doc;
-    },
-    repointDocName: (id, name) => {
-      const extra = extraDocs.get(id);
-      if (extra) {
-        extraDocs.set(id, { ...extra, name });
-        return true;
-      }
-      return base.repointDocName(id, name);
-    },
-    removeDoc: (id) => extraDocs.delete(id) || base.removeDoc(id),
-    runs: (pid) => base.runs(pid),
-    findRunByFingerprint: (pid, fp) => base.findRunByFingerprint(pid, fp),
-    addRun: (pid, run) => base.addRun(pid, run),
-    updateRunNotes: (rid, notes) => base.updateRunNotes(rid, notes),
-    flush: () => base.flush(),
-  };
 }
 
 export async function openStoreForUser(userId: user_id_string): Promise<Store> {

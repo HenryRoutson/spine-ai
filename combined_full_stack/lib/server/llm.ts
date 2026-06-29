@@ -6,6 +6,7 @@ import {
   getStructuredResponsesParallel,
   getVisionStringResponse,
   streamStringResponse,
+  streamStructuredResponse,
   type ChatOptions,
   type VisionAttachment,
 } from "./openrouter_llm";
@@ -91,6 +92,18 @@ export function llmStructured<T>(
 ): Promise<T> {
   log?.debug(`llmStructured call`, { model: ctx.model, promptChars: prompt.length });
   return getStructuredResponse(prompt, schema, chatOpts(ctx, log), log);
+}
+
+// AI : like llmStructured but streams the raw JSON response — onRawDelta fires on each token.
+export function llmStreamStructured<T>(
+  prompt: string,
+  schema: ZodType<T>,
+  ctx: CallContext,
+  onRawDelta: (delta: string) => void,
+  log?: ServerLogger,
+): Promise<T> {
+  log?.debug(`llmStreamStructured call`, { model: ctx.model, promptChars: prompt.length });
+  return streamStructuredResponse(prompt, schema, onRawDelta, chatOpts(ctx, log), log);
 }
 
 // AI : batch llm — fires all items in one http1-burst parallel round (see openrouter_llm.parallelChat).

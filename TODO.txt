@@ -6,6 +6,13 @@ name might already be taken https://www.getspine.ai/
 todo check XSS
 
 
+remove outIsList as it's not generic and won't scale to other types
+
+
+
+
+create a single file for all colours to use, color pallete
+
 use viridis colour scheme and have selectors in settings for colour blindness
 
 
