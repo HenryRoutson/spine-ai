@@ -9,6 +9,7 @@ import {
   type AssistantChatRole,
   type AssistantDebugEntry,
   type AssistantLoadingPhase,
+  type AssistantStreamingDraft,
   type ProposalStatus,
 } from "@/lib/assistant-chat-types"
 import { appendAssistantDebugEntry } from "@/lib/assistant-debug"
@@ -70,6 +71,8 @@ type AssistantChatProps<TProposal> = {
   /** AI : shared session — when set, chat history persists across tab mounts */
   messages?: AssistantChatMessage<TProposal>[]
   onMessagesChange?: React.Dispatch<React.SetStateAction<AssistantChatMessage<TProposal>[]>>
+  /** AI : mirrors in-flight stream for conversation copy while loading */
+  onStreamingDraftChange?: React.Dispatch<React.SetStateAction<AssistantStreamingDraft | null>>
 }
 
 export function AssistantChat<TProposal>({
@@ -86,6 +89,7 @@ export function AssistantChat<TProposal>({
   requestAssistant,
   messages: controlledMessages,
   onMessagesChange,
+  onStreamingDraftChange,
 }: AssistantChatProps<TProposal>) {
   const [internalMessages, setInternalMessages] = useState<AssistantChatMessage<TProposal>[]>([
     { id: uid(), role: "assistant", content: initialMessage },
@@ -109,9 +113,24 @@ export function AssistantChat<TProposal>({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, loading, loadingPhase, liveThinking, debugTrace])
 
+  const emptyStreamingDraft = (): AssistantStreamingDraft => ({
+    content: "",
+    liveThinking: "",
+    debugTrace: [],
+  })
+
   function handleDebugEntry(entry: AssistantDebugEntry) {
     setDebugTrace((prev) => appendAssistantDebugEntry(prev, entry))
     if (entry.kind === "thinking") setLiveThinking("")
+    onStreamingDraftChange?.((draft) => {
+      const base = draft ?? emptyStreamingDraft()
+      const debugTrace = appendAssistantDebugEntry(base.debugTrace, entry)
+      return {
+        ...base,
+        debugTrace,
+        liveThinking: entry.kind === "thinking" ? "" : base.liveThinking,
+      }
+    })
   }
 
   async function send(text: string) {
@@ -136,14 +155,27 @@ export function AssistantChat<TProposal>({
     setDebugTrace([])
     setError(null)
     setErrorDebugTrace([])
+    onStreamingDraftChange?.(emptyStreamingDraft())
 
     const history = buildAssistantHistory([...messages, userMsg], ASSISTANT_HISTORY_LIMIT)
 
     try {
       const data = await requestAssistant(trimmed, history, {
         setLoadingPhase,
-        onThinkingDelta: (delta) => setLiveThinking((prev) => prev + delta),
-        onMessageDelta: (delta) => setLiveResponse((prev) => prev + delta),
+        onThinkingDelta: (delta) => {
+          setLiveThinking((prev) => prev + delta)
+          onStreamingDraftChange?.((draft) => ({
+            ...(draft ?? emptyStreamingDraft()),
+            liveThinking: (draft?.liveThinking ?? "") + delta,
+          }))
+        },
+        onMessageDelta: (delta) => {
+          setLiveResponse((prev) => prev + delta)
+          onStreamingDraftChange?.((draft) => ({
+            ...(draft ?? emptyStreamingDraft()),
+            content: (draft?.content ?? "") + delta,
+          }))
+        },
         onDebugEntry: handleDebugEntry,
       })
       const assistantMsg: AssistantChatMessage<TProposal> = {
@@ -170,6 +202,7 @@ export function AssistantChat<TProposal>({
       setLoading(false)
       setLiveThinking("")
       setLiveResponse("")
+      onStreamingDraftChange?.(null)
     }
   }
 

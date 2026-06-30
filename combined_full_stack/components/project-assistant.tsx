@@ -31,15 +31,19 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
     addDocContent,
     applyProjectChanges,
     setDocumentation,
+    renameProject,
     refresh,
     refreshBilling,
   } = useStore()
-  const { messages, setMessages } = useProjectAssistantSession(
+  const { messages, setMessages, activeChatId, setStreamingDraft } = useProjectAssistantSession(
     project.id,
     PROJECT_ASSISTANT_INITIAL_MESSAGE,
   )
 
   async function applyProposal(proposal: ProjectProposal) {
+    if (proposal.changed.name && proposal.projectName) {
+      renameProject(project.id, proposal.projectName)
+    }
     if (proposal.changed.models || proposal.changed.modules) {
       applyProjectChanges({
         ...(proposal.changed.models ? { models: proposal.models } : {}),
@@ -59,6 +63,7 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
   return (
     <div className={cn("flex h-full flex-col", className)}>
       <AssistantChat<ProjectProposal>
+        key={activeChatId ?? project.id}
         title="Project assistant"
         subtitle={`${modules.length} steps · ${models.length} models · ${docs.length} docs`}
         showDebug
@@ -74,6 +79,7 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
         }
         messages={messages}
         onMessagesChange={setMessages}
+        onStreamingDraftChange={setStreamingDraft}
         onApprove={async (msg) => {
           if (!msg.proposal) return
           await applyProposal(msg.proposal)
@@ -117,6 +123,7 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
                 models: true,
                 docs: (data.proposal.docs?.length ?? 0) > 0,
                 documentation: false,
+                name: !!data.proposal.projectName,
               },
             }
           }
@@ -134,6 +141,7 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
   const showModules = p.changed?.modules ?? true
   const showDocs = p.changed?.docs ?? (p.docs?.length ?? 0) > 0
   const showDocumentation = p.changed?.documentation ?? false
+  const showName = p.changed?.name ?? !!p.projectName
 
   return (
     <>
@@ -141,6 +149,11 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
         <span className="font-mono text-[10px] uppercase tracking-wider text-primary">
           Proposed changes
         </span>
+        {showName && p.projectName && (
+          <Badge variant="outline" className="font-mono text-[9px]">
+            rename → {p.projectName}
+          </Badge>
+        )}
         {showModules && (
           <Badge variant="outline" className="font-mono text-[9px]">
             {p.modules.length} steps

@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { uid } from "../id";
 import { resolveModuleNote } from "@/lib/pipeline-module-factory";
+import { UNNAMED_PROJECT_NAME } from "@/lib/project-assistant-types";
 import { z } from "zod";
 import { DOCUMENTS_DIR, REPO_ROOT } from "./config";
 import { isUnavailableSeedDoc, unavailableSeedDocMessage } from "../seed-doc";
@@ -238,7 +239,7 @@ export function userProjectsFrom(projects: Project[]): Project[] {
 export function blankProject(id: ProjectId): Project {
   return {
     id,
-    name: "Untitled Pipeline",
+    name: UNNAMED_PROJECT_NAME,
     kind: "blank",
     createdAt: Date.now(),
     models: [],

@@ -13,6 +13,7 @@ import {
 import type { AssistantChatMessage } from "@/components/assistant-chat"
 import { API_ROUTES } from "@/lib/api-routes"
 import { JSON_HEADERS, apiJson } from "@/lib/api-client"
+import type { AssistantStreamingDraft } from "@/lib/assistant-chat-types"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 
 export type AssistantChatSummary = {
@@ -27,6 +28,8 @@ export type AssistantChatSummary = {
 type ProjectAssistantSession = {
   messages: AssistantChatMessage<ProjectProposal>[]
   setMessages: React.Dispatch<React.SetStateAction<AssistantChatMessage<ProjectProposal>[]>>
+  streamingDraft: AssistantStreamingDraft | null
+  setStreamingDraft: React.Dispatch<React.SetStateAction<AssistantStreamingDraft | null>>
   chats: AssistantChatSummary[]
   activeChatId: string | null
   chatsLoading: boolean
@@ -46,17 +49,17 @@ type ProjectAssistantContextValue = {
 const ProjectAssistantContext = createContext<ProjectAssistantContextValue | null>(null)
 
 function welcomeMessage(
-  projectId: string,
+  chatId: string,
   initialMessage: string,
 ): AssistantChatMessage<ProjectProposal> {
-  return { id: `${projectId}-welcome`, role: "assistant", content: initialMessage }
+  return { id: `${chatId}-welcome`, role: "assistant", content: initialMessage }
 }
 
 function defaultMessages(
-  projectId: string,
+  chatId: string,
   initialMessage: string,
 ): AssistantChatMessage<ProjectProposal>[] {
-  return [welcomeMessage(projectId, initialMessage)]
+  return [welcomeMessage(chatId, initialMessage)]
 }
 
 function formatChatDate(ts: number): string {
@@ -75,6 +78,9 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
   const [messagesByChat, setMessagesByChat] = useState<
     Record<string, AssistantChatMessage<ProjectProposal>[]>
   >({})
+  const [streamingDraftByChat, setStreamingDraftByChat] = useState<
+    Record<string, AssistantStreamingDraft | null>
+  >({})
   const [chatsByProject, setChatsByProject] = useState<Record<string, AssistantChatSummary[]>>({})
   const [activeChatByProject, setActiveChatByProject] = useState<Record<string, string>>({})
   const [loadingByProject, setLoadingByProject] = useState<Record<string, boolean>>({})
@@ -83,11 +89,17 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
   const initialMessageByProject = useRef(new Map<string, string>())
   const activeChatByProjectRef = useRef(activeChatByProject)
   activeChatByProjectRef.current = activeChatByProject
+  const messagesByChatRef = useRef(messagesByChat)
+  messagesByChatRef.current = messagesByChat
+  const chatsByProjectRef = useRef(chatsByProject)
+  chatsByProjectRef.current = chatsByProject
 
   const toggle = useCallback(() => setOpen((v) => !v), [])
 
   const persistMessages = useCallback(
     (chatId: string, messages: AssistantChatMessage<ProjectProposal>[]) => {
+      // AI : optimistic local chats are promoted to server ids after POST succeeds.
+      if (chatId.includes("-local-")) return
       const prev = saveTimers.current.get(chatId)
       if (prev) clearTimeout(prev)
       saveTimers.current.set(
@@ -105,6 +117,27 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
     [],
   )
 
+  const cancelPendingSave = useCallback((chatId: string) => {
+    const pending = saveTimers.current.get(chatId)
+    if (pending) {
+      clearTimeout(pending)
+      saveTimers.current.delete(chatId)
+    }
+  }, [])
+
+  function mergeChatSummaries(
+    existing: AssistantChatSummary[],
+    incoming: AssistantChatSummary[],
+  ): AssistantChatSummary[] {
+    const merged = [...existing]
+    for (const chat of incoming) {
+      const i = merged.findIndex((c) => c.id === chat.id)
+      if (i === -1) merged.push(chat)
+      else merged[i] = chat
+    }
+    return merged.sort((a, b) => b.updatedAt - a.updatedAt)
+  }
+
   const ensureProjectChats = useCallback(
     async (projectId: string, initialMessage: string) => {
       if (loadStarted.current.has(projectId)) return
@@ -119,7 +152,8 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
         let activeId = chats[0]?.id
 
         if (!activeId) {
-          const welcome = defaultMessages(projectId, initialMessage)
+          const localId = `${projectId}-local-${Date.now()}`
+          const welcome = defaultMessages(localId, initialMessage)
           const { chat } = await apiJson<{ chat: AssistantChatSummary & { messages: AssistantChatMessage<ProjectProposal>[] } }>(
             API_ROUTES.assistantChats,
             {
@@ -130,25 +164,38 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
           )
           nextChats = [chat]
           activeId = chat.id
-          setMessagesByChat((prev) => ({ ...prev, [chat.id]: chat.messages?.length ? chat.messages : welcome }))
+          setMessagesByChat((prev) => ({
+            ...prev,
+            [chat.id]: chat.messages?.length ? chat.messages : welcome,
+          }))
         } else {
           const top = chats[0]
           const { chat } = await apiJson<{
             chat: AssistantChatSummary & { messages: AssistantChatMessage<ProjectProposal>[] }
           }>(API_ROUTES.assistantChat(top.id))
-          setMessagesByChat((prev) => ({
-            ...prev,
-            [top.id]:
-              chat.messages?.length > 0
-                ? chat.messages
-                : defaultMessages(projectId, initialMessage),
-          }))
+          setMessagesByChat((prev) => {
+            if (prev[top.id]) return prev
+            return {
+              ...prev,
+              [top.id]:
+                chat.messages?.length > 0
+                  ? chat.messages
+                  : defaultMessages(top.id, initialMessage),
+            }
+          })
         }
 
-        setChatsByProject((prev) => ({ ...prev, [projectId]: nextChats }))
-        setActiveChatByProject((prev) => ({ ...prev, [projectId]: activeId! }))
+        setChatsByProject((prev) => {
+          const existing = prev[projectId] ?? []
+          const merged = existing.length > 0 ? mergeChatSummaries(existing, nextChats) : nextChats
+          return { ...prev, [projectId]: merged }
+        })
+        setActiveChatByProject((prev) => {
+          if (prev[projectId]) return prev
+          return { ...prev, [projectId]: activeId! }
+        })
       } catch {
-        const localId = `${projectId}-local`
+        const localId = `${projectId}-local-${Date.now()}`
         setChatsByProject((prev) => ({
           ...prev,
           [projectId]: [
@@ -160,12 +207,16 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
               updatedAt: Date.now(),
               messageCount: 1,
             },
+            ...(prev[projectId] ?? []),
           ],
         }))
-        setActiveChatByProject((prev) => ({ ...prev, [projectId]: localId }))
+        setActiveChatByProject((prev) => {
+          if (prev[projectId]) return prev
+          return { ...prev, [projectId]: localId }
+        })
         setMessagesByChat((prev) => ({
           ...prev,
-          [localId]: defaultMessages(projectId, initialMessage),
+          [localId]: prev[localId] ?? defaultMessages(localId, initialMessage),
         }))
       } finally {
         setLoadingByProject((prev) => ({ ...prev, [projectId]: false }))
@@ -177,7 +228,7 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
   const selectChat = useCallback(
     async (projectId: string, chatId: string) => {
       setActiveChatByProject((prev) => ({ ...prev, [projectId]: chatId }))
-      if (messagesByChat[chatId]) return
+      if (messagesByChatRef.current[chatId]) return
       const initialMessage = initialMessageByProject.current.get(projectId) ?? ""
       try {
         const { chat } = await apiJson<{
@@ -186,23 +237,47 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
         setMessagesByChat((prev) => ({
           ...prev,
           [chatId]:
-            chat.messages?.length > 0
+            prev[chatId] ??
+            (chat.messages?.length > 0
               ? chat.messages
-              : defaultMessages(projectId, initialMessage),
+              : defaultMessages(chatId, initialMessage)),
         }))
       } catch {
         setMessagesByChat((prev) => ({
           ...prev,
-          [chatId]: defaultMessages(projectId, initialMessage),
+          [chatId]: prev[chatId] ?? defaultMessages(chatId, initialMessage),
         }))
       }
     },
-    [messagesByChat],
+    [],
   )
 
   const newChat = useCallback(
     async (projectId: string, initialMessage: string) => {
-      const welcome = defaultMessages(projectId, initialMessage)
+      const previousChatId = activeChatByProjectRef.current[projectId]
+      if (previousChatId) cancelPendingSave(previousChatId)
+
+      const localId = `${projectId}-local-${Date.now()}`
+      const welcome = defaultMessages(localId, initialMessage)
+
+      // AI : switch UI immediately so new chat feels instant even while POST is in flight.
+      setActiveChatByProject((prev) => ({ ...prev, [projectId]: localId }))
+      setMessagesByChat((prev) => ({ ...prev, [localId]: welcome }))
+      setChatsByProject((prev) => ({
+        ...prev,
+        [projectId]: [
+          {
+            id: localId,
+            projectId,
+            title: "New chat",
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            messageCount: welcome.length,
+          },
+          ...(prev[projectId] ?? []),
+        ],
+      }))
+
       try {
         const { chat } = await apiJson<{
           chat: AssistantChatSummary & { messages: AssistantChatMessage<ProjectProposal>[] }
@@ -213,29 +288,25 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
         })
         setChatsByProject((prev) => ({
           ...prev,
-          [projectId]: [chat, ...(prev[projectId] ?? [])],
+          [projectId]: mergeChatSummaries(
+            (prev[projectId] ?? []).filter((c) => c.id !== localId),
+            [chat],
+          ),
         }))
         setActiveChatByProject((prev) => ({ ...prev, [projectId]: chat.id }))
-        setMessagesByChat((prev) => ({ ...prev, [chat.id]: welcome }))
+        let migratedMessages = defaultMessages(chat.id, initialMessage)
+        setMessagesByChat((prev) => {
+          migratedMessages = prev[localId] ?? defaultMessages(chat.id, initialMessage)
+          const next = { ...prev, [chat.id]: migratedMessages }
+          delete next[localId]
+          return next
+        })
+        persistMessages(chat.id, migratedMessages)
       } catch {
-        const localId = `${projectId}-local-${Date.now()}`
-        const summary: AssistantChatSummary = {
-          id: localId,
-          projectId,
-          title: "New chat",
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          messageCount: 1,
-        }
-        setChatsByProject((prev) => ({
-          ...prev,
-          [projectId]: [summary, ...(prev[projectId] ?? [])],
-        }))
-        setActiveChatByProject((prev) => ({ ...prev, [projectId]: localId }))
-        setMessagesByChat((prev) => ({ ...prev, [localId]: welcome }))
+        // AI : keep the optimistic local chat when persistence is unavailable.
       }
     },
-    [],
+    [cancelPendingSave, persistMessages],
   )
 
   const deleteChat = useCallback(
@@ -256,9 +327,15 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
       }
 
       const wasActive = activeChatByProjectRef.current[projectId] === chatId
-      const remaining = (chatsByProject[projectId] ?? []).filter((c) => c.id !== chatId)
+      const remaining = (chatsByProjectRef.current[projectId] ?? []).filter((c) => c.id !== chatId)
 
       setMessagesByChat((prev) => {
+        const next = { ...prev }
+        delete next[chatId]
+        return next
+      })
+      setStreamingDraftByChat((prev) => {
+        if (!(chatId in prev)) return prev
         const next = { ...prev }
         delete next[chatId]
         return next
@@ -281,7 +358,7 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
       })
       void newChat(projectId, initialMessage)
     },
-    [chatsByProject, newChat, selectChat],
+    [newChat, selectChat],
   )
 
   const getSession = useCallback(
@@ -290,13 +367,13 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
       const initial = initialMessageByProject.current.get(projectId) ?? initialMessage
       const messages =
         (activeChatId && messagesByChat[activeChatId]) ||
-        defaultMessages(projectId, initial)
+        (activeChatId ? defaultMessages(activeChatId, initial) : [])
 
       const setMessages: ProjectAssistantSession["setMessages"] = (updater) => {
         const chatId = activeChatByProjectRef.current[projectId]
         if (!chatId) return
         setMessagesByChat((prev) => {
-          const current = prev[chatId] ?? defaultMessages(projectId, initial)
+          const current = prev[chatId] ?? defaultMessages(chatId, initial)
           const next = typeof updater === "function" ? updater(current) : updater
           persistMessages(chatId, next)
           setChatsByProject((chatsPrev) => {
@@ -320,6 +397,17 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
       return {
         messages,
         setMessages,
+        streamingDraft: activeChatId ? (streamingDraftByChat[activeChatId] ?? null) : null,
+        setStreamingDraft: (updater) => {
+          const chatId = activeChatByProjectRef.current[projectId]
+          if (!chatId) return
+          setStreamingDraftByChat((prev) => {
+            const current = prev[chatId] ?? null
+            const next = typeof updater === "function" ? updater(current) : updater
+            if (next === current) return prev
+            return { ...prev, [chatId]: next }
+          })
+        },
         chats: chatsByProject[projectId] ?? [],
         activeChatId,
         chatsLoading: loadingByProject[projectId] ?? !loadStarted.current.has(projectId),
@@ -328,7 +416,7 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
         deleteChat: (chatId) => deleteChat(projectId, chatId, initialMessage),
       }
     },
-    [activeChatByProject, chatsByProject, deleteChat, loadingByProject, messagesByChat, newChat, persistMessages, selectChat],
+    [activeChatByProject, chatsByProject, deleteChat, loadingByProject, messagesByChat, newChat, persistMessages, selectChat, streamingDraftByChat],
   )
 
   useEffect(() => {

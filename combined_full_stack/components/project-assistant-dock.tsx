@@ -9,6 +9,7 @@ import {
   useProjectAssistant,
   useProjectAssistantSession,
 } from "@/lib/project-assistant-context"
+import { formatProjectAssistantConversation } from "@/lib/format-project-assistant-copy"
 import { PROJECT_ASSISTANT_INITIAL_MESSAGE } from "@/lib/project-assistant-types"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
@@ -16,16 +17,14 @@ import { cn } from "@/lib/utils"
 export function ProjectAssistantDock() {
   const { open, toggle } = useProjectAssistant()
   const { project } = useStore()
-  const { messages, chats, activeChatId, chatsLoading, selectChat, newChat, deleteChat } =
+  const { messages, chats, activeChatId, chatsLoading, selectChat, newChat, deleteChat, streamingDraft } =
     useProjectAssistantSession(project.id, PROJECT_ASSISTANT_INITIAL_MESSAGE)
   const [copied, setCopied] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   function copyConversation() {
-    const text = messages
-      .map((m) => `${m.role === "user" ? "You" : "Assistant"}: ${m.content}`)
-      .join("\n\n")
+    const text = formatProjectAssistantConversation(messages, streamingDraft)
     void navigator.clipboard.writeText(text).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)

@@ -6,6 +6,8 @@ import { dataDir } from "./config";
 import { LOCAL_DEV_USER_ID, type AuthSession } from "./require_auth";
 import type { ProjectId } from "./types";
 
+import type { AssistantDebugEntry } from "@/lib/assistant-debug-types";
+
 export type assistant_chat_id_string = string & { __brand: "assistant_chat_id" };
 
 export type StoredAssistantChatMessage = {
@@ -17,6 +19,7 @@ export type StoredAssistantChatMessage = {
   invalidCount?: number;
   retryCount?: number;
   validationErrors?: string | null;
+  debugTrace?: AssistantDebugEntry[];
 };
 
 export type AssistantChatSummary = {
@@ -128,9 +131,8 @@ async function createSupabaseChat(
   messages: StoredAssistantChatMessage[],
 ): Promise<AssistantChatRecord> {
   const now = Date.now();
-  const row: AssistantChatRow = {
+  const row = {
     id: uid("chat_"),
-    user_id: auth.userId,
     project_id: projectId,
     title: titleFromMessages(messages),
     messages,
@@ -140,7 +142,7 @@ async function createSupabaseChat(
   const db = await createClient();
   const { error } = await db.from("assistant_chats").insert(row);
   if (error) throw error;
-  return rowToRecord(row);
+  return rowToRecord({ ...row, user_id: auth.userId } as AssistantChatRow);
 }
 
 async function updateSupabaseChat(
@@ -312,7 +314,7 @@ export async function deleteAssistantChat(
 export function toStoredAssistantMessages<T extends StoredAssistantChatMessage>(
   messages: T[],
 ): StoredAssistantChatMessage[] {
-  return messages.map(({ id, role, content, proposal, status, invalidCount, retryCount, validationErrors }) => ({
+  return messages.map(({ id, role, content, proposal, status, invalidCount, retryCount, validationErrors, debugTrace }) => ({
     id,
     role,
     content,
@@ -321,5 +323,6 @@ export function toStoredAssistantMessages<T extends StoredAssistantChatMessage>(
     ...(invalidCount !== undefined ? { invalidCount } : {}),
     ...(retryCount !== undefined ? { retryCount } : {}),
     ...(validationErrors !== undefined ? { validationErrors } : {}),
+    ...(debugTrace !== undefined && debugTrace.length > 0 ? { debugTrace } : {}),
   }));
 }

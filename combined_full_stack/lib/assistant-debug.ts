@@ -66,6 +66,51 @@ export function streamEventToDebugEntry(
   }
 }
 
+// AI : UI-aligned debug text for conversation copy (matches AssistantDebugPanel display).
+export function formatAssistantDebugTraceDisplay(entries: AssistantDebugEntry[]): string {
+  const lines: string[] = ["Debug trace", ""]
+  for (const entry of entries) {
+    switch (entry.kind) {
+      case "phase":
+        lines.push(entry.phase, "")
+        break
+      case "thinking":
+        lines.push("Thinking", "", entry.text, "")
+        break
+      case "llm_response":
+        lines.push(
+          `LLM response · ${entry.label}`,
+          "",
+          JSON.stringify(entry.response, null, 2),
+          "",
+        )
+        break
+      case "structured_failure":
+        lines.push(
+          `Structured failure · attempt ${entry.attempt} · ${entry.failureKind}`,
+          "",
+          entry.error,
+          "",
+        )
+        break
+      case "validation_failed":
+        lines.push(`Validation failed · retry ${entry.attempt}`, "", entry.errors, "")
+        break
+      case "done":
+        lines.push(
+          `Done · ${entry.retryCount} retries · ${entry.invalidCount} invalid`,
+          "",
+        )
+        if (entry.validationErrors) lines.push(entry.validationErrors, "")
+        break
+      case "error":
+        lines.push("Error", "", entry.error, "")
+        break
+    }
+  }
+  return lines.join("\n").trimEnd()
+}
+
 export function formatAssistantDebugTrace(entries: AssistantDebugEntry[]): string {
   const lines: string[] = ["=== Pipeline assistant debug trace ===", ""]
   for (const e of entries) {

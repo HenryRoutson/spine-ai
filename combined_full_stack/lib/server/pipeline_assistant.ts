@@ -23,6 +23,7 @@ import { uid } from "@/lib/id";
 import { USER_ADDABLE_MODULE_KINDS, stepRequiresNote } from "@/lib/module-kinds";
 import { materializeStructureModels } from "./structure_assistant";
 import { attachAssistantUsage } from "./assistant_billing";
+import { isUnnamedProjectName } from "@/lib/project-assistant-types";
 import {
   DEFAULT_MODEL,
   INPUT_TYPES,
@@ -105,6 +106,8 @@ const assistantResponseSchema = z.object({
   docs: z.array(docSpecSchema).nullable(),
   // AI : full replacement markdown for project.documentation when pipeline/models change.
   documentationUpdate: z.string().max(48_000).nullable(),
+  // AI : rename only when project is still "Untitled Pipeline" — server enforces.
+  projectNameUpdate: z.string().max(120).nullable(),
 });
 
 export type PipelineAssistantModuleSpec = z.infer<typeof moduleSpecSchema>;
@@ -117,11 +120,13 @@ export type PipelineAssistantProposal = {
   models: StructureModel[];
   docs: ProjectAssistantDocSpec[];
   documentation: string;
+  projectName?: string;
   changed: {
     modules: boolean;
     models: boolean;
     docs: boolean;
     documentation: boolean;
+    name?: boolean;
   };
 };
 
@@ -332,8 +337,8 @@ ${stepsBlock}
 User request: ${message}`;
 }
 
-function buildSystemPrompt(globalModel: ModelId): string {
-  return buildProjectAssistantSystemPrompt(globalModel);
+function buildSystemPrompt(globalModel: ModelId, projectName: string): string {
+  return buildProjectAssistantSystemPrompt(globalModel, projectName);
 }
 
 function buildUserPrompt(
@@ -378,7 +383,14 @@ function materializeProposal(
   const hasModelChange = raw.models !== null;
   const hasDocChange = raw.docs !== null;
   const hasDocumentationChange = raw.documentationUpdate !== null;
-  if (!hasPipelineChange && !hasModelChange && !hasDocChange && !hasDocumentationChange) return null;
+  const trimmedNameUpdate = raw.projectNameUpdate?.trim();
+  const hasNameChange =
+    !!trimmedNameUpdate &&
+    isUnnamedProjectName(project.name) &&
+    trimmedNameUpdate !== project.name;
+  if (!hasPipelineChange && !hasModelChange && !hasDocChange && !hasDocumentationChange && !hasNameChange) {
+    return null;
+  }
 
   const models = materializeModels(raw.models, project.models);
   let modules: PipelineModule[];
@@ -402,7 +414,9 @@ function materializeProposal(
       models: hasModelChange,
       docs: hasDocChange,
       documentation: hasDocumentationChange,
+      name: hasNameChange,
     },
+    ...(hasNameChange ? { projectName: trimmedNameUpdate } : {}),
   };
 }
 
@@ -517,7 +531,7 @@ export async function proposePipelineChange(
       {
         model: globalModel,
         ledger,
-        system: buildSystemPrompt(globalModel),
+        system: buildSystemPrompt(globalModel, project.name),
         onStructuredFailure: (detail) => {
           llmAttempt += 1;
           opts?.onStructuredFailure?.({
@@ -562,7 +576,7 @@ export async function proposePipelineChange(
         {
           model: globalModel,
           ledger,
-          system: buildSystemPrompt(globalModel),
+          system: buildSystemPrompt(globalModel, project.name),
           onStructuredFailure: (detail) => {
             llmAttempt += 1;
             opts?.onStructuredFailure?.({

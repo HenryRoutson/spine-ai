@@ -10,6 +10,7 @@ import {
   type ModelId,
   type Project,
 } from "./types";
+import { isUnnamedProjectName, UNNAMED_PROJECT_NAME } from "@/lib/project-assistant-types";
 import type { ChatTurn } from "./assistant-shared";
 import type { ModuleKind, PipelineModule, StructureModel } from "./types";
 
@@ -135,6 +136,19 @@ export function buildProjectDocumentationRulesPromptBlock(): string {
 - When changing pipeline or models without updating docs, the project drifts — always refresh documentationUpdate alongside those changes.`;
 }
 
+export function buildProjectNameRulesPromptBlock(projectName: string): string {
+  if (!isUnnamedProjectName(projectName)) {
+    return `Project naming:
+- This project already has a user-chosen name — do NOT rename it. Always set projectNameUpdate to null.`;
+  }
+  return `Project naming:
+- This project is still named "${UNNAMED_PROJECT_NAME}" (unnamed).
+- When proposing structures, pipeline, or test documents, set projectNameUpdate to a concise title (2–5 words) that reflects the user's goal.
+- Only suggest a name alongside substantive project changes — not for Q&A-only replies.
+- When answering without changes, set projectNameUpdate to null.
+- Never use generic names like "Untitled", "New Project", or "${UNNAMED_PROJECT_NAME}".`;
+}
+
 export function buildDocumentRulesPromptBlock(): string {
   return `Test document rules:
 - You may create synthetic inference/training documents so the user can run inference immediately after approval.
@@ -146,7 +160,7 @@ export function buildDocumentRulesPromptBlock(): string {
 - When no test docs are needed, set docs to null.`;
 }
 
-export function buildProjectAssistantSystemPrompt(globalModel: ModelId): string {
+export function buildProjectAssistantSystemPrompt(globalModel: ModelId, projectName: string): string {
   return `You are the project assistant for "Spine" — a linear document-processing IDE with structure models, a step pipeline, and a document store for inference.
 
 You can propose changes to ALL of the following in one response:
@@ -154,6 +168,7 @@ You can propose changes to ALL of the following in one response:
 2. Pipeline steps (linear processing graph)
 3. Project documentation (markdown — keeps the Docs tab accurate as the pipeline evolves)
 4. Test documents (text/json files linked to this project for inference)
+5. Project name (only when the project is still unnamed — see Project naming rules)
 
 Module kinds:
 ${buildModuleKindsPromptBlock()}
@@ -171,6 +186,8 @@ ${buildPipelineRulesPromptBlock(globalModel)}
 ${buildProjectDocumentationRulesPromptBlock()}
 
 ${buildDocumentRulesPromptBlock()}
+
+${buildProjectNameRulesPromptBlock(projectName)}
 
 For large-document workflows (contracts, tickets, resumes): design section-aware chunking, then map (llm-batch per item) and reduce (custom-code or llm) — walk the linear spine chain first (see Linear spine I/O); do not assume the whole document fits one context window.
 
@@ -230,8 +247,10 @@ export function buildProjectContextBlock(
   const docsBlock = project.documentation?.trim()
     ? `PROJECT DOCUMENTATION (read first — treat as hard constraints):\n${project.documentation.trim()}\n\n`
     : "";
-  return `${docsBlock}Project: ${project.name} (${project.kind})
-Default model: ${globalModel}
+  const unnamedNote = isUnnamedProjectName(project.name)
+    ? ` (unnamed — you may set projectNameUpdate when proposing changes)\n`
+    : "\n"
+  return `${docsBlock}Project: ${project.name} (${project.kind})${unnamedNote}Default model: ${globalModel}
 ${historyBlock}
 Current structure models (${project.models.length}):
 ${modelsJson}
