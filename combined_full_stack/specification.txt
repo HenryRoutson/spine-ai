@@ -1,4 +1,4 @@
-auto pipeline — combined_full_stack specification
+spine-ai.dev — combined_full_stack specification
 
 === global shell (/) ===
 · single-page app; 7 sidebar tabs, linear left-to-right pipeline mental model

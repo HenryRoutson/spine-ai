@@ -2,11 +2,11 @@ export type policy_version_string = string
 export type contact_email_string = string
 
 export const LEGAL = {
-  productName: "auto pipeline",
-  controllerName: "auto pipeline (Antler hackathon project)",
-  contactEmail: "privacy@auto-pipeline.dev" as contact_email_string,
+  productName: "spine-ai.dev",
+  controllerName: "spine-ai.dev",
+  contactEmail: "bizness_548129@proton.me" as contact_email_string,
   policyVersion: "2026-06-01" as policy_version_string,
-  lastUpdated: "28 June 2026",
+  lastUpdated: "30 June 2026",
   minAgeYears: 16,
 } as const
 
