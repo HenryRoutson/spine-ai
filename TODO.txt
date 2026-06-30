@@ -7,6 +7,21 @@ add parallel pipelines, processing at the same time.
 
 todo check XSS
 
+Give goodle auto evolution thing spine 
+
+Phone UI can be improved 
+
+Expected outputs for testing and evaluate comparison with git diff?
+
+
+Add doc to sections and table of contents pipeline example
+
+Need more previews options for outputs, 
+  check you can visualise markdown and graphs with mermaid
+
+Document chats with agent including responses and build a dashboard
+
+When the user makes a change to the agent , suggest updates to docs 
 
 remove outIsList as it's not generic and won't scale to other types
 
