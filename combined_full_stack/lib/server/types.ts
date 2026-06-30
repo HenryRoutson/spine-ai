@@ -107,7 +107,7 @@ export interface PipelineModule {
   id: ModuleId;
   kind: ModuleKind;
   label: string;
-  note?: string; // annotation — e.g. document purpose for materialized output
+  note: string; // annotation / purpose — required on input, combine, and llm steps
   // io contract — every step declares the structure it consumes and emits
   inStructureId?: StructureModelId;
   outStructureId?: StructureModelId;

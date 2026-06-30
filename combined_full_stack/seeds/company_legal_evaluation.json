@@ -115,7 +115,7 @@
         "pdf"
       ],
       "inputNameContains": "legal_requirements",
-      "inputDescription": "Healthcare data legal requirements contract \u2014 text or PDF governing obligations",
+      "inputDescription": "Healthcare data legal requirements contract — text or PDF governing obligations",
       "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 110,
@@ -125,12 +125,12 @@
       "id": "mod_extract_rules",
       "kind": "llm",
       "label": "Extract Atomic Rules",
-      "note": "text \u2192 list[tuple[text, quote]]",
+      "note": "text → list[tuple[text, quote]]",
       "inputDescription": "Parsed legal contract Document with full body text ready for rule extraction",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_rule",
       "outIsList": true,
-      "prompt": "Extract the 6 most important atomic, independently verifiable legal rules from the document. For each rule, give a stable rule_id (R-01, R-02, \u2026), a concise plain-language description, the verbatim source quote it came from, and a 1-5 severity. Return at most 6 rules.",
+      "prompt": "Extract the 6 most important atomic, independently verifiable legal rules from the document. For each rule, give a stable rule_id (R-01, R-02, …), a concise plain-language description, the verbatim source quote it came from, and a 1-5 severity. Return at most 6 rules.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2300,
@@ -141,7 +141,7 @@
       "kind": "quote",
       "label": "Link Quotes",
       "auto": true,
-      "note": "Auto \u00b7 AtomicRule \u2192 AtomicRule \u00b7 links LLM quote strings to source spans.",
+      "note": "Auto · AtomicRule → AtomicRule · links LLM quote strings to source spans.",
       "inputDescription": "List of AtomicRule objects with verbatim source quote strings to link to the contract",
       "inStructureId": "m_rule",
       "outStructureId": "m_rule",
@@ -154,7 +154,7 @@
       "id": "mod_sort_rules",
       "kind": "custom-code",
       "label": "Sort Rules by Severity",
-      "note": "Custom TS function \u2014 deterministic glue step, no LLM cost.",
+      "note": "Custom TS function — deterministic glue step, no LLM cost.",
       "inputDescription": "List of AtomicRule objects with severity scores to sort descending",
       "inStructureId": "m_rule",
       "outStructureId": "m_rule",
@@ -181,7 +181,8 @@
       "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 90,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "note": "Company compliance outline describing operations, data handling, and filings"
     },
     {
       "id": "mod_combine",
@@ -200,7 +201,7 @@
       "kind": "llm",
       "label": "Assess Compliance",
       "note": "Evaluate the company against every rule.",
-      "inputDescription": "Combined evaluation input \u2014 company_data document plus extracted legal rules list",
+      "inputDescription": "Combined evaluation input — company_data document plus extracted legal rules list",
       "inStructureId": "m_combined",
       "outStructureId": "m_report",
       "outIsList": true,
@@ -214,13 +215,14 @@
       "id": "mod_output",
       "kind": "output",
       "label": "Legal Considerations",
-      "inputDescription": "List of LegalConsiderations records \u2014 one compliance assessment per extracted rule",
+      "inputDescription": "List of LegalConsiderations records — one compliance assessment per extracted rule",
       "inStructureId": "m_report",
       "outStructureId": "m_report",
       "outIsList": true,
       "cached": true,
       "avgMs": 40,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "note": ""
     }
   ],
   "strategies": [

@@ -8,7 +8,7 @@ import type {
   StructureModelId,
 } from "./types";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
-import { usesPassthroughStructure, isLlmKind } from "@/lib/module-kinds";
+import { usesPassthroughStructure, isLlmKind, stepRequiresNote } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
 import { hasQuoteField, listFieldsForWrap, isBuiltinDocumentModel } from "./structure";
 import {
@@ -211,6 +211,16 @@ function computeInputDescriptionInvalid(modules: PipelineModule[]): InvalidMap {
   return invalid;
 }
 
+function computeNoteInvalid(modules: PipelineModule[]): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (const m of modules) {
+    if (!stepRequiresNote(m.kind)) continue;
+    if (m.note.trim()) continue;
+    pushInvalid(invalid, { moduleId: m.id, kind: "missing-note" });
+  }
+  return invalid;
+}
+
 // AI : canonical I/O-validity check — strictly linear except combine (pipeline state + side doc).
 export function computeInvalid(
   modules: PipelineModule[],
@@ -218,6 +228,11 @@ export function computeInvalid(
   opts?: ComputeInvalidOpts,
 ): InvalidMap {
   const invalid = computeLabelInvalid(modules);
+  for (const [moduleId, issues] of computeNoteInvalid(modules)) {
+    const list = invalid.get(moduleId) ?? [];
+    list.push(...issues);
+    invalid.set(moduleId, list);
+  }
   if (opts?.requireInputDescriptions) {
     for (const [moduleId, issues] of computeInputDescriptionInvalid(modules)) {
       const list = invalid.get(moduleId) ?? [];

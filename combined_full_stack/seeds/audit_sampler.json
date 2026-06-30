@@ -115,13 +115,14 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "AP transaction sample markdown table drawn for audit testing"
+      "inputDescription": "AP transaction sample markdown table drawn for audit testing",
+      "note": "AP transaction sample markdown table drawn for audit testing"
     },
     {
       "id": "mod_parse_txn",
       "kind": "custom-code",
       "label": "Parse Transaction Table",
-      "note": "Markdown table \u2192 CSV-style cells \u2192 JSON rows (no raw markdown to LLM).",
+      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
       "inputDescription": "TableRow list parsed from the AP transaction sample markdown table",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_row",
@@ -145,7 +146,8 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "Journal entry excerpt markdown table with refs and amounts"
+      "inputDescription": "Journal entry excerpt markdown table with refs and amounts",
+      "note": "Journal entry excerpt markdown table with refs and amounts"
     },
     {
       "id": "mod_combine",
@@ -156,14 +158,15 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "Parsed transaction rows from the first input, ready to merge with journal entries"
+      "inputDescription": "Parsed transaction rows from the first input, ready to merge with journal entries",
+      "note": "Parsed transaction rows from the first input, ready to merge with journal entries"
     },
     {
       "id": "mod_merge",
       "kind": "custom-code",
       "label": "Merge Audit Tables",
-      "note": "Markdown table \u2192 CSV-style cells \u2192 JSON rows (no raw markdown to LLM).",
-      "inputDescription": "Combined audit input \u2014 transaction row JSON in table_a_json and journal entry document",
+      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inputDescription": "Combined audit input — transaction row JSON in table_a_json and journal entry document",
       "inStructureId": "m_combined",
       "outStructureId": "m_merged2",
       "cached": true,
@@ -182,12 +185,13 @@
       "inStructureId": "m_merged2",
       "outStructureId": "m_sample",
       "outIsList": true,
-      "inputDescription": "Merged JSON \u2014 AP transactions in table_a_json and journal entries in table_b_json",
+      "inputDescription": "Merged JSON — AP transactions in table_a_json and journal entries in table_b_json",
       "prompt": "table_a_json lists AP transactions; table_b_json lists journal entries. For each transaction in table_a_json, output one SampleVerdict: whether supporting docs exist (per txn notes), whether JE ref ties and amounts match, and a brief finding.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 3000,
-      "avgCostCents": 10
+      "avgCostCents": 10,
+      "note": "Merged JSON — AP transactions in table_a_json and journal entries in table_b_json"
     },
     {
       "id": "mod_out",
@@ -199,7 +203,8 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of SampleVerdict records \u2014 one audit test result per sampled transaction"
+      "inputDescription": "List of SampleVerdict records — one audit test result per sampled transaction",
+      "note": ""
     }
   ],
   "strategies": [

@@ -20,7 +20,7 @@ import {
 import { UsageLedger } from "./usage";
 import { createPipelineModule } from "@/lib/pipeline-module-factory";
 import { uid } from "@/lib/id";
-import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds";
+import { USER_ADDABLE_MODULE_KINDS, stepRequiresNote } from "@/lib/module-kinds";
 import { materializeStructureModels } from "./structure_assistant";
 import { attachAssistantUsage } from "./assistant_billing";
 import {
@@ -42,21 +42,31 @@ const MODULE_KINDS = USER_ADDABLE_MODULE_KINDS;
 
 const INPUT_TYPE_VALUES = INPUT_TYPES.map((t) => t.value);
 
-const moduleSpecSchema = z.object({
-  kind: z.enum(MODULE_KINDS),
-  label: z.string(),
-  note: z.string().optional(),
-  structureIn: z.string().optional(),
-  structureOut: z.string().optional(),
-  inputType: z.enum(INPUT_TYPE_VALUES as [string, ...string[]]).optional(),
-  inputNameContains: z.string().optional(),
-  inputDescription: z.string().optional(),
-  checkInputDescription: z.boolean().optional(),
-  prompt: z.string().optional(),
-  code: z.string().optional(),
-  model: z.string().optional(),
-  outIsList: z.boolean().optional(),
-});
+const moduleSpecSchema = z
+  .object({
+    kind: z.enum(MODULE_KINDS),
+    label: z.string(),
+    note: z.string().optional(),
+    structureIn: z.string().optional(),
+    structureOut: z.string().optional(),
+    inputType: z.enum(INPUT_TYPE_VALUES as [string, ...string[]]).optional(),
+    inputNameContains: z.string().optional(),
+    inputDescription: z.string().optional(),
+    checkInputDescription: z.boolean().optional(),
+    prompt: z.string().optional(),
+    code: z.string().optional(),
+    model: z.string().optional(),
+    outIsList: z.boolean().optional(),
+  })
+  .superRefine((spec, ctx) => {
+    if (stepRequiresNote(spec.kind) && !spec.note?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "note is required for input, combine, and llm steps",
+        path: ["note"],
+      });
+    }
+  });
 
 // AI : patch entry — only the fields the agent wants to change; matched by 0-based index in current pipeline.
 const modulePatchEntrySchema = z.object({
@@ -93,6 +103,8 @@ const assistantResponseSchema = z.object({
   modulePatch: z.array(modulePatchEntrySchema).nullable(),
   models: z.array(modelSpecSchema).nullable(),
   docs: z.array(docSpecSchema).nullable(),
+  // AI : full replacement markdown for project.documentation when pipeline/models change.
+  documentationUpdate: z.string().max(48_000).nullable(),
 });
 
 export type PipelineAssistantModuleSpec = z.infer<typeof moduleSpecSchema>;
@@ -104,10 +116,12 @@ export type PipelineAssistantProposal = {
   modules: PipelineModule[];
   models: StructureModel[];
   docs: ProjectAssistantDocSpec[];
+  documentation: string;
   changed: {
     modules: boolean;
     models: boolean;
     docs: boolean;
+    documentation: boolean;
   };
 };
 
@@ -190,7 +204,12 @@ function expandModuleSpecs(
       out.push(
         {
           ...makeModuleFromSpec(
-            { kind: "input", label: "Document Input", structureOut: spec.structureIn ?? spec.structureOut },
+            {
+              kind: "input",
+              label: "Document Input",
+              structureOut: spec.structureIn ?? spec.structureOut,
+              note: spec.inputDescription?.trim() || `Side document for "${spec.label}"`,
+            },
             models,
             globalModel,
           ),
@@ -358,7 +377,8 @@ function materializeProposal(
   const hasPipelineChange = hasPipelineRewrite || hasPipelinePatch;
   const hasModelChange = raw.models !== null;
   const hasDocChange = raw.docs !== null;
-  if (!hasPipelineChange && !hasModelChange && !hasDocChange) return null;
+  const hasDocumentationChange = raw.documentationUpdate !== null;
+  if (!hasPipelineChange && !hasModelChange && !hasDocChange && !hasDocumentationChange) return null;
 
   const models = materializeModels(raw.models, project.models);
   let modules: PipelineModule[];
@@ -374,10 +394,14 @@ function materializeProposal(
     modules: modules ?? [],
     models,
     docs,
+    documentation: hasDocumentationChange
+      ? raw.documentationUpdate!.trim()
+      : (project.documentation ?? ""),
     changed: {
       modules: hasPipelineChange,
       models: hasModelChange,
       docs: hasDocChange,
+      documentation: hasDocumentationChange,
     },
   };
 }

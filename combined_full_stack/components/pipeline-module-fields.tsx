@@ -193,17 +193,29 @@ export function PipelineModuleFields({
       ) : null}
 
       {(selected.kind === "input" || selected.kind === "combine" || isLlmKind(selected.kind)) && (
-        <PipelineField label="Annotation / purpose">
+        <PipelineField
+          label="Annotation / purpose"
+          hint={edit ? "required — describe what this step does or handles" : undefined}
+          hintTone={
+            edit && (invalidIssues ?? (invalid ? [invalid] : [])).some((issue) => issue.kind === "missing-note")
+              ? "error"
+              : undefined
+          }
+        >
           {edit ? (
             <Input
-              value={selected.note ?? ""}
+              value={selected.note}
               onChange={(e) => onUpdate!({ note: e.target.value })}
+              onBlur={(e) => {
+                const trimmed = e.target.value.trim()
+                if (trimmed !== selected.note) onUpdate!({ note: trimmed })
+              }}
               placeholder="describe what this step does…"
               className="h-8 text-xs"
             />
-          ) : (
+          ) : selected.note.trim() ? (
             <StaticValue>{selected.note}</StaticValue>
-          )}
+          ) : null}
         </PipelineField>
       )}
 

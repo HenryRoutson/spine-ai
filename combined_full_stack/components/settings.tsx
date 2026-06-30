@@ -1,7 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Check } from "lucide-react"
+import { Check, LogOut } from "lucide-react"
+import { createClient } from "@/utils/supabase/client"
+import { useStore } from "@/lib/store"
+import { ModelSelector } from "@/components/model-selector"
+import { Button } from "@/components/ui/button"
 import { WindowHeader } from "@/components/window-header"
 import { JsonHighlight } from "@/components/highlight"
 import { cn } from "@/lib/utils"
@@ -85,6 +89,8 @@ function SyntaxThemePreview({ theme }: { theme: JsonViewerSyntaxThemeId }) {
 }
 
 export function Settings() {
+  const { model, setModel } = useStore()
+  const [email, setEmail] = useState<string | null>(null)
   const [defaultView, setDefaultView] = useState<JsonViewerHumanViewId>(DEFAULT_JSON_VIEWER_HUMAN_VIEW)
   const [syntaxTheme, setSyntaxTheme] = useState<JsonViewerSyntaxThemeId>(DEFAULT_JSON_VIEWER_SYNTAX_THEME)
   const [hideServerLogs, setHideServerLogs] = useState(DEFAULT_HIDE_SERVER_LOGS)
@@ -92,6 +98,13 @@ export function Settings() {
   const [requireInputDescriptions, setRequireInputDescriptions] = useState(DEFAULT_REQUIRE_INPUT_DESCRIPTIONS)
   const [inferenceOutputStepsOnly, setInferenceOutputStepsOnly] = useState(DEFAULT_INFERENCE_OUTPUT_STEPS_ONLY)
   const [colorScheme, setColorScheme] = useState<ColorSchemeId>(DEFAULT_COLOR_SCHEME)
+
+  useEffect(() => {
+    void createClient()
+      .then((supabase) => supabase.auth.getUser())
+      .then(({ data }) => setEmail(data.user?.email ?? null))
+      .catch(() => setEmail(null))
+  }, [])
 
   useEffect(() => {
     setDefaultView(readJsonViewerDefaultView())
@@ -147,6 +160,40 @@ export function Settings() {
       />
       <div className="flex-1 overflow-auto p-5">
         <div className="flex max-w-lg flex-col gap-4">
+          <section className="rounded-lg border border-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+              <h3 className="text-sm font-semibold">Account</h3>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <span className="font-mono text-xs text-muted-foreground">{email ?? "…"}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  void createClient()
+                    .then((supabase) => supabase.auth.signOut())
+                    .then(() => (window.location.href = "/login"))
+                }}
+                className="gap-1.5 text-xs"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Sign out
+              </Button>
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+              <h3 className="text-sm font-semibold">Default model</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                LLM used for pipeline steps by default.
+              </p>
+            </div>
+            <div className="px-4 py-3">
+              <ModelSelector value={model} onChange={setModel} />
+            </div>
+          </section>
+
           <section className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">JSON reader</h3>

@@ -122,13 +122,14 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "Markdown expense policy table listing category limits and approval rules"
+      "inputDescription": "Markdown expense policy table listing category limits and approval rules",
+      "note": "Markdown expense policy table listing category limits and approval rules"
     },
     {
       "id": "mod_parse_policy",
       "kind": "custom-code",
       "label": "Parse Policy Table",
-      "note": "Markdown table \u2192 CSV-style cells \u2192 JSON rows (no raw markdown to LLM).",
+      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
       "inputDescription": "TableRow list parsed from the expense policy markdown table",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_row",
@@ -152,7 +153,8 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "Submitted employee expense report as a markdown table of line items"
+      "inputDescription": "Submitted employee expense report as a markdown table of line items",
+      "note": "Submitted employee expense report as a markdown table of line items"
     },
     {
       "id": "mod_combine",
@@ -163,13 +165,14 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "Parsed policy rows from the first input, ready to merge with the expense report document"
+      "inputDescription": "Parsed policy rows from the first input, ready to merge with the expense report document",
+      "note": "Parsed policy rows from the first input, ready to merge with the expense report document"
     },
     {
       "id": "mod_merge",
       "kind": "custom-code",
       "label": "Merge Parsed Tables",
-      "note": "Markdown table \u2192 CSV-style cells \u2192 JSON rows (no raw markdown to LLM).",
+      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
       "inputDescription": "Combined audit input bundling parsed policy rows with the expense report document",
       "inStructureId": "m_combined",
       "outStructureId": "m_merged2",
@@ -189,12 +192,13 @@
       "inStructureId": "m_merged2",
       "outStructureId": "m_flag",
       "outIsList": true,
-      "inputDescription": "Merged JSON tables \u2014 policy limits in table_a_json and expense lines in table_b_json",
+      "inputDescription": "Merged JSON tables — policy limits in table_a_json and expense lines in table_b_json",
       "prompt": "table_a_json is the travel policy limits (JSON array). table_b_json is submitted expenses (JSON array). For EACH expense row, output one ComplianceFlag: line_id from the row index, category and amount_usd from the row, compliant verdict vs policy limits, and issue text if non-compliant.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2800,
-      "avgCostCents": 9
+      "avgCostCents": 9,
+      "note": "Merged JSON tables — policy limits in table_a_json and expense lines in table_b_json"
     },
     {
       "id": "mod_out",
@@ -206,7 +210,8 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of ComplianceFlag records \u2014 one per audited expense line"
+      "inputDescription": "List of ComplianceFlag records — one per audited expense line",
+      "note": ""
     }
   ],
   "strategies": [

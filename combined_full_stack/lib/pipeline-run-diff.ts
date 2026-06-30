@@ -6,6 +6,7 @@ export function modulesFromRunSteps(steps: RunStep[]): PipelineModule[] {
     id: step.moduleId,
     kind: step.kind === "doc-to-text" ? "input" : step.kind,
     label: step.label,
+    note: step.label,
     cached: true,
     avgMs: step.ms,
     avgCostCents: step.costCents,

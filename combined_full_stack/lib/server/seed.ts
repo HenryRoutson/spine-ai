@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { uid } from "../id";
+import { resolveModuleNote } from "@/lib/pipeline-module-factory";
 import { z } from "zod";
 import { DOCUMENTS_DIR, REPO_ROOT } from "./config";
 import { isUnavailableSeedDoc, unavailableSeedDocMessage } from "../seed-doc";
@@ -63,7 +64,7 @@ const SeedFileSchema = z.object({
       id: z.string(),
       kind: ModuleKindSchema,
       label: z.string(),
-      note: z.string().optional(),
+      note: z.string().default(""),
       inStructureId: z.string().optional(),
       outStructureId: z.string().optional(),
       inputType: z.union([InputTypeSchema, z.array(InputTypeSchema).min(1)]).optional(),
@@ -149,7 +150,13 @@ export function loadProjectSeed(path: string): ProjectSeed {
       name: raw.name,
       kind: raw.kind,
       models: raw.models as StructureModel[],
-      modules: raw.modules as PipelineModule[],
+      modules: raw.modules.map((m) => ({
+        ...m,
+        note: resolveModuleNote(m.kind, m.note, {
+          label: m.label,
+          inputDescription: m.inputDescription,
+        }),
+      })) as PipelineModule[],
       strategies: raw.strategies as Strategy[],
       seedDocNames: raw.docs.map((d) => d.name),
     },
@@ -236,8 +243,8 @@ export function blankProject(id: ProjectId): Project {
     createdAt: Date.now(),
     models: [],
     modules: [
-      { id: "mod_blank_in" as ModuleId, kind: "input", label: "Input", inputType: "text", cached: true, avgMs: 80, avgCostCents: 0 },
-      { id: "mod_blank_out" as ModuleId, kind: "output", label: "Output", cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_blank_in" as ModuleId, kind: "input", label: "Input", note: "Pipeline input document", inputType: "text", cached: true, avgMs: 80, avgCostCents: 0 },
+      { id: "mod_blank_out" as ModuleId, kind: "output", label: "Output", note: "", cached: true, avgMs: 40, avgCostCents: 0 },
     ],
     strategies: legalStrategies.map((s) => ({ ...s, id: `${s.id}_${id}` })),
   };

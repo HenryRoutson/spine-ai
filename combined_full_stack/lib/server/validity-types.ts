@@ -12,7 +12,8 @@ export type InvalidKind =
   | "duplicate-input-struct"
   | "duplicate-output-struct"
   | "state-key-missing"
-  | "missing-input-description";
+  | "missing-input-description"
+  | "missing-note";
 
 export interface InvalidStep {
   moduleId: ModuleId;

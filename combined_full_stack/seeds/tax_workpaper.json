@@ -115,13 +115,14 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "W-2 wage statement for tax year 2024 as a markdown table of box values"
+      "inputDescription": "W-2 wage statement for tax year 2024 as a markdown table of box values",
+      "note": "W-2 wage statement for tax year 2024 as a markdown table of box values"
     },
     {
       "id": "mod_parse_w2",
       "kind": "custom-code",
       "label": "Parse W-2 Table",
-      "note": "Markdown table \u2192 CSV-style cells \u2192 JSON rows (no raw markdown to LLM).",
+      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
       "inputDescription": "TableRow list parsed from the W-2 wage statement markdown table",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_row",
@@ -145,7 +146,8 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "1099-MISC supplemental income form as a markdown table"
+      "inputDescription": "1099-MISC supplemental income form as a markdown table",
+      "note": "1099-MISC supplemental income form as a markdown table"
     },
     {
       "id": "mod_combine",
@@ -156,14 +158,15 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "Parsed W-2 box rows from the first input, ready to merge with the 1099 document"
+      "inputDescription": "Parsed W-2 box rows from the first input, ready to merge with the 1099 document",
+      "note": "Parsed W-2 box rows from the first input, ready to merge with the 1099 document"
     },
     {
       "id": "mod_merge",
       "kind": "custom-code",
       "label": "Merge Form Tables",
-      "note": "Markdown table \u2192 CSV-style cells \u2192 JSON rows (no raw markdown to LLM).",
-      "inputDescription": "Combined tax input \u2014 W-2 row JSON in table_a_json and 1099 fields in table_b_json",
+      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
+      "inputDescription": "Combined tax input — W-2 row JSON in table_a_json and 1099 fields in table_b_json",
       "inStructureId": "m_combined",
       "outStructureId": "m_merged2",
       "cached": true,
@@ -182,12 +185,13 @@
       "inStructureId": "m_merged2",
       "outStructureId": "m_field",
       "outIsList": true,
-      "inputDescription": "Merged form tables \u2014 parsed W-2 rows and 1099 field rows as JSON arrays",
-      "prompt": "table_a_json is parsed W-2 box rows; table_b_json is parsed 1099 field rows. Emit standardized WorkpaperField entries for wages, federal withholding, 401(k), state tax, and 1099 other income \u2014 each with source_form and source_box.",
+      "inputDescription": "Merged form tables — parsed W-2 rows and 1099 field rows as JSON arrays",
+      "prompt": "table_a_json is parsed W-2 box rows; table_b_json is parsed 1099 field rows. Emit standardized WorkpaperField entries for wages, federal withholding, 401(k), state tax, and 1099 other income — each with source_form and source_box.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2600,
-      "avgCostCents": 8
+      "avgCostCents": 8,
+      "note": "Merged form tables — parsed W-2 rows and 1099 field rows as JSON arrays"
     },
     {
       "id": "mod_out",
@@ -199,7 +203,8 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of WorkpaperField entries sourced from W-2 and 1099 forms"
+      "inputDescription": "List of WorkpaperField entries sourced from W-2 and 1099 forms",
+      "note": ""
     }
   ],
   "strategies": [

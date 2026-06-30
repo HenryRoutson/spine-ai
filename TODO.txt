@@ -3,6 +3,8 @@ Spine
 rename everything to spine
 name might already be taken https://www.getspine.ai/
 
+add parallel pipelines, processing at the same time. 
+
 todo check XSS
 
 

@@ -73,7 +73,8 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "User-submitted bug report describing steps to reproduce and expected behavior"
+      "inputDescription": "User-submitted bug report describing steps to reproduce and expected behavior",
+      "note": "User-submitted bug report describing steps to reproduce and expected behavior"
     },
     {
       "id": "mod_in_logs",
@@ -85,7 +86,8 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "Application log snippet around the time of the reported failure"
+      "inputDescription": "Application log snippet around the time of the reported failure",
+      "note": "Application log snippet around the time of the reported failure"
     },
     {
       "id": "mod_combine",
@@ -96,7 +98,8 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "User-submitted bug report describing steps to reproduce and expected behavior"
+      "inputDescription": "User-submitted bug report describing steps to reproduce and expected behavior",
+      "note": "User-submitted bug report describing steps to reproduce and expected behavior"
     },
     {
       "id": "mod_enrich",
@@ -104,12 +107,13 @@
       "label": "Enrich Bug",
       "inStructureId": "m_combined",
       "outStructureId": "m_enriched",
-      "inputDescription": "Combined bug input \u2014 user_report document plus app_logs log excerpt",
+      "inputDescription": "Combined bug input — user_report document plus app_logs log excerpt",
       "prompt": "user_report is the bug report Document (use user_report.content). app_logs is the log document (use app_logs.content). Infer repro_steps, severity, likely_component (e.g. export/pdf/fonts), and a concise summary.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2400,
-      "avgCostCents": 7
+      "avgCostCents": 7,
+      "note": "Combined bug input — user_report document plus app_logs log excerpt"
     },
     {
       "id": "mod_out",
@@ -120,7 +124,8 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "Single EnrichedBug object \u2014 structured ticket ready for engineering triage"
+      "inputDescription": "Single EnrichedBug object — structured ticket ready for engineering triage",
+      "note": ""
     }
   ],
   "strategies": [

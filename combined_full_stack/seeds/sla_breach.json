@@ -71,13 +71,14 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "Vendor SLA uptime report markdown table with measured availability per service"
+      "inputDescription": "Vendor SLA uptime report markdown table with measured availability per service",
+      "note": "Vendor SLA uptime report markdown table with measured availability per service"
     },
     {
       "id": "mod_parse",
       "kind": "custom-code",
       "label": "Parse Uptime Table",
-      "note": "Markdown table \u2192 CSV-style cells \u2192 JSON rows (no raw markdown to LLM).",
+      "note": "Markdown table → CSV-style cells → JSON rows (no raw markdown to LLM).",
       "inputDescription": "ParsedTable parsed from the vendor SLA uptime report markdown table",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_parsed",
@@ -97,12 +98,13 @@
       "inStructureId": "m_parsed",
       "outStructureId": "m_breach",
       "outIsList": true,
-      "inputDescription": "ParsedTable with rows_json \u2014 JSON array of uptime rows from the SLA report",
+      "inputDescription": "ParsedTable with rows_json — JSON array of uptime rows from the SLA report",
       "prompt": "rows_json is a JSON array parsed from the uptime markdown table. Emit one SlaBreachRow per service with breached=true when the Breach column is yes. Include credit_note from the document narrative when breached.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2200,
-      "avgCostCents": 7
+      "avgCostCents": 7,
+      "note": "ParsedTable with rows_json — JSON array of uptime rows from the SLA report"
     },
     {
       "id": "mod_out",
@@ -114,7 +116,8 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of SlaBreachRow records \u2014 one breach verdict per monitored service"
+      "inputDescription": "List of SlaBreachRow records — one breach verdict per monitored service",
+      "note": ""
     }
   ],
   "strategies": [

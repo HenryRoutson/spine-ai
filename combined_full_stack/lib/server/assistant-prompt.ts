@@ -113,6 +113,7 @@ ${buildLinearIoPromptBlock()}
 
 - Input steps: set inputType from supported types; optional inputNameContains so only matching filenames fill that slot (useful with multiple inputs).
 - Any step may set inputDescription — before the step runs, a guard LLM rejects input that doesn't match. inputDescription MUST describe what the step RECEIVES as input (the upstream data), not what it produces. For export/output steps (e.g. "Export CSV", "Generate Report"), describe the upstream structured data fields, not the output file format.
+- input, combine, and llm/llm-batch steps MUST set note (Annotation / purpose) — a short human-readable description of what the step does or what document/data it handles. Never leave note empty on those kinds.
 - combine steps merge pipeline state with a new document — emit ONLY the combine step; a Document Input is auto-inserted before it.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
 - transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically, or use custom-code.
@@ -122,6 +123,16 @@ ${buildLinearIoPromptBlock()}
 - For large changes (restructuring, new steps, changing the overall flow): set modules to the FULL replacement array and modulePatch to null. To clear all steps, return modules as [] — never null.
 - For small targeted changes (fixing a prompt, swapping a model, adding outIsList, editing 1–3 steps): set modules to null and use modulePatch instead. Each entry must include the step's 0-based index (shown in the current pipeline JSON) and ONLY the fields you want to change — untouched fields are preserved as-is.
 - When answering questions without pipeline changes, set both modules and modulePatch to null.`;
+}
+
+export function buildProjectDocumentationRulesPromptBlock(): string {
+  return `Project documentation rules (Docs tab — injected into every future assistant call):
+- When you change pipeline steps (modules or modulePatch) or structure models, you MUST return documentationUpdate — the FULL replacement markdown for the project Docs tab.
+- Keep docs accurate over time: purpose, pipeline step overview (what each step does), structure glossary, and hard constraints/invariants the user stated or you introduced.
+- Preserve user-written rules from the current documentation unless the change explicitly supersedes them.
+- Be concise but complete — future assistant calls treat this as ground truth to prevent regressions.
+- When only answering questions, creating test documents, or making no pipeline/model changes, set documentationUpdate to null.
+- When changing pipeline or models without updating docs, the project drifts — always refresh documentationUpdate alongside those changes.`;
 }
 
 export function buildDocumentRulesPromptBlock(): string {
@@ -141,7 +152,8 @@ export function buildProjectAssistantSystemPrompt(globalModel: ModelId): string 
 You can propose changes to ALL of the following in one response:
 1. Structure models (pydantic schemas for LLM I/O)
 2. Pipeline steps (linear processing graph)
-3. Test documents (text/json files linked to this project for inference)
+3. Project documentation (markdown — keeps the Docs tab accurate as the pipeline evolves)
+4. Test documents (text/json files linked to this project for inference)
 
 Module kinds:
 ${buildModuleKindsPromptBlock()}
@@ -155,6 +167,8 @@ ${buildInputTypesPromptBlock()}
 ${buildStructureRulesPromptBlock()}
 
 ${buildPipelineRulesPromptBlock(globalModel)}
+
+${buildProjectDocumentationRulesPromptBlock()}
 
 ${buildDocumentRulesPromptBlock()}
 

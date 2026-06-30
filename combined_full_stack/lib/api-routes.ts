@@ -24,6 +24,8 @@ export const API_ROUTES = {
   abtest: "/api/abtest",
   pipelineAssistant: "/api/pipeline-assistant",
   projectAssistant: "/api/project-assistant",
+  assistantChats: "/api/assistant-chats",
+  assistantChat: (id: string) => `/api/assistant-chats/${id}`,
   pipelineSummary: "/api/pipeline-summary",
   structureAssistant: "/api/structure-assistant",
   docsContent: "/api/docs/content",

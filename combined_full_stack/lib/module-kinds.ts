@@ -25,6 +25,11 @@ export function isLlmKind(kind: ModuleKind): boolean {
   return LLM_KINDS.includes(kind)
 }
 
+// AI : input/combine/llm steps expose Annotation / purpose — must be non-empty when the pipeline is valid.
+export function stepRequiresNote(kind: ModuleKind): boolean {
+  return kind === "input" || kind === "combine" || isLlmKind(kind)
+}
+
 // AI : llm steps use prompt/response wording; quote step shows source + extracts → linked spans.
 export function stepIoLabels(kind: RunStepKind) {
   if (kind === "quote") {

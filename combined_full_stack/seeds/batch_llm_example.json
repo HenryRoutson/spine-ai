@@ -27,7 +27,7 @@
     {
       "id": "m_summary",
       "name": "ChunkSummary",
-      "description": "One structured result per batch LLM call \u2014 the step always emits a list of these.",
+      "description": "One structured result per batch LLM call — the step always emits a list of these.",
       "fields": [
         {
           "id": "f_id",
@@ -73,18 +73,19 @@
       "kind": "input",
       "label": "Bullet List",
       "inputType": "text",
-      "inputDescription": "Plain-text bullet checklist \u2014 one actionable line per row",
+      "inputDescription": "Plain-text bullet checklist — one actionable line per row",
       "outStructureId": "m_builtin_document",
       "cached": true,
       "avgMs": 80,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "note": "Plain-text bullet checklist — one actionable line per row"
     },
     {
       "id": "mod_wrap_in",
       "kind": "custom-code",
-      "label": "Wrap \u2192 List",
-      "note": "BEFORE batch LLM \u2014 single Document \u2192 list[TextChunk]. Batch steps always take a list.",
-      "inputDescription": "Plain-text bullet checklist \u2014 one actionable line per row",
+      "label": "Wrap → List",
+      "note": "BEFORE batch LLM — single Document → list[TextChunk]. Batch steps always take a list.",
+      "inputDescription": "Plain-text bullet checklist — one actionable line per row",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_chunk",
       "outIsList": true,
@@ -101,8 +102,8 @@
       "id": "mod_batch",
       "kind": "llm-batch",
       "label": "Summarize Each Line",
-      "note": "list[TextChunk] \u2192 list[ChunkSummary]. One structured LLM call per item.",
-      "inputDescription": "List of TextChunk objects \u2014 one checklist line with id and text",
+      "note": "list[TextChunk] → list[ChunkSummary]. One structured LLM call per item.",
+      "inputDescription": "List of TextChunk objects — one checklist line with id and text",
       "inStructureId": "m_chunk",
       "outStructureId": "m_summary",
       "outIsList": true,
@@ -115,9 +116,9 @@
     {
       "id": "mod_wrap_out",
       "kind": "custom-code",
-      "label": "Unwrap List \u2192 Report",
-      "note": "AFTER batch LLM \u2014 list[ChunkSummary] \u2192 single CombinedReport for the output step.",
-      "inputDescription": "List of ChunkSummary objects \u2014 one-sentence summary per checklist line",
+      "label": "Unwrap List → Report",
+      "note": "AFTER batch LLM — list[ChunkSummary] → single CombinedReport for the output step.",
+      "inputDescription": "List of ChunkSummary objects — one-sentence summary per checklist line",
       "inStructureId": "m_summary",
       "outStructureId": "m_report",
       "cached": true,
@@ -133,12 +134,13 @@
       "id": "mod_output",
       "kind": "output",
       "label": "Summary Report",
-      "inputDescription": "Single CombinedReport object \u2014 title and joined summary body",
+      "inputDescription": "Single CombinedReport object — title and joined summary body",
       "inStructureId": "m_report",
       "outStructureId": "m_report",
       "cached": true,
       "avgMs": 40,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "note": ""
     }
   ],
   "strategies": [

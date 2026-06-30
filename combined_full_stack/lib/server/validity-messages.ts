@@ -66,6 +66,9 @@ export function invalidStepMessage(
   if (issue.kind === "missing-input-description") {
     return "input description is required — describe what data this step expects";
   }
+  if (issue.kind === "missing-note") {
+    return "annotation / purpose is required — describe what this step does or handles";
+  }
   return "invalid step";
 }
 

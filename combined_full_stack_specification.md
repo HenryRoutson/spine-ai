@@ -182,7 +182,9 @@ if you do not have enough funds in billing, a button to direct you to the billin
 
 after inference is finished or if it's cached, the final output should show up. With a json, excel style viewer, or even custom visualisations like video, plots.
 
+when using an agent, it will always write descriptions of it's input to ensure correctness.
 
+Users should be able to see their previous chats with the spine agent. 
 
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.

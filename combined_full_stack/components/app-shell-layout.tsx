@@ -13,8 +13,6 @@ import {
   Settings,
   Plus,
   Check,
-  LogOut,
-  UserRound,
   Pencil,
   Trash2,
   ArrowLeft,
@@ -30,7 +28,6 @@ import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { createClient } from "@/utils/supabase/client"
 import { useAppShell, type AppWindowId } from "@/lib/app-shell"
 import { useSyncProjectDocStructures } from "@/lib/use-sync-project-doc-structures"
-import { ModelSelector } from "@/components/model-selector"
 import { LazyDocViewer } from "@/components/lazy-doc-viewer"
 import { PanelLoading } from "@/components/panel-loading"
 import { FeedbackButton } from "@/components/feedback-button"
@@ -248,53 +245,15 @@ function ProjectSelector() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-        <DropdownMenuItem onClick={() => setActiveWindow("projects")} className="gap-2 text-xs">
-          <LayoutGrid className="h-3.5 w-3.5" />
+        <DropdownMenuItem onClick={() => setActiveWindow("projects")} className="gap-2 py-2.5 font-medium">
+          <LayoutGrid className="h-4 w-4" />
           Manage projects…
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={addProject} className="gap-2 text-xs text-primary">
-          <Plus className="h-3.5 w-3.5" />
+        <DropdownMenuItem onClick={addProject} className="gap-2 py-2.5 font-medium text-primary">
+          <Plus className="h-4 w-4" />
           New project
         </DropdownMenuItem>
         </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-// AI : todo §7 — signed in ⇒ per-user Supabase data (email shown); anonymous ⇒ local store.
-function AccountMenu() {
-  const [email, setEmail] = useState<string | null>(null)
-  useEffect(() => {
-    void createClient()
-      .then((supabase) => supabase.auth.getUser())
-      .then(({ data }) => setEmail(data.user?.email ?? null))
-      .catch(() => setEmail(null))
-  }, [])
-
-  if (!email)
-    return (
-      <span className="font-mono text-[11px] text-muted-foreground">…</span>
-    )
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 py-1.5 font-mono text-[11px] transition-colors hover:bg-accent">
-        <UserRound className="h-3.5 w-3.5 text-primary" />
-        <span className="max-w-[140px] truncate">{email}</span>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
-        <DropdownMenuItem
-          onClick={() => {
-            void createClient()
-              .then((supabase) => supabase.auth.signOut())
-              .then(() => (window.location.href = "/login"))
-          }}
-          className="gap-2 text-xs"
-        >
-          <LogOut className="h-3.5 w-3.5" />
-          Sign out
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -313,7 +272,7 @@ function ProjectSwitchOverlay({ projectName }: { projectName: string }) {
 
 export function AppShellLayout() {
   const { activeWindow, setActiveWindow } = useAppShell()
-  const { model, setModel, modules, models, project, projectLoading } = useStore()
+  const { modules, models, project, projectLoading } = useStore()
   useSyncProjectDocStructures()
   const pipelineInvalid = computeInvalidForUi(modules, models).size > 0
 
@@ -346,13 +305,8 @@ export function AppShellLayout() {
           <ProjectSelector />
         </div>
         <div className="flex items-center gap-2">
-          <span className="hidden font-mono text-[10px] text-muted-foreground md:inline">
-            default model
-          </span>
-          <ModelSelector value={model} onChange={setModel} />
           <ProjectAssistantDock />
           <FeedbackButton />
-          <AccountMenu />
         </div>
       </header>
 
@@ -374,7 +328,7 @@ export function AppShellLayout() {
                 }
                 className={cn(
                   "group flex items-center gap-3 rounded-md px-2.5 py-2 text-sm transition-colors",
-                  "justify-center lg:justify-start",
+                  "min-h-[44px] justify-center lg:min-h-0 lg:justify-start",
                   isInferenceInvalid
                     ? isActive
                       ? "bg-destructive/10 text-destructive"

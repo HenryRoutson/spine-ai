@@ -8,6 +8,7 @@ import type {
 } from "./types";
 import { MODULE_META } from "./types";
 import { migrateCustomCodeModule } from "@/lib/custom_code_entries";
+import { resolveModuleNote } from "@/lib/pipeline-module-factory";
 import { usesPassthroughStructure, isLlmKind } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
 import { hasQuoteField, listFieldsForWrap } from "./structure";
@@ -193,6 +194,16 @@ function normalizePassthroughStructureIds(modules: PipelineModule[]): PipelineMo
   });
 }
 
+function normalizeModuleNotes(modules: PipelineModule[]): PipelineModule[] {
+  return modules.map((m) => ({
+    ...m,
+    note: resolveModuleNote(m.kind, m.note, {
+      label: m.label,
+      inputDescription: m.inputDescription,
+    }),
+  }));
+}
+
 export function migrateProjectModules(project: Project): Project {
   const models = withSharedModels(stripSharedModels(project.models));
   const folded = foldDocToTextSteps(project.modules);
@@ -202,6 +213,7 @@ export function migrateProjectModules(project: Project): Project {
   // AI : cache is always on — normalize legacy projects that disabled it per step.
   const withCache = migrated.map((m) => (m.cached ? m : { ...m, cached: true }));
   const normalized = normalizePassthroughStructureIds(withCache);
+  const noted = normalizeModuleNotes(normalized);
   const modelsChanged = models.length !== project.models.length || models.some((m, i) => m !== project.models[i]);
   const changed =
     modelsChanged ||
@@ -209,7 +221,8 @@ export function migrateProjectModules(project: Project): Project {
     placed !== folded ||
     migrated.some((m, i) => m !== placed[i]) ||
     withCache.some((m, i) => m !== migrated[i]) ||
-    normalized.some((m, i) => m !== withCache[i]);
+    normalized.some((m, i) => m !== withCache[i]) ||
+    noted.some((m, i) => m !== normalized[i]);
   if (!changed) return project;
-  return { ...project, models, modules: normalized };
+  return { ...project, models, modules: noted };
 }

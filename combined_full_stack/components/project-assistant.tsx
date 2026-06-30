@@ -1,6 +1,6 @@
 "use client"
 
-import { Check, AlertTriangle, FileText } from "lucide-react"
+import { Check, AlertTriangle, FileText, BookOpen } from "lucide-react"
 import { API_ROUTES } from "@/lib/api-routes"
 import { JSON_HEADERS } from "@/lib/api-client"
 import { readPipelineAssistantStream } from "@/lib/assistant-stream-read"
@@ -9,7 +9,7 @@ import { useStore } from "@/lib/store"
 import { MODULE_META } from "@/lib/types"
 import { AssistantChat, type AssistantChatMessage } from "@/components/assistant-chat"
 import { Badge } from "@/components/ui/badge"
-import { useProjectAssistant } from "@/lib/project-assistant-context"
+import { useProjectAssistantSession } from "@/lib/project-assistant-context"
 import {
   PROJECT_ASSISTANT_INITIAL_MESSAGE,
   PROJECT_ASSISTANT_STARTERS,
@@ -30,11 +30,14 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
     model: globalModel,
     addDocContent,
     applyProjectChanges,
+    setDocumentation,
     refresh,
     refreshBilling,
   } = useStore()
-  const { getSession } = useProjectAssistant()
-  const { messages, setMessages } = getSession(project.id, PROJECT_ASSISTANT_INITIAL_MESSAGE)
+  const { messages, setMessages } = useProjectAssistantSession(
+    project.id,
+    PROJECT_ASSISTANT_INITIAL_MESSAGE,
+  )
 
   async function applyProposal(proposal: ProjectProposal) {
     if (proposal.changed.models || proposal.changed.modules) {
@@ -42,6 +45,9 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
         ...(proposal.changed.models ? { models: proposal.models } : {}),
         ...(proposal.changed.modules ? { modules: proposal.modules } : {}),
       })
+    }
+    if (proposal.changed.documentation) {
+      setDocumentation(proposal.documentation)
     }
     if (proposal.changed.docs) {
       for (const spec of proposal.docs) {
@@ -105,10 +111,12 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
             data.proposal = {
               ...data.proposal,
               docs: data.proposal.docs ?? [],
+              documentation: data.proposal.documentation ?? "",
               changed: data.proposal.changed ?? {
                 modules: true,
                 models: true,
                 docs: (data.proposal.docs?.length ?? 0) > 0,
+                documentation: false,
               },
             }
           }
@@ -125,6 +133,7 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
   const showModels = p.changed?.models ?? true
   const showModules = p.changed?.modules ?? true
   const showDocs = p.changed?.docs ?? (p.docs?.length ?? 0) > 0
+  const showDocumentation = p.changed?.documentation ?? false
 
   return (
     <>
@@ -145,6 +154,12 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
         {showDocs && (
           <Badge variant="outline" className="font-mono text-[9px]">
             {p.docs.length} docs
+          </Badge>
+        )}
+        {showDocumentation && (
+          <Badge variant="outline" className="gap-1 font-mono text-[9px]">
+            <BookOpen className="h-2.5 w-2.5" />
+            docs tab
           </Badge>
         )}
         {msg.retryCount != null && msg.retryCount > 0 && (
@@ -215,6 +230,17 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
               </li>
             ))}
           </ol>
+        </div>
+      )}
+
+      {showDocumentation && (
+        <div className="mb-3">
+          <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+            Project documentation
+          </p>
+          <pre className="max-h-32 overflow-auto rounded border border-border/60 bg-background/50 p-2 font-mono text-[9px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
+            {p.documentation.trim() || "(empty)"}
+          </pre>
         </div>
       )}
 
