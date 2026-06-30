@@ -301,7 +301,7 @@ export async function resumeRunPipeline(
   const ms = Date.now() - t0;
   const costCents = ledger.totalCents() - beforeCents;
   if (status !== "error" && m.cached && result) {
-    const key = stepCacheKey(cacheOwnerId, checkpoint.projectId, m, m.model ?? model, fingerprintInputDocIds);
+    const key = stepCacheKey(cacheOwnerId, checkpoint.projectId, m, m.model ?? model, fingerprintInputDocIds, project);
     writeStepCache(
       key,
       {

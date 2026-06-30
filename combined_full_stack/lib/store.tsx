@@ -336,15 +336,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     await persistProject(pending.id, pending.body)
   }, [persistProject])
 
-  const addProject = useCallback(() => {
-    apiJson<Project>(API_ROUTES.projects, { method: "POST" })
-      .then((fresh) => {
-        setState((prev) => (prev ? { ...prev, projects: [...prev.projects, fresh] } : prev))
-        setActiveProjectId(fresh.id)
-      })
-      .catch((err) => setSaveError(err instanceof Error ? err.message : "Failed to create project"))
-  }, [])
-
   const postNewProject = useCallback((body: { templateId?: string; cloneFrom?: string }) => {
     return apiJson<Project>(API_ROUTES.projects, {
       method: "POST",
@@ -362,6 +353,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         throw err
       })
   }, [refresh])
+
+  const addProject = useCallback(() => {
+    void postNewProject({}).catch((err) =>
+      setSaveError(err instanceof Error ? err.message : "Failed to create project"),
+    )
+  }, [postNewProject])
 
   const cloneFromTemplate = useCallback(
     (templateId: string) => postNewProject({ templateId }),

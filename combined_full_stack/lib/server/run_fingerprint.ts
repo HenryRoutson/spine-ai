@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import { buildRunInputDocIds as buildRunInputDocIdsFromDocs } from "../inference-input";
 import {
   buildRunFingerprintPayload,
-  moduleConfigForStepCache,
   resolveRunModel,
   stableJson,
+  stepCacheConfigPayload,
 } from "../run-fingerprint";
 import { stepModelForCache } from "./types";
 import { projectSeedDocNames } from "./seed";
@@ -29,10 +29,12 @@ export function stepCacheKey(
   module: PipelineModule,
   model: ModelId,
   inputDocIds: DocId[],
+  project: Project,
 ): string {
   const inputs = inputDocIds.length ? inputDocIds.join("__") : "none";
+  const migrated = fingerprintProject(project);
   const cfg = createHash("sha256")
-    .update(stableJson(moduleConfigForStepCache(module)))
+    .update(stableJson(stepCacheConfigPayload(migrated, module, model)))
     .digest("hex")
     .slice(0, 12);
   const stepModel = stepModelForCache(module, model);

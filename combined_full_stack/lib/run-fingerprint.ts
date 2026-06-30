@@ -100,3 +100,11 @@ export function buildRunFingerprintPayload(
 export function moduleConfigForStepCache(m: PipelineModule) {
   return moduleForFingerprint(m) ?? { id: m.id, kind: m.kind }
 }
+
+// AI : step cache cfg — module execution config plus structure field defs (ids alone miss schema edits).
+export function stepCacheConfigPayload(project: Project, module: PipelineModule, model: ModelId) {
+  return {
+    module: moduleConfigForStepCache(module),
+    models: buildRunConfigPayload(project, model).models,
+  }
+}

@@ -84,27 +84,54 @@ export function savePdfBytes(id: DocId, bytes: Uint8Array): void {
 
 export type OriginalDocFile = { path: string; mime: string; ext: OriginalDocExt };
 
-export async function originalDocFile(id: DocId): Promise<OriginalDocFile | undefined> {
+function copySeedPdfToDocsDir(id: DocId, pdfPath: string): OriginalDocFile {
+  const dest = join(docsDir(), `${id}.pdf`);
+  mkdirSync(docsDir(), { recursive: true });
+  copyFileSync(pdfPath, dest);
+  return { path: dest, mime: EXT_MIME.pdf, ext: "pdf" };
+}
+
+export async function originalDocFile(id: DocId, docName?: string): Promise<OriginalDocFile | undefined> {
   for (const ext of ORIGINAL_DOC_EXTS) {
     const path = join(docsDir(), `${id}.${ext}`);
     if (existsSync(path)) return { path, mime: EXT_MIME[ext], ext };
   }
-  return backfillSeedOriginalDoc(id);
+  return backfillSeedOriginalDoc(id, docName);
 }
 
-async function backfillSeedOriginalDoc(id: DocId): Promise<OriginalDocFile | undefined> {
+async function backfillSeedOriginalDoc(id: DocId, docName?: string): Promise<OriginalDocFile | undefined> {
   for (const seed of allProjectSeeds()) {
     for (const spec of seed.docSpecs) {
-      // AI : match by extracted-text hash — seed docs may be typed "text" while still shipping a PDF sidecar.
       const txtSidecar = spec.path.replace(/\.pdf$/i, ".txt");
-      if (!existsSync(txtSidecar)) continue;
-      if (hashContent(readFileSync(txtSidecar, "utf8")) !== id) continue;
-      const pdfPath = spec.path.endsWith(".pdf") ? spec.path : spec.path.replace(/\.txt$/i, ".pdf");
-      if (!existsSync(pdfPath)) continue;
-      const dest = join(docsDir(), `${id}.pdf`);
-      mkdirSync(docsDir(), { recursive: true });
-      copyFileSync(pdfPath, dest);
-      return { path: dest, mime: EXT_MIME.pdf, ext: "pdf" };
+      if (existsSync(txtSidecar) && hashContent(readFileSync(txtSidecar, "utf8")) === id) {
+        const pdfPath = spec.path.endsWith(".pdf") ? spec.path : spec.path.replace(/\.txt$/i, ".pdf");
+        if (existsSync(pdfPath)) return copySeedPdfToDocsDir(id, pdfPath);
+      }
+      // AI : seed docs may be .md/.json — hash ingested text, not only a .txt sidecar path.
+      try {
+        const content = await readSeedDocContent(spec);
+        if (hashContent(content) === id) {
+          const pdfPath = spec.path.endsWith(".pdf")
+            ? spec.path
+            : spec.path.replace(/\.(txt|md|json)$/i, ".pdf");
+          if (existsSync(pdfPath)) return copySeedPdfToDocsDir(id, pdfPath);
+        }
+      } catch {
+        // skip missing seed files
+      }
+    }
+  }
+
+  // AI : match bundled PDF by stored doc name when hash backfill misses (re-uploaded seed filename).
+  if (docName) {
+    for (const seed of allProjectSeeds()) {
+      for (const spec of seed.docSpecs) {
+        if (spec.name !== docName) continue;
+        const pdfPath = spec.path.endsWith(".pdf")
+          ? spec.path
+          : spec.path.replace(/\.(txt|md|json)$/i, ".pdf");
+        if (existsSync(pdfPath)) return copySeedPdfToDocsDir(id, pdfPath);
+      }
     }
   }
   return undefined;

@@ -60,7 +60,7 @@ export async function runLinearStepsFrom(
         log.section(`step ${i + 1}/${project.modules.length}: ${m.label}`);
         log.info(`step starting`, { moduleId: m.id, kind: m.kind, cached: !!m.cached, stepModel: m.model ?? model });
 
-        const key = stepCacheKey(cacheOwnerId, projectId, m, m.model ?? model, fingerprintInputDocIds);
+        const key = stepCacheKey(cacheOwnerId, projectId, m, m.model ?? model, fingerprintInputDocIds, project);
         log.debug(`cache lookup`, { key, cachedFlag: !!m.cached });
         const cached = m.cached ? readStepCache(key) : undefined;
 
