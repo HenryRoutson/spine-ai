@@ -5,7 +5,7 @@ import { type BillingUserKey, confirmCheckoutSession } from "@/lib/server/billin
 import { STRIPE_ENABLED } from "@/lib/stripe-enabled";
 
 export async function POST(req: NextRequest) {
-  if (!STRIPE_ENABLED) return apiError("Stripe is disabled", HTTP.SERVICE_UNAVAILABLE);
+  if (!STRIPE_ENABLED) return apiError("Stripe is disabled", HTTP.UNAVAILABLE);
   const ctx = await requireAuthStore();
   if (ctx instanceof NextResponse) return ctx;
 
