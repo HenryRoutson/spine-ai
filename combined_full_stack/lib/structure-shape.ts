@@ -10,18 +10,28 @@ export function isNumberedStructureName(name: string): boolean {
 function fieldShapePart(
   f: ModelField,
   byId: Map<string, StructureModel>,
+  visiting: Set<StructureModelId>,
 ): string {
   const refModel = f.ref ? byId.get(f.ref) : undefined
-  const refPart = refModel ? `@${modelShapeSignature(refModel, byId)}` : ""
+  const refPart = refModel
+    ? visiting.has(refModel.id)
+      ? `@ref:${refModel.id}`
+      : `@${modelShapeSignature(refModel, byId, visiting)}`
+    : ""
   return `${f.type}${f.optional ? "?" : ""}${refPart}`
 }
 
 function fieldShapePartLoose(
   f: ModelField,
   byId: Map<string, StructureModel>,
+  visiting: Set<StructureModelId>,
 ): string {
   const refModel = f.ref ? byId.get(f.ref) : undefined
-  const refPart = refModel ? `@${modelShapeSignatureLoose(refModel, byId)}` : ""
+  const refPart = refModel
+    ? visiting.has(refModel.id)
+      ? `@ref:${refModel.id}`
+      : `@${modelShapeSignatureLoose(refModel, byId, visiting)}`
+    : ""
   return `${f.name}:${f.type}${refPart}`
 }
 
@@ -29,24 +39,34 @@ function fieldShapePartLoose(
 export function modelShapeSignature(
   m: StructureModel,
   all: StructureModel[] | Map<string, StructureModel>,
+  visiting: Set<StructureModelId> = new Set(),
 ): string {
   const byId = all instanceof Map ? all : new Map(all.map((x) => [x.id, x]))
-  return m.fields
-    .map((f) => fieldShapePart(f, byId))
+  if (visiting.has(m.id)) return `cycle:${m.id}`
+  visiting.add(m.id)
+  const sig = m.fields
+    .map((f) => fieldShapePart(f, byId, visiting))
     .sort()
     .join("|")
+  visiting.delete(m.id)
+  return sig
 }
 
 // AI : pydantic / named-model dedupe — same field names + types, optional flags ignored.
 export function modelShapeSignatureLoose(
   m: StructureModel,
   all: StructureModel[] | Map<string, StructureModel>,
+  visiting: Set<StructureModelId> = new Set(),
 ): string {
   const byId = all instanceof Map ? all : new Map(all.map((x) => [x.id, x]))
-  return m.fields
-    .map((f) => fieldShapePartLoose(f, byId))
+  if (visiting.has(m.id)) return `cycle:${m.id}`
+  visiting.add(m.id)
+  const sig = m.fields
+    .map((f) => fieldShapePartLoose(f, byId, visiting))
     .sort()
     .join("|")
+  visiting.delete(m.id)
+  return sig
 }
 
 export function bundleShapeSignature(root: StructureModel, all: StructureModel[]): string {

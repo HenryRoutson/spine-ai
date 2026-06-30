@@ -19,6 +19,12 @@ import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
+// AI : shared chat bubble styling so live streaming matches completed messages.
+const USER_AVATAR_CLASS = "border-border bg-secondary"
+const ASSISTANT_AVATAR_CLASS = "border-sky-400/40 bg-sky-500/25"
+const USER_BUBBLE_CLASS = "border-border bg-secondary/70"
+const ASSISTANT_BUBBLE_CLASS = "border-sky-500/35 bg-sky-500/20"
+
 export type AssistantChatMessage<TProposal> = {
   id: string
   role: AssistantChatRole
@@ -213,21 +219,19 @@ export function AssistantChat<TProposal>({
               <div
                 className={cn(
                   "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border",
-                  m.role === "user" ? "bg-secondary" : "bg-primary/10 border-primary/30",
+                  m.role === "user" ? USER_AVATAR_CLASS : ASSISTANT_AVATAR_CLASS,
                 )}
               >
                 {m.role === "user" ? (
                   <User className="h-3.5 w-3.5 text-muted-foreground" />
                 ) : (
-                  <Bot className="h-3.5 w-3.5 text-primary" />
+                  <Bot className="h-3.5 w-3.5 text-sky-300" />
                 )}
               </div>
               <div
                 className={cn(
                   "min-w-0 max-w-[92%] rounded-lg border px-3 py-2",
-                  m.role === "user"
-                    ? "border-border bg-secondary/60"
-                    : "border-border bg-card",
+                  m.role === "user" ? USER_BUBBLE_CLASS : ASSISTANT_BUBBLE_CLASS,
                 )}
               >
                 <p className="text-xs leading-relaxed whitespace-pre-wrap">{m.content}</p>
@@ -259,44 +263,61 @@ export function AssistantChat<TProposal>({
                   </div>
                 )}
                 {showDebug && m.debugTrace && m.debugTrace.length > 0 && (
-                  <AssistantDebugPanel entries={m.debugTrace} className="mt-3" />
+                  <AssistantDebugPanel
+                    entries={m.debugTrace}
+                    className="mt-3 border-sky-400/25 bg-sky-950/35"
+                  />
                 )}
               </div>
             </div>
           ))}
 
           {loading && (
-            <div className="space-y-2 px-2">
-              {showDebug ? (
-                <AssistantDebugPanel
-                  entries={debugTrace}
-                  liveThinking={liveThinking}
-                  thinkingActive={loadingPhase === "thinking"}
-                />
-              ) : liveThinking ? (
-                <div className="rounded-lg border border-border/60 bg-secondary/30 px-3 py-2">
-                  <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                    Thinking
-                  </p>
-                  <p className="max-h-40 overflow-y-auto font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
-                    {liveThinking}
-                    {loadingPhase === "thinking" && (
-                      <span className="inline-block animate-pulse text-primary">▍</span>
-                    )}
-                  </p>
-                </div>
-              ) : null}
-              {liveResponse && (
-                <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
-                  <p className="text-xs leading-relaxed whitespace-pre-wrap text-foreground/80">
+            <div className="flex gap-2 flex-row">
+              <div
+                className={cn(
+                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border",
+                  ASSISTANT_AVATAR_CLASS,
+                )}
+              >
+                <Bot className="h-3.5 w-3.5 text-sky-300" />
+              </div>
+              <div
+                className={cn(
+                  "min-w-0 max-w-[92%] space-y-3 rounded-lg border px-3 py-2",
+                  ASSISTANT_BUBBLE_CLASS,
+                )}
+              >
+                {showDebug && (debugTrace.length > 0 || liveThinking) ? (
+                  <AssistantDebugPanel
+                    entries={debugTrace}
+                    liveThinking={liveThinking}
+                    thinkingActive={loadingPhase === "thinking"}
+                    className="border-sky-400/25 bg-sky-950/35"
+                  />
+                ) : liveThinking ? (
+                  <div>
+                    <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-sky-200/70">
+                      Thinking
+                    </p>
+                    <p className="max-h-40 overflow-y-auto font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-foreground/80">
+                      {liveThinking}
+                      {loadingPhase === "thinking" && (
+                        <span className="inline-block animate-pulse text-sky-300">▍</span>
+                      )}
+                    </p>
+                  </div>
+                ) : null}
+                {liveResponse && (
+                  <p className="text-xs leading-relaxed whitespace-pre-wrap">
                     {liveResponse}
-                    <span className="inline-block animate-pulse text-primary">▍</span>
+                    <span className="inline-block animate-pulse text-sky-300">▍</span>
                   </p>
+                )}
+                <div className="flex items-center gap-2 font-mono text-[10px] text-sky-200/70">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  {loadingText}
                 </div>
-              )}
-              <div className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                {loadingText}
               </div>
             </div>
           )}
