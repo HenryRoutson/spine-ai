@@ -15,8 +15,8 @@ type CompareModalProps = {
 }
 
 export function CompareModal({ runs, runInputLabel, runInputDocIds, initialRunId, onClose }: CompareModalProps) {
-  const [compareRunA, setCompareRunA] = useState(initialRunId ?? runs[0]?.id ?? "")
-  const [compareRunB, setCompareRunB] = useState(
+  const [compareRunA, setCompareRunA] = useState<string>(initialRunId ?? runs[0]?.id ?? "")
+  const [compareRunB, setCompareRunB] = useState<string>(
     runs.find((r) => r.id !== initialRunId)?.id ?? runs[1]?.id ?? "",
   )
   const [compareQueryA, setCompareQueryA] = useState("")
