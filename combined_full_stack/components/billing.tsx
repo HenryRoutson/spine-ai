@@ -9,6 +9,7 @@ import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "rec
 import { useStore } from "@/lib/store"
 import { billingSeries, totalSaved, totalUsageFromRuns } from "@/lib/billing"
 import { redirectToCheckout } from "@/lib/stripe-client"
+import { STRIPE_ENABLED } from "@/lib/stripe-enabled"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import {
@@ -143,47 +144,51 @@ export function Billing() {
               </p>
             </div>
             <div className="relative z-10 flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={!!checkoutKey || billingAccount.subscribed || capReached}
-                onClick={() => startCheckout("subscription")}
-              >
-                {checkoutKey === "subscription" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <CreditCard className="h-3.5 w-3.5" />
-                )}
-                {billingAccount.subscribed
-                  ? `Subscribed — ${formatCents(billingAccount.subCentsPerMonth)}/mo`
-                  : `Subscribe ${formatCents(billingAccount.subCentsPerMonth)}/mo`}
-              </Button>
-              {billingAccount.topupOptionsCents.map((amountCents) => {
-                const topupKey = `topup:${amountCents}`
-                const topupCapReached =
-                  billingAccount.totalBilledCents + amountCents > billingAccount.billingCapCents
-                return (
+              {STRIPE_ENABLED && (
+                <>
                   <Button
-                    key={amountCents}
                     type="button"
-                    variant="secondary"
+                    variant="outline"
                     size="sm"
-                    disabled={!!checkoutKey || capReached || topupCapReached}
-                    onClick={() => startCheckout("payment", amountCents)}
-                    title={
-                      capReached
-                        ? "Billing cap reached"
-                        : topupCapReached
-                          ? `Would exceed ${formatCents(billingAccount.billingCapCents)} cap`
-                          : undefined
-                    }
+                    disabled={!!checkoutKey || billingAccount.subscribed || capReached}
+                    onClick={() => startCheckout("subscription")}
                   >
-                    {checkoutKey === topupKey ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                    Top up {formatCents(amountCents)}
+                    {checkoutKey === "subscription" ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <CreditCard className="h-3.5 w-3.5" />
+                    )}
+                    {billingAccount.subscribed
+                      ? `Subscribed — ${formatCents(billingAccount.subCentsPerMonth)}/mo`
+                      : `Subscribe ${formatCents(billingAccount.subCentsPerMonth)}/mo`}
                   </Button>
-                )
-              })}
+                  {billingAccount.topupOptionsCents.map((amountCents) => {
+                    const topupKey = `topup:${amountCents}`
+                    const topupCapReached =
+                      billingAccount.totalBilledCents + amountCents > billingAccount.billingCapCents
+                    return (
+                      <Button
+                        key={amountCents}
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={!!checkoutKey || capReached || topupCapReached}
+                        onClick={() => startCheckout("payment", amountCents)}
+                        title={
+                          capReached
+                            ? "Billing cap reached"
+                            : topupCapReached
+                              ? `Would exceed ${formatCents(billingAccount.billingCapCents)} cap`
+                              : undefined
+                        }
+                      >
+                        {checkoutKey === topupKey ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                        Top up {formatCents(amountCents)}
+                      </Button>
+                    )
+                  })}
+                </>
+              )}
               <Button type="button" variant="ghost" size="sm" onClick={() => refreshBilling().catch(console.error)}>
                 Refresh
               </Button>

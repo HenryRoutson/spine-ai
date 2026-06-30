@@ -2,8 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
 import { type BillingUserKey, confirmCheckoutSession } from "@/lib/server/billing_account";
+import { STRIPE_ENABLED } from "@/lib/stripe-enabled";
 
 export async function POST(req: NextRequest) {
+  if (!STRIPE_ENABLED) return apiError("Stripe is disabled", HTTP.SERVICE_UNAVAILABLE);
   const ctx = await requireAuthStore();
   if (ctx instanceof NextResponse) return ctx;
 

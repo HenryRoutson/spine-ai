@@ -6,8 +6,10 @@ import {
   type BillingUserKey,
   createCheckoutSession,
 } from "@/lib/server/billing_account";
+import { STRIPE_ENABLED } from "@/lib/stripe-enabled";
 
 export async function POST(req: NextRequest) {
+  if (!STRIPE_ENABLED) return apiError("Stripe is disabled", HTTP.UNAVAILABLE);
   const ctx = await requireAuthStore();
   if (ctx instanceof NextResponse) return ctx;
 

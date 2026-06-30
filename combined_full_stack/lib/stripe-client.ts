@@ -1,11 +1,13 @@
 "use client";
 
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
+import { STRIPE_ENABLED } from "@/lib/stripe-enabled";
 
 // AI : browser Stripe.js loader — publishable key is inlined by Next from NEXT_PUBLIC_*.
 let stripePromise: Promise<Stripe | null> | null = null;
 
 export function getStripe(): Promise<Stripe | null> {
+  if (!STRIPE_ENABLED) return Promise.resolve(null);
   const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
   if (!key) throw new Error("NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY missing");
   stripePromise ??= loadStripe(key);
