@@ -71,7 +71,43 @@ function formatChatDate(ts: number): string {
   })
 }
 
-export { formatChatDate }
+function chatMonthKey(ts: number): string {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${d.getMonth()}`
+}
+
+function formatChatMonthYear(ts: number): string {
+  return new Date(ts).toLocaleString(undefined, {
+    month: "long",
+    year: "numeric",
+  })
+}
+
+export type AssistantChatMonthGroup = {
+  monthKey: string
+  monthLabel: string
+  chats: AssistantChatSummary[]
+}
+
+function groupChatsByMonth(chats: AssistantChatSummary[]): AssistantChatMonthGroup[] {
+  const groups: AssistantChatMonthGroup[] = []
+  for (const chat of chats) {
+    const key = chatMonthKey(chat.updatedAt)
+    const last = groups[groups.length - 1]
+    if (last?.monthKey === key) {
+      last.chats.push(chat)
+    } else {
+      groups.push({
+        monthKey: key,
+        monthLabel: formatChatMonthYear(chat.updatedAt),
+        chats: [chat],
+      })
+    }
+  }
+  return groups
+}
+
+export { formatChatDate, groupChatsByMonth }
 
 export function ProjectAssistantProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)

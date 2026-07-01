@@ -14,7 +14,6 @@ import {
   Plus,
   Check,
   Pencil,
-  Trash2,
   ArrowLeft,
   Loader2,
   FolderKanban,
@@ -43,8 +42,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { AnimatedRemovalItem } from "@/components/animated-removal-item"
+import { DeleteButton } from "@/components/delete-button"
+import { useAnimatedRemoval } from "@/lib/use-animated-removal"
 import { SpineLogoBox } from "@/components/spine-mark"
 import { LEGAL } from "@shared/legal/site"
+import type { Project } from "@/lib/types"
 
 // AI : marketing site lives on a separate deploy from the app
 const LANDING_PAGE_URL = "https://withspine.dev/"
@@ -156,6 +159,8 @@ function ProjectSelector() {
   const { setActiveWindow } = useAppShell()
   const [editing, setEditing] = useState<{ id: string; initialName: string } | null>(null)
   const canDelete = projects.length > 1
+  const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
+  const displayProjects = mergeWithGhosts(projects)
 
   function startRename(id: string, name: string) {
     setEditing({ id, initialName: name })
@@ -181,7 +186,7 @@ function ProjectSelector() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-        {projects.map((p) =>
+        {displayProjects.map((p) =>
           editing?.id === p.id ? (
             <ProjectRenameInput
               key={p.id}
@@ -190,8 +195,14 @@ function ProjectSelector() {
               onCancel={() => setEditing(null)}
             />
           ) : (
-          <DropdownMenuItem
+          <AnimatedRemovalItem
             key={p.id}
+            itemId={p.id}
+            isExiting={isExiting(p.id)}
+            as="div"
+            className={cn(isDeleting(p.id) && "opacity-60")}
+          >
+          <DropdownMenuItem
             onMouseEnter={() => prefetchProject(p.id)}
             onFocus={() => prefetchProject(p.id)}
             onClick={() => setActiveProjectId(p.id)}
@@ -221,25 +232,25 @@ function ProjectSelector() {
                   <Pencil className="h-3 w-3" />
                 </Button>
                 {canDelete && (
-                  <Button
+                  <DeleteButton
                     type="button"
                     size="icon"
                     variant="ghost"
-                    className="h-6 w-6 text-destructive opacity-0 hover:text-destructive group-hover:opacity-100"
-                    onClick={(e) => {
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                    deleting={isDeleting(p.id)}
+                    label={`Delete ${p.name}`}
+                    onClick={(e: React.MouseEvent) => {
                       e.stopPropagation()
                       e.preventDefault()
-                      deleteProject(p.id)
+                      void runDelete(p, projects, () => deleteProject(p.id))
                     }}
-                    aria-label={`Delete ${p.name}`}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
+                  />
                 )}
                 {p.id === project.id && <Check className="h-3.5 w-3.5 text-primary" />}
               </div>
             </>
           </DropdownMenuItem>
+          </AnimatedRemovalItem>
           ),
         )}
         </DropdownMenuGroup>

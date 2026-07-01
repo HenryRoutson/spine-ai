@@ -67,7 +67,7 @@ interface StoreState {
   cloneProject: (projectId: string) => Promise<Project>
   resyncExamples: () => Promise<number>
   renameProject: (id: string, name: string) => void
-  deleteProject: (id: string) => void
+  deleteProject: (id: string) => Promise<void>
   project: Project
   // shortcuts that read/write the active project
   models: StructureModel[]
@@ -397,7 +397,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [persistProject])
 
   const deleteProject = useCallback(
-    (id: string) => {
+    (id: string): Promise<void> =>
       apiJson<{ ok: true }>(API_ROUTES.project(id), { method: "DELETE" })
         .then(() => {
           let nextActiveId: string | undefined
@@ -409,8 +409,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           })
           if (nextActiveId) setActiveProjectId(nextActiveId)
         })
-        .catch((err) => setSaveError(err instanceof Error ? err.message : "Failed to delete project"))
-    },
+        .catch((err) => {
+          setSaveError(err instanceof Error ? err.message : "Failed to delete project")
+          throw err
+        }),
     [activeProjectId],
   )
 

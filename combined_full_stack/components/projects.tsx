@@ -9,7 +9,6 @@ import {
   Pencil,
   Plus,
   RefreshCw,
-  Trash2,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { useAppShell } from "@/lib/app-shell"
@@ -21,6 +20,9 @@ import { cn } from "@/lib/utils"
 import { apiJson } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { timeAgo } from "@/lib/time-ago"
+import { AnimatedRemovalItem } from "@/components/animated-removal-item"
+import { DeleteButton } from "@/components/delete-button"
+import { useAnimatedRemoval } from "@/lib/use-animated-removal"
 import type { Project, ProjectId } from "@/lib/types"
 
 type ProjectTemplateSummary = {
@@ -50,6 +52,8 @@ export function Projects() {
   const [editName, setEditName] = useState("")
   const [busy, setBusy] = useState<string | null>(null)
   const [resyncMsg, setResyncMsg] = useState<string | null>(null)
+  const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
+  const displayProjects = mergeWithGhosts(projects)
 
   useEffect(() => {
     let cancelled = false
@@ -151,14 +155,19 @@ export function Projects() {
             The header dropdown is a quick switcher — this page is the full manager.
           </p>
           <ul className="divide-y divide-border rounded-lg border border-border bg-card">
-            {projects.map((p) => {
+            {displayProjects.map((p) => {
               const active = p.id === project.id
+              const deleting = isDeleting(p.id)
+              const exiting = isExiting(p.id)
               return (
-                <li
+                <AnimatedRemovalItem
                   key={p.id}
+                  itemId={p.id}
+                  isExiting={exiting}
                   className={cn(
                     "flex flex-wrap items-center gap-3 px-4 py-3",
                     active && "bg-primary/5",
+                    deleting && "opacity-60",
                   )}
                 >
                   <div className="min-w-0 flex-1">
@@ -222,18 +231,16 @@ export function Projects() {
                       {busy === `clone-${p.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
                     </Button>
                     {projects.length > 1 && (
-                      <Button
+                      <DeleteButton
                         variant="ghost"
                         size="icon-sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => deleteProject(p.id)}
-                        aria-label={`Delete ${p.name}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                        deleting={deleting}
+                        label={`Delete ${p.name}`}
+                        onClick={() => void runDelete(p, projects, () => deleteProject(p.id))}
+                      />
                     )}
                   </div>
-                </li>
+                </AnimatedRemovalItem>
               )
             })}
           </ul>

@@ -25,9 +25,11 @@ import {
   Eye,
   Search,
   TriangleAlert,
-  Trash2,
 } from "lucide-react"
-import type { DocId, DocLabel, InputType } from "@/lib/types"
+import { AnimatedRemovalItem } from "@/components/animated-removal-item"
+import { DeleteButton } from "@/components/delete-button"
+import { useAnimatedRemoval } from "@/lib/use-animated-removal"
+import type { DocLabel, DocRef, InputType } from "@/lib/types"
 
 const TYPE_ICON: Record<InputType, typeof FileText> = {
   pdf: FileText,
@@ -49,6 +51,7 @@ export function Documents() {
   const [dragOver, setDragOver] = useState(false)
   const [lastDedup, setLastDedup] = useState<string | null>(null)
   const [uploadWarning, setUploadWarning] = useState<string | null>(null)
+  const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<DocRef>()
 
   // AI : scroll to and highlight a doc when opened from Inference / Logging links.
   useEffect(() => {
@@ -101,15 +104,15 @@ export function Documents() {
 
   const totalKb = projectDocs.reduce((a, d) => a + d.sizeKb, 0)
 
-  async function handleDelete(docId: DocId, e: React.MouseEvent) {
+  async function handleDelete(doc: DocRef, e: React.MouseEvent) {
     e.stopPropagation()
-    try {
-      await removeDoc(docId, project.id)
-      if (target?.docId === docId) close()
-    } catch (err) {
-      console.error(err)
-    }
+    await runDelete(doc, filtered, async () => {
+      await removeDoc(doc.id, project.id)
+      if (target?.docId === doc.id) close()
+    })
   }
+
+  const displayDocs = mergeWithGhosts(filtered)
 
   return (
     <div className="flex h-full flex-col">
@@ -184,16 +187,21 @@ export function Documents() {
 
       <ScrollArea className="min-h-0 flex-1">
         <ul className="divide-y divide-border p-2">
-          {filtered.map((doc) => {
+          {displayDocs.map((doc) => {
             const Icon = TYPE_ICON[doc.type]
+            const deleting = isDeleting(doc.id)
+            const exiting = isExiting(doc.id)
             return (
-              <li
+              <AnimatedRemovalItem
                 key={doc.id + doc.name}
+                itemId={doc.id}
+                isExiting={exiting}
                 id={`doc-row-${doc.id}`}
                 onClick={() => focusDocId === doc.id && clearFocusDoc()}
                 className={cn(
                   "flex items-center gap-3 rounded-md px-2 py-2.5 hover:bg-accent",
                   focusDocId === doc.id && "bg-primary/10 ring-1 ring-primary/30",
+                  deleting && "opacity-60",
                 )}
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-card">
@@ -237,16 +245,15 @@ export function Documents() {
                 >
                   <Eye className="mr-1.5 h-3.5 w-3.5" /> View
                 </Button>
-                <Button
+                <DeleteButton
                   variant="ghost"
                   size="icon-sm"
-                  className="shrink-0 text-destructive hover:text-destructive"
-                  onClick={(e) => void handleDelete(doc.id, e)}
-                  aria-label={`Delete ${doc.name}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </li>
+                  className="shrink-0"
+                  deleting={deleting}
+                  label={`Delete ${doc.name}`}
+                  onClick={(e: React.MouseEvent) => void handleDelete(doc, e)}
+                />
+              </AnimatedRemovalItem>
             )
           })}
         </ul>

@@ -1,17 +1,22 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Copy, History, Plus, Sparkles, Trash2, X } from "lucide-react"
+import { Check, Copy, History, Plus, Sparkles, X } from "lucide-react"
 import { ProjectAssistant } from "@/components/project-assistant"
 import { Button } from "@/components/ui/button"
+import { AnimatedRemovalItem } from "@/components/animated-removal-item"
+import { DeleteButton } from "@/components/delete-button"
 import {
   formatChatDate,
+  groupChatsByMonth,
   useProjectAssistant,
   useProjectAssistantSession,
+  type AssistantChatSummary,
 } from "@/lib/project-assistant-context"
 import { formatProjectAssistantConversation } from "@/lib/format-project-assistant-copy"
 import { PROJECT_ASSISTANT_INITIAL_MESSAGE } from "@/lib/project-assistant-types"
 import { useStore } from "@/lib/store"
+import { useAnimatedRemoval } from "@/lib/use-animated-removal"
 import { cn } from "@/lib/utils"
 
 export function ProjectAssistantDock() {
@@ -21,7 +26,8 @@ export function ProjectAssistantDock() {
     useProjectAssistantSession(project.id, PROJECT_ASSISTANT_INITIAL_MESSAGE)
   const [copied, setCopied] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<AssistantChatSummary>()
+  const displayChats = mergeWithGhosts(chats)
 
   function copyConversation() {
     const text = formatProjectAssistantConversation(messages, streamingDraft)
@@ -108,46 +114,61 @@ export function ProjectAssistantDock() {
               ) : chats.length === 0 ? (
                 <p className="px-1 font-mono text-[10px] text-muted-foreground">No saved chats yet.</p>
               ) : (
-                <ul className="space-y-1">
-                  {chats.map((chat) => (
-                    <li key={chat.id} className="flex items-stretch gap-1">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          selectChat(chat.id)
-                          setHistoryOpen(false)
-                        }}
-                        className={cn(
-                          "min-w-0 flex-1 rounded-md border px-2 py-1.5 text-left transition-colors",
-                          chat.id === activeChatId
-                            ? "border-primary/40 bg-primary/5"
-                            : "border-transparent hover:border-border hover:bg-background/80",
-                        )}
-                      >
-                        <p className="truncate font-mono text-[10px] text-foreground">{chat.title}</p>
-                        <p className="font-mono text-[9px] text-muted-foreground">
-                          {formatChatDate(chat.updatedAt)} · {chat.messageCount} msgs
-                        </p>
-                      </button>
-                      <Button
-                        type="button"
-                        size="icon-sm"
-                        variant="ghost"
-                        className="shrink-0 text-muted-foreground hover:text-destructive"
-                        disabled={deletingId === chat.id}
-                        aria-label={`Delete chat ${chat.title}`}
-                        title="Delete chat"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setDeletingId(chat.id)
-                          void deleteChat(chat.id).finally(() => setDeletingId(null))
-                        }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </li>
+                <div className="space-y-3">
+                  {groupChatsByMonth(displayChats).map((group) => (
+                    <div key={group.monthKey}>
+                      <p className="sticky top-0 z-10 mb-1.5 border-b border-border/60 bg-secondary/20 px-1 pb-1 font-mono text-[9px] tracking-wider text-muted-foreground">
+                        {group.monthLabel}
+                      </p>
+                      <ul className="space-y-1">
+                        {group.chats.map((chat) => {
+                          const deleting = isDeleting(chat.id)
+                          const exiting = isExiting(chat.id)
+                          return (
+                          <AnimatedRemovalItem
+                            key={chat.id}
+                            itemId={chat.id}
+                            isExiting={exiting}
+                            className={cn("flex items-stretch gap-1", deleting && "opacity-60")}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                selectChat(chat.id)
+                                setHistoryOpen(false)
+                              }}
+                              className={cn(
+                                "min-w-0 flex-1 rounded-md border px-2 py-1.5 text-left transition-colors",
+                                chat.id === activeChatId
+                                  ? "border-primary/40 bg-primary/5"
+                                  : "border-transparent hover:border-border hover:bg-background/80",
+                              )}
+                            >
+                              <p className="truncate font-mono text-[10px] text-foreground">{chat.title}</p>
+                              <p className="font-mono text-[9px] text-muted-foreground">
+                                {formatChatDate(chat.updatedAt)} · {chat.messageCount} msgs
+                              </p>
+                            </button>
+                            <DeleteButton
+                              type="button"
+                              size="icon-sm"
+                              variant="ghost"
+                              className="shrink-0 text-muted-foreground hover:text-destructive"
+                              deleting={deleting}
+                              label={`Delete chat ${chat.title}`}
+                              title="Delete chat"
+                              onClick={(e: React.MouseEvent) => {
+                                e.stopPropagation()
+                                void runDelete(chat, displayChats, () => deleteChat(chat.id))
+                              }}
+                            />
+                          </AnimatedRemovalItem>
+                          )
+                        })}
+                      </ul>
+                    </div>
                   ))}
-                </ul>
+                </div>
               )}
             </div>
           )}
