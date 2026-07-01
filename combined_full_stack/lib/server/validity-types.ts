@@ -13,7 +13,10 @@ export type InvalidKind =
   | "duplicate-output-struct"
   | "state-key-missing"
   | "missing-input-description"
-  | "missing-note";
+  | "missing-note"
+  | "missing-structure"
+  | "code-compile-error"
+  | "json-input-mismatch";
 
 export interface InvalidStep {
   moduleId: ModuleId;
@@ -23,6 +26,7 @@ export interface InvalidStep {
   expectsType?: string;
   upstreamType?: string;
   missingLabel?: string;
+  compileError?: string;
 }
 
 export type InvalidMap = Map<ModuleId, InvalidStep[]>;

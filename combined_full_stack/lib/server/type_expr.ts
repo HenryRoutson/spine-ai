@@ -10,6 +10,7 @@ import type {
 } from "./types";
 
 // AI : canonical type IR — one definition for static checks, zod, pydantic, and codegen.
+// AI : TODO — per-step compile (pyright/tsc from generated stubs); list vs scalar on steps not enforced yet.
 export type PrimName = "text" | "int" | "float" | "bool" | "datetime" | "json";
 
 export type TypeExpr =

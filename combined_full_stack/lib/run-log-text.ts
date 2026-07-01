@@ -20,7 +20,13 @@ export function runLogText(run: PipelineRun): string {
     lines.push("")
     lines.push(`${i + 1}. [${step.status.toUpperCase()}] ${step.label}${step.model ? `  (${step.model})` : ""}  ${step.ms}ms  ${formatCostCents(step.costCents)}`)
 
-    if (step.inputPreview) {
+    if (step.inputPreviewItems?.length) {
+      lines.push(`   Input:`)
+      for (const item of step.inputPreviewItems) {
+        lines.push(`     ── ${item.label} ──`)
+        item.text.split("\n").forEach((l) => lines.push(`     ${l}`))
+      }
+    } else if (step.inputPreview) {
       lines.push(`   Input:`)
       step.inputPreview.split("\n").forEach((l) => lines.push(`     ${l}`))
     }

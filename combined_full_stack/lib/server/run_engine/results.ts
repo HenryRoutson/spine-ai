@@ -36,6 +36,7 @@ export function resultFromCache(m: PipelineModule, cached: StepCacheArtifact, ct
     json,
     docId,
     inputPreview: cached.inputPreview,
+    inputPreviewItems: cached.inputPreviewItems,
   };
 }
 

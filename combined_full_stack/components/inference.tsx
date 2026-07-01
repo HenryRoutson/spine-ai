@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO — per-step cache toggles, run-from-step, and cache probe (see requirements/inference_tab_requirements.md).
 import { useEffect, useMemo, useRef } from "react"
 import {
   FileText,

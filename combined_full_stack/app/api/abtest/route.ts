@@ -10,6 +10,7 @@ const apiLog = logger("api:abtest");
 
 // AI : real A/B benchmark (replaces the setTimeout jitter) — all enabled environments run
 // AI : on the cheap model, the LLM judge scores them. Takes ~1-2 min; the client awaits.
+// AI : TODO — per-step strategy comparison, statistical significance, and pipeline-step-level env pickers.
 // AI : keep in sync with ROUTE_MAX_DURATION_RUNS in lib/server/route-config.ts.
 export const maxDuration = 300;
 

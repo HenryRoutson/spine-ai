@@ -6,6 +6,7 @@ import type { RunCheckpoint } from "../run_checkpoint";
 import type {
   DocId,
   InputDescriptionCheckResult,
+  InputPreviewItem,
   LlmCallRecord,
   ModelId,
   ModuleId,
@@ -46,6 +47,7 @@ export interface ExecResult {
   preview: string;
   json?: string;
   inputPreview?: string;
+  inputPreviewItems?: InputPreviewItem[];
   docId?: DocId;
   llmCalls?: LlmCallRecord[];
 }

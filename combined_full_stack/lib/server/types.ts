@@ -223,6 +223,8 @@ export type InputDescriptionCheckResult = {
   items?: InputDescriptionCheckItem[];
 };
 
+export type InputPreviewItem = { label: string; text: string };
+
 export type StepDescriptionFields = {
   outputPreview?: string;
   inputDescriptionCheck?: InputDescriptionCheckResult;
@@ -240,6 +242,7 @@ export interface RunStep extends Omit<StepDescriptionFields, "outputPreview"> {
   costCents: number;
   savedCostCents?: number; // AI : cache hit — original step cost avoided this run (costCents stays 0)
   inputPreview: string;
+  inputPreviewItems?: InputPreviewItem[];
   outputPreview: string;
   outputJson?: string;
   inputDescription?: string; // AI : snapshot at run time — expected input for this step

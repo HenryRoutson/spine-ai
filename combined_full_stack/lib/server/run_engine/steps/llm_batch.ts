@@ -15,8 +15,12 @@ export async function execLlmBatchStep(m: PipelineModule, ctx: RunCtx, log: RunL
   log.info(`llm-batch step`, { moduleId: m.id, model: stepModel, itemCount: items.length, outStructure: out.name });
   const schema = llmSchema(out, project.models, false);
   const sampleItem = items[0];
-  const sampleUser = `${m.prompt ?? "Process the item."}\n\nITEM:\n${JSON.stringify(sampleItem, null, 2)}`;
-  const samplePrompt = structuredLlmPrompt(sampleUser, schema);
+  const promptFor = (item: unknown) =>
+    structuredLlmPrompt(
+      `${m.prompt ?? "Process the item."}\n\nITEM:\n${JSON.stringify(item, null, 2)}`,
+      schema,
+    );
+  const samplePrompt = promptFor(sampleItem);
   ctx.reportSub?.({ label: "LLM calls", current: 0, total: items.length });
   ctx.stepLlmCalls = [];
   const rows = await llmBatchStructured(
@@ -29,14 +33,20 @@ export async function execLlmBatchStep(m: PipelineModule, ctx: RunCtx, log: RunL
   );
   log.info(`llm-batch complete`, { moduleId: m.id, rows: rows.length });
   const value = rows;
+  const inputPreviewItems =
+    items.length > 1
+      ? items.map((item, i) => ({
+          label: `item ${i + 1}/${items.length}`,
+          text: promptFor(item),
+        }))
+      : undefined;
   return {
     value,
     preview: `${items.length} items → ${value.length} ${out.name}`,
     json: JSON.stringify(value, null, 2),
     inputPreview:
-      items.length > 1
-        ? `${samplePrompt}\n\n… same prompt × ${items.length} items`
-        : samplePrompt,
+      items.length > 1 ? `${items.length} items · browse prompts with ◀ ▶` : samplePrompt,
+    inputPreviewItems,
     llmCalls: ctx.stepLlmCalls,
   };
 }

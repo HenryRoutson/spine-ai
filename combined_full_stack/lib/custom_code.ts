@@ -97,6 +97,23 @@ export function compileCustomFn(code: string): CustomFn {
   return fn as CustomFn;
 }
 
+// AI : static pipeline validation — TS via new Function; Python skipped (needs Pyodide).
+export function tryCompileCustomCodeEntry(
+  entry: ParsedCustomCodeEntry,
+  opts?: { assert?: boolean },
+): string | undefined {
+  const raw = entry.code.trim();
+  if (!raw) return "code is empty";
+  if (entry.language === "python") return undefined; // AI : TODO bug — Pyodide compile check before inference (same as TS tryCompileCustomCodeEntry).
+  const code = opts?.assert ? wrapAssertCode(raw, entry.language) : raw;
+  try {
+    compileCustomFn(code);
+    return undefined;
+  } catch (err) {
+    return err instanceof Error ? err.message : "code does not compile";
+  }
+}
+
 async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     promise,

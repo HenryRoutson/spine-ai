@@ -18,6 +18,8 @@ import type { ModelField, StructureModel } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 export function StructureBuilder() {
+  // AI : TODO bug — structure edits don't re-validate against source doc content or field integrity
+  // AI : (empty names, model/list[model] without ref, duplicate field names); only pipeline I/O is checked.
   const { models, setModels } = useStore()
   const { focusStructureId, clearFocusStructure } = useAppShell()
   const [selectedId, setSelectedId] = useState<string>(models[0]?.id ?? "")

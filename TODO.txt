@@ -14,12 +14,12 @@ Create a pipeline to turn documents into a structure with sections and sub secti
 
 
 please write up a plan to make the type system more generic: remove outIsList as it's not generic and won't scale to other types. How are generics handled? Tree node generic. like how does a set work? ensure you have full type checking using a typed python script or typescript file that you run a linter on , so you can handle generics. i should be able to view that typed file in the UI. please remove inIsList as it's not generic.
+docs/new_type_system_plan.md
 
 
 
 
-
-
+add voice mode to talk to the agent if not already. might be on mobile? just add a prompt
 
 
 

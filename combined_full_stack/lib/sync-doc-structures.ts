@@ -12,6 +12,7 @@ import { repairOrphanModelRefs } from "@/lib/structure-ref"
 import { tabularRowSetsFromContent } from "@/lib/tabular-row-sets"
 import type { DocId, DocRef, StructureModel, StructureModelId } from "@/lib/types"
 
+// AI : TODO bug — after manual structure edits, re-validate inferred models against stored doc text.
 function shapeAlreadyPresent(
   models: StructureModel[],
   root: StructureModel,
@@ -50,6 +51,7 @@ export function mergeInferredStructuresForDoc(
 }
 
 export function modelsChanged(before: StructureModel[], after: StructureModel[]): boolean {
+  // AI : TODO bug — ignores field renames/reorder; doc-shape drift can slip through without re-inference.
   if (before.length !== after.length) return true
   const beforeById = new Map(before.map((m) => [m.id, m]))
   return after.some((m) => {

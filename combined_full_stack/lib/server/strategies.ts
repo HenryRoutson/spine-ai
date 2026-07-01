@@ -81,7 +81,7 @@ async function envSingleLlm(task: BenchTask): Promise<unknown[]> {
 
 
 // 2+3. agent loop — draft, self-validate, critique-and-revise. Shared by claude-code & cheap-agent.
-// AI : TODO placeholder — "claude-code" should spawn a real Claude Code instance with tools;
+// AI : TODO bug — "claude-code" should spawn a real Claude Code / OpenHands instance with tools;
 // AI : the demo runs this same critique loop, just under the claude-code label.
 async function envAgentLoop(task: BenchTask, label: string): Promise<unknown[]> {
   task.log.push(`## ${label} (agent loop)`, "draft → validate → critique → revise");

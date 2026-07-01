@@ -38,6 +38,7 @@ import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
 import type { DocRef, ModuleId, PipelineRun, RunStepStatus } from "@/lib/types"
 import { runLogText } from "@/lib/run-log-text"
 import { IoSection } from "@/components/logging/io-section"
+import { IoPager } from "@/components/logging/io-pager"
 import { filterRuns, RunNotesPreview } from "@/components/logging/run-picker-column"
 import { CompareModal } from "@/components/logging/compare-modal"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
@@ -328,13 +329,28 @@ export function Logging() {
                             }
                             onExpand={() =>
                               setPopup({
-                                text: step.inputPreview,
+                                text:
+                                  step.inputPreviewItems?.length &&
+                                  step.inputPreviewItems.length > 1
+                                    ? step.inputPreviewItems
+                                        .map((item) => `${item.label}\n${item.text}`)
+                                        .join("\n\n")
+                                    : step.inputPreview,
                                 title: `${inTitle} (input) · ${step.label}`,
                                 sourceDocId: stepSourceDoc,
                               })
                             }
                           >
-                            <PromptText text={step.inputPreview} sourceDocId={stepSourceDoc} />
+                            {step.inputPreviewItems && step.inputPreviewItems.length > 1 ? (
+                              <IoPager
+                                items={step.inputPreviewItems}
+                                renderItem={(item) => (
+                                  <PromptText text={item.text} sourceDocId={stepSourceDoc} />
+                                )}
+                              />
+                            ) : (
+                              <PromptText text={step.inputPreview} sourceDocId={stepSourceDoc} />
+                            )}
                           </IoSection>
 
                           {step.serverLogs && step.serverLogs.length > 0 && (

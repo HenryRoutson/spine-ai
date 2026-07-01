@@ -154,6 +154,7 @@ export async function runLinearStepsFrom(
                       : undefined),
                   docId: result.docId,
                   inputPreview: result.inputPreview,
+                  inputPreviewItems: result.inputPreviewItems,
                   costCents: stepCost,
                 },
                 {
@@ -274,6 +275,7 @@ export async function runLinearStepsFrom(
       costCents,
       savedCostCents: status === "cached" && savedCostCents > 0 ? savedCostCents : undefined,
       inputPreview: result.inputPreview ?? defaultInputPreview,
+      inputPreviewItems: result.inputPreviewItems,
       outputPreview: result.preview,
       outputJson: result.json,
       inputDescription: m.inputDescription?.trim() || undefined,

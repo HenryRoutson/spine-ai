@@ -76,13 +76,8 @@ export function findStructureMatchesForDoc(
   }
 
   for (const m of models.filter((x) => x.sourceDocId === doc.id)) {
-    const kind = derived.find((d) => d.model.name === m.name)?.matchKind ?? "object"
-    matches.push({
-      modelId: m.id,
-      modelName: m.name,
-      fieldCount: m.fields.length,
-      matchKind: kind,
-    })
+    const validated = findMatchingStructures(parsed.value, models).find((match) => match.modelId === m.id);
+    if (validated) matches.push(validated);
   }
 
   return {

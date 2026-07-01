@@ -69,6 +69,16 @@ export function invalidStepMessage(
   if (issue.kind === "missing-note") {
     return "annotation / purpose is required — describe what this step does or handles";
   }
+  if (issue.kind === "missing-structure") {
+    const name = modelName(models, issue.expects) ?? issue.expects ?? "structure";
+    return `references missing structure "${name}" — restore the model or rewire this step`;
+  }
+  if (issue.kind === "code-compile-error") {
+    return issue.compileError ?? "code does not compile";
+  }
+  if (issue.kind === "json-input-mismatch") {
+    return "JSON input must use a JSON structure, not the built-in Document model";
+  }
   return "invalid step";
 }
 

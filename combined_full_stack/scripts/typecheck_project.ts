@@ -1,4 +1,5 @@
 #!/usr/bin/env npx tsx
+// AI : TODO — full per-step type system: compile user code + validate example payloads (see docs/new_type_system_plan.md).
 // AI : TODO refactor — add vitest for validity, run-fingerprint, quotation, billing (no runtime tests yet).
 // AI : generate models.py + pipeline_types from a seed/project JSON and optionally run pyright/tsc.
 import { readFileSync, mkdirSync, writeFileSync } from "fs";

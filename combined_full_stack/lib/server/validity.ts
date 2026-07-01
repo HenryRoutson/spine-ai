@@ -8,6 +8,7 @@ import type {
   StructureModelId,
 } from "./types";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
+import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
 import { usesPassthroughStructure, isLlmKind, stepRequiresNote } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
 import { hasQuoteField, listFieldsForWrap, isBuiltinDocumentModel } from "./structure";
@@ -197,6 +198,66 @@ function computeStateKeyInvalid(modules: PipelineModule[]): InvalidMap {
   return invalid;
 }
 
+function computeMissingStructureInvalid(
+  modules: PipelineModule[],
+  models: StructureModel[],
+): InvalidMap {
+  // AI : TODO bug — also flag dangling field.ref, empty field names, and input I/O shape vs uploaded doc sample.
+  const invalid: InvalidMap = new Map();
+  const modelIds = new Set(models.map((m) => m.id));
+  for (const m of modules) {
+    for (const sid of [m.inStructureId, m.outStructureId]) {
+      if (sid && !modelIds.has(sid)) {
+        pushInvalid(invalid, { moduleId: m.id, kind: "missing-structure", expects: sid });
+      }
+    }
+  }
+  return invalid;
+}
+
+function computeJsonInputMismatchInvalid(
+  modules: PipelineModule[],
+  models: StructureModel[],
+): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (const m of modules) {
+    if (m.kind !== "input" || !moduleInputTypes(m).includes("json")) continue;
+    const out = models.find((x) => x.id === m.outStructureId);
+    if (isBuiltinDocumentModel(out)) {
+      pushInvalid(invalid, { moduleId: m.id, kind: "json-input-mismatch" });
+    }
+  }
+  return invalid;
+}
+
+function computeCodeCompileInvalid(modules: PipelineModule[]): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (const m of modules) {
+    const isCodeStep =
+      m.kind === "custom-code" ||
+      m.kind === "assert" ||
+      (m.kind === "transform" && !!m.code?.trim());
+    if (!isCodeStep) continue;
+
+    const entries =
+      m.kind === "assert"
+        ? assertEntriesForModule(m)
+        : customCodeEntriesForModule(m);
+    if (!entries.length) {
+      if (m.kind === "custom-code") {
+        pushInvalid(invalid, { moduleId: m.id, kind: "code-compile-error", compileError: "no code entries" });
+      }
+      continue;
+    }
+    for (const entry of entries) {
+      const err = tryCompileCustomCodeEntry(entry, { assert: m.kind === "assert" });
+      if (err) pushInvalid(invalid, { moduleId: m.id, kind: "code-compile-error", compileError: err });
+    }
+    // AI : TODO — run struct example payloads through code at compile time (not just syntax check).
+  }
+  return invalid;
+}
+
 export type ComputeInvalidOpts = {
   requireInputDescriptions?: boolean;
 };
@@ -360,6 +421,21 @@ export function computeInvalid(
       pushInvalid(invalid, issue);
     }
   }
+  for (const [id, issues] of computeMissingStructureInvalid(modules, models)) {
+    for (const issue of issues) {
+      pushInvalid(invalid, issue);
+    }
+  }
+  for (const [id, issues] of computeJsonInputMismatchInvalid(modules, models)) {
+    for (const issue of issues) {
+      pushInvalid(invalid, issue);
+    }
+  }
+  for (const [id, issues] of computeCodeCompileInvalid(modules)) {
+    for (const issue of issues) {
+      pushInvalid(invalid, issue);
+    }
+  }
 
   return invalid;
 }
@@ -422,12 +498,6 @@ export function computeWarnings(
 
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i];
-    if (m.kind === "input" && moduleInputTypes(m).includes("json")) {
-      const out = models.find((x) => x.id === m.outStructureId);
-      if (isBuiltinDocumentModel(out)) {
-        add(m.id, { moduleId: m.id, kind: "json-input-type" });
-      }
-    }
     if (isLlmKind(m.kind) && !m.prompt?.trim()) {
       add(m.id, { moduleId: m.id, kind: "no-prompt" });
     }

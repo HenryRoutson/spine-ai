@@ -1,6 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
+// AI : TODO — debounced tryCompileCustomCodeEntry markers in Monaco (computeInvalid already blocks run).
 import { useCallback, useEffect, useState } from "react"
 import { Maximize2, X } from "lucide-react"
 import type { editor } from "monaco-editor"

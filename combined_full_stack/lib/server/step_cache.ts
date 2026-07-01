@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "./config";
-import type { DocId, ModelId, ModuleId, Project, ProjectId } from "./types";
+import type { DocId, InputPreviewItem, ModelId, ModuleId, Project, ProjectId } from "./types";
 
 const cacheDir = () => join(dataDir(), "cache");
 const statsPath = () => join(cacheDir(), "_stats.json");
@@ -19,6 +19,7 @@ export type StepCacheArtifact = {
   json?: string;
   docId?: DocId;
   inputPreview?: string;
+  inputPreviewItems?: InputPreviewItem[];
   costCents?: number;
   createdAt?: number;
   meta?: StepCacheMeta;

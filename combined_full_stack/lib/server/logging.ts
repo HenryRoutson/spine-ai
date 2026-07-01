@@ -1,5 +1,6 @@
 import type { ModelId, ModuleKind, PipelineRun, RunId } from "./types";
 
+// AI : TODO — runToHtml / runToMarkdown should emit inputPreviewItems when present (multi-doc / llm-batch).
 export interface RunFilter {
   model?: ModelId;
   kind?: ModuleKind;

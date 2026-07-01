@@ -257,6 +257,7 @@ export function materializeInputDocument(
 }
 
 // AI : map loose runtime values (file text, doc_id) into every field of a pydantic/zod StructureModel.
+// AI : TODO bug — missing/wrong fields get silent defaults at run time; should fail in Structure tab / computeInvalid.
 export function materializeToModel(
   partial: unknown,
   model: StructureModel,

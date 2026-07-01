@@ -61,8 +61,15 @@ export async function execInputStep(m: PipelineModule, ctx: RunCtx, log: RunLogg
     };
   }
   const items = [];
+  const inputPreviewItems: { label: string; text: string }[] = [];
   for (let i = 0; i < docIds.length; i++) {
-    items.push(await materializeDoc(docIds[i]!, i === 0));
+    const docId = docIds[i]!;
+    items.push(await materializeDoc(docId, i === 0));
+    const docName = store.docs().find((d) => d.id === docId)?.name ?? docId;
+    inputPreviewItems.push({
+      label: `${docName} (${i + 1}/${docIds.length})`,
+      text: `${inputTypeLabel(m.inputType)} · ${docId}`,
+    });
   }
   const out = modelById(project.models, m.outStructureId);
   const value =
@@ -70,14 +77,16 @@ export async function execInputStep(m: PipelineModule, ctx: RunCtx, log: RunLogg
       ? items
       : wrapListForOutputStructure(items, out, m.outStructureId);
   ctx.outputs.set(m.id, value);
+  const docNames = docIds.map((id) => store.docs().find((d) => d.id === id)?.name ?? id);
   return {
     value,
     preview: `loaded ${docIds.length} ${inputTypeLabel(m.inputType)} doc(s)${inputUsesVisionOcr(m) ? " · OCR" : ""}`,
     docId: docIds[0],
-    json: JSON.stringify({ doc_ids: docIds }, null, 2),
+    json: JSON.stringify({ doc_ids: docIds, doc_names: docNames }, null, 2),
     inputPreview: inputUsesVisionOcr(m)
       ? `vision OCR · ${lastOcr?.model ?? m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL}${lastOcr?.fromVisionCache ? " · cached" : ""}`
-      : undefined,
+      : `${docIds.length} documents · browse with ◀ ▶`,
+    inputPreviewItems: inputUsesVisionOcr(m) ? undefined : inputPreviewItems,
     llmCalls: inputUsesVisionOcr(m) ? ctx.stepLlmCalls : undefined,
   };
 }
