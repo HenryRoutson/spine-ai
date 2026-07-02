@@ -69,7 +69,9 @@ export async function runPipeline(
     moduleCount: project.modules.length,
   });
 
-  const invalid = computeInvalid(project.modules, project.models);
+  const invalid = computeInvalid(project.modules, project.models, {
+    typeAliases: project.typeAliases ?? [],
+  });
   if (invalid.size > 0) {
     log.error(`pipeline invalid`, { invalidModules: [...invalid.keys()] });
     throw new Error(`pipeline invalid: ${[...invalid.keys()].join(", ")}`);

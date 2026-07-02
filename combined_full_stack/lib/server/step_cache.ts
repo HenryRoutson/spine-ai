@@ -264,6 +264,7 @@ export type StepCacheEntryDetail = StepCacheEntrySummary & {
   moduleLabel?: string;
   outputJson: string;
   docId?: DocId;
+  inputPreviewItems?: InputPreviewItem[];
 };
 
 export function getStepCacheEntryDetail(args: {
@@ -309,5 +310,6 @@ export function getStepCacheEntryDetail(args: {
     sizeBytes: existsSync(path) ? statSync(path).size : 0,
     outputJson: artifactOutputText(artifact),
     docId: artifact.docId,
+    inputPreviewItems: artifact.inputPreviewItems,
   };
 }

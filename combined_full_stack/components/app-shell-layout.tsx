@@ -283,9 +283,9 @@ function ProjectSwitchOverlay({ projectName }: { projectName: string }) {
 
 export function AppShellLayout() {
   const { activeWindow, setActiveWindow } = useAppShell()
-  const { modules, models, project, projectLoading } = useStore()
+  const { modules, models, project, projectLoading, typeAliases } = useStore()
   useSyncProjectDocStructures()
-  const pipelineInvalid = computeInvalidForUi(modules, models).size > 0
+  const pipelineInvalid = computeInvalidForUi(modules, models, typeAliases).size > 0
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)

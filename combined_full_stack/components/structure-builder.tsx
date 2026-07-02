@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Plus, Trash2, Code2, LayoutGrid, FileSpreadsheet, Sparkles, AlertTriangle, Lock, Braces } from "lucide-react"
 import { StructureFieldRow } from "@/components/structure-field-row"
 import { StructureExcelEditor } from "@/components/structure-excel-editor"
@@ -16,6 +16,7 @@ import { useStore, uid } from "@/lib/store"
 import { StructureTypesCodeSection } from "@/components/structure-types-code-section"
 import { TypeBuilderPanel } from "@/components/type-builder-panel"
 import { isLockedStructureModel } from "@/lib/structure"
+import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-validity"
 import { UNSET_TYPE_EXPR } from "@/lib/server/type_expr"
 import type { ModelField, StructureModel, TypeAlias } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -25,8 +26,6 @@ type EditorTarget =
   | { kind: "type"; id: string }
 
 export function StructureBuilder() {
-  // AI : TODO bug — structure edits don't re-validate against source doc content or field integrity
-  // AI : (empty names, model/list[model] without ref, duplicate field names); only pipeline I/O is checked.
   const { models, setModels, typeAliases, setTypeAliases } = useStore()
   const { focusStructureId, clearFocusStructure } = useAppShell()
   const [target, setTarget] = useState<EditorTarget>(() =>
@@ -49,6 +48,14 @@ export function StructureBuilder() {
   const selected = models.find((m) => m.id === selectedStructId) ?? models[0]
   const selectedType = typeAliases.find((t) => t.id === selectedTypeId)
   const selectedLocked = selected ? isLockedStructureModel(selected) : false
+  const structureIssues = useMemo(
+    () => computeStructureIssues(models, typeAliases),
+    [models, typeAliases],
+  )
+  const selectedStructIssues = useMemo(
+    () => (selected ? structureIssues.filter((i) => i.modelId === selected.id) : []),
+    [structureIssues, selected],
+  )
 
   function updateModel(next: StructureModel) {
     if (isLockedStructureModel(next)) return
@@ -353,6 +360,15 @@ export function StructureBuilder() {
               {selected.sourceDocId && (
                 <div className="mb-4">
                   <StructureSourceDocLink sourceDocId={selected.sourceDocId} />
+                </div>
+              )}
+              {selectedStructIssues.length > 0 && (
+                <div className="mb-4 space-y-1 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2">
+                  {selectedStructIssues.map((issue, i) => (
+                    <p key={i} className="font-mono text-[11px] text-destructive">
+                      {structureIssueMessage(issue, models)}
+                    </p>
+                  ))}
                 </div>
               )}
               {selected.fields.length === 0 && (

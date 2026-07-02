@@ -11,12 +11,13 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { PromptText } from "@/components/highlight"
 import { QuoteLinks, quotesFromJson } from "@/components/quote-links"
+import { IoPager } from "@/components/logging/io-pager"
 import { API_ROUTES } from "@/lib/api-routes"
 import { cn } from "@/lib/utils"
 import { timeAgo } from "@/lib/time-ago"
 import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
 import { Database, Maximize2, Search, X, Zap } from "lucide-react"
-import type { DocId, ModelId, ModuleId, ProjectId } from "@/lib/types"
+import type { DocId, InputPreviewItem, ModelId, ModuleId, ProjectId } from "@/lib/types"
 
 type CacheEntryRow = {
   key: string
@@ -37,6 +38,7 @@ type CacheEntryRow = {
 type CacheEntryDetail = CacheEntryRow & {
   outputJson: string
   docId?: DocId
+  inputPreviewItems?: InputPreviewItem[]
 }
 
 function formatBytes(n: number): string {
@@ -333,9 +335,20 @@ export function Cache() {
                           <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
                             Input
                           </h3>
-                          <div className="rounded border border-border bg-muted/20 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
-                            <PromptText text={detail.inputPreview} />
-                          </div>
+                          {detail.inputPreviewItems && detail.inputPreviewItems.length > 1 ? (
+                            <IoPager
+                              items={detail.inputPreviewItems}
+                              renderItem={(item) => (
+                                <div className="rounded border border-border bg-muted/20 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                                  <PromptText text={item.text} />
+                                </div>
+                              )}
+                            />
+                          ) : (
+                            <div className="rounded border border-border bg-muted/20 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                              <PromptText text={detail.inputPreview} />
+                            </div>
+                          )}
                         </section>
                       )}
                       <section>

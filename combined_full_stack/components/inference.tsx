@@ -56,11 +56,12 @@ export function Inference() {
     inferenceInputDocIds,
     setInferenceInputDocIds,
     flushPendingSave,
+    typeAliases,
   } = useStore()
   const { setActiveWindow, openLogging } = useAppShell()
   const { open } = useDocViewer()
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
-  const pipelineInvalid = computeInvalidForUi(modules, models).size > 0
+  const pipelineInvalid = computeInvalidForUi(modules, models, typeAliases).size > 0
   const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
   const insufficientCredit =
     billingAccount != null && billingAccount.balanceCents < minRunBalanceCents

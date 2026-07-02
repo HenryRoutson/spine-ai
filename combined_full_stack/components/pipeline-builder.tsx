@@ -48,13 +48,13 @@ import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 
 export function PipelineBuilder() {
-  const { modules, setModules, models, model: globalModel, runs } = useStore()
+  const { modules, setModules, models, model: globalModel, runs, typeAliases } = useStore()
   const [selectedId, setSelectedId] = useState<string>(modules[0]?.id ?? "")
   const [copied, setCopied] = useState(false)
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
 
   const selected = modules.find((m) => m.id === selectedId)
-  const invalid = computeInvalidForUi(modules, models)
+  const invalid = computeInvalidForUi(modules, models, typeAliases)
   const warnings = computeWarnings(modules, models)
   const warningCount = [...warnings.values()].reduce((n, ws) => n + ws.length, 0)
   const metrics = moduleMetrics(runs)

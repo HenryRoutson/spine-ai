@@ -7,9 +7,11 @@ import {
   type DocId,
   type ModelId,
   type ModuleId,
+  type ModelField,
   type PipelineModule,
   type Project,
   type StructureModel,
+  type TypeAlias,
 } from "@/lib/types"
 
 // AI : derived quote steps are re-generated from upstream LLM config — exclude from the hash.
@@ -32,20 +34,35 @@ function moduleForFingerprint(m: PipelineModule) {
     useOcr: m.useOcr ?? null,
     note: m.note ?? null,
     outIsList: m.outIsList ?? null,
+    inType: m.inType ?? null,
+    outType: m.outType ?? null,
+  }
+}
+
+function fieldForFingerprint(f: ModelField) {
+  return {
+    id: f.id,
+    name: f.name,
+    type: f.type,
+    optional: f.optional,
+    ref: f.ref ?? null,
+    typeExpr: f.typeExpr ?? null,
+    minItems: f.minItems ?? null,
   }
 }
 
 function modelForFingerprint(m: StructureModel) {
   return {
     id: m.id,
-    fields: [...m.fields]
-      .map((f) => ({
-        id: f.id,
-        type: f.type,
-        optional: f.optional,
-        ref: f.ref ?? null,
-      }))
-      .sort((a, b) => a.id.localeCompare(b.id)),
+    fields: [...m.fields].map(fieldForFingerprint).sort((a, b) => a.id.localeCompare(b.id)),
+  }
+}
+
+function typeAliasForFingerprint(t: TypeAlias) {
+  return {
+    id: t.id,
+    name: t.name,
+    expr: t.expr,
   }
 }
 
@@ -76,9 +93,12 @@ export function stableJson(value: unknown): string {
 
 export function buildRunConfigPayload(project: Project, model: ModelId | undefined) {
   return {
-    v: 2 as const,
+    v: 3 as const,
     model: resolveRunModel(project, model),
     models: [...project.models].sort((a, b) => a.id.localeCompare(b.id)).map(modelForFingerprint),
+    typeAliases: [...(project.typeAliases ?? [])]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map(typeAliasForFingerprint),
     modules: [...project.modules]
       .map(moduleForFingerprint)
       .filter((m): m is NonNullable<typeof m> => m != null)
@@ -103,8 +123,10 @@ export function moduleConfigForStepCache(m: PipelineModule) {
 
 // AI : step cache cfg — module execution config plus structure field defs (ids alone miss schema edits).
 export function stepCacheConfigPayload(project: Project, module: PipelineModule, model: ModelId) {
+  const cfg = buildRunConfigPayload(project, model);
   return {
     module: moduleConfigForStepCache(module),
-    models: buildRunConfigPayload(project, model).models,
+    models: cfg.models,
+    typeAliases: cfg.typeAliases,
   }
 }

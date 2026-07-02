@@ -16,7 +16,8 @@ export type InvalidKind =
   | "missing-note"
   | "missing-structure"
   | "code-compile-error"
-  | "json-input-mismatch";
+  | "json-input-mismatch"
+  | "structure-field";
 
 export interface InvalidStep {
   moduleId: ModuleId;
@@ -27,6 +28,7 @@ export interface InvalidStep {
   upstreamType?: string;
   missingLabel?: string;
   compileError?: string;
+  structureMessage?: string;
 }
 
 export type InvalidMap = Map<ModuleId, InvalidStep[]>;

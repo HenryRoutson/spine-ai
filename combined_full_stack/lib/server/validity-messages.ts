@@ -79,6 +79,9 @@ export function invalidStepMessage(
   if (issue.kind === "json-input-mismatch") {
     return "JSON input must use a JSON structure, not the built-in Document model";
   }
+  if (issue.kind === "structure-field") {
+    return issue.structureMessage ?? "structure field error";
+  }
   return "invalid step";
 }
 

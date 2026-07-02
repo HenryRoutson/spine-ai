@@ -11,6 +11,10 @@ there should be example input and expected output files which are used to test t
 this can be a demo for the inference. assert actual output equals expected. you should also write this for every single step, not just the final output to really isolate where things go wrong. write assert inputs and outputs inside the steps themselves.
 
 
+
+there should be checks for duplicate requests, trying not to waste inference. toggle to allow or disallow, and if allowed, the duplicates are collected and then denomalise to avoid extra billing.
+
+
 Create hidden bounaries for when something is pasted and when they edit inside the paste and extract json and python - create as a seperate project
 
 

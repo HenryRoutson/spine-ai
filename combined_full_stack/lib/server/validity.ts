@@ -6,6 +6,7 @@ import type {
   Project,
   StructureModel,
   StructureModelId,
+  TypeAlias,
 } from "./types";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
@@ -45,6 +46,10 @@ import {
   modelName,
 } from "./validity-types";
 import { invalidStepMessage, warningStepMessage, warningStepMessages } from "./validity-messages";
+import {
+  computeStructureIssues,
+  structureIssueMessage,
+} from "@/lib/structure-validity";
 import {
   type IoMismatchFixKind,
   type IoMismatchFixHint,
@@ -284,7 +289,32 @@ function computeCodeCompileInvalid(modules: PipelineModule[]): InvalidMap {
 
 export type ComputeInvalidOpts = {
   requireInputDescriptions?: boolean;
+  typeAliases?: TypeAlias[];
 };
+
+function modulesForStructure(modelId: StructureModelId, modules: PipelineModule[]): ModuleId[] {
+  if (!modelId) return modules[0]?.id ? [modules[0].id] : [];
+  const ids: ModuleId[] = [];
+  for (const m of modules) {
+    if (m.inStructureId === modelId || m.outStructureId === modelId) ids.push(m.id);
+  }
+  return ids.length ? ids : [modules[0]?.id].filter(Boolean) as ModuleId[];
+}
+
+function computeStructureFieldInvalid(
+  modules: PipelineModule[],
+  models: StructureModel[],
+  typeAliases: TypeAlias[] = [],
+): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (const issue of computeStructureIssues(models, typeAliases)) {
+    const message = structureIssueMessage(issue, models);
+    for (const moduleId of modulesForStructure(issue.modelId, modules)) {
+      pushInvalid(invalid, { moduleId, kind: "structure-field", structureMessage: message });
+    }
+  }
+  return invalid;
+}
 
 function computeInputDescriptionInvalid(modules: PipelineModule[]): InvalidMap {
   const invalid: InvalidMap = new Map();
@@ -456,6 +486,11 @@ export function computeInvalid(
     }
   }
   for (const [id, issues] of computeCodeCompileInvalid(modules)) {
+    for (const issue of issues) {
+      pushInvalid(invalid, issue);
+    }
+  }
+  for (const [id, issues] of computeStructureFieldInvalid(modules, models, opts?.typeAliases ?? [])) {
     for (const issue of issues) {
       pushInvalid(invalid, issue);
     }

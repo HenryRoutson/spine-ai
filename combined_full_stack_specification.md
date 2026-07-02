@@ -289,3 +289,6 @@ Default human view when opening JSON in the document viewer.
 # other features
 backend supabase should contain profit per user as a virtual table or concrete table. main expense is llm calls, ensure no user is arbitraging some mispriced llm calls. block account if value goes below -10$. ensure safegard.
 when things are deleted, please improve the animation of them being deleted. i would prefer a deletion loading button and then when database updates it should fade out or collapse
+
+
+there should be checks for duplicate requests, trying not to waste inference. toggle to allow or disallow, and if allowed, the duplicates are collected and then denomalise to avoid extra billing. This should be visualised how many duplicate requests have been caught
