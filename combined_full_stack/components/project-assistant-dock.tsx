@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Copy, History, Plus, Sparkles, X } from "lucide-react"
+import { History, Plus, Sparkles, X } from "lucide-react"
 import { ProjectAssistant } from "@/components/project-assistant"
 import { Button } from "@/components/ui/button"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
@@ -13,7 +13,6 @@ import {
   useProjectAssistantSession,
   type AssistantChatSummary,
 } from "@/lib/project-assistant-context"
-import { formatProjectAssistantConversation } from "@/lib/format-project-assistant-copy"
 import { PROJECT_ASSISTANT_INITIAL_MESSAGE } from "@/lib/project-assistant-types"
 import { useStore } from "@/lib/store"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
@@ -22,20 +21,11 @@ import { cn } from "@/lib/utils"
 export function ProjectAssistantDock() {
   const { open, toggle } = useProjectAssistant()
   const { project } = useStore()
-  const { messages, chats, activeChatId, chatsLoading, selectChat, newChat, deleteChat, streamingDraft } =
+  const { chats, activeChatId, chatsLoading, selectChat, newChat, deleteChat } =
     useProjectAssistantSession(project.id, PROJECT_ASSISTANT_INITIAL_MESSAGE)
-  const [copied, setCopied] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<AssistantChatSummary>()
   const displayChats = mergeWithGhosts(chats)
-
-  function copyConversation() {
-    const text = formatProjectAssistantConversation(messages, streamingDraft)
-    void navigator.clipboard.writeText(text).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    })
-  }
 
   return (
     <>
@@ -80,16 +70,6 @@ export function ProjectAssistantDock() {
                 title="New chat"
               >
                 <Plus className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="ghost"
-                onClick={copyConversation}
-                aria-label="Copy conversation"
-                title="Copy conversation"
-              >
-                {copied ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}
               </Button>
               <Button
                 type="button"

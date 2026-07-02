@@ -73,6 +73,8 @@ type AssistantChatProps<TProposal> = {
   onMessagesChange?: React.Dispatch<React.SetStateAction<AssistantChatMessage<TProposal>[]>>
   /** AI : mirrors in-flight stream for conversation copy while loading */
   onStreamingDraftChange?: React.Dispatch<React.SetStateAction<AssistantStreamingDraft | null>>
+  /** AI : actions tied to the active agent instance (e.g. copy conversation) */
+  headerActions?: ReactNode
 }
 
 export function AssistantChat<TProposal>({
@@ -90,6 +92,7 @@ export function AssistantChat<TProposal>({
   messages: controlledMessages,
   onMessagesChange,
   onStreamingDraftChange,
+  headerActions,
 }: AssistantChatProps<TProposal>) {
   const [internalMessages, setInternalMessages] = useState<AssistantChatMessage<TProposal>[]>([
     { id: uid(), role: "assistant", content: initialMessage },
@@ -235,9 +238,12 @@ export function AssistantChat<TProposal>({
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-primary" />
-          <p className="text-sm font-medium">{title}</p>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+            <p className="truncate text-sm font-medium">{title}</p>
+          </div>
+          {headerActions}
         </div>
         <p className="mt-1 font-mono text-[10px] text-muted-foreground">{subtitle}</p>
       </div>
