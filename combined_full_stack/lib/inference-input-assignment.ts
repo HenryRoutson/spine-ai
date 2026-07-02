@@ -6,18 +6,10 @@ import {
   inputMinCountForModule,
   isMultiDocInputModule,
   orderedInputModules,
+  sortMultiInputDocs,
   type InputDocsAssignment,
 } from "./inference-input-core"
 import { buildDefaultInputDocs, docMatchesInputModule } from "./inference-input-picker"
-
-function sortMultiInputDocs(docs: DocRef[]): DocRef[] {
-  return [...docs].sort((a, b) => {
-    const aTemplate = /template/i.test(a.name) ? 0 : 1
-    const bTemplate = /template/i.test(b.name) ? 0 : 1
-    if (aTemplate !== bTemplate) return aTemplate - bTemplate
-    return a.name.localeCompare(b.name)
-  })
-}
 
 export function resolveInputDocs(
   docs: DocRef[],
@@ -41,10 +33,10 @@ export function resolveInputDocs(
     if (isMultiDocInputModule(m)) {
       const defaultDocs = docsForInputModule(defaults, m.id)
       const seen = new Set(resolved.map((d) => d.id))
-      const merged = sortMultiInputDocs([
-        ...resolved,
-        ...defaultDocs.filter((d) => !seen.has(d.id)),
-      ])
+      const merged = sortMultiInputDocs(
+        [...resolved, ...defaultDocs.filter((d) => !seen.has(d.id))],
+        project.seedDocNames,
+      )
       out[m.id] =
         merged.length >= inputMinCountForModule(m)
           ? merged
@@ -135,14 +127,15 @@ export function buildRunInputDocIds(
   for (let i = 0; i < inputMods.length; i++) {
     const mod = inputMods[i]
     if (isMultiDocInputModule(mod)) {
-      const seeded = scoped
-        .filter(
+      const seeded = sortMultiInputDocs(
+        scoped.filter(
           (d) =>
             d.label === "inference" &&
             !used.has(d.id) &&
             docMatchesInputModule(d, mod),
-        )
-        .map((d) => d.id as DocId)
+        ),
+        seedDocNames ?? project.seedDocNames,
+      ).map((d) => d.id as DocId)
       seeded.forEach((id) => {
         inputQueue.push(id)
         used.add(id)

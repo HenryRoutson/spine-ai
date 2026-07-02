@@ -18,6 +18,10 @@ there should be checks for duplicate requests, trying not to waste inference. to
 Create hidden bounaries for when something is pasted and when they edit inside the paste and extract json and python - create as a seperate project
 
 
+you should always have the ability to view the whole pipeline as code, 
+and if there are no errors in the pipeline there should be none in the code for any langauge.
+
+
 
 
 there should be a copy prompt button which copies the entire pipeline or just whatever you select, maybe a copy prompt tab. including validation errors, any selected logs, documents text includign excel, . everythign a prompt could ever need, 

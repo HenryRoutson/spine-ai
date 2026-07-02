@@ -54,6 +54,22 @@ export function orderedInputModules(modules: PipelineModule[]): PipelineModule[]
   return modules.filter((m) => m.kind === "input")
 }
 
+// AI : multi-doc slots — templates first, then seed doc order, then filename.
+export function sortMultiInputDocs(docs: DocRef[], seedDocNames?: string[]): DocRef[] {
+  const rank = seedDocNames?.length ? new Map(seedDocNames.map((n, i) => [n, i])) : undefined
+  return [...docs].sort((a, b) => {
+    const aTemplate = /template/i.test(a.name) ? 0 : 1
+    const bTemplate = /template/i.test(b.name) ? 0 : 1
+    if (aTemplate !== bTemplate) return aTemplate - bTemplate
+    if (rank) {
+      const ar = rank.get(a.name) ?? 999
+      const br = rank.get(b.name) ?? 999
+      if (ar !== br) return ar - br
+    }
+    return a.name.localeCompare(b.name)
+  })
+}
+
 export function inputTypeLabel(type?: InputTypeSpec): string {
   if (!type) return "file"
   const types = Array.isArray(type) ? type : [type]

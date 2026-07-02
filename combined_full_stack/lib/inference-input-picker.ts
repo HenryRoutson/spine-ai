@@ -3,6 +3,7 @@ import {
   inputTypeLabel,
   inputTypesForModule,
   isMultiDocInputModule,
+  sortMultiInputDocs,
   type InputDocsAssignment,
 } from "@/lib/inference-input-core"
 import { docsForProject } from "@/lib/project-docs"
@@ -85,15 +86,6 @@ export function defaultDocForInputModule(
   return passable[0]
 }
 
-function sortMultiInputDocs(docs: DocRef[]): DocRef[] {
-  return [...docs].sort((a, b) => {
-    const aTemplate = /template/i.test(a.name) ? 0 : 1
-    const bTemplate = /template/i.test(b.name) ? 0 : 1
-    if (aTemplate !== bTemplate) return aTemplate - bTemplate
-    return a.name.localeCompare(b.name)
-  })
-}
-
 export function defaultInputDocsForModules(
   docs: DocRef[],
   project: Project,
@@ -109,7 +101,7 @@ export function defaultInputDocsForModules(
     )
     if (!passable.length) continue
     if (isMultiDocInputModule(m)) {
-      const picked = sortMultiInputDocs(passable)
+      const picked = sortMultiInputDocs(passable, project.seedDocNames)
       picked.forEach((d) => used.add(d.id))
       out[m.id] = picked
       continue

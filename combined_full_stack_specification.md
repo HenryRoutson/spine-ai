@@ -173,7 +173,11 @@ pleaes make an option in settings to make input descriptoins mandatory. make sur
 
 add an export to python button to export the whole pipeline to python, including the front end UI. this should include a lot of supabase info so maybe use sql, plus some derived errors like validation.
 
+there should be an export pipeline to code,
+the pop up showns download buttons button to export to typescript and python.
 
+you should always have the ability to view the whole pipeline as code, 
+and if there are no errors in the pipeline there should be none in the code for any langauge.
 
 # inference
 

@@ -12,6 +12,7 @@ import {
   Check,
   Lock,
   Zap,
+  Download,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
@@ -46,11 +47,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
+import { downloadBlob } from "@/lib/download-blob"
 
 export function PipelineBuilder() {
-  const { modules, setModules, models, model: globalModel, runs, typeAliases } = useStore()
+  const { modules, setModules, models, model: globalModel, runs, typeAliases, project } = useStore()
   const [selectedId, setSelectedId] = useState<string>(modules[0]?.id ?? "")
   const [copied, setCopied] = useState(false)
+  const [exportedTs, setExportedTs] = useState(false)
+  const [exportedPy, setExportedPy] = useState(false)
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
 
   const selected = modules.find((m) => m.id === selectedId)
@@ -140,6 +144,32 @@ export function PipelineBuilder() {
     setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)
   }
 
+  function projectSlug(): string {
+    return (
+      project.name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9._-]+/g, "_")
+        .replace(/^_+|_+$/g, "") || "pipeline"
+    )
+  }
+
+  async function exportPipelineTs() {
+    const { generatePipelineSourceTs } = await import("@/lib/server/pipeline_ts_export")
+    const source = generatePipelineSourceTs({ ...project, modules, models, typeAliases })
+    downloadBlob(`${projectSlug()}_pipeline.ts`, source, "text/typescript")
+    setExportedTs(true)
+    setTimeout(() => setExportedTs(false), COPY_FEEDBACK_MS)
+  }
+
+  async function exportPipelinePy() {
+    const { generatePipelineSourcePy } = await import("@/lib/server/pipeline_py_export")
+    const source = generatePipelineSourcePy({ ...project, modules, models, typeAliases })
+    downloadBlob(`${projectSlug()}_pipeline.py`, source, "text/x-python")
+    setExportedPy(true)
+    setTimeout(() => setExportedPy(false), COPY_FEEDBACK_MS)
+  }
+
   const invalidMap = invalid
   const warningMap = warnings
 
@@ -160,6 +190,26 @@ export function PipelineBuilder() {
               >
                 {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                 {copied ? "Copied" : "Copy prompt"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1.5 text-[10px]"
+                onClick={() => void exportPipelineTs()}
+                title="Download equivalent TypeScript (types, steps, orchestrator)"
+              >
+                {exportedTs ? <Check className="h-3 w-3" /> : <Download className="h-3.5 w-3.5" />}
+                {exportedTs ? "Exported" : "Export TS"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1.5 text-[10px]"
+                onClick={() => void exportPipelinePy()}
+                title="Download equivalent Python (models, steps, orchestrator)"
+              >
+                {exportedPy ? <Check className="h-3 w-3" /> : <Download className="h-3.5 w-3.5" />}
+                {exportedPy ? "Exported" : "Export Py"}
               </Button>
               <span className="text-muted-foreground">
                 {totalMs != null ? `~${formatSecondsShort(totalMs)} avg` : "— avg"}
