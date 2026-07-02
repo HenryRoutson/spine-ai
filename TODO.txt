@@ -4,6 +4,12 @@ rename everything to spine
 name might already be taken https://www.getspine.ai/
 
 
+
+get spine email,
+replace privacy@withspine.dev.  and any other emails.
+
+remove Allow duplicate runs
+
 Create a pipeline to turn documents into a structure with sections and sub section headings . Allow 2.6.3.6 . Create test file and example output file. Ensure it’s not just a single LLM call as this won’t work with longer contexts. input should be markdown and output json structures.
 
 
@@ -21,7 +27,7 @@ Create hidden bounaries for when something is pasted and when they edit inside t
 you should always have the ability to view the whole pipeline as code, 
 and if there are no errors in the pipeline there should be none in the code for any langauge.
 
-
+switch to GLM 5.2
 
 
 there should be a copy prompt button which copies the entire pipeline or just whatever you select, maybe a copy prompt tab. including validation errors, any selected logs, documents text includign excel, . everythign a prompt could ever need, 

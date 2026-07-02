@@ -179,6 +179,17 @@ the pop up showns download buttons button to export to typescript and python.
 you should always have the ability to view the whole pipeline as code, 
 and if there are no errors in the pipeline there should be none in the code for any langauge.
 
+
+# Testing 
+
+please create a testing tab, where you can describe the exact output at each step to precisely pinpoint where a pipeline goes wrong
+test files with end in _testing.json and have a checkbox logo to identify them.
+test files will need to be validated if they even fit the current structure of the pipeline, as the pipeline can change as the tests may need to as well.
+Allow AI to write these testing files, and setup multiple tests. 
+intended to run before the inference tab which is more for demoing.
+Note that as much 'testing' as possible should be done in the design tab.
+A simple check if the input goes into the next step is much easier than designing a full test file.
+
 # inference
 
 All inputs are shown with the option to select documents.
