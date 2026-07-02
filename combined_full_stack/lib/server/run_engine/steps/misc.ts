@@ -6,7 +6,8 @@ import { wrapListForOutputStructure } from "../../structure";
 import { documentContentFrom, documentDocIdFrom, documentFilenameFrom, documentValueFrom } from "../../document_value";
 import { collectQuotes, resolveQuotesValue } from "../../quotation";
 import type { PipelineModule, StructureModelId } from "../../types";
-import { materializeHints, materializeStepOutput, modelById, sourceDocumentBlock } from "../helpers";
+import { resolveOutIsList } from "../../spine_types";
+import { materializeHints, materializeStepOutput, modelById, prevModuleFor, sourceDocumentBlock } from "../helpers";
 import { requireLinearInput } from "../context";
 import { buildAssertResult } from "../results";
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types";
@@ -28,11 +29,13 @@ export async function execCombineStep(m: PipelineModule, ctx: RunCtx, _log: RunL
       : pipelineData ?? [];
     summary[f.name] = isDoc ? documentFilenameFrom(newInput, newDocHints) : Array.isArray(pipelineData) ? `${pipelineData.length} items` : pipelineData;
   }
+  const prev = prevModuleFor(project.modules, ctx.prevModuleId);
   const merged = materializeStepOutput(
     m,
     project,
     value,
     materializeHints(m, ctx, newDocHints.docId, documentContentFrom(newInput)),
+    prev,
   );
   return {
     value: merged,
@@ -56,7 +59,7 @@ export async function execTransformStep(m: PipelineModule, ctx: RunCtx, log: Run
       fallbacks: Math.max(0, entries.length - 1),
     });
     throw new ClientStepPendingError(entries, input, ctx.byLabel);
-  } else if (out && !m.outIsList && Array.isArray(input)) {
+  } else if (out && !resolveOutIsList(m) && Array.isArray(input)) {
     if (input.length === 1 && m.inStructureId === m.outStructureId) {
       value = input[0];
       log.debug(`transform unwrapped single-item list`, { moduleId: m.id });
@@ -70,7 +73,8 @@ export async function execTransformStep(m: PipelineModule, ctx: RunCtx, log: Run
     }
   }
 
-  const merged = out ? materializeStepOutput(m, project, value, materializeHints(m, ctx)) : value;
+  const prev = prevModuleFor(project.modules, ctx.prevModuleId);
+  const merged = out ? materializeStepOutput(m, project, value, materializeHints(m, ctx), prev) : value;
   return { value: merged, preview: "reshaped", json: JSON.stringify(merged, null, 2) };
 }
 

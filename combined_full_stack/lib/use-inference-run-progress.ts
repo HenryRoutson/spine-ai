@@ -8,8 +8,8 @@ import {
   type InputDocsAssignment,
 } from "@/lib/inference-input"
 import { logsByModuleFromRun, partitionLogsByModule } from "@/lib/step-logs"
-import { pipelineRunError } from "@/lib/run-errors"
 import { useRunProgressUi } from "@/lib/use-run-progress-ui"
+import { readAllowDuplicateRuns } from "@/lib/inference-settings"
 import {
   awaitRun,
   isRunBillingError,
@@ -63,12 +63,14 @@ export function useInferenceRunProgress({
   const [debugLogs, setDebugLogs] = useState<JobLogEntry[]>([])
   const [runNotes, setRunNotes] = useState("")
   const [pendingHumanReview, setPendingHumanReview] = useState<ClientStepSpec | null>(null)
+  const [deduped, setDeduped] = useState(false)
   const humanReviewResolveRef = useRef<((decision: "approved" | "rejected") => void) | null>(null)
   const runNotesRef = useRef("")
   const savedNotesRef = useRef<string | undefined>(undefined)
   const logEndRef = useRef<HTMLDivElement>(null)
   const activeJobGenRef = useRef(0)
   const activeJobIdRef = useRef<RunJobId | null>(null)
+  const configChangedDuringRunRef = useRef(false)
   const runsRef = useRef(runs)
   runsRef.current = runs
 
@@ -108,12 +110,13 @@ export function useInferenceRunProgress({
     setDebugLogs([])
     setRunNotes("")
     setPendingHumanReview(null)
+    setDeduped(false)
     humanReviewResolveRef.current = null
     savedNotesRef.current = undefined
     resetInputs?.()
   }
 
-  // AI : drop stale cached step trace when pipeline/structure config changes (not on project switch — handled separately).
+  // AI : drop stale step trace when pipeline/structure/input config changes (not on project switch — handled separately).
   const prevConfigKeyRef = useRef<string | null>(null)
   useEffect(() => {
     if (!configResetKey) return
@@ -122,10 +125,20 @@ export function useInferenceRunProgress({
       return
     }
     if (prevConfigKeyRef.current === configResetKey) return
+    if (phase === "running") {
+      configChangedDuringRunRef.current = true
+      prevConfigKeyRef.current = configResetKey
+      return
+    }
     prevConfigKeyRef.current = configResetKey
-    if (phase === "running") return
     resetRunState()
   }, [configResetKey, phase]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (phase !== "done" || !configChangedDuringRunRef.current) return
+    configChangedDuringRunRef.current = false
+    resetRunState()
+  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function start() {
     if (!allInputsReady || inputsInvalid) return
@@ -146,11 +159,18 @@ export function useInferenceRunProgress({
     try {
       // AI : flush any debounced project save before starting — prevents stale server state causing 400.
       await flushPendingSave?.()
-      const { jobId } = await startRun(projectId, primary, model, rest, byModule)
+      const { jobId } = await startRun(
+        projectId,
+        primary,
+        model,
+        rest,
+        byModule,
+        readAllowDuplicateRuns(),
+      )
       if (jobGen !== activeJobGenRef.current) return
       activeJobIdRef.current = jobId
       refreshBilling().catch(console.error)
-      const { run: finished } = await awaitRun(jobId, {
+      const { run: finished, deduped } = await awaitRun(jobId, {
         onStep: (steps) => {
           if (jobGen !== activeJobGenRef.current || activeJobIdRef.current !== jobId) return
           setStepStates((prev) => mergeStepStates(prev, steps))
@@ -174,12 +194,11 @@ export function useInferenceRunProgress({
       const withNotes = notes ? { ...finished, notes } : finished
       savedNotesRef.current = notes
       setRun(withNotes)
+      setDeduped(!!deduped)
       if (!runsRef.current.some((r) => r.id === finished.id)) {
         addRun(withNotes)
       }
       if (notes) updateRunNotes(finished.id, notes).catch(console.error)
-      const runErr = pipelineRunError(finished)
-      if (runErr) setError(runErr)
       setPhase("done")
     } catch (e) {
       if (jobGen !== activeJobGenRef.current) return
@@ -240,6 +259,7 @@ export function useInferenceRunProgress({
     progressPct,
     waitPhrase,
     pendingHumanReview,
+    deduped,
     resolveHumanReview,
     start,
     reset,

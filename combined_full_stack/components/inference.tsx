@@ -235,23 +235,39 @@ export function Inference() {
                   </Button>
                 </div>
               ) : (
-                <Button
-                  className="w-full"
-                  disabled={
-                    !run.allInputsReady ||
-                    run.inputsInvalid ||
-                    run.phase === "running" ||
-                    insufficientCredit
-                  }
-                  onClick={run.start}
-                >
-                  {run.runButtonBusy ? (
-                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Zap className="mr-1.5 h-4 w-4" />
+                <>
+                  {run.matchingPriorRun && run.phase === "idle" && (
+                    <div className="rounded-lg border border-chart-3/40 bg-chart-3/5 px-4 py-3">
+                      <p className="text-sm text-foreground">
+                        This setup already completed successfully.
+                      </p>
+                      <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                        {timeAgo(run.matchingPriorRun.startedAt)} · {run.matchingPriorRun.id}
+                      </p>
+                      <GoToLoggingButton
+                        className="mt-3"
+                        onClick={() => openLogging(run.matchingPriorRun!.id)}
+                      />
+                    </div>
                   )}
-                  {run.runButtonLabel}
-                </Button>
+                  <Button
+                    className="w-full"
+                    disabled={
+                      !run.allInputsReady ||
+                      run.inputsInvalid ||
+                      run.phase === "running" ||
+                      insufficientCredit
+                    }
+                    onClick={run.start}
+                  >
+                    {run.runButtonBusy ? (
+                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Zap className="mr-1.5 h-4 w-4" />
+                    )}
+                    {run.runButtonLabel}
+                  </Button>
+                </>
               )}
 
               {run.pendingHumanReview && (
@@ -268,6 +284,12 @@ export function Inference() {
               )}
 
               {run.error && run.phase !== "done" && <ErrorBanner text={run.error} />}
+
+              {run.deduped && run.phase === "done" && (
+                <div className="rounded-lg border border-chart-3/40 bg-chart-3/5 px-4 py-3 text-sm text-foreground">
+                  Reused a prior successful run with the same fingerprint — no new inference was billed.
+                </div>
+              )}
 
               {run.phase === "running" && (
                 <InferenceStepTracePanel

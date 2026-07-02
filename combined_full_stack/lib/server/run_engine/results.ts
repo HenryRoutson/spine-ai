@@ -5,7 +5,7 @@ import { StructuredResponseError } from "../openrouter_llm";
 import { documentContentFrom, documentDocIdFrom, documentFilenameFrom } from "../document_value";
 import type { DocId, PipelineModule } from "../types";
 import type { StepCacheArtifact } from "../step_cache";
-import { materializeHints, materializeStepOutput, modelById } from "./helpers";
+import { materializeHints, materializeStepOutput, modelById, prevModuleFor } from "./helpers";
 import type { ExecResult, RunCtx } from "./engine_types";
 
 export function resultFromCache(m: PipelineModule, cached: StepCacheArtifact, ctx: RunCtx): ExecResult {
@@ -86,14 +86,16 @@ export function buildAssertResult(value: unknown): ExecResult {
   };
 }
 
-export function buildClientResult(m: PipelineModule, project: { models: import("../types").StructureModel[] }, ctx: RunCtx, value: unknown): ExecResult {
+export function buildClientResult(m: PipelineModule, project: { models: import("../types").StructureModel[]; modules?: PipelineModule[] }, ctx: RunCtx, value: unknown): ExecResult {
+  const prev = prevModuleFor(ctx.project.modules, ctx.prevModuleId);
+  const projectWithModules = { ...project, modules: ctx.project.modules };
   if (m.kind === "transform") {
     const out = modelById(project.models, m.outStructureId);
-    const merged = out ? materializeStepOutput(m, project, value, materializeHints(m, ctx)) : value;
+    const merged = out ? materializeStepOutput(m, projectWithModules, value, materializeHints(m, ctx), prev) : value;
     return { value: merged, preview: "reshaped", json: JSON.stringify(merged, null, 2) };
   }
   const out = modelById(project.models, m.outStructureId);
-  const merged = out ? materializeStepOutput(m, project, value, materializeHints(m, ctx)) : value;
+  const merged = out ? materializeStepOutput(m, projectWithModules, value, materializeHints(m, ctx), prev) : value;
   const entries = customCodeEntriesForModule(m);
   const primary = entries[0];
   return {

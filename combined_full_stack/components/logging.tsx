@@ -26,7 +26,7 @@ import { descriptionCheckLlmCallsFromStep, llmCallsFromStep } from "@/lib/llm-di
 import { enrichRunModules, modulesFromRunSteps } from "@/lib/pipeline-run-diff"
 import { PipelineCanvas } from "@/components/pipeline-canvas"
 import { PipelineInspector } from "@/components/pipeline-inspector"
-import { computeInvalid } from "@/lib/validity"
+import type { InvalidMap } from "@/lib/validity"
 import { RunNotesEditor } from "@/components/run-notes-editor"
 import { StepServerLogsSection } from "@/components/server-logs-panel"
 import { StepInputDescription, resolveStepInputDescription } from "@/components/step-input-description"
@@ -37,12 +37,14 @@ import { stepIoLabels } from "@/lib/module-kinds"
 import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
 import type { DocRef, ModuleId, PipelineRun, RunStepStatus } from "@/lib/types"
 import { runLogText } from "@/lib/run-log-text"
+import { runLogJson } from "@/lib/run-log-json"
 import { IoSection } from "@/components/logging/io-section"
 import { IoPager } from "@/components/logging/io-pager"
 import { StepLoadedDocSection } from "@/components/step-loaded-doc-section"
 import { filterRuns, RunNotesPreview } from "@/components/logging/run-picker-column"
 import { CompareModal } from "@/components/logging/compare-modal"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
+import { LlmRetryGridSection } from "@/components/logging/llm-retry-grid"
 
 export function Logging() {
   const palette = useStatusPalette()
@@ -54,6 +56,7 @@ export function Logging() {
   const [selectedPipelineModuleId, setSelectedPipelineModuleId] = useState<ModuleId | undefined>()
   const [compareOpen, setCompareOpen] = useState(false)
   const [logCopied, setLogCopied] = useState(false)
+  const [jsonCopied, setJsonCopied] = useState(false)
 
   useEffect(() => {
     if (!focusRunId) return
@@ -91,6 +94,9 @@ export function Logging() {
     )
     return { modules: modulesAtRun, stepStatus }
   }, [active, modules])
+
+  // AI : historical runs use current models for I/O enrichment — skip live invalid overlay (misleading after edits).
+  const runPipelineInvalid = useMemo((): InvalidMap => new Map(), [])
 
   const selectedPipelineModule = runPipeline?.modules.find((m) => m.id === selectedPipelineModuleId)
 
@@ -192,6 +198,43 @@ export function Logging() {
           ) : (
             <ScrollArea className="h-full">
               <div className="space-y-4 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-[10px] uppercase text-muted-foreground">Run</p>
+                    <p className="truncate font-mono text-xs">{active.id}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 gap-1 font-mono text-[10px]"
+                      onClick={() => {
+                        navigator.clipboard.writeText(runLogJson(active))
+                        setJsonCopied(true)
+                        setTimeout(() => setJsonCopied(false), 2000)
+                      }}
+                    >
+                      {jsonCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      {jsonCopied ? "copied" : "copy_json"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 gap-1 font-mono text-[10px]"
+                      onClick={() => {
+                        navigator.clipboard.writeText(runLogText(active))
+                        setLogCopied(true)
+                        setTimeout(() => setLogCopied(false), 2000)
+                      }}
+                    >
+                      {logCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      {logCopied ? "copied" : "copy_log"}
+                    </Button>
+                  </div>
+                </div>
+
                 {activeSourceDocs.map((doc) => (
                   <InputDocumentLink key={doc.id} doc={doc} />
                 ))}
@@ -230,24 +273,10 @@ export function Logging() {
                 )}
 
                 <div>
-                  <div className="mb-2 flex items-center justify-between">
+                  <div className="mb-2">
                     <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       Step trace
                     </h3>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-6 gap-1 font-mono text-[10px]"
-                      onClick={() => {
-                        navigator.clipboard.writeText(runLogText(active))
-                        setLogCopied(true)
-                        setTimeout(() => setLogCopied(false), 2000)
-                      }}
-                    >
-                      {logCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                      {logCopied ? "copied" : "copy_log"}
-                    </Button>
                   </div>
                   <ol className="space-y-1.5">
                     {active.steps.map((step, i) => {
@@ -294,6 +323,19 @@ export function Logging() {
                           </div>
 
                           <StepFailuresSection step={step} className="ml-7" />
+
+                          {(stepLlmCalls.length > 0 || descCheckLlmCalls.length > 0) && (
+                            <LlmRetryGridSection
+                              calls={[...stepLlmCalls, ...descCheckLlmCalls]}
+                              stepSucceeded={step.status !== "error"}
+                              promptCountHint={
+                                step.kind === "llm-batch"
+                                  ? step.inputPreviewItems?.length
+                                  : undefined
+                              }
+                              className="ml-7"
+                            />
+                          )}
 
                           <StepInputDescription
                             description={resolveStepInputDescription(step, modules)}
@@ -460,7 +502,7 @@ export function Logging() {
                           selectedId={selectedPipelineModuleId}
                           onSelect={setSelectedPipelineModuleId}
                           stepStatus={runPipeline.stepStatus}
-                          invalid={computeInvalid(runPipeline.modules, models, { typeAliases })}
+                          invalid={runPipelineInvalid}
                         />
                       </div>
                       <aside className="flex min-h-0 flex-col overflow-hidden">
@@ -472,6 +514,7 @@ export function Logging() {
                         <PipelineInspector
                           module={selectedPipelineModule}
                           models={models}
+                          typeAliases={typeAliases}
                           modules={runPipeline.modules}
                         />
                       </aside>

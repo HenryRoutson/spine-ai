@@ -46,6 +46,7 @@ interface BenchTask {
   taskBrief: string; // AI : from the pipeline's LLM step prompt — not hardcoded per project kind
   out: StructureModel; // the report structure every environment must produce
   models: StructureModel[];
+  typeAliases: Project["typeAliases"];
   model: ModelId;
   ledger: UsageLedger;
   log: string[];
@@ -56,12 +57,12 @@ function fence(lang: string, body: string): string {
 }
 
 function rowSchema(task: BenchTask): ZodType {
-  return llmSchema(task.out, task.models, true);
+  return llmSchema(task.out, task.models, true, task.typeAliases ?? []);
 }
 
 function validRows(task: BenchTask, rows: unknown): unknown[] {
   if (!Array.isArray(rows)) return [];
-  return rows.filter((r) => validate(r, task.out, task.models).ok);
+  return rows.filter((r) => validate(r, task.out, task.models, task.typeAliases ?? []).ok);
 }
 
 function resultKeyFor(strategy: Strategy, model: ModelId, isFallback = false): string {
@@ -89,7 +90,7 @@ async function envAgentLoop(task: BenchTask, label: string): Promise<unknown[]> 
   let rows = (await llmStructured(draftPrompt, rowSchema(task), { model: task.model, ledger: task.ledger })) as unknown[];
   task.log.push("### draft", fence("json", JSON.stringify(rows, null, 2)));
 
-  const failures = (Array.isArray(rows) ? rows : []).map((r) => validate(r, task.out, task.models)).filter((v) => !v.ok);
+  const failures = (Array.isArray(rows) ? rows : []).map((r) => validate(r, task.out, task.models, task.typeAliases ?? [])).filter((v) => !v.ok);
   const critique = `You previously produced this assessment:\n${JSON.stringify(rows, null, 2)}\n\n${
     failures.length ? `Schema errors:\n${failures.map((f) => f.error).join("\n")}` : "Critique it for missed obligations, wrong verdicts, or vague rationales."
   }\nReturn the improved full assessment.\n\nDOCUMENT:\n${task.source}`;
@@ -120,6 +121,7 @@ export async function runStrategy(
     taskBrief: pipelineTaskPrompt(project.modules),
     out: pipelineOutputModel(project),
     models: project.models,
+    typeAliases: project.typeAliases ?? [],
     model,
     ledger,
     log: [`# A/B log — ${strategy.kind} on ${model}`, ""],

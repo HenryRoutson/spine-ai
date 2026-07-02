@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Batch LLM failure grid</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface2: #334155;
+  --border: #475569;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --ok: #22c55e;
+  --retry: #f59e0b;
+  --err: #ef4444;
+  --empty: #334155;
+  --accent: #3b82f6;
+  --radius: 8px;
+  --mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+}
+
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--surface2);
+  background: #0b1220;
+}
+
+header h1 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+header p {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#batchStatus {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+#batchStatus.ok {
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  color: #86efac;
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+}
+
+#batchStatus.fail {
+  background: color-mix(in srgb, var(--err) 18%, transparent);
+  color: #fca5a5;
+  border-color: color-mix(in srgb, var(--err) 35%, transparent);
+}
+
+main {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  overflow: hidden;
+}
+
+aside {
+  padding: 16px;
+  border-right: 1px solid var(--surface2);
+  overflow-y: auto;
+  background: #0b1220;
+}
+
+.control {
+  margin-bottom: 18px;
+}
+
+.control label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.control label span.val {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+button {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+button:hover { background: var(--surface2); }
+
+.stats {
+  margin-top: 20px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--surface2);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.stats dt {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 8px;
+}
+
+.stats dt:first-child { margin-top: 0; }
+
+.stats dd {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.stats dd.ok { color: #86efac; }
+.stats dd.fail { color: #fca5a5; }
+
+.legend {
+  margin-top: 16px;
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.12);
+  flex-shrink: 0;
+}
+
+#panel {
+  padding: 20px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.grid-wrap {
+  background: var(--surface);
+  border: 1px solid var(--surface2);
+  border-radius: var(--radius);
+  padding: 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.grid-wrap.batch-ok {
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--surface2));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.grid-wrap.batch-fail {
+  border-color: color-mix(in srgb, var(--err) 50%, var(--surface2));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--err) 18%, transparent);
+}
+
+.grid-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+th {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+  padding: 0 4px 8px;
+  text-align: center;
+  min-width: 28px;
+}
+
+th.row-label { width: 32px; }
+
+td.row-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  padding-right: 8px;
+  text-align: right;
+}
+
+tr.row-exhausted td.row-label {
+  color: #fca5a5;
+  font-weight: 600;
+}
+
+td.cell-wrap { padding: 2px; }
+
+.cell {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.08);
+  cursor: default;
+  transition: transform 0.1s;
+}
+
+.cell:hover { transform: scale(1.15); }
+
+.cell.ok    { background: color-mix(in srgb, var(--ok) 80%, transparent); }
+.cell.retry { background: color-mix(in srgb, var(--retry) 80%, transparent); }
+.cell.error { background: color-mix(in srgb, var(--err) 80%, transparent); }
+.cell.empty { background: color-mix(in srgb, var(--empty) 60%, transparent); }
+
+.hint {
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Batch LLM failure grid</h1>
+  <p>Simulate a parallel batch call — grid is batch_size × (max_failures + 1)</p>
+  <div id="batchStatus">—</div>
+</header>
+
+<main>
+  <aside>
+    <div class="control">
+      <label>Batch size <span class="val" id="batchVal">20</span></label>
+      <input type="range" id="batchSize" min="4" max="64" value="20" step="1" />
+    </div>
+    <div class="control">
+      <label>Max failures (retries) <span class="val" id="maxFailVal">2</span></label>
+      <input type="range" id="maxFailures" min="0" max="6" value="2" step="1" />
+    </div>
+    <div class="control">
+      <label>Failure rate <span class="val" id="rateVal">20%</span></label>
+      <input type="range" id="failureRate" min="0" max="100" value="20" step="1" />
+    </div>
+    <div class="control">
+      <label>Seed <span class="val" id="seedVal">—</span></label>
+      <input type="range" id="seed" min="1" max="9999" value="42" step="1" />
+    </div>
+    <button id="resample">Resample</button>
+
+    <dl class="stats" id="stats"></dl>
+
+    <div class="legend">
+      <div class="legend-item"><div class="swatch cell ok"></div> ok on this attempt</div>
+      <div class="legend-item"><div class="swatch cell retry"></div> failed, later recovered</div>
+      <div class="legend-item"><div class="swatch cell error"></div> failed (exhausted)</div>
+      <div class="legend-item"><div class="swatch cell empty"></div> no call (already succeeded)</div>
+    </div>
+  </aside>
+
+  <div id="panel">
+    <div class="grid-wrap" id="gridWrap">
+      <div class="grid-title" id="gridTitle"></div>
+      <div id="gridMount"></div>
+      <p class="hint">Each row is one prompt in the batch. Columns are attempt rounds (1st → retries).</p>
+    </div>
+  </div>
+</main>
+
+<script>
+// AI : mulberry32 — small deterministic PRNG for reproducible samples
+function mulberry32(seed) {
+  return function () {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** @typedef {"empty"|"ok"|"error"|"retried"} CellStatus */
+/** @typedef {{ status: CellStatus, detail?: string }} GridCell */
+
+/**
+ * @param {number} batchSize
+ * @param {number} maxFailures
+ * @param {number} failureRate 0..1
+ * @param {() => number} rng
+ * @returns {{ cells: GridCell[][], columnCount: number }}
+ */
+function simulateBatch(batchSize, maxFailures, failureRate, rng) {
+  const columnCount = maxFailures + 1;
+  /** @type {GridCell[][]} */
+  const cells = [];
+
+  for (let pi = 0; pi < batchSize; pi++) {
+    /** @type {GridCell[]} */
+    const row = [];
+    let succeeded = false;
+
+    for (let round = 0; round < columnCount; round++) {
+      if (succeeded) {
+        row.push({ status: "empty" });
+        continue;
+      }
+
+      const failed = rng() < failureRate;
+      if (!failed) {
+        row.push({ status: "ok", detail: `p${pi + 1} attempt ${round + 1}: ok` });
+        succeeded = true;
+      } else if (round === columnCount - 1) {
+        row.push({ status: "error", detail: `p${pi + 1} attempt ${round + 1}: failed (exhausted)` });
+      } else {
+        row.push({ status: "error", detail: `p${pi + 1} attempt ${round + 1}: failed` });
+      }
+    }
+
+    // AI : mark earlier failures as retried when a later attempt succeeds
+    let recovered = false;
+    for (let ri = columnCount - 1; ri >= 0; ri--) {
+      const cell = row[ri];
+      if (cell.status === "ok") recovered = true;
+      else if (cell.status === "error" && recovered) cell.status = "retried";
+    }
+
+    cells.push(row);
+  }
+
+  return { cells, columnCount };
+}
+
+function roundLabel(round) {
+  if (round === 0) return "1st";
+  if (round === 1) return "retry";
+  return `r${round}`;
+}
+
+function renderGrid(batchSize, maxFailures, failureRate, seed) {
+  const rng = mulberry32(seed);
+  const rate = failureRate / 100;
+  const { cells, columnCount } = simulateBatch(batchSize, maxFailures, rate, rng);
+
+  let okFirst = 0;
+  let recovered = 0;
+  let exhausted = 0;
+  let totalAttempts = 0;
+  let totalFailures = 0;
+  /** @type {number[]} */
+  const exhaustedRows = [];
+
+  for (let pi = 0; pi < cells.length; pi++) {
+    const row = cells[pi];
+    const hasOk = row.some((c) => c.status === "ok");
+    const hasRetried = row.some((c) => c.status === "retried");
+    const finalErr = row[row.length - 1].status === "error";
+
+    if (hasOk && !hasRetried) okFirst++;
+    else if (hasOk && hasRetried) recovered++;
+    else if (finalErr) {
+      exhausted++;
+      exhaustedRows.push(pi + 1);
+    }
+
+    for (const c of row) {
+      if (c.status !== "empty") totalAttempts++;
+      if (c.status === "error" || c.status === "retried") totalFailures++;
+    }
+  }
+
+  // AI : batch fails if any prompt exhausts all max-failure retries
+  const batchFailed = exhausted > 0;
+  const exhaustedLabel = exhaustedRows.length
+    ? exhaustedRows.map((n) => `p${n}`).join(", ")
+    : "none";
+
+  const statusEl = document.getElementById("batchStatus");
+  statusEl.className = batchFailed ? "fail" : "ok";
+  statusEl.textContent = batchFailed
+    ? `Batch failed — ${exhausted} prompt${exhausted === 1 ? "" : "s"} exhausted all retries`
+    : "Batch ok — every prompt succeeded within retry limit";
+
+  const gridWrap = document.getElementById("gridWrap");
+  gridWrap.classList.remove("batch-ok", "batch-fail");
+  gridWrap.classList.add(batchFailed ? "batch-fail" : "batch-ok");
+
+  document.getElementById("gridTitle").textContent =
+    `Attempt grid (${batchSize} prompts × ${columnCount} attempts)`;
+
+  document.getElementById("stats").innerHTML = `
+    <dt>Overall</dt>
+    <dd class="${batchFailed ? "fail" : "ok"}">${batchFailed ? "FAILED" : "OK"}</dd>
+    <dt>Grid shape</dt>
+    <dd>${batchSize} × ${columnCount}</dd>
+    <dt>Outcome</dt>
+    <dd>${okFirst} ok first try · ${recovered} recovered · ${exhausted} exhausted</dd>
+    <dt>Exhausted prompts</dt>
+    <dd class="${batchFailed ? "fail" : ""}">${exhaustedLabel}</dd>
+    <dt>Calls</dt>
+    <dd>${totalAttempts} total · ${totalFailures} failures (${(rate * 100).toFixed(0)}% per attempt)</dd>
+    <dt>Prompt success</dt>
+    <dd>${okFirst + recovered}/${batchSize} (${(((okFirst + recovered) / batchSize) * 100).toFixed(0)}%)</dd>
+  `;
+
+  const showRowLabels = batchSize > 1;
+  let html = "<table><thead><tr>";
+  if (showRowLabels) html += '<th class="row-label"></th>';
+  for (let r = 0; r < columnCount; r++) {
+    html += `<th>${roundLabel(r)}</th>`;
+  }
+  html += "</tr></thead><tbody>";
+
+  for (let pi = 0; pi < batchSize; pi++) {
+    const rowExhausted = cells[pi][columnCount - 1].status === "error";
+    html += `<tr${rowExhausted ? ' class="row-exhausted"' : ""}>`;
+    if (showRowLabels) html += `<td class="row-label">p${pi + 1}</td>`;
+    for (let ri = 0; ri < columnCount; ri++) {
+      const cell = cells[pi][ri];
+      const cls = cell.status === "retried" ? "retry" : cell.status;
+      html += `<td class="cell-wrap"><div class="cell ${cls}" title="${cell.detail ?? cell.status}"></div></td>`;
+    }
+    html += "</tr>";
+  }
+  html += "</tbody></table>";
+
+  document.getElementById("gridMount").innerHTML = html;
+}
+
+function readState() {
+  const batchSize = Number(document.getElementById("batchSize").value);
+  const maxFailures = Number(document.getElementById("maxFailures").value);
+  const failureRate = Number(document.getElementById("failureRate").value);
+  const seed = Number(document.getElementById("seed").value);
+
+  document.getElementById("batchVal").textContent = String(batchSize);
+  document.getElementById("maxFailVal").textContent = String(maxFailures);
+  document.getElementById("rateVal").textContent = `${failureRate}%`;
+  document.getElementById("seedVal").textContent = String(seed);
+
+  return { batchSize, maxFailures, failureRate, seed };
+}
+
+function refresh() {
+  const s = readState();
+  renderGrid(s.batchSize, s.maxFailures, s.failureRate, s.seed);
+}
+
+function randomSeed() {
+  document.getElementById("seed").value = String(Math.floor(Math.random() * 9999) + 1);
+}
+
+["batchSize", "maxFailures", "failureRate", "seed"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", refresh);
+});
+
+document.getElementById("resample").addEventListener("click", () => {
+  randomSeed();
+  refresh();
+});
+
+refresh();
+</script>
+</body>
+</html>

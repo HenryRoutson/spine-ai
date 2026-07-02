@@ -15,6 +15,9 @@ import { hasQuoteField, listFieldsForWrap } from "./structure";
 import { stripSharedModels, withSharedModels } from "./builtin_models";
 import { stepSpineOutType, stepEmitsList } from "./type_expr";
 import { migrateModulesSpineTypes } from "./spine_types";
+import { dedupeInferredModelsByShape } from "@/lib/structure-shape";
+import { repairOrphanModelRefs } from "@/lib/structure-ref";
+import { uid } from "../id";
 
 export { stepEmitsList } from "./type_expr";
 
@@ -206,7 +209,12 @@ function normalizeModuleNotes(modules: PipelineModule[]): PipelineModule[] {
 }
 
 export function migrateProjectModules(project: Project): Project {
-  const models = withSharedModels(stripSharedModels(project.models));
+  // AI : match client useSyncProjectDocStructures — dedupe + repair before I/O validation at run time.
+  let models = repairOrphanModelRefs(
+    dedupeInferredModelsByShape(stripSharedModels(project.models)),
+    () => uid<StructureModelId>(),
+  );
+  models = withSharedModels(models);
   const folded = foldDocToTextSteps(project.modules);
   const quoted = syncAutoQuoteSteps(folded, models);
   const placed = syncAssertPlacement(quoted);

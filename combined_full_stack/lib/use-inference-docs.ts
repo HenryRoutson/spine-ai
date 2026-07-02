@@ -156,6 +156,7 @@ export function useInferenceDocs({
 
   return {
     inputDocs,
+    inputDocIdsKey,
     inputIssues,
     pickerModuleId,
     setPickerModuleId,

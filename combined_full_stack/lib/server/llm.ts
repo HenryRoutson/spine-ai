@@ -21,6 +21,8 @@ export interface CallContext {
   ledger: UsageLedger;
   system?: string;
   maxTokens?: number;
+  promptIndex?: number;
+  round?: number;
   llmCalls?: LlmCallRecord[];
   onStructuredFailure?: ChatOptions["onStructuredFailure"];
 }
@@ -31,6 +33,8 @@ function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
     model: slugFor(ctx.model) as unknown as ChatOptions["model"],
     system: ctx.system,
     maxTokens: ctx.maxTokens,
+    promptIndex: ctx.promptIndex,
+    round: ctx.round,
     onUsage: (u) => {
       log?.info(`token usage`, { model: ctx.model, ...u });
       ctx.ledger.recordLlm({ model: ctx.model, ...u });
@@ -42,6 +46,8 @@ function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
         latencyMs,
         status: ok ? "ok" : "error",
         attempt: meta?.attempt,
+        promptIndex: meta?.promptIndex ?? ctx.promptIndex,
+        round: meta?.round ?? ctx.round,
         httpStatus: meta?.httpStatus,
         failureKind: meta?.failureKind ?? (ok ? undefined : "provider"),
         failureDetail: meta?.failureDetail,
@@ -54,6 +60,8 @@ function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
         latencyMs: 0,
         status: "error",
         attempt: detail.attempt,
+        promptIndex: detail.promptIndex ?? ctx.promptIndex,
+        round: detail.round ?? ctx.round ?? detail.attempt - 1,
         failureKind: detail.kind,
         failureDetail: detail.error,
       });

@@ -205,7 +205,7 @@
       "id": "mod_input",
       "kind": "input",
       "label": "GPS Site Catalog",
-      "inputType": "json",
+      "inputType": "text",
       "inputDescription": "JSON catalog of GPS sites with coordinates, names, and facility notes",
       "outStructureId": "m_builtin_document",
       "cached": true,

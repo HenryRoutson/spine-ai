@@ -12,6 +12,7 @@ import { MODULE_META } from "@/lib/types"
 import type {
   PipelineModule,
   StructureModel,
+  TypeAlias,
 } from "@/lib/types"
 import {
   invalidStepMessage,
@@ -44,6 +45,7 @@ export { useLlmSchemaPreview } from "@/components/pipeline-fields/shared"
 type PipelineModuleFieldsProps = {
   module: PipelineModule
   models: StructureModel[]
+  typeAliases?: TypeAlias[]
   modules: PipelineModule[]
   mode: "edit" | "view"
   globalModel?: string
@@ -59,6 +61,7 @@ type PipelineModuleFieldsProps = {
 export function PipelineModuleFields({
   module: selected,
   models,
+  typeAliases = [],
   modules,
   mode,
   globalModel,
@@ -69,7 +72,7 @@ export function PipelineModuleFields({
   onUpdate,
   onFixIoMismatch,
 }: PipelineModuleFieldsProps) {
-  const llmSchemaPreview = useLlmSchemaPreview(selected, models)
+  const llmSchemaPreview = useLlmSchemaPreview(selected, models, typeAliases)
   const edit = mode === "edit" && onUpdate
   const requireInputDescriptions = useBrowserPrefEvent(LOGGING_SETTINGS_CHANGED_EVENT, readRequireInputDescriptions)
   const hasNoPromptWarning = warnings?.some((w) => w.kind === "no-prompt")

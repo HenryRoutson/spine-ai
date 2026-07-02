@@ -227,6 +227,8 @@ export interface LlmCallRecord {
   latencyMs: number;
   status: LlmCallStatus;
   attempt?: number;
+  promptIndex?: number; // AI : llm-batch item index — rows in the retry grid
+  round?: number; // AI : 0-indexed logical attempt column (0 = first try, no retry)
   httpStatus?: number;
   failureKind?: FailureKind;
   failureDetail?: string;

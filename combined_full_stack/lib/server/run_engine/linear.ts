@@ -18,6 +18,7 @@ import {
   recordStepModel,
   stepFailuresFor,
   stepServerLogs,
+  validatesStepOutputAsList,
 } from "./helpers";
 import { applyInputCacheSideEffects, failedStepResult, resultFromCache } from "./results";
 import type { ExecResult, LinearStepParams } from "./engine_types";
@@ -122,7 +123,8 @@ export async function runLinearStepsFrom(
             const validationStructId = usesPassthroughStructure(m.kind) ? m.inStructureId : m.outStructureId;
             const out = modelById(project.models, validationStructId);
             if (out) {
-              const isList = m.outIsList || m.kind === "llm-batch";
+              const prev = i > 0 ? project.modules[i - 1] : undefined;
+              const isList = validatesStepOutputAsList(m, result.value, prev);
               const rawQuotes = isLlmKind(m.kind) && hasQuoteField(out, project.models);
               const check = validateStepOutput(result.value, out, project.models, {
                 isList,

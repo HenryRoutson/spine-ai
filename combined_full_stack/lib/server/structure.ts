@@ -100,8 +100,13 @@ export function structuredLlmPrompt(userPrompt: string, schema: ZodType): string
 }
 
 // AI : JSON Schema preview for the pipeline inspector (Zod llmSchema → JSON Schema).
-export function llmSchemaJson(model: StructureModel, models: StructureModel[], isList: boolean): string {
-  return JSON.stringify(z.toJSONSchema(llmSchema(model, models, isList)), null, 2);
+export function llmSchemaJson(
+  model: StructureModel,
+  models: StructureModel[],
+  isList: boolean,
+  typeAliases: TypeAlias[] = [],
+): string {
+  return JSON.stringify(z.toJSONSchema(llmSchema(model, models, isList, typeAliases)), null, 2);
 }
 
 function llmBuild(

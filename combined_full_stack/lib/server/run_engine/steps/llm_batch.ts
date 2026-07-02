@@ -13,7 +13,7 @@ export async function execLlmBatchStep(m: PipelineModule, ctx: RunCtx, log: RunL
   const data = requireLinearInput(m, ctx);
   const items = Array.isArray(data) ? data : [data];
   log.info(`llm-batch step`, { moduleId: m.id, model: stepModel, itemCount: items.length, outStructure: out.name });
-  const schema = llmSchema(out, project.models, false);
+  const schema = llmSchema(out, project.models, false, project.typeAliases ?? []);
   const sampleItem = items[0];
   const promptFor = (item: unknown) =>
     structuredLlmPrompt(

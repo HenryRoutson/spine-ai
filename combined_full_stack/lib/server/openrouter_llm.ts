@@ -117,11 +117,13 @@ export async function streamStructuredResponse<T>(
     kind: parsed.kind,
     error: parsed.error,
     attempt: 1,
+    promptIndex: opts.promptIndex,
+    round: opts.round ?? 0,
     inputChars: base.length,
     replyChars: raw.length,
     willRetry: true,
   });
-  return getStructuredResponse(prompt, schema, opts, log);
+  return getStructuredResponse(prompt, schema, { ...opts, round: (opts.round ?? 0) + 1 }, log);
 }
 
 export async function getVisionStringResponse(
@@ -143,14 +145,17 @@ export async function getStructuredResponse<T>(
   let lastError = "";
   let lastFailureKind: Extract<FailureKind, "json_parse" | "schema"> | undefined;
   let lastRaw = "";
+  const roundBase = opts.round ?? 0;
   for (let attempt = 0; attempt < 2; attempt++) {
     const willRetry = attempt < 1;
-    log.debug(`structured attempt`, { attempt: attempt + 1, correcting: attempt > 0 });
+    const round = roundBase + attempt;
+    const attemptOpts: ChatOptions = { ...opts, round };
+    log.debug(`structured attempt`, { attempt: attempt + 1, correcting: attempt > 0, round });
     const ask =
       attempt === 0
         ? base
         : `${base}\n\nYour previous reply failed validation:\n${lastError}\nReturn corrected JSON only.`;
-    const raw = await chat(ask, opts, true, log);
+    const raw = await chat(ask, attemptOpts, true, log);
     lastRaw = extractJson(raw);
     const parsed = parseStructured(raw, schema);
     if (parsed.ok) {
@@ -177,6 +182,8 @@ export async function getStructuredResponse<T>(
       kind: parsed.kind,
       error: lastError,
       attempt: attempt + 1,
+      promptIndex: opts.promptIndex,
+      round,
       inputChars: ask.length,
       replyChars: raw.length,
       willRetry,
@@ -200,20 +207,36 @@ export async function getStructuredResponsesParallel<T>(
   if (prompts.length === 1) return [await getStructuredResponse(prompts[0], schema, opts, log)];
 
   const bases = prompts.map((p) => structuredLlmPrompt(p, schema));
-  const raws = await parallelChat(bases, opts, true, log);
+  const raws = await parallelChat(bases, { ...opts, round: opts.round ?? 0 }, true, log);
   const out: T[] = new Array(prompts.length);
   const retry: number[] = [];
 
   for (const { index, content } of raws) {
     const parsed = parseStructured(content, schema);
     if (parsed.ok) out[index] = parsed.data;
-    else retry.push(index);
+    else {
+      retry.push(index);
+      opts.onStructuredFailure?.({
+        kind: parsed.kind,
+        error: parsed.error,
+        attempt: 1,
+        promptIndex: index,
+        round: opts.round ?? 0,
+        inputChars: bases[index]!.length,
+        replyChars: content.length,
+        willRetry: true,
+      });
+    }
   }
 
   await Promise.all(
     retry.map(async (index) => {
       log.warn(`parallel item retry`, { index, total: prompts.length });
-      out[index] = await getStructuredResponse(prompts[index], schema, opts, log);
+      out[index] = await getStructuredResponse(prompts[index]!, schema, {
+        ...opts,
+        promptIndex: index,
+        round: (opts.round ?? 0) + 1,
+      }, log);
     }),
   );
 

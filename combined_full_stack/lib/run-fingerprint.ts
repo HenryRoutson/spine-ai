@@ -2,6 +2,7 @@
 // AI : TODO refactor — vitest target: fingerprint stability (pairs with lib/server/run_fingerprint.ts).
 import { orderedInputModules } from "@/lib/inference-input"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
+import { fieldToTypeExpr } from "@/lib/server/type_expr"
 import {
   DEFAULT_MODEL,
   type DocId,
@@ -9,7 +10,9 @@ import {
   type ModuleId,
   type ModelField,
   type PipelineModule,
+  type PipelineRun,
   type Project,
+  type RunFingerprint,
   type StructureModel,
   type TypeAlias,
 } from "@/lib/types"
@@ -43,11 +46,10 @@ function fieldForFingerprint(f: ModelField) {
   return {
     id: f.id,
     name: f.name,
-    type: f.type,
     optional: f.optional,
-    ref: f.ref ?? null,
-    typeExpr: f.typeExpr ?? null,
     minItems: f.minItems ?? null,
+    // AI : canonical type — typeExpr wins over legacy type/ref so cache keys track schema edits.
+    expr: fieldToTypeExpr(f),
   }
 }
 
@@ -93,7 +95,7 @@ export function stableJson(value: unknown): string {
 
 export function buildRunConfigPayload(project: Project, model: ModelId | undefined) {
   return {
-    v: 3 as const,
+    v: 4 as const,
     model: resolveRunModel(project, model),
     models: [...project.models].sort((a, b) => a.id.localeCompare(b.id)).map(modelForFingerprint),
     typeAliases: [...(project.typeAliases ?? [])]
@@ -129,4 +131,38 @@ export function stepCacheConfigPayload(project: Project, module: PipelineModule,
     models: cfg.models,
     typeAliases: cfg.typeAliases,
   }
+}
+
+// AI : browser-side fingerprint — matches server run_fingerprint.ts hash for prior-run detection.
+export async function computeRunFingerprintClient(
+  project: Project,
+  model: ModelId | undefined,
+  inputDocIds: DocId[],
+): Promise<RunFingerprint> {
+  const json = stableJson(buildRunFingerprintPayload(project, model, inputDocIds))
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(json))
+  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("")
+  return `runfp_${hex.slice(0, 24)}` as RunFingerprint
+}
+
+// AI : browser-side prior-run match — mirrors server findMatchingRun (stored fp + legacy recompute).
+export async function findMatchingRunClient(
+  runs: PipelineRun[],
+  project: Project,
+  model: ModelId | undefined,
+  inputDocIds: DocId[],
+): Promise<PipelineRun | null> {
+  const fingerprint = await computeRunFingerprintClient(project, model, inputDocIds)
+  const byColumn = runs.find((r) => r.status === "ok" && r.fingerprint === fingerprint)
+  if (byColumn) return byColumn
+
+  const resolvedModel = resolveRunModel(project, model)
+  for (const r of runs) {
+    if (r.status !== "ok") continue
+    const ids = r.inputDocIds?.length ? r.inputDocIds : []
+    if (!ids.length) continue
+    if ((await computeRunFingerprintClient(project, resolvedModel, ids)) === fingerprint) return r
+    if (r.model && (await computeRunFingerprintClient(project, r.model, ids)) === fingerprint) return r
+  }
+  return null
 }

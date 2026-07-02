@@ -1,8 +1,10 @@
-import { isLlmKind } from "@/lib/module-kinds";
+import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds";
 import { failuresFromLlmCalls } from "@/lib/llm-distribution";
 import type { JobLogEntry } from "@/lib/run-types";
 import { MAX_STEP_LOGS } from "../log_limits";
 import { materializeToModel } from "../structure";
+import { resolveOutIsList } from "../spine_types";
+import { stepEmitsList } from "../type_expr";
 import {
   DEFAULT_VISION_DOC_PARSE_MODEL,
   inputUsesVisionOcr,
@@ -36,15 +38,37 @@ export function materializeHints(m: PipelineModule, ctx: RunCtx, docId?: DocId, 
   };
 }
 
+// AI : passthrough steps inherit list-ness from upstream / runtime value — outIsList may be stripped by spine migration.
+export function validatesStepOutputAsList(
+  m: PipelineModule,
+  value: unknown,
+  prev?: PipelineModule,
+): boolean {
+  if (resolveOutIsList(m)) return true;
+  if (usesPassthroughStructure(m.kind)) {
+    if (Array.isArray(value)) return true;
+    if (prev && stepEmitsList(prev)) return true;
+  }
+  return false;
+}
+
+export function prevModuleFor(
+  modules: PipelineModule[],
+  prevModuleId?: ModuleId,
+): PipelineModule | undefined {
+  return prevModuleId ? modules.find((mod) => mod.id === prevModuleId) : undefined;
+}
+
 export function materializeStepOutput(
   m: PipelineModule,
-  project: { models: StructureModel[] },
+  project: { models: StructureModel[]; modules?: PipelineModule[] },
   partial: unknown,
   hints: MaterializeHints,
+  prev?: PipelineModule,
 ): unknown {
   const out = modelById(project.models, m.outStructureId);
   if (!out) return partial;
-  const isList = m.outIsList || m.kind === "llm-batch";
+  const isList = validatesStepOutputAsList(m, partial, prev);
   if (isList) {
     const items = Array.isArray(partial) ? partial : partial == null ? [] : [partial];
     return items.map((item) => materializeToModel(item, out, project.models, hints));

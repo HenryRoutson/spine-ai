@@ -1,6 +1,6 @@
 "use client"
 
-// AI : TODO — IoPager for inputPreviewItems (same as logging.tsx); cache detail still dumps flat inputPreview.
+// AI : TODO — run list rows still use flat inputPreview; detail modal uses IoPager for multi-file inputs.
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import { useStore } from "@/lib/store"

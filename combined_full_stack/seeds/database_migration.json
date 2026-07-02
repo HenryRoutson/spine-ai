@@ -194,7 +194,7 @@
       "id": "mod_input_mapping",
       "kind": "input",
       "label": "Field Mapping Input",
-      "inputType": "json",
+      "inputType": "text",
       "inputNameContains": "field_mapping",
       "inputDescription": "JSON field-mapping spec — source columns, transforms, defaults, and target paths",
       "outStructureId": "m_builtin_document",

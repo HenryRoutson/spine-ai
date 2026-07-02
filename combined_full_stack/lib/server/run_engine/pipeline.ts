@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { invariant } from "@/lib/assert";
+import { usesPassthroughStructure } from "@/lib/module-kinds";
 import { uid } from "../../id";
 import { finalizeRunMetrics } from "../../run-metrics";
 import {
@@ -15,7 +16,8 @@ import { fileWriteHelper } from "../file_write_helper";
 import { collectLogsDuring, withStepModuleContext } from "../job_log_sink";
 import { runToHtml } from "../logging";
 import { runLogger } from "../server_logger";
-import { computeInvalid, migrateProjectModules } from "../validity";
+import { computeInvalid, formatInvalidMapErrors, migrateProjectModules } from "../validity";
+import { withSharedModels } from "../builtin_models";
 import {
   DEFAULT_MODEL,
   type DocId,
@@ -33,11 +35,11 @@ import type { RunCheckpoint } from "../run_checkpoint";
 import { computeRunFingerprint, buildRunInputDocIds, stepCacheKey } from "../run_fingerprint";
 import { writeStepCache } from "../step_cache";
 import { validateStepOutput } from "../structure";
+import { modelById, recordStepModel, stepFailuresFor, stepServerLogs, validatesStepOutputAsList } from "./helpers";
 import { persistArtifacts, persistCustomCodeArtifacts } from "./artifacts";
 import { restoreCtx } from "./context";
 import { createWriteLive } from "./live";
 import { runLinearStepsFrom } from "./linear";
-import { modelById, recordStepModel, stepFailuresFor, stepServerLogs } from "./helpers";
 import { buildAssertResult, buildClientResult, buildHumanReviewResult, failedStepResult } from "./results";
 import type { ClientStepResume, RunCtx, RunOptions } from "./engine_types";
 
@@ -73,8 +75,9 @@ export async function runPipeline(
     typeAliases: project.typeAliases ?? [],
   });
   if (invalid.size > 0) {
-    log.error(`pipeline invalid`, { invalidModules: [...invalid.keys()] });
-    throw new Error(`pipeline invalid: ${[...invalid.keys()].join(", ")}`);
+    const detail = formatInvalidMapErrors(invalid, project.modules, withSharedModels(project.models));
+    log.error(`pipeline invalid`, { invalidModules: [...invalid.keys()], detail });
+    throw new Error(detail || `pipeline invalid: ${[...invalid.keys()].join(", ")}`);
   }
 
   const fingerprintInputDocIds =
@@ -252,7 +255,9 @@ export async function resumeRunPipeline(
       log.info(`client step resume`, { moduleId: m.id, kind: m.kind });
 
       for (const entry of opts.clientLogs ?? []) {
-        log[entry.level === "error" ? "error" : entry.level === "warn" ? "warn" : "info"](entry.line, {
+        const level =
+          entry.level === "error" && (entry.tag === "assert" || entry.tag === "custom-code") ? "warn" : entry.level;
+        log[level === "error" ? "error" : level === "warn" ? "warn" : "info"](entry.line, {
           moduleId: m.id,
           tag: entry.tag,
         });
@@ -266,9 +271,11 @@ export async function resumeRunPipeline(
             : m.kind === "human-review"
               ? buildHumanReviewResult(clientStep.output)
               : buildClientResult(m, project, ctx, clientStep.output);
-        const out = modelById(project.models, m.outStructureId);
+        const validationStructId = usesPassthroughStructure(m.kind) ? m.inStructureId : m.outStructureId;
+        const out = modelById(project.models, validationStructId);
         if (out) {
-          const isList = m.outIsList || m.kind === "llm-batch";
+          const prev = checkpoint.stepIndex > 0 ? project.modules[checkpoint.stepIndex - 1] : undefined;
+          const isList = validatesStepOutputAsList(m, result.value, prev);
           const check = validateStepOutput(result.value, out, project.models, {
             isList,
             rawQuotes: false,
@@ -288,7 +295,7 @@ export async function resumeRunPipeline(
       } catch (err) {
         status = "error";
         result = failedStepResult(err, m, ctx, result);
-        log.error(`client step failed`, { moduleId: m.id, error: (err as Error).message, failedJson: result.json });
+        log.warn(`client step failed`, { moduleId: m.id, error: (err as Error).message, failedJson: result.json });
       }
 
       log.info(`step finished`, {

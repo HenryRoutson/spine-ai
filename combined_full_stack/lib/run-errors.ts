@@ -101,6 +101,17 @@ function friendlyStepError(stepLabel: string, raw: string): RunErrorDisplay {
     }
   }
 
+  if (/assertEqual failed/i.test(raw) || /assertDeepEqual failed/i.test(raw) || /assert returned false/i.test(raw)) {
+    const labelMatch = raw.match(/assertEqual failed for "([^"]+)"/i)
+    const check = labelMatch?.[1] ?? "expected output"
+    return {
+      title: `"${stepLabel}" check failed`,
+      message: `The "${check}" assertion did not match. Review the step trace in Logging for the failing check and input snapshot.`,
+      detail: raw,
+      stepLabel,
+    }
+  }
+
   if (/custom code failed/i.test(raw)) {
     return {
       title: `"${stepLabel}" custom logic failed`,

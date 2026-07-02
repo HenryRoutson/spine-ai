@@ -1,5 +1,5 @@
 import { validate } from "@/lib/structure"
-import type { StructureModel, StructureModelId } from "@/lib/types"
+import type { StructureModel, StructureModelId, TypeAlias } from "@/lib/types"
 
 export type StructureMatchKind = "object" | "list"
 
@@ -14,13 +14,14 @@ export type StructureMatch = {
 export function findMatchingStructures(
   value: unknown,
   models: StructureModel[],
+  typeAliases: TypeAlias[] = [],
 ): StructureMatch[] {
   const matches: StructureMatch[] = []
 
   for (const model of models) {
     if (Array.isArray(value)) {
       if (value.length === 0) continue
-      const allOk = value.every((row) => validate(row, model, models).ok)
+      const allOk = value.every((row) => validate(row, model, models, typeAliases).ok)
       if (allOk) {
         matches.push({
           modelId: model.id,
@@ -32,7 +33,7 @@ export function findMatchingStructures(
       continue
     }
 
-    if (validate(value, model, models).ok) {
+    if (validate(value, model, models, typeAliases).ok) {
       matches.push({
         modelId: model.id,
         modelName: model.name,

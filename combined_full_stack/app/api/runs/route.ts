@@ -4,7 +4,7 @@ import { HTTP, unknownDoc, unknownProject } from "@/lib/server/api-errors";
 import { assertCanStartRun, billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
-import { computeRunFingerprintForRequest } from "@/lib/server/run_fingerprint";
+import { computeRunFingerprintForRequest, findMatchingRun } from "@/lib/server/run_fingerprint";
 import {
   MAX_CONCURRENT_RUNS_PER_USER,
   countActiveJobs,
@@ -44,6 +44,7 @@ interface RunRequest {
   inputDocIds?: DocId[];
   inputDocsByModule?: Partial<Record<ModuleId, DocId[]>>;
   model?: ModelId;
+  allowDuplicateRuns?: boolean;
 }
 
 export async function POST(req: NextRequest) {
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
   if (ctx instanceof NextResponse) return ctx;
   const { auth, store } = ctx;
 
-  const { projectId, inputDocId, inputDocIds, inputDocsByModule, model } = (await req.json()) as RunRequest;
+  const { projectId, inputDocId, inputDocIds, inputDocsByModule, model, allowDuplicateRuns } = (await req.json()) as RunRequest;
   apiLog.info(`POST /api/runs`, { projectId, inputDocId, inputDocIds, inputDocsByModule, model, ownerId: auth.userId });
 
   if (!store.project(projectId)) {
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest) {
   }
 
   const resolvedByModule = inputDocsByModuleFromAssignment(inputModules, assignment);
-  const { fingerprint, inputDocIds: fingerprintInputDocIds } = computeRunFingerprintForRequest(
+  const { fingerprint, inputDocIds: fingerprintInputDocIds, project: migratedProject } = computeRunFingerprintForRequest(
     store,
     project,
     model,
@@ -149,6 +150,14 @@ export async function POST(req: NextRequest) {
     await withJobLogging(auth.userId, jobId, jobDb, async () => {
       apiLog.info(`after() pipeline starting`, { jobId, projectId, inputDocId, model });
       try {
+        if (!allowDuplicateRuns) {
+          const cached = findMatchingRun(store, migratedProject, projectId, fingerprint, model);
+          if (cached) {
+            apiLog.info(`run deduped — reusing prior ok run`, { jobId, cachedRunId: cached.id, fingerprint });
+            await finishJob(auth.userId, jobId, { run: cached, deduped: true, cachedRunId: cached.id }, jobDb);
+            return;
+          }
+        }
         const run = await runPipeline(store, projectId, inputDocId, {
           model,
           inputDocIds,

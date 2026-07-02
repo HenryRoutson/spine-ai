@@ -8,6 +8,8 @@ import { spawnSync } from "child_process";
 import { loadProjectSeed } from "../lib/server/seed";
 import { generatePipelineTypes } from "../lib/server/type_codegen";
 import { computeInvalid, invalidIssuesForModule } from "../lib/server/validity";
+import { invalidStepMessage } from "../lib/server/validity-messages";
+import { withSharedModels } from "../lib/server/builtin_models";
 
 const args = process.argv.slice(2);
 const jsonPath = args.find((a) => !a.startsWith("-"));
@@ -53,13 +55,18 @@ writeFileSync(join(outDir, "pyrightconfig.json"), JSON.stringify(pyrightconfig, 
 const invalid = computeInvalid(project.modules, project.models, {
   typeAliases: project.typeAliases ?? [],
 });
+const modelsForMessages = withSharedModels(project.models);
 let staticErrors = 0;
 console.log(`\n=== static pipeline type errors (${project.name}) ===\n`);
 for (const m of project.modules) {
   const issues = invalidIssuesForModule(invalid, m.id);
   for (const issue of issues) {
     staticErrors++;
-    console.log(`[${m.label}] (${m.kind}) ${issue.kind}: ${issue.expectsType ?? issue.missingLabel ?? issue.expects ?? ""}`);
+    const msg =
+      issue.kind === "structure-field"
+        ? (issue.structureMessage ?? "structure field error")
+        : invalidStepMessage(issue, modelsForMessages, project.modules);
+    console.log(`[${m.label}] (${m.kind}) ${issue.kind}: ${msg}`);
   }
 }
 if (staticErrors === 0) console.log("(none)");

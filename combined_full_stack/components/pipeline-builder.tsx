@@ -15,7 +15,7 @@ import {
 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
-import { computeWarnings, ioMismatchInspectorFix, invalidForModule, invalidIssuesForModule, prevModuleId, type IoMismatchFixKind } from "@/lib/validity"
+import { computeWarnings, formatInvalidMapErrors, ioMismatchInspectorFix, invalidForModule, invalidIssuesForModule, prevModuleId, type IoMismatchFixKind } from "@/lib/validity"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import { useRerenderOnEvent } from "@/lib/use-browser-pref-event"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
@@ -131,7 +131,11 @@ export function PipelineBuilder() {
 
   async function copyPipelineJson() {
     const json = JSON.stringify({ models, modules }, null, 2)
-    await navigator.clipboard.writeText(json)
+    const validationErrors = formatInvalidMapErrors(invalid, modules, models)
+    const errorsBlock = validationErrors.trim()
+      ? `\n\nCurrent pipeline validation errors:\n${validationErrors}\n`
+      : "\n\nCurrent pipeline: valid (no I/O errors).\n"
+    await navigator.clipboard.writeText(`${json}${errorsBlock}`)
     setCopied(true)
     setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)
   }
@@ -248,6 +252,7 @@ export function PipelineBuilder() {
                 <PipelineModuleFields
                   module={selected}
                   models={models}
+                  typeAliases={typeAliases}
                   modules={modules}
                   mode="edit"
                   globalModel={globalModel}

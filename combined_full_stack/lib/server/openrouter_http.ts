@@ -38,6 +38,8 @@ export interface ChatOptions {
   system?: string;
   temperature?: number;
   maxTokens?: number;
+  promptIndex?: number;
+  round?: number;
   onUsage?: (usage: RawUsage) => void;
   // AI : fired after every HTTP round-trip (ok or failed) for length + latency distributions.
   onRoundTrip?: (
@@ -47,6 +49,8 @@ export interface ChatOptions {
     latencyMs: number,
     meta?: {
       attempt: number;
+      promptIndex?: number;
+      round?: number;
       httpStatus?: number;
       willRetry?: boolean;
       failureKind?: FailureKind;
@@ -58,6 +62,8 @@ export interface ChatOptions {
     kind: Extract<FailureKind, "json_parse" | "schema">;
     error: string;
     attempt: number;
+    promptIndex?: number;
+    round?: number;
     inputChars: number;
     replyChars: number;
     willRetry: boolean;
@@ -241,6 +247,20 @@ async function httpPost(
   return { res: res as unknown as Response, latencyMs: Date.now() - t0 };
 }
 
+// AI : attach promptIndex/round from opts so llm-batch retry grids can place each HTTP attempt.
+function roundTripMeta(
+  opts: ChatOptions,
+  extra: {
+    attempt: number;
+    httpStatus?: number;
+    willRetry?: boolean;
+    failureKind?: FailureKind;
+    failureDetail?: string;
+  },
+) {
+  return { ...extra, promptIndex: opts.promptIndex, round: opts.round };
+}
+
 async function fetchChat(
   body: string,
   inputChars: number,
@@ -264,13 +284,13 @@ async function fetchChat(
         maxAttempts: MAX_CHAT_ATTEMPTS,
         detail: failureDetail.slice(0, 300),
       });
-      opts.onRoundTrip?.(inputChars, 0, false, latencyMs, {
+      opts.onRoundTrip?.(inputChars, 0, false, latencyMs, roundTripMeta(opts, {
         attempt: attempt + 1,
         httpStatus: res.status,
         willRetry,
         failureKind: "provider",
         failureDetail,
-      });
+      }));
       if (willRetry) {
         const delayMs = retryDelayMs(res, attempt);
         log.info(`llm provider retry scheduled`, {
@@ -292,11 +312,11 @@ async function fetchChat(
     const content = data.choices?.[0]?.message?.content;
     if (typeof content !== "string") {
       const failureDetail = "OpenRouter returned no message content";
-      opts.onRoundTrip?.(inputChars, 0, false, latencyMs, {
+      opts.onRoundTrip?.(inputChars, 0, false, latencyMs, roundTripMeta(opts, {
         attempt: attempt + 1,
         failureKind: "provider",
         failureDetail,
-      });
+      }));
       log.error(`llm provider error`, { failureKind: "provider", attempt: attempt + 1, detail: failureDetail });
       throw new Error(failureDetail);
     }
@@ -304,7 +324,7 @@ async function fetchChat(
       promptTokens: data.usage?.prompt_tokens ?? 0,
       completionTokens: data.usage?.completion_tokens ?? 0,
     });
-    opts.onRoundTrip?.(inputChars, content.length, true, latencyMs, { attempt: attempt + 1 });
+    opts.onRoundTrip?.(inputChars, content.length, true, latencyMs, roundTripMeta(opts, { attempt: attempt + 1 }));
     if (attempt > 0) {
       log.info(`llm provider recovered`, {
         model,
@@ -318,11 +338,11 @@ async function fetchChat(
     return content as RawReply;
   }
   const failureDetail = `OpenRouter failed after ${MAX_CHAT_ATTEMPTS} attempts: ${lastError.slice(0, 500)}`;
-  opts.onRoundTrip?.(inputChars, 0, false, 0, {
+  opts.onRoundTrip?.(inputChars, 0, false, 0, roundTripMeta(opts, {
     attempt: MAX_CHAT_ATTEMPTS,
     failureKind: "provider",
     failureDetail,
-  });
+  }));
   log.error(`llm provider error`, { failureKind: "provider", attempt: MAX_CHAT_ATTEMPTS, detail: failureDetail.slice(0, 300) });
   throw new Error(failureDetail);
 }
@@ -415,7 +435,12 @@ export async function parallelChat(
     return Promise.all(
       prompts.map(async (prompt, index) => {
         const t0 = Date.now();
-        const content = await fetchTextChat(prompt, opts, jsonMode, log, dispatcher);
+        const itemOpts: ChatOptions = {
+          ...opts,
+          promptIndex: index,
+          round: opts.round ?? 0,
+        };
+        const content = await fetchTextChat(prompt, itemOpts, jsonMode, log, dispatcher);
         return { index, content, latencyMs: Date.now() - t0 };
       }),
     );
@@ -450,13 +475,13 @@ export async function fetchStreamingChat(
     if (!res.ok) {
       lastError = await res.text();
       const willRetry = RETRYABLE_STATUSES.has(res.status) && attempt < MAX_CHAT_ATTEMPTS - 1;
-      opts.onRoundTrip?.(inputChars, 0, false, latencyMs, {
+      opts.onRoundTrip?.(inputChars, 0, false, latencyMs, roundTripMeta(opts, {
         attempt: attempt + 1,
         httpStatus: res.status,
         willRetry,
         failureKind: "provider",
         failureDetail: `HTTP ${res.status}: ${lastError.slice(0, 500)}`,
-      });
+      }));
       if (willRetry) {
         await sleep(retryDelayMs(res, attempt));
         continue;
@@ -508,7 +533,7 @@ export async function fetchStreamingChat(
     }
 
     if (responseModel) assertResponseModel(responseModel, model);
-    opts.onRoundTrip?.(inputChars, full.length, true, latencyMs, { attempt: attempt + 1 });
+    opts.onRoundTrip?.(inputChars, full.length, true, latencyMs, roundTripMeta(opts, { attempt: attempt + 1 }));
     log.info(`stream success`, { model, replyChars: full.length, attempt: attempt + 1 });
     return full as RawReply;
   }

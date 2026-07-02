@@ -1,5 +1,5 @@
 import { firstMatchingModelName } from "@/lib/structure-match-parse"
-import type { StructureModel } from "@/lib/types"
+import type { StructureModel, TypeAlias } from "@/lib/types"
 
 function filenameSlug(raw: string): string {
   return (
@@ -29,13 +29,16 @@ export type DownloadBaseNameInput = {
   projectName?: string
   userEmail?: string | null
   models?: StructureModel[]
+  typeAliases?: TypeAlias[]
   modelName?: string
 }
 
 // AI : autopipeline_project_user_datetime_pydantic_model_json_hash
 export async function buildDownloadBaseName(input: DownloadBaseNameInput): Promise<string> {
   const hash = await shortContentHash(input.content)
-  const model = input.modelName ?? firstMatchingModelName(input.content, input.models ?? [])
+  const model =
+    input.modelName ??
+    firstMatchingModelName(input.content, input.models ?? [], input.typeAliases ?? [])
   return [
     "autopipeline",
     filenameSlug(input.projectName ?? "project"),

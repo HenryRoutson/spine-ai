@@ -114,11 +114,19 @@ export async function startRun(
   model: ModelId,
   inputDocIds: DocId[] = [],
   inputDocsByModule?: Partial<Record<ModuleId, DocId[]>>,
+  allowDuplicateRuns = false,
 ): Promise<StartRunResult> {
   const res = await fetch(API_ROUTES.runs, {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ projectId, inputDocId, inputDocIds, inputDocsByModule, model }),
+    body: JSON.stringify({
+      projectId,
+      inputDocId,
+      inputDocIds,
+      inputDocsByModule,
+      model,
+      allowDuplicateRuns,
+    }),
   })
   if (!res.ok) {
     const body = await readApiErrorBody(res)
@@ -179,6 +187,25 @@ export type ClientStepSubmitPayload = {
   clientLogs?: JobLogEntry[]
 }
 
+// AI : assert/custom-code failures are expected project outcomes — warn in console, not Next.js console.error overlay.
+function pipelineLogToConsole(entry: JobLogEntry): void {
+  const fn = entry.level === "info" ? console.log : console.warn
+  fn(`[pipeline] ${entry.line}`)
+}
+
+function clientStepFailureLogLevel(tag: string): JobLogEntry["level"] {
+  return tag === "assert" || tag === "custom-code" ? "warn" : "error"
+}
+
+function clientStepSubmitError(kind: string, err: unknown): string {
+  if (err instanceof CustomCodeExhaustedError) {
+    const last = err.failures[err.failures.length - 1]
+    if (kind === "assert" && last?.error) return last.error
+    return err.message
+  }
+  return (err as Error).message
+}
+
 // AI : shared poll loop for dev runs and shared-link runs — handles browser client steps + human review.
 export async function awaitJobCompletion(
   poll: () => Promise<RunJob>,
@@ -196,10 +223,7 @@ export async function awaitJobCompletion(
     const logs = job.logs ?? []
     const newLines = logs.slice(seenLogs)
     if (newLines.length) {
-      for (const l of newLines) {
-        const fn = l.level === "error" ? console.error : l.level === "warn" ? console.warn : console.log
-        fn(`[pipeline] ${l.line}`)
-      }
+      for (const l of newLines) pipelineLogToConsole(l)
       onLogs?.(logs, newLines)
       seenLogs = logs.length
     }
@@ -292,10 +316,11 @@ export async function awaitJobCompletion(
                   input,
                 },
               ]
+        const failureLevel = clientStepFailureLogLevel(tag)
         for (const f of failures) {
           clientLogs.push({
             at: Date.now(),
-            level: "error",
+            level: failureLevel,
             tag,
             line: formatCustomCodeFailureLog(f, tag),
             moduleId,
@@ -303,13 +328,13 @@ export async function awaitJobCompletion(
         }
         clientLogs.push({
           at: Date.now(),
-          level: "error",
+          level: failureLevel,
           tag,
           line: `${tag} exhausted all ${entries.length} attempt(s)`,
           moduleId,
         })
         await submitClientStep({
-          error: (err as Error).message,
+          error: clientStepSubmitError(kind, err),
           clientLogs,
         })
         clientStepSubmittedFor = moduleId

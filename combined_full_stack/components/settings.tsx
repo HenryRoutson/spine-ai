@@ -37,6 +37,9 @@ import {
   DEFAULT_INFERENCE_OUTPUT_STEPS_ONLY,
   readInferenceOutputStepsOnly,
   writeInferenceOutputStepsOnly,
+  DEFAULT_ALLOW_DUPLICATE_RUNS,
+  readAllowDuplicateRuns,
+  writeAllowDuplicateRuns,
 } from "@/lib/inference-settings"
 import {
   COLOR_SCHEME_IDS,
@@ -97,6 +100,7 @@ export function Settings() {
   const [hideInputDescriptions, setHideInputDescriptions] = useState(DEFAULT_HIDE_INPUT_DESCRIPTIONS)
   const [requireInputDescriptions, setRequireInputDescriptions] = useState(DEFAULT_REQUIRE_INPUT_DESCRIPTIONS)
   const [inferenceOutputStepsOnly, setInferenceOutputStepsOnly] = useState(DEFAULT_INFERENCE_OUTPUT_STEPS_ONLY)
+  const [allowDuplicateRuns, setAllowDuplicateRuns] = useState(DEFAULT_ALLOW_DUPLICATE_RUNS)
   const [colorScheme, setColorScheme] = useState<ColorSchemeId>(DEFAULT_COLOR_SCHEME)
 
   useEffect(() => {
@@ -113,6 +117,7 @@ export function Settings() {
     setHideInputDescriptions(readHideInputDescriptionsDefault())
     setRequireInputDescriptions(readRequireInputDescriptions())
     setInferenceOutputStepsOnly(readInferenceOutputStepsOnly())
+    setAllowDuplicateRuns(readAllowDuplicateRuns())
     setColorScheme(readColorScheme())
   }, [])
 
@@ -144,6 +149,11 @@ export function Settings() {
   function pickInferenceOutputStepsOnly(onlyOutputSteps: boolean) {
     writeInferenceOutputStepsOnly(onlyOutputSteps)
     setInferenceOutputStepsOnly(onlyOutputSteps)
+  }
+
+  function pickAllowDuplicateRuns(allowed: boolean) {
+    writeAllowDuplicateRuns(allowed)
+    setAllowDuplicateRuns(allowed)
   }
 
   function pickColorScheme(scheme: ColorSchemeId) {
@@ -333,6 +343,19 @@ export function Settings() {
                 <span className="block text-sm font-medium">Only show output-step tables</span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
                   When on, the inference tab shows spreadsheet views only for pipeline output steps — not intermediate step results.
+                </span>
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-start gap-3 border-t border-border px-4 py-3">
+              <Switch
+                checked={allowDuplicateRuns}
+                onCheckedChange={(checked) => pickAllowDuplicateRuns(!!checked)}
+                className="mt-0.5"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">Allow duplicate runs</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  When off, an identical pipeline + input setup reuses the last successful run instead of billing again.
                 </span>
               </span>
             </label>

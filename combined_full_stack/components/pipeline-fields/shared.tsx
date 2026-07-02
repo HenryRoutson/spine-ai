@@ -11,6 +11,7 @@ import {
   type PipelineModule,
   type StructureModel,
   type StructureModelId,
+  type TypeAlias,
 } from "@/lib/types"
 import {
   type InvalidStep,
@@ -32,14 +33,18 @@ export function llmModelLabel(id?: string) {
   return MODEL_OPTIONS.find((m) => m.id === id)?.label ?? id ?? "—"
 }
 
-export function useLlmSchemaPreview(selected: PipelineModule | undefined, models: StructureModel[]) {
+export function useLlmSchemaPreview(
+  selected: PipelineModule | undefined,
+  models: StructureModel[],
+  typeAliases: TypeAlias[] = [],
+) {
   return useMemo(() => {
     if (!selected || !isLlmKind(selected.kind) || !selected.outStructureId) return null
     const out = models.find((m) => m.id === selected.outStructureId)
     if (!out) return null
     const isList = llmStepEmitsList(selected)
-    return llmSchemaJson(out, models, isList)
-  }, [selected, models])
+    return llmSchemaJson(out, models, isList, typeAliases)
+  }, [selected, models, typeAliases])
 }
 
 export function PipelineField({

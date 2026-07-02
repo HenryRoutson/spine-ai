@@ -3,16 +3,17 @@ import { tryParseJson } from "@/lib/json-utils"
 import { findMatchingStructures, type StructureMatch } from "@/lib/structure-match"
 import { findModelByBundleShape } from "@/lib/structure-shape"
 import { tabularRowSetsFromContent } from "@/lib/tabular-row-sets"
-import type { DocRef, StructureModel, StructureModelId } from "@/lib/types"
+import type { DocRef, StructureModel, StructureModelId, TypeAlias } from "@/lib/types"
 
 export function parseAndMatchStructures(
   json: string,
   models: StructureModel[],
+  typeAliases: TypeAlias[] = [],
 ): { matches: StructureMatch[]; error: string | null } {
   if (!models.length) return { matches: [], error: null }
   const parsed = tryParseJson(json)
   if (!parsed.ok) return { matches: [], error: parsed.error.message }
-  return { matches: findMatchingStructures(parsed.value, models), error: null }
+  return { matches: findMatchingStructures(parsed.value, models, typeAliases), error: null }
 }
 
 function dedupeMatches(matches: StructureMatch[]): StructureMatch[] {
@@ -36,6 +37,7 @@ export function findStructureMatchesForDoc(
   json: string,
   models: StructureModel[],
   doc?: Pick<DocRef, "id" | "name" | "type">,
+  typeAliases: TypeAlias[] = [],
 ): { matches: StructureMatch[]; error: string | null; expectMatches: boolean } {
   if (!models.length) return { matches: [], error: null, expectMatches: false }
 
@@ -43,7 +45,7 @@ export function findStructureMatchesForDoc(
   if (!parsed.ok) return { matches: [], error: parsed.error.message, expectMatches: false }
 
   const expectMatches = doc ? isInferrableDocContent(json, doc.name, doc.type) : false
-  let matches = findMatchingStructures(parsed.value, models)
+  let matches = findMatchingStructures(parsed.value, models, typeAliases)
 
   if (!doc) {
     return { matches, error: null, expectMatches: false }
@@ -59,7 +61,7 @@ export function findStructureMatchesForDoc(
   )
 
   for (const d of derived) {
-    matches = [...matches, ...findMatchingStructures(d.sample, models)]
+    matches = [...matches, ...findMatchingStructures(d.sample, models, typeAliases)]
   }
 
   for (const d of derived) {
@@ -76,7 +78,7 @@ export function findStructureMatchesForDoc(
   }
 
   for (const m of models.filter((x) => x.sourceDocId === doc.id)) {
-    const validated = findMatchingStructures(parsed.value, models).find((match) => match.modelId === m.id);
+    const validated = findMatchingStructures(parsed.value, models, typeAliases).find((match) => match.modelId === m.id);
     if (validated) matches.push(validated);
   }
 
@@ -87,8 +89,12 @@ export function findStructureMatchesForDoc(
   }
 }
 
-export function firstMatchingModelName(content: string, models: StructureModel[]): string {
-  const { matches } = parseAndMatchStructures(content, models)
+export function firstMatchingModelName(
+  content: string,
+  models: StructureModel[],
+  typeAliases: TypeAlias[] = [],
+): string {
+  const { matches } = parseAndMatchStructures(content, models, typeAliases)
   return matches[0]?.modelName ?? "general"
 }
 

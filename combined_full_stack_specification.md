@@ -171,6 +171,10 @@ add an optional input description which is evaluated by an llm if enabled to che
 pleaes make an option in settings to make input descriptoins mandatory. make sure to charge these llm checks to billing, create a seperate billing graph for this at the bottom of logging under Mean cost called Description Validation cost. then add a toggle inside each step for if the description will be checked, in case it's expensive but you want to run it occasitionally
 
 
+add an export to python button to export the whole pipeline to python, including the front end UI. this should include a lot of supabase info so maybe use sql, plus some derived errors like validation.
+
+
+
 # inference
 
 All inputs are shown with the option to select documents.
@@ -228,6 +232,11 @@ please make sure you attribute server logs to different steps in the pipeline, n
 
 
 There should be a single button to click to copy the whole log of a run.
+
+
+
+visualise prompt failures in a grid which is n_prompts x (max_retries + 1) where 1 is the first prompt without a retry.
+Ensure all data from the run is included, including failures, and the whole log including the pipeline can be easily copied with a button.
 
 # documents
 

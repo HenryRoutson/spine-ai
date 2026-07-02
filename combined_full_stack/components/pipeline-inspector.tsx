@@ -1,6 +1,6 @@
 "use client"
 
-import { MODULE_META, type PipelineModule, type StructureModel } from "@/lib/types"
+import { MODULE_META, type PipelineModule, type StructureModel, type TypeAlias } from "@/lib/types"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
 import { AutoQuoteLock } from "@/lib/module-ui"
 import { PipelineModuleFields } from "@/components/pipeline-module-fields"
@@ -8,11 +8,12 @@ import { PipelineModuleFields } from "@/components/pipeline-module-fields"
 type PipelineInspectorProps = {
   module: PipelineModule | undefined
   models: StructureModel[]
+  typeAliases?: TypeAlias[]
   modules?: PipelineModule[]
 }
 
 // AI : read-only mirror of the Pipeline tab inspector — prompts, I/O, code, schema.
-export function PipelineInspector({ module: selected, models, modules = [] }: PipelineInspectorProps) {
+export function PipelineInspector({ module: selected, models, typeAliases = [], modules = [] }: PipelineInspectorProps) {
   if (!selected) {
     return (
       <div className="flex h-full min-h-48 items-center justify-center p-6 text-center">
@@ -29,7 +30,13 @@ export function PipelineInspector({ module: selected, models, modules = [] }: Pi
         </span>
         {isAutoQuoteStep(selected) && <AutoQuoteLock />}
       </div>
-      <PipelineModuleFields module={selected} models={models} modules={modules} mode="view" />
+      <PipelineModuleFields
+        module={selected}
+        models={models}
+        typeAliases={typeAliases}
+        modules={modules}
+        mode="view"
+      />
     </div>
   )
 }

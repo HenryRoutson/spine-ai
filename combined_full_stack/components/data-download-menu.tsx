@@ -56,6 +56,7 @@ export function DataDownloadMenu({
           projectName: store?.project.name,
           userEmail,
           models,
+          typeAliases: store?.typeAliases,
         }))
       downloadDataAs(content, format, baseName)
     } catch (e) {

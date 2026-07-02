@@ -1,5 +1,5 @@
 import { z, type ZodType } from "zod";
-import type { PipelineModule, Project, StructureModel } from "./types";
+import type { PipelineModule, Project, StructureModel, TypeAlias } from "./types";
 import type { PipelineState, StepLabel } from "../run-types";
 import { formatTypeExpr, labelToPyKey, stepSpineOutType, typeExprToTs, typeExprToZod, zodFromModel } from "./type_expr";
 
@@ -43,11 +43,13 @@ export function pipelineStateFields(project: {
 export function pipelineStateSchema(project: {
   modules: PipelineModule[];
   models: StructureModel[];
+  typeAliases?: TypeAlias[];
 }): ZodType {
+  const typeAliases = project.typeAliases ?? [];
   const shape: Record<string, ZodType> = {};
   for (const field of pipelineStateFields(project)) {
     if (!field.type) continue;
-    shape[field.label] = typeExprToZod(field.type, project.models);
+    shape[field.label] = typeExprToZod(field.type, project.models, new Set(), false, typeAliases);
   }
   return z.object(shape);
 }
@@ -79,7 +81,8 @@ export function validatePipelineStateEntry(
 ): { ok: boolean; error?: string } {
   const field = pipelineStateFields(project).find((f) => f.label === label);
   if (!field?.type) return { ok: true };
-  const schema = typeExprToZod(field.type, project.models);
+  const typeAliases = project.typeAliases ?? [];
+  const schema = typeExprToZod(field.type, project.models, new Set(), false, typeAliases);
   const parsed = schema.safeParse(value);
   if (parsed.success) return { ok: true };
   return { ok: false, error: JSON.stringify(parsed.error.issues, null, 2) };

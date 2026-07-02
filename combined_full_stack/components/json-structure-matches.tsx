@@ -28,6 +28,7 @@ export function JsonStructureMatches({
   const store = useOptionalStore()
   const shell = useOptionalAppShell()
   const models = modelsProp ?? store?.models
+  const typeAliases = store?.typeAliases ?? []
   const openStructure = shell?.openStructure
 
   // AI : merge inferred structures synchronously for display, persist in effect.
@@ -49,8 +50,8 @@ export function JsonStructureMatches({
   }, [doc, displayModels, models, store])
 
   const { error, matches, expectMatches } = doc
-    ? findStructureMatchesForDoc(json, displayModels, doc)
-    : { ...parseAndMatchStructures(json, displayModels), expectMatches: false as const }
+    ? findStructureMatchesForDoc(json, displayModels, doc, typeAliases)
+    : { ...parseAndMatchStructures(json, displayModels, typeAliases), expectMatches: false as const }
 
   if (!models?.length) return null
 

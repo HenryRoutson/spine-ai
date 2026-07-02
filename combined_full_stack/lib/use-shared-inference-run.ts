@@ -8,7 +8,6 @@ import {
   orderedInputModules,
   type InputDocsAssignment,
 } from "@/lib/inference-input"
-import { pipelineRunError } from "@/lib/run-errors"
 import { useRunProgressUi } from "@/lib/use-run-progress-ui"
 import { mergeStepStates, type StepUiState } from "@/lib/run-engine"
 import { modelName } from "@/lib/validity"
@@ -150,8 +149,6 @@ export function useSharedInferenceRun(link: SharedLinkPublicView, linkId: string
       )
       if (jobGen !== activeJobGenRef.current) return
       setRun(finished)
-      const runErr = pipelineRunError(finished)
-      if (runErr) setError(runErr)
       setPhase("done")
     } catch (e) {
       if (jobGen !== activeJobGenRef.current) return

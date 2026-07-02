@@ -18,8 +18,11 @@ import {
   listFieldsForWrap,
   isBuiltinDocumentModel,
 } from "./structure";
+import { withSharedModels } from "./builtin_models";
 import {
   cardinalityMismatch,
+  collectTypeExprRefModelIds,
+  fieldToTypeExpr,
   formatTypeExpr,
   stepSpineInType,
   stepSpineOutType,
@@ -146,13 +149,13 @@ function stepAcceptsSpineType(
   models: StructureModel[],
 ): boolean {
   if (typeExprEqual(expected, actual)) return true;
+  // AI : passthrough steps read pipeline state by label — spine type at this index is not their contract.
+  if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review" || m.kind === "quote") return true;
   if (!cardinalityMismatch(expected, actual)) return false;
   // AI : custom-code / coded transform steps reshape list↔object at runtime — spine item type still matches.
   if (m.kind === "custom-code" || (m.kind === "transform" && !!m.code?.trim())) return true;
   // AI : bare transform auto-wraps list[T] into { listField: T[] } when the output structure has a matching list field.
   if (bareTransformCanAutoWrapList(m, actual, models)) return true;
-  // AI : output/assert snapshot spine as-is; quote links list or scalar extracts.
-  if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review" || m.kind === "quote") return true;
   return false;
 }
 
@@ -293,12 +296,87 @@ export type ComputeInvalidOpts = {
 };
 
 function modulesForStructure(modelId: StructureModelId, modules: PipelineModule[]): ModuleId[] {
-  if (!modelId) return modules[0]?.id ? [modules[0].id] : [];
+  if (!modelId) return [];
   const ids: ModuleId[] = [];
   for (const m of modules) {
     if (m.inStructureId === modelId || m.outStructureId === modelId) ids.push(m.id);
   }
-  return ids.length ? ids : [modules[0]?.id].filter(Boolean) as ModuleId[];
+  return ids;
+}
+
+function structureTreeContains(
+  rootId: StructureModelId,
+  targetId: StructureModelId,
+  byId: Map<StructureModelId, StructureModel>,
+): boolean {
+  const seen = new Set<StructureModelId>();
+  const queue = [rootId];
+  while (queue.length) {
+    const id = queue.pop()!;
+    if (id === targetId) return true;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const model = byId.get(id);
+    if (!model) continue;
+    for (const field of model.fields) {
+      if (field.ref) queue.push(field.ref);
+      for (const refId of collectTypeExprRefModelIds(fieldToTypeExpr(field))) queue.push(refId);
+    }
+  }
+  return false;
+}
+
+function pipelineReachableModelIds(
+  modules: PipelineModule[],
+  models: StructureModel[],
+): Set<StructureModelId> {
+  const byId = new Map(models.map((m) => [m.id, m]));
+  const seeds = new Set<StructureModelId>();
+  for (const m of modules) {
+    if (m.inStructureId) seeds.add(m.inStructureId);
+    if (m.outStructureId) seeds.add(m.outStructureId);
+  }
+  const reachable = new Set<StructureModelId>(seeds);
+  const queue = [...seeds];
+  while (queue.length) {
+    const id = queue.pop()!;
+    const model = byId.get(id);
+    if (!model) continue;
+    for (const field of model.fields) {
+      if (field.ref && !reachable.has(field.ref)) {
+        reachable.add(field.ref);
+        queue.push(field.ref);
+      }
+      for (const refId of collectTypeExprRefModelIds(fieldToTypeExpr(field))) {
+        if (!reachable.has(refId)) {
+          reachable.add(refId);
+          queue.push(refId);
+        }
+      }
+    }
+  }
+  return reachable;
+}
+
+function modulesAffectedByStructure(
+  modelId: StructureModelId,
+  modules: PipelineModule[],
+  models: StructureModel[],
+): ModuleId[] {
+  const direct = modulesForStructure(modelId, modules);
+  if (direct.length) return direct;
+  const byId = new Map(models.map((m) => [m.id, m]));
+  const affected: ModuleId[] = [];
+  for (const m of modules) {
+    for (const rootId of [m.inStructureId, m.outStructureId]) {
+      if (!rootId) continue;
+      if (rootId === modelId || structureTreeContains(rootId, modelId, byId)) {
+        affected.push(m.id);
+        break;
+      }
+    }
+  }
+  return affected;
 }
 
 function computeStructureFieldInvalid(
@@ -307,15 +385,15 @@ function computeStructureFieldInvalid(
   typeAliases: TypeAlias[] = [],
 ): InvalidMap {
   const invalid: InvalidMap = new Map();
+  const allModels = withSharedModels(models);
+  const reachable = pipelineReachableModelIds(modules, allModels);
   for (const issue of computeStructureIssues(models, typeAliases)) {
-    const message = structureIssueMessage(issue, models);
-    // AI : alias-definition issues use a placeholder modelId — pin to first pipeline step, not every step wired to models[0].
-    const moduleIds =
-      issue.aliasName && !issue.fieldId
-        ? modules[0]?.id
-          ? [modules[0].id]
-          : []
-        : modulesForStructure(issue.modelId, modules);
+    // AI : global alias rows aren't wired to a pipeline step — Structures tab only.
+    if (issue.aliasName && !issue.fieldId) continue;
+    // AI : auto-inferred orphans (Structure N from doc upload) must not block runs on step 1.
+    if (!reachable.has(issue.modelId)) continue;
+    const message = structureIssueMessage(issue, allModels);
+    const moduleIds = modulesAffectedByStructure(issue.modelId, modules, allModels);
     for (const moduleId of moduleIds) {
       pushInvalid(invalid, { moduleId, kind: "structure-field", structureMessage: message });
     }
@@ -349,6 +427,8 @@ export function computeInvalid(
   models: StructureModel[] = [],
   opts?: ComputeInvalidOpts,
 ): InvalidMap {
+  // AI : project JSON stores user models only — shared Document must count for I/O + field refs.
+  models = withSharedModels(models);
   const invalid = computeLabelInvalid(modules);
   for (const [moduleId, issues] of computeNoteInvalid(modules)) {
     const list = invalid.get(moduleId) ?? [];
@@ -555,6 +635,7 @@ export function computeWarnings(
   modules: PipelineModule[],
   models: StructureModel[] = [],
 ): Map<ModuleId, PipelineWarning[]> {
+  models = withSharedModels(models);
   const warnings = new Map<ModuleId, PipelineWarning[]>();
   const add = (moduleId: ModuleId, issue: PipelineWarning) => {
     const list = warnings.get(moduleId) ?? [];
@@ -592,13 +673,12 @@ export function computeWarnings(
   return warnings;
 }
 
-// AI : human-readable validation report for assistants and retry prompts.
-export function formatPipelineValidationErrors(
+// AI : human-readable validation report for assistants, retry prompts, and copy-to-clipboard.
+export function formatInvalidMapErrors(
+  invalid: InvalidMap,
   modules: PipelineModule[],
   models: StructureModel[] = [],
-  typeAliases: TypeAlias[] = [],
 ): string {
-  const invalid = computeInvalid(modules, models, { typeAliases });
   if (invalid.size === 0) return "";
   const lines: string[] = [];
   for (const issues of invalid.values()) {
@@ -610,6 +690,14 @@ export function formatPipelineValidationErrors(
     }
   }
   return lines.join("\n");
+}
+
+export function formatPipelineValidationErrors(
+  modules: PipelineModule[],
+  models: StructureModel[] = [],
+  typeAliases: TypeAlias[] = [],
+): string {
+  return formatInvalidMapErrors(computeInvalid(modules, models, { typeAliases }), modules, models);
 }
 
 // AI : A/B strategies use the pipeline's own LLM prompt — not a hardcoded legal brief.

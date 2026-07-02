@@ -1,12 +1,17 @@
 // AI : structure field integrity — empty names, dangling refs, duplicate names within a model.
 import { fieldToTypeExpr, collectTypeExprRefModelIds, type TypeExpr } from "@/lib/server/type_expr";
+import { typeExprHasUnset } from "@/lib/type-expr-edit";
+import { withSharedModels } from "@/lib/structure";
 import type { ModelField, StructureModel, StructureModelId, TypeAlias } from "@/lib/types";
 
 export type StructureIssueKind =
   | "empty-field-name"
   | "duplicate-field-name"
   | "dangling-field-ref"
-  | "unknown-type-alias";
+  | "unknown-type-alias"
+  | "empty-alias-name"
+  | "duplicate-alias-name"
+  | "incomplete-type-expr";
 
 export type StructureIssue = {
   modelId: StructureModelId;
@@ -18,10 +23,10 @@ export type StructureIssue = {
 };
 
 function fieldRefIds(field: ModelField): StructureModelId[] {
-  const ids: StructureModelId[] = [];
-  if (field.ref) ids.push(field.ref);
-  ids.push(...collectTypeExprRefModelIds(fieldToTypeExpr(field)));
-  return ids;
+  const ids = new Set<StructureModelId>();
+  if (field.ref) ids.add(field.ref);
+  for (const id of collectTypeExprRefModelIds(fieldToTypeExpr(field))) ids.add(id);
+  return [...ids];
 }
 
 function collectNamedTypeExprs(expr: TypeExpr, out: Set<string>, seen = new Set<string>()): void {
@@ -65,7 +70,8 @@ export function computeStructureIssues(
   models: StructureModel[],
   typeAliases: TypeAlias[] = [],
 ): StructureIssue[] {
-  const byId = new Set(models.map((m) => m.id));
+  // AI : persisted project.models omit shared Document — include it for ref resolution only.
+  const byId = new Set(withSharedModels(models).map((m) => m.id));
   const issues: StructureIssue[] = [];
 
   for (const model of models) {
@@ -102,7 +108,8 @@ export function computeStructureIssues(
         }
       }
 
-      for (const aliasName of unknownNamedTypes(fieldToTypeExpr(field), typeAliases)) {
+      const fieldExpr = fieldToTypeExpr(field);
+      for (const aliasName of unknownNamedTypes(fieldExpr, typeAliases)) {
         issues.push({
           modelId: model.id,
           kind: "unknown-type-alias",
@@ -111,6 +118,37 @@ export function computeStructureIssues(
           aliasName,
         });
       }
+      if (typeExprHasUnset(fieldExpr)) {
+        issues.push({
+          modelId: model.id,
+          kind: "incomplete-type-expr",
+          fieldId: field.id,
+          fieldName: name,
+        });
+      }
+    }
+  }
+
+  const seenAliasNames = new Map<string, string>();
+  for (const alias of typeAliases) {
+    const name = alias.name.trim();
+    if (!name) {
+      issues.push({
+        modelId: models[0]?.id ?? ("" as StructureModelId),
+        kind: "empty-alias-name",
+        aliasName: alias.name,
+      });
+      continue;
+    }
+    const prev = seenAliasNames.get(name.toLowerCase());
+    if (prev) {
+      issues.push({
+        modelId: models[0]?.id ?? ("" as StructureModelId),
+        kind: "duplicate-alias-name",
+        aliasName: name,
+      });
+    } else {
+      seenAliasNames.set(name.toLowerCase(), alias.id);
     }
   }
 
@@ -131,6 +169,13 @@ export function computeStructureIssues(
         modelId: models[0]?.id ?? ("" as StructureModelId),
         kind: "unknown-type-alias",
         aliasName: `${alias.name} → ${unknown}`,
+      });
+    }
+    if (typeExprHasUnset(alias.expr)) {
+      issues.push({
+        modelId: models[0]?.id ?? ("" as StructureModelId),
+        kind: "incomplete-type-expr",
+        aliasName: alias.name,
       });
     }
   }
@@ -157,6 +202,15 @@ export function structureIssueMessage(issue: StructureIssue, models: StructureMo
           : `unknown type alias "${issue.aliasName ?? "?"}"`;
       }
       return `${modelName}.${issue.fieldName} uses unknown type alias "${issue.aliasName ?? "?"}"`;
+    case "empty-alias-name":
+      return "type alias has no name";
+    case "duplicate-alias-name":
+      return `duplicate type alias name "${issue.aliasName ?? "?"}"`;
+    case "incomplete-type-expr":
+      if (issue.aliasName) {
+        return `type alias "${issue.aliasName}" has unfilled UNSET slots`;
+      }
+      return `${modelName}.${issue.fieldName ?? "?"} has unfilled UNSET slots in its type`;
     default:
       return "structure validation error";
   }

@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LLM call distribution</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface2: #334155;
+  --border: #475569;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --ok: #22c55e;
+  --retry: #f59e0b;
+  --err: #ef4444;
+  --empty: #334155;
+  --accent: #3b82f6;
+  --stat: #64748b;
+  --radius: 8px;
+  --mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+}
+
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--surface2);
+  background: #0b1220;
+}
+
+header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; }
+header p { margin-top: 4px; font-size: 12px; color: var(--muted); }
+
+#batchStatus {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+#batchStatus.ok {
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  color: #86efac;
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+}
+
+#batchStatus.fail {
+  background: color-mix(in srgb, var(--err) 18%, transparent);
+  color: #fca5a5;
+  border-color: color-mix(in srgb, var(--err) 35%, transparent);
+}
+
+main {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  overflow: hidden;
+}
+
+aside {
+  padding: 16px;
+  border-right: 1px solid var(--surface2);
+  overflow-y: auto;
+  background: #0b1220;
+}
+
+.control { margin-bottom: 18px; }
+
+.control label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.control label span.val {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+button {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+button:hover { background: var(--surface2); }
+
+.stats {
+  margin-top: 20px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--surface2);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.stats dt {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 8px;
+}
+
+.stats dt:first-child { margin-top: 0; }
+.stats dd { font-family: var(--mono); font-size: 12px; }
+.stats dd.ok { color: #86efac; }
+.stats dd.fail { color: #fca5a5; }
+
+.legend {
+  margin-top: 16px;
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.legend-item { display: flex; align-items: center; gap: 8px; }
+
+.swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.12);
+  flex-shrink: 0;
+}
+
+#panel {
+  padding: 20px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.section {
+  background: var(--surface);
+  border: 1px solid var(--surface2);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.section.batch-ok {
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--surface2));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.section.batch-fail {
+  border-color: color-mix(in srgb, var(--err) 50%, var(--surface2));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--err) 18%, transparent);
+}
+
+.section-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.hint {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.chart-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.chart-card {
+  min-width: 0;
+  border: 1px solid var(--surface2);
+  border-radius: 6px;
+  background: #0b1220;
+  padding: 8px;
+}
+
+.chart-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--surface2);
+}
+
+.chart-card-header span:first-child {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chart-card-header span:last-child {
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.chart-card svg { width: 100%; height: auto; display: block; }
+
+table { border-collapse: collapse; }
+
+th {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+  padding: 0 4px 8px;
+  text-align: center;
+  min-width: 28px;
+}
+
+td.row-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  padding-right: 8px;
+  text-align: right;
+}
+
+tr.row-exhausted td.row-label { color: #fca5a5; font-weight: 600; }
+
+td.cell-wrap { padding: 2px; }
+
+.cell {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.08);
+  cursor: default;
+  transition: transform 0.1s;
+}
+
+.cell:hover { transform: scale(1.15); }
+.cell.ok    { background: color-mix(in srgb, var(--ok) 80%, transparent); }
+.cell.retry { background: color-mix(in srgb, var(--retry) 80%, transparent); }
+.cell.error { background: color-mix(in srgb, var(--err) 80%, transparent); }
+.cell.empty { background: color-mix(in srgb, var(--empty) 60%, transparent); }
+
+@media (max-width: 1100px) {
+  .chart-grid { grid-template-columns: 1fr; }
+  .chart-grid.two { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>LLM call distribution</h1>
+  <p>Simulate N parallel prompts with retries — scatter, failure histograms, and 2D views</p>
+  <div id="batchStatus">—</div>
+</header>
+
+<main>
+  <aside>
+    <div class="control">
+      <label>Prompt count <span class="val" id="promptVal">24</span></label>
+      <input type="range" id="promptCount" min="4" max="64" value="24" step="1" />
+    </div>
+    <div class="control">
+      <label>Max retries <span class="val" id="maxRetryVal">2</span></label>
+      <input type="range" id="maxRetries" min="0" max="5" value="2" step="1" />
+    </div>
+    <div class="control">
+      <label>Failure rate <span class="val" id="rateVal">22%</span></label>
+      <input type="range" id="failureRate" min="0" max="80" value="22" step="1" />
+    </div>
+    <div class="control">
+      <label>Correlation <span class="val" id="corrVal">70%</span></label>
+      <input type="range" id="correlation" min="0" max="100" value="70" step="1" />
+    </div>
+    <div class="control">
+      <label>Seed <span class="val" id="seedVal">—</span></label>
+      <input type="range" id="seed" min="1" max="9999" value="42" step="1" />
+    </div>
+    <button id="resample">Resample</button>
+
+    <dl class="stats" id="stats"></dl>
+
+    <div class="legend">
+      <div class="legend-item"><div class="swatch cell ok"></div> ok</div>
+      <div class="legend-item"><div class="swatch cell retry"></div> failed, later recovered</div>
+      <div class="legend-item"><div class="swatch cell error"></div> failed (exhausted)</div>
+      <div class="legend-item"><div class="swatch cell empty"></div> no call (already succeeded)</div>
+    </div>
+  </aside>
+
+  <div id="panel">
+    <div class="section" id="gridSection">
+      <div class="section-title" id="gridTitle"></div>
+      <div id="gridMount"></div>
+      <p class="hint">Each row = one prompt. Columns = attempt rounds (1st → retries).</p>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Attempt distributions (y = retry round · x = metric · gray curve = μ ± σ per round)</div>
+      <div class="chart-grid" id="scatterMount"></div>
+      <p class="hint">Each horizontal band is one attempt round (1st at bottom → later retries above). Same prompt keeps the same input length across retries — failed retries stack vertically.</p>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Failure count vs metric (y = failures in bin · x = input / output / latency)</div>
+      <div class="chart-grid" id="histMount"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">2D views</div>
+      <div class="chart-grid two" id="twoDMount"></div>
+      <p class="hint">Left: input vs output chars. Right: input chars vs latency — color = attempt outcome.</p>
+    </div>
+  </div>
+</main>
+
+<script>
+// AI : mulberry32 — small deterministic PRNG for reproducible samples
+function mulberry32(seed) {
+  return function () {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// AI : Box–Muller transform for normally distributed metrics
+function normalSample(rng, mean, std) {
+  let u = 0;
+  let v = 0;
+  while (u === 0) u = rng();
+  while (v === 0) v = rng();
+  const z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  return mean + z * std;
+}
+
+function clamp(n, lo, hi) {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+const FAILURE_KINDS = ["provider", "json_parse", "schema"];
+const FAILURE_LABELS = {
+  provider: "LLM provider",
+  json_parse: "JSON parse",
+  schema: "Schema validation",
+};
+
+const PALETTE = {
+  ok: "#22c55e",
+  okStroke: "#15803d",
+  retry: "#f59e0b",
+  retryStroke: "#b45309",
+  err: "#ef4444",
+  errStroke: "#b91c1c",
+};
+
+/** @typedef {"ok"|"error"|"retried"} DisplayStatus */
+/** @typedef {{
+ *   promptIndex: number,
+ *   round: number,
+ *   inputChars: number,
+ *   outputChars: number,
+ *   latencyMs: number,
+ *   status: "ok"|"error",
+ *   failureKind?: string,
+ *   detail: string,
+ * }} LlmCall */
+
+function distributionStats(values) {
+  const n = values.length;
+  if (n === 0) return { mean: 0, std: 0 };
+  const mean = values.reduce((a, v) => a + v, 0) / n;
+  if (n === 1) return { mean, std: 0 };
+  const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / n;
+  return { mean, std: Math.sqrt(variance) };
+}
+
+// AI : horizontal nudge only when unrelated prompts share the same x in one band
+function dotXWithCollision(items, index, x, xMin, xMax) {
+  const base = xScale(xMin, xMax, x);
+  const peers = items.filter((item) => item.x === x);
+  if (peers.length <= 1) return base;
+  const peerIdx = peers.findIndex((item) => item.index === index);
+  const spread = Math.min(14, peers.length * 4);
+  const step = peers.length > 1 ? spread / (peers.length - 1) : 0;
+  return base + (peerIdx - (peers.length - 1) / 2) * step;
+}
+
+function normalCurvePoints(mean, std, min, max, peakHeight, points = 48) {
+  if (std <= 0 || peakHeight <= 0) return [{ x: mean, y: peakHeight }];
+  const pad = std * 2.5;
+  const x0 = Math.max(min, mean - pad);
+  const x1 = Math.min(max + 1, mean + pad);
+  const coeff = 1 / (std * Math.sqrt(2 * Math.PI));
+  const raw = [];
+  for (let i = 0; i <= points; i++) {
+    const x = x0 + ((x1 - x0) * i) / points;
+    raw.push(coeff * Math.exp(-0.5 * ((x - mean) / std) ** 2));
+  }
+  const pdfMax = Math.max(...raw, 1e-9);
+  return raw.map((y, i) => ({
+    x: x0 + ((x1 - x0) * i) / points,
+    y: (y / pdfMax) * peakHeight,
+  }));
+}
+
+function displayStatusesForCalls(calls) {
+  return calls.map((call, i) => {
+    if (call.status === "ok") return "ok";
+    // AI : recovery is per prompt — a failed 1st attempt is amber if that prompt later succeeds
+    const recovered = calls
+      .slice(i + 1)
+      .some((c) => c.promptIndex === call.promptIndex && c.status === "ok");
+    return recovered ? "retried" : "error";
+  });
+}
+
+function summarizeCalls(calls) {
+  const displayStatuses = displayStatusesForCalls(calls);
+  return {
+    ok: displayStatuses.filter((s) => s === "ok").length,
+    retried: displayStatuses.filter((s) => s === "retried").length,
+    failed: displayStatuses.filter((s) => s === "error").length,
+    displayStatuses,
+  };
+}
+
+function buildRetryRoundScatter(calls, displayStatuses, field, columnCount) {
+  const values = calls.map((c) => c[field]);
+  const xMin = Math.min(...values);
+  const xMax = Math.max(...values);
+
+  /** @type {{ round: number, mean: number, std: number, n: number }[]} */
+  const rounds = [];
+  for (let round = 0; round < columnCount; round++) {
+    const roundValues = calls.filter((c) => c.round === round).map((c) => c[field]);
+    const { mean, std } = distributionStats(roundValues);
+    rounds.push({ round, mean, std, n: roundValues.length });
+  }
+
+  /** @type {{ round: number, items: { call: LlmCall, status: DisplayStatus, index: number }[] }[]} */
+  const byRound = Array.from({ length: columnCount }, (_, round) => ({
+    round,
+    items: calls
+      .map((call, index) => ({ call, status: displayStatuses[index], index }))
+      .filter(({ call }) => call.round === round),
+  }));
+
+  const points = byRound.flatMap(({ round, items }) =>
+    items.map((item) => ({
+      x: item.call[field],
+      round,
+      status: item.status,
+      index: item.index,
+    })),
+  );
+
+  return { points, rounds, xMin, xMax };
+}
+
+function formatChars(n) {
+  if (n >= 10000) return `${(n / 1000).toFixed(1)}k`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return String(Math.round(n));
+}
+
+function formatMs(n) {
+  if (n >= 10000) return `${(n / 1000).toFixed(1)}s`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}s`;
+  return `${Math.round(n)}ms`;
+}
+
+const METRIC = {
+  inputChars: { label: "Input (chars)", axis: "chars", fmt: formatChars },
+  outputChars: { label: "Output (chars)", axis: "chars", fmt: formatChars },
+  latencyMs: { label: "Response latency", axis: "latency", fmt: formatMs },
+};
+
+// AI : blend load-driven and independent draws — 0 = uncorrelated, 1 = fully correlated
+function mix(loadDriven, independent, correlation) {
+  return loadDriven * correlation + independent * (1 - correlation);
+}
+
+// AI : shared latent load — higher load → larger input/output/latency and higher failure risk
+function promptLoad(rng) {
+  return normalSample(rng, 0, 1);
+}
+
+function attemptLoad(promptLoadVal, round, rng, correlation) {
+  const roundStress = round * 0.12 * correlation;
+  const noise = normalSample(rng, 0, 0.1) * (1 - correlation * 0.5);
+  return promptLoadVal * correlation + roundStress + noise;
+}
+
+// AI : input is fixed per prompt — retries resend the same prompt
+function promptInputFromLoad(load, rng, correlation) {
+  const loadDriven = 1200 + load * 420;
+  const independent = normalSample(rng, 1200, 420);
+  const noise = normalSample(rng, 0, 1) * 140 * (1 - correlation * 0.65);
+  return Math.round(clamp(mix(loadDriven, independent, correlation) + noise, 200, 4000));
+}
+
+function attemptMetricsFromInput(inputChars, load, rng, correlation) {
+  const indepOut = normalSample(rng, 750, 220);
+  const loadOut = 650 + load * 300 + inputChars * 0.07;
+  const outputChars = Math.round(clamp(mix(loadOut, indepOut, correlation), 80, 3000));
+
+  const indepLat = normalSample(rng, 2400, 600);
+  const loadLat = 2100 + load * 520 + inputChars * 0.32 + outputChars * 0.22;
+  const latencyMs = Math.round(clamp(mix(loadLat, indepLat, correlation), 400, 12000));
+  return { outputChars, latencyMs };
+}
+
+function correlatedFailureProb(load, inputChars, outputChars, latencyMs, baseRate, correlation) {
+  const flat = baseRate;
+  const loadNorm = clamp((load + 2) / 4, 0, 1);
+  const inNorm = (inputChars - 200) / (4000 - 200);
+  const outNorm = (outputChars - 80) / (3000 - 80);
+  const latNorm = (latencyMs - 400) / (12000 - 400);
+  const stress = 0.45 * loadNorm + 0.2 * inNorm + 0.18 * outNorm + 0.17 * latNorm;
+  const stressed = baseRate * (0.3 + stress * 1.55);
+  return clamp(mix(stressed, flat, correlation), 0.02, 0.92);
+}
+
+/**
+ * @param {number} promptCount
+ * @param {number} maxRetries
+ * @param {number} failureRate 0..1
+ * @param {number} correlation 0..1
+ * @param {() => number} rng
+ */
+function simulateCalls(promptCount, maxRetries, failureRate, correlation, rng) {
+  const columnCount = maxRetries + 1;
+  /** @type {LlmCall[]} */
+  const calls = [];
+  /** @type {("empty"|"ok"|"error"|"retried")[][]} */
+  const grid = [];
+
+  for (let pi = 0; pi < promptCount; pi++) {
+    const load = promptLoad(rng);
+    const inputChars = promptInputFromLoad(load, rng, correlation);
+
+    /** @type {("empty"|"ok"|"error"|"retried")[]} */
+    const row = [];
+    let succeeded = false;
+
+    for (let round = 0; round < columnCount; round++) {
+      if (succeeded) {
+        row.push("empty");
+        continue;
+      }
+
+      const attempt = attemptLoad(load, round, rng, correlation);
+      const { outputChars, latencyMs } = attemptMetricsFromInput(inputChars, attempt, rng, correlation);
+      const pFail = correlatedFailureProb(attempt, inputChars, outputChars, latencyMs, failureRate, correlation);
+      const failed = rng() < pFail;
+      const failureKind = FAILURE_KINDS[Math.floor(rng() * FAILURE_KINDS.length)];
+
+      if (!failed) {
+        calls.push({
+          promptIndex: pi,
+          round,
+          inputChars,
+          outputChars,
+          latencyMs,
+          status: "ok",
+          detail: `p${pi + 1} attempt ${round + 1}: ok · ${inputChars} in · ${outputChars} out · ${latencyMs}ms · p_fail=${(pFail * 100).toFixed(0)}%`,
+        });
+        row.push("ok");
+        succeeded = true;
+      } else if (round === columnCount - 1) {
+        calls.push({
+          promptIndex: pi,
+          round,
+          inputChars,
+          outputChars,
+          latencyMs,
+          status: "error",
+          failureKind,
+          detail: `p${pi + 1} attempt ${round + 1}: ${FAILURE_LABELS[failureKind]} (exhausted) · ${latencyMs}ms · p_fail=${(pFail * 100).toFixed(0)}%`,
+        });
+        row.push("error");
+      } else {
+        calls.push({
+          promptIndex: pi,
+          round,
+          inputChars,
+          outputChars,
+          latencyMs,
+          status: "error",
+          failureKind,
+          detail: `p${pi + 1} attempt ${round + 1}: ${FAILURE_LABELS[failureKind]} · ${latencyMs}ms · p_fail=${(pFail * 100).toFixed(0)}%`,
+        });
+        row.push("error");
+      }
+    }
+
+    let recovered = false;
+    for (let ri = columnCount - 1; ri >= 0; ri--) {
+      if (row[ri] === "ok") recovered = true;
+      else if (row[ri] === "error" && recovered) row[ri] = "retried";
+    }
+
+    grid.push(row);
+  }
+
+  const exhausted = grid.filter((row) => row[columnCount - 1] === "error").length;
+  const stepSucceeded = exhausted === 0;
+
+  return { calls, grid, columnCount, stepSucceeded, exhausted };
+}
+
+function roundLabel(round) {
+  if (round === 0) return "1st";
+  if (round === 1) return "retry";
+  return `r${round}`;
+}
+
+function statusColor(status) {
+  if (status === "ok") return { fill: PALETTE.ok, stroke: PALETTE.okStroke };
+  if (status === "retried") return { fill: PALETTE.retry, stroke: PALETTE.retryStroke };
+  return { fill: PALETTE.err, stroke: PALETTE.errStroke };
+}
+
+const SCATTER_W = 300;
+const SCATTER_PAD = { l: 38, r: 6, t: 8, b: 28 };
+const DOT_R = 4.5;
+
+function scatterHeight(columnCount) {
+  return 28 + columnCount * 44;
+}
+
+function xScale(min, max, v, w = SCATTER_W, pad = SCATTER_PAD) {
+  const span = Math.max(1, max - min);
+  return pad.l + ((v - min) / span) * (w - pad.l - pad.r);
+}
+
+function roundBand(round, columnCount, plotY, plotH) {
+  const bandH = plotH / columnCount;
+  const yBottom = plotY + plotH - (round + 1) * bandH;
+  const yTop = plotY + plotH - round * bandH;
+  return { yTop, yBottom, yCenter: (yTop + yBottom) / 2, bandH };
+}
+
+function renderScatterChart(field, calls, displayStatuses, columnCount) {
+  const meta = METRIC[field];
+  const scatter = buildRetryRoundScatter(calls, displayStatuses, field, columnCount);
+  const scatterH = scatterHeight(columnCount);
+  const plotW = SCATTER_W - SCATTER_PAD.l - SCATTER_PAD.r;
+  const plotH = scatterH - SCATTER_PAD.t - SCATTER_PAD.b;
+  const xMin = scatter.xMin;
+  const xMax = scatter.xMax;
+  const plotX = SCATTER_PAD.l;
+  const plotY = SCATTER_PAD.t;
+
+  let svg = `<svg viewBox="0 0 ${SCATTER_W} ${scatterH}" aria-hidden>`;
+  svg += `<rect x="${plotX}" y="${plotY}" width="${plotW}" height="${plotH}" fill="rgba(51,65,85,0.35)" stroke="var(--stat)" stroke-width="1.5" rx="2"/>`;
+
+  for (let round = 0; round < columnCount; round++) {
+    const band = roundBand(round, columnCount, plotY, plotH);
+    const roundStats = scatter.rounds[round];
+
+    if (round > 0) {
+      svg += `<line x1="${plotX}" x2="${plotX + plotW}" y1="${band.yTop}" y2="${band.yTop}" stroke="var(--stat)" stroke-width="0.5" opacity="0.35"/>`;
+    }
+
+    svg += `<text x="${plotX - 4}" y="${band.yCenter + 2.5}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="end">${roundLabel(round)}</text>`;
+
+    if (roundStats.n === 0) continue;
+
+    const curveH = band.bandH * 0.72;
+    const curveBase = band.yBottom + (band.bandH - curveH) / 2;
+    const curve = normalCurvePoints(roundStats.mean, roundStats.std, xMin, xMax, 1, 36);
+
+    if (curve.length > 1) {
+      const d = curve
+        .map((p, i) => {
+          const x = xScale(xMin, xMax, p.x);
+          const y = curveBase + curveH - p.y * curveH;
+          return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+        })
+        .join(" ");
+      svg += `<path d="${d}" fill="none" stroke="var(--stat)" stroke-width="1.25" opacity="0.85"><title>${roundLabel(round)}: μ=${meta.fmt(roundStats.mean)} σ=${meta.fmt(roundStats.std)} n=${roundStats.n}</title></path>`;
+    }
+
+    const meanX = xScale(xMin, xMax, roundStats.mean);
+    svg += `<line x1="${meanX}" x2="${meanX}" y1="${band.yTop + 1}" y2="${band.yBottom - 1}" stroke="var(--stat)" stroke-width="1.25" opacity="0.75"/>`;
+
+    if (roundStats.std > 0) {
+      const stdLo = xScale(xMin, xMax, roundStats.mean - roundStats.std);
+      const stdHi = xScale(xMin, xMax, roundStats.mean + roundStats.std);
+      svg += `<line x1="${stdLo}" x2="${stdLo}" y1="${band.yTop + 1}" y2="${band.yBottom - 1}" stroke="var(--stat)" stroke-width="1" stroke-dasharray="3 3" opacity="0.55"/>`;
+      svg += `<line x1="${stdHi}" x2="${stdHi}" y1="${band.yTop + 1}" y2="${band.yBottom - 1}" stroke="var(--stat)" stroke-width="1" stroke-dasharray="3 3" opacity="0.55"/>`;
+    }
+  }
+
+  for (const pt of scatter.points) {
+    const band = roundBand(pt.round, columnCount, plotY, plotH);
+    const bandItems = scatter.points.filter((p) => p.round === pt.round);
+    const cx = dotXWithCollision(bandItems, pt.index, pt.x, xMin, xMax);
+    const cy = band.yCenter;
+    const { fill, stroke } = statusColor(pt.status);
+    const call = calls[pt.index];
+    svg += `<circle cx="${cx}" cy="${cy}" r="${DOT_R}" fill="${fill}" stroke="${stroke}" stroke-width="1.75"><title>${call.detail}</title></circle>`;
+  }
+
+  svg += `<text x="${plotX + 2}" y="${scatterH - 14}" fill="var(--stat)" font-size="7" font-family="var(--mono)">${meta.fmt(xMin)}</text>`;
+  svg += `<text x="${plotX + plotW - 2}" y="${scatterH - 14}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="end">${meta.fmt(xMax)}</text>`;
+  svg += `<text x="${SCATTER_W / 2}" y="${scatterH - 4}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="middle">${meta.axis}</text>`;
+  svg += `<text x="10" y="${plotY + plotH / 2}" fill="var(--stat)" font-size="6.5" font-family="var(--mono)" transform="rotate(-90 10 ${plotY + plotH / 2})" text-anchor="middle">retry</text>`;
+  svg += "</svg>";
+
+  const roundSummary = scatter.rounds
+    .filter((r) => r.n > 0)
+    .map((r) => `${roundLabel(r.round)} μ=${meta.fmt(r.mean)}`)
+    .join(" · ");
+
+  return `
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <span>${meta.label}</span>
+        <span>${roundSummary || "no calls"} · n=${calls.length}</span>
+      </div>
+      ${svg}
+    </div>`;
+}
+
+const HIST_W = 300;
+const HIST_H = 120;
+const HIST_PAD = { l: 28, r: 8, t: 8, b: 28 };
+const BIN_COUNT = 10;
+
+function buildFailureHistogram(calls, displayStatuses, field) {
+  const meta = METRIC[field];
+  const failed = calls
+    .map((call, i) => ({ call, status: displayStatuses[i] }))
+    .filter(({ status }) => status === "error" || status === "retried");
+
+  if (failed.length === 0) {
+    return { bins: [], meta, maxCount: 0, xMin: 0, xMax: 1 };
+  }
+
+  const values = failed.map(({ call }) => call[field]);
+  const xMin = Math.min(...values);
+  const xMax = Math.max(...values);
+  const span = Math.max(1, xMax - xMin);
+  const binWidth = span / BIN_COUNT;
+
+  /** @type {{ lo: number, hi: number, count: number }[]} */
+  const bins = Array.from({ length: BIN_COUNT }, (_, i) => ({
+    lo: xMin + i * binWidth,
+    hi: xMin + (i + 1) * binWidth,
+    count: 0,
+  }));
+
+  for (const { call } of failed) {
+    const v = call[field];
+    let idx = Math.floor((v - xMin) / binWidth);
+    if (idx >= BIN_COUNT) idx = BIN_COUNT - 1;
+    if (idx < 0) idx = 0;
+    bins[idx].count++;
+  }
+
+  return { bins, meta, maxCount: Math.max(...bins.map((b) => b.count), 1), xMin, xMax };
+}
+
+function renderFailureHistogram(field, calls, displayStatuses) {
+  const { bins, meta, maxCount, xMin, xMax } = buildFailureHistogram(calls, displayStatuses, field);
+  const plotW = HIST_W - HIST_PAD.l - HIST_PAD.r;
+  const plotH = HIST_H - HIST_PAD.t - HIST_PAD.b;
+  const plotX = HIST_PAD.l;
+  const plotY = HIST_PAD.t;
+  const barW = plotW / Math.max(bins.length, 1);
+
+  let svg = `<svg viewBox="0 0 ${HIST_W} ${HIST_H}" aria-hidden>`;
+  svg += `<rect x="${plotX}" y="${plotY}" width="${plotW}" height="${plotH}" fill="rgba(51,65,85,0.35)" stroke="var(--stat)" stroke-width="1.5" rx="2"/>`;
+
+  for (let i = 0; i < bins.length; i++) {
+    const b = bins[i];
+    const h = (b.count / maxCount) * plotH;
+    const x = plotX + i * barW + 1;
+    const y = plotY + plotH - h;
+    const w = Math.max(1, barW - 2);
+    svg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="color-mix(in srgb, var(--err) 75%, transparent)" stroke="var(--err)" stroke-width="0.5"><title>${meta.fmt(b.lo)}–${meta.fmt(b.hi)}: ${b.count} failure${b.count === 1 ? "" : "s"}</title></rect>`;
+  }
+
+  for (let tick = 0; tick <= 4; tick++) {
+    const frac = tick / 4;
+    const y = plotY + plotH - frac * plotH;
+    const val = Math.round(maxCount * frac);
+    svg += `<line x1="${plotX - 4}" x2="${plotX}" y1="${y}" y2="${y}" stroke="var(--stat)" stroke-width="1"/>`;
+    svg += `<text x="${plotX - 6}" y="${y + 2}" fill="var(--stat)" font-size="6.5" font-family="var(--mono)" text-anchor="end">${val}</text>`;
+  }
+
+  if (bins.length) {
+    svg += `<text x="${plotX + 2}" y="${HIST_H - 14}" fill="var(--stat)" font-size="7" font-family="var(--mono)">${meta.fmt(xMin)}</text>`;
+    svg += `<text x="${plotX + plotW - 2}" y="${HIST_H - 14}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="end">${meta.fmt(xMax)}</text>`;
+  }
+
+  svg += `<text x="${HIST_W / 2}" y="${HIST_H - 4}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="middle">${meta.axis}</text>`;
+  svg += `<text x="8" y="${plotY + plotH / 2}" fill="var(--stat)" font-size="6.5" font-family="var(--mono)" transform="rotate(-90 8 ${plotY + plotH / 2})" text-anchor="middle">failures</text>`;
+  svg += "</svg>";
+
+  const totalFailures = bins.reduce((n, b) => n + b.count, 0);
+
+  return `
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <span>Failures vs ${meta.label.toLowerCase()}</span>
+        <span>${totalFailures} failed attempt${totalFailures === 1 ? "" : "s"}</span>
+      </div>
+      ${svg}
+    </div>`;
+}
+
+const TWO_W = 420;
+const TWO_H = 260;
+const TWO_PAD = { l: 36, r: 12, t: 12, b: 32 };
+
+function render2DScatter(calls, displayStatuses, xField, yField, title) {
+  const xMeta = METRIC[xField];
+  const yMeta = METRIC[yField];
+  const xs = calls.map((c) => c[xField]);
+  const ys = calls.map((c) => c[yField]);
+  const xMin = Math.min(...xs);
+  const xMax = Math.max(...xs);
+  const yMin = Math.min(...ys);
+  const yMax = Math.max(...ys);
+  const plotW = TWO_W - TWO_PAD.l - TWO_PAD.r;
+  const plotH = TWO_H - TWO_PAD.t - TWO_PAD.b;
+  const plotX = TWO_PAD.l;
+  const plotY = TWO_PAD.t;
+
+  function sx(v) {
+    return plotX + ((v - xMin) / Math.max(1, xMax - xMin)) * plotW;
+  }
+  function sy(v) {
+    return plotY + plotH - ((v - yMin) / Math.max(1, yMax - yMin)) * plotH;
+  }
+
+  const { mean: mx, std: sxStd } = distributionStats(xs);
+  const { mean: my, std: syStd } = distributionStats(ys);
+
+  let svg = `<svg viewBox="0 0 ${TWO_W} ${TWO_H}" aria-hidden>`;
+  svg += `<rect x="${plotX}" y="${plotY}" width="${plotW}" height="${plotH}" fill="rgba(51,65,85,0.35)" stroke="var(--stat)" stroke-width="1.5" rx="2"/>`;
+
+  svg += `<line x1="${sx(mx)}" x2="${sx(mx)}" y1="${plotY}" y2="${plotY + plotH}" stroke="var(--stat)" stroke-width="1" stroke-dasharray="4 4" opacity="0.5"/>`;
+  svg += `<line x1="${plotX}" x2="${plotX + plotW}" y1="${sy(my)}" y2="${sy(my)}" stroke="var(--stat)" stroke-width="1" stroke-dasharray="4 4" opacity="0.5"/>`;
+
+  if (sxStd > 0) {
+    svg += `<rect x="${sx(mx - sxStd)}" y="${plotY}" width="${sx(mx + sxStd) - sx(mx - sxStd)}" height="${plotH}" fill="rgba(100,116,139,0.08)"/>`;
+  }
+  if (syStd > 0) {
+    svg += `<rect x="${plotX}" y="${sy(my + syStd)}" width="${plotW}" height="${sy(my - syStd) - sy(my + syStd)}" fill="rgba(100,116,139,0.08)"/>`;
+  }
+
+  for (let i = 0; i < calls.length; i++) {
+    const call = calls[i];
+    const status = displayStatuses[i];
+    const { fill, stroke } = statusColor(status);
+    svg += `<circle cx="${sx(call[xField])}" cy="${sy(call[yField])}" r="6" fill="${fill}" stroke="${stroke}" stroke-width="1.5" opacity="0.9"><title>${call.detail}</title></circle>`;
+  }
+
+  svg += `<text x="${plotX + 2}" y="${TWO_H - 16}" fill="var(--stat)" font-size="7" font-family="var(--mono)">${xMeta.fmt(xMin)}</text>`;
+  svg += `<text x="${plotX + plotW - 2}" y="${TWO_H - 16}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="end">${xMeta.fmt(xMax)}</text>`;
+  svg += `<text x="${TWO_W / 2}" y="${TWO_H - 4}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="middle">${xMeta.axis}</text>`;
+  svg += `<text x="10" y="${plotY + plotH / 2}" fill="var(--stat)" font-size="7" font-family="var(--mono)" transform="rotate(-90 10 ${plotY + plotH / 2})" text-anchor="middle">${yMeta.axis}</text>`;
+  svg += `<text x="${plotX - 8}" y="${plotY + 4}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="end">${yMeta.fmt(yMax)}</text>`;
+  svg += `<text x="${plotX - 8}" y="${plotY + plotH}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="end">${yMeta.fmt(yMin)}</text>`;
+  svg += "</svg>";
+
+  return `
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <span>${title}</span>
+        <span>μ=(${xMeta.fmt(mx)}, ${yMeta.fmt(my)})</span>
+      </div>
+      ${svg}
+    </div>`;
+}
+
+function renderGrid(promptCount, grid, columnCount) {
+  const showRowLabels = promptCount > 1;
+  let html = "<table><thead><tr>";
+  if (showRowLabels) html += "<th></th>";
+  for (let r = 0; r < columnCount; r++) html += `<th>${roundLabel(r)}</th>`;
+  html += "</tr></thead><tbody>";
+
+  for (let pi = 0; pi < promptCount; pi++) {
+    const row = grid[pi];
+    const exhausted = row[columnCount - 1] === "error";
+    html += `<tr${exhausted ? ' class="row-exhausted"' : ""}>`;
+    if (showRowLabels) html += `<td class="row-label">p${pi + 1}</td>`;
+    for (let ri = 0; ri < columnCount; ri++) {
+      const status = row[ri];
+      const cls = status === "retried" ? "retry" : status;
+      html += `<td class="cell-wrap"><div class="cell ${cls}" title="${status}"></div></td>`;
+    }
+    html += "</tr>";
+  }
+  html += "</tbody></table>";
+  return html;
+}
+
+function renderAll(promptCount, maxRetries, failureRate, correlation, seed) {
+  const rng = mulberry32(seed);
+  const rate = failureRate / 100;
+  const corr = correlation / 100;
+  const { calls, grid, columnCount, stepSucceeded, exhausted } = simulateCalls(
+    promptCount,
+    maxRetries,
+    rate,
+    corr,
+    rng,
+  );
+  const summary = summarizeCalls(calls);
+
+  const batchFailed = !stepSucceeded;
+  const statusEl = document.getElementById("batchStatus");
+  statusEl.className = batchFailed ? "fail" : "ok";
+  statusEl.textContent = batchFailed
+    ? `Batch failed — ${exhausted} prompt${exhausted === 1 ? "" : "s"} exhausted all retries`
+    : "Batch ok — every prompt succeeded within retry limit";
+
+  const gridSection = document.getElementById("gridSection");
+  gridSection.classList.remove("batch-ok", "batch-fail");
+  gridSection.classList.add(batchFailed ? "batch-fail" : "batch-ok");
+
+  document.getElementById("gridTitle").textContent =
+    `Retry grid (${promptCount} prompts × ${columnCount} attempts)`;
+
+  const okFirst = grid.filter((row) => row[0] === "ok").length;
+  const recovered = grid.filter((row) => row.includes("retried")).length;
+
+  document.getElementById("stats").innerHTML = `
+    <dt>Overall</dt>
+    <dd class="${batchFailed ? "fail" : "ok"}">${batchFailed ? "FAILED" : "OK"}</dd>
+    <dt>HTTP attempts</dt>
+    <dd>${calls.length} total · ${summary.ok} ok · ${summary.retried} retried · ${summary.failed} failed</dd>
+    <dt>Prompt outcomes</dt>
+    <dd>${okFirst} ok first try · ${recovered} recovered · ${exhausted} exhausted</dd>
+    <dt>Failure rate</dt>
+    <dd>${(rate * 100).toFixed(0)}% per attempt</dd>
+    <dt>Correlation</dt>
+    <dd>${(corr * 100).toFixed(0)}% · input↔output↔latency↔failures</dd>
+  `;
+
+  document.getElementById("gridMount").innerHTML = renderGrid(promptCount, grid, columnCount);
+
+  const fields = ["inputChars", "outputChars", "latencyMs"];
+  document.getElementById("scatterMount").innerHTML = fields
+    .map((f) => renderScatterChart(f, calls, summary.displayStatuses, columnCount))
+    .join("");
+
+  document.getElementById("histMount").innerHTML = fields
+    .map((f) => renderFailureHistogram(f, calls, summary.displayStatuses))
+    .join("");
+
+  document.getElementById("twoDMount").innerHTML =
+    render2DScatter(calls, summary.displayStatuses, "inputChars", "outputChars", "Input vs output") +
+    render2DScatter(calls, summary.displayStatuses, "inputChars", "latencyMs", "Input vs latency");
+}
+
+function readState() {
+  const promptCount = Number(document.getElementById("promptCount").value);
+  const maxRetries = Number(document.getElementById("maxRetries").value);
+  const failureRate = Number(document.getElementById("failureRate").value);
+  const correlation = Number(document.getElementById("correlation").value);
+  const seed = Number(document.getElementById("seed").value);
+
+  document.getElementById("promptVal").textContent = String(promptCount);
+  document.getElementById("maxRetryVal").textContent = String(maxRetries);
+  document.getElementById("rateVal").textContent = `${failureRate}%`;
+  document.getElementById("corrVal").textContent = `${correlation}%`;
+  document.getElementById("seedVal").textContent = String(seed);
+
+  return { promptCount, maxRetries, failureRate, correlation, seed };
+}
+
+function refresh() {
+  const s = readState();
+  renderAll(s.promptCount, s.maxRetries, s.failureRate, s.correlation, s.seed);
+}
+
+["promptCount", "maxRetries", "failureRate", "correlation", "seed"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", refresh);
+});
+
+document.getElementById("resample").addEventListener("click", () => {
+  document.getElementById("seed").value = String(Math.floor(Math.random() * 9999) + 1);
+  refresh();
+});
+
+refresh();
+</script>
+</body>
+</html>

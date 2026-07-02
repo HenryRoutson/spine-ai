@@ -20,6 +20,13 @@ Create hidden bounaries for when something is pasted and when they edit inside t
 
 
 
+there should be a copy prompt button which copies the entire pipeline or just whatever you select, maybe a copy prompt tab. including validation errors, any selected logs, documents text includign excel, . everythign a prompt could ever need, 
+
+
+
+
+add an export to python button to export the whole pipeline to python, including the front end UI. this should include a lot of supabase info so maybe use sql, plus some derived errors like validation.
+
 
 
 please write up a plan to make the type system more generic: remove outIsList as it's not generic and won't scale to other types. How are generics handled? Tree node generic. like how does a set work? ensure you have full type checking using a typed python script or typescript file that you run a linter on , so you can handle generics. i should be able to view that typed file in the UI. please remove inIsList as it's not generic.

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import type { RefObject } from "react"
 import { ChevronDown, Copy, Check } from "lucide-react"
 import { runLogText } from "@/lib/run-log-text"
+import { runLogJson } from "@/lib/run-log-json"
 import { Progress } from "@/components/ui/progress"
 import { segmentPipeline, mergeCombineSegmentStatus } from "@/lib/pipeline-layout"
 import type { StepUiState } from "@/lib/run-engine"
@@ -47,6 +48,7 @@ export function InferenceStepTracePanel({
 }) {
   const [stepsExpanded, setStepsExpanded] = useState(true)
   const [logCopied, setLogCopied] = useState(false)
+  const [jsonCopied, setJsonCopied] = useState(false)
   // AI : show input/output viz while running and again after done when trace is expanded.
   const showStepIo = stepsExpanded && (phase === "running" || phase === "done")
   const ioCompact = phase === "running"
@@ -74,18 +76,32 @@ export function InferenceStepTracePanel({
         </button>
         <div className="flex items-center gap-2">
           {phase === "done" && run && (
-            <button
-              type="button"
-              onClick={() => {
-                navigator.clipboard.writeText(runLogText(run))
-                setLogCopied(true)
-                setTimeout(() => setLogCopied(false), 2000)
-              }}
-              className="inline-flex items-center gap-1 font-mono text-[10px] text-muted-foreground hover:text-foreground"
-            >
-              {logCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-              {logCopied ? "copied" : "copy_log"}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(runLogJson(run))
+                  setJsonCopied(true)
+                  setTimeout(() => setJsonCopied(false), 2000)
+                }}
+                className="inline-flex items-center gap-1 font-mono text-[10px] text-muted-foreground hover:text-foreground"
+              >
+                {jsonCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                {jsonCopied ? "copied" : "copy_json"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(runLogText(run))
+                  setLogCopied(true)
+                  setTimeout(() => setLogCopied(false), 2000)
+                }}
+                className="inline-flex items-center gap-1 font-mono text-[10px] text-muted-foreground hover:text-foreground"
+              >
+                {logCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                {logCopied ? "copied" : "copy_log"}
+              </button>
+            </>
           )}
           <span className="font-mono text-[11px] text-primary">{progressPct}%</span>
         </div>

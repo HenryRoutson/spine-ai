@@ -1,10 +1,12 @@
 "use client"
 
 // AI : composes use-inference-docs + use-inference-run-progress.
-import { useCallback, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { flattenInputDocIds } from "@/lib/inference-input"
+import { migrateProjectModules } from "@/lib/quote-steps"
 import { useInferenceDocs } from "@/lib/use-inference-docs"
 import { useInferenceRunProgress, type InferencePhase } from "@/lib/use-inference-run-progress"
-import { buildRunConfigPayload, stableJson } from "@/lib/run-fingerprint"
+import { buildRunConfigPayload, findMatchingRunClient, stableJson } from "@/lib/run-fingerprint"
 import type { DocId, DocRef, ModelId, ModuleId, PipelineModule, PipelineRun, Project, ProjectId } from "@/lib/types"
 
 export type { InferencePhase }
@@ -50,16 +52,41 @@ export function useInferenceRun({
     onProjectSwitch,
   })
 
-  const configResetKey = useMemo(
-    () =>
-      stableJson(
-        buildRunConfigPayload(
-          { ...project, modules, typeAliases: project.typeAliases ?? [] },
-          model as ModelId,
-        ),
-      ),
-    [project, modules, model],
-  )
+  const configResetKey = useMemo(() => {
+    const migrated = migrateProjectModules({
+      ...project,
+      modules,
+      typeAliases: project.typeAliases ?? [],
+    })
+    return stableJson({
+      cfg: buildRunConfigPayload(migrated, model as ModelId),
+      inputs: docsState.inputDocIdsKey,
+    })
+  }, [project, modules, model, docsState.inputDocIdsKey])
+
+  const [matchingPriorRun, setMatchingPriorRun] = useState<PipelineRun | null>(null)
+
+  // AI : fingerprint match — offer "view log" when this exact setup already completed successfully.
+  useEffect(() => {
+    if (!docsState.allInputsReady || docsState.inputsInvalid) {
+      setMatchingPriorRun(null)
+      return
+    }
+    const inputDocIds = flattenInputDocIds(docsState.inputModules, docsState.inputDocs)
+    const migrated = migrateProjectModules({
+      ...project,
+      modules,
+      typeAliases: project.typeAliases ?? [],
+    })
+    let cancelled = false
+    void findMatchingRunClient(runs, migrated, model as ModelId, inputDocIds).then((match) => {
+      if (cancelled) return
+      setMatchingPriorRun(match)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [configResetKey, docsState.allInputsReady, docsState.inputsInvalid, docsState.inputDocs, docsState.inputModules, model, modules, project, runs])
 
   const progress = useInferenceRunProgress({
     projectId: project.id as ProjectId,
@@ -79,5 +106,5 @@ export function useInferenceRun({
 
   resetRunOnSwitchRef.current = progress.resetRunState
 
-  return { ...docsState, ...progress }
+  return { ...docsState, ...progress, matchingPriorRun }
 }

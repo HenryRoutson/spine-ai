@@ -74,7 +74,10 @@ function legacyEmitsList(m: PipelineModule): boolean {
 export function deriveOutType(m: PipelineModule): TypeExpr | undefined {
   if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review") {
     const id = m.inStructureId ?? m.outStructureId;
-    return refType(id);
+    const base = refType(id);
+    if (!base) return undefined;
+    // AI : output/assert/human-review may materialize a list snapshot — preserve legacy outIsList in outType.
+    return legacyEmitsList(m) ? listOf(base) : base;
   }
   if (!m.outStructureId) return undefined;
   const base = refType(m.outStructureId);
