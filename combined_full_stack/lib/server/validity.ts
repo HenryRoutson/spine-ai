@@ -11,7 +11,12 @@ import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
 import { usesPassthroughStructure, isLlmKind, stepRequiresNote } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
-import { hasQuoteField, listFieldsForWrap, isBuiltinDocumentModel } from "./structure";
+import {
+  canAutoWrapListIntoOutputStructure,
+  hasQuoteField,
+  listFieldsForWrap,
+  isBuiltinDocumentModel,
+} from "./structure";
 import {
   cardinalityMismatch,
   formatTypeExpr,
@@ -117,11 +122,30 @@ function spineMismatchIssue(
   };
 }
 
-function stepAcceptsSpineType(m: PipelineModule, expected: TypeExpr, actual: TypeExpr): boolean {
+function bareTransformCanAutoWrapList(
+  m: PipelineModule,
+  actual: TypeExpr,
+  models: StructureModel[],
+): boolean {
+  if (m.kind !== "transform" || m.code?.trim() || m.outIsList) return false;
+  if (actual.kind !== "list" || actual.item.kind !== "ref") return false;
+  const out = models.find((x) => x.id === m.outStructureId);
+  if (!out) return false;
+  return canAutoWrapListIntoOutputStructure(out, actual.item.modelId, m.inStructureId);
+}
+
+function stepAcceptsSpineType(
+  m: PipelineModule,
+  expected: TypeExpr,
+  actual: TypeExpr,
+  models: StructureModel[],
+): boolean {
   if (typeExprEqual(expected, actual)) return true;
   if (!cardinalityMismatch(expected, actual)) return false;
   // AI : custom-code / coded transform steps reshape list↔object at runtime — spine item type still matches.
   if (m.kind === "custom-code" || (m.kind === "transform" && !!m.code?.trim())) return true;
+  // AI : bare transform auto-wraps list[T] into { listField: T[] } when the output structure has a matching list field.
+  if (bareTransformCanAutoWrapList(m, actual, models)) return true;
   // AI : output/assert snapshot spine as-is; quote links list or scalar extracts.
   if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review" || m.kind === "quote") return true;
   return false;
@@ -352,7 +376,7 @@ export function computeInvalid(
       if (invalidIssuesForModule(invalid, m.id).some((x) => x.kind === "no-output")) continue;
       const expected = stepSpineInType(m);
       const upstreamType = (prev && stepSpineOutType(prev)) ?? flowType;
-      if (!expected || !upstreamType || !stepAcceptsSpineType(m, expected, upstreamType)) {
+      if (!expected || !upstreamType || !stepAcceptsSpineType(m, expected, upstreamType, models)) {
         if (expected && upstreamType) {
           pushInvalid(invalid, spineMismatchIssue(m.id, expected, upstreamType, models));
         } else {
@@ -376,7 +400,7 @@ export function computeInvalid(
 
     const expected = stepSpineInType(m);
     const upstreamType = (prev && stepSpineOutType(prev)) ?? flowType;
-    if (!expected || !upstreamType || !stepAcceptsSpineType(m, expected, upstreamType)) {
+    if (!expected || !upstreamType || !stepAcceptsSpineType(m, expected, upstreamType, models)) {
       if (expected && upstreamType) {
         pushInvalid(invalid, spineMismatchIssue(m.id, expected, upstreamType, models));
       } else {

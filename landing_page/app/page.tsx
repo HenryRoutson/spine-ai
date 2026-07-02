@@ -172,8 +172,7 @@ export default function Home() {
         <div className="grid md:grid-cols-2">
           <div className="flex flex-col justify-center border-b border-line p-8 sm:p-12 md:border-b-0 md:border-r">
             <div className="zeero-badge mb-8 w-fit">
-              <span className="zeero-badge-new">New</span>
-              <span className="zeero-badge-label">Validated AI</span>
+              <span className="zeero-badge-new">Validated AI</span>
             </div>
             <h1 className="text-4xl font-normal leading-[1.08] tracking-tight sm:text-[52px]">
               AI engineering is hard.

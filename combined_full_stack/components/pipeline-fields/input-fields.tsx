@@ -23,6 +23,11 @@ import {
   type IoMismatchInspectorFix,
   type PipelineWarning,
 } from "@/lib/validity"
+import {
+  formatModuleSpineOut,
+  patchSpineOutList,
+  resolveOutIsList,
+} from "@/lib/spine-type"
 import { StructureLink } from "@/components/structure-link"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
@@ -179,24 +184,26 @@ export function InputModuleFields({
             <div>
               <p className="text-xs font-medium">Emit list output</p>
               <p className="font-mono text-[10px] text-muted-foreground">
-                {selected.outIsList ? "multi-doc slot · list[structure]" : "single-doc slot · one structure"}
+                {resolveOutIsList(selected)
+                  ? "multi-doc slot · list[structure]"
+                  : "single-doc slot · one structure"}
               </p>
             </div>
             <Switch
-              checked={!!selected.outIsList}
+              checked={resolveOutIsList(selected)}
               onCheckedChange={(v) =>
                 onUpdate!({
-                  outIsList: v || undefined,
+                  ...patchSpineOutList(selected, v),
                   inputMinCount: v ? Math.max(2, selected.inputMinCount ?? 1) : undefined,
                 })
               }
             />
           </div>
         ) : (
-          <StaticValue>{selected.outIsList ? "Multi-doc (list)" : "Single-doc"}</StaticValue>
+          <StaticValue>{resolveOutIsList(selected) ? "Multi-doc (list)" : "Single-doc"}</StaticValue>
         )}
       </PipelineField>
-      {(selected.outIsList || (selected.inputMinCount ?? 1) > 1) && (
+      {(resolveOutIsList(selected) || (selected.inputMinCount ?? 1) > 1) && (
         <PipelineField
           label="Minimum documents"
           hint={edit ? "required count when this slot accepts multiple files" : undefined}
@@ -205,24 +212,21 @@ export function InputModuleFields({
             <Input
               type="number"
               min={1}
-              value={selected.inputMinCount ?? (selected.outIsList ? 2 : 1)}
+              value={selected.inputMinCount ?? (resolveOutIsList(selected) ? 2 : 1)}
               onChange={(e) => {
                 const n = Math.max(1, Number.parseInt(e.target.value, 10) || 1)
-                onUpdate!({ inputMinCount: n === 1 && !selected.outIsList ? undefined : n })
+                onUpdate!({ inputMinCount: n === 1 && !resolveOutIsList(selected) ? undefined : n })
               }}
               className="h-8 font-mono text-xs"
             />
           ) : (
-            <StaticValue mono>{selected.inputMinCount ?? (selected.outIsList ? 2 : 1)}</StaticValue>
+            <StaticValue mono>{selected.inputMinCount ?? (resolveOutIsList(selected) ? 2 : 1)}</StaticValue>
           )}
         </PipelineField>
       )}
-      {selected.outIsList && selected.outStructureId && (
-        <PipelineField label="Output shape">
-          <StaticValue mono>
-            list[
-            {models.find((m) => m.id === selected.outStructureId)?.name ?? "structure"}]
-          </StaticValue>
+      {resolveOutIsList(selected) && selected.outStructureId && (
+        <PipelineField label="Spine output type">
+          <StaticValue mono>{formatModuleSpineOut(selected, models)}</StaticValue>
         </PipelineField>
       )}
       {warnings?.length ? (

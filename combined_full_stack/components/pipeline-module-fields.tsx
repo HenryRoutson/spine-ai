@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds"
+import { formatModuleSpineIn, formatModuleSpineOut } from "@/lib/spine-type"
 import { MODULE_META } from "@/lib/types"
 import type {
   PipelineModule,
@@ -298,6 +299,14 @@ export function PipelineModuleFields({
             edit={!!edit}
             onFix={onFixIoMismatch}
           />
+        </PipelineField>
+      )}
+
+      {selected.kind !== "input" && (
+        <PipelineField label="Spine types">
+          <StaticValue mono>
+            {formatModuleSpineIn(selected, models)} → {formatModuleSpineOut(selected, models)}
+          </StaticValue>
         </PipelineField>
       )}
 

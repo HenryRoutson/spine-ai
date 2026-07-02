@@ -7,8 +7,10 @@
 // AI :   - frontend DEFAULT_MODEL is "qwen-2.5-72b" (backend: "deepseek-v3"),
 // AI :   - frontend MODEL_OPTIONS is missing "sonnet-4.7" (the A/B fallback model).
 
-// ---- branded id types (rule 4: differentiate otherwise-shared strings) ----
+import type { TypeExpr } from "./type_expr";
 import { DEEPSEEK_SLUG } from "./openrouter_slugs";
+
+export type { TypeExpr } from "./type_expr";
 
 export type ProjectId = string & { __brand: "ProjectId" };
 export type StructureModelId = string & { __brand: "StructureModelId" };
@@ -111,6 +113,9 @@ export interface PipelineModule {
   // io contract — every step declares the structure it consumes and emits
   inStructureId?: StructureModelId;
   outStructureId?: StructureModelId;
+  // AI : explicit spine types — canonical when set; legacy in/outStructureId + outIsList are synced from these.
+  inType?: TypeExpr;
+  outType?: TypeExpr;
   // config
   inputType?: InputTypeSpec;
   inputNameContains?: string; // AI : optional filename substring — only matching docs can fill this input slot
@@ -142,6 +147,7 @@ export interface Project {
   strategies: Strategy[];
   seedDocNames?: string[]; // AI : filenames from seeds/*.json — scopes inference inputs to this project
   createdAt?: number; // AI : ms since epoch — set when blank/cloned; templates from seeds/*.json omit this
+  lastOpenedAt?: number; // AI : ms since epoch — updated when user opens/switches to this project
   documentation?: string; // AI : freeform markdown — prepended to every agent/assistant prompt call to prevent regressions
 }
 

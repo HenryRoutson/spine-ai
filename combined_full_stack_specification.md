@@ -24,6 +24,8 @@ a project selector is at the top of the screen and available no matter what tab 
 Create a blank project button
 project was created and give a date in the ui.
 
+please have a last opened variable for every project and open on load the one that is latest so you don't keep opening the same project on load
+
 # example projects
 
   1. a company legal evaluation, where you provide a document about legal requirements for some type of company and then a document of what that company has done to comply with regulation. what is produced is an excel file which has broken down the atomic rules and if they are followed or not. use parallel llm calls by breaking down the legal requirements into atomic rules. accept diverse inputs.

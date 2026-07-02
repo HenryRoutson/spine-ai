@@ -21,6 +21,11 @@ export type TypeExpr =
   | { kind: "list"; item: TypeExpr }
   | { kind: "ref"; modelId: StructureModelId }
   | { kind: "file"; inputTypes: InputType[] }
+  | { kind: "optional"; inner: TypeExpr }
+  | { kind: "set"; item: TypeExpr }
+  | { kind: "map"; key: TypeExpr; value: TypeExpr }
+  | { kind: "union"; variants: TypeExpr[] }
+  | { kind: "generic"; name: string; args: TypeExpr[] }
   | { kind: "unknown" };
 
 export const QuoteSchema = z.object({
@@ -88,15 +93,17 @@ function structureSpineType(modelId: StructureModelId | undefined, isList: boole
   return isList ? { kind: "list", item: base } : base;
 }
 
-// AI : mirrors validity.ts — llm-batch and outIsList steps put a bare array on the spine.
+// AI : list-ness on the spine comes from outType when set, else legacy outIsList / llm-batch.
 export function stepEmitsList(m: PipelineModule | undefined): boolean {
   if (!m) return false;
+  if (m.outType) return isListRoot(m.outType);
   if (m.kind === "llm-batch") return true;
   return !!m.outIsList;
 }
 
 export function stepSpineOutType(m: PipelineModule | undefined): TypeExpr | undefined {
   if (!m) return undefined;
+  if (m.outType) return m.outType;
   if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review") {
     const id = m.inStructureId ?? m.outStructureId;
     return id ? structureSpineType(id, false) : undefined;
@@ -109,6 +116,7 @@ export function stepSpineOutType(m: PipelineModule | undefined): TypeExpr | unde
 }
 
 export function stepSpineInType(m: PipelineModule): TypeExpr | undefined {
+  if (m.inType) return m.inType;
   if (!m.inStructureId) return undefined;
   if (m.kind === "llm-batch") {
     return { kind: "list", item: { kind: "ref", modelId: m.inStructureId } };
@@ -152,6 +160,29 @@ export function typeExprEqual(a: TypeExpr, b: TypeExpr): boolean {
       const bs = [...b.inputTypes].sort().join(",");
       return as === bs;
     }
+    case "optional":
+      return b.kind === "optional" && typeExprEqual(a.inner, b.inner);
+    case "set":
+      return b.kind === "set" && typeExprEqual(a.item, b.item);
+    case "map":
+      return (
+        b.kind === "map" &&
+        typeExprEqual(a.key, b.key) &&
+        typeExprEqual(a.value, b.value)
+      );
+    case "union":
+      return (
+        b.kind === "union" &&
+        a.variants.length === b.variants.length &&
+        a.variants.every((v, i) => typeExprEqual(v, b.variants[i]!))
+      );
+    case "generic":
+      return (
+        b.kind === "generic" &&
+        a.name === b.name &&
+        a.args.length === b.args.length &&
+        a.args.every((arg, i) => typeExprEqual(arg, b.args[i]!))
+      );
     default:
       return false;
   }
@@ -190,6 +221,18 @@ export function formatTypeExpr(expr: TypeExpr, models: StructureModel[] = []): s
       return expr.inputTypes.length === 1
         ? `file(${expr.inputTypes[0]})`
         : `file(${expr.inputTypes.join("|")})`;
+    case "optional":
+      return `optional[${formatTypeExpr(expr.inner, models)}]`;
+    case "set":
+      return `set[${formatTypeExpr(expr.item, models)}]`;
+    case "map":
+      return `map[${formatTypeExpr(expr.key, models)}, ${formatTypeExpr(expr.value, models)}]`;
+    case "union":
+      return expr.variants.map((v) => formatTypeExpr(v, models)).join(" | ");
+    case "generic":
+      return expr.args.length
+        ? `${expr.name}[${expr.args.map((a) => formatTypeExpr(a, models)).join(", ")}]`
+        : expr.name;
     case "unknown":
       return "?";
     default:
@@ -255,6 +298,25 @@ export function typeExprToZod(
       return z.array(typeExprToZod(expr.item, models, seen, llmQuotes));
     case "ref":
       return refZod(expr.modelId, index, seen, llmQuotes);
+    case "optional":
+      return typeExprToZod(expr.inner, models, seen, llmQuotes).optional();
+    case "set":
+      return z.array(typeExprToZod(expr.item, models, seen, llmQuotes));
+    case "map":
+      return z.record(
+        typeExprToZod(expr.key, models, seen, llmQuotes) as z.ZodString,
+        typeExprToZod(expr.value, models, seen, llmQuotes),
+      );
+    case "union":
+      return z.union(
+        expr.variants.map((v) => typeExprToZod(v, models, seen, llmQuotes)) as [
+          ZodType,
+          ZodType,
+          ...ZodType[],
+        ],
+      );
+    case "generic":
+      return typeExprToZod(expr.args[0] ?? { kind: "unknown" }, models, seen, llmQuotes);
     case "file":
     case "unknown":
       return z.unknown();
@@ -328,6 +390,18 @@ export function typeExprToPy(expr: TypeExpr, models: StructureModel[] = []): str
       const name = modelName(models, expr.modelId);
       return name ?? "Any";
     }
+    case "optional":
+      return `Optional[${typeExprToPy(expr.inner, models)}]`;
+    case "set":
+      return `set[${typeExprToPy(expr.item, models)}]`;
+    case "map":
+      return `dict[${typeExprToPy(expr.key, models)}, ${typeExprToPy(expr.value, models)}]`;
+    case "union":
+      return expr.variants.map((v) => typeExprToPy(v, models)).join(" | ");
+    case "generic":
+      return expr.args.length
+        ? `${expr.name}[${expr.args.map((a) => typeExprToPy(a, models)).join(", ")}]`
+        : expr.name;
     case "file":
       return "FileInput";
     case "unknown":
@@ -377,6 +451,18 @@ export function typeExprToTs(expr: TypeExpr, models: StructureModel[] = []): str
       const name = modelName(models, expr.modelId);
       return name ?? "unknown";
     }
+    case "optional":
+      return `${typeExprToTs(expr.inner, models)} | undefined`;
+    case "set":
+      return `Set<${typeExprToTs(expr.item, models)}>`;
+    case "map":
+      return `Record<${typeExprToTs(expr.key, models)}, ${typeExprToTs(expr.value, models)}>`;
+    case "union":
+      return expr.variants.map((v) => typeExprToTs(v, models)).join(" | ");
+    case "generic":
+      return expr.args.length
+        ? `${expr.name}<${expr.args.map((a) => typeExprToTs(a, models)).join(", ")}>`
+        : expr.name;
     case "file":
       return "FileInput";
     case "unknown":

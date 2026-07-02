@@ -5,7 +5,8 @@ import {
   labelAsStateKey,
   pipelineStateTsInterface,
 } from "./pipeline_state";
-import type { Project, PipelineModule } from "./types";
+import type { Project, PipelineModule, StructureModel } from "./types";
+import { fieldTypeToExpr } from "./type_expr";
 import {
   formatTypeExpr,
   labelToPyKey,
@@ -17,9 +18,33 @@ import {
 
 export type GeneratedPipelineTypes = {
   modelsPy: string;
+  modelsDts: string;
   pipelinePy: string;
   pipelineDts: string;
 };
+
+function modelToDts(model: StructureModel, models: StructureModel[]): string {
+  const lines = model.fields
+    .filter((f) => f.name.trim())
+    .map((f) => {
+      let t = typeExprToTs(fieldTypeToExpr(f), models);
+      if (f.optional) t = `${t} | undefined`;
+      return `  ${f.name}: ${t};`;
+    });
+  return `export type ${model.name} = {\n${lines.join("\n")}\n};`;
+}
+
+export function generateModelsDts(models: StructureModel[]): string {
+  const header = [
+    "export type Quote = { doc_id: string; start: number; end: number };",
+    "export type TextQuote = { text: string; quote: Quote };",
+    "export type Document = { content: string; filename: string };",
+    "export type FileInput = Document;",
+    "",
+  ].join("\n");
+  const user = models.map((m) => modelToDts(m, models)).join("\n\n");
+  return `${header}${user}\n`;
+}
 
 function stepFunctionName(m: PipelineModule, index: number): string {
   const key = labelToPyKey(m.label);
@@ -28,6 +53,7 @@ function stepFunctionName(m: PipelineModule, index: number): string {
 
 export function generatePipelineTypes(project: Project): GeneratedPipelineTypes {
   const modelsPy = allModelsToPydantic(project.models);
+  const modelsDts = generateModelsDts(project.models);
   const statePy = pipelineStatePyTypedDict(project);
 
   const pySteps: string[] = [];
@@ -87,7 +113,7 @@ export function generatePipelineTypes(project: Project): GeneratedPipelineTypes 
     "",
   ].join("\n");
 
-  return { modelsPy, pipelinePy, pipelineDts };
+  return { modelsPy, modelsDts, pipelinePy, pipelineDts };
 }
 
 export function formatPipelineTypeSummary(project: Project): string {

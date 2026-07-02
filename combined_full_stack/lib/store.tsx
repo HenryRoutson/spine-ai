@@ -38,6 +38,7 @@ import { migrateProjectModules, syncAutoQuoteSteps } from "@/lib/quote-steps"
 import { stripSharedModels, withSharedModels } from "@/lib/structure"
 import { mergeInferredStructuresForDoc, modelsChanged } from "@/lib/sync-doc-structures"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
+import { mostRecentlyOpenedProject, resolveActiveProject } from "@/lib/project-active"
 
 export type BillingAccountView = {
   balanceCents: number
@@ -224,13 +225,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const applyState = useCallback(
     (data: ServerState, projectId: string) => {
       setLoadError(null)
-      setState(data)
-      // AI : first load (or stale id) — pin to the first project so the selector stays in sync.
-      if (!projectId || !data.projects.some((p) => p.id === projectId))
-        setActiveProjectId(data.projects[0]?.id ?? "")
+      setState((prev) => {
+        // AI : keep in-flight lastOpenedAt when refetch races the open-stamp PUT
+        const mergedProjects = data.projects.map((p) => {
+          const local = prev?.projects.find((x) => x.id === p.id)
+          if (!local?.lastOpenedAt) return p
+          if (!p.lastOpenedAt || local.lastOpenedAt > p.lastOpenedAt) return { ...p, lastOpenedAt: local.lastOpenedAt }
+          return p
+        })
+        return { ...data, projects: mergedProjects }
+      })
+      const resolved = resolveActiveProject(data.projects, projectId)
+      const activeId = resolved?.id ?? ""
+      if (!projectId || !data.projects.some((p) => p.id === projectId)) setActiveProjectId(activeId)
       refreshBilling().catch(console.error) // AI : billing failure must not block pipeline UI
     },
     [refreshBilling],
+  )
+
+  const stampProjectOpened = useCallback(
+    (id: string) => {
+      setState((prev) => {
+        if (!prev) return prev
+        const current = prev.projects.find((p) => p.id === id)
+        if (!current) return prev
+        const next = { ...current, lastOpenedAt: Date.now() }
+        void persistProject(id, JSON.stringify(next))
+        return { ...prev, projects: prev.projects.map((p) => (p.id === id ? next : p)) }
+      })
+    },
+    [persistProject],
+  )
+
+  const selectActiveProject = useCallback(
+    (id: string) => {
+      if (id === activeProjectId) return
+      stampProjectOpened(id)
+      setActiveProjectId(id)
+    },
+    [activeProjectId, stampProjectOpened],
   )
 
   const refresh = useCallback(async (projectId = activeProjectId) => {
@@ -343,7 +376,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify(body),
     })
       .then(async (fresh) => {
-        setActiveProjectId(fresh.id)
+        selectActiveProject(fresh.id)
         // AI : clone may ingest/rename bundled seed docs server-side — reload docs + backfilled seedDocNames.
         await refresh(fresh.id)
         return fresh
@@ -352,7 +385,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setSaveError(err instanceof Error ? err.message : "Failed to create project")
         throw err
       })
-  }, [refresh])
+  }, [refresh, selectActiveProject])
 
   const addProject = useCallback(() => {
     void postNewProject({}).catch((err) =>
@@ -404,16 +437,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setState((prev) => {
             if (!prev || prev.projects.length <= 1) return prev
             const nextProjects = prev.projects.filter((p) => p.id !== id)
-            if (activeProjectId === id) nextActiveId = nextProjects[0]?.id
+            if (activeProjectId === id) nextActiveId = mostRecentlyOpenedProject(nextProjects)?.id
             return { ...prev, projects: nextProjects }
           })
-          if (nextActiveId) setActiveProjectId(nextActiveId)
+          if (nextActiveId) selectActiveProject(nextActiveId)
         })
         .catch((err) => {
           setSaveError(err instanceof Error ? err.message : "Failed to delete project")
           throw err
         }),
-    [activeProjectId],
+    [activeProjectId, selectActiveProject],
   )
 
   const addDoc = useCallback(async (file: File, label: DocLabel, projectId?: string) => {
@@ -683,7 +716,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return {
       projects,
       activeProjectId: project.id,
-      setActiveProjectId,
+      setActiveProjectId: selectActiveProject,
       addProject,
       cloneFromTemplate,
       cloneProject: cloneProjectById,
@@ -757,6 +790,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     resyncExamples,
     renameProject,
     deleteProject,
+    selectActiveProject,
   ])
 
   if (loadError) {

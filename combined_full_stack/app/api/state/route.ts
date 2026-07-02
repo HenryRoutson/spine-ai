@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAuthStore } from "@/lib/server/api_context";
+import { resolveActiveProject } from "@/lib/project-active";
 import { userProjectsFrom } from "@/lib/server/store";
 import { migrateProjectModules } from "@/lib/server/validity";
 import { logger } from "@/lib/server/server_logger";
@@ -16,8 +17,7 @@ export async function GET(req: NextRequest) {
 
   const projectId = req.nextUrl.searchParams.get("projectId") as ProjectId | null;
   const projects = userProjectsFrom(store.projects()).map(migrateProjectModules);
-  const project =
-    (projectId && projects.find((p) => p.id === projectId)) || projects[0];
+  const project = resolveActiveProject(projects, projectId);
   apiLog.debug(`GET /api/state`, {
     projectId,
     activeProject: project?.id,

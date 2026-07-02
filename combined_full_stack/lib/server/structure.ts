@@ -287,22 +287,44 @@ export function materializeToModel(
   return out;
 }
 
+// AI : pick the list field a bare transform uses when wrapping list[T] → { …list field… }.
+export function listFieldForAutoWrap(
+  out: StructureModel,
+  listItemStructureId: StructureModelId,
+  inStructureId?: StructureModelId,
+): ModelField | undefined {
+  const listFields = listFieldsForWrap(out);
+  if (!listFields.length) return undefined;
+  if (inStructureId) {
+    const byIn = listFields.find((f) => f.type === "list[model]" && f.ref === inStructureId);
+    if (byIn) return byIn;
+  }
+  const byItem = listFields.find((f) => f.type === "list[model]" && f.ref === listItemStructureId);
+  return byItem ?? listFields[0];
+}
+
+export function canAutoWrapListIntoOutputStructure(
+  out: StructureModel,
+  listItemStructureId: StructureModelId,
+  inStructureId?: StructureModelId,
+): boolean {
+  return !!listFieldForAutoWrap(out, listItemStructureId, inStructureId);
+}
+
 // AI : llm-batch emits a bare array; a single-object output needs that list in a list field.
 export function wrapListForOutputStructure(
   list: unknown[],
   out: StructureModel,
   inStructureId?: StructureModelId,
 ): Record<string, unknown> {
-  const listFields = listFieldsForWrap(out);
-  if (listFields.length === 0) {
+  const target = inStructureId
+    ? listFieldForAutoWrap(out, inStructureId, inStructureId)
+    : listFieldsForWrap(out)[0];
+  if (!target) {
     throw new Error(
       `output structure "${out.name}" has no list field — add one or use custom-code to reshape the upstream list`,
     );
   }
-  const matched =
-    inStructureId &&
-    listFields.find((f) => f.type === "list[model]" && f.ref === inStructureId);
-  const target = matched ?? listFields[0];
   return { [target.name]: list };
 }
 

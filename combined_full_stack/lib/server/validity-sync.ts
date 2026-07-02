@@ -14,6 +14,7 @@ import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/asser
 import { hasQuoteField, listFieldsForWrap } from "./structure";
 import { stripSharedModels, withSharedModels } from "./builtin_models";
 import { stepSpineOutType, stepEmitsList } from "./type_expr";
+import { migrateModulesSpineTypes } from "./spine_types";
 
 export { stepEmitsList } from "./type_expr";
 
@@ -214,6 +215,7 @@ export function migrateProjectModules(project: Project): Project {
   const withCache = migrated.map((m) => (m.cached ? m : { ...m, cached: true }));
   const normalized = normalizePassthroughStructureIds(withCache);
   const noted = normalizeModuleNotes(normalized);
+  const spineTyped = migrateModulesSpineTypes(noted);
   const modelsChanged = models.length !== project.models.length || models.some((m, i) => m !== project.models[i]);
   const changed =
     modelsChanged ||
@@ -222,7 +224,8 @@ export function migrateProjectModules(project: Project): Project {
     migrated.some((m, i) => m !== placed[i]) ||
     withCache.some((m, i) => m !== migrated[i]) ||
     normalized.some((m, i) => m !== withCache[i]) ||
-    noted.some((m, i) => m !== normalized[i]);
+    noted.some((m, i) => m !== normalized[i]) ||
+    spineTyped.some((m, i) => m !== noted[i]);
   if (!changed) return project;
-  return { ...project, models, modules: noted };
+  return { ...project, models, modules: spineTyped };
 }

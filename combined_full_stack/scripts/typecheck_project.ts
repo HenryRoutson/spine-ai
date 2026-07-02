@@ -27,23 +27,8 @@ const generated = generatePipelineTypes(project);
 mkdirSync(outDir, { recursive: true });
 writeFileSync(join(outDir, "models.py"), generated.modelsPy);
 writeFileSync(join(outDir, "pipeline_types.py"), generated.pipelinePy);
+writeFileSync(join(outDir, "models.d.ts"), generated.modelsDts);
 writeFileSync(join(outDir, "pipeline_types.d.ts"), generated.pipelineDts);
-
-const modelsDts = [
-  "export type Quote = { doc_id: string; start: number; end: number };",
-  "export type TextQuote = { text: string; quote: Quote };",
-  "export type Document = { content: string; filename: string };",
-  "export type FileInput = Document;",
-  "",
-  ...project.models.map((m) => {
-    const fields = m.fields
-      .map((f) => `  ${f.name}: unknown;`)
-      .join("\n");
-    return `export type ${m.name} = {\n${fields}\n};`;
-  }),
-  "",
-].join("\n");
-writeFileSync(join(outDir, "models.d.ts"), modelsDts);
 
 const tsconfig = {
   compilerOptions: {

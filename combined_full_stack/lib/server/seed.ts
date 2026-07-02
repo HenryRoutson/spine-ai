@@ -6,6 +6,7 @@ import { UNNAMED_PROJECT_NAME } from "@/lib/project-assistant-types";
 import { z } from "zod";
 import { DOCUMENTS_DIR, REPO_ROOT } from "./config";
 import { isUnavailableSeedDoc, unavailableSeedDocMessage } from "../seed-doc";
+import { TypeExprSchema } from "./spine_types";
 import {
   FIELD_TYPES,
   INPUT_TYPES,
@@ -68,6 +69,8 @@ const SeedFileSchema = z.object({
       note: z.string().default(""),
       inStructureId: z.string().optional(),
       outStructureId: z.string().optional(),
+      inType: TypeExprSchema.optional(),
+      outType: TypeExprSchema.optional(),
       inputType: z.union([InputTypeSchema, z.array(InputTypeSchema).min(1)]).optional(),
       inputNameContains: z.string().optional(),
       inputDescription: z.string().optional(),
@@ -237,11 +240,13 @@ export function userProjectsFrom(projects: Project[]): Project[] {
 }
 
 export function blankProject(id: ProjectId): Project {
+  const now = Date.now();
   return {
     id,
     name: UNNAMED_PROJECT_NAME,
     kind: "blank",
-    createdAt: Date.now(),
+    createdAt: now,
+    lastOpenedAt: now,
     models: [],
     modules: [
       { id: "mod_blank_in" as ModuleId, kind: "input", label: "Input", note: "Pipeline input document", inputType: "text", cached: true, avgMs: 80, avgCostCents: 0 },
@@ -280,11 +285,13 @@ export function nextNumberedCloneName(baseName: string, existingNames: Iterable<
 export function cloneProject(source: Project, existingProjects: Project[]): Project {
   const id = uid<ProjectId>("p_");
   const name = nextNumberedCloneName(source.name, existingProjects.map((p) => p.name));
+  const now = Date.now();
   const cloned: Project = {
     ...structuredClone(backfillSeedDocNames(source)),
     id,
     name,
-    createdAt: Date.now(),
+    createdAt: now,
+    lastOpenedAt: now,
     strategies: source.strategies.map((s) => ({ ...s, id: `${s.id}_${id}` })),
   };
   return cloned;

@@ -4,6 +4,7 @@
 import { useMemo } from "react"
 import { llmSchemaJson } from "@/lib/structure"
 import { isLlmKind } from "@/lib/module-kinds"
+import { llmStepEmitsList } from "@/lib/spine-type"
 import { cn } from "@/lib/utils"
 import {
   MODEL_OPTIONS,
@@ -36,7 +37,7 @@ export function useLlmSchemaPreview(selected: PipelineModule | undefined, models
     if (!selected || !isLlmKind(selected.kind) || !selected.outStructureId) return null
     const out = models.find((m) => m.id === selected.outStructureId)
     if (!out) return null
-    const isList = selected.outIsList || selected.kind === "llm-batch"
+    const isList = llmStepEmitsList(selected)
     return llmSchemaJson(out, models, isList)
   }, [selected, models])
 }

@@ -4,6 +4,7 @@ import { DEFAULT_ASSERT_TS } from "@/lib/assert_steps"
 import { MODULE_META } from "@/lib/types"
 import { uid } from "@/lib/id"
 import { isLlmKind, stepRequiresNote, usesPassthroughStructure } from "@/lib/module-kinds"
+import { migrateModuleSpineTypes } from "@/lib/server/spine_types"
 
 export type ModuleFactoryOpts = {
   id?: ModuleId
@@ -43,7 +44,7 @@ export function createPipelineModule(
   const { kind } = opts
   const isLlm = isLlmKind(kind)
   const defaultModel = models[0]?.id
-  return {
+  return migrateModuleSpineTypes({
     id: opts.id ?? uid<ModuleId>(),
     kind,
     label: opts.label ?? MODULE_META[kind].label,
@@ -71,7 +72,7 @@ export function createPipelineModule(
           ? (opts.fallbackList ?? [makeCustomCodeEntry("typescript", DEFAULT_ASSERT_TS)])
           : undefined,
     model: isLlm ? opts.model ?? globalModel : undefined,
-  }
+  })
 }
 
 export function makeModule(

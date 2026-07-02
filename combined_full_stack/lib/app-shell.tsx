@@ -9,6 +9,7 @@ export type AppWindowId =
   | "projects"
   | "structure"
   | "pipeline"
+  | "types"
   | "inference"
   | "logging"
   | "cache"
