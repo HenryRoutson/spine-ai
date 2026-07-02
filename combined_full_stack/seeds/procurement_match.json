@@ -346,6 +346,12 @@
       "type": "text",
       "label": "inference",
       "file": "procurement_match/vendor_invoice.md"
+    },
+    {
+      "name": "procurement_match_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "procurement_match/procurement_match_testing.json"
     }
   ]
 }

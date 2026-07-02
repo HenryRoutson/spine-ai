@@ -1,0 +1,34 @@
+{
+  "description": "Step-by-step test for Batch LLM Example — expected outputs from the bundled golden fixtures.",
+  "inputs": {
+    "Bullet List": "sample_bullets.txt"
+  },
+  "expectedOutputs": {
+    "Wrap → List": [
+      {
+        "id": "1",
+        "text": "Product launch checklist"
+      },
+      {
+        "id": "2",
+        "text": "- Finalize pricing tiers"
+      },
+      {
+        "id": "3",
+        "text": "- Write onboarding emails"
+      },
+      {
+        "id": "4",
+        "text": "- Set up analytics dashboard"
+      },
+      {
+        "id": "5",
+        "text": "- Review security audit findings"
+      }
+    ],
+    "Summary Report": {
+      "title": "Combined summaries",
+      "body": "[1] Summary of: Product launch checklist\n[2] Summary of: - Finalize pricing tiers\n[3] Summary of: - Write onboarding emails\n[4] Summary of: - Set up analytics dashboard\n[5] Summary of: - Review security audit findings"
+    }
+  }
+}

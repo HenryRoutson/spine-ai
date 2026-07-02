@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { dataDir } from "./config";
-import { uid } from "../id";
 import {
   allProjectSeeds,
   backfillSeedDocNames,
@@ -236,10 +235,9 @@ export function syncProjectFromSeed(existing: Project, seed: Project): Project {
 }
 
 // AI : built-in templates live in seeds/*.json only — drop any legacy rows that were openable in-store.
+// AI : zero projects is a valid state now — the client renders a no-projects page instead.
 export function purgeSeedTemplateProjects(store: Store): number {
   const templateIds = seedTemplateIds();
-  const hasUserProject = store.projects().some((p) => !templateIds.has(p.id));
-  if (!hasUserProject) store.saveProject(blankProject(uid<ProjectId>("p_")));
   let removed = 0;
   for (const id of templateIds) {
     if (store.project(id) && store.deleteProject(id)) removed += 1;
@@ -452,7 +450,6 @@ export class JsonStore implements Store {
   }
 
   deleteProject(id: ProjectId): boolean {
-    if (this.state.projects.length <= 1) return false;
     const i = this.state.projects.findIndex((p) => p.id === id);
     if (i === -1) return false;
     this.state.projects.splice(i, 1);

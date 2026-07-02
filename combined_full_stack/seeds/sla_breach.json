@@ -161,6 +161,12 @@
       "type": "text",
       "label": "inference",
       "file": "sla_breach/sla_uptime_report.md"
+    },
+    {
+      "name": "sla_breach_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "sla_breach/sla_breach_testing.json"
     }
   ]
 }

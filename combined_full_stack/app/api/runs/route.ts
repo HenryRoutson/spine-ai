@@ -45,6 +45,8 @@ interface RunRequest {
   inputDocsByModule?: Partial<Record<ModuleId, DocId[]>>;
   model?: ModelId;
   allowDuplicateRuns?: boolean;
+  // AI : "testing" flags Testing-tab runs in Logging; anything else is a normal app run.
+  source?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -52,8 +54,9 @@ export async function POST(req: NextRequest) {
   if (ctx instanceof NextResponse) return ctx;
   const { auth, store } = ctx;
 
-  const { projectId, inputDocId, inputDocIds, inputDocsByModule, model, allowDuplicateRuns } = (await req.json()) as RunRequest;
-  apiLog.info(`POST /api/runs`, { projectId, inputDocId, inputDocIds, inputDocsByModule, model, ownerId: auth.userId });
+  const { projectId, inputDocId, inputDocIds, inputDocsByModule, model, allowDuplicateRuns, source } = (await req.json()) as RunRequest;
+  const runSource = source === "testing" ? ("testing" as const) : undefined;
+  apiLog.info(`POST /api/runs`, { projectId, inputDocId, inputDocIds, inputDocsByModule, model, source: runSource, ownerId: auth.userId });
 
   if (!store.project(projectId)) {
     apiLog.warn(`unknown project`, { projectId });
@@ -165,6 +168,7 @@ export async function POST(req: NextRequest) {
           fingerprint,
           fingerprintInputDocIds,
           cacheOwnerId: auth.userId,
+          ...(runSource ? { runMeta: { source: runSource } } : {}),
           // AI : never block the pipeline on Supabase job upserts — progress is memory-hot during the run.
           onStep: (p) => {
             void jobProgress(auth.userId, jobId, p, jobDb).catch((err) =>

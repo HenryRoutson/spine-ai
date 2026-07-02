@@ -294,6 +294,12 @@
       "type": "json",
       "label": "inference",
       "file": "database_migration/data/database_field_mapping.json"
+    },
+    {
+      "name": "database_migration_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "database_migration/database_migration_testing.json"
     }
   ]
 }

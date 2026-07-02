@@ -29,6 +29,7 @@ export const API_ROUTES = {
   assistantChat: (id: string) => `/api/assistant-chats/${id}`,
   pipelineSummary: "/api/pipeline-summary",
   structureAssistant: "/api/structure-assistant",
+  testingAssistant: "/api/testing-assistant",
   docsContent: "/api/docs/content",
   feedback: "/api/feedback",
   supabaseEnv: "/api/supabase-env",

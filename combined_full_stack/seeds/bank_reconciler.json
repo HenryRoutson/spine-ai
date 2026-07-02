@@ -261,6 +261,12 @@
       "type": "text",
       "label": "inference",
       "file": "bank_reconciler/open_invoices.md"
+    },
+    {
+      "name": "bank_reconciler_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "bank_reconciler/bank_reconciler_testing.json"
     }
   ]
 }

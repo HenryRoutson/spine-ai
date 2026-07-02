@@ -115,6 +115,7 @@ export async function startRun(
   inputDocIds: DocId[] = [],
   inputDocsByModule?: Partial<Record<ModuleId, DocId[]>>,
   allowDuplicateRuns = false,
+  source?: "testing",
 ): Promise<StartRunResult> {
   const res = await fetch(API_ROUTES.runs, {
     method: "POST",
@@ -126,6 +127,7 @@ export async function startRun(
       inputDocsByModule,
       model,
       allowDuplicateRuns,
+      source,
     }),
   })
   if (!res.ok) {

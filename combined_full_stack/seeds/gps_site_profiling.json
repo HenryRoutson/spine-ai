@@ -331,6 +331,12 @@
       "type": "json",
       "label": "inference",
       "file": "gps_site_profiling/gps_site_locations.json"
+    },
+    {
+      "name": "gps_site_profiling_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "gps_site_profiling/gps_site_profiling_testing.json"
     }
   ]
 }

@@ -41,6 +41,7 @@ import { stripSharedModels, withSharedModels } from "@/lib/structure"
 import { mergeInferredStructuresForDoc, modelsChanged } from "@/lib/sync-doc-structures"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
 import { mostRecentlyOpenedProject, resolveActiveProject } from "@/lib/project-active"
+import { NoProjectsPage } from "@/components/no-projects-page"
 
 export type BillingAccountView = {
   balanceCents: number
@@ -438,14 +439,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (id: string): Promise<void> =>
       apiJson<{ ok: true }>(API_ROUTES.project(id), { method: "DELETE" })
         .then(() => {
+          // AI : deleting the last project is allowed — zero projects renders NoProjectsPage below.
           let nextActiveId: string | undefined
+          let emptied = false
           setState((prev) => {
-            if (!prev || prev.projects.length <= 1) return prev
+            if (!prev) return prev
             const nextProjects = prev.projects.filter((p) => p.id !== id)
+            emptied = nextProjects.length === 0
             if (activeProjectId === id) nextActiveId = mostRecentlyOpenedProject(nextProjects)?.id
             return { ...prev, projects: nextProjects }
           })
           if (nextActiveId) selectActiveProject(nextActiveId)
+          else if (emptied) setActiveProjectId("")
         })
         .catch((err) => {
           setSaveError(err instanceof Error ? err.message : "Failed to delete project")
@@ -835,6 +840,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     )
   }
 
+  const saveErrorBanner = saveError ? (
+    <div
+      role="alert"
+      className="fixed inset-x-0 top-0 z-50 flex items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive"
+    >
+      <span>Save failed: {saveError}</span>
+      <button type="button" onClick={clearSaveError} className="shrink-0 underline">
+        dismiss
+      </button>
+    </div>
+  ) : null
+
+  // AI : zero projects is valid — replace the whole app shell (no sub tabs) with an empty-state page.
+  if (state && migratedProjects.length === 0) {
+    return (
+      <>
+        {saveErrorBanner}
+        <NoProjectsPage onCreateBlank={addProject} onCloneTemplate={cloneFromTemplate} />
+      </>
+    )
+  }
+
   if (!state || !project || !value) {
     return (
       <div className="flex h-dvh items-center justify-center bg-background">
@@ -845,17 +872,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   return (
     <>
-      {saveError && (
-        <div
-          role="alert"
-          className="fixed inset-x-0 top-0 z-50 flex items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive"
-        >
-          <span>Save failed: {saveError}</span>
-          <button type="button" onClick={clearSaveError} className="shrink-0 underline">
-            dismiss
-          </button>
-        </div>
-      )}
+      {saveErrorBanner}
       <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
     </>
   )

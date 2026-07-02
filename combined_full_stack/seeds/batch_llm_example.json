@@ -142,7 +142,9 @@
       "avgMs": 2,
       "avgCostCents": 0,
       "fallbackList": [
-        { "typescript": "assertEqual(step(\"Wrap → List\"), \"Wrap → List\");" }
+        {
+          "typescript": "assertEqual(step(\"Wrap → List\"), \"Wrap → List\");"
+        }
       ]
     },
     {
@@ -232,10 +234,22 @@
       "type": "text",
       "label": "inference",
       "file": "batch_llm_example/sample_bullets.txt"
+    },
+    {
+      "name": "batch_llm_example_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "batch_llm_example/batch_llm_example_testing.json"
     }
   ],
   "expectedOutputs": [
-    { "stepLabel": "Wrap → List", "file": "batch_llm_example/expected/wrap_list.json" },
-    { "stepLabel": "Summary Report", "file": "batch_llm_example/expected/summary_report.json" }
+    {
+      "stepLabel": "Wrap → List",
+      "file": "batch_llm_example/expected/wrap_list.json"
+    },
+    {
+      "stepLabel": "Summary Report",
+      "file": "batch_llm_example/expected/summary_report.json"
+    }
   ]
 }

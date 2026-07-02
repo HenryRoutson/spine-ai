@@ -41,7 +41,7 @@ import { runLogJson } from "@/lib/run-log-json"
 import { IoSection } from "@/components/logging/io-section"
 import { IoPager } from "@/components/logging/io-pager"
 import { StepLoadedDocSection } from "@/components/step-loaded-doc-section"
-import { filterRuns, RunNotesPreview } from "@/components/logging/run-picker-column"
+import { filterRuns, isTestingRun, RunNotesPreview } from "@/components/logging/run-picker-column"
 import { CompareModal } from "@/components/logging/compare-modal"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
 import { LlmRetryGridSection } from "@/components/logging/llm-retry-grid"
@@ -155,6 +155,11 @@ export function Logging() {
                           {isSharedRun(run) && (
                             <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
                               shared run
+                            </Badge>
+                          )}
+                          {isTestingRun(run) && (
+                            <Badge variant="outline" className="shrink-0 border-chart-3/40 font-mono text-[9px] text-chart-3">
+                              testing
                             </Badge>
                           )}
                           {runInputDocIds(run).map((docId) => (

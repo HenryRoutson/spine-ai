@@ -272,6 +272,12 @@
       "type": "text",
       "label": "inference",
       "file": "legal/company_for_assessment.md"
+    },
+    {
+      "name": "company_legal_evaluation_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "legal/company_legal_evaluation_testing.json"
     }
   ]
 }

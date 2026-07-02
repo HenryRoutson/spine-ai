@@ -1,0 +1,9 @@
+{
+  "description": "Test scaffold for Vendor SLA Breach Report — inputs are pinned; fill the null expected outputs from a verified run (only listed steps are checked).",
+  "inputs": {
+    "SLA Uptime Report": "cloudhost_sla_march_2025.md"
+  },
+  "expectedOutputs": {
+    "Breach Table": null
+  }
+}

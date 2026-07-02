@@ -15,6 +15,11 @@ import { compactPreview, PREVIEW_RUN_NOTES_CHARS } from "@/lib/text-preview"
 import { useStatusPalette } from "@/lib/chart-colors"
 import type { DocId, PipelineRun } from "@/lib/types"
 
+// AI : Testing-tab runs carry source "testing" — badge + searchable via "testing".
+export function isTestingRun(run: PipelineRun): boolean {
+  return run.source === "testing"
+}
+
 export function filterRuns(runs: PipelineRun[], query: string): PipelineRun[] {
   if (!query.trim()) return runs
   const q = query.toLowerCase()
@@ -23,6 +28,7 @@ export function filterRuns(runs: PipelineRun[], query: string): PipelineRun[] {
       r.model.toLowerCase().includes(q) ||
       r.id.toLowerCase().includes(q) ||
       (r.notes?.toLowerCase().includes(q) ?? false) ||
+      (r.source?.toLowerCase().includes(q) ?? false) ||
       r.steps.some((s) => s.label.toLowerCase().includes(q)),
   )
 }
@@ -101,6 +107,11 @@ export function RunPickerColumn({
                       {isSharedRun(run) && (
                         <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
                           shared run
+                        </Badge>
+                      )}
+                      {isTestingRun(run) && (
+                        <Badge variant="outline" className="shrink-0 border-chart-3/40 font-mono text-[9px] text-chart-3">
+                          testing
                         </Badge>
                       )}
                       {runInputDocIds(run).map((docId) => (

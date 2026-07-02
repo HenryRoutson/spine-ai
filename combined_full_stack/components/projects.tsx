@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import {
   Check,
   Copy,
@@ -17,21 +17,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { apiJson } from "@/lib/api-client"
-import { API_ROUTES } from "@/lib/api-routes"
 import { timeAgo } from "@/lib/time-ago"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
+import { useProjectTemplates } from "@/lib/use-project-templates"
 import type { Project, ProjectId } from "@/lib/types"
-
-type ProjectTemplateSummary = {
-  id: ProjectId
-  name: string
-  kind: string
-  moduleCount: number
-  inputCount: number
-}
 
 export function Projects() {
   const {
@@ -46,29 +37,13 @@ export function Projects() {
     resyncExamples,
   } = useStore()
   const { setActiveWindow } = useAppShell()
-  const [templates, setTemplates] = useState<ProjectTemplateSummary[]>([])
-  const [loadingTemplates, setLoadingTemplates] = useState(true)
+  const { templates, loading: loadingTemplates } = useProjectTemplates()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
   const [busy, setBusy] = useState<string | null>(null)
   const [resyncMsg, setResyncMsg] = useState<string | null>(null)
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
   const displayProjects = mergeWithGhosts(projects)
-
-  useEffect(() => {
-    let cancelled = false
-    void apiJson<{ templates: ProjectTemplateSummary[] }>(API_ROUTES.projectTemplates)
-      .then((data) => {
-        if (!cancelled) setTemplates(data.templates)
-      })
-      .catch(console.error)
-      .finally(() => {
-        if (!cancelled) setLoadingTemplates(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const openProject = useCallback(
     (id: string) => {
@@ -230,15 +205,13 @@ export function Projects() {
                     >
                       {busy === `clone-${p.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Copy className="h-3.5 w-3.5" />}
                     </Button>
-                    {projects.length > 1 && (
-                      <DeleteButton
-                        variant="ghost"
-                        size="icon-sm"
-                        deleting={deleting}
-                        label={`Delete ${p.name}`}
-                        onClick={() => void runDelete(p, projects, () => deleteProject(p.id))}
-                      />
-                    )}
+                    <DeleteButton
+                      variant="ghost"
+                      size="icon-sm"
+                      deleting={deleting}
+                      label={`Delete ${p.name}`}
+                      onClick={() => void runDelete(p, projects, () => deleteProject(p.id))}
+                    />
                   </div>
                 </AnimatedRemovalItem>
               )

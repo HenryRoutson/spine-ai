@@ -25,7 +25,9 @@ import {
   Eye,
   Search,
   TriangleAlert,
+  SquareCheck,
 } from "lucide-react"
+import { isTestingFileName } from "@/lib/testing-files"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
@@ -138,15 +140,16 @@ export function Documents() {
             className="h-8 pl-8 font-mono text-xs"
           />
         </div>
-        {(["all", "inference", "training"] as const).map((f) => (
+        {/* AI : "testing" docs are stored under the "training" DocLabel; re-click to clear the filter. */}
+        {(["inference", "training"] as const).map((f) => (
           <Button
             key={f}
             size="sm"
             variant={filter === f ? "default" : "outline"}
             className={cn("h-8 capitalize", filter !== f && "bg-transparent")}
-            onClick={() => setFilter(f)}
+            onClick={() => setFilter(filter === f ? "all" : f)}
           >
-            {f}
+            {f === "training" ? "testing" : f}
           </Button>
         ))}
       </div>
@@ -188,7 +191,9 @@ export function Documents() {
       <ScrollArea className="min-h-0 flex-1">
         <ul className="divide-y divide-border p-2">
           {displayDocs.map((doc) => {
-            const Icon = TYPE_ICON[doc.type]
+            // AI : *_testing.json files carry a checkbox mark — spec § Testing.
+            const isTest = isTestingFileName(doc.name)
+            const Icon = isTest ? SquareCheck : TYPE_ICON[doc.type]
             const deleting = isDeleting(doc.id)
             const exiting = isExiting(doc.id)
             return (
@@ -219,6 +224,11 @@ export function Documents() {
                     >
                       {doc.label}
                     </Badge>
+                    {isTest && (
+                      <Badge variant="outline" className="border-chart-3/40 font-mono text-[9px] text-chart-3">
+                        test
+                      </Badge>
+                    )}
                   </div>
                   <p className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
                     <span className="flex items-center gap-1">

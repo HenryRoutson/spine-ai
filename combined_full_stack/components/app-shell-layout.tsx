@@ -20,6 +20,7 @@ import {
   LayoutGrid,
   ChevronDown,
   BookOpen,
+  SquareCheck,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
@@ -64,6 +65,9 @@ const PipelineBuilder = dynamic(
   () => import("@/components/pipeline-builder").then((m) => ({ default: m.PipelineBuilder })),
   { loading: () => <PanelLoading label="loading pipeline…" /> },
 )
+const Testing = dynamic(() => import("@/components/testing").then((m) => ({ default: m.Testing })), {
+  loading: () => <PanelLoading label="loading testing…" />,
+})
 const Inference = dynamic(() => import("@/components/inference").then((m) => ({ default: m.Inference })), {
   loading: () => <PanelLoading label="loading inference…" />,
 })
@@ -93,13 +97,15 @@ const WINDOWS: { id: WindowId; label: string; hint: string; icon: typeof Boxes }
   { id: "projects", label: "Projects", hint: "·", icon: FolderKanban },
   { id: "structure", label: "Structure", hint: "01", icon: Boxes },
   { id: "pipeline", label: "Pipeline", hint: "02", icon: GitBranch },
-  { id: "inference", label: "Inference", hint: "03", icon: Play },
-  { id: "logging", label: "Logging", hint: "04", icon: ScrollText },
-  { id: "cache", label: "Cache", hint: "05", icon: Database },
-  { id: "documents", label: "Documents", hint: "06", icon: Files },
-  { id: "docs", label: "Docs", hint: "07", icon: BookOpen },
-  { id: "billing", label: "Billing", hint: "08", icon: CreditCard },
-  { id: "settings", label: "Settings", hint: "09", icon: Settings },
+  // AI : Testing sits before Inference — tests run before demoing (spec § Testing).
+  { id: "testing", label: "Testing", hint: "03", icon: SquareCheck },
+  { id: "inference", label: "Inference", hint: "04", icon: Play },
+  { id: "logging", label: "Logging", hint: "05", icon: ScrollText },
+  { id: "cache", label: "Cache", hint: "06", icon: Database },
+  { id: "documents", label: "Documents", hint: "07", icon: Files },
+  { id: "docs", label: "Docs", hint: "08", icon: BookOpen },
+  { id: "billing", label: "Billing", hint: "09", icon: CreditCard },
+  { id: "settings", label: "Settings", hint: "10", icon: Settings },
 ]
 
 function ProjectRenameInput({
@@ -158,7 +164,6 @@ function ProjectSelector() {
     useStore()
   const { setActiveWindow } = useAppShell()
   const [editing, setEditing] = useState<{ id: string; initialName: string } | null>(null)
-  const canDelete = projects.length > 1
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
   const displayProjects = mergeWithGhosts(projects)
 
@@ -231,21 +236,19 @@ function ProjectSelector() {
                 >
                   <Pencil className="h-3 w-3" />
                 </Button>
-                {canDelete && (
-                  <DeleteButton
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                    deleting={isDeleting(p.id)}
-                    label={`Delete ${p.name}`}
-                    onClick={(e: React.MouseEvent) => {
-                      e.stopPropagation()
-                      e.preventDefault()
-                      void runDelete(p, projects, () => deleteProject(p.id))
-                    }}
-                  />
-                )}
+                <DeleteButton
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                  deleting={isDeleting(p.id)}
+                  label={`Delete ${p.name}`}
+                  onClick={(e: React.MouseEvent) => {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    void runDelete(p, projects, () => deleteProject(p.id))
+                  }}
+                />
                 {p.id === project.id && <Check className="h-3.5 w-3.5 text-primary" />}
               </div>
             </>
@@ -373,6 +376,7 @@ export function AppShellLayout() {
           {activeWindow === "projects" && <Projects />}
           {activeWindow === "structure" && <StructureBuilder />}
           {activeWindow === "pipeline" && <PipelineBuilder />}
+          {activeWindow === "testing" && <Testing />}
           {activeWindow === "inference" && <Inference />}
           {activeWindow === "logging" && <Logging />}
           {activeWindow === "cache" && <Cache />}

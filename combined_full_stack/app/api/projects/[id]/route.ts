@@ -41,10 +41,7 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
     apiLog.warn(`DELETE /api/projects — unknown`, { projectId: id });
     return apiError(unknownProject(id), HTTP.NOT_FOUND);
   }
-  if (!store.deleteProject(id as ProjectId)) {
-    apiLog.warn(`DELETE /api/projects — blocked (last project)`, { projectId: id });
-    return apiError("cannot delete the last project", 400);
-  }
+  store.deleteProject(id as ProjectId);
   apiLog.info(`DELETE /api/projects`, { projectId: id });
   await store.flush();
   return NextResponse.json({ ok: true });

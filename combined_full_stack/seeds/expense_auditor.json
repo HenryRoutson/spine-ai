@@ -261,6 +261,12 @@
       "type": "text",
       "label": "inference",
       "file": "expense_auditor/expense_report.md"
+    },
+    {
+      "name": "expense_auditor_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "expense_auditor/expense_auditor_testing.json"
     }
   ]
 }

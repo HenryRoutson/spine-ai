@@ -175,6 +175,12 @@
       "type": "text",
       "label": "inference",
       "file": "bug_enricher/app_logs_snippet.md"
+    },
+    {
+      "name": "bug_enricher_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "bug_enricher/bug_enricher_testing.json"
     }
   ]
 }

@@ -196,6 +196,8 @@ testing isn't limited to whole runs and shouldn't need to cover all the steps. y
 
 you should describe if certain fields are deterministic like a maths answer, or probabilistic if they're something like a summary which will almost never be the same.
 
+for each test there is a button to run it
+
 # inference
 
 All inputs are shown with the option to select documents.
@@ -224,6 +226,9 @@ you need to mininimise everything except the outputs marked as output steps when
 
 there should be example input and expected output files which are used to test the pipeline, 
 this can be a demo for the inference. assert actual output equals expected
+
+
+inference contains a list of possible runs which have been pre selected, not just a single default one. these possible runs are named for example for a homework grader you could do a 1st grade example and a university grade example where the university includes latex formatting as a more advnaced test. you can also select from the tests in the inference tab.
 
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.

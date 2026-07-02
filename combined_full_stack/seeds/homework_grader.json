@@ -374,7 +374,9 @@
       "avgMs": 2,
       "avgCostCents": 0,
       "fallbackList": [
-        { "typescript": "assertEqual(step(\"Marking Schema\"), \"Marking Schema\");" }
+        {
+          "typescript": "assertEqual(step(\"Marking Schema\"), \"Marking Schema\");"
+        }
       ]
     },
     {
@@ -389,7 +391,9 @@
       "avgMs": 2,
       "avgCostCents": 0,
       "fallbackList": [
-        { "typescript": "assertEqual(step(\"Marking Questions List\"), \"Marking Questions List\");" }
+        {
+          "typescript": "assertEqual(step(\"Marking Questions List\"), \"Marking Questions List\");"
+        }
       ]
     },
     {
@@ -404,7 +408,9 @@
       "avgMs": 2,
       "avgCostCents": 0,
       "fallbackList": [
-        { "typescript": "assertEqual(step(\"Student Submissions\"), \"Student Submissions\", [\"doc_id\"]);" }
+        {
+          "typescript": "assertEqual(step(\"Student Submissions\"), \"Student Submissions\", [\"doc_id\"]);"
+        }
       ]
     },
     {
@@ -418,7 +424,9 @@
       "avgMs": 2,
       "avgCostCents": 0,
       "fallbackList": [
-        { "typescript": "assertEqual(step(\"Combine Inputs\"), \"Combine Inputs\", [\"doc_id\"]);" }
+        {
+          "typescript": "assertEqual(step(\"Combine Inputs\"), \"Combine Inputs\", [\"doc_id\"]);"
+        }
       ]
     },
     {
@@ -432,7 +440,9 @@
       "avgMs": 2,
       "avgCostCents": 0,
       "fallbackList": [
-        { "typescript": "assertEqual(step(\"Assemble Grader Work\"), \"Assemble Grader Work\", [\"doc_id\"]);" }
+        {
+          "typescript": "assertEqual(step(\"Assemble Grader Work\"), \"Assemble Grader Work\", [\"doc_id\"]);"
+        }
       ]
     },
     {
@@ -447,7 +457,9 @@
       "avgMs": 2,
       "avgCostCents": 0,
       "fallbackList": [
-        { "typescript": "assertEqual(step(\"Flatten Sections\"), \"Flatten Sections\");" }
+        {
+          "typescript": "assertEqual(step(\"Flatten Sections\"), \"Flatten Sections\");"
+        }
       ]
     },
     {
@@ -548,14 +560,38 @@
       "type": "text",
       "label": "inference",
       "file": "homework_grader/homework_student_alex.md"
+    },
+    {
+      "name": "homework_grader_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "homework_grader/homework_grader_testing.json"
     }
   ],
   "expectedOutputs": [
-    { "stepLabel": "Marking Schema", "file": "homework_grader/expected/marking_schema.json" },
-    { "stepLabel": "Marking Questions List", "file": "homework_grader/expected/marking_questions_list.json" },
-    { "stepLabel": "Student Submissions", "file": "homework_grader/expected/student_submissions.json" },
-    { "stepLabel": "Combine Inputs", "file": "homework_grader/expected/combine_inputs.json" },
-    { "stepLabel": "Assemble Grader Work", "file": "homework_grader/expected/assemble_grader_work.json" },
-    { "stepLabel": "Flatten Sections", "file": "homework_grader/expected/flatten_sections.json" }
+    {
+      "stepLabel": "Marking Schema",
+      "file": "homework_grader/expected/marking_schema.json"
+    },
+    {
+      "stepLabel": "Marking Questions List",
+      "file": "homework_grader/expected/marking_questions_list.json"
+    },
+    {
+      "stepLabel": "Student Submissions",
+      "file": "homework_grader/expected/student_submissions.json"
+    },
+    {
+      "stepLabel": "Combine Inputs",
+      "file": "homework_grader/expected/combine_inputs.json"
+    },
+    {
+      "stepLabel": "Assemble Grader Work",
+      "file": "homework_grader/expected/assemble_grader_work.json"
+    },
+    {
+      "stepLabel": "Flatten Sections",
+      "file": "homework_grader/expected/flatten_sections.json"
+    }
   ]
 }

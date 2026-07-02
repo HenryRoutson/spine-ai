@@ -155,6 +155,12 @@
       "type": "text",
       "label": "inference",
       "file": "feedback_router/product_feedback.txt"
+    },
+    {
+      "name": "feedback_router_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "feedback_router/feedback_router_testing.json"
     }
   ]
 }

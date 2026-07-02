@@ -1,0 +1,10 @@
+{
+  "description": "Test scaffold for Audit Sample Tester — inputs are pinned; fill the null expected outputs from a verified run (only listed steps are checked).",
+  "inputs": {
+    "Transaction Sample": "ap_transaction_sample_q1.md",
+    "Journal Entries": "journal_entries_excerpt.md"
+  },
+  "expectedOutputs": {
+    "Sample Results": null
+  }
+}

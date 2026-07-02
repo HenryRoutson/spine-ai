@@ -1,0 +1,12 @@
+{
+  "description": "Test scaffold for Legacy CRM Migration — inputs are pinned; fill the null expected outputs from a verified run (only listed steps are checked).",
+  "inputs": {
+    "Legacy Users": [
+      "database_legacy_users.json"
+    ],
+    "Field Mapping Input": "database_legacy_users.json"
+  },
+  "expectedOutputs": {
+    "Migrated Users": null
+  }
+}

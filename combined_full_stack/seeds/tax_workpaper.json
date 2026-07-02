@@ -254,6 +254,12 @@
       "type": "text",
       "label": "inference",
       "file": "tax_workpaper/form_1099_misc.md"
+    },
+    {
+      "name": "tax_workpaper_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "tax_workpaper/tax_workpaper_testing.json"
     }
   ]
 }

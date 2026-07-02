@@ -5,8 +5,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // AI : runPipeline & co accept this store unchanged. RLS scopes every row to the
 // AI : signed-in user behind `db`; no user_id handling anywhere in app code.
 import { hashContent, type Store } from "./store";
-import { blankProject } from "./seed";
-import { uid } from "../id";
 import { storeErrorMessage } from "./errors";
 import { migrateProjectModules } from "./validity";
 import { stripSharedModels } from "./builtin_models";
@@ -238,7 +236,6 @@ export class SupabaseStore implements Store {
   }
 
   deleteProject(id: ProjectId): boolean {
-    if (this.state.projects.length <= 1) return false;
     const i = this.state.projects.findIndex((p) => p.id === id);
     if (i === -1) return false;
     this.state.projects.splice(i, 1);
@@ -450,13 +447,10 @@ export function isMissingSchemaError(error: unknown): boolean {
   );
 }
 
-// AI : a ready store for one signed-in user — first sign-in gets a blank project + bundled docs.
+// AI : a ready store for one signed-in user — zero projects is valid (client shows the
+// AI : no-projects page), so nothing is auto-created here anymore.
 export async function openUserStore(db: SupabaseClient): Promise<SupabaseStore> {
   const s = new SupabaseStore(db);
   await s.init();
-  if (s.projects().length === 0) {
-    s.saveProject(blankProject(uid<ProjectId>("p_")));
-    await s.flush();
-  }
   return s;
 }
