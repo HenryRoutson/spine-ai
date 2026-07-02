@@ -1,6 +1,9 @@
 "use client"
 
-import { Check, AlertTriangle, FileText, BookOpen } from "lucide-react"
+import { useMemo } from "react"
+import { Check, AlertTriangle, FileText, BookOpen, Braces } from "lucide-react"
+import { MultiLangReadonlyCodeViewer, type MultiLangCodeSource } from "@/components/code-viewer"
+import { allModelsToDts, allModelsToPydantic } from "@/lib/pydantic"
 import { API_ROUTES } from "@/lib/api-routes"
 import { JSON_HEADERS } from "@/lib/api-client"
 import { readPipelineAssistantStream } from "@/lib/assistant-stream-read"
@@ -26,6 +29,7 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
     project,
     modules,
     models,
+    typeAliases,
     docs,
     model: globalModel,
     addDocContent,
@@ -44,10 +48,11 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
     if (proposal.changed.name && proposal.projectName) {
       renameProject(project.id, proposal.projectName)
     }
-    if (proposal.changed.models || proposal.changed.modules) {
+    if (proposal.changed.models || proposal.changed.modules || proposal.changed.typeAliases) {
       applyProjectChanges({
         ...(proposal.changed.models ? { models: proposal.models } : {}),
         ...(proposal.changed.modules ? { modules: proposal.modules } : {}),
+        ...(proposal.changed.typeAliases ? { typeAliases: proposal.typeAliases } : {}),
       })
     }
     if (proposal.changed.documentation) {
@@ -65,7 +70,7 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
       <AssistantChat<ProjectProposal>
         key={activeChatId ?? project.id}
         title="Project assistant"
-        subtitle={`${modules.length} steps · ${models.length} models · ${docs.length} docs`}
+        subtitle={`${modules.length} steps · ${models.length} models · ${typeAliases.length} types · ${docs.length} docs`}
         showDebug
         initialMessage={PROJECT_ASSISTANT_INITIAL_MESSAGE}
         starters={PROJECT_ASSISTANT_STARTERS}
@@ -116,11 +121,13 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
           if (data.proposal) {
             data.proposal = {
               ...data.proposal,
+              typeAliases: data.proposal.typeAliases ?? [],
               docs: data.proposal.docs ?? [],
               documentation: data.proposal.documentation ?? "",
               changed: data.proposal.changed ?? {
                 modules: true,
                 models: true,
+                typeAliases: (data.proposal.typeAliases?.length ?? 0) > 0,
                 docs: (data.proposal.docs?.length ?? 0) > 0,
                 documentation: false,
                 name: !!data.proposal.projectName,
@@ -138,10 +145,33 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
 function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProposal> }) {
   const p = msg.proposal!
   const showModels = p.changed?.models ?? true
+  const showTypeAliases = p.changed?.typeAliases ?? (p.typeAliases?.length ?? 0) > 0
   const showModules = p.changed?.modules ?? true
   const showDocs = p.changed?.docs ?? (p.docs?.length ?? 0) > 0
   const showDocumentation = p.changed?.documentation ?? false
   const showName = p.changed?.name ?? !!p.projectName
+  const proposalTypes = p.typeAliases ?? []
+  const proposalModels = p.models ?? []
+
+  const codeSources = useMemo<MultiLangCodeSource[]>(
+    () => [
+      {
+        language: "python",
+        label: "Python",
+        filename: "models.py",
+        content: allModelsToPydantic(proposalModels, proposalTypes),
+      },
+      {
+        language: "typescript",
+        label: "TypeScript",
+        filename: "models.d.ts",
+        content: allModelsToDts(proposalModels, proposalTypes),
+      },
+    ],
+    [proposalModels, proposalTypes],
+  )
+
+  const showCodegen = showModels || showTypeAliases
 
   return (
     <>
@@ -161,7 +191,13 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
         )}
         {showModels && (
           <Badge variant="outline" className="font-mono text-[9px]">
-            {p.models.length} models
+            {proposalModels.length} models
+          </Badge>
+        )}
+        {showTypeAliases && (
+          <Badge variant="outline" className="gap-1 font-mono text-[9px]">
+            <Braces className="h-2.5 w-2.5" />
+            {proposalTypes.length} types
           </Badge>
         )}
         {showDocs && (
@@ -213,7 +249,7 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
             Structures
           </p>
           <ul className="space-y-1">
-            {p.models.map((model) => (
+            {proposalModels.map((model) => (
               <li
                 key={model.id}
                 className="rounded border border-border/60 bg-background/50 px-2 py-1.5 font-mono text-[10px]"
@@ -223,6 +259,33 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {showTypeAliases && proposalTypes.length > 0 && (
+        <div className="mb-3">
+          <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+            Types
+          </p>
+          <ul className="space-y-1">
+            {proposalTypes.map((alias) => (
+              <li
+                key={alias.id}
+                className="rounded border border-border/60 bg-background/50 px-2 py-1.5 font-mono text-[10px]"
+              >
+                <span className="text-foreground">{alias.name}</span>
+                {alias.description && (
+                  <span className="text-muted-foreground"> · {alias.description}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {showCodegen && (
+        <div className="mb-3 flex h-56 flex-col overflow-hidden rounded-md border border-border">
+          <MultiLangReadonlyCodeViewer sources={codeSources} badge="preview" switchVariant="segment" />
         </div>
       )}
 

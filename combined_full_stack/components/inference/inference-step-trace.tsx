@@ -10,6 +10,7 @@ import {
 import { LlmCallDistribution } from "@/components/llm-call-distribution"
 import { StepServerLogsSection } from "@/components/server-logs-panel"
 import { StepInputDescription } from "@/components/step-input-description"
+import { StepLoadedDocSection } from "@/components/step-loaded-doc-section"
 import { Progress } from "@/components/ui/progress"
 import { formatCostCents } from "@/lib/format"
 import { resolveInputDescriptionCheck } from "@/lib/input-description"
@@ -17,15 +18,18 @@ import { cn } from "@/lib/utils"
 import { useStatusPalette } from "@/lib/chart-colors"
 import type { StepUiState } from "@/lib/run-engine"
 import type {
+  DocRef,
   InputDescriptionCheckResult,
   JobLogEntry,
   LlmCallRecord,
   ModuleId,
   PipelineRun,
+  RunStep,
   StepProgress,
   StepSubProgress,
+  StructureModel,
 } from "@/lib/types"
-import { OutputStepLabel, outputStepOutlineClass } from "@/components/inference/inference-outputs"
+import { OutputStepLabel, outputStepOutlineClass, StepTraceOutputPreview, stepHasTraceOutput } from "@/components/inference/inference-outputs"
 
 export function stepDescriptionMeta(
   moduleId: ModuleId,
@@ -51,30 +55,51 @@ export function InferenceStepRow({
   nested,
   sub,
   isOutputStep = false,
+  isInputStep = false,
+  runStep,
+  assignedInputDocs = [],
+  docs = [],
+  models,
   inputDescription,
   inputDescriptionCheck,
   descriptionCheckLlmCalls,
   descriptionCheckCostCents,
   serverLogs = [],
   forceCollapsedLogs = false,
+  showStepIo = false,
+  ioCompact = true,
+  outputPreview,
 }: {
   label: string
   state: StepProgress["status"] | "idle"
   nested?: boolean
   sub?: StepSubProgress
   isOutputStep?: boolean
+  isInputStep?: boolean
+  runStep?: RunStep
+  assignedInputDocs?: DocRef[]
+  docs?: DocRef[]
+  models?: StructureModel[]
   inputDescription?: string
   inputDescriptionCheck?: InputDescriptionCheckResult
   descriptionCheckLlmCalls?: LlmCallRecord[]
   descriptionCheckCostCents?: number
   serverLogs?: JobLogEntry[]
   forceCollapsedLogs?: boolean
+  showStepIo?: boolean
+  ioCompact?: boolean
+  outputPreview?: string
 }) {
   const palette = useStatusPalette()
   const descCheckFailed = inputDescriptionCheck?.matches === false
   const showDescCheckCalls =
     (state === "running" || state === "ok" || state === "error") &&
     (descriptionCheckLlmCalls?.length ?? 0) > 0
+  const stepFinished = state === "ok" || state === "cached" || state === "error"
+  const showInputDocPreview =
+    isInputStep && showStepIo && stepFinished && (runStep != null || assignedInputDocs.length > 0)
+  const showOutputPreview =
+    showStepIo && stepFinished && stepHasTraceOutput(runStep, outputPreview, isInputStep)
 
   const header = (
     <div className="flex items-center gap-2.5">
@@ -144,6 +169,24 @@ export function InferenceStepRow({
           logs={serverLogs}
           className={nested ? "pl-5" : "pl-7"}
           forceCollapsed={forceCollapsedLogs}
+        />
+      )}
+      {showInputDocPreview && (
+        <StepLoadedDocSection
+          step={runStep}
+          assignedDocs={assignedInputDocs}
+          docs={docs}
+          models={models}
+          className={nested ? "pl-5" : "pl-7"}
+        />
+      )}
+      {showOutputPreview && (
+        <StepTraceOutputPreview
+          runStep={runStep}
+          outputPreview={outputPreview}
+          models={models}
+          compact={ioCompact}
+          className={nested ? "pl-5" : "pl-7"}
         />
       )}
     </div>

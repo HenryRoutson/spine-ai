@@ -131,6 +131,54 @@
       ]
     },
     {
+      "id": "mod_assert_wrap",
+      "kind": "assert",
+      "label": "✓ Wrap → List",
+      "note": "Golden fixture — bullet list split into TextChunk rows",
+      "inStructureId": "m_chunk",
+      "outStructureId": "m_chunk",
+      "outIsList": true,
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "fallbackList": [
+        { "typescript": "assertEqual(step(\"Wrap → List\"), \"Wrap → List\");" }
+      ]
+    },
+    {
+      "id": "mod_assert_batch",
+      "kind": "assert",
+      "label": "✓ Summarize Each Line",
+      "note": "Structural check — one summary per input chunk, ids preserved",
+      "inStructureId": "m_summary",
+      "outStructureId": "m_summary",
+      "outIsList": true,
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "const rows = step(\"Summarize Each Line\");\nconst chunks = step(\"Wrap → List\");\nif (len(rows) !== len(chunks)) throw new Error(`expected ${len(chunks)} summaries, got ${len(rows)}`);\nfor (let i = 0; i < rows.length; i++) {\n  if (rows[i]?.id !== chunks[i]?.id || typeof rows[i]?.summary !== \"string\" || !rows[i].summary.trim()) {\n    throw new Error(`summary row ${i + 1} missing id or summary`);\n  }\n}"
+        }
+      ]
+    },
+    {
+      "id": "mod_assert_unwrap_shape",
+      "kind": "assert",
+      "label": "✓ Unwrap List → Report",
+      "note": "Structural check — CombinedReport has title and non-empty body",
+      "inStructureId": "m_report",
+      "outStructureId": "m_report",
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "const r = step(\"Unwrap List → Report\");\nif (!r?.title || typeof r?.body !== \"string\" || !r.body.trim()) throw new Error(\"report missing title or body\");"
+        }
+      ]
+    },
+    {
       "id": "mod_output",
       "kind": "output",
       "label": "Summary Report",
@@ -185,5 +233,9 @@
       "label": "inference",
       "file": "batch_llm_example/sample_bullets.txt"
     }
+  ],
+  "expectedOutputs": [
+    { "stepLabel": "Wrap → List", "file": "batch_llm_example/expected/wrap_list.json" },
+    { "stepLabel": "Summary Report", "file": "batch_llm_example/expected/summary_report.json" }
   ]
 }

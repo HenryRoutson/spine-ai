@@ -364,9 +364,113 @@
       "note": ""
     },
     {
+      "id": "mod_assert_schema",
+      "kind": "assert",
+      "label": "✓ Marking Schema",
+      "note": "Golden fixture — rubric JSON matches expected output",
+      "inStructureId": "m_schema",
+      "outStructureId": "m_schema",
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "fallbackList": [
+        { "typescript": "assertEqual(step(\"Marking Schema\"), \"Marking Schema\");" }
+      ]
+    },
+    {
+      "id": "mod_assert_questions",
+      "kind": "assert",
+      "label": "✓ Marking Questions List",
+      "note": "Golden fixture — flattened rubric questions match expected",
+      "inStructureId": "m_rubric_q",
+      "outStructureId": "m_rubric_q",
+      "outIsList": true,
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "fallbackList": [
+        { "typescript": "assertEqual(step(\"Marking Questions List\"), \"Marking Questions List\");" }
+      ]
+    },
+    {
+      "id": "mod_assert_students",
+      "kind": "assert",
+      "label": "✓ Student Submissions",
+      "note": "Golden fixture — three student docs loaded (doc_id ignored)",
+      "inStructureId": "m_builtin_document",
+      "outStructureId": "m_builtin_document",
+      "outIsList": true,
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "fallbackList": [
+        { "typescript": "assertEqual(step(\"Student Submissions\"), \"Student Submissions\", [\"doc_id\"]);" }
+      ]
+    },
+    {
+      "id": "mod_assert_combine",
+      "kind": "assert",
+      "label": "✓ Combine Inputs",
+      "note": "Golden fixture — merged schema + submission shape (doc_id ignored)",
+      "inStructureId": "m_hw_combined",
+      "outStructureId": "m_hw_combined",
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "fallbackList": [
+        { "typescript": "assertEqual(step(\"Combine Inputs\"), \"Combine Inputs\", [\"doc_id\"]);" }
+      ]
+    },
+    {
+      "id": "mod_assert_work",
+      "kind": "assert",
+      "label": "✓ Assemble Grader Work",
+      "note": "Golden fixture — grader work bundle matches expected",
+      "inStructureId": "m_work",
+      "outStructureId": "m_work",
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "fallbackList": [
+        { "typescript": "assertEqual(step(\"Assemble Grader Work\"), \"Assemble Grader Work\", [\"doc_id\"]);" }
+      ]
+    },
+    {
+      "id": "mod_assert_flatten",
+      "kind": "assert",
+      "label": "✓ Flatten Sections",
+      "note": "Golden fixture — 15 gradable rows (3 students × 5 questions)",
+      "inStructureId": "m_gradable",
+      "outStructureId": "m_gradable",
+      "outIsList": true,
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "fallbackList": [
+        { "typescript": "assertEqual(step(\"Flatten Sections\"), \"Flatten Sections\");" }
+      ]
+    },
+    {
+      "id": "mod_assert_grade_shape",
+      "kind": "assert",
+      "label": "✓ Grade Each Section",
+      "note": "Structural check — one grade per gradable row with required fields",
+      "inStructureId": "m_grade",
+      "outStructureId": "m_grade",
+      "outIsList": true,
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "const graded = step(\"Grade Each Section\");\nconst flat = step(\"Flatten Sections\");\nif (len(graded) !== len(flat)) throw new Error(`expected ${len(flat)} grades, got ${len(graded)}`);\nfor (const g of graded) {\n  if (!g?.student_label || !g?.section_id || typeof g?.score !== \"number\" || typeof g?.feedback !== \"string\") {\n    throw new Error(\"grade row missing student_label, section_id, score, or feedback\");\n  }\n}"
+        }
+      ]
+    },
+    {
       "id": "mod_assert",
       "kind": "assert",
-      "label": "Grade Count Check",
+      "label": "✓ Grade Count Check",
       "note": "len(Student Submissions) × len(Marking Questions List) = len(Final Output)",
       "inStructureId": "m_grade",
       "outStructureId": "m_grade",
@@ -445,5 +549,13 @@
       "label": "inference",
       "file": "homework_grader/homework_student_alex.md"
     }
+  ],
+  "expectedOutputs": [
+    { "stepLabel": "Marking Schema", "file": "homework_grader/expected/marking_schema.json" },
+    { "stepLabel": "Marking Questions List", "file": "homework_grader/expected/marking_questions_list.json" },
+    { "stepLabel": "Student Submissions", "file": "homework_grader/expected/student_submissions.json" },
+    { "stepLabel": "Combine Inputs", "file": "homework_grader/expected/combine_inputs.json" },
+    { "stepLabel": "Assemble Grader Work", "file": "homework_grader/expected/assemble_grader_work.json" },
+    { "stepLabel": "Flatten Sections", "file": "homework_grader/expected/flatten_sections.json" }
   ]
 }

@@ -11,7 +11,7 @@ const apiLog = logger("api:project-types");
 
 export type { ProjectTypesResponse, GeneratedTypeFile } from "@/lib/project-types";
 
-// AI : generate lintable TS/Python type stubs for the live project — shown in the Types tab.
+// AI : generate lintable TS/Python type stubs for the live project — shown in Structure → Code → Lint stubs.
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const authCtx = await requireAuthStore();
   if (authCtx instanceof NextResponse) return authCtx;

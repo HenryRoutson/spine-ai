@@ -1,73 +1,12 @@
 "use client"
 
-import dynamic from "next/dynamic"
 // AI : TODO — debounced tryCompileCustomCodeEntry markers in Monaco (computeInvalid already blocks run).
 import { useCallback, useEffect, useState } from "react"
 import { Maximize2, X } from "lucide-react"
-import type { editor } from "monaco-editor"
+import { CODE_LANG_LABEL, MonacoCodeEditor } from "@/components/code-viewer"
 import { Button } from "@/components/ui/button"
 import type { CustomCodeLanguage } from "@/lib/types"
 import { cn } from "@/lib/utils"
-
-const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
-  ssr: false,
-  loading: () => (
-    <div className="flex min-h-24 items-center justify-center font-mono text-[10px] text-muted-foreground">
-      Loading editor…
-    </div>
-  ),
-})
-
-function monacoLanguage(language: CustomCodeLanguage): string {
-  return language === "python" ? "python" : "typescript"
-}
-
-function baseEditorOptions(compact: boolean): editor.IStandaloneEditorConstructionOptions {
-  return {
-    fontSize: compact ? 11 : 13,
-    fontFamily: "var(--font-geist-mono), 'Geist Mono', ui-monospace, monospace",
-    lineNumbers: "on",
-    minimap: { enabled: !compact },
-    scrollBeyondLastLine: false,
-    wordWrap: "on",
-    automaticLayout: true,
-    padding: compact ? { top: 8, bottom: 8 } : { top: 12, bottom: 12 },
-    overviewRulerLanes: compact ? 0 : 3,
-    hideCursorInOverviewRuler: compact,
-    scrollbar: {
-      verticalScrollbarSize: compact ? 8 : 10,
-      horizontalScrollbarSize: compact ? 8 : 10,
-    },
-    tabSize: 2,
-    renderLineHighlight: compact ? "none" : "line",
-    folding: true,
-    bracketPairColorization: { enabled: true },
-  }
-}
-
-type MonacoPaneProps = {
-  value: string
-  onChange?: (value: string) => void
-  language: CustomCodeLanguage
-  readOnly: boolean
-  compact: boolean
-}
-
-function MonacoPane({ value, onChange, language, readOnly, compact }: MonacoPaneProps) {
-  return (
-    <MonacoEditor
-      height={compact ? "96px" : "100%"}
-      language={monacoLanguage(language)}
-      theme="vs-dark"
-      value={value}
-      onChange={readOnly ? undefined : (v) => onChange?.(v ?? "")}
-      options={{
-        ...baseEditorOptions(compact),
-        readOnly,
-      }}
-    />
-  )
-}
 
 type CustomCodeEditorProps = {
   value: string
@@ -121,7 +60,7 @@ export function CustomCodeEditor({
           >
             <Maximize2 className="h-3.5 w-3.5" />
           </Button>
-          <MonacoPane
+          <MonacoCodeEditor
             value={value}
             onChange={onChange}
             language={language}
@@ -137,7 +76,7 @@ export function CustomCodeEditor({
             <div className="min-w-0">
               {label && <p className="truncate font-mono text-xs text-foreground">{label}</p>}
               <p className="font-mono text-[10px] text-muted-foreground">
-                {language === "python" ? "Python" : "TypeScript"} · Esc to close
+                {CODE_LANG_LABEL[language]} · Esc to close
               </p>
             </div>
             <Button
@@ -151,15 +90,12 @@ export function CustomCodeEditor({
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <div className="min-h-0 flex-1">
-            <MonacoPane
-              value={value}
-              onChange={onChange}
-              language={language}
-              readOnly={readOnly}
-              compact={false}
-            />
-          </div>
+          <MonacoCodeEditor
+            value={value}
+            onChange={onChange}
+            language={language}
+            readOnly={readOnly}
+          />
         </div>
       )}
     </>

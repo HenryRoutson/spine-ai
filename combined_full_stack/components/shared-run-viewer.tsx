@@ -202,6 +202,9 @@ function SharedRunContent({ link, linkId }: { link: SharedLinkPublicView; linkId
                 run={run.run}
                 progressPct={run.progressPct}
                 waitPhrase={run.waitPhrase}
+                docs={Object.values(run.inputDocs).flatMap((v) => (Array.isArray(v) ? v : v ? [v] : []))}
+                models={link.models}
+                inputDocs={run.inputDocs}
                 footer={
                   run.phase === "done" && run.run ? (
                     <Button

@@ -100,12 +100,12 @@ export function compileCustomFn(code: string): CustomFn {
 // AI : static pipeline validation — TS via new Function; Python skipped (needs Pyodide).
 export function tryCompileCustomCodeEntry(
   entry: ParsedCustomCodeEntry,
-  opts?: { assert?: boolean },
+  opts?: { assert?: boolean; expectedOutputs?: import("@/lib/assert_steps").ExpectedOutputsMap },
 ): string | undefined {
   const raw = entry.code.trim();
   if (!raw) return "code is empty";
   if (entry.language === "python") return undefined; // AI : TODO bug — Pyodide compile check before inference (same as TS tryCompileCustomCodeEntry).
-  const code = opts?.assert ? wrapAssertCode(raw, entry.language) : raw;
+  const code = opts?.assert ? wrapAssertCode(raw, entry.language, opts.expectedOutputs ?? {}) : raw;
   try {
     compileCustomFn(code);
     return undefined;
@@ -217,12 +217,13 @@ export async function runAssertWithFallbacks(
   entries: ParsedCustomCodeEntry[],
   input: unknown,
   state?: PipelineState,
+  expectedOutputs?: import("@/lib/assert_steps").ExpectedOutputsMap,
 ): Promise<CustomCodeRunResult> {
   if (!entries.length) throw new Error("assert step has no code entries");
   const failures: CustomCodeAttemptFailure[] = [];
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i]!;
-    const wrapped = { ...entry, code: wrapAssertCode(entry.code, entry.language) };
+    const wrapped = { ...entry, code: wrapAssertCode(entry.code, entry.language, expectedOutputs ?? {}) };
     try {
       const result = await runCustomEntry(wrapped, input, state);
       if (result === false) throw new Error("assert returned false");

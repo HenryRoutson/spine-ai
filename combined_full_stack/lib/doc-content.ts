@@ -64,3 +64,16 @@ export function defaultDocViewMode(
   if (isMarkdownDoc(doc)) return "formatted"
   return "parser"
 }
+
+// AI : inline step previews — text/markdown/excel only; no pdf iframe or vision OCR tabs.
+export function inlineDocViewTabs(doc: DocMeta, hasPdfFile: boolean): DocViewMode[] {
+  return docViewerTabs(doc, hasPdfFile, false).filter((m) => m !== "pdf" && m !== "vision")
+}
+
+export function defaultInlineDocViewMode(doc: DocMeta, hasPdfFile: boolean): DocViewMode {
+  const tabs = inlineDocViewTabs(doc, hasPdfFile)
+  if (doc?.type === "json" || doc?.type === "excel") return tabs.includes("json") ? "json" : "parser"
+  if (isMarkdownDoc(doc)) return tabs.includes("formatted") ? "formatted" : "parser"
+  if (isPdfDoc(doc, hasPdfFile)) return tabs.includes("formatted") ? "formatted" : "parser"
+  return tabs[0] ?? "parser"
+}

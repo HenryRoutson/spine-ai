@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from "react"
 import {
   Boxes,
   GitBranch,
-  Braces,
   Play,
   ScrollText,
   Database,
@@ -65,10 +64,6 @@ const PipelineBuilder = dynamic(
   () => import("@/components/pipeline-builder").then((m) => ({ default: m.PipelineBuilder })),
   { loading: () => <PanelLoading label="loading pipeline…" /> },
 )
-const TypesPanel = dynamic(
-  () => import("@/components/types-panel").then((m) => ({ default: m.TypesPanel })),
-  { loading: () => <PanelLoading label="loading types…" /> },
-)
 const Inference = dynamic(() => import("@/components/inference").then((m) => ({ default: m.Inference })), {
   loading: () => <PanelLoading label="loading inference…" />,
 })
@@ -98,14 +93,13 @@ const WINDOWS: { id: WindowId; label: string; hint: string; icon: typeof Boxes }
   { id: "projects", label: "Projects", hint: "·", icon: FolderKanban },
   { id: "structure", label: "Structure", hint: "01", icon: Boxes },
   { id: "pipeline", label: "Pipeline", hint: "02", icon: GitBranch },
-  { id: "types", label: "Types", hint: "03", icon: Braces },
-  { id: "inference", label: "Inference", hint: "04", icon: Play },
-  { id: "logging", label: "Logging", hint: "05", icon: ScrollText },
-  { id: "cache", label: "Cache", hint: "06", icon: Database },
-  { id: "documents", label: "Documents", hint: "07", icon: Files },
-  { id: "docs", label: "Docs", hint: "08", icon: BookOpen },
-  { id: "billing", label: "Billing", hint: "09", icon: CreditCard },
-  { id: "settings", label: "Settings", hint: "10", icon: Settings },
+  { id: "inference", label: "Inference", hint: "03", icon: Play },
+  { id: "logging", label: "Logging", hint: "04", icon: ScrollText },
+  { id: "cache", label: "Cache", hint: "05", icon: Database },
+  { id: "documents", label: "Documents", hint: "06", icon: Files },
+  { id: "docs", label: "Docs", hint: "07", icon: BookOpen },
+  { id: "billing", label: "Billing", hint: "08", icon: CreditCard },
+  { id: "settings", label: "Settings", hint: "09", icon: Settings },
 ]
 
 function ProjectRenameInput({
@@ -379,7 +373,6 @@ export function AppShellLayout() {
           {activeWindow === "projects" && <Projects />}
           {activeWindow === "structure" && <StructureBuilder />}
           {activeWindow === "pipeline" && <PipelineBuilder />}
-          {activeWindow === "types" && <TypesPanel />}
           {activeWindow === "inference" && <Inference />}
           {activeWindow === "logging" && <Logging />}
           {activeWindow === "cache" && <Cache />}

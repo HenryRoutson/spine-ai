@@ -10,8 +10,10 @@ import {
   type ModelId,
   type Project,
 } from "./types";
+import { formatTypeExprPy } from "@/lib/type-expr-parse";
 import { isUnnamedProjectName, UNNAMED_PROJECT_NAME } from "@/lib/project-assistant-types";
 import type { ChatTurn } from "./assistant-shared";
+import { fieldToTypeExpr } from "./type_expr";
 import type { ModuleKind, PipelineModule, StructureModel } from "./types";
 
 function structureName(models: StructureModel[], id: string | undefined): string | undefined {
@@ -60,13 +62,24 @@ export function buildModelOptionsPromptBlock(): string {
   return MODEL_OPTIONS.map((m) => `- ${m.id}: ${m.label}`).join("\n");
 }
 
+export function buildTypeAliasesRulesPromptBlock(): string {
+  return `Reusable type aliases (typeAliases array):
+- Define standalone Python-style types when a field shape is reused or nested: list[list[int]], dict[str, str], Optional[T], tuple[Section, Meta].
+- Each alias: name, description, expr (Python type string — same syntax as the Structure → Types editor).
+- Reference an alias from a struct field by using the alias name as the field type (e.g. type: "quote_id_t").
+- Or set field typeExpr to a Python string for one-off expressions.
+- Quote-friendly presets stay on fields: tuple[text,quote], list[tuple[text,quote]] — do not redefine those as aliases unless wrapping a larger shape.
+- When changing aliases, return a FULL replacement typeAliases array (include untouched aliases) — not a patch.
+- When answering without alias changes, set typeAliases to null.`;
+}
+
 export function buildStructureRulesPromptBlock(): string {
   return `Structure rules:
 - Structures are pydantic models: name, description (docstring), and typed fields.
 - Use "text" for strings (not "str"). Use "tuple[text,quote]" when extracted text must link back to a source span; quote offsets are resolved downstream — never ask for doc_id/start/end in the schema.
 - Use "model" / "list[model]" with ref set to another structure's exact name when nesting.
 - Use "document" for the shared Document structure ({ content, filename }).
-- Field types must be from the Field types list — no "dict", "str", or ad-hoc types.
+- Prefer preset field types from the Field types list; use type alias names or typeExpr for complex shapes (see Reusable type aliases).
 - Every field needs a description string (use "" if nothing to add).
 - Optional fields: set optional true.
 - When changing structures, return a FULL replacement models array (include untouched models too) — not a patch.
@@ -165,16 +178,19 @@ export function buildProjectAssistantSystemPrompt(globalModel: ModelId, projectN
 
 You can propose changes to ALL of the following in one response:
 1. Structure models (pydantic schemas for LLM I/O)
-2. Pipeline steps (linear processing graph)
-3. Project documentation (markdown — keeps the Docs tab accurate as the pipeline evolves)
-4. Test documents (text/json files linked to this project for inference)
-5. Project name (only when the project is still unnamed — see Project naming rules)
+2. Reusable type aliases (Python-style types referenced by struct fields)
+3. Pipeline steps (linear processing graph)
+4. Project documentation (markdown — keeps the Docs tab accurate as the pipeline evolves)
+5. Test documents (text/json files linked to this project for inference)
+6. Project name (only when the project is still unnamed — see Project naming rules)
 
 Module kinds:
 ${buildModuleKindsPromptBlock()}
 
 Field types:
 ${buildFieldTypesPromptBlock()}
+
+${buildTypeAliasesRulesPromptBlock()}
 
 Input types (for input steps):
 ${buildInputTypesPromptBlock()}
@@ -203,6 +219,15 @@ export function buildProjectContextBlock(
   history: ChatTurn[],
   extras?: string,
 ): string {
+  const typeAliasesJson = JSON.stringify(
+    (project.typeAliases ?? []).map((t) => ({
+      name: t.name,
+      description: t.description,
+      expr: formatTypeExprPy(t.expr, project.models),
+    })),
+    null,
+    2,
+  );
   const modelsJson = JSON.stringify(
     project.models.map((m) => ({
       id: m.id,
@@ -211,6 +236,7 @@ export function buildProjectContextBlock(
       fields: m.fields.map((f) => ({
         name: f.name,
         type: f.type,
+        typeExpr: f.typeExpr ? formatTypeExprPy(fieldToTypeExpr(f), project.models) : undefined,
         optional: f.optional,
         ref: project.models.find((x) => x.id === f.ref)?.name,
       })),
@@ -252,6 +278,9 @@ export function buildProjectContextBlock(
     : "\n"
   return `${docsBlock}Project: ${project.name} (${project.kind})${unnamedNote}Default model: ${globalModel}
 ${historyBlock}
+Current type aliases (${project.typeAliases?.length ?? 0}):
+${typeAliasesJson}
+
 Current structure models (${project.models.length}):
 ${modelsJson}
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import type { InputPreviewItem } from "@/lib/types"
 
@@ -9,12 +9,21 @@ type IoPagerProps = {
   renderItem: (item: InputPreviewItem, index: number) => ReactNode
 }
 
+function pagerItemsKey(items: InputPreviewItem[]): string {
+  return items.map((i) => `${i.label}\0${i.text}`).join("\x01")
+}
+
 export function IoPager({ items, renderItem }: IoPagerProps) {
   const [index, setIndex] = useState(0)
+  const itemsKey = useMemo(() => pagerItemsKey(items), [items])
 
   useEffect(() => {
     setIndex(0)
-  }, [items])
+  }, [itemsKey])
+
+  useEffect(() => {
+    setIndex((i) => Math.min(i, Math.max(0, items.length - 1)))
+  }, [itemsKey, items.length])
 
   if (items.length <= 1) {
     return items[0] ? renderItem(items[0], 0) : null

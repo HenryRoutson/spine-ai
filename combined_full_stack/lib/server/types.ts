@@ -14,6 +14,7 @@ export type { TypeExpr } from "./type_expr";
 
 export type ProjectId = string & { __brand: "ProjectId" };
 export type StructureModelId = string & { __brand: "StructureModelId" };
+export type TypeAliasId = string & { __brand: "TypeAliasId" };
 export type ModuleId = string & { __brand: "ModuleId" };
 export type DocId = string & { __brand: "ContentHash" }; // content hash == id
 export type RunId = string & { __brand: "RunId" };
@@ -48,10 +49,14 @@ export interface ModelField {
   example?: string; // AI : sample value — shown in structure UI and emitted in pydantic / LLM schema hints
   ref?: StructureModelId; // referenced model id when type === "model" | "list[model]"
   minItems?: number; // AI : minimum list length when type is a list[…] field
+  typeExpr?: TypeExpr; // AI : when set, overrides type/ref — full Python-style type expression
 }
 
 // AI : meta-type — one field row inside a StructureDef (structure-of-structures)
-export type StructureFieldDef = Pick<ModelField, "id" | "name" | "type" | "optional" | "description" | "ref" | "minItems">;
+export type StructureFieldDef = Pick<
+  ModelField,
+  "id" | "name" | "type" | "optional" | "description" | "ref" | "minItems" | "typeExpr"
+>;
 
 // AI : meta-type — JSON-serializable shape used to define StructureModel entries in seeds / assistants
 export type StructureDef = {
@@ -74,6 +79,14 @@ export interface StructureModel {
   shared?: boolean; // AI : injected into every project — not persisted per project
   locked?: boolean; // AI : read-only in Structure UI — cannot rename, edit fields, or delete
   sourceDocId?: DocId; // AI : document this structure was inferred from — links back in Structure tab
+}
+
+// AI : standalone reusable type — not a struct with fields; referenced by name in type expressions.
+export interface TypeAlias {
+  id: TypeAliasId;
+  name: string;
+  description: string;
+  expr: TypeExpr;
 }
 
 export type InputType = "pdf" | "excel" | "word" | "json" | "text" | "web" | "image";
@@ -143,9 +156,11 @@ export interface Project {
   name: string;
   kind: string;
   models: StructureModel[];
+  typeAliases?: TypeAlias[];
   modules: PipelineModule[];
   strategies: Strategy[];
   seedDocNames?: string[]; // AI : filenames from seeds/*.json — scopes inference inputs to this project
+  expectedOutputs?: Record<string, unknown>; // AI : golden step outputs keyed by step label — assert steps compare at run time
   createdAt?: number; // AI : ms since epoch — set when blank/cloned; templates from seeds/*.json omit this
   lastOpenedAt?: number; // AI : ms since epoch — updated when user opens/switches to this project
   documentation?: string; // AI : freeform markdown — prepended to every agent/assistant prompt call to prevent regressions

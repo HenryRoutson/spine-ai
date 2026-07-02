@@ -57,6 +57,7 @@ const SeedFileSchema = z.object({
           example: z.string().optional(),
           ref: z.string().optional(),
           minItems: z.number().int().min(1).optional(),
+          typeExpr: TypeExprSchema.optional(),
         }),
       ),
     }),
@@ -110,6 +111,14 @@ const SeedFileSchema = z.object({
       file: z.string(), // filename under the repo /documents folder
     }),
   ),
+  expectedOutputs: z
+    .array(
+      z.object({
+        stepLabel: z.string(),
+        file: z.string(), // JSON under documents/ — golden output for that step label
+      }),
+    )
+    .optional(),
 });
 
 export interface SeedDocSpec {
@@ -144,9 +153,33 @@ export async function readSeedDocContent(spec: SeedDocSpec): Promise<string> {
   return readFileSync(spec.path, "utf8");
 }
 
+function loadExpectedOutputs(
+  entries: { stepLabel: string; file: string }[] | undefined,
+): Record<string, unknown> | undefined {
+  if (!entries?.length) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const e of entries) {
+    const path = resolveSeedDocPath(e.file);
+    if (!existsSync(path)) throw new Error(`expected output missing: ${path} (step "${e.stepLabel}")`);
+    out[e.stepLabel] = JSON.parse(readFileSync(path, "utf8")) as unknown;
+  }
+  return out;
+}
+
+// AI : resolve golden outputs for assert steps — persisted on project or loaded from seeds/*.json template.
+export function expectedOutputsForProject(project: Project): Record<string, unknown> {
+  if (project.expectedOutputs && Object.keys(project.expectedOutputs).length) return project.expectedOutputs;
+  const byId = allProjectSeeds().find((s) => s.project.id === project.id);
+  if (byId?.project.expectedOutputs) return byId.project.expectedOutputs;
+  const baseName = project.name.replace(/ \d+$/, "");
+  const byName = allProjectSeeds().find((s) => s.project.name === baseName);
+  return byName?.project.expectedOutputs ?? {};
+}
+
 // AI : the generic entry point — any validated seed JSON becomes a project + its source docs.
 export function loadProjectSeed(path: string): ProjectSeed {
   const raw = SeedFileSchema.parse(JSON.parse(readFileSync(path, "utf8")));
+  const expectedOutputs = loadExpectedOutputs(raw.expectedOutputs);
   return {
     // AI : zod-validated plain strings → branded contract types
     project: {
@@ -163,6 +196,7 @@ export function loadProjectSeed(path: string): ProjectSeed {
       })) as PipelineModule[],
       strategies: raw.strategies as Strategy[],
       seedDocNames: raw.docs.map((d) => d.name),
+      expectedOutputs,
     },
     // AI : bug fix — seed `file` entries are now repo-/documents/-relative paths
     // AI : ("legal/legal_doc_text.pdf"), so a fresh seed no longer ENOENTs in openStore().

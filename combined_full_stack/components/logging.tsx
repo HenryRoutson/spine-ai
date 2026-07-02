@@ -21,7 +21,7 @@ import { useStatusPalette } from "@/lib/chart-colors"
 import { isSharedRun } from "@/lib/shared-link-types"
 import { cn } from "@/lib/utils"
 import { useAppShell } from "@/lib/app-shell"
-import { stepDocId, stepDocLinkLabels, stepSourceDocId } from "@/lib/step-doc"
+import { stepDocId, stepDocLinkLabels, stepSourceDocId, isDocReferenceOutputJson } from "@/lib/step-doc"
 import { descriptionCheckLlmCallsFromStep, llmCallsFromStep } from "@/lib/llm-distribution"
 import { enrichRunModules, modulesFromRunSteps } from "@/lib/pipeline-run-diff"
 import { PipelineCanvas } from "@/components/pipeline-canvas"
@@ -39,6 +39,7 @@ import type { DocRef, ModuleId, PipelineRun, RunStepStatus } from "@/lib/types"
 import { runLogText } from "@/lib/run-log-text"
 import { IoSection } from "@/components/logging/io-section"
 import { IoPager } from "@/components/logging/io-pager"
+import { StepLoadedDocSection } from "@/components/step-loaded-doc-section"
 import { filterRuns, RunNotesPreview } from "@/components/logging/run-picker-column"
 import { CompareModal } from "@/components/logging/compare-modal"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
@@ -318,6 +319,9 @@ export function Logging() {
                             />
                           )}
 
+                          {step.kind === "input" ? (
+                            <StepLoadedDocSection step={step} docs={docs} models={models} />
+                          ) : (
                           <IoSection
                             title={inTitle}
                             qualifier="input"
@@ -352,6 +356,7 @@ export function Logging() {
                               <PromptText text={step.inputPreview} sourceDocId={stepSourceDoc} />
                             )}
                           </IoSection>
+                          )}
 
                           {step.serverLogs && step.serverLogs.length > 0 && (
                             <StepServerLogsSection
@@ -381,6 +386,7 @@ export function Logging() {
                             </IoSection>
                           )}
 
+                          {!(step.kind === "input" && isDocReferenceOutputJson(step.outputJson)) && (
                           <IoSection
                             title={outTitle}
                             qualifier="output"
@@ -412,6 +418,7 @@ export function Logging() {
                               <span className="text-muted-foreground/70">No raw response captured</span>
                             )}
                           </IoSection>
+                          )}
 
                           {stepQuotes.length > 0 && (
                             <QuoteLinks quotes={stepQuotes} className="mt-2 pl-7" />

@@ -2,10 +2,14 @@ import { z } from "zod";
 import { llmStreamString, llmStructured, llmStreamStructured } from "./llm";
 import {
   ChatTurn,
+  collectTypeAliasNames,
   formatValidationBlock,
+  materializeStructureModels,
+  materializeTypeAliases,
   parseStructureHint,
   resolveStructureIdFromModels,
   structureModelSpecSchema,
+  typeAliasSpecSchema,
   wantsValidationFix,
 } from "./assistant-shared";
 import {
@@ -21,7 +25,6 @@ import { UsageLedger } from "./usage";
 import { createPipelineModule } from "@/lib/pipeline-module-factory";
 import { uid } from "@/lib/id";
 import { USER_ADDABLE_MODULE_KINDS, stepRequiresNote } from "@/lib/module-kinds";
-import { materializeStructureModels } from "./structure_assistant";
 import { attachAssistantUsage } from "./assistant_billing";
 import { isUnnamedProjectName } from "@/lib/project-assistant-types";
 import {
@@ -37,6 +40,7 @@ import {
   type Project,
   type StructureModel,
   type StructureModelId,
+  type TypeAlias,
 } from "./types";
 
 const MODULE_KINDS = USER_ADDABLE_MODULE_KINDS;
@@ -103,6 +107,7 @@ const assistantResponseSchema = z.object({
   modules: z.array(moduleSpecSchema).nullable(),
   modulePatch: z.array(modulePatchEntrySchema).nullable(),
   models: z.array(modelSpecSchema).nullable(),
+  typeAliases: z.array(typeAliasSpecSchema).nullable(),
   docs: z.array(docSpecSchema).nullable(),
   // AI : full replacement markdown for project.documentation when pipeline/models change.
   documentationUpdate: z.string().max(48_000).nullable(),
@@ -118,12 +123,14 @@ export type ProjectAssistantDocSpec = z.infer<typeof docSpecSchema>;
 export type PipelineAssistantProposal = {
   modules: PipelineModule[];
   models: StructureModel[];
+  typeAliases: TypeAlias[];
   docs: ProjectAssistantDocSpec[];
   documentation: string;
   projectName?: string;
   changed: {
     modules: boolean;
     models: boolean;
+    typeAliases: boolean;
     docs: boolean;
     documentation: boolean;
     name?: boolean;
@@ -232,9 +239,10 @@ function expandModuleSpecs(
 function materializeModels(
   specs: PipelineAssistantModelSpec[] | null | undefined,
   existing: StructureModel[],
+  typeAliasNames: Set<string>,
 ): StructureModel[] {
   if (!specs?.length) return existing;
-  return materializeStructureModels(specs, existing);
+  return materializeStructureModels(specs, existing, typeAliasNames);
 }
 
 // AI : apply a single patch entry onto an existing module — preserves id and all unpatched fields.
@@ -381,6 +389,7 @@ function materializeProposal(
   const hasPipelinePatch = !hasPipelineRewrite && (raw.modulePatch?.length ?? 0) > 0;
   const hasPipelineChange = hasPipelineRewrite || hasPipelinePatch;
   const hasModelChange = raw.models !== null;
+  const hasTypeAliasChange = raw.typeAliases !== null;
   const hasDocChange = raw.docs !== null;
   const hasDocumentationChange = raw.documentationUpdate !== null;
   const trimmedNameUpdate = raw.projectNameUpdate?.trim();
@@ -388,11 +397,23 @@ function materializeProposal(
     !!trimmedNameUpdate &&
     isUnnamedProjectName(project.name) &&
     trimmedNameUpdate !== project.name;
-  if (!hasPipelineChange && !hasModelChange && !hasDocChange && !hasDocumentationChange && !hasNameChange) {
+  if (
+    !hasPipelineChange &&
+    !hasModelChange &&
+    !hasTypeAliasChange &&
+    !hasDocChange &&
+    !hasDocumentationChange &&
+    !hasNameChange
+  ) {
     return null;
   }
 
-  const models = materializeModels(raw.models, project.models);
+  const aliasNames = collectTypeAliasNames(project.typeAliases ?? [], raw.typeAliases);
+  const models = materializeModels(raw.models, project.models, aliasNames);
+  const typeAliases =
+    raw.typeAliases !== null
+      ? materializeTypeAliases(raw.typeAliases, project.typeAliases ?? [], models)
+      : (project.typeAliases ?? []);
   let modules: PipelineModule[];
   if (hasPipelineRewrite) {
     modules = syncAutoQuoteSteps(expandModuleSpecs(raw.modules ?? [], models, globalModel), models) ?? [];
@@ -405,6 +426,7 @@ function materializeProposal(
   return {
     modules: modules ?? [],
     models,
+    typeAliases,
     docs,
     documentation: hasDocumentationChange
       ? raw.documentationUpdate!.trim()
@@ -412,6 +434,7 @@ function materializeProposal(
     changed: {
       modules: hasPipelineChange,
       models: hasModelChange,
+      typeAliases: hasTypeAliasChange,
       docs: hasDocChange,
       documentation: hasDocumentationChange,
       name: hasNameChange,

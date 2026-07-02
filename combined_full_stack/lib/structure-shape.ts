@@ -1,10 +1,43 @@
 import type { ModelField, StructureModel, StructureModelId } from "@/lib/types"
 import { referencedModelIds } from "@/lib/structure-ref"
+import { collectTypeExprRefModelIds, fieldToTypeExpr } from "@/lib/server/type_expr"
+import { formatTypeExprPy } from "@/lib/type-expr-parse"
 
-const STRUCTURE_NUMBER_RE = /^Structure (\d+)$/
+const STRUCTURE_NUMBER_RE = /^Structure[_ ](\d+)$/
 
 export function isNumberedStructureName(name: string): boolean {
   return STRUCTURE_NUMBER_RE.test(name)
+}
+
+// AI : codegen-safe model identifiers — "Structure 4" → "Structure_4", other spaces → "_".
+export function modelExportIdentifier(name: string): string {
+  const hit = STRUCTURE_NUMBER_RE.exec(name)
+  if (hit) return `Structure_${hit[1]}`
+  const trimmed = name.trim()
+  if (!trimmed) return "_empty"
+  return trimmed.replace(/[^\w]+/g, "_").replace(/^(\d)/, "_$1")
+}
+
+function nestedRefShapeParts(
+  f: ModelField,
+  byId: Map<string, StructureModel>,
+  visiting: Set<StructureModelId>,
+  loose: boolean,
+): string {
+  const refIds = new Set<StructureModelId>()
+  if (f.ref) refIds.add(f.ref)
+  for (const id of collectTypeExprRefModelIds(fieldToTypeExpr(f))) refIds.add(id)
+  return [...refIds]
+    .map((refId) => {
+      const refModel = byId.get(refId)
+      if (!refModel) return `@ref:${refId}`
+      if (visiting.has(refModel.id)) return `@ref:${refModel.id}`
+      const sig = loose
+        ? modelShapeSignatureLoose(refModel, byId, visiting)
+        : modelShapeSignature(refModel, byId, visiting)
+      return `@${sig}`
+    })
+    .join("")
 }
 
 function fieldShapePart(
@@ -12,13 +45,9 @@ function fieldShapePart(
   byId: Map<string, StructureModel>,
   visiting: Set<StructureModelId>,
 ): string {
-  const refModel = f.ref ? byId.get(f.ref) : undefined
-  const refPart = refModel
-    ? visiting.has(refModel.id)
-      ? `@ref:${refModel.id}`
-      : `@${modelShapeSignature(refModel, byId, visiting)}`
-    : ""
-  return `${f.type}${f.optional ? "?" : ""}${refPart}`
+  const typePart = formatTypeExprPy(fieldToTypeExpr(f), [...byId.values()])
+  const refPart = nestedRefShapeParts(f, byId, visiting, false)
+  return `${typePart}${f.optional ? "?" : ""}${refPart}`
 }
 
 function fieldShapePartLoose(
@@ -26,13 +55,9 @@ function fieldShapePartLoose(
   byId: Map<string, StructureModel>,
   visiting: Set<StructureModelId>,
 ): string {
-  const refModel = f.ref ? byId.get(f.ref) : undefined
-  const refPart = refModel
-    ? visiting.has(refModel.id)
-      ? `@ref:${refModel.id}`
-      : `@${modelShapeSignatureLoose(refModel, byId, visiting)}`
-    : ""
-  return `${f.name}:${f.type}${refPart}`
+  const typePart = formatTypeExprPy(fieldToTypeExpr(f), [...byId.values()])
+  const refPart = nestedRefShapeParts(f, byId, visiting, true)
+  return `${f.name}:${typePart}${refPart}`
 }
 
 // AI : compare inferred shapes by field types — doc-specific field names are ignored.
@@ -83,6 +108,7 @@ export function bundleShapeSignature(root: StructureModel, all: StructureModel[]
     parts.push(modelShapeSignature(m, byId))
     for (const f of m.fields) {
       if (f.ref) queue.push(f.ref)
+      for (const refId of collectTypeExprRefModelIds(fieldToTypeExpr(f))) queue.push(refId)
     }
   }
   return parts.sort().join("||")
@@ -102,6 +128,7 @@ export function bundleShapeSignatureLoose(root: StructureModel, all: StructureMo
     parts.push(modelShapeSignatureLoose(m, byId))
     for (const f of m.fields) {
       if (f.ref) queue.push(f.ref)
+      for (const refId of collectTypeExprRefModelIds(fieldToTypeExpr(f))) queue.push(refId)
     }
   }
   return parts.sort().join("||")
@@ -184,7 +211,7 @@ export function nextSharedStructureName(models: StructureModel[]): string {
     const hit = STRUCTURE_NUMBER_RE.exec(m.name)
     if (hit) max = Math.max(max, Number(hit[1]))
   }
-  return `Structure ${max + 1}`
+  return `Structure_${max + 1}`
 }
 
 export function findModelByBundleShape(
@@ -235,8 +262,10 @@ function collapsePerDocInferredDuplicates(models: StructureModel[]): StructureMo
     }
     let sharedName = keeper.name
     if (!STRUCTURE_NUMBER_RE.test(sharedName)) {
-      while (takenNames.has(`Structure ${nameCursor}`)) nameCursor++
-      sharedName = `Structure ${nameCursor}`
+      while (takenNames.has(`Structure_${nameCursor}`) || takenNames.has(`Structure ${nameCursor}`)) {
+        nameCursor++
+      }
+      sharedName = `Structure_${nameCursor}`
       nameCursor++
       takenNames.add(sharedName)
     }
@@ -257,7 +286,51 @@ function collapsePerDocInferredDuplicates(models: StructureModel[]): StructureMo
     .map((m) => (renames.has(m.id) ? { ...m, ...renames.get(m.id)! } : m))
 }
 
+// AI : doc infer can produce two auto models with the same export id (recursive subsections) — rename companions.
+function disambiguateDuplicateModelNames(models: StructureModel[]): StructureModel[] {
+  const byExportId = new Map<string, StructureModel[]>()
+  for (const m of models) {
+    const key = modelExportIdentifier(m.name)
+    const group = byExportId.get(key) ?? []
+    group.push(m)
+    byExportId.set(key, group)
+  }
+
+  const refCounts = new Map<StructureModelId, number>()
+  for (const m of models) {
+    for (const f of m.fields) {
+      if (f.ref) refCounts.set(f.ref, (refCounts.get(f.ref) ?? 0) + 1)
+    }
+  }
+
+  const renames = new Map<StructureModelId, string>()
+  const takenNames = new Set(models.map((m) => m.name))
+
+  for (const group of byExportId.values()) {
+    if (group.length <= 1) continue
+    const groupIds = new Set(group.map((m) => m.id))
+    const sorted = [...group].sort((a, b) => {
+      const aWraps = a.fields.some((f) => f.ref && groupIds.has(f.ref))
+      const bWraps = b.fields.some((f) => f.ref && groupIds.has(f.ref))
+      if (aWraps !== bWraps) return aWraps ? -1 : 1
+      return (refCounts.get(b.id) ?? 0) - (refCounts.get(a.id) ?? 0)
+    })
+    const [, ...rest] = sorted
+    for (const m of rest) {
+      let candidate = `${m.name}Item`
+      while (takenNames.has(candidate)) candidate = `${candidate}Item`
+      renames.set(m.id, candidate)
+      takenNames.add(candidate)
+    }
+  }
+
+  if (!renames.size) return models
+  return models.map((m) => (renames.has(m.id) ? { ...m, name: renames.get(m.id)! } : m))
+}
+
 // AI : collapse per-doc inferred duplicates + numbered structures that match a named model.
 export function dedupeInferredModelsByShape(models: StructureModel[]): StructureModel[] {
-  return collapsePerDocInferredDuplicates(collapseNumberedAgainstNamed(models))
+  return disambiguateDuplicateModelNames(
+    collapsePerDocInferredDuplicates(collapseNumberedAgainstNamed(models)),
+  )
 }

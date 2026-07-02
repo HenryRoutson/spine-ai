@@ -6,19 +6,22 @@ import { documentContentFrom, documentFilenameFrom, documentValueFrom } from "@/
 import { modelHasQuoteFields } from "./quote_schema";
 import {
   fieldTypeToExpr,
+  fieldToTypeExpr,
+  fieldIsListType,
   formatTypeExpr,
   isListFieldType,
   typeExprToZod,
   withFieldMeta,
   zodFromModel as zodFromModelExpr,
 } from "./type_expr";
-import type { FieldType, ModelField, PipelineModule, StructureModel, StructureModelId } from "./types";
+import type { FieldType, ModelField, PipelineModule, StructureModel, StructureModelId, TypeAlias } from "./types";
 
 export { QuoteSchema, isListFieldType } from "./type_expr";
 export type { TypeExpr } from "./type_expr";
 export {
   cardinalityMismatch,
   fieldTypeToExpr,
+  fieldToTypeExpr,
   formatTypeExpr,
   stepEmitsList,
   stepSpineInType,
@@ -47,14 +50,27 @@ export function assertValidJsonFieldValue(val: unknown, fieldName?: string): ass
   }
 }
 
-function llmModelToZod(model: StructureModel, models: StructureModel[], seen: Set<StructureModelId>): ZodType {
+function llmModelToZod(
+  model: StructureModel,
+  models: StructureModel[],
+  seen: Set<StructureModelId>,
+  typeAliases: TypeAlias[] = [],
+): ZodType {
   if (seen.has(model.id)) return z.record(z.string(), z.unknown());
   const next = new Set(seen).add(model.id);
   const shape: Record<string, ZodType> = {};
   for (const f of model.fields) {
     if (!f.name.trim()) continue;
-    let base = withFieldMeta(typeExprToZod(fieldTypeToExpr(f), models, next, true), f);
-    if (f.minItems && f.minItems > 1 && isListFieldType(f.type) && base instanceof z.ZodArray) {
+    let base = withFieldMeta(
+      typeExprToZod(fieldToTypeExpr(f), models, {
+        seen: next,
+        llmQuotes: true,
+        typeAliases,
+        seenAliasNames: new Set(),
+      }),
+      f,
+    );
+    if (f.minItems && f.minItems > 1 && fieldIsListType(f) && base instanceof z.ZodArray) {
       base = base.min(f.minItems);
     }
     shape[f.name] = f.optional ? base.optional() : base;
@@ -63,8 +79,12 @@ function llmModelToZod(model: StructureModel, models: StructureModel[], seen: Se
 }
 
 // AI : canonical schema builder — ONE definition backs runtime validation AND llm output schemas.
-export function zodFromModel(model: StructureModel, models: StructureModel[] = []): ZodType {
-  return zodFromModelExpr(model, models.length ? models : [model], false);
+export function zodFromModel(
+  model: StructureModel,
+  models: StructureModel[] = [],
+  typeAliases: TypeAlias[] = [],
+): ZodType {
+  return zodFromModelExpr(model, models.length ? models : [model], false, typeAliases);
 }
 
 // AI : true when this model or any nested ref carries a quote field — drives LLM source + link steps.
@@ -88,12 +108,18 @@ function llmBuild(
   model: StructureModel,
   models: StructureModel[],
   seen: Set<StructureModelId>,
+  typeAliases: TypeAlias[] = [],
 ): ZodType {
-  return llmModelToZod(model, models, seen);
+  return llmModelToZod(model, models, seen, typeAliases);
 }
 
-export function llmSchema(model: StructureModel, models: StructureModel[], isList: boolean): ZodType {
-  const obj = llmBuild(model, models, new Set());
+export function llmSchema(
+  model: StructureModel,
+  models: StructureModel[],
+  isList: boolean,
+  typeAliases: TypeAlias[] = [],
+): ZodType {
+  const obj = llmBuild(model, models, new Set(), typeAliases);
   return isList ? z.preprocess(coerceLlmListOutput, z.array(obj)) : obj;
 }
 
@@ -166,7 +192,31 @@ function coerceFieldValue(
   filename: string,
   docId: string,
 ): unknown {
+  const expr = fieldToTypeExpr(field);
   if (val !== undefined && val !== null) {
+    if (expr.kind === "ref") {
+      const ref = models.find((m) => m.id === expr.modelId);
+      if (ref) return materializeToModel(val, ref, models, hints);
+    }
+    if (expr.kind === "list" && Array.isArray(val)) {
+      const item = expr.item;
+      if (item.kind === "ref") {
+        const ref = models.find((m) => m.id === item.modelId);
+        if (ref) return val.map((row) => materializeToModel(row, ref, models, hints));
+      }
+    }
+    if (expr.kind === "optional") {
+      return coerceFieldValue(
+        val,
+        { ...field, typeExpr: expr.inner, optional: false },
+        models,
+        hints,
+        content,
+        purpose,
+        filename,
+        docId,
+      );
+    }
     if (field.type === "model" && field.ref) {
       const ref = models.find((m) => m.id === field.ref);
       if (ref) return materializeToModel(val, ref, models, hints);
@@ -175,9 +225,12 @@ function coerceFieldValue(
       const ref = models.find((m) => m.id === field.ref);
       if (ref) return val.map((item) => materializeToModel(item, ref, models, hints));
     }
-    if (field.type === "document") return documentFieldValue(val, hints);
-    if (field.type === "list[document]" && Array.isArray(val)) {
-      return val.map((item) => documentFieldValue(item, hints));
+    if (expr.kind === "document" || field.type === "document") return documentFieldValue(val, hints);
+    if (
+      (expr.kind === "list" && expr.item.kind === "document") ||
+      field.type === "list[document]"
+    ) {
+      if (Array.isArray(val)) return val.map((item) => documentFieldValue(item, hints));
     }
     return val;
   }
@@ -334,8 +387,13 @@ function formatZodError(error: ZodError): string {
 }
 
 // AI : implicit validation reused by Pipeline/Inference on every step's I/O (no standalone step).
-export function validate(value: unknown, model: StructureModel, models: StructureModel[] = []): ValidationResult {
-  const parsed = zodFromModel(model, models).safeParse(value);
+export function validate(
+  value: unknown,
+  model: StructureModel,
+  models: StructureModel[] = [],
+  typeAliases: TypeAlias[] = [],
+): ValidationResult {
+  const parsed = zodFromModel(model, models, typeAliases).safeParse(value);
   return parsed.success
     ? { ok: true, value: parsed.data }
     : { ok: false, error: formatZodError(parsed.error) };
@@ -346,10 +404,13 @@ export function validateStepOutput(
   value: unknown,
   model: StructureModel,
   models: StructureModel[],
-  opts: { isList?: boolean; rawQuotes?: boolean } = {},
+  opts: { isList?: boolean; rawQuotes?: boolean; typeAliases?: TypeAlias[] } = {},
 ): ValidationResult {
   const isList = opts.isList ?? false;
-  const itemSchema = opts.rawQuotes ? llmSchema(model, models, false) : zodFromModel(model, models);
+  const typeAliases = opts.typeAliases ?? [];
+  const itemSchema = opts.rawQuotes
+    ? llmSchema(model, models, false, typeAliases)
+    : zodFromModel(model, models, typeAliases);
   if (isList) {
     const parsed = z.array(itemSchema).safeParse(coerceLlmListOutput(value));
     return parsed.success
@@ -383,7 +444,7 @@ export function inferModel(sample: Record<string, unknown>, name: string, id: St
 // AI : human-readable schema line for logs — e.g. MarkingSchema { assignment_title: text, sections: list[RubricSection] }
 export function formatStructureDef(model: StructureModel, models: StructureModel[] = []): string {
   const fields = model.fields
-    .map((f) => `${f.name}: ${formatTypeExpr(fieldTypeToExpr(f), models)}`)
+    .map((f) => `${f.name}: ${formatTypeExpr(fieldToTypeExpr(f), models)}`)
     .join(", ");
   return `${model.name} { ${fields} }`;
 }

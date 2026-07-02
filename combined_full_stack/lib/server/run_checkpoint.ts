@@ -42,7 +42,9 @@ export type RunCheckpoint = {
     entries?: ParsedCustomCodeEntry[];
     input: unknown;
     pipelineState?: import("../run-types").PipelineState;
+    expectedOutputs?: Record<string, unknown>;
   };
+  expectedOutputs?: Record<string, unknown>;
 };
 
 export class HumanReviewPendingError extends Error {

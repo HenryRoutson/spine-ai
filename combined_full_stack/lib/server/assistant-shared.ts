@@ -1,9 +1,12 @@
 import { z } from "zod";
-import { FIELD_TYPES, type FieldType, type StructureModel, type StructureModelId } from "./types";
+import { uid } from "@/lib/id";
+import { tryParseTypeExprString } from "@/lib/type-expr-parse";
+import { FIELD_TYPES, type FieldType, type ModelField, type StructureModel, type StructureModelId, type TypeAlias, type TypeAliasId } from "./types";
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
 const fieldTypeValues = FIELD_TYPES as [FieldType, ...FieldType[]];
+const FIELD_TYPE_SET = new Set<string>(FIELD_TYPES);
 
 export const modelFieldSpecSchema = z.object({
   name: z.string(),
@@ -11,6 +14,13 @@ export const modelFieldSpecSchema = z.object({
   optional: z.boolean().default(false),
   description: z.string().default(""),
   ref: z.string().optional(),
+  typeExpr: z.string().optional(),
+});
+
+export const typeAliasSpecSchema = z.object({
+  name: z.string(),
+  description: z.string().default(""),
+  expr: z.string(),
 });
 
 export const structureModelSpecSchema = z.object({
@@ -18,6 +28,9 @@ export const structureModelSpecSchema = z.object({
   description: z.string().default(""),
   fields: z.array(modelFieldSpecSchema),
 });
+
+export type StructureAssistantModelSpec = z.infer<typeof structureModelSpecSchema>;
+export type TypeAliasSpec = z.infer<typeof typeAliasSpecSchema>;
 
 const LIST_STRUCTURE_HINT = /^list\[(.+)\]$/i;
 
@@ -68,4 +81,132 @@ export function resolveStructureIdFromMap(
     if (id.toLowerCase() === key) return id;
   }
   return undefined;
+}
+
+export function collectTypeAliasNames(
+  existing: TypeAlias[],
+  specs: TypeAliasSpec[] | null | undefined,
+): Set<string> {
+  const names = new Set(existing.map((a) => a.name.toLowerCase()));
+  for (const spec of specs ?? []) {
+    if (spec.name.trim()) names.add(spec.name.trim().toLowerCase());
+  }
+  return names;
+}
+
+export function materializeTypeAliases(
+  specs: TypeAliasSpec[],
+  existing: TypeAlias[],
+  models: StructureModel[],
+): TypeAlias[] {
+  const existingByName = new Map(existing.map((a) => [a.name.toLowerCase(), a]));
+  return specs.map((spec) => {
+    const prev = existingByName.get(spec.name.toLowerCase());
+    const parsed = tryParseTypeExprString(spec.expr, models);
+    return {
+      id: (prev?.id ?? uid()) as TypeAliasId,
+      name: spec.name,
+      description: spec.description,
+      expr: parsed.ok ? parsed.expr : { kind: "named", name: spec.expr.trim() || "Any" },
+    };
+  });
+}
+
+export function materializeModelField(
+  f: z.infer<typeof modelFieldSpecSchema>,
+  ctx: {
+    byName: Map<string, StructureModelId>;
+    existing: StructureModel[];
+    modelsForParse: StructureModel[];
+    typeAliasNames: Set<string>;
+    prevField?: ModelField;
+  },
+): ModelField {
+  const base = {
+    id: ctx.prevField?.id ?? uid(),
+    name: f.name,
+    optional: f.optional,
+    description: f.description,
+  };
+
+  if (f.typeExpr?.trim()) {
+    const parsed = tryParseTypeExprString(f.typeExpr.trim(), ctx.modelsForParse);
+    if (parsed.ok) {
+      return { ...base, type: "json", typeExpr: parsed.expr, ref: undefined };
+    }
+  }
+
+  const typeStr = String(f.type);
+  if (!FIELD_TYPE_SET.has(typeStr)) {
+    if (ctx.typeAliasNames.has(typeStr.toLowerCase())) {
+      return {
+        ...base,
+        type: "json",
+        typeExpr: { kind: "named", name: typeStr },
+        ref: undefined,
+      };
+    }
+    const parsed = tryParseTypeExprString(typeStr, ctx.modelsForParse);
+    if (parsed.ok) {
+      return { ...base, type: "json", typeExpr: parsed.expr, ref: undefined };
+    }
+  }
+
+  return {
+    ...base,
+    type: typeStr as FieldType,
+    ref: resolveStructureIdFromMap(f.ref, ctx.byName, ctx.existing),
+  };
+}
+
+export function materializeStructureModels(
+  specs: StructureAssistantModelSpec[],
+  existing: StructureModel[],
+  typeAliasNames: Set<string> = new Set(),
+): StructureModel[] {
+  const existingByName = new Map(existing.map((m) => [m.name.toLowerCase(), m]));
+  const byName = new Map<string, StructureModelId>();
+
+  for (const spec of specs) {
+    const prev = existingByName.get(spec.name.toLowerCase());
+    byName.set(spec.name.toLowerCase(), prev?.id ?? (uid() as StructureModelId));
+  }
+
+  const draftModels: StructureModel[] = specs.map((spec) => {
+    const prev = existingByName.get(spec.name.toLowerCase());
+    const id = byName.get(spec.name.toLowerCase())!;
+    return {
+      id,
+      name: spec.name,
+      description: spec.description,
+      fields: [],
+      auto: prev?.auto,
+    };
+  });
+
+  return specs.map((spec, i) => {
+    const prev = existingByName.get(spec.name.toLowerCase());
+    const id = byName.get(spec.name.toLowerCase())!;
+    const prevFieldsByName = new Map(prev?.fields.map((f) => [f.name.toLowerCase(), f]) ?? []);
+    const modelShell = draftModels[i]!;
+    const modelsForParse = [...existing, ...draftModels.filter((m) => m.id !== id), modelShell];
+
+    const fields: ModelField[] = spec.fields.map((f) =>
+      materializeModelField(f, {
+        byName,
+        existing,
+        modelsForParse,
+        typeAliasNames,
+        prevField: prevFieldsByName.get(f.name.toLowerCase()),
+      }),
+    );
+
+    return {
+      id,
+      name: spec.name,
+      description: spec.description,
+      fields,
+      auto: prev?.auto,
+    };
+  });
 }

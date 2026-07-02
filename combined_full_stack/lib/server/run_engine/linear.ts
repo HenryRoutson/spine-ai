@@ -5,6 +5,7 @@ import { inputTypeLabel } from "../../inference-input";
 import { assertInputMatchesDescription, InputDescriptionRejectedError, shouldCheckInputDescription } from "../input_description_check";
 import { collectLogsDuring, withStepModuleContext } from "../job_log_sink";
 import { ClientStepPendingError, HumanReviewPendingError, PipelinePausedError } from "../run_checkpoint";
+import { expectedOutputsForProject } from "../seed";
 import { stepCacheKey } from "../run_fingerprint";
 import { readStepCache, writeStepCache } from "../step_cache";
 import { hasQuoteField, validateStepOutput } from "../structure";
@@ -123,7 +124,11 @@ export async function runLinearStepsFrom(
             if (out) {
               const isList = m.outIsList || m.kind === "llm-batch";
               const rawQuotes = isLlmKind(m.kind) && hasQuoteField(out, project.models);
-              const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes });
+              const check = validateStepOutput(result.value, out, project.models, {
+                isList,
+                rawQuotes,
+                typeAliases: project.typeAliases ?? [],
+              });
               if (!check.ok) {
                 const failedJson = result.json ?? JSON.stringify(result.value, null, 2);
                 const validationError = check.error ?? "unknown validation error";
@@ -170,6 +175,7 @@ export async function runLinearStepsFrom(
         } catch (err) {
           if (err instanceof ClientStepPendingError) {
             const primary = err.entries[0];
+            const golden = expectedOutputsForProject(project);
             throw new PipelinePausedError({
               runId,
               projectId,
@@ -182,6 +188,7 @@ export async function runLinearStepsFrom(
               startedAt,
               steps: [...steps],
               ctx: serializeCtx(ctx),
+              expectedOutputs: golden,
               clientStep: {
                 moduleId: m.id,
                 label: m.label,
@@ -190,6 +197,7 @@ export async function runLinearStepsFrom(
                 entries: err.entries,
                 input: err.input,
                 pipelineState: err.pipelineState,
+                expectedOutputs: golden,
               },
             });
           }
@@ -206,6 +214,7 @@ export async function runLinearStepsFrom(
               startedAt,
               steps: [...steps],
               ctx: serializeCtx(ctx),
+              expectedOutputs: expectedOutputsForProject(project),
               clientStep: {
                 moduleId: m.id,
                 label: m.label,

@@ -237,7 +237,7 @@ export async function awaitJobCompletion(
       !clientStepBusy &&
       clientStepSubmittedFor !== job.clientStep.moduleId
     ) {
-      const { moduleId, entries, input, pipelineState, kind } = job.clientStep
+      const { moduleId, entries, input, pipelineState, kind, expectedOutputs } = job.clientStep
       if (!entries?.length) {
         await submitClientStep({ error: `${kind} step has no code configured` })
         clientStepSubmittedFor = moduleId
@@ -249,7 +249,7 @@ export async function awaitJobCompletion(
       try {
         const { output, failures, attemptIndex, language } =
           kind === "assert"
-            ? await runAssertWithFallbacks(entries, input, pipelineState)
+            ? await runAssertWithFallbacks(entries, input, pipelineState, expectedOutputs)
             : await runCustomCodeWithFallbacks(entries, input, pipelineState)
         for (const f of failures) {
           clientLogs.push({

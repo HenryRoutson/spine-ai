@@ -267,7 +267,11 @@ export async function resumeRunPipeline(
         const out = modelById(project.models, m.outStructureId);
         if (out) {
           const isList = m.outIsList || m.kind === "llm-batch";
-          const check = validateStepOutput(result.value, out, project.models, { isList, rawQuotes: false });
+          const check = validateStepOutput(result.value, out, project.models, {
+            isList,
+            rawQuotes: false,
+            typeAliases: project.typeAliases ?? [],
+          });
           if (!check.ok) {
             const validationError = check.error ?? "unknown validation error";
             ctx.stepExtraFailures = [{ kind: "step_output", detail: validationError, recovered: false }];

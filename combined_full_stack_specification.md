@@ -61,7 +61,10 @@ ask an ai assistant to change the models for you
 
 
 
+You need to have a page which doesn't edit structs but just single types. so you can click on a placeholder and add a dict or a list and then fill out what's in that list etc. allow any inline type that you would in python like list[list[int]] or dict[str, str] or new types like quote_id_t or unfilled types like set[UNSET].
 
+
+each structure should have a quick AI summarise button, which is not meant to replace human descriptions, but to quickly catch bugs or inconsistencyies like "document_summary : int".
 
 
 # Pipeline
@@ -187,6 +190,15 @@ after inference is finished or if it's cached, the final output should show up. 
 when using an agent, it will always write descriptions of it's input to ensure correctness.
 
 Users should be able to see their previous chats with the spine agent. 
+they should be date sorted with month seperations
+
+
+you need to mininimise everything except the outputs marked as output steps when the inference run finishes. You should show all intermediate logs and outputs in the step trace, but this should be minimised as soon as the run finishes.
+
+
+
+there should be example input and expected output files which are used to test the pipeline, 
+this can be a demo for the inference. assert actual output equals expected
 
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.

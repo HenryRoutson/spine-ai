@@ -29,6 +29,8 @@ import type {
   Strategy,
   StructureModel,
   StructureModelId,
+  TypeAlias,
+  TypeAliasId,
   InputType,
 } from "@/lib/types"
 import { DEFAULT_MODEL } from "@/lib/types"
@@ -72,13 +74,16 @@ interface StoreState {
   project: Project
   // shortcuts that read/write the active project
   models: StructureModel[]
-  setModels: (m: StructureModel[]) => void
+  setModels: (m: StructureModel[] | ((prev: StructureModel[]) => StructureModel[])) => void
+  typeAliases: TypeAlias[]
+  setTypeAliases: (t: TypeAlias[] | ((prev: TypeAlias[]) => TypeAlias[])) => void
   modules: PipelineModule[]
   setModules: (m: PipelineModule[]) => void
   // AI : atomic models+modules patch — avoids stale closure when assistant changes both at once
   applyProjectChanges: (changes: {
     models?: StructureModel[]
     modules?: PipelineModule[]
+    typeAliases?: TypeAlias[]
   }) => void
   strategies: Strategy[]
   setStrategies: (s: Strategy[]) => void
@@ -650,13 +655,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const setModels = useCallback(
-    (m: StructureModel[]) => {
+    (m: StructureModel[] | ((prev: StructureModel[]) => StructureModel[])) => {
       if (!project) return
-      const nextModels = stripSharedModels(m)
+      const prev = stripSharedModels(project.models)
+      const raw = typeof m === "function" ? m(prev) : m
+      const nextModels = stripSharedModels(raw)
       patchProject({
         models: nextModels,
         modules: syncAutoQuoteSteps(project.modules, withSharedModels(nextModels)),
       })
+    },
+    [patchProject, project],
+  )
+
+  const setTypeAliases = useCallback(
+    (t: TypeAlias[] | ((prev: TypeAlias[]) => TypeAlias[])) => {
+      const prev = project?.typeAliases ?? []
+      const next = typeof t === "function" ? t(prev) : t
+      patchProject({ typeAliases: next })
     },
     [patchProject, project],
   )
@@ -670,8 +686,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   )
 
   const applyProjectChanges = useCallback(
-    (changes: { models?: StructureModel[]; modules?: PipelineModule[] }) => {
-      if (!project || (!changes.models && !changes.modules)) return
+    (changes: {
+      models?: StructureModel[]
+      modules?: PipelineModule[]
+      typeAliases?: TypeAlias[]
+    }) => {
+      if (!project || (!changes.models && !changes.modules && !changes.typeAliases)) return
 
       const nextModels = changes.models ? stripSharedModels(changes.models) : project.models
       const modelsForSync = withSharedModels(nextModels)
@@ -683,6 +703,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       patchProject({
         ...(changes.models ? { models: nextModels } : {}),
+        ...(changes.typeAliases ? { typeAliases: changes.typeAliases } : {}),
         ...(nextModules !== undefined ? { modules: nextModules } : {}),
       })
     },
@@ -726,6 +747,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       project,
       models: project.models,
       setModels,
+      typeAliases: project.typeAliases ?? [],
+      setTypeAliases,
       modules,
       setModules,
       applyProjectChanges,
@@ -761,6 +784,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     project,
     modules,
     setModels,
+    setTypeAliases,
     setModules,
     applyProjectChanges,
     setStrategies,

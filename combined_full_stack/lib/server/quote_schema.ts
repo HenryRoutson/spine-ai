@@ -1,6 +1,6 @@
-import type { DocId, FieldType, ModelField, StructureModel, StructureModelId } from "./types";
-
-// AI : schema-driven quote handling — follow StructureModel refs to find/link spans; no JSON brute-force.
+import { fieldToTypeExpr, typeExprIsQuote, typeExprRefModelId } from "./type_expr";
+import type { TypeExpr } from "./type_expr";
+import type { DocId, ModelField, StructureModel, StructureModelId } from "./types";
 
 export type LinkedQuoteValue = {
   text: string;
@@ -13,15 +13,129 @@ function byId(models: StructureModel[]): Map<StructureModelId, StructureModel> {
   return new Map(models.map((m) => [m.id, m]));
 }
 
-function isQuoteFieldType(type: FieldType): boolean {
-  return type === "tuple[text,quote]" || type === "list[tuple[text,quote]]";
-}
-
-function refModel(
-  field: ModelField,
+function refModelFromExpr(
+  expr: TypeExpr,
   index: Map<StructureModelId, StructureModel>,
 ): StructureModel | undefined {
-  return field.ref ? index.get(field.ref) : undefined;
+  const refId = typeExprRefModelId(expr);
+  return refId ? index.get(refId) : undefined;
+}
+
+function exprHasQuoteFields(
+  expr: TypeExpr,
+  models: StructureModel[],
+  index: Map<StructureModelId, StructureModel>,
+  seen: Set<StructureModelId>,
+): boolean {
+  if (typeExprIsQuote(expr)) return true;
+  const refId = typeExprRefModelId(expr);
+  if (refId) {
+    const ref = index.get(refId);
+    if (ref && modelHasQuoteFields(ref, models, seen)) return true;
+  }
+  if (expr.kind === "optional") return exprHasQuoteFields(expr.inner, models, index, seen);
+  if (expr.kind === "list") return exprHasQuoteFields(expr.item, models, index, seen);
+  if (expr.kind === "generic" && expr.name === "tuple") {
+    return expr.args.some((arg) => exprHasQuoteFields(arg, models, index, seen));
+  }
+  if (expr.kind === "union") {
+    return expr.variants.some((v) => exprHasQuoteFields(v, models, index, seen));
+  }
+  return false;
+}
+
+function resolveQuoteExpr(
+  expr: TypeExpr,
+  raw: unknown,
+  models: StructureModel[],
+  index: Map<StructureModelId, StructureModel>,
+  link: QuoteLinker,
+  seen: Set<StructureModelId>,
+): unknown {
+  if (typeExprIsQuote(expr)) return linkQuoteField(raw, link);
+  if (expr.kind === "list" && expr.item.kind === "text_quote") return linkQuoteList(raw, link);
+  if (expr.kind === "list" && expr.item.kind === "ref" && Array.isArray(raw)) {
+    const ref = refModelFromExpr(expr.item, index);
+    if (!ref) return raw;
+    return raw.map((row) => resolveQuotesOnRow(row, ref, models, link, seen));
+  }
+  if (expr.kind === "ref") {
+    const ref = refModelFromExpr(expr, index);
+    if (ref) return resolveQuotesOnRow(raw, ref, models, link, seen);
+    return raw;
+  }
+  if (expr.kind === "optional") {
+    if (raw === undefined || raw === null) return raw;
+    return resolveQuoteExpr(expr.inner, raw, models, index, link, seen);
+  }
+  if (expr.kind === "generic" && expr.name === "tuple" && Array.isArray(raw)) {
+    return raw.map((item, i) =>
+      resolveQuoteExpr(expr.args[i] ?? { kind: "unknown" }, item, models, index, link, seen),
+    );
+  }
+  return raw;
+}
+
+function collectQuoteExpr(
+  expr: TypeExpr,
+  raw: unknown,
+  models: StructureModel[],
+  index: Map<StructureModelId, StructureModel>,
+  out: LinkedQuoteValue[],
+  seen: Set<StructureModelId>,
+): void {
+  if (typeExprIsQuote(expr)) {
+    pushLinkedQuote(raw, out);
+    return;
+  }
+  if (expr.kind === "list" && expr.item.kind === "text_quote" && Array.isArray(raw)) {
+    for (const item of raw) pushLinkedQuote(item, out);
+    return;
+  }
+  if (expr.kind === "list" && expr.item.kind === "ref" && Array.isArray(raw)) {
+    const ref = refModelFromExpr(expr.item, index);
+    if (!ref) return;
+    for (const row of raw) collectQuotesOnRow(row, ref, models, out, seen);
+    return;
+  }
+  if (expr.kind === "ref") {
+    const ref = refModelFromExpr(expr, index);
+    if (ref) collectQuotesOnRow(raw, ref, models, out, seen);
+    return;
+  }
+  if (expr.kind === "optional") {
+    if (raw === undefined || raw === null) return;
+    collectQuoteExpr(expr.inner, raw, models, index, out, seen);
+    return;
+  }
+  if (expr.kind === "generic" && expr.name === "tuple" && Array.isArray(raw)) {
+    raw.forEach((item, i) =>
+      collectQuoteExpr(expr.args[i] ?? { kind: "unknown" }, item, models, index, out, seen),
+    );
+  }
+}
+
+function quotePathsForExpr(
+  expr: TypeExpr,
+  models: StructureModel[],
+  index: Map<StructureModelId, StructureModel>,
+  path: string,
+  seen: Set<StructureModelId>,
+): string[] {
+  if (typeExprIsQuote(expr)) return [path];
+  const refId = typeExprRefModelId(expr);
+  if (refId) {
+    const ref = index.get(refId);
+    if (ref) return quoteFieldPaths(ref, models, path, seen);
+    return [];
+  }
+  if (expr.kind === "list" && expr.item.kind === "ref") {
+    const ref = refModelFromExpr(expr.item, index);
+    if (ref) return quoteFieldPaths(ref, models, `${path}[]`, seen);
+    return [];
+  }
+  if (expr.kind === "optional") return quotePathsForExpr(expr.inner, models, index, path, seen);
+  return [];
 }
 
 // AI : true when this model or any nested model ref carries a quote field.
@@ -36,15 +150,7 @@ export function modelHasQuoteFields(
 
   for (const f of model.fields) {
     if (!f.name.trim()) continue;
-    if (isQuoteFieldType(f.type)) return true;
-    if (f.type === "model") {
-      const ref = refModel(f, index);
-      if (ref && modelHasQuoteFields(ref, models, next)) return true;
-    }
-    if (f.type === "list[model]") {
-      const ref = refModel(f, index);
-      if (ref && modelHasQuoteFields(ref, models, next)) return true;
-    }
+    if (exprHasQuoteFields(fieldToTypeExpr(f), models, index, next)) return true;
   }
   return false;
 }
@@ -92,26 +198,7 @@ function resolveQuotesOnRow(
     const raw = obj[f.name];
     if (raw === undefined) continue;
 
-    switch (f.type) {
-      case "tuple[text,quote]":
-        out[f.name] = linkQuoteField(raw, link);
-        break;
-      case "list[tuple[text,quote]]":
-        out[f.name] = linkQuoteList(raw, link);
-        break;
-      case "model": {
-        const ref = refModel(f, index);
-        if (ref) out[f.name] = resolveQuotesOnRow(raw, ref, models, link, next);
-        break;
-      }
-      case "list[model]": {
-        const ref = refModel(f, index);
-        if (ref && Array.isArray(raw)) {
-          out[f.name] = raw.map((row) => resolveQuotesOnRow(row, ref, models, link, next));
-        }
-        break;
-      }
-    }
+    out[f.name] = resolveQuoteExpr(fieldToTypeExpr(f), raw, models, index, link, next);
   }
   return out;
 }
@@ -154,26 +241,7 @@ function collectQuotesOnRow(
     const raw = obj[f.name];
     if (raw === undefined) continue;
 
-    switch (f.type) {
-      case "tuple[text,quote]":
-        pushLinkedQuote(raw, out);
-        break;
-      case "list[tuple[text,quote]]":
-        if (Array.isArray(raw)) for (const item of raw) pushLinkedQuote(item, out);
-        break;
-      case "model": {
-        const ref = refModel(f, index);
-        if (ref) collectQuotesOnRow(raw, ref, models, out, next);
-        break;
-      }
-      case "list[model]": {
-        const ref = refModel(f, index);
-        if (ref && Array.isArray(raw)) {
-          for (const row of raw) collectQuotesOnRow(row, ref, models, out, next);
-        }
-        break;
-      }
-    }
+    collectQuoteExpr(fieldToTypeExpr(f), raw, models, index, out, next);
   }
 }
 
@@ -207,18 +275,12 @@ export function quoteFieldPaths(
   for (const f of model.fields) {
     if (!f.name.trim()) continue;
     const path = prefix ? `${prefix}.${f.name}` : f.name;
-    if (isQuoteFieldType(f.type)) {
+    const expr = fieldToTypeExpr(f);
+    if (typeExprIsQuote(expr)) {
       paths.push(path);
       continue;
     }
-    if (f.type === "model") {
-      const ref = refModel(f, index);
-      if (ref) paths.push(...quoteFieldPaths(ref, models, path, next));
-    }
-    if (f.type === "list[model]") {
-      const ref = refModel(f, index);
-      if (ref) paths.push(...quoteFieldPaths(ref, models, `${path}[]`, next));
-    }
+    paths.push(...quotePathsForExpr(expr, models, index, path, next));
   }
   return paths;
 }

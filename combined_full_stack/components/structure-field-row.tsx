@@ -2,18 +2,9 @@
 
 import { X } from "lucide-react"
 import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import { StructureFieldRefPicker, isRefFieldType } from "@/components/structure-field-ref-picker"
-import { JSON_FIELD_PREFER_STRUCTURE_MSG, FIELD_TYPES, type FieldType, type ModelField, type StructureModel } from "@/lib/types"
+import { StructureFieldTypeEditor } from "@/components/structure-field-type-editor"
+import { JSON_FIELD_PREFER_STRUCTURE_MSG, type ModelField, type StructureModel } from "@/lib/types"
 import { cn } from "@/lib/utils"
-
-const REF_TYPES: FieldType[] = ["model", "list[model]"]
 
 export function StructureFieldRow({
   field,
@@ -25,58 +16,32 @@ export function StructureFieldRow({
   onRemove,
 }: {
   field: ModelField
-  fields: ModelField[]
+  fields: Pick<ModelField, "ref" | "name">[]
   models: StructureModel[]
   selectedId: string
   locked: boolean
   onUpdate: (patch: Partial<ModelField>) => void
   onRemove: () => void
 }) {
+  const isLegacyJson = field.type === "json" && !field.typeExpr
+
   return (
     <div>
-      <div className="grid grid-cols-[1.1fr_1fr_1.2fr_1fr_auto] items-center gap-2 border-b border-border px-3 py-2">
+      <div className="grid grid-cols-[1.1fr_1fr_1.2fr_1fr_auto] items-start gap-2 border-b border-border px-3 py-2">
         <Input
           value={field.name}
           onChange={(e) => onUpdate({ name: e.target.value })}
           readOnly={locked}
           className="h-8 font-mono text-xs"
         />
-        <div className="min-w-0 space-y-1">
-          <Select
-            value={field.type}
-            onValueChange={(v) =>
-              onUpdate({
-                type: v as FieldType,
-                ref: REF_TYPES.includes(v as FieldType)
-                  ? models.find((m) => m.id !== selectedId)?.id
-                  : undefined,
-              })
-            }
-            disabled={locked}
-          >
-            <SelectTrigger className="h-8 font-mono text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {FIELD_TYPES.map((t) => (
-                <SelectItem key={t} value={t} className="font-mono text-xs">
-                  {t}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {isRefFieldType(field.type) && (
-            <StructureFieldRefPicker
-              field={field}
-              fields={fields}
-              models={models}
-              selectedId={selectedId}
-              locked={locked}
-              onRefChange={(ref) => onUpdate({ ref })}
-              compact
-            />
-          )}
-        </div>
+        <StructureFieldTypeEditor
+          field={field}
+          fields={fields}
+          models={models}
+          selectedId={selectedId}
+          locked={locked}
+          onUpdate={onUpdate}
+        />
         <Input
           value={field.description}
           placeholder="—"
@@ -91,7 +56,7 @@ export function StructureFieldRow({
           readOnly={locked}
           className="h-8 font-mono text-xs"
         />
-        <div className="flex w-14 items-center justify-center gap-1">
+        <div className="flex h-8 w-14 items-center justify-center gap-1">
           <button
             onClick={() => onUpdate({ optional: !field.optional })}
             disabled={locked}
@@ -113,9 +78,9 @@ export function StructureFieldRow({
           </button>
         </div>
       </div>
-      {field.type === "json" && (
+      {isLegacyJson && (
         <div className="border-b border-border bg-amber-500/5 px-3 py-1.5">
-          <p className="font-mono text-[10px] text-amber-700 dark:text-amber-500">
+          <p className={cn("font-mono text-[10px] text-amber-700 dark:text-amber-500")}>
             {JSON_FIELD_PREFER_STRUCTURE_MSG}
           </p>
         </div>

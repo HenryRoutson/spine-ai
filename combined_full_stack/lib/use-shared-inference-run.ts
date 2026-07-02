@@ -20,6 +20,7 @@ import {
   startSharedRun,
   uploadSharedDoc,
 } from "@/lib/shared-run-client"
+import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 
 export type SharedInferencePhase = "idle" | "running" | "done"
 
@@ -175,7 +176,7 @@ export function useSharedInferenceRun(link: SharedLinkPublicView, linkId: string
   } = useRunProgressUi({ modules, phase, stepStates, run, pendingHumanReview })
 
   const outputSteps = useMemo(
-    () => run?.steps.filter((s) => s.outputJson || s.outputPreview.trim()) ?? [],
+    () => (run ? pipelineFinalOutputSteps(run.steps) : []),
     [run],
   )
 

@@ -180,6 +180,7 @@ export interface Store {
 // AI : pull models + module graph from a bundled template — keep per-step model/prompt overrides.
 function mergeSeedPipelineIntoProject(existing: Project, seed: Project): Project {
   const seedDocNames = seed.seedDocNames?.length ? seed.seedDocNames : existing.seedDocNames;
+  const expectedOutputs = seed.expectedOutputs ?? existing.expectedOutputs;
   const models = structuredClone(seed.models);
   let modules = seed.modules.map((sm) => {
     const em = existing.modules.find((m) => m.id === sm.id);
@@ -195,7 +196,7 @@ function mergeSeedPipelineIntoProject(existing: Project, seed: Project): Project
     };
   });
   modules = syncAutoQuoteSteps(modules, models);
-  return migrateProjectModules({ ...existing, seedDocNames, models, modules });
+  return migrateProjectModules({ ...existing, seedDocNames, expectedOutputs, models, modules });
 }
 
 // AI : keep persisted seed projects aligned with seeds/*.json — merge new modules (e.g. Link Quotes)

@@ -1,4 +1,4 @@
-import type { DocLabel, InputType, PipelineModule, StructureModel } from "@/lib/types"
+import type { DocLabel, InputType, PipelineModule, StructureModel, TypeAlias } from "@/lib/types"
 
 export const UNNAMED_PROJECT_NAME = "Untitled Pipeline" as const
 
@@ -16,6 +16,7 @@ export type ProjectDocSpec = {
 export type ProjectProposal = {
   modules: PipelineModule[]
   models: StructureModel[]
+  typeAliases: TypeAlias[]
   docs: ProjectDocSpec[]
   documentation: string
   projectName?: string
@@ -23,6 +24,7 @@ export type ProjectProposal = {
   changed: {
     modules: boolean
     models: boolean
+    typeAliases: boolean
     docs: boolean
     documentation: boolean
     name?: boolean
@@ -30,10 +32,11 @@ export type ProjectProposal = {
 }
 
 export const PROJECT_ASSISTANT_INITIAL_MESSAGE =
-  "Describe what you want to build — I can propose structure models, pipeline steps, and inference test documents in one shot. Approve to apply everything."
+  "Describe what you want to build — I can propose structure models, reusable type aliases, pipeline steps, and inference test documents in one shot. Approve to apply everything."
 
 export const PROJECT_ASSISTANT_STARTERS = [
-  "Set up structures, pipeline, and sample test documents from scratch",
+  "Set up structures, type aliases, pipeline, and sample test documents from scratch",
+  "Add reusable types like list[quote_id_t] and wire them into my structs",
   "Design a map-reduce pipeline for long document field extraction",
   "Create inference test documents that match my input steps",
   "Fix validation errors and simplify this project",

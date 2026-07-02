@@ -46,6 +46,8 @@ const TypeExprSchemaInner: z.ZodType<TypeExpr> = z.lazy(() =>
       name: z.string().min(1),
       args: z.array(TypeExprSchemaInner),
     }),
+    z.object({ kind: z.literal("named"), name: z.string().min(1) }),
+    z.object({ kind: z.literal("unset") }),
   ]) as z.ZodType<TypeExpr>,
 );
 

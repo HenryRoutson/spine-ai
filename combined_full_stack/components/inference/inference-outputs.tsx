@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2 } from "lucide-react"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { cn } from "@/lib/utils"
 import { useStatusPalette } from "@/lib/chart-colors"
+import { hasDisplayableStepOutput, isDocReferenceOutputJson } from "@/lib/step-doc"
 import type { RunStep, StructureModel } from "@/lib/types"
 
 function OutputStepLabel() {
@@ -27,7 +28,7 @@ export function InferenceRunOutputs({
 }) {
   return (
     <div className="space-y-3">
-      <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">outputs</p>
+      <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">final outputs</p>
       {steps.map((step, i) => (
         <InferenceStepOutput
           key={step.moduleId}
@@ -92,3 +93,55 @@ function InferenceStepOutput({
 }
 
 export { OutputStepLabel, outputStepOutlineClass }
+
+export function StepTraceOutputPreview({
+  runStep,
+  outputPreview,
+  models,
+  className,
+  compact = true,
+}: {
+  runStep?: RunStep
+  outputPreview?: string
+  models?: StructureModel[]
+  className?: string
+  compact?: boolean
+}) {
+  const json = runStep?.outputJson
+  const preview = runStep?.outputPreview ?? outputPreview
+  if (json && !isDocReferenceOutputJson(json)) {
+    return (
+      <div className={cn("mt-2 overflow-hidden rounded-md border border-border", className)}>
+        <div className={compact ? "h-[min(12rem,28vh)]" : "h-[min(24rem,50vh)]"}>
+          <JsonPreviewPanel json={json} models={models} defaultView="table" className="h-full" />
+        </div>
+      </div>
+    )
+  }
+  if (preview?.trim()) {
+    return (
+      <div
+        className={cn(
+          "mt-2 overflow-auto rounded-md border border-border bg-muted/20 px-2.5 py-2",
+          compact ? "max-h-32" : "max-h-64",
+          className,
+        )}
+      >
+        <pre className="whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-muted-foreground">
+          {preview}
+        </pre>
+      </div>
+    )
+  }
+  return null
+}
+
+export function stepHasTraceOutput(
+  runStep: RunStep | undefined,
+  outputPreview: string | undefined,
+  isInputStep: boolean,
+): boolean {
+  if (isInputStep) return false
+  if (runStep) return hasDisplayableStepOutput(runStep)
+  return !!(outputPreview?.trim())
+}

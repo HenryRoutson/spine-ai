@@ -58,7 +58,10 @@ function inferListElementType(values: unknown[]): FieldType {
 
 function nestedModelName(parentName: string, key: string): string {
   const suffix = toPascalCase(sanitizeFieldName(key))
-  if (parentName.endsWith(suffix)) return parentName
+  if (parentName.endsWith(suffix)) {
+    // AI : recursive field (subsections → …Subsections) — must not reuse the parent model name.
+    return `${parentName}Item`
+  }
   return `${parentName}${suffix}`
 }
 

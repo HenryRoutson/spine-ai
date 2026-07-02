@@ -48,6 +48,7 @@ export type ClientStepSpec = {
   entries?: ParsedCustomCodeEntry[];
   input: unknown;
   pipelineState?: PipelineState;
+  expectedOutputs?: Record<string, unknown>;
 };
 
 export interface RunJob {

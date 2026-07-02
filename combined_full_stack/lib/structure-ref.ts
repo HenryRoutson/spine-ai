@@ -1,4 +1,6 @@
 import { sanitizeFieldName } from "@/lib/csv-parse"
+import { isSharedStructureModel } from "@/lib/server/builtin_models"
+import { collectTypeExprRefModelIds, fieldToTypeExpr } from "@/lib/server/type_expr"
 import type { ModelField, StructureModel, StructureModelId } from "@/lib/types"
 
 function toPascalCase(raw: string): string {
@@ -7,14 +9,83 @@ function toPascalCase(raw: string): string {
   return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join("")
 }
 
+function fieldRefModelIds(f: ModelField): StructureModelId[] {
+  const ids: StructureModelId[] = []
+  if (f.ref) ids.push(f.ref)
+  ids.push(...collectTypeExprRefModelIds(fieldToTypeExpr(f)))
+  return ids
+}
+
 export function referencedModelIds(models: StructureModel[]): Set<StructureModelId> {
   const ids = new Set<StructureModelId>()
   for (const m of models) {
     for (const f of m.fields) {
-      if (f.ref) ids.add(f.ref)
+      for (const refId of fieldRefModelIds(f)) ids.add(refId)
     }
   }
   return ids
+}
+
+// AI : top-level structs — not referenced as a field type on any other model.
+export function rootModelIds(models: StructureModel[]): Set<StructureModelId> {
+  const referenced = referencedModelIds(models)
+  return new Set(
+    models.filter((m) => !referenced.has(m.id)).map((m) => m.id),
+  )
+}
+
+function isModelRefTarget(m: StructureModel): boolean {
+  return !isSharedStructureModel(m)
+}
+
+export type RefPickerGroups = {
+  roots: StructureModel[]
+  nested: StructureModel[]
+  self?: StructureModel
+  missing: StructureModel[]
+}
+
+function sortByName(models: StructureModel[]): StructureModel[] {
+  return [...models].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+// AI : group selectable refs — roots first so sub-types can be defined in separate structs.
+export function groupModelsForRefPicker(
+  models: StructureModel[],
+  selectedId: string,
+  fields: Pick<ModelField, "ref" | "name">[],
+): RefPickerGroups {
+  const selectable = models.filter(isModelRefTarget)
+  const byId = new Map(selectable.map((m) => [m.id, m]))
+  const roots = rootModelIds(selectable)
+  const self = selectable.find((m) => m.id === selectedId)
+
+  const missingRefIds = [
+    ...new Set(
+      fields.map((f) => f.ref).filter((id): id is StructureModelId => !!id && !byId.has(id)),
+    ),
+  ]
+  const missing = missingRefIds.map((refId) => ({
+    id: refId,
+    name: modelRefLabel(models, refId, fieldNamesForRef(fields, refId)),
+    description: "Missing companion — pick another model or re-sync the source document.",
+    fields: [] as ModelField[],
+    auto: true as const,
+  }))
+
+  const rootPool = sortByName(
+    selectable.filter((m) => roots.has(m.id) && m.id !== selectedId),
+  )
+  const nestedPool = sortByName(
+    selectable.filter((m) => !roots.has(m.id) && m.id !== selectedId),
+  )
+
+  return {
+    roots: rootPool,
+    nested: nestedPool,
+    self,
+    missing: sortByName(missing),
+  }
 }
 
 export function resolveReferencedModel(
@@ -47,27 +118,39 @@ function fieldNamesForRef(
   return [...new Set(fields.filter((f) => f.ref === refId).map((f) => f.name))]
 }
 
-// AI : pool every selectable model — include missing companions for all refs on this structure.
+// AI : pool every selectable model — roots, nested companions, self (recursive), and missing refs.
 export function modelsForRefPicker(
   models: StructureModel[],
   selectedId: string,
   fields: Pick<ModelField, "ref" | "name">[],
 ): StructureModel[] {
-  const pool = models.filter((m) => m.id !== selectedId)
-  const byId = new Map(pool.map((m) => [m.id, m]))
-  const missingRefIds = [
-    ...new Set(
-      fields.map((f) => f.ref).filter((id): id is StructureModelId => !!id && !byId.has(id)),
-    ),
-  ]
-  const stubs = missingRefIds.map((refId) => ({
-    id: refId,
-    name: modelRefLabel(models, refId, fieldNamesForRef(fields, refId)),
-    description: "Missing companion — pick another model or re-sync the source document.",
-    fields: [] as ModelField[],
-    auto: true as const,
-  }))
-  return [...pool, ...stubs].sort((a, b) => a.name.localeCompare(b.name))
+  const { roots, nested, self, missing } = groupModelsForRefPicker(models, selectedId, fields)
+  const seen = new Set<StructureModelId>()
+  const out: StructureModel[] = []
+  for (const m of [...roots, ...nested, ...(self ? [self] : []), ...missing]) {
+    if (seen.has(m.id)) continue
+    seen.add(m.id)
+    out.push(m)
+  }
+  return out
+}
+
+export function pickDefaultModelRef(
+  models: StructureModel[],
+  selectedId: string,
+): StructureModelId | undefined {
+  const { roots, nested } = groupModelsForRefPicker(models, selectedId, [])
+  return roots[0]?.id ?? nested[0]?.id
+}
+
+export function defaultModelTypeExprString(
+  models: StructureModel[],
+  selectedId: string,
+  asList: boolean,
+): string {
+  const ref = pickDefaultModelRef(models, selectedId)
+  const name = ref ? models.find((m) => m.id === ref)?.name : undefined
+  return asList ? `list[${name ?? "Model"}]` : (name ?? "Model")
 }
 
 export function refPickerLabel(fieldType: ModelField["type"]): string {
@@ -92,7 +175,9 @@ export function repairOrphanModelRefs(
   const orphans = new Set<StructureModelId>()
   for (const m of models) {
     for (const f of m.fields) {
-      if (f.ref && !byId.has(f.ref)) orphans.add(f.ref)
+      for (const refId of fieldRefModelIds(f)) {
+        if (!byId.has(refId)) orphans.add(refId)
+      }
     }
   }
   if (!orphans.size) return models

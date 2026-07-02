@@ -1,5 +1,6 @@
 import { z, type ZodType } from "zod";
 import { isValidJsonString } from "@/lib/json-utils";
+import { modelExportIdentifier } from "@/lib/structure-shape";
 import type {
   FieldType,
   InputType,
@@ -7,6 +8,7 @@ import type {
   PipelineModule,
   StructureModel,
   StructureModelId,
+  TypeAlias,
 } from "./types";
 
 // AI : canonical type IR — one definition for static checks, zod, pydantic, and codegen.
@@ -26,7 +28,11 @@ export type TypeExpr =
   | { kind: "map"; key: TypeExpr; value: TypeExpr }
   | { kind: "union"; variants: TypeExpr[] }
   | { kind: "generic"; name: string; args: TypeExpr[] }
+  | { kind: "named"; name: string }
+  | { kind: "unset" }
   | { kind: "unknown" };
+
+export const UNSET_TYPE_EXPR: TypeExpr = { kind: "unset" };
 
 export const QuoteSchema = z.object({
   doc_id: z.string(),
@@ -76,6 +82,77 @@ export function fieldTypeToExpr(field: Pick<ModelField, "type" | "ref">): TypeEx
     default:
       return { kind: "unknown" };
   }
+}
+
+// AI : typeExpr wins when set — enables tuple[Model, Model], Optional[Model], etc.
+export function fieldToTypeExpr(field: Pick<ModelField, "type" | "ref" | "typeExpr">): TypeExpr {
+  if (field.typeExpr) return field.typeExpr;
+  return fieldTypeToExpr(field);
+}
+
+export function typeExprIsQuote(expr: TypeExpr): boolean {
+  return expr.kind === "text_quote" || (expr.kind === "list" && expr.item.kind === "text_quote");
+}
+
+export function typeExprRefModelId(expr: TypeExpr): StructureModelId | undefined {
+  if (expr.kind === "ref") return expr.modelId;
+  if (expr.kind === "list" && expr.item.kind === "ref") return expr.item.modelId;
+  if (expr.kind === "optional") return typeExprRefModelId(expr.inner);
+  return undefined;
+}
+
+// AI : walk typeExpr for nested model refs — used by structure-ref + shape dedupe.
+export function collectTypeExprRefModelIds(expr: TypeExpr): StructureModelId[] {
+  const ids: StructureModelId[] = [];
+  function walk(e: TypeExpr) {
+    switch (e.kind) {
+      case "ref":
+        ids.push(e.modelId);
+        break;
+      case "list":
+      case "set":
+        walk(e.item);
+        break;
+      case "optional":
+        walk(e.inner);
+        break;
+      case "map":
+        walk(e.key);
+        walk(e.value);
+        break;
+      case "union":
+        e.variants.forEach(walk);
+        break;
+      case "generic":
+        e.args.forEach(walk);
+        break;
+      default:
+        break;
+    }
+  }
+  walk(expr);
+  return ids;
+}
+
+function resolveNamedTypeAlias(
+  name: string,
+  typeAliases: TypeAlias[],
+  seenNames: Set<string>,
+): TypeExpr | undefined {
+  const key = name.trim().toLowerCase();
+  if (!key || seenNames.has(key)) return undefined;
+  const alias = typeAliases.find((t) => t.name.trim().toLowerCase() === key);
+  if (!alias) return undefined;
+  seenNames.add(key);
+  return alias.expr;
+}
+
+export function typeExprIsList(expr: TypeExpr): boolean {
+  return expr.kind === "list";
+}
+
+export function fieldIsListType(field: Pick<ModelField, "type" | "ref" | "typeExpr" | "minItems">): boolean {
+  return typeExprIsList(fieldToTypeExpr(field));
 }
 
 export function isListFieldType(type: FieldType): boolean {
@@ -149,7 +226,10 @@ export function typeExprEqual(a: TypeExpr, b: TypeExpr): boolean {
     case "quote":
     case "text_quote":
     case "unknown":
+    case "unset":
       return true;
+    case "named":
+      return b.kind === "named" && a.name === b.name;
     case "list":
       return b.kind === "list" && typeExprEqual(a.item, b.item);
     case "ref":
@@ -233,6 +313,10 @@ export function formatTypeExpr(expr: TypeExpr, models: StructureModel[] = []): s
       return expr.args.length
         ? `${expr.name}[${expr.args.map((a) => formatTypeExpr(a, models)).join(", ")}]`
         : expr.name;
+    case "named":
+      return expr.name;
+    case "unset":
+      return "UNSET";
     case "unknown":
       return "?";
     default:
@@ -253,23 +337,40 @@ export function withFieldMeta(schema: ZodType, f: ModelField): ZodType {
   return d ? schema.describe(d) : schema;
 }
 
+type TypeExprToZodOpts = {
+  seen?: Set<StructureModelId>;
+  llmQuotes?: boolean;
+  typeAliases?: TypeAlias[];
+  seenAliasNames?: Set<string>;
+};
+
 function refZod(
   ref: StructureModelId | undefined,
   index: Map<StructureModelId, StructureModel>,
-  seen: Set<StructureModelId>,
-  llmQuotes: boolean,
+  opts: TypeExprToZodOpts,
 ): ZodType {
   const model = ref ? index.get(ref) : undefined;
   if (!model) return z.record(z.string(), z.unknown());
-  return modelToZod(model, index, seen, llmQuotes);
+  return modelToZod(model, index, opts);
 }
 
 export function typeExprToZod(
   expr: TypeExpr,
   models: StructureModel[],
-  seen: Set<StructureModelId> = new Set(),
+  seenOrOpts: Set<StructureModelId> | TypeExprToZodOpts = new Set(),
   llmQuotes = false,
+  typeAliases: TypeAlias[] = [],
 ): ZodType {
+  const opts: TypeExprToZodOpts =
+    seenOrOpts instanceof Set
+      ? { seen: seenOrOpts, llmQuotes, typeAliases, seenAliasNames: new Set<string>() }
+      : {
+          seen: seenOrOpts.seen ?? new Set(),
+          llmQuotes: seenOrOpts.llmQuotes ?? false,
+          typeAliases: seenOrOpts.typeAliases ?? [],
+          seenAliasNames: seenOrOpts.seenAliasNames ?? new Set<string>(),
+        };
+  const { seen, typeAliases: aliases = [] } = opts;
   const index = byId(models);
   switch (expr.kind) {
     case "prim":
@@ -295,28 +396,47 @@ export function typeExprToZod(
     case "text_quote":
       return llmQuotes ? z.string() : TextQuoteSchema;
     case "list":
-      return z.array(typeExprToZod(expr.item, models, seen, llmQuotes));
+      return z.array(typeExprToZod(expr.item, models, opts));
     case "ref":
-      return refZod(expr.modelId, index, seen, llmQuotes);
+      return refZod(expr.modelId, index, opts);
     case "optional":
-      return typeExprToZod(expr.inner, models, seen, llmQuotes).optional();
+      return typeExprToZod(expr.inner, models, opts).optional();
     case "set":
-      return z.array(typeExprToZod(expr.item, models, seen, llmQuotes));
+      return z.array(typeExprToZod(expr.item, models, opts));
     case "map":
       return z.record(
-        typeExprToZod(expr.key, models, seen, llmQuotes) as z.ZodString,
-        typeExprToZod(expr.value, models, seen, llmQuotes),
+        typeExprToZod(expr.key, models, opts) as z.ZodString,
+        typeExprToZod(expr.value, models, opts),
       );
     case "union":
       return z.union(
-        expr.variants.map((v) => typeExprToZod(v, models, seen, llmQuotes)) as [
+        expr.variants.map((v) => typeExprToZod(v, models, opts)) as [
           ZodType,
           ZodType,
           ...ZodType[],
         ],
       );
     case "generic":
-      return typeExprToZod(expr.args[0] ?? { kind: "unknown" }, models, seen, llmQuotes);
+      if (expr.name === "tuple" && expr.args.length >= 2) {
+        return z.tuple(
+          expr.args.map((a) => typeExprToZod(a, models, opts)) as [
+            ZodType,
+            ZodType,
+            ...ZodType[],
+          ],
+        );
+      }
+      if (expr.args.length === 1) {
+        return typeExprToZod(expr.args[0]!, models, opts);
+      }
+      return z.record(z.string(), z.unknown());
+    case "named": {
+      const resolved = resolveNamedTypeAlias(expr.name, aliases, opts.seenAliasNames!);
+      if (resolved) return typeExprToZod(resolved, models, opts);
+      return z.string();
+    }
+    case "unset":
+      return z.never();
     case "file":
     case "unknown":
       return z.unknown();
@@ -328,20 +448,23 @@ export function typeExprToZod(
 function modelToZod(
   model: StructureModel,
   index: Map<StructureModelId, StructureModel>,
-  seen: Set<StructureModelId>,
-  llmQuotes: boolean,
+  opts: TypeExprToZodOpts,
 ): ZodType {
+  const seen = opts.seen ?? new Set();
   if (seen.has(model.id)) return z.record(z.string(), z.unknown());
-  const next = new Set(seen).add(model.id);
+  const next: TypeExprToZodOpts = { ...opts, seen: new Set(seen).add(model.id) };
   const shape: Record<string, ZodType> = {};
   for (const f of model.fields) {
     if (!f.name.trim()) continue;
-    let base = withFieldMeta(typeExprToZod(fieldTypeToExpr(f), [...index.values()], next, llmQuotes), f);
-    if (f.minItems && f.minItems > 1 && isListFieldType(f.type) && base instanceof z.ZodArray) {
+    let base = withFieldMeta(
+      typeExprToZod(fieldToTypeExpr(f), [...index.values()], next),
+      f,
+    );
+    if (f.minItems && f.minItems > 1 && fieldIsListType(f) && base instanceof z.ZodArray) {
       base = base.min(f.minItems);
     }
     shape[f.name] = f.optional
-      ? llmQuotes
+      ? opts.llmQuotes
         ? base.optional()
         : base.nullish()
       : base;
@@ -349,12 +472,22 @@ function modelToZod(
   return z.object(shape);
 }
 
-export function zodFromModel(model: StructureModel, models: StructureModel[] = [], llmQuotes = false): ZodType {
-  return modelToZod(model, byId(models.length ? models : [model]), new Set(), llmQuotes);
+export function zodFromModel(
+  model: StructureModel,
+  models: StructureModel[] = [],
+  llmQuotes = false,
+  typeAliases: TypeAlias[] = [],
+): ZodType {
+  return modelToZod(model, byId(models.length ? models : [model]), {
+    seen: new Set(),
+    llmQuotes,
+    typeAliases,
+    seenAliasNames: new Set(),
+  });
 }
 
-export function spineTypeToZod(expr: TypeExpr, models: StructureModel[]): ZodType {
-  return typeExprToZod(expr, models);
+export function spineTypeToZod(expr: TypeExpr, models: StructureModel[], typeAliases: TypeAlias[] = []): ZodType {
+  return typeExprToZod(expr, models, { typeAliases, seenAliasNames: new Set() });
 }
 
 function pyPrim(name: PrimName): string {
@@ -388,7 +521,7 @@ export function typeExprToPy(expr: TypeExpr, models: StructureModel[] = []): str
       return `list[${typeExprToPy(expr.item, models)}]`;
     case "ref": {
       const name = modelName(models, expr.modelId);
-      return name ?? "Any";
+      return name ? modelExportIdentifier(name) : "Any";
     }
     case "optional":
       return `Optional[${typeExprToPy(expr.inner, models)}]`;
@@ -399,9 +532,16 @@ export function typeExprToPy(expr: TypeExpr, models: StructureModel[] = []): str
     case "union":
       return expr.variants.map((v) => typeExprToPy(v, models)).join(" | ");
     case "generic":
+      if (expr.name === "tuple") {
+        return `tuple[${expr.args.map((a) => typeExprToPy(a, models)).join(", ")}]`;
+      }
       return expr.args.length
         ? `${expr.name}[${expr.args.map((a) => typeExprToPy(a, models)).join(", ")}]`
         : expr.name;
+    case "named":
+      return expr.name;
+    case "unset":
+      return "UNSET";
     case "file":
       return "FileInput";
     case "unknown":
@@ -412,8 +552,9 @@ export function typeExprToPy(expr: TypeExpr, models: StructureModel[] = []): str
 }
 
 export function fieldToPy(field: ModelField, models: StructureModel[]): string {
-  let t = typeExprToPy(fieldTypeToExpr(field), models);
-  if (field.optional) t = `Optional[${t}]`;
+  const expr = fieldToTypeExpr(field);
+  let t = typeExprToPy(expr, models);
+  if (field.optional && expr.kind !== "optional") t = `Optional[${t}]`;
   const fieldArgs: string[] = [];
   if (field.optional) fieldArgs.push("default=None");
   if (field.description) fieldArgs.push(`description=${JSON.stringify(field.description)}`);
@@ -449,7 +590,7 @@ export function typeExprToTs(expr: TypeExpr, models: StructureModel[] = []): str
       return `${typeExprToTs(expr.item, models)}[]`;
     case "ref": {
       const name = modelName(models, expr.modelId);
-      return name ?? "unknown";
+      return name ? modelExportIdentifier(name) : "unknown";
     }
     case "optional":
       return `${typeExprToTs(expr.inner, models)} | undefined`;
@@ -460,9 +601,16 @@ export function typeExprToTs(expr: TypeExpr, models: StructureModel[] = []): str
     case "union":
       return expr.variants.map((v) => typeExprToTs(v, models)).join(" | ");
     case "generic":
+      if (expr.name === "tuple") {
+        return `[${expr.args.map((a) => typeExprToTs(a, models)).join(", ")}]`;
+      }
       return expr.args.length
         ? `${expr.name}<${expr.args.map((a) => typeExprToTs(a, models)).join(", ")}>`
         : expr.name;
+    case "named":
+      return expr.name;
+    case "unset":
+      return "never";
     case "file":
       return "FileInput";
     case "unknown":

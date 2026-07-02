@@ -3,19 +3,15 @@
 import { Plus, Trash2, Lock, Sparkles, AlertTriangle } from "lucide-react"
 import { useStore, uid } from "@/lib/store"
 import {
-  type FieldType,
   type ModelField,
   type StructureModel,
 } from "@/lib/types"
 import { isLockedStructureModel } from "@/lib/structure"
-import { StructureFieldRefPicker, isRefFieldType } from "@/components/structure-field-ref-picker"
-import { modelsForRefPicker } from "@/lib/structure-ref"
-import { FIELD_TYPE_OPTIONS, fieldTypeLabel } from "@/lib/structure-field-labels"
+import { StructureFieldTypeEditor } from "@/components/structure-field-type-editor"
+import { fieldTypeLabel } from "@/lib/structure-field-labels"
 import { Button } from "@/components/ui/button"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { cn } from "@/lib/utils"
-
-const REF_TYPES: FieldType[] = ["model", "list[model]"]
 
 type StructureExcelEditorProps = {
   selectedId: string
@@ -233,7 +229,6 @@ type FieldRowProps = {
 
 function FieldRow({ field, fields, rowIdx, locked, models, selectedId, onUpdate, onRemove }: FieldRowProps) {
   const stripe = rowIdx % 2 === 1
-  const refModels = modelsForRefPicker(models, selectedId, fields)
 
   return (
     <>
@@ -250,36 +245,15 @@ function FieldRow({ field, fields, rowIdx, locked, models, selectedId, onUpdate,
           />
         </td>
         <td className="border-b border-r border-border p-0 align-top">
-          <div className="space-y-0.5 px-1 py-1">
-            <select
-              value={field.type}
-              onChange={(e) => {
-                const type = e.target.value as FieldType
-                onUpdate({
-                  type,
-                  ref: REF_TYPES.includes(type) ? refModels[0]?.id : undefined,
-                })
-              }}
-              disabled={locked}
-              className="h-7 w-full border-0 bg-transparent px-1 text-[11.5px] outline-none disabled:cursor-default disabled:opacity-70"
-            >
-              {FIELD_TYPE_OPTIONS.map(({ value, label }) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            {isRefFieldType(field.type) && (
-              <StructureFieldRefPicker
-                field={field}
-                fields={fields}
-                models={models}
-                selectedId={selectedId}
-                locked={locked}
-                onRefChange={(ref) => onUpdate({ ref })}
-                compact
-              />
-            )}
+          <div className="px-1 py-1">
+            <StructureFieldTypeEditor
+              field={field}
+              fields={fields}
+              models={models}
+              selectedId={selectedId}
+              locked={locked}
+              onUpdate={onUpdate}
+            />
           </div>
         </td>
         <td className="border-b border-r border-border p-0">
@@ -327,11 +301,11 @@ function FieldRow({ field, fields, rowIdx, locked, models, selectedId, onUpdate,
           )}
         </td>
       </tr>
-      {field.type === "json" && (
+      {field.type === "json" && !field.typeExpr && (
         <tr className={cn(stripe && "bg-secondary/15")}>
           <td className="border-b border-r border-border bg-secondary/25" />
           <td colSpan={6} className="border-b border-border px-2 py-1 text-[10px] text-amber-700 dark:text-amber-500">
-            Flexible data stores anything — prefer &ldquo;{fieldTypeLabel("model")}&rdquo; when you can define a shape.
+            Flexible data stores anything — prefer &ldquo;{fieldTypeLabel("model")}&rdquo; or a Type from the sidebar.
           </td>
         </tr>
       )}

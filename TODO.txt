@@ -7,6 +7,11 @@ name might already be taken https://www.getspine.ai/
 Create a pipeline to turn documents into a structure with sections and sub section headings . Allow 2.6.3.6 . Create test file and example output file. Ensure it’s not just a single LLM call as this won’t work with longer contexts. input should be markdown and output json structures.
 
 
+there should be example input and expected output files which are used to test the pipeline, 
+this can be a demo for the inference. assert actual output equals expected. you should also write this for every single step, not just the final output to really isolate where things go wrong. write assert inputs and outputs inside the steps themselves.
+
+
+Create hidden bounaries for when something is pasted and when they edit inside the paste and extract json and python - create as a seperate project
 
 
 

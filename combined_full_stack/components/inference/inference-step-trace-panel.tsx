@@ -14,7 +14,9 @@ import {
 } from "@/components/inference/inference-step-trace"
 import { moduleInputDescription } from "@/components/step-input-description"
 import { CyclingWaitPhrase } from "@/components/inference/inference-run-chrome"
+import { docsForInputModule } from "@/lib/inference-input"
 import { cn } from "@/lib/utils"
+import type { DocRef, StructureModel } from "@/lib/types"
 
 export function InferenceStepTracePanel({
   modules,
@@ -26,6 +28,9 @@ export function InferenceStepTracePanel({
   logsByModule,
   logEndRef,
   footer,
+  docs,
+  models,
+  inputDocs,
 }: {
   modules: PipelineModule[]
   phase: "idle" | "running" | "done"
@@ -36,13 +41,18 @@ export function InferenceStepTracePanel({
   logsByModule?: Map<ModuleId, JobLogEntry[]>
   logEndRef?: RefObject<HTMLDivElement | null>
   footer?: React.ReactNode
+  docs: DocRef[]
+  models: StructureModel[]
+  inputDocs: Partial<Record<ModuleId, DocRef | DocRef[]>>
 }) {
   const [stepsExpanded, setStepsExpanded] = useState(true)
   const [logCopied, setLogCopied] = useState(false)
+  // AI : show input/output viz while running and again after done when trace is expanded.
+  const showStepIo = stepsExpanded && (phase === "running" || phase === "done")
+  const ioCompact = phase === "running"
 
   useEffect(() => {
-    if (phase === "done") setStepsExpanded(false)
-    else if (phase === "running") setStepsExpanded(true)
+    if (phase === "running" || phase === "done") setStepsExpanded(true)
   }, [phase])
 
   if (phase !== "running" && phase !== "done") return null
@@ -99,6 +109,10 @@ export function InferenceStepTracePanel({
                   label={seg.combine.label}
                   state={state}
                   sub={combineUi?.sub}
+                  showStepIo={showStepIo}
+                  ioCompact={ioCompact}
+                  outputPreview={combineUi?.outputPreview}
+                  runStep={run?.steps.find((s) => s.moduleId === seg.combine.id)}
                   inputDescription={moduleInputDescription(seg.combine)}
                   inputDescriptionCheck={combineDesc.check}
                   descriptionCheckLlmCalls={combineDesc.descriptionCheckLlmCalls}
@@ -111,6 +125,14 @@ export function InferenceStepTracePanel({
                   state={inputState}
                   sub={inputUi?.sub}
                   nested
+                  isInputStep
+                  showStepIo={showStepIo}
+                  ioCompact={ioCompact}
+                  outputPreview={inputUi?.outputPreview}
+                  runStep={run?.steps.find((s) => s.moduleId === seg.input.id)}
+                  assignedInputDocs={docsForInputModule(inputDocs, seg.input.id)}
+                  docs={docs}
+                  models={models}
                   inputDescription={moduleInputDescription(seg.input)}
                   inputDescriptionCheck={inputDesc.check}
                   descriptionCheckLlmCalls={inputDesc.descriptionCheckLlmCalls}
@@ -123,6 +145,7 @@ export function InferenceStepTracePanel({
           }
           const moduleUi = stepStates.get(seg.module.id)
           const moduleDesc = stepDescriptionMeta(seg.module.id, run, moduleUi)
+          const isInputStep = seg.module.kind === "input"
           return (
             <InferenceStepRow
               key={seg.module.id}
@@ -130,6 +153,14 @@ export function InferenceStepTracePanel({
               state={moduleUi?.status ?? "idle"}
               sub={moduleUi?.sub}
               isOutputStep={seg.module.kind === "output"}
+              isInputStep={isInputStep}
+              showStepIo={showStepIo}
+              ioCompact={ioCompact}
+              outputPreview={moduleUi?.outputPreview}
+              runStep={run?.steps.find((s) => s.moduleId === seg.module.id)}
+              assignedInputDocs={isInputStep ? docsForInputModule(inputDocs, seg.module.id) : []}
+              docs={docs}
+              models={models}
               inputDescription={moduleInputDescription(seg.module)}
               inputDescriptionCheck={moduleDesc.check}
               descriptionCheckLlmCalls={moduleDesc.descriptionCheckLlmCalls}

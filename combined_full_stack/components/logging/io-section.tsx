@@ -3,6 +3,7 @@
 import { Maximize2, Link2 } from "lucide-react"
 import { useDocViewer, type DocViewMode } from "@/lib/doc-viewer"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
+import { cn } from "@/lib/utils"
 import type { DocId } from "@/lib/types"
 
 export function IoSection({
@@ -12,6 +13,8 @@ export function IoSection({
   children,
   onExpand,
   docLink,
+  bodyClickable,
+  className,
 }: {
   title: string
   qualifier: "input" | "output" | "error"
@@ -19,8 +22,11 @@ export function IoSection({
   children?: React.ReactNode
   onExpand?: () => void
   docLink?: { docId: DocId; mode: DocViewMode; label: string }
+  bodyClickable?: boolean
+  className?: string
 }) {
   const { open } = useDocViewer()
+  const clickable = bodyClickable !== false && !!docLink
 
   function openDoc() {
     if (!docLink) return
@@ -28,7 +34,7 @@ export function IoSection({
   }
 
   return (
-    <div className="mt-2 pl-7">
+    <div className={cn("mt-2 pl-7", className)}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
           {title}{" "}
@@ -74,7 +80,7 @@ export function IoSection({
           )}
         </div>
       </div>
-      {docLink ? (
+      {clickable ? (
         <div
           role="button"
           tabIndex={0}

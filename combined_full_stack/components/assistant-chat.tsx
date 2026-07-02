@@ -57,7 +57,7 @@ type AssistantChatProps<TProposal> = {
   showDebug?: boolean
   renderProposal: (msg: AssistantChatMessage<TProposal>) => ReactNode
   onApprove: (msg: AssistantChatMessage<TProposal>) => void | Promise<void>
-  onReject: (msg: AssistantChatMessage<TProposal>) => void
+  onReject: (msg: AssistantChatMessage<TProposal>) => void | Promise<void>
   requestAssistant: (
     text: string,
     history: { role: AssistantChatRole; content: string }[],
@@ -108,6 +108,7 @@ export function AssistantChat<TProposal>({
   const [error, setError] = useState<string | null>(null)
   const [errorDebugTrace, setErrorDebugTrace] = useState<AssistantDebugEntry[]>([])
   const [approvingId, setApprovingId] = useState<string | null>(null)
+  const [rejectingId, setRejectingId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const pending = [...messages].reverse().find((m) => m.proposal && m.status === "pending")
@@ -210,7 +211,7 @@ export function AssistantChat<TProposal>({
   }
 
   async function approve(msg: AssistantChatMessage<TProposal>) {
-    if (!msg.proposal || approvingId) return
+    if (!msg.proposal || approvingId || rejectingId) return
     setApprovingId(msg.id)
     try {
       await onApprove(msg)
@@ -225,11 +226,17 @@ export function AssistantChat<TProposal>({
     }
   }
 
-  function reject(msg: AssistantChatMessage<TProposal>) {
-    onReject(msg)
-    setMessages((prev) =>
-      prev.map((m) => (m.id === msg.id ? { ...m, status: "rejected" } : m)),
-    )
+  async function reject(msg: AssistantChatMessage<TProposal>) {
+    if (!msg.proposal || approvingId || rejectingId) return
+    setRejectingId(msg.id)
+    try {
+      await Promise.resolve(onReject(msg))
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? { ...m, status: "rejected" } : m)),
+      )
+    } finally {
+      setRejectingId(null)
+    }
   }
 
   const loadingText =
@@ -278,23 +285,33 @@ export function AssistantChat<TProposal>({
                   <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3">
                     {renderProposal(m)}
                     {m.status === "pending" && (
+                      // AI : todo — approve/reject settle animations (checkmark flash, slide-out)
                       <div className="mt-3 flex gap-2">
                         <Button
                           size="sm"
                           className="h-7 flex-1 gap-1.5 text-[11px]"
-                          disabled={approvingId === m.id}
+                          disabled={approvingId === m.id || rejectingId === m.id}
                           onClick={() => void approve(m)}
                         >
-                          <Check className="h-3 w-3" />
+                          {approvingId === m.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Check className="h-3 w-3" />
+                          )}
                           Approve
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
                           className="h-7 flex-1 gap-1.5 text-[11px]"
-                          onClick={() => reject(m)}
+                          disabled={approvingId === m.id || rejectingId === m.id}
+                          onClick={() => void reject(m)}
                         >
-                          <X className="h-3 w-3" />
+                          {rejectingId === m.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <X className="h-3 w-3" />
+                          )}
                           Reject
                         </Button>
                       </div>
