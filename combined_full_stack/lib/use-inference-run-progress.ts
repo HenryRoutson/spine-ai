@@ -27,6 +27,7 @@ type UseInferenceRunProgressArgs = {
   projectId: ProjectId
   modules: PipelineModule[]
   model: string
+  configResetKey?: string
   inputModules: PipelineModule[]
   inputDocs: InputDocsAssignment
   allInputsReady: boolean
@@ -43,6 +44,7 @@ export function useInferenceRunProgress({
   projectId,
   modules,
   model,
+  configResetKey,
   inputModules,
   inputDocs,
   allInputsReady,
@@ -110,6 +112,20 @@ export function useInferenceRunProgress({
     savedNotesRef.current = undefined
     resetInputs?.()
   }
+
+  // AI : drop stale cached step trace when pipeline/structure config changes (not on project switch — handled separately).
+  const prevConfigKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!configResetKey) return
+    if (prevConfigKeyRef.current === null) {
+      prevConfigKeyRef.current = configResetKey
+      return
+    }
+    if (prevConfigKeyRef.current === configResetKey) return
+    prevConfigKeyRef.current = configResetKey
+    if (phase === "running") return
+    resetRunState()
+  }, [configResetKey, phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function start() {
     if (!allInputsReady || inputsInvalid) return

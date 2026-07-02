@@ -151,7 +151,12 @@ export function structureIssueMessage(issue: StructureIssue, models: StructureMo
       }
       return `${modelName}.${issue.fieldName ?? "?"} references missing structure`;
     case "unknown-type-alias":
-      return `${modelName}.${issue.fieldName ?? "?"} uses unknown type alias "${issue.aliasName ?? "?"}"`;
+      if (!issue.fieldName) {
+        return issue.aliasName?.includes(" → ")
+          ? `type alias ${issue.aliasName}`
+          : `unknown type alias "${issue.aliasName ?? "?"}"`;
+      }
+      return `${modelName}.${issue.fieldName} uses unknown type alias "${issue.aliasName ?? "?"}"`;
     default:
       return "structure validation error";
   }

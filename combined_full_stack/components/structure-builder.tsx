@@ -56,6 +56,13 @@ export function StructureBuilder() {
     () => (selected ? structureIssues.filter((i) => i.modelId === selected.id) : []),
     [structureIssues, selected],
   )
+  const selectedTypeIssues = useMemo(() => {
+    if (!selectedType) return []
+    const name = selectedType.name.trim()
+    return structureIssues.filter(
+      (i) => i.aliasName === name || i.aliasName?.startsWith(`${name} → `),
+    )
+  }, [structureIssues, selectedType])
 
   function updateModel(next: StructureModel) {
     if (isLockedStructureModel(next)) return
@@ -318,6 +325,15 @@ export function StructureBuilder() {
         ) : view === "ui" && target.kind === "type" && selectedType ? (
           <div className="min-w-0 flex-1 overflow-y-auto">
             <div className="mx-auto max-w-3xl px-5 py-5">
+              {selectedTypeIssues.length > 0 && (
+                <div className="mb-4 space-y-1 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2">
+                  {selectedTypeIssues.map((issue, i) => (
+                    <p key={i} className="font-mono text-[11px] text-destructive">
+                      {structureIssueMessage(issue, models)}
+                    </p>
+                  ))}
+                </div>
+              )}
               <StructureTypeAliasEditor
                 alias={selectedType}
                 models={models}

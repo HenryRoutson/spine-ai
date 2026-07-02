@@ -309,7 +309,14 @@ function computeStructureFieldInvalid(
   const invalid: InvalidMap = new Map();
   for (const issue of computeStructureIssues(models, typeAliases)) {
     const message = structureIssueMessage(issue, models);
-    for (const moduleId of modulesForStructure(issue.modelId, modules)) {
+    // AI : alias-definition issues use a placeholder modelId — pin to first pipeline step, not every step wired to models[0].
+    const moduleIds =
+      issue.aliasName && !issue.fieldId
+        ? modules[0]?.id
+          ? [modules[0].id]
+          : []
+        : modulesForStructure(issue.modelId, modules);
+    for (const moduleId of moduleIds) {
       pushInvalid(invalid, { moduleId, kind: "structure-field", structureMessage: message });
     }
   }
@@ -589,8 +596,9 @@ export function computeWarnings(
 export function formatPipelineValidationErrors(
   modules: PipelineModule[],
   models: StructureModel[] = [],
+  typeAliases: TypeAlias[] = [],
 ): string {
-  const invalid = computeInvalid(modules, models);
+  const invalid = computeInvalid(modules, models, { typeAliases });
   if (invalid.size === 0) return "";
   const lines: string[] = [];
   for (const issues of invalid.values()) {
@@ -627,8 +635,12 @@ export function pipelineOutputModel(project: Project): StructureModel {
   return m;
 }
 
-export function isPipelineValid(modules: PipelineModule[], models: StructureModel[] = []): boolean {
-  return computeInvalid(modules, models).size === 0;
+export function isPipelineValid(
+  modules: PipelineModule[],
+  models: StructureModel[] = [],
+  typeAliases: TypeAlias[] = [],
+): boolean {
+  return computeInvalid(modules, models, { typeAliases }).size === 0;
 }
 
 // AI : a step's run button is enabled only when the pipeline is valid AND the step is
@@ -643,8 +655,9 @@ export function canRunStep(
   moduleId: ModuleId,
   hasInput: boolean,
   models: StructureModel[] = [],
+  typeAliases: TypeAlias[] = [],
 ): boolean {
-  if (!isPipelineValid(modules, models)) return false;
+  if (!isPipelineValid(modules, models, typeAliases)) return false;
   const m = modules.find((x) => x.id === moduleId);
   if (!m) return false;
   return m.cached || m.kind === "input" || hasInput;

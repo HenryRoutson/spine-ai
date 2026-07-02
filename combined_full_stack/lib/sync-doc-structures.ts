@@ -69,6 +69,7 @@ export function modelsChanged(before: StructureModel[], after: StructureModel[])
         old.type !== f.type ||
         old.ref !== f.ref ||
         old.optional !== f.optional ||
+        old.minItems !== f.minItems ||
         stableJson(fieldToTypeExpr(old)) !== stableJson(fieldToTypeExpr(f))
       )
     })

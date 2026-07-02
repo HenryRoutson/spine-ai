@@ -218,7 +218,7 @@ export function syncProjectFromSeed(existing: Project, seed: Project): Project {
       return { ...m, label: sm.label, note: sm.note };
     });
     modules = syncAutoQuoteSteps(modules, next.models);
-    const invalid = computeInvalid(modules, next.models);
+    const invalid = computeInvalid(modules, next.models, { typeAliases: next.typeAliases ?? [] });
     if (invalid.size > 0) {
       const seedIds = new Set(seed.modules.map((m) => m.id));
       const drop = [...invalid.keys()].filter((id) => !seedIds.has(id));

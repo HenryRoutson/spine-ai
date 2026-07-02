@@ -50,7 +50,9 @@ const pyrightconfig = {
 };
 writeFileSync(join(outDir, "pyrightconfig.json"), JSON.stringify(pyrightconfig, null, 2));
 
-const invalid = computeInvalid(project.modules, project.models);
+const invalid = computeInvalid(project.modules, project.models, {
+  typeAliases: project.typeAliases ?? [],
+});
 let staticErrors = 0;
 console.log(`\n=== static pipeline type errors (${project.name}) ===\n`);
 for (const m of project.modules) {

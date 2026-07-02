@@ -360,7 +360,8 @@ function buildUserPrompt(
   forceFix?: boolean,
 ): string {
   const currentValidation =
-    liveValidation ?? formatPipelineValidationErrors(project.modules, project.models);
+    liveValidation ??
+      formatPipelineValidationErrors(project.modules, project.models, project.typeAliases ?? []);
   const currentValidationBlock = formatValidationBlock(
     currentValidation,
     "Current pipeline validation errors (fix when changing the pipeline; do not replicate these mistakes):",
@@ -511,7 +512,11 @@ export async function proposePipelineChange(
   let fixErrors = opts?.fixValidationErrors;
   let fixAttempt = opts?.fixAttempt ?? 0;
 
-  const liveValidation = formatPipelineValidationErrors(project.modules, project.models);
+  const liveValidation = formatPipelineValidationErrors(
+    project.modules,
+    project.models,
+    project.typeAliases ?? [],
+  );
   const forceFix = !fixErrors && !!liveValidation && wantsValidationFix(message);
 
   let thinking = "";
@@ -573,7 +578,11 @@ export async function proposePipelineChange(
     let retryCount = 0;
 
     for (let retry = 0; retry < MAX_VALIDATION_RETRIES && proposal; retry++) {
-      const validationErrors = formatPipelineValidationErrors(proposal.modules, proposal.models);
+      const validationErrors = formatPipelineValidationErrors(
+        proposal.modules,
+        proposal.models,
+        proposal.typeAliases ?? [],
+      );
       if (!validationErrors) break;
 
       retryCount += 1;
@@ -615,10 +624,16 @@ export async function proposePipelineChange(
       proposal = materializeProposal(raw, project, globalModel);
     }
 
-    const invalidCount = proposal ? computeInvalid(proposal.modules, proposal.models).size : 0;
+    const invalidCount = proposal
+      ? computeInvalid(proposal.modules, proposal.models, { typeAliases: proposal.typeAliases ?? [] }).size
+      : 0;
     const validationErrors =
       proposal && invalidCount > 0
-        ? formatPipelineValidationErrors(proposal.modules, proposal.models)
+        ? formatPipelineValidationErrors(
+            proposal.modules,
+            proposal.models,
+            proposal.typeAliases ?? [],
+          )
         : null;
 
     return {

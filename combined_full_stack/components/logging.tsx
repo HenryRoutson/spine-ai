@@ -46,7 +46,7 @@ import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
 
 export function Logging() {
   const palette = useStatusPalette()
-  const { runs, docs, modules, models, project } = useStore()
+  const { runs, docs, modules, models, project, typeAliases } = useStore()
   const { focusRunId, clearFocusRun } = useAppShell()
   const [query, setQuery] = useState("")
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
@@ -460,7 +460,7 @@ export function Logging() {
                           selectedId={selectedPipelineModuleId}
                           onSelect={setSelectedPipelineModuleId}
                           stepStatus={runPipeline.stepStatus}
-                          invalid={computeInvalid(runPipeline.modules, models)}
+                          invalid={computeInvalid(runPipeline.modules, models, { typeAliases })}
                         />
                       </div>
                       <aside className="flex min-h-0 flex-col overflow-hidden">

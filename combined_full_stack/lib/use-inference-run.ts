@@ -1,9 +1,10 @@
 "use client"
 
 // AI : composes use-inference-docs + use-inference-run-progress.
-import { useCallback, useRef } from "react"
+import { useCallback, useMemo, useRef } from "react"
 import { useInferenceDocs } from "@/lib/use-inference-docs"
 import { useInferenceRunProgress, type InferencePhase } from "@/lib/use-inference-run-progress"
+import { buildRunConfigPayload, stableJson } from "@/lib/run-fingerprint"
 import type { DocId, DocRef, ModelId, ModuleId, PipelineModule, PipelineRun, Project, ProjectId } from "@/lib/types"
 
 export type { InferencePhase }
@@ -49,10 +50,22 @@ export function useInferenceRun({
     onProjectSwitch,
   })
 
+  const configResetKey = useMemo(
+    () =>
+      stableJson(
+        buildRunConfigPayload(
+          { ...project, modules, typeAliases: project.typeAliases ?? [] },
+          model as ModelId,
+        ),
+      ),
+    [project, modules, model],
+  )
+
   const progress = useInferenceRunProgress({
     projectId: project.id as ProjectId,
     modules,
     model,
+    configResetKey,
     inputModules: docsState.inputModules,
     inputDocs: docsState.inputDocs,
     allInputsReady: docsState.allInputsReady,
