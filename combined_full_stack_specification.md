@@ -189,6 +189,12 @@ Allow AI to write these testing files, and setup multiple tests.
 intended to run before the inference tab which is more for demoing.
 Note that as much 'testing' as possible should be done in the design tab.
 A simple check if the input goes into the next step is much easier than designing a full test file.
+all examples should have step by step tests, 
+testing output should go into logging with the testing flag
+testing isn't limited to whole runs and shouldn't need to cover all the steps. you can only provide the expected value for 3/8 steps for example, and you  only check those. you can also have 10 tests for one step and non for all the others.
+
+
+you should describe if certain fields are deterministic like a maths answer, or probabilistic if they're something like a summary which will almost never be the same.
 
 # inference
 

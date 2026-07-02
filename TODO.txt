@@ -5,6 +5,17 @@ name might already be taken https://www.getspine.ai/
 
 
 
+everytime i open the cache in the UI it has to load in again, please fix this. in general try to fix this and load all data for a project but just change it with streaming
+
+
+
+add this option in the fields of the structs : you should describe if certain fields are deterministic like a maths answer, or probabilistic if they're something like a summary which will almost never be the same. you should also mark certain steps as either probabilistic or deterministic, as we might want seeds for testing which you can vary, but need to consider when you decide to cache or not
+
+
+remove doc.label === "training", search for "training"
+add doc label "example"
+add an enum for these options
+
 get spine email,
 replace privacy@withspine.dev.  and any other emails.
 
