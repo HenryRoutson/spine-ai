@@ -33,6 +33,7 @@ import type {
   TypeAlias,
   TypeAliasId,
   InputType,
+  ModelOptionPublic,
 } from "@/lib/types"
 import { DEFAULT_MODEL } from "@/lib/types"
 import { apiJson, apiPut, JSON_HEADERS } from "@/lib/api-client"
@@ -61,6 +62,7 @@ interface ServerState {
   docs: DocRef[]
   runs: PipelineRun[]
   allRuns: PipelineRun[]
+  modelOptions: ModelOptionPublic[]
 }
 
 interface StoreState {
@@ -94,6 +96,7 @@ interface StoreState {
   // global model
   model: string
   setModel: (m: string) => void
+  modelOptions: ModelOptionPublic[]
   // documents — real upload through POST /api/docs (content-hash dedupe server-side)
   docs: DocRef[]
   addDoc: (file: File, label: DocLabel, projectId?: string) => Promise<DocRef>
@@ -782,6 +785,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setDocumentation,
       model,
       setModel,
+      modelOptions: state.modelOptions,
       docs: state.docs,
       addDoc,
       addDocContent,

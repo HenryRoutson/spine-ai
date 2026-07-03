@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
 import {
+  parseAssistantRequestModel,
   requireAssistantMessage,
   requireProjectOr404,
   runBilledProjectAssistant,
@@ -10,7 +11,6 @@ import {
 } from "@/lib/server/assistant-route";
 import { ASSISTANT_STREAM_EVENT } from "@/lib/assistant-chat-types";
 import { logger } from "@/lib/server/server_logger";
-import { DEFAULT_MODEL } from "@/lib/server/types";
 
 const apiLog = logger("api:project-assistant");
 
@@ -18,10 +18,14 @@ export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as AssistantRequestBody;
-  const { projectId, message, history = [], model = DEFAULT_MODEL, stream = false } = body;
+  const { projectId, message, history = [], stream = false } = body;
 
   const messageErr = requireAssistantMessage(message);
   if (messageErr) return messageErr;
+
+  const modelOrErr = parseAssistantRequestModel(body.model);
+  if (modelOrErr instanceof NextResponse) return modelOrErr;
+  const model = modelOrErr;
 
   const ctx = await requireAuthStore("llm");
   if (ctx instanceof NextResponse) return ctx;

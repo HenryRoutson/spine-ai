@@ -29,6 +29,8 @@ import {
   inferenceInputIssueMessage,
 } from "@/lib/inference-validity";
 import { RunSource, type DocId, type DocRef, type ModelId, type ModuleId, type ProjectId } from "@/lib/server/types";
+import { UnknownModelError, parseOptionalRequestModel } from "@/lib/server/model_catalog";
+import { ensureModelOptionsFresh } from "@/lib/server/openrouter_models";
 
 const apiLog = logger("api:runs");
 
@@ -56,7 +58,18 @@ export async function POST(req: NextRequest) {
 
   const { projectId, inputDocId, inputDocIds, inputDocsByModule, model, allowDuplicateRuns, source } = (await req.json()) as RunRequest;
   const runSource = source === RunSource.Testing ? RunSource.Testing : undefined;
-  apiLog.info(`POST /api/runs`, { projectId, inputDocId, inputDocIds, inputDocsByModule, model, source: runSource, ownerId: auth.userId });
+
+  let resolvedModel: ModelId | undefined;
+  try {
+    resolvedModel = parseOptionalRequestModel(model);
+  } catch (err) {
+    if (err instanceof UnknownModelError) return apiError(err.message, HTTP.BAD_REQUEST);
+    throw err;
+  }
+
+  apiLog.info(`POST /api/runs`, { projectId, inputDocId, inputDocIds, inputDocsByModule, model: resolvedModel, source: runSource, ownerId: auth.userId });
+
+  await ensureModelOptionsFresh();
 
   if (!store.project(projectId)) {
     apiLog.warn(`unknown project`, { projectId });
@@ -117,7 +130,7 @@ export async function POST(req: NextRequest) {
   const { fingerprint, inputDocIds: fingerprintInputDocIds, project: migratedProject } = computeRunFingerprintForRequest(
     store,
     project,
-    model,
+    resolvedModel,
     inputDocId,
     inputDocIds,
     resolvedByModule,
@@ -151,10 +164,10 @@ export async function POST(req: NextRequest) {
 
   after(async () => {
     await withJobLogging(auth.userId, jobId, jobDb, async () => {
-      apiLog.info(`after() pipeline starting`, { jobId, projectId, inputDocId, model });
+      apiLog.info(`after() pipeline starting`, { jobId, projectId, inputDocId, model: resolvedModel });
       try {
         if (!allowDuplicateRuns) {
-          const cached = findMatchingRun(store, migratedProject, projectId, fingerprint, model);
+          const cached = findMatchingRun(store, migratedProject, projectId, fingerprint, resolvedModel);
           if (cached) {
             apiLog.info(`run deduped — reusing prior ok run`, { jobId, cachedRunId: cached.id, fingerprint });
             await finishJob(auth.userId, jobId, { run: cached, deduped: true, cachedRunId: cached.id }, jobDb);
@@ -162,7 +175,7 @@ export async function POST(req: NextRequest) {
           }
         }
         const run = await runPipeline(store, projectId, inputDocId, {
-          model,
+          model: resolvedModel,
           inputDocIds,
           inputDocsByModule: resolvedByModule,
           fingerprint,

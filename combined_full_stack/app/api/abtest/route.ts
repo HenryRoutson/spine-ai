@@ -3,6 +3,7 @@ import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_co
 import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { assertCanStartRun, billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
 import { mergeBenchmarkStrategies, runBenchmark } from "@/lib/server/strategies";
+import { ensureModelOptionsFresh } from "@/lib/server/openrouter_models";
 import { logger } from "@/lib/server/server_logger";
 import { DocLabel } from "@/lib/server/types";
 import type { DocId, ProjectId } from "@/lib/server/types";
@@ -42,6 +43,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    await ensureModelOptionsFresh();
     apiLog.info(`benchmark starting`, { projectId, docId });
     const result = await runBenchmark(project, store, docId);
     if (result.totalCostCents > 0) {

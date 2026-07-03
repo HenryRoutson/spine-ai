@@ -5,7 +5,7 @@ import {
   DEFAULT_MODEL,
   FIELD_TYPES,
   INPUT_TYPES,
-  MODEL_OPTIONS,
+  MODEL_CATALOG,
   MODULE_META,
   type ModelId,
   type Project,
@@ -59,7 +59,7 @@ export function buildInputTypesPromptBlock(): string {
 }
 
 export function buildModelOptionsPromptBlock(): string {
-  return MODEL_OPTIONS.map((m) => `- ${m.id}: ${m.label}`).join("\n");
+  return MODEL_CATALOG.map((m) => `- ${m.id}: ${m.label}`).join("\n");
 }
 
 export function buildTypeAliasesRulesPromptBlock(): string {

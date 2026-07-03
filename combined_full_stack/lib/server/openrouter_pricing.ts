@@ -25,7 +25,7 @@ export function tokenCostCents(
   return +(usd * 100 * PRICE_MARKUP).toFixed(6);
 }
 
-// AI : live pull from OpenRouter — used by scripts/sync_openrouter_pricing.mjs to refresh MODEL_OPTIONS.
+// AI : live pull from OpenRouter — runtime pricing in openrouter_models.ts; scripts/sync_openrouter_pricing.mjs validates catalog slugs.
 export async function fetchOpenRouterRates(slug: string): Promise<OpenRouterRates> {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) throw new Error("OPENROUTER_API_KEY missing — set it in the repo root .env");

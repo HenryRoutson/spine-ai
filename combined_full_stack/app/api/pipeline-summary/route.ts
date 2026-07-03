@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
 import { requireProjectOr404 } from "@/lib/server/assistant-route";
+import { UnknownModelError, parseRequestModel } from "@/lib/server/model_catalog";
+import { ensureModelOptionsFresh } from "@/lib/server/openrouter_models";
 import {
   PIPELINE_SUMMARY_STREAM_EVENT,
   summarizePipelineStream,
@@ -20,9 +22,17 @@ type SummaryRequestBody = {
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as SummaryRequestBody;
-  const { projectId, model = DEFAULT_MODEL } = body;
+  const { projectId } = body;
 
   if (!projectId?.trim()) return apiError("projectId required", HTTP.BAD_REQUEST);
+
+  let model: ModelId;
+  try {
+    model = parseRequestModel(body.model, DEFAULT_MODEL);
+  } catch (err) {
+    if (err instanceof UnknownModelError) return apiError(err.message, HTTP.BAD_REQUEST);
+    throw err;
+  }
 
   const ctx = await requireAuthStore("llm");
   if (ctx instanceof NextResponse) return ctx;
@@ -41,6 +51,7 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(`${JSON.stringify(payload)}\n`));
       };
       try {
+        await ensureModelOptionsFresh();
         const text = await summarizePipelineStream(project, model, (delta) => {
           push({ type: PIPELINE_SUMMARY_STREAM_EVENT.DELTA, text: delta });
         });

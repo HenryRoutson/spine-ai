@@ -7,12 +7,12 @@ import { isLlmKind } from "@/lib/module-kinds"
 import { llmStepEmitsList } from "@/lib/spine-type"
 import { cn } from "@/lib/utils"
 import {
-  MODEL_OPTIONS,
   type PipelineModule,
   type StructureModel,
   type StructureModelId,
   type TypeAlias,
 } from "@/lib/types"
+import { modelLabel } from "@/lib/use-model-options"
 import {
   type InvalidStep,
   type IoMismatchFixKind,
@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select"
 
 export function llmModelLabel(id?: string) {
-  return MODEL_OPTIONS.find((m) => m.id === id)?.label ?? id ?? "—"
+  return modelLabel(id)
 }
 
 export function useLlmSchemaPreview(

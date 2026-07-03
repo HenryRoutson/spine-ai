@@ -1,5 +1,6 @@
 import { runBilledCents } from "@/lib/run-metrics";
-import { RunSource, type BillingPoint, type ModuleId, type PipelineRun, modelOption } from "./types";
+import { catalogLabel } from "./model_catalog";
+import { RunSource, type BillingPoint, type ModuleId, type PipelineRun } from "./types";
 
 type DayLabel = string; // e.g. "Jun 11"
 
@@ -25,7 +26,7 @@ export function billingFromRuns(runs: PipelineRun[]): BillingPoint[] {
             ? "shared link"
             : step.kind === "doc-to-text" && !step.model
               ? "doc-parse svc"
-              : modelOption(step.model ?? run.model).label;
+              : catalogLabel(step.model ?? run.model);
       bucket.spend[key] = +((bucket.spend[key] ?? 0) + step.costCents).toFixed(4);
     }
     byDay.set(day, bucket);

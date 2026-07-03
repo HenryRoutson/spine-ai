@@ -17,7 +17,9 @@ import {
 } from "./pipeline_assistant"
 import { logger } from "./server_logger"
 import type { BillingUserKey } from "./billing_account"
-import type { ModelId, Project, ProjectId } from "./types"
+import { UnknownModelError, parseRequestModel } from "./model_catalog"
+import { ensureModelOptionsFresh } from "./openrouter_models"
+import { DEFAULT_MODEL, type ModelId, type Project, ProjectId } from "./types"
 import type { Store } from "./store"
 
 const routeLog = logger("assistant-route")
@@ -45,6 +47,15 @@ export function requireAssistantMessage(message: string | undefined): NextRespon
     return apiError(`message too large (max ${MAX_ASSISTANT_MESSAGE_CHARS} chars)`, HTTP.BAD_REQUEST)
   }
   return null
+}
+
+export function parseAssistantRequestModel(model: ModelId | undefined): ModelId | NextResponse {
+  try {
+    return parseRequestModel(model, DEFAULT_MODEL)
+  } catch (err) {
+    if (err instanceof UnknownModelError) return apiError(err.message, HTTP.BAD_REQUEST)
+    throw err
+  }
 }
 
 export function requireProjectOr404(
@@ -81,6 +92,8 @@ export async function runBilledProjectAssistant(
 ): Promise<AssistantSessionResult | NextResponse> {
   const billingOrErr = await requireAssistantBilling()
   if (billingOrErr instanceof NextResponse) return billingOrErr
+
+  await ensureModelOptionsFresh()
 
   const startedAt = Date.now()
   const trimmed = message.trim()

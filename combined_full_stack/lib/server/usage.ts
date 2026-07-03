@@ -1,6 +1,7 @@
 import { PRICE_MARKUP, tokenCostCents } from "./openrouter_pricing";
 import { logger } from "./server_logger";
-import { type ModelId, type TokenUsage, modelOption } from "./types";
+import { type ModelId, type TokenUsage } from "./types";
+import { modelOption } from "./openrouter_models";
 
 const usageLog = logger("usage");
 

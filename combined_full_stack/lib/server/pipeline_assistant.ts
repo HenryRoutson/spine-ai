@@ -27,12 +27,12 @@ import { uid } from "@/lib/id";
 import { USER_ADDABLE_MODULE_KINDS, stepRequiresNote } from "@/lib/module-kinds";
 import { attachAssistantUsage } from "./assistant_billing";
 import { isUnnamedProjectName } from "@/lib/project-assistant-types";
+import { catalogHasModel, resolveModelId } from "./model_catalog";
 import {
   DEFAULT_MODEL,
   DocLabel,
   INPUT_TYPES,
   InputType,
-  MODEL_OPTIONS,
   ModuleKind,
   type ModelId,
   type ModuleId,
@@ -183,7 +183,7 @@ function makeModuleFromSpec(
     resolveStructureIdFromModels(outHint?.name ?? spec.structureOut, models) ??
     defaultOutForKind(spec.kind, models);
   const outIsList = spec.outIsList ?? outHint?.isList ?? false;
-  const modelOpt = MODEL_OPTIONS.find((m) => m.id === spec.model);
+  const modelId = spec.model && catalogHasModel(spec.model) ? resolveModelId(spec.model) : undefined;
   return createPipelineModule(
     {
       id: uid<ModuleId>(),
@@ -198,7 +198,7 @@ function makeModuleFromSpec(
       outIsList,
       prompt: spec.prompt,
       code: spec.code,
-      model: modelOpt?.id,
+      model: modelId,
     },
     models,
     globalModel,
@@ -255,8 +255,8 @@ function applyModulePatch(
   const outHint = patch.structureOut ? parseStructureHint(patch.structureOut) : undefined;
   const inId = inHint ? resolveStructureIdFromModels(inHint.name ?? patch.structureIn!, models) : undefined;
   const outId = outHint ? resolveStructureIdFromModels(outHint.name ?? patch.structureOut!, models) : undefined;
-  const modelOpt = patch.model ? MODEL_OPTIONS.find((m) => m.id === patch.model) : undefined;
-  return { // human - this looks hardcoded
+  const modelId = patch.model && catalogHasModel(patch.model) ? resolveModelId(patch.model) : undefined;
+  return {
     ...existing,
     ...(patch.label !== undefined ? { label: patch.label } : {}),
     ...(patch.note !== undefined ? { note: patch.note } : {}),
@@ -268,7 +268,7 @@ function applyModulePatch(
     ...(patch.checkInputDescription !== undefined ? { checkInputDescription: patch.checkInputDescription } : {}),
     ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
     ...(patch.code !== undefined ? { code: patch.code } : {}),
-    ...(modelOpt !== undefined ? { model: modelOpt.id } : {}),
+    ...(modelId !== undefined ? { model: modelId } : {}),
     ...(patch.outIsList !== undefined ? { outIsList: patch.outIsList } : {}),
   };
 }

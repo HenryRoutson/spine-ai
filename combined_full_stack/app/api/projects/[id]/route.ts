@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { logger } from "@/lib/server/server_logger";
+import { sanitizeModuleModels } from "@/lib/server/model_catalog";
 import type { Project, ProjectId } from "@/lib/server/types";
 
 const apiLog = logger("api:projects");
@@ -20,13 +21,16 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     return apiError(unknownProject(id), HTTP.NOT_FOUND);
   }
   const patch = (await req.json()) as Partial<Project>;
+  const sanitized: Partial<Project> = patch.modules
+    ? { ...patch, modules: sanitizeModuleModels(patch.modules) }
+    : patch;
   apiLog.info(`PUT /api/projects`, {
     projectId: id,
-    patchKeys: Object.keys(patch),
-    moduleCount: patch.modules?.length ?? project.modules.length,
-    modelCount: patch.models?.length ?? project.models.length,
+    patchKeys: Object.keys(sanitized),
+    moduleCount: sanitized.modules?.length ?? project.modules.length,
+    modelCount: sanitized.models?.length ?? project.models.length,
   });
-  store.saveProject({ ...project, ...patch, id: project.id });
+  store.saveProject({ ...project, ...sanitized, id: project.id });
   await store.flush();
   return NextResponse.json({ ok: true });
 }

@@ -5,10 +5,9 @@
 // AI :   - frontend ModuleKind/MODULE_META lack "llm-batch" (any Record<ModuleKind,…> in
 // AI :     frontend COMPONENTS will fail to typecheck once these types land),
 // AI :   - frontend DEFAULT_MODEL is "qwen-2.5-72b" (backend: "deepseek-v3"),
-// AI :   - frontend MODEL_OPTIONS is missing "sonnet-4.7" (the A/B fallback model).
+// AI :   - frontend MODEL_CATALOG may drift from backend until merge.
 
 import type { TypeExpr } from "./type_expr";
-import { DEEPSEEK_SLUG } from "./openrouter_slugs";
 
 export type { TypeExpr } from "./type_expr";
 
@@ -18,7 +17,7 @@ export type TypeAliasId = string & { __brand: "TypeAliasId" };
 export type ModuleId = string & { __brand: "ModuleId" };
 export type DocId = string & { __brand: "ContentHash" }; // content hash == id
 export type RunId = string & { __brand: "RunId" };
-export type ModelId = string; // demo model id, e.g. "qwen-2.5-72b" (see MODEL_OPTIONS)
+export type ModelId = string; // demo model id, e.g. "qwen-2.5-72b" (see MODEL_CATALOG)
 export type OpenRouterSlug = string & { __brand: "OpenRouterSlug" };
 
 // AI : string values are the persisted wire/DB format (seeds/*.json + supabase rows) — do not rename.
@@ -419,18 +418,23 @@ export interface BillingPoint {
   [modelOrService: string]: number | string;
 }
 
-export interface ModelOption {
+// AI : client-safe model picker row — no OpenRouter slug or raw token rates.
+export interface ModelOptionPublic {
   id: ModelId;
   label: string;
   provider: string;
-  flag: string; // origin marker for the demo
   costPer1k: number; // cents per 1k tokens (blended, OpenRouter + 40%)
+  cheap?: boolean;
+}
+
+export interface ModelOption extends ModelOptionPublic {
   promptUsdPerToken: number; // raw OpenRouter prompt rate (USD/token)
   completionUsdPerToken: number; // raw OpenRouter completion rate (USD/token)
-  cheap?: boolean;
   // AI : backend-only — the real OpenRouter slug this demo id maps to.
   slug: OpenRouterSlug;
 }
+
+export { MODEL_CATALOG, catalogEntry, catalogLabel, slugFor, type ModelCatalogEntry } from "./model_catalog";
 
 // AI : token usage captured on every real LLM call (feeds Logging + Billing).
 export interface TokenUsage {
@@ -439,20 +443,7 @@ export interface TokenUsage {
   completionTokens: number;
 }
 
-// ---- registries (kept identical to the frontend stub, plus `slug`) ----
-
-export const MODEL_OPTIONS: ModelOption[] = [
-  { id: "qwen-2.5-72b", label: "Qwen 2.5 72B", provider: "openrouter", flag: "CN", costPer1k: 0.1064, promptUsdPerToken: 3.6e-7, completionUsdPerToken: 4e-7, cheap: true, slug: "qwen/qwen-2.5-72b-instruct" as OpenRouterSlug },
-  { id: "deepseek-v3", label: "DeepSeek V3", provider: "openrouter", flag: "CN", costPer1k: 0.14, promptUsdPerToken: 2.002e-7, completionUsdPerToken: 8.001e-7, cheap: true, slug: DEEPSEEK_SLUG as OpenRouterSlug },
-  { id: "glm-4-plus", label: "GLM-4 Plus", provider: "openrouter", flag: "CN", costPer1k: 0.3038, promptUsdPerToken: 4.3e-7, completionUsdPerToken: 0.00000174, cheap: true, slug: "z-ai/glm-4.6" as OpenRouterSlug },
-  { id: "gpt-5-mini", label: "GPT-5 mini", provider: "openai", flag: "US", costPer1k: 0.105, promptUsdPerToken: 1.5e-7, completionUsdPerToken: 6e-7, slug: "openai/gpt-4o-mini" as OpenRouterSlug },
-  // AI : bug fix — old slug anthropic/claude-3.5-sonnet is gone from OpenRouter (404).
-  { id: "claude-opus-4.6", label: "Claude Opus 4.6", provider: "anthropic", flag: "US", costPer1k: 12.6, promptUsdPerToken: 0.000015, completionUsdPerToken: 0.000075, slug: "anthropic/claude-opus-4.1" as OpenRouterSlug },
-  // AI : demo_outline §3 — the A/B fallback model "if nothing else works well".
-  { id: "sonnet-4.7", label: "Claude Sonnet 4.7", provider: "anthropic", flag: "US", costPer1k: 2.52, promptUsdPerToken: 0.000003, completionUsdPerToken: 0.000015, slug: "anthropic/claude-sonnet-4.5" as OpenRouterSlug },
-  // AI : gemini-2-flash-lite removed — slug google/gemini-2.0-flash-lite-001 404s on OpenRouter; steps that referenced it fall back to deepseek-v3 via slugFor().
-  { id: "gemini-3-flash", label: "Gemini 3 Flash", provider: "google", flag: "US", costPer1k: 0.49, promptUsdPerToken: 5e-7, completionUsdPerToken: 0.000003, slug: "google/gemini-3-flash-preview" as OpenRouterSlug },
-];
+// AI : live pricing — hydrated via GET /api/state → modelOptions (see openrouter_models.ts).
 
 // AI : default to DeepSeek V3 — cheap Chinese model, maps to deepseek/deepseek-chat, fast + reliable
 // AI : for large structured outputs (qwen-2.5-72b on OpenRouter is markedly slower here).
@@ -536,13 +527,3 @@ export const STRATEGY_META: Record<StrategyKind, { name: string; description: st
   [StrategyKind.ClaudeCode]: { name: "Agent (Frontier)", description: "A full coding-agent instance on the task." },
   [StrategyKind.CheapAgent]: { name: "Agent (Cheap Model)", description: "Agent loop on a low-cost open model." },
 };
-
-// AI : map a demo model id to its real OpenRouter slug; falls back to the cheap default.
-export function slugFor(modelId: ModelId | undefined): OpenRouterSlug {
-  const opt = MODEL_OPTIONS.find((m) => m.id === modelId);
-  return opt?.slug ?? (DEEPSEEK_SLUG as OpenRouterSlug);
-}
-
-export function modelOption(modelId: ModelId): ModelOption {
-  return MODEL_OPTIONS.find((m) => m.id === modelId) ?? MODEL_OPTIONS[0];
-}

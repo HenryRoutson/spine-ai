@@ -3,6 +3,7 @@ import { requireAuthStore } from "@/lib/server/api_context";
 import { resolveActiveProject } from "@/lib/project-active";
 import { userProjectsFrom } from "@/lib/server/store";
 import { migrateProjectModules } from "@/lib/server/validity";
+import { getModelOptions, toPublicModelOptions } from "@/lib/server/openrouter_models";
 import { logger } from "@/lib/server/server_logger";
 import type { ProjectId } from "@/lib/server/types";
 
@@ -26,11 +27,14 @@ export async function GET(req: NextRequest) {
     runCount: store.runs(project?.id).length,
     allRunCount: store.runs().length,
   });
+  const modelOptions = toPublicModelOptions(await getModelOptions());
   return NextResponse.json({
     projects,
     docs: store.docs(),
     runs: store.runs(project?.id),
     // AI : account-wide run history — Billing tab aggregates spend across every project.
     allRuns: store.runs(),
+    // AI : live OpenRouter pricing — fetched server-side, not from the client.
+    modelOptions,
   });
 }

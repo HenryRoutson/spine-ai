@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { HTTP } from "@/lib/server/api-errors";
+import { UnknownModelError, parseOptionalRequestModel } from "@/lib/server/model_catalog";
 import { listSharedLinksForOwner, publishSharedLink } from "@/lib/server/shared_links";
 import { migrateProjectModules } from "@/lib/server/validity";
 import { logger } from "@/lib/server/server_logger";
@@ -30,10 +32,18 @@ export async function POST(req: NextRequest) {
     const project = ctx.store.project(body.projectId);
     if (!project) return apiError(`unknown project ${body.projectId}`, 404);
 
+    let defaultModel: ModelId | undefined;
+    try {
+      defaultModel = parseOptionalRequestModel(body.defaultModel);
+    } catch (err) {
+      if (err instanceof UnknownModelError) return apiError(err.message, HTTP.BAD_REQUEST);
+      throw err;
+    }
+
     const link = await publishSharedLink({
       ownerId: ctx.auth.userId,
       project: migrateProjectModules(project),
-      defaultModel: body.defaultModel,
+      defaultModel,
       fundingMode: body.fundingMode,
       viewerNameRequired: body.viewerNameRequired,
       defaultDocsByModule: body.defaultDocsByModule ?? {},

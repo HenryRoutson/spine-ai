@@ -38,6 +38,7 @@ import type { RunCheckpoint } from "../run_checkpoint";
 import { computeRunFingerprint, buildRunInputDocIds, stepCacheKey } from "../run_fingerprint";
 import { writeStepCache } from "../step_cache";
 import { validateStepOutput } from "../structure";
+import { ensureModelOptionsFresh } from "../openrouter_models";
 import { modelById, recordStepModel, stepFailuresFor, stepServerLogs, validatesStepOutputAsList } from "./helpers";
 import { persistArtifacts, persistCustomCodeArtifacts } from "./artifacts";
 import { restoreCtx } from "./context";
@@ -56,6 +57,7 @@ export async function runPipeline(
   if (!rawProject) throw new Error(unknownProject(projectId));
   const project = migrateProjectModules(rawProject);
   invariant(project.modules.length > 0, `project ${projectId} has no pipeline modules`);
+  await ensureModelOptionsFresh();
   const model = opts.model ?? project.modules.find((m) => m.kind === "llm")?.model ?? DEFAULT_MODEL;
   const persist = opts.persist ?? true;
 
@@ -212,6 +214,7 @@ export async function resumeRunPipeline(
   if (!rawProject) throw new Error(unknownProject(checkpoint.projectId));
   const project = migrateProjectModules(rawProject);
 
+  await ensureModelOptionsFresh();
   const model = checkpoint.model;
   const persist = opts.persist ?? true;
   const ledger = new UsageLedger();

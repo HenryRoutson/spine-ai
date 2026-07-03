@@ -11,7 +11,8 @@ import {
   type VisionAttachment,
 } from "./openrouter_llm";
 import { type ServerLogger } from "./server_logger";
-import { FailureKind, LlmCallStatus, type LlmCallRecord, type ModelId, slugFor } from "./types";
+import { FailureKind, LlmCallStatus, type LlmCallRecord, type ModelId } from "./types";
+import { slugFor } from "./model_catalog";
 import { type UsageLedger } from "./usage";
 
 // AI : single place to call the LLM with a demo ModelId — maps id→slug and bills the ledger.
