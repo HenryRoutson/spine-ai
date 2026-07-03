@@ -225,11 +225,6 @@ export function Documents() {
                     >
                       {docLabelDisplay(doc.label)}
                     </Badge>
-                    {isTest && (
-                      <Badge variant="outline" className="border-chart-3/40 font-mono text-[9px] text-chart-3">
-                        test
-                      </Badge>
-                    )}
                   </div>
                   <p className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
                     <span className="flex items-center gap-1">
