@@ -106,7 +106,8 @@
           "name": "explanation",
           "type": "text",
           "optional": false,
-          "description": "Match rationale or why unmatched"
+          "description": "Match rationale or why unmatched",
+          "deterministic": false
         }
       ]
     }

@@ -1,4 +1,5 @@
-import type { FailureKind, LlmCallRecord, RunFailureRecord, RunStep } from "@/lib/types"
+import { FailureKind, LlmCallStatus, RunStepStatus } from "@/lib/types"
+import type { LlmCallRecord, RunFailureRecord, RunStep } from "@/lib/types"
 import { formatCostCents, formatMs } from "@/lib/format"
 
 export type MetricField = "inputChars" | "outputChars" | "latencyMs"
@@ -45,13 +46,13 @@ function jitterY(index: number, total: number, xKey: number): number {
 
 export function failureKindLabel(kind: FailureKind): string {
   switch (kind) {
-    case "provider":
+    case FailureKind.Provider:
       return "LLM provider"
-    case "json_parse":
+    case FailureKind.JsonParse:
       return "JSON parse"
-    case "schema":
+    case FailureKind.Schema:
       return "Schema validation (pydantic/zod)"
-    case "step_output":
+    case FailureKind.StepOutput:
       return "Step output validation (pydantic/zod)"
   }
 }
@@ -75,7 +76,7 @@ export function failuresFromLlmCalls(
 
 export function stepFailures(step: RunStep): RunFailureRecord[] {
   if (step.failures?.length) return step.failures
-  return failuresFromLlmCalls(llmCallsFromStep(step), step.status !== "error")
+  return failuresFromLlmCalls(llmCallsFromStep(step), step.status !== RunStepStatus.Error)
 }
 
 export function displayStatusesForCalls(
@@ -83,9 +84,9 @@ export function displayStatusesForCalls(
   stepSucceeded: boolean,
 ): LlmCallDisplayStatus[] {
   return calls.map((call, i) => {
-    if (call.status === "ok") return "ok"
-    const recovered = stepSucceeded && calls.slice(i + 1).some((c) => c.status === "ok")
-    return recovered ? "retried" : "error"
+    if (call.status === LlmCallStatus.Ok) return LlmCallStatus.Ok
+    const recovered = stepSucceeded && calls.slice(i + 1).some((c) => c.status === LlmCallStatus.Ok)
+    return recovered ? "retried" : LlmCallStatus.Error
   })
 }
 
@@ -190,13 +191,13 @@ export function metricAxisLabel(field: MetricField): string {
 export function llmCallsFromStep(step: RunStep): LlmCallRecord[] {
   if (step.llmCalls?.length) return step.llmCalls
   if (step.kind !== "llm" && step.kind !== "llm-batch") return []
-  const failed = step.status === "error"
+  const failed = step.status === RunStepStatus.Error
   return [
     {
       inputChars: step.inputPreview.length,
       outputChars: (step.outputJson ?? step.outputPreview).length,
       latencyMs: step.ms,
-      status: failed ? "error" : "ok",
+      status: failed ? LlmCallStatus.Error : LlmCallStatus.Ok,
     },
   ]
 }
@@ -211,7 +212,7 @@ export function collectRunLlmCalls(steps: RunStep[]): LlmCallRecord[] {
 
 export function summarizeRunLlmCalls(steps: RunStep[]): LlmCallSummary {
   const perStep = steps
-    .map((step) => summarizeLlmCalls(llmCallsFromStep(step), step.status !== "error"))
+    .map((step) => summarizeLlmCalls(llmCallsFromStep(step), step.status !== RunStepStatus.Error))
     .filter((s) => s.ok + s.retried + s.failed > 0)
   return {
     ok: perStep.reduce((n, s) => n + s.ok, 0),

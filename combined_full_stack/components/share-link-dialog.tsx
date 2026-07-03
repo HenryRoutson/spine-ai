@@ -14,8 +14,10 @@ import {
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { orderedInputModules } from "@/lib/inference-input"
-import type { DocId, DocRef, ModuleId, Project, SharedLinkFundingMode } from "@/lib/types"
+import { DocLabel, SharedLinkFundingMode } from "@/lib/types"
+import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
+import { copyTextToClipboard } from "@/lib/clipboard"
 
 export function ShareLinkDialog({
   project,
@@ -31,7 +33,7 @@ export function ShareLinkDialog({
   const [error, setError] = useState<string | null>(null)
   const [url, setUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [fundingMode, setFundingMode] = useState<SharedLinkFundingMode>("sharer_pays")
+  const [fundingMode, setFundingMode] = useState<SharedLinkFundingMode>(SharedLinkFundingMode.SharerPays)
   const [viewerNameRequired, setViewerNameRequired] = useState(false)
 
   const inputModules = useMemo(() => orderedInputModules(project.modules), [project.modules])
@@ -44,7 +46,7 @@ export function ShareLinkDialog({
         out[m.id] = Array.isArray(raw) ? raw : [raw]
         continue
       }
-      const seeded = docs.filter((d) => d.label === "inference").slice(0, 1)
+      const seeded = docs.filter((d) => d.label === DocLabel.Inference).slice(0, 1)
       if (seeded.length) out[m.id] = [seeded[0].id]
     }
     return out
@@ -75,7 +77,7 @@ export function ShareLinkDialog({
 
   async function copyUrl() {
     if (!url) return
-    await navigator.clipboard.writeText(url)
+    await copyTextToClipboard(url)
     setCopied(true)
     setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)
   }

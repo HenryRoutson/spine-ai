@@ -1,4 +1,11 @@
+import { DocLabel } from "@/lib/types";
 import type { DocRef, Project, ProjectId } from "@/lib/types";
+
+// AI : "testing" docs are persisted under the legacy "training" DocLabel (seeds + supabase rows);
+// AI : map to the user-facing word only at display time — never show "training" in the UI.
+export function docLabelDisplay(label: DocLabel): "inference" | "testing" {
+  return label === DocLabel.Training ? "testing" : "inference";
+}
 
 // AI : docs are global bytes; each project lists linked filenames in seedDocNames.
 export function docsForProject(docs: DocRef[], project: Project): DocRef[] {
@@ -21,9 +28,9 @@ export function defaultInferenceDoc(docs: DocRef[], project: Project): DocRef | 
   const names = project.seedDocNames;
   if (names?.length) {
     for (const name of names) {
-      const doc = mine.find((d) => d.name === name && d.label === "inference");
+      const doc = mine.find((d) => d.name === name && d.label === DocLabel.Inference);
       if (doc) return doc;
     }
   }
-  return mine.find((d) => d.label === "inference") ?? mine[0];
+  return mine.find((d) => d.label === DocLabel.Inference) ?? mine[0];
 }

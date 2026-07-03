@@ -14,14 +14,14 @@ import { migrateProjectModules } from "./validity";
 import { isMissingSchemaError } from "./supabase_store";
 import { LOCAL_DEV_USER_ID, type user_id_string } from "./require_auth";
 import { logger } from "./server_logger";
-import type {
-  DocId,
-  ModelId,
-  ModuleId,
-  Project,
-  ProjectId,
+import {
   SharedLinkFundingMode,
-  SharedLinkId,
+  type DocId,
+  type ModelId,
+  type ModuleId,
+  type Project,
+  type ProjectId,
+  type SharedLinkId,
 } from "./types";
 import type { SharedLinkDefaultDoc, SharedLinkRecord } from "@/lib/shared-link-types";
 
@@ -274,7 +274,7 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     description: undefined,
     snapshot,
     defaultModel: input.defaultModel,
-    fundingMode: input.fundingMode ?? "sharer_pays",
+    fundingMode: input.fundingMode ?? SharedLinkFundingMode.SharerPays,
     viewerNameRequired: input.viewerNameRequired ?? false,
     defaultDocs,
     runCount: 0,

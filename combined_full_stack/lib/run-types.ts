@@ -13,7 +13,12 @@ import type { ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
 export type StepLabel = string;
 export type PipelineState = Record<StepLabel, unknown>;
 
-export type JobLogLevel = "debug" | "info" | "warn" | "error";
+export enum JobLogLevel {
+  Debug = "debug",
+  Info = "info",
+  Warn = "warn",
+  Error = "error",
+}
 
 export interface JobLogEntry {
   at: number;

@@ -14,7 +14,7 @@ import {
   withFieldMeta,
   zodFromModel as zodFromModelExpr,
 } from "./type_expr";
-import type { FieldType, ModelField, PipelineModule, StructureModel, StructureModelId, TypeAlias } from "./types";
+import { InputType, type FieldType, type ModelField, type PipelineModule, type StructureModel, type StructureModelId, type TypeAlias } from "./types";
 
 export { QuoteSchema, isListFieldType } from "./type_expr";
 export type { TypeExpr } from "./type_expr";
@@ -290,7 +290,7 @@ export function materializeInputDocument(
   const inputTypes = !m.inputType ? [] : Array.isArray(m.inputType) ? m.inputType : [m.inputType];
   const docHints = { ...hints, docId, sourceText: content };
 
-  if (inputTypes.includes("json")) {
+  if (inputTypes.includes(InputType.Json)) {
     let parsed: unknown;
     try {
       parsed = JSON.parse(content);

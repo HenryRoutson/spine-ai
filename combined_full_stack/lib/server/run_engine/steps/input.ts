@@ -7,6 +7,7 @@ import { docToTextViaLlm } from "../../doc_to_text";
 import { materializeInputDocument, wrapListForOutputStructure } from "../../structure";
 import { DEFAULT_VISION_DOC_PARSE_MODEL, inputUsesVisionOcr, type DocId, type PipelineModule } from "../../types";
 import { materializeHints, modelById } from "../helpers";
+import { jsonStringifyStepValue } from "../results";
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types";
 
 export async function execInputStep(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
@@ -53,6 +54,7 @@ export async function execInputStep(m: PipelineModule, ctx: RunCtx, log: RunLogg
     return {
       value,
       preview: `loaded ${inputTypeLabel(m.inputType)} → ${docId}${inputUsesVisionOcr(m) ? " · OCR" : ""}`,
+      json: jsonStringifyStepValue(value),
       docId,
       inputPreview: inputUsesVisionOcr(m)
         ? `vision OCR · ${lastOcr?.model ?? m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL}${lastOcr?.fromVisionCache ? " · cached" : ""}`
@@ -77,12 +79,11 @@ export async function execInputStep(m: PipelineModule, ctx: RunCtx, log: RunLogg
       ? items
       : wrapListForOutputStructure(items, out, m.outStructureId);
   ctx.outputs.set(m.id, value);
-  const docNames = docIds.map((id) => store.docs().find((d) => d.id === id)?.name ?? id);
   return {
     value,
     preview: `loaded ${docIds.length} ${inputTypeLabel(m.inputType)} doc(s)${inputUsesVisionOcr(m) ? " · OCR" : ""}`,
+    json: jsonStringifyStepValue(value),
     docId: docIds[0],
-    json: JSON.stringify({ doc_ids: docIds, doc_names: docNames }, null, 2),
     inputPreview: inputUsesVisionOcr(m)
       ? `vision OCR · ${lastOcr?.model ?? m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL}${lastOcr?.fromVisionCache ? " · cached" : ""}`
       : `${docIds.length} documents · browse with ◀ ▶`,

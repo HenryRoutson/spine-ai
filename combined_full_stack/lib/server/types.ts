@@ -21,20 +21,22 @@ export type RunId = string & { __brand: "RunId" };
 export type ModelId = string; // demo model id, e.g. "qwen-2.5-72b" (see MODEL_OPTIONS)
 export type OpenRouterSlug = string & { __brand: "OpenRouterSlug" };
 
-export type FieldType =
-  | "text"
-  | "int"
-  | "float"
-  | "bool"
-  | "datetime"
-  | "document"
-  | "list[document]"
-  | "json"
-  | "list[text]"
-  | "tuple[text,quote]"
-  | "list[tuple[text,quote]]"
-  | "model"
-  | "list[model]";
+// AI : string values are the persisted wire/DB format (seeds/*.json + supabase rows) — do not rename.
+export enum FieldType {
+  Text = "text",
+  Int = "int",
+  Float = "float",
+  Bool = "bool",
+  Datetime = "datetime",
+  Document = "document",
+  ListDocument = "list[document]",
+  Json = "json",
+  ListText = "list[text]",
+  TupleTextQuote = "tuple[text,quote]",
+  ListTupleTextQuote = "list[tuple[text,quote]]",
+  Model = "model",
+  ListModel = "list[model]",
+}
 
 // AI : shown in Structure builder when a field uses type json
 export const JSON_FIELD_PREFER_STRUCTURE_MSG =
@@ -50,12 +52,16 @@ export interface ModelField {
   ref?: StructureModelId; // referenced model id when type === "model" | "list[model]"
   minItems?: number; // AI : minimum list length when type is a list[…] field
   typeExpr?: TypeExpr; // AI : when set, overrides type/ref — full Python-style type expression
+  // AI : field-level flag (spec § Testing) — false = probabilistic, the value varies across runs
+  // AI : (LLM prose like a summary or feedback) so tests ignore it. Missing/true = deterministic
+  // AI : (a maths answer, an enum like answer_ABCD) → exact-compared.
+  deterministic?: boolean;
 }
 
 // AI : meta-type — one field row inside a StructureDef (structure-of-structures)
 export type StructureFieldDef = Pick<
   ModelField,
-  "id" | "name" | "type" | "optional" | "description" | "ref" | "minItems" | "typeExpr"
+  "id" | "name" | "type" | "optional" | "description" | "ref" | "minItems" | "typeExpr" | "deterministic"
 >;
 
 // AI : meta-type — JSON-serializable shape used to define StructureModel entries in seeds / assistants
@@ -89,33 +95,52 @@ export interface TypeAlias {
   expr: TypeExpr;
 }
 
-export type InputType = "pdf" | "excel" | "word" | "json" | "text" | "web" | "image";
+// AI : string values are the persisted wire/DB format — do not rename.
+export enum InputType {
+  Pdf = "pdf",
+  Excel = "excel",
+  Word = "word",
+  Json = "json",
+  Text = "text",
+  Web = "web",
+  Image = "image",
+}
 
 // AI : input steps accept one type or a subset — e.g. ["word", "pdf"] for company filings.
 export type InputTypeSpec = InputType | InputType[];
 
-export type ModuleKind =
-  | "input"
-  | "llm"
-  | "llm-batch" // AI : backend addition — one structured call per list item, merged typed list out
-  | "quote" // AI : deterministic — resolve LLM quote strings → source-linked spans
-  | "transform"
-  | "combine"
-  | "custom-code"
-  | "assert" // AI : validate pipeline state — passthrough spine; code reads step["Label"] keys
-  | "human-review" // AI : pause in Inference — operator approves or rejects before continuing
-  | "output";
+// AI : string values are the persisted wire/DB format — do not rename.
+export enum ModuleKind {
+  Input = "input",
+  Llm = "llm",
+  LlmBatch = "llm-batch", // AI : backend addition — one structured call per list item, merged typed list out
+  Quote = "quote", // AI : deterministic — resolve LLM quote strings → source-linked spans
+  Transform = "transform",
+  Combine = "combine",
+  CustomCode = "custom-code",
+  Assert = "assert", // AI : validate pipeline state — passthrough spine; code reads step["Label"] keys
+  HumanReview = "human-review", // AI : pause in Inference — operator approves or rejects before continuing
+  Output = "output",
+}
 
-export type CustomCodeLanguage = "typescript" | "python";
+export enum CustomCodeLanguage {
+  TypeScript = "typescript",
+  Python = "python",
+}
 
 // AI : one language key per entry — e.g. { "typescript": "(input) => input" } or { "python": "..." }.
 export type CustomCodeEntry = { typescript?: string; python?: string };
 
 // AI : input — built-in PDF/text parser at upload vs OpenRouter vision OCR (handwriting, scans).
-export type DocParseMode = "parser" | "llm";
+export enum DocParseMode {
+  Parser = "parser",
+  Llm = "llm",
+}
 
 // AI : legacy run logs may still reference folded doc-to-text steps.
-export type LegacyModuleKind = "doc-to-text";
+export enum LegacyModuleKind {
+  DocToText = "doc-to-text",
+}
 export type RunStepKind = ModuleKind | LegacyModuleKind;
 
 export interface PipelineModule {
@@ -179,12 +204,16 @@ export interface Project {
   documentation?: string; // AI : freeform markdown — prepended to every agent/assistant prompt call to prevent regressions
 }
 
-export type StrategyKind = "single-llm" |"claude-code" | "cheap-agent";
+export enum StrategyKind {
+  SingleLlm = "single-llm",
+  ClaudeCode = "claude-code",
+  CheapAgent = "cheap-agent",
+}
 
 export const STRATEGY_KINDS = [
-  "single-llm",
-  "claude-code",
-  "cheap-agent",
+  StrategyKind.SingleLlm,
+  StrategyKind.ClaudeCode,
+  StrategyKind.CheapAgent,
 ] as const satisfies readonly StrategyKind[];
 
 export interface Strategy {
@@ -199,7 +228,12 @@ export interface Strategy {
   passRate: number; // 0-100 schema validity
 }
 
-export type DocLabel = "inference" | "training";
+// AI : string values are the persisted wire/DB format (seeds/*.json + supabase rows) — do not rename.
+// AI : Training is legacy naming for what the UI calls "testing" — see docLabelDisplay().
+export enum DocLabel {
+  Inference = "inference",
+  Training = "training",
+}
 
 export interface DocRef {
   id: DocId; // content hash
@@ -219,12 +253,24 @@ export interface SourceQuote {
   end: number;
 }
 
-export type RunStepStatus = "ok" | "cached" | "error";
+export enum RunStepStatus {
+  Ok = "ok",
+  Cached = "cached",
+  Error = "error",
+}
 
-export type LlmCallStatus = "ok" | "error";
+export enum LlmCallStatus {
+  Ok = "ok",
+  Error = "error",
+}
 
 // AI : what failed — provider HTTP, JSON parse, zod/pydantic schema, or post-step output check.
-export type FailureKind = "provider" | "json_parse" | "schema" | "step_output";
+export enum FailureKind {
+  Provider = "provider",
+  JsonParse = "json_parse",
+  Schema = "schema",
+  StepOutput = "step_output",
+}
 
 export interface RunFailureRecord {
   kind: FailureKind;
@@ -290,15 +336,32 @@ export interface RunStep extends Omit<StepDescriptionFields, "outputPreview"> {
 
 export type RunFingerprint = string & { __brand: "RunFingerprint" };
 export type SharedLinkId = string & { __brand: "SharedLinkId" };
-// AI : "testing" — run started from the Testing tab; flagged in Logging (spec § Testing).
-export type RunSource = "app" | "shared_link" | "assistant" | "testing";
+// AI : Testing — run started from the Testing tab; flagged in Logging (spec § Testing).
+export enum RunSource {
+  App = "app",
+  SharedLink = "shared_link",
+  Assistant = "assistant",
+  Testing = "testing",
+}
 
 // AI : persisted test verdict — expected vs actual per pinned step, attached to the run
 // AI : after the Testing tab compares the finished run against its *_testing.json file.
+export enum RunTestStepStatus {
+  Pass = "pass",
+  Fail = "fail",
+  // AI : Skipped = input/combine — same data as expected, but run trace is refs/summary only (see skipReason).
+  Skipped = "skipped",
+  NotReached = "not-reached",
+}
+
 export type RunTestStepResult = {
   label: string;
-  status: "pass" | "fail" | "not-reached";
+  status: RunTestStepStatus;
   diffPath?: string;
+  // AI : why a skipped step was not scored — input/combine traces are refs or summaries, not full values.
+  skipReason?: string;
+  // AI : probabilistic field paths (ModelField.deterministic === false) excluded from the compare.
+  ignoredPaths?: string[];
   expected: unknown;
   actual?: unknown;
 };
@@ -307,12 +370,22 @@ export type RunTestReport = {
   testDocName: string;
   results: RunTestStepResult[];
 };
-export type SharedLinkFundingMode = "sharer_pays" | "viewer_pays" | "viewer_signs_in";
+export enum SharedLinkFundingMode {
+  SharerPays = "sharer_pays",
+  ViewerPays = "viewer_pays",
+  ViewerSignsIn = "viewer_signs_in",
+}
+
+export enum RunStatus {
+  Ok = "ok",
+  Error = "error",
+  Running = "running",
+}
 
 export interface PipelineRun {
   id: RunId;
   startedAt: number;
-  status: "ok" | "error" | "running";
+  status: RunStatus;
   totalMs: number;
   billedCents: number;
   savedCents: number;
@@ -381,90 +454,76 @@ export const DEFAULT_VISION_DOC_PARSE_MODEL: ModelId = "gemini-3-flash";
 export const DEFAULT_INPUT_CHECK_MODEL: ModelId = "deepseek-v3";
 
 export const DOC_PARSE_MODES: { value: DocParseMode; label: string; hint: string }[] = [
-  { value: "parser", label: "Built-in parser", hint: "PDF.js text extract at upload — stored in docs.content" },
-  { value: "llm", label: "Vision OCR", hint: "OpenRouter vision — cached separately in doc_vision_cache" },
+  { value: DocParseMode.Parser, label: "Built-in parser", hint: "PDF.js text extract at upload — stored in docs.content" },
+  { value: DocParseMode.Llm, label: "Vision OCR", hint: "OpenRouter vision — cached separately in doc_vision_cache" },
 ];
 
 export function docParseModeForModule(m: PipelineModule): DocParseMode {
-  if (m.kind === "input") return m.useOcr ? "llm" : "parser";
-  return "parser";
+  if (m.kind === ModuleKind.Input) return m.useOcr ? DocParseMode.Llm : DocParseMode.Parser;
+  return DocParseMode.Parser;
 }
 
 export function inputUsesVisionOcr(m: PipelineModule): boolean {
-  return m.kind === "input" && docParseModeForModule(m) === "llm";
+  return m.kind === ModuleKind.Input && docParseModeForModule(m) === DocParseMode.Llm;
 }
 
 // AI : step-cache model slug — vision OCR steps must not share keys with the global run model.
 export function stepModelForCache(m: PipelineModule, globalModel: ModelId): ModelId {
   if (inputUsesVisionOcr(m)) return m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
-  if (m.kind === "llm" || m.kind === "llm-batch") return m.model ?? globalModel;
+  if (m.kind === ModuleKind.Llm || m.kind === ModuleKind.LlmBatch) return m.model ?? globalModel;
   return m.model ?? globalModel;
 }
 
-export const FIELD_TYPES: FieldType[] = [
-  "text",
-  "int",
-  "float",
-  "bool",
-  "datetime",
-  "document",
-  "list[document]",
-  "json",
-  "list[text]",
-  "tuple[text,quote]",
-  "list[tuple[text,quote]]",
-  "model",
-  "list[model]",
-];
+export const FIELD_TYPES: FieldType[] = Object.values(FieldType);
 
 export const INPUT_TYPES: { value: InputType; label: string }[] = [
-  { value: "pdf", label: "PDF" },
-  { value: "word", label: "Word" },
-  { value: "excel", label: "Excel" },
-  { value: "json", label: "JSON" },
-  { value: "text", label: "Text" },
-  { value: "web", label: "Web" },
-  { value: "image", label: "Image" },
+  { value: InputType.Pdf, label: "PDF" },
+  { value: InputType.Word, label: "Word" },
+  { value: InputType.Excel, label: "Excel" },
+  { value: InputType.Json, label: "JSON" },
+  { value: InputType.Text, label: "Text" },
+  { value: InputType.Web, label: "Web" },
+  { value: InputType.Image, label: "Image" },
 ];
 
 export const MODULE_META: Record<ModuleKind, { label: string; description: string }> = {
-  input: {
+  [ModuleKind.Input]: {
     label: "Input",
     description: "Ingest a source (pdf, word, web, json…) — built-in parser or optional vision OCR",
   },
-  llm: { label: "LLM Call", description: "Run a model against a prompt + schema" },
-  "llm-batch": { label: "Batch LLM", description: "list in → list out (one structured call per item). Wrap with Custom TS before/after when upstream/downstream is a single object." },
-  quote: {
+  [ModuleKind.Llm]: { label: "LLM Call", description: "Run a model against a prompt + schema" },
+  [ModuleKind.LlmBatch]: { label: "Batch LLM", description: "list in → list out (one structured call per item). Wrap with Custom TS before/after when upstream/downstream is a single object." },
+  [ModuleKind.Quote]: {
     label: "Link Quotes",
     description: "Match verbatim LLM quote strings against the source document and attach byte offsets (zero LLM cost)",
   },
-  transform: {
+  [ModuleKind.Transform]: {
     label: "Transform",
     description: "Deterministic reshape — list→object wrap needs a list field on the output structure, or custom TS code",
   },
-  combine: { label: "Combine Inputs", description: "Merge a new input with the pipeline state" },
-  "custom-code": {
+  [ModuleKind.Combine]: { label: "Combine Inputs", description: "Merge a new input with the pipeline state" },
+  [ModuleKind.CustomCode]: {
     label: "Custom Code",
     description: "TypeScript or Python (input) => output with ordered fallbacks on failure",
   },
-  assert: {
+  [ModuleKind.Assert]: {
     label: "Assert",
     description: "Check pipeline state (step[\"Label\"], len) — runs after referenced steps; passthrough",
   },
-  "human-review": {
+  [ModuleKind.HumanReview]: {
     label: "Human Review",
     description: "Pause in Inference for approve or reject — passthrough on approval",
   },
-  output: {
+  [ModuleKind.Output]: {
     label: "Output",
     description: "Materialize a named snapshot of a structure — not the pipeline's only output; add one anywhere you want an artifact",
   },
 };
 
 export const STRATEGY_META: Record<StrategyKind, { name: string; description: string }> = {
-  "single-llm": { name: "Single LLM Call", description: "One direct call to the model." },
-  "claude-code": { name: "Agent (Frontier)", description: "A full coding-agent instance on the task." },
-  "cheap-agent": { name: "Agent (Cheap Model)", description: "Agent loop on a low-cost open model." },
+  [StrategyKind.SingleLlm]: { name: "Single LLM Call", description: "One direct call to the model." },
+  [StrategyKind.ClaudeCode]: { name: "Agent (Frontier)", description: "A full coding-agent instance on the task." },
+  [StrategyKind.CheapAgent]: { name: "Agent (Cheap Model)", description: "Agent loop on a low-cost open model." },
 };
 
 // AI : map a demo model id to its real OpenRouter slug; falls back to the cheap default.

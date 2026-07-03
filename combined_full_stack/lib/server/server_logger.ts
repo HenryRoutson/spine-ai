@@ -1,4 +1,4 @@
-import type { JobLogLevel } from "@/lib/run-types";
+import { JobLogLevel } from "@/lib/run-types";
 import { join } from "node:path";
 import { dataDir } from "./config";
 import { FileLog } from "./file_log";
@@ -56,16 +56,16 @@ export class ServerLogger {
   }
 
   debug(msg: string, ctx?: LogCtx): void {
-    this.emit("debug", msg, ctx);
+    this.emit(JobLogLevel.Debug, msg, ctx);
   }
   info(msg: string, ctx?: LogCtx): void {
-    this.emit("info", msg, ctx);
+    this.emit(JobLogLevel.Info, msg, ctx);
   }
   warn(msg: string, ctx?: LogCtx): void {
-    this.emit("warn", msg, ctx);
+    this.emit(JobLogLevel.Warn, msg, ctx);
   }
   error(msg: string, ctx?: LogCtx): void {
-    this.emit("error", msg, ctx);
+    this.emit(JobLogLevel.Error, msg, ctx);
   }
 
   section(title: string): void {

@@ -56,7 +56,7 @@ export function StructureFieldRow({
           readOnly={locked}
           className="h-8 font-mono text-xs"
         />
-        <div className="flex h-8 w-14 items-center justify-center gap-1">
+        <div className="flex h-8 w-20 items-center justify-center gap-1">
           <button
             onClick={() => onUpdate({ optional: !field.optional })}
             disabled={locked}
@@ -68,6 +68,24 @@ export function StructureFieldRow({
             )}
           >
             {field.optional ? "?" : "·"}
+          </button>
+          {/* AI : deterministic flag (spec § Testing) — "=" exact-compared in tests, "≈" probabilistic (ignored) */}
+          <button
+            onClick={() => onUpdate({ deterministic: field.deterministic === false ? undefined : false })}
+            disabled={locked}
+            title={
+              field.deterministic === false
+                ? "probabilistic — value varies between runs (LLM prose); tests ignore this field"
+                : "deterministic — same input always gives this value (maths answer, id, enum); tests exact-compare it"
+            }
+            className={cn(
+              "h-5 w-5 rounded border text-[10px] font-medium",
+              field.deterministic === false
+                ? "border-chart-3 bg-chart-3/15 text-chart-3"
+                : "border-border text-muted-foreground",
+            )}
+          >
+            {field.deterministic === false ? "≈" : "="}
           </button>
           <button
             onClick={onRemove}

@@ -20,6 +20,9 @@ import { computeInvalid, formatInvalidMapErrors, migrateProjectModules } from ".
 import { withSharedModels } from "../builtin_models";
 import {
   DEFAULT_MODEL,
+  FailureKind,
+  RunStatus,
+  RunStepStatus,
   type DocId,
   type ModelId,
   type ModuleId,
@@ -161,7 +164,7 @@ export async function runPipeline(
   const run: PipelineRun = {
     id: runId,
     startedAt,
-    status: steps.some((s) => s.status === "error") ? "error" : "ok",
+    status: steps.some((s) => s.status === "error") ? RunStatus.Error : RunStatus.Ok,
     totalMs,
     billedCents,
     savedCents,
@@ -248,7 +251,7 @@ export async function resumeRunPipeline(
 
   const { logs: serverLogs, value: stepOutcome } = await withStepModuleContext(m.id, () =>
     collectLogsDuring(async () => {
-      let status: import("../types").RunStepStatus = "ok";
+      let status: RunStepStatus = RunStepStatus.Ok;
       let result: import("./engine_types").ExecResult | undefined;
 
       log.section(`step ${checkpoint.stepIndex + 1}/${project.modules.length}: ${m.label}`);
@@ -283,7 +286,7 @@ export async function resumeRunPipeline(
           });
           if (!check.ok) {
             const validationError = check.error ?? "unknown validation error";
-            ctx.stepExtraFailures = [{ kind: "step_output", detail: validationError, recovered: false }];
+            ctx.stepExtraFailures = [{ kind: FailureKind.StepOutput, detail: validationError, recovered: false }];
             log.error(`step output schema validation failed`, {
               failureKind: "step_output",
               structure: out.name,
@@ -293,7 +296,7 @@ export async function resumeRunPipeline(
           }
         }
       } catch (err) {
-        status = "error";
+        status = RunStepStatus.Error;
         result = failedStepResult(err, m, ctx, result);
         log.warn(`client step failed`, { moduleId: m.id, error: (err as Error).message, failedJson: result.json });
       }
@@ -365,7 +368,7 @@ export async function resumeRunPipeline(
     const run: PipelineRun = {
       id: checkpoint.runId,
       startedAt: checkpoint.startedAt,
-      status: "error",
+      status: RunStatus.Error,
       ...finalizeRunMetrics(steps, checkpoint.startedAt),
       savedCents: 0,
       model,
@@ -409,7 +412,7 @@ export async function resumeRunPipeline(
   const run: PipelineRun = {
     id: checkpoint.runId,
     startedAt: checkpoint.startedAt,
-    status: steps.some((s) => s.status === "error") ? "error" : "ok",
+    status: steps.some((s) => s.status === "error") ? RunStatus.Error : RunStatus.Ok,
     totalMs,
     billedCents,
     savedCents,

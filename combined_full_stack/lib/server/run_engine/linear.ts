@@ -9,7 +9,7 @@ import { expectedOutputsForRun } from "../seed";
 import { stepCacheKey } from "../run_fingerprint";
 import { readStepCache, writeStepCache } from "../step_cache";
 import { hasQuoteField, validateStepOutput } from "../structure";
-import { DEFAULT_INPUT_CHECK_MODEL, inputUsesVisionOcr, type LlmCallRecord, type RunStepStatus } from "../types";
+import { DEFAULT_INPUT_CHECK_MODEL, FailureKind, inputUsesVisionOcr, ModuleKind, RunStepStatus, type LlmCallRecord } from "../types";
 import { serializeCtx, resolveStepInputForCheck } from "./context";
 import { execModule } from "./exec_module";
 import {
@@ -20,7 +20,7 @@ import {
   stepServerLogs,
   validatesStepOutputAsList,
 } from "./helpers";
-import { applyInputCacheSideEffects, failedStepResult, resultFromCache } from "./results";
+import { applyInputCacheSideEffects, failedStepResult, jsonStringifyStepValue, resultFromCache } from "./results";
 import type { ExecResult, LinearStepParams } from "./engine_types";
 
 export async function runLinearStepsFrom(
@@ -67,7 +67,7 @@ export async function runLinearStepsFrom(
 
     const { logs: serverLogs, value: stepOutcome } = await withStepModuleContext(m.id, () =>
       collectLogsDuring(async () => {
-        let status: RunStepStatus = "ok";
+        let status: RunStepStatus = RunStepStatus.Ok;
         let result: ExecResult | undefined;
 
         log.section(`step ${i + 1}/${project.modules.length}: ${m.label}`);
@@ -122,7 +122,7 @@ export async function runLinearStepsFrom(
             if (m.kind === "input" && inputUsesVisionOcr(m)) {
               applyInputCacheSideEffects(m, cached, ctx);
             }
-            status = "cached";
+            status = RunStepStatus.Cached;
             savedCostCents = cached.costCents ?? 0;
             savedCentsAcc.value += savedCostCents;
             result = resultFromCache(m, cached, ctx);
@@ -146,7 +146,7 @@ export async function runLinearStepsFrom(
                 const failedJson = result.json ?? JSON.stringify(result.value, null, 2);
                 const validationError = check.error ?? "unknown validation error";
                 ctx.stepExtraFailures = [
-                  { kind: "step_output", detail: validationError, recovered: false },
+                  { kind: FailureKind.StepOutput, detail: validationError, recovered: false },
                 ];
                 log.error(`step output schema validation failed`, {
                   failureKind: "step_output",
@@ -167,9 +167,7 @@ export async function runLinearStepsFrom(
                   value: result.value,
                   json:
                     result.json ??
-                    (result.docId && m.kind === "input"
-                      ? JSON.stringify({ doc_id: result.docId }, null, 2)
-                      : undefined),
+                    (result.value != null ? jsonStringifyStepValue(result.value) : undefined),
                   docId: result.docId,
                   inputPreview: result.inputPreview,
                   inputPreviewItems: result.inputPreviewItems,
@@ -231,12 +229,12 @@ export async function runLinearStepsFrom(
               clientStep: {
                 moduleId: m.id,
                 label: m.label,
-                kind: "human-review",
+                kind: ModuleKind.HumanReview,
                 input: err.input,
               },
             });
           }
-          status = "error";
+          status = RunStepStatus.Error;
           if (err instanceof InputDescriptionRejectedError) {
             inputDescriptionCheck = err.check;
           }

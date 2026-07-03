@@ -1,4 +1,5 @@
 import type { StepUiState } from "@/lib/run-engine"
+import { RunStepStatus } from "@/lib/types"
 import type { PipelineModule } from "@/lib/types"
 import { isLlmKind } from "@/lib/module-kinds"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
@@ -59,9 +60,9 @@ export function mergeCombineSegmentStatus(
   combineStatus: StepUiStatus,
   inputStatus: StepUiStatus,
 ): StepUiStatus {
-  if (combineStatus === "error" || inputStatus === "error") return "error"
+  if (combineStatus === "error" || inputStatus === "error") return RunStepStatus.Error
   if (combineStatus === "running" || inputStatus === "running") return "running"
-  if (combineStatus === "cached" || inputStatus === "cached") return "cached"
-  if (combineStatus !== "idle" || inputStatus !== "idle") return "ok"
+  if (combineStatus === "cached" || inputStatus === "cached") return RunStepStatus.Cached
+  if (combineStatus !== "idle" || inputStatus !== "idle") return RunStepStatus.Ok
   return "idle"
 }

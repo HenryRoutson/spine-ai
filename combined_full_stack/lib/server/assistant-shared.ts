@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { uid } from "@/lib/id";
 import { tryParseTypeExprString } from "@/lib/type-expr-parse";
-import { FIELD_TYPES, type FieldType, type ModelField, type StructureModel, type StructureModelId, type TypeAlias, type TypeAliasId } from "./types";
+import { FIELD_TYPES, FieldType, type ModelField, type StructureModel, type StructureModelId, type TypeAlias, type TypeAliasId } from "./types";
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
@@ -127,12 +127,15 @@ export function materializeModelField(
     name: f.name,
     optional: f.optional,
     description: f.description,
+    example: ctx.prevField?.example,
+    // AI : preserve field-level deterministic flag — assistant edits must not reset probabilistic markers.
+    deterministic: ctx.prevField?.deterministic,
   };
 
   if (f.typeExpr?.trim()) {
     const parsed = tryParseTypeExprString(f.typeExpr.trim(), ctx.modelsForParse);
     if (parsed.ok) {
-      return { ...base, type: "json", typeExpr: parsed.expr, ref: undefined };
+      return { ...base, type: FieldType.Json, typeExpr: parsed.expr, ref: undefined };
     }
   }
 
@@ -141,14 +144,14 @@ export function materializeModelField(
     if (ctx.typeAliasNames.has(typeStr.toLowerCase())) {
       return {
         ...base,
-        type: "json",
+        type: FieldType.Json,
         typeExpr: { kind: "named", name: typeStr },
         ref: undefined,
       };
     }
     const parsed = tryParseTypeExprString(typeStr, ctx.modelsForParse);
     if (parsed.ok) {
-      return { ...base, type: "json", typeExpr: parsed.expr, ref: undefined };
+      return { ...base, type: FieldType.Json, typeExpr: parsed.expr, ref: undefined };
     }
   }
 

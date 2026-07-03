@@ -16,10 +16,10 @@ import {
   modelRefLabel,
   refPickerLabel,
 } from "@/lib/structure-ref"
-import type { FieldType, ModelField, StructureModel, StructureModelId } from "@/lib/types"
+import { FieldType, type ModelField, type StructureModel, type StructureModelId } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-const REF_TYPES: FieldType[] = ["model", "list[model]"]
+const REF_TYPES: FieldType[] = [FieldType.Model, FieldType.ListModel]
 
 export function isRefFieldType(type: FieldType): boolean {
   return REF_TYPES.includes(type)

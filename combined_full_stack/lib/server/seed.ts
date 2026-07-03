@@ -8,15 +8,15 @@ import { DOCUMENTS_DIR, REPO_ROOT } from "./config";
 import { isUnavailableSeedDoc, unavailableSeedDocMessage } from "../seed-doc";
 import { TypeExprSchema } from "./spine_types";
 import {
+  DocLabel,
   FIELD_TYPES,
   INPUT_TYPES,
   MODULE_META,
   STRATEGY_META,
-  type DocLabel,
+  InputType,
+  ModuleKind,
   type InferencePreset,
-  type InputType,
   type ModuleId,
-  type ModuleKind,
   type PipelineModule,
   type Project,
   type ProjectId,
@@ -59,6 +59,7 @@ const SeedFileSchema = z.object({
           ref: z.string().optional(),
           minItems: z.number().int().min(1).optional(),
           typeExpr: TypeExprSchema.optional(),
+          deterministic: z.boolean().optional(),
         }),
       ),
     }),
@@ -108,7 +109,7 @@ const SeedFileSchema = z.object({
     z.object({
       name: z.string(),
       type: InputTypeSchema,
-      label: enumOf(["inference", "training"] as DocLabel[]),
+      label: enumOf([DocLabel.Inference, DocLabel.Training]),
       file: z.string(), // filename under the repo /documents folder
     }),
   ),
@@ -334,8 +335,8 @@ export function blankProject(id: ProjectId): Project {
     lastOpenedAt: now,
     models: [],
     modules: [
-      { id: "mod_blank_in" as ModuleId, kind: "input", label: "Input", note: "Pipeline input document", inputType: "text", cached: true, avgMs: 80, avgCostCents: 0 },
-      { id: "mod_blank_out" as ModuleId, kind: "output", label: "Output", note: "", cached: true, avgMs: 40, avgCostCents: 0 },
+      { id: "mod_blank_in" as ModuleId, kind: ModuleKind.Input, label: "Input", note: "Pipeline input document", inputType: InputType.Text, cached: true, avgMs: 80, avgCostCents: 0 },
+      { id: "mod_blank_out" as ModuleId, kind: ModuleKind.Output, label: "Output", note: "", cached: true, avgMs: 40, avgCostCents: 0 },
     ],
     strategies: legalStrategies.map((s) => ({ ...s, id: `${s.id}_${id}` })),
   };

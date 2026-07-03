@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { StructureFieldRefPicker } from "@/components/structure-field-ref-picker"
-import { FIELD_TYPES, type FieldType, type ModelField, type StructureModel } from "@/lib/types"
+import { FIELD_TYPES, FieldType, type ModelField, type StructureModel } from "@/lib/types"
 import { fieldTypeLabel } from "@/lib/structure-field-labels"
 import { pickDefaultModelRef } from "@/lib/structure-ref"
 import { legacyFieldFromTypeExpr, formatTypeExprPy } from "@/lib/type-expr-parse"
@@ -18,7 +18,7 @@ import { fieldToTypeExpr, typeExprEqual, typeExprRefModelId } from "@/lib/server
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
-const REF_TYPES: FieldType[] = ["model", "list[model]"]
+const REF_TYPES: FieldType[] = [FieldType.Model, FieldType.ListModel]
 const PRESET_TYPES = FIELD_TYPES.filter((t) => !REF_TYPES.includes(t))
 const ALIAS_PREFIX = "alias:"
 
@@ -29,19 +29,19 @@ function isRefField(field: ModelField): boolean {
 
 function refFieldType(field: ModelField): FieldType {
   const expr = fieldToTypeExpr(field)
-  if (expr.kind === "list" && expr.item.kind === "ref") return "list[model]"
+  if (expr.kind === "list" && expr.item.kind === "ref") return FieldType.ListModel
   if (expr.kind === "optional" && expr.inner.kind === "list" && expr.inner.item.kind === "ref") {
-    return "list[model]"
+    return FieldType.ListModel
   }
-  if (expr.kind === "ref") return "model"
-  return field.type === "list[model]" ? "list[model]" : "model"
+  if (expr.kind === "ref") return FieldType.Model
+  return field.type === FieldType.ListModel ? FieldType.ListModel : FieldType.Model
 }
 
 function refFieldForPicker(field: ModelField): ModelField {
   const refId = typeExprRefModelId(fieldToTypeExpr(field))
   if (!refId) return field
-  const asList = refFieldType(field) === "list[model]"
-  return { ...field, type: asList ? "list[model]" : "model", ref: refId, typeExpr: undefined }
+  const asList = refFieldType(field) === FieldType.ListModel
+  return { ...field, type: asList ? FieldType.ListModel : FieldType.Model, ref: refId, typeExpr: undefined }
 }
 
 function resolveSelectValueWithAliases(
@@ -97,16 +97,16 @@ export function StructureFieldTypeEditor({
       const alias = typeAliases.find((t) => t.id === aliasId)
       if (!alias) return
       onUpdate({
-        type: "json",
+        type: FieldType.Json,
         typeExpr: { kind: "named", name: alias.name },
         ref: undefined,
       })
       return
     }
 
-    if (next === "model" || next === "list[model]") {
+    if (next === FieldType.Model || next === FieldType.ListModel) {
       onUpdate({
-        type: next,
+        type: next as FieldType,
         typeExpr: undefined,
         ref: pickDefaultModelRef(models, selectedId),
       })

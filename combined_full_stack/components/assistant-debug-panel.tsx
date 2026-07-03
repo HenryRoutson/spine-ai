@@ -4,6 +4,7 @@ import { useRef, useState } from "react"
 import { Check, Copy } from "lucide-react"
 import type { AssistantDebugEntry } from "@/lib/assistant-chat-types"
 import { formatAssistantDebugTrace } from "@/lib/assistant-debug"
+import { copyTextToClipboard } from "@/lib/clipboard"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
@@ -109,7 +110,7 @@ export function AssistantDebugPanel({
             { kind: "thinking" as const, text: liveThinking },
           ]
         : entries
-    await navigator.clipboard.writeText(formatAssistantDebugTrace(entriesForCopy))
+    await copyTextToClipboard(formatAssistantDebugTrace(entriesForCopy))
     setCopied(true)
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
     copyTimerRef.current = setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)

@@ -4,6 +4,7 @@ import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { assertCanStartRun, billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
 import { mergeBenchmarkStrategies, runBenchmark } from "@/lib/server/strategies";
 import { logger } from "@/lib/server/server_logger";
+import { DocLabel } from "@/lib/server/types";
 import type { DocId, ProjectId } from "@/lib/server/types";
 
 const apiLog = logger("api:abtest");
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
   }
 
   // AI : default task input = the oldest inference doc (the seeded source document).
-  const docId = inputDocId ?? [...store.docs()].reverse().find((d) => d.label === "inference")?.id;
+  const docId = inputDocId ?? [...store.docs()].reverse().find((d) => d.label === DocLabel.Inference)?.id;
   if (!docId) return apiError("no inference document in the store", 400);
 
   const billingKey = await getBillingUserKey();

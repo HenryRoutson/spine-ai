@@ -1,13 +1,5 @@
 // AI : client-safe shared-link DTOs — keep in sync with lib/server/shared_links.ts.
-import type {
-  DocId,
-  ModelId,
-  ModuleId,
-  InputType,
-  Project,
-  SharedLinkFundingMode,
-  SharedLinkId,
-} from "./types";
+import { RunSource, type DocId, type ModelId, type ModuleId, type InputType, type Project, type SharedLinkFundingMode, type SharedLinkId } from "./types";
 
 export type SharedLinkDefaultDoc = {
   moduleId: ModuleId;
@@ -55,6 +47,6 @@ export function sharedRunNotes(viewerName?: string): string {
   return who ? `${SHARED_RUN_NOTES_PREFIX} — ${who}` : SHARED_RUN_NOTES_PREFIX;
 }
 
-export function isSharedRun(run: { source?: string; sharedLinkId?: string }): boolean {
-  return run.source === "shared_link" || !!run.sharedLinkId;
+export function isSharedRun(run: { source?: RunSource; sharedLinkId?: string }): boolean {
+  return run.source === RunSource.SharedLink || !!run.sharedLinkId;
 }

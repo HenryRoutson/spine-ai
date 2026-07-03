@@ -1,3 +1,4 @@
+import { InputType } from "./types";
 import type { DocRef, ModuleId, PipelineModule } from "./types";
 import { isUnavailableSeedDoc, looksLikeUnavailableSeedDoc } from "./seed-doc";
 import {
@@ -51,7 +52,7 @@ export function validateInferenceDocContent(
       message: `seed doc missing on deploy — run sync-seeds or upload ${doc.name}`,
     };
   }
-  if (doc.type === "json" && inputTypesForModule(inputModule).includes("json")) {
+  if (doc.type === InputType.Json && inputTypesForModule(inputModule).includes(InputType.Json)) {
     try {
       JSON.parse(content);
     } catch (err) {
@@ -80,7 +81,7 @@ export function validateInferenceDocPreview(
 }
 
 export function inferenceDocNeedsFullContent(inputModule: PipelineModule, doc: DocRef): boolean {
-  return doc.type === "json" && inputTypesForModule(inputModule).includes("json");
+  return doc.type === InputType.Json && inputTypesForModule(inputModule).includes(InputType.Json);
 }
 
 export function collectInferenceInputIssues(

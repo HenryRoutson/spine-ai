@@ -1,5 +1,6 @@
 import { invariant } from "@/lib/assert"
 import { docsForProject } from "@/lib/project-docs"
+import { DocLabel } from "@/lib/types"
 import type { DocId, DocRef, ModuleId, PipelineModule, PipelineRun, Project } from "@/lib/types"
 import {
   docsForInputModule,
@@ -128,7 +129,7 @@ export function buildRunInputDocIds(
       const seeded = sortMultiInputDocs(
         scoped.filter(
           (d) =>
-            d.label === "inference" &&
+            d.label === DocLabel.Inference &&
             !used.has(d.id) &&
             docMatchesInputModule(d, mod),
         ),
@@ -149,7 +150,7 @@ export function buildRunInputDocIds(
     const fallback = scoped
       .filter(
         (d) =>
-          d.label === "inference" &&
+          d.label === DocLabel.Inference &&
           !used.has(d.id) &&
           docMatchesInputModule(d, mod),
       )

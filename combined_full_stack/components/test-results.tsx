@@ -9,11 +9,18 @@ import { JsonHighlight } from "@/components/highlight"
 import { SectionLabel } from "@/components/testing-editor"
 import { firstFailure } from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
-import type { RunTestStepResult } from "@/lib/types"
+import { RunTestStepStatus, type RunTestStepResult } from "@/lib/types"
 
 export function TestResults({ results, action }: { results: RunTestStepResult[]; action?: ReactNode }) {
   const failure = firstFailure(results)
-  const passed = results.filter((r) => r.status === "pass").length
+  const passed = results.filter((r) => r.status === RunTestStepStatus.Pass).length
+  // AI : skipped steps (input/combine) are recorded but never compared — out of the score.
+  const skipped = results.filter((r) => r.status === RunTestStepStatus.Skipped).length
+  const compared = results.length - skipped
+  const ignoredCount = results.reduce((n, r) => n + (r.ignoredPaths?.length ?? 0), 0)
+  const skippedNote =
+    (skipped ? ` · ${skipped} step(s) skipped` : "") +
+    (ignoredCount ? ` · ${ignoredCount} probabilistic field(s) ignored` : "")
   return (
     <section>
       <div className="flex items-center justify-between gap-2">
@@ -30,8 +37,8 @@ export function TestResults({ results, action }: { results: RunTestStepResult[];
       >
         {failure ? <CircleX className="h-3.5 w-3.5 shrink-0" /> : <CircleCheck className="h-3.5 w-3.5 shrink-0" />}
         {failure
-          ? `${passed}/${results.length} steps match — pipeline diverges at "${failure.label}"`
-          : `all ${results.length} expected outputs match`}
+          ? `${passed}/${compared} steps match — pipeline diverges at "${failure.label}"${skippedNote}`
+          : `all ${compared} expected outputs match${skippedNote}`}
       </p>
       <ul className="mt-2 space-y-1.5">
         {results.map((r) => (
@@ -44,7 +51,8 @@ export function TestResults({ results, action }: { results: RunTestStepResult[];
 
 function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; isFirstFailure: boolean }) {
   const [open, setOpen] = useState(isFirstFailure)
-  const failed = result.status !== "pass"
+  const failed =
+    result.status === RunTestStepStatus.Fail || result.status === RunTestStepStatus.NotReached
   return (
     <li
       className={cn(
@@ -63,21 +71,37 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
         ) : (
           <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
         )}
-        {result.status === "pass" ? (
+        {result.status === RunTestStepStatus.Pass ? (
           <CircleCheck className="h-3.5 w-3.5 shrink-0 text-chart-2" />
-        ) : result.status === "fail" ? (
+        ) : result.status === RunTestStepStatus.Fail ? (
           <CircleX className="h-3.5 w-3.5 shrink-0 text-destructive" />
         ) : (
           <MinusCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         )}
         <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{result.label}</span>
-        {result.status === "fail" && result.diffPath && (
+        {result.status === RunTestStepStatus.Fail && result.diffPath && (
           <span className="shrink-0 font-mono text-[10px] text-destructive">first diff at {result.diffPath}</span>
         )}
-        {result.status === "not-reached" && (
+        {result.status === RunTestStepStatus.NotReached && (
           <span className="shrink-0 font-mono text-[10px] text-muted-foreground">step produced no output</span>
         )}
+        {result.status === RunTestStepStatus.Skipped && (
+          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+            {result.skipReason ?? "skipped"}
+          </span>
+        )}
+        {result.status !== RunTestStepStatus.Skipped && !!result.ignoredPaths?.length && (
+          <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+            {result.ignoredPaths.length} field(s) ignored
+          </span>
+        )}
       </button>
+      {open && !!result.ignoredPaths?.length && (
+        // AI : what the compare ignored — probabilistic fields per the structure definitions
+        <p className="border-t border-border px-2.5 py-1.5 font-mono text-[10px] text-muted-foreground">
+          ignored probabilistic fields: {result.ignoredPaths.join(", ")}
+        </p>
+      )}
       {open && (
         <div className="grid grid-cols-1 gap-2 border-t border-border p-2.5 lg:grid-cols-2">
           <div>

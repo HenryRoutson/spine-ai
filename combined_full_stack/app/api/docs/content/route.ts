@@ -5,7 +5,8 @@ import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, MESSAGE_REQUIRED } from "@/lib/server/api-errors";
 import { linkDocToProject } from "@/lib/server/store";
 import { logger } from "@/lib/server/server_logger";
-import type { DocLabel, InputType, ProjectId } from "@/lib/server/types";
+import { DocLabel } from "@/lib/server/types";
+import type { InputType, ProjectId } from "@/lib/server/types";
 import { inputTypeFromFilename } from "@/lib/server/upload_constants";
 
 const apiLog = logger("api:docs-content");
@@ -47,7 +48,7 @@ function validateDocContent(body: DocContentBody): NextResponse | { name: string
     normalized = prettyJsonString(content);
   }
 
-  const label: DocLabel = body.label === "training" ? "training" : "inference";
+  const label: DocLabel = body.label === DocLabel.Training ? DocLabel.Training : DocLabel.Inference;
   return { name, type, content: normalized, label, projectId: body.projectId };
 }
 

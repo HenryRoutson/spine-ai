@@ -9,7 +9,7 @@ import {
 } from "../lib/markdown_table_parse";
 import { loadProjectSeed, SEEDS_DIR } from "../lib/server/seed";
 import { BUILTIN_DOCUMENT_ID } from "../lib/server/builtin_models";
-import type { FieldType, StructureDef, StructureModelId } from "../lib/server/types";
+import { FieldType, type StructureDef, type StructureModelId } from "../lib/server/types";
 
 const DOC_ID = BUILTIN_DOCUMENT_ID;
 
@@ -17,16 +17,17 @@ const DOC_ID = BUILTIN_DOCUMENT_ID;
 type StructureFieldDef = StructureDef["fields"][number];
 const sid = (id: string): StructureModelId => id as StructureModelId;
 const STRUCT = (def: StructureDef) => def;
+// AI : seeds are hand-written JSON-ish literals — accept the enum's wire strings and brand them here.
 const field = (
   id: string,
   name: string,
-  type: FieldType,
+  type: `${FieldType}`,
   description: string,
   extra: { ref?: string; minItems?: number } = {},
 ): StructureFieldDef => ({
   id,
   name,
-  type,
+  type: type as FieldType,
   optional: false,
   description,
   ...(extra.ref ? { ref: sid(extra.ref) } : {}),
@@ -595,7 +596,7 @@ const seeds: Record<string, unknown> = {
           {
             id: "f_subs",
             name: "student_submissions",
-            type: "list[document]",
+            type: FieldType.ListDocument,
             optional: false,
             description: "Student homework sheets",
             minItems: 1,

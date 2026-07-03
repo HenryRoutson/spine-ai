@@ -29,13 +29,13 @@ import { attachAssistantUsage } from "./assistant_billing";
 import { isUnnamedProjectName } from "@/lib/project-assistant-types";
 import {
   DEFAULT_MODEL,
+  DocLabel,
   INPUT_TYPES,
+  InputType,
   MODEL_OPTIONS,
-  type DocLabel,
-  type InputType,
+  ModuleKind,
   type ModelId,
   type ModuleId,
-  type ModuleKind,
   type PipelineModule,
   type Project,
   type StructureModel,
@@ -92,13 +92,13 @@ const modulePatchEntrySchema = z.object({
 
 const modelSpecSchema = structureModelSpecSchema;
 
-const ASSISTANT_DOC_TYPES = ["text", "json"] as const satisfies readonly InputType[];
+const ASSISTANT_DOC_TYPES = [InputType.Text, InputType.Json] as const satisfies readonly InputType[];
 
 const docSpecSchema = z.object({
   name: z.string(),
   type: z.enum(ASSISTANT_DOC_TYPES),
   content: z.string().max(32_000),
-  label: z.enum(["inference", "training"]).optional(),
+  label: z.enum([DocLabel.Inference, DocLabel.Training]).optional(),
 });
 
 const assistantResponseSchema = z.object({
@@ -190,7 +190,7 @@ function makeModuleFromSpec(
       kind: spec.kind,
       label: spec.label,
       note: spec.note,
-      inputType: spec.kind === "input" ? (spec.inputType as PipelineModule["inputType"]) ?? "pdf" : undefined,
+      inputType: spec.kind === ModuleKind.Input ? (spec.inputType as PipelineModule["inputType"]) ?? InputType.Pdf : undefined,
       inputNameContains: spec.inputNameContains,
       inputDescription: spec.inputDescription,
       inStructureId: spec.kind !== "input" ? inId ?? defaultOutForKind(spec.kind, models) : undefined,
@@ -217,7 +217,7 @@ function expandModuleSpecs(
         {
           ...makeModuleFromSpec(
             {
-              kind: "input",
+              kind: ModuleKind.Input,
               label: "Document Input",
               structureOut: spec.structureIn ?? spec.structureOut,
               note: spec.inputDescription?.trim() || `Side document for "${spec.label}"`,
@@ -293,7 +293,7 @@ function materializeDocs(
   if (!specs?.length) return [];
   return specs.map((d) => ({
     ...d,
-    label: (d.label ?? "inference") as DocLabel,
+    label: d.label ?? DocLabel.Inference,
   }));
 }
 

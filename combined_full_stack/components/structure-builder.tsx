@@ -18,7 +18,7 @@ import { TypeBuilderPanel } from "@/components/type-builder-panel"
 import { isLockedStructureModel } from "@/lib/structure"
 import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-validity"
 import { UNSET_TYPE_EXPR } from "@/lib/server/type_expr"
-import type { ModelField, StructureModel, TypeAlias } from "@/lib/types"
+import { FieldType, type ModelField, type StructureModel, type TypeAlias } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 type EditorTarget =
@@ -74,7 +74,7 @@ export function StructureBuilder() {
       id: uid(),
       name: "NewStruct",
       description: "",
-      fields: [{ id: uid(), name: "field", type: "text", optional: false, description: "" }],
+      fields: [{ id: uid(), name: "field", type: FieldType.Text, optional: false, description: "" }],
     }
     setModels([...models, m])
     setTarget({ kind: "struct", id: m.id })
@@ -131,7 +131,7 @@ export function StructureBuilder() {
           ...m,
           fields: [
             ...m.fields,
-            { id: uid(), name: "field", type: "text", optional: false, description: "" },
+            { id: uid(), name: "field", type: FieldType.Text, optional: false, description: "" },
           ],
         }
       }),
@@ -431,7 +431,9 @@ export function StructureBuilder() {
                   <span>Type</span>
                   <span>Description</span>
                   <span>Example</span>
-                  <span className="w-14 text-center">Opt</span>
+                  <span className="w-20 text-center" title="optional · deterministic (= exact-tested, ≈ probabilistic/ignored)">
+                    Opt · Det
+                  </span>
                 </div>
                 {selected.fields.map((f) => (
                   <StructureFieldRow

@@ -1,5 +1,5 @@
 import { runBilledCents } from "@/lib/run-metrics";
-import { type BillingPoint, type ModuleId, type PipelineRun, modelOption } from "./types";
+import { RunSource, type BillingPoint, type ModuleId, type PipelineRun, modelOption } from "./types";
 
 type DayLabel = string; // e.g. "Jun 11"
 
@@ -19,9 +19,9 @@ export function billingFromRuns(runs: PipelineRun[]): BillingPoint[] {
     for (const step of run.steps) {
       if (step.costCents <= 0) continue;
       const key =
-        run.source === "assistant"
+        run.source === RunSource.Assistant
           ? "project assistant"
-          : run.source === "shared_link"
+          : run.source === RunSource.SharedLink
             ? "shared link"
             : step.kind === "doc-to-text" && !step.model
               ? "doc-parse svc"

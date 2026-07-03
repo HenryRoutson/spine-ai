@@ -1,7 +1,7 @@
 // AI : HTTP transport layer for OpenRouter — slot limiting, retry, connection pooling, body builders.
 // AI : Consumed by openrouter_llm.ts (structured response API). Keep free of Zod / schema logic.
 import { Agent, fetch as undiciFetch, type Dispatcher } from "undici";
-import { type FailureKind } from "./types";
+import { FailureKind } from "./types";
 import { type ServerLogger, logger } from "./server_logger";
 import { DEEPSEEK_SLUG, OPENROUTER_AUTH_KEY_URL, OPENROUTER_CHAT_URL } from "./openrouter_slugs";
 import "./config";
@@ -288,7 +288,7 @@ async function fetchChat(
         attempt: attempt + 1,
         httpStatus: res.status,
         willRetry,
-        failureKind: "provider",
+        failureKind: FailureKind.Provider,
         failureDetail,
       }));
       if (willRetry) {
@@ -314,7 +314,7 @@ async function fetchChat(
       const failureDetail = "OpenRouter returned no message content";
       opts.onRoundTrip?.(inputChars, 0, false, latencyMs, roundTripMeta(opts, {
         attempt: attempt + 1,
-        failureKind: "provider",
+        failureKind: FailureKind.Provider,
         failureDetail,
       }));
       log.error(`llm provider error`, { failureKind: "provider", attempt: attempt + 1, detail: failureDetail });
@@ -340,7 +340,7 @@ async function fetchChat(
   const failureDetail = `OpenRouter failed after ${MAX_CHAT_ATTEMPTS} attempts: ${lastError.slice(0, 500)}`;
   opts.onRoundTrip?.(inputChars, 0, false, 0, roundTripMeta(opts, {
     attempt: MAX_CHAT_ATTEMPTS,
-    failureKind: "provider",
+    failureKind: FailureKind.Provider,
     failureDetail,
   }));
   log.error(`llm provider error`, { failureKind: "provider", attempt: MAX_CHAT_ATTEMPTS, detail: failureDetail.slice(0, 300) });
@@ -479,7 +479,7 @@ export async function fetchStreamingChat(
         attempt: attempt + 1,
         httpStatus: res.status,
         willRetry,
-        failureKind: "provider",
+        failureKind: FailureKind.Provider,
         failureDetail: `HTTP ${res.status}: ${lastError.slice(0, 500)}`,
       }));
       if (willRetry) {

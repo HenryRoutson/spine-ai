@@ -71,7 +71,8 @@
           "name": "summary",
           "type": "text",
           "optional": false,
-          "description": "Executive summary"
+          "description": "Executive summary",
+          "deterministic": false
         },
         {
           "id": "f_rep_rule_id",
@@ -92,7 +93,8 @@
           "name": "rationale",
           "type": "text",
           "optional": false,
-          "description": "Reasoning"
+          "description": "Reasoning",
+          "deterministic": false
         },
         {
           "id": "f_liability",

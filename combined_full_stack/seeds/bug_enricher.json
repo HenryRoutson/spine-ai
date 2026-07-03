@@ -36,7 +36,8 @@
           "name": "repro_steps",
           "type": "list[text]",
           "optional": false,
-          "description": "Numbered repro steps"
+          "description": "Numbered repro steps",
+          "deterministic": false
         },
         {
           "id": "f_sev",
@@ -50,14 +51,16 @@
           "name": "likely_component",
           "type": "text",
           "optional": false,
-          "description": "Suspected code area"
+          "description": "Suspected code area",
+          "deterministic": false
         },
         {
           "id": "f_summary",
           "name": "summary",
           "type": "text",
           "optional": false,
-          "description": "One-line title"
+          "description": "One-line title",
+          "deterministic": false
         }
       ]
     }

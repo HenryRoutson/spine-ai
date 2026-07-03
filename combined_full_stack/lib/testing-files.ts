@@ -4,14 +4,26 @@
 import { deepEqual, deepEqualDiffPath } from "@/lib/deep_equal"
 import { namedInputDocNames, resolveNamedRunInputs, type ResolvedNamedInputs } from "@/lib/inference-presets"
 import { labelAsStateKey, validatePipelineStateEntry } from "@/lib/server/pipeline_state"
+import { fieldToTypeExpr, stepSpineOutType } from "@/lib/server/type_expr"
 import { tryParseJson } from "@/lib/json-utils"
-import type { DocRef, PipelineModule, PipelineRun, Project, RunTestStepResult } from "@/lib/types"
+import { DocLabel, ModuleKind, RunTestStepStatus } from "@/lib/types"
+import type {
+  DocRef,
+  PipelineModule,
+  PipelineRun,
+  Project,
+  RunTestStepResult,
+  StructureModel,
+  TypeExpr,
+} from "@/lib/types"
 
 export const TESTING_FILE_SUFFIX = "_testing.json"
 
 type step_label_string = string
 type doc_name_string = string
 
+// AI : deterministic-ness is NOT stored here — it lives on structure fields
+// AI : (ModelField.deterministic); probabilistic fields are ignored for every test.
 export type SpineTestFile = {
   description?: string
   // AI : input step label → doc name(s) so a test pins its own inputs
@@ -67,7 +79,7 @@ function moduleByLabel(modules: PipelineModule[], label: string): PipelineModule
 }
 
 export function inputModulesOf(modules: PipelineModule[]): PipelineModule[] {
-  return modules.filter((m) => m.kind === "input")
+  return modules.filter((m) => m.kind === ModuleKind.Input)
 }
 
 // AI : does this test still fit the current pipeline? Labels may be stale, values may mismatch types.
@@ -114,7 +126,7 @@ export function validateTestFile(
       issues.push({ level: "error", where: label, message: "input step not found in the pipeline" })
       continue
     }
-    if (mod.kind !== "input") {
+    if (mod.kind !== ModuleKind.Input) {
       issues.push({ level: "error", where: label, message: `"${label}" is a ${mod.kind} step, not an input` })
       continue
     }
@@ -155,34 +167,142 @@ export function resolveTestRunInputs(
 export type TestStepResult = RunTestStepResult
 export type TestStepStatus = TestStepResult["status"]
 
+// AI : input/combine steps are not scored — run log now stores the full value (same shape as expected).
+function isComparableStep(m: PipelineModule): boolean {
+  return m.kind !== ModuleKind.Input && m.kind !== ModuleKind.Combine
+}
+
+export function skipReasonForTestStep(m: PipelineModule): string | undefined {
+  if (m.kind === ModuleKind.Input) return "Input — no computation"
+  if (m.kind === ModuleKind.Combine) return "Combine — not scored"
+  return undefined
+}
+
+// AI : golden fixtures use seed doc_ids; runs use content hashes — drop for skipped-step display.
+function stripDocIds(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripDocIds)
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (k === "doc_id") continue
+      out[k] = stripDocIds(v)
+    }
+    return out
+  }
+  return value
+}
+
+type field_path_string = string
+
+// AI : static walk of a type — every field path whose structure definition says
+// AI : deterministic:false (probabilistic — LLM prose that varies per run), e.g. "grades[].feedback".
+function collectProbabilisticPaths(
+  expr: TypeExpr | undefined,
+  models: StructureModel[],
+  path: field_path_string,
+  seen: Set<string>,
+  out: Set<field_path_string>,
+): void {
+  if (!expr) return
+  switch (expr.kind) {
+    case "optional":
+      return collectProbabilisticPaths(expr.inner, models, path, seen, out)
+    case "list":
+    case "set":
+      return collectProbabilisticPaths(expr.item, models, `${path}[]`, seen, out)
+    case "ref": {
+      if (seen.has(expr.modelId)) return
+      const model = models.find((m) => m.id === expr.modelId)
+      if (!model) return
+      for (const f of model.fields) {
+        const childPath = path ? `${path}.${f.name}` : f.name
+        if (f.deterministic === false) out.add(childPath)
+        else {
+          collectProbabilisticPaths(
+            fieldToTypeExpr(f),
+            models,
+            childPath,
+            new Set([...seen, expr.modelId]),
+            out,
+          )
+        }
+      }
+      return
+    }
+    default:
+      return
+  }
+}
+
+// AI : what a test would ignore for this step — drives the editor hint and the run report.
+export function probabilisticPathsForModule(
+  m: PipelineModule,
+  models: StructureModel[],
+): field_path_string[] {
+  const out = new Set<field_path_string>()
+  collectProbabilisticPaths(stepSpineOutType(m), models, "", new Set(), out)
+  return [...out].sort()
+}
+
+// AI : structural walk mirroring the path grammar above — array items normalize to "[]",
+// AI : so a value path can be matched against the static probabilistic paths and dropped.
+function stripPaths(value: unknown, paths: Set<field_path_string>, path: field_path_string): unknown {
+  if (value === null || typeof value !== "object") return value
+  if (Array.isArray(value)) return value.map((v) => stripPaths(v, paths, `${path}[]`))
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    const childPath = path ? `${path}.${k}` : k
+    if (paths.has(childPath)) continue
+    out[k] = stripPaths(v, paths, childPath)
+  }
+  return out
+}
+
 // AI : the pinpoint view — first failing step in pipeline order is where the pipeline goes wrong.
+// AI : Only deterministic fields are compared; probabilistic ones surface as ignoredPaths.
 export function compareRunToTest(
   run: PipelineRun,
   test: SpineTestFile,
-  modules: PipelineModule[],
+  project: Pick<Project, "modules" | "models">,
 ): TestStepResult[] {
   const expectedByKey = new Map(
     Object.entries(test.expectedOutputs).map(([label, v]) => [labelAsStateKey(label), v]),
   )
   const results: TestStepResult[] = []
-  for (const m of modules) {
+  for (const m of project.modules) {
     const key = labelAsStateKey(m.label)
     if (!expectedByKey.has(key)) continue
     const expected = expectedByKey.get(key)
     const step = run.steps.find((s) => labelAsStateKey(s.label) === key)
     if (!step || step.outputJson === undefined) {
-      results.push({ label: m.label, status: "not-reached", expected })
+      results.push({ label: m.label, status: RunTestStepStatus.NotReached, expected })
       continue
     }
     const parsed = tryParseJson(step.outputJson)
     const actual = parsed.ok ? parsed.value : step.outputJson
-    if (deepEqual(actual, expected)) {
-      results.push({ label: m.label, status: "pass", expected, actual })
+    if (!isComparableStep(m)) {
+      results.push({
+        label: m.label,
+        status: RunTestStepStatus.Skipped,
+        skipReason: skipReasonForTestStep(m),
+        expected: stripDocIds(expected),
+        actual: actual === undefined ? undefined : stripDocIds(actual),
+      })
+      continue
+    }
+    const probabilistic = probabilisticPathsForModule(m, project.models)
+    const ignoredPaths = probabilistic.length ? probabilistic : undefined
+    const pathSet = new Set(probabilistic)
+    const expectedCore = stripPaths(expected, pathSet, "")
+    const actualCore = stripPaths(actual, pathSet, "")
+    if (deepEqual(actualCore, expectedCore)) {
+      results.push({ label: m.label, status: RunTestStepStatus.Pass, ignoredPaths, expected, actual })
     } else {
       results.push({
         label: m.label,
-        status: "fail",
-        diffPath: deepEqualDiffPath(actual, expected),
+        status: RunTestStepStatus.Fail,
+        diffPath: deepEqualDiffPath(actualCore, expectedCore),
+        ignoredPaths,
         expected,
         actual,
       })
@@ -192,7 +312,9 @@ export function compareRunToTest(
 }
 
 export function firstFailure(results: TestStepResult[]): TestStepResult | undefined {
-  return results.find((r) => r.status !== "pass")
+  return results.find(
+    (r) => r.status === RunTestStepStatus.Fail || r.status === RunTestStepStatus.NotReached,
+  )
 }
 
 // AI : starter file — golden outputs when the project ships them; otherwise just the output
@@ -200,20 +322,20 @@ export function firstFailure(results: TestStepResult[]): TestStepResult | undefi
 export function testFileSkeleton(project: Project, projectDocs: DocRef[]): string {
   const inputs: Record<step_label_string, doc_name_string> = {}
   for (const m of inputModulesOf(project.modules)) {
-    const candidate = projectDocs.find((d) => d.label === "inference" && !isTestingFileName(d.name))
+    const candidate = projectDocs.find((d) => d.label === DocLabel.Inference && !isTestingFileName(d.name))
     inputs[labelAsStateKey(m.label)] = candidate?.name ?? ""
   }
   const golden = project.expectedOutputs ?? {}
   const expectedOutputs: Record<step_label_string, unknown> = {}
   for (const m of project.modules) {
-    if (m.kind === "input") continue
+    if (m.kind === ModuleKind.Input) continue
     const key = labelAsStateKey(m.label)
     if (!key) continue
     if (key in golden) expectedOutputs[key] = golden[key]
   }
   if (!Object.keys(expectedOutputs).length) {
     for (const m of project.modules) {
-      if (m.kind !== "output") continue
+      if (m.kind !== ModuleKind.Output) continue
       const key = labelAsStateKey(m.label)
       if (key) expectedOutputs[key] = null
     }

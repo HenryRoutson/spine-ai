@@ -1,6 +1,7 @@
 import { sanitizeFieldName } from "@/lib/csv-parse"
 import { isSharedStructureModel } from "@/lib/server/builtin_models"
 import { collectTypeExprRefModelIds, fieldToTypeExpr } from "@/lib/server/type_expr"
+import { FieldType } from "@/lib/types"
 import type { ModelField, StructureModel, StructureModelId } from "@/lib/types"
 
 function toPascalCase(raw: string): string {
@@ -154,15 +155,15 @@ export function defaultModelTypeExprString(
 }
 
 export function refPickerLabel(fieldType: ModelField["type"]): string {
-  return fieldType === "list[model]" ? "↳ references model (list)" : "↳ references model"
+  return fieldType === FieldType.ListModel ? "↳ references model (list)" : "↳ references model"
 }
 
 const MAPPING_RULE_NAME = "MappingRule"
 
 const MAPPING_RULE_FIELDS: ModelField[] = [
-  { id: "f_source", name: "source", type: "text", optional: false, description: "" },
-  { id: "f_transform", name: "transform", type: "text", optional: true, description: "" },
-  { id: "f_default", name: "default", type: "text", optional: true, description: "" },
+  { id: "f_source", name: "source", type: FieldType.Text, optional: false, description: "" },
+  { id: "f_transform", name: "transform", type: FieldType.Text, optional: true, description: "" },
+  { id: "f_default", name: "default", type: FieldType.Text, optional: true, description: "" },
 ]
 
 // AI : TODO bug — silent remap hides broken field refs; surface computeStructureInvalid instead.

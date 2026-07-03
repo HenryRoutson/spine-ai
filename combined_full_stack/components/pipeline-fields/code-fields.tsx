@@ -15,7 +15,7 @@ import {
   languageOfEntry,
   makeCustomCodeEntry,
 } from "@/lib/custom_code_entries"
-import type { CustomCodeLanguage, PipelineModule } from "@/lib/types"
+import { CustomCodeLanguage, type PipelineModule } from "@/lib/types"
 import { PipelineField, StaticValue } from "@/components/pipeline-fields/shared"
 
 type CodeModuleFieldsProps = {
@@ -106,7 +106,7 @@ export function CodeModuleFields({ selected, edit, onUpdate }: CodeModuleFieldsP
             className="h-8 text-xs"
             onClick={() => {
               onUpdate!({
-                fallbackList: [...(selected.fallbackList ?? []), makeCustomCodeEntry("typescript", "")],
+                fallbackList: [...(selected.fallbackList ?? []), makeCustomCodeEntry(CustomCodeLanguage.TypeScript, "")],
               })
             }}
           >

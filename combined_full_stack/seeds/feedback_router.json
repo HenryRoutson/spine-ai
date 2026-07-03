@@ -48,7 +48,8 @@
           "name": "representative_quote",
           "type": "text",
           "optional": false,
-          "description": "Short quote"
+          "description": "Short quote",
+          "deterministic": false
         }
       ]
     }

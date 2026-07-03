@@ -1,10 +1,11 @@
+import { ModuleKind } from "@/lib/types"
 import type { PipelineModule, RunStep } from "@/lib/types"
 
 // AI : rebuild the pipeline shape a run executed against — step order + labels/kinds at run time.
 export function modulesFromRunSteps(steps: RunStep[]): PipelineModule[] {
   return steps.map((step) => ({
     id: step.moduleId,
-    kind: step.kind === "doc-to-text" ? "input" : step.kind,
+    kind: step.kind === "doc-to-text" ? ModuleKind.Input : step.kind,
     label: step.label,
     note: step.label,
     cached: true,

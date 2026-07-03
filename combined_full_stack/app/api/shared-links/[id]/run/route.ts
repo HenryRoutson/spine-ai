@@ -49,6 +49,7 @@ import {
 } from "@/lib/server/shared-link-session";
 import { isAuthSession, requireAuth } from "@/lib/server/require_auth";
 import { logger } from "@/lib/server/server_logger";
+import { DocLabel, RunSource } from "@/lib/server/types";
 import type { DocId, DocRef, ModuleId, SharedLinkId } from "@/lib/server/types";
 
 export const maxDuration = 300;
@@ -100,7 +101,7 @@ async function resolveAssignment(
             id,
             name: loaded.name,
             type: loaded.type,
-            label: "inference",
+            label: DocLabel.Inference,
             sizeKb: Math.max(1, Math.round(loaded.content.length / 1024)),
             uploadedAt: Date.now(),
             preview: loaded.content.slice(0, 180),
@@ -226,7 +227,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           cacheOwnerId: link.ownerId,
           projectOverride: project,
           runMeta: {
-            source: "shared_link",
+            source: RunSource.SharedLink,
             sharedLinkId: link.id,
             viewerName: body.viewerName?.trim(),
             viewerSessionId: sessionId,

@@ -1,3 +1,4 @@
+import { InputType } from "@/lib/types"
 import type { DocId, DocRef, RunStep } from "@/lib/types"
 import type { DocViewMode } from "@/lib/doc-viewer"
 import { isMarkdownDoc, isPdfDoc } from "@/lib/doc-content"
@@ -75,7 +76,7 @@ export function isDocReferenceOutputJson(json?: string): boolean {
 }
 
 export function resolveDocRef(docs: DocRef[], docId: DocId): Pick<DocRef, "id" | "name" | "type"> {
-  return docs.find((d) => d.id === docId) ?? { id: docId, name: docId, type: "text" }
+  return docs.find((d) => d.id === docId) ?? { id: docId, name: docId, type: InputType.Text }
 }
 
 type StepOutputLike = {

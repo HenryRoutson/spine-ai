@@ -20,6 +20,7 @@ export function runLogText(run: PipelineRun): string {
     lines.push(`── Test · ${run.test.testDocName} ──`)
     for (const r of run.test.results) {
       lines.push(`[${r.status.toUpperCase()}] ${r.label}${r.diffPath ? `  (diff at ${r.diffPath})` : ""}`)
+      if (r.ignoredPaths?.length) lines.push(`   Ignored (probabilistic): ${r.ignoredPaths.join(", ")}`)
       lines.push(`   Expected: ${JSON.stringify(r.expected)}`)
       if (r.actual !== undefined) lines.push(`   Actual:   ${JSON.stringify(r.actual)}`)
     }

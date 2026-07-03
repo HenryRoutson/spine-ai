@@ -54,6 +54,7 @@ import {
   type TestStepResult,
 } from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
+import { DocLabel, InputType, RunSource } from "@/lib/types"
 import type { DocId, DocRef, ModuleId, PipelineModule, Project } from "@/lib/types"
 
 type TestDocState = {
@@ -162,9 +163,9 @@ export function Testing() {
     try {
       const doc = await addDocContent(
         nextTestFileName(projectDocs),
-        "json",
+        InputType.Json,
         testFileSkeleton(project, projectDocs),
-        "training",
+        DocLabel.Training,
         project.id,
       )
       invalidateDocText(doc.id)
@@ -187,7 +188,7 @@ export function Testing() {
     }
     try {
       await removeDoc(state.doc.id, project.id)
-      const doc = await addDocContent(state.doc.name, "json", draft, "training", project.id)
+      const doc = await addDocContent(state.doc.name, InputType.Json, draft, DocLabel.Training, project.id)
       invalidateDocText(doc.id)
       setContents(({ [state.doc.id]: _old, [doc.id]: _stale, ...rest }) => rest)
       selectTest(doc.id)
@@ -238,7 +239,7 @@ export function Testing() {
         // AI : no run-dedupe — every test gets its own Logging entry tagged "test" with its
         // AI : verdict attached; per-step caching still makes identical reruns ~free.
         true,
-        "testing", // AI : flags the run in Logging (spec § Testing)
+        RunSource.Testing, // AI : flags the run in Logging (spec § Testing)
       )
       refreshBilling().catch(console.error)
       const { run } = await awaitRun(jobId, {
@@ -247,7 +248,7 @@ export function Testing() {
         onHumanReview: () => Promise.resolve("approved" as const),
       })
       if (!runs.some((r) => r.id === run.id)) addRun(run)
-      const report = compareRunToTest(run, state.test, modules)
+      const report = compareRunToTest(run, state.test, project)
       setResults(report)
       setResultRunId(run.id)
       setRunPhase("done")
@@ -284,7 +285,7 @@ export function Testing() {
     try {
       const existing = projectDocs.find((d) => d.name === generated.name)
       if (existing) await removeDoc(existing.id, project.id)
-      const doc = await addDocContent(generated.name, "json", generated.content, "training", project.id)
+      const doc = await addDocContent(generated.name, InputType.Json, generated.content, DocLabel.Training, project.id)
       invalidateDocText(doc.id)
       setContents(({ [doc.id]: _stale, ...rest }) => rest)
       setAiGenerated(null)

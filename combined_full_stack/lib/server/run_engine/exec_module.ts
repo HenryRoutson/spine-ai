@@ -1,5 +1,5 @@
 import { assertNever } from "@/lib/assert";
-import type { PipelineModule } from "../types";
+import { ModuleKind, type PipelineModule } from "../types";
 import type { ExecResult, RunCtx, RunLogger } from "./engine_types";
 import { execInputStep } from "./steps/input";
 import { execLlmStep } from "./steps/llm";
@@ -17,25 +17,25 @@ import {
 export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   log.debug(`execModule start`, { moduleId: m.id, kind: m.kind, label: m.label });
   switch (m.kind) {
-    case "input":
+    case ModuleKind.Input:
       return execInputStep(m, ctx, log);
-    case "llm":
+    case ModuleKind.Llm:
       return execLlmStep(m, ctx, log);
-    case "combine":
+    case ModuleKind.Combine:
       return execCombineStep(m, ctx, log);
-    case "transform":
+    case ModuleKind.Transform:
       return execTransformStep(m, ctx, log);
-    case "custom-code":
+    case ModuleKind.CustomCode:
       return execCustomCodeStep(m, ctx, log);
-    case "llm-batch":
+    case ModuleKind.LlmBatch:
       return execLlmBatchStep(m, ctx, log);
-    case "quote":
+    case ModuleKind.Quote:
       return execQuoteStep(m, ctx, log);
-    case "output":
+    case ModuleKind.Output:
       return execOutputStep(m, ctx, log);
-    case "assert":
+    case ModuleKind.Assert:
       return execAssertStep(m, ctx, log);
-    case "human-review":
+    case ModuleKind.HumanReview:
       return execHumanReviewStep(m, ctx, log);
     default: {
       const unreachable: never = m.kind;

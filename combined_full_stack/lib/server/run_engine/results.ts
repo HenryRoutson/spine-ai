@@ -8,6 +8,11 @@ import type { StepCacheArtifact } from "../step_cache";
 import { materializeHints, materializeStepOutput, modelById, prevModuleFor } from "./helpers";
 import type { ExecResult, RunCtx } from "./engine_types";
 
+// AI : run log outputJson — full step value so tests/logging match pipeline state (not ref summaries).
+export function jsonStringifyStepValue(value: unknown): string {
+  return JSON.stringify(value, null, 2);
+}
+
 export function resultFromCache(m: PipelineModule, cached: StepCacheArtifact, ctx: RunCtx): ExecResult {
   const valueDocId =
     cached.docId ??
@@ -28,7 +33,7 @@ export function resultFromCache(m: PipelineModule, cached: StepCacheArtifact, ct
 
   const json =
     cached.json ??
-    (docId && m.kind === "input" ? JSON.stringify({ doc_id: docId }, null, 2) : undefined);
+    (cached.value != null ? jsonStringifyStepValue(cached.value) : undefined);
 
   return {
     value: cached.value,

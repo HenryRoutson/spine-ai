@@ -8,6 +8,7 @@ import {
 } from "@/lib/inference-input-core"
 import { resolveNamedRunInputs } from "@/lib/inference-presets"
 import { docsForProject } from "@/lib/project-docs"
+import { DocLabel } from "@/lib/types"
 import type { DocRef, PipelineModule, Project } from "@/lib/types"
 
 export { inputNameRestrictionLabel } from "@/lib/inference-input-core"
@@ -49,7 +50,7 @@ export function passableDocsForInputModule(
   inputModule: PipelineModule,
 ): DocRef[] {
   const scoped = docsForProject(docs, project)
-  return scoped.filter((d) => d.label === "inference" && docMatchesInputModule(d, inputModule))
+  return scoped.filter((d) => d.label === DocLabel.Inference && docMatchesInputModule(d, inputModule))
 }
 
 export function excludedDocsForInputModule(
@@ -57,7 +58,7 @@ export function excludedDocsForInputModule(
   project: Project,
   inputModule: PipelineModule,
 ): { doc: DocRef; reason: InputDocExclusionReason }[] {
-  const scoped = docsForProject(docs, project).filter((d) => d.label === "inference")
+  const scoped = docsForProject(docs, project).filter((d) => d.label === DocLabel.Inference)
   return scoped.flatMap((doc) => {
     if (docMatchesInputModule(doc, inputModule)) return []
     const reason = exclusionReasonForInputModule(doc, inputModule)

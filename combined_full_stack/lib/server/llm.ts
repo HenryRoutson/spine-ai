@@ -11,7 +11,7 @@ import {
   type VisionAttachment,
 } from "./openrouter_llm";
 import { type ServerLogger } from "./server_logger";
-import { type LlmCallRecord, type ModelId, slugFor } from "./types";
+import { FailureKind, LlmCallStatus, type LlmCallRecord, type ModelId, slugFor } from "./types";
 import { type UsageLedger } from "./usage";
 
 // AI : single place to call the LLM with a demo ModelId — maps id→slug and bills the ledger.
@@ -44,12 +44,12 @@ function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
         inputChars,
         outputChars,
         latencyMs,
-        status: ok ? "ok" : "error",
+        status: ok ? LlmCallStatus.Ok : LlmCallStatus.Error,
         attempt: meta?.attempt,
         promptIndex: meta?.promptIndex ?? ctx.promptIndex,
         round: meta?.round ?? ctx.round,
         httpStatus: meta?.httpStatus,
-        failureKind: meta?.failureKind ?? (ok ? undefined : "provider"),
+        failureKind: meta?.failureKind ?? (ok ? undefined : FailureKind.Provider),
         failureDetail: meta?.failureDetail,
       });
     },
@@ -58,7 +58,7 @@ function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
         inputChars: detail.inputChars,
         outputChars: detail.replyChars,
         latencyMs: 0,
-        status: "error",
+        status: LlmCallStatus.Error,
         attempt: detail.attempt,
         promptIndex: detail.promptIndex ?? ctx.promptIndex,
         round: detail.round ?? ctx.round ?? detail.attempt - 1,

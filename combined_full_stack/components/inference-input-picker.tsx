@@ -34,6 +34,7 @@ import { Input } from "@/components/ui/input"
 import { confidentialUploadWarning } from "@/lib/confidential-upload"
 import { cn } from "@/lib/utils"
 import { timeAgo } from "@/lib/time-ago"
+import { DocLabel } from "@/lib/types"
 import type { DocId, DocRef, InputType, PipelineModule } from "@/lib/types"
 
 const TYPE_ICON: Record<InputType, typeof FileText> = {
@@ -99,7 +100,7 @@ export function InferenceInputPickerPopup({
     }
     setUploading(true)
     try {
-      const doc = await addDoc(files[0], "inference", project.id)
+      const doc = await addDoc(files[0], DocLabel.Inference, project.id)
       if (passableDocsForInputModule([doc], project, inputModule).some((d) => d.id === doc.id)) {
         onSelect(doc)
       }

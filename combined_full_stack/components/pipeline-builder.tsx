@@ -24,7 +24,7 @@ import { moduleMetrics } from "@/lib/billing"
 import { combinePairIds } from "@/lib/pipeline-layout"
 import { KIND_COLOR, KIND_ICON } from "@/lib/module-ui"
 import { makeModule } from "@/lib/pipeline-module-factory"
-import { MODULE_META, type ModuleKind, type PipelineModule, type ModuleId } from "@/lib/types"
+import { MODULE_META, ModuleKind, type PipelineModule, type ModuleId } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
 import { PipelineCanvas } from "@/components/pipeline-canvas"
 import { PipelineSummaryBox } from "@/components/pipeline-summary-box"
@@ -47,6 +47,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
+import { copyTextToClipboard } from "@/lib/clipboard"
 import { downloadBlob } from "@/lib/download-blob"
 
 export function PipelineBuilder() {
@@ -71,10 +72,10 @@ export function PipelineBuilder() {
 
   function insertModule(kind: ModuleKind, at = modules.length) {
     const fresh: PipelineModule[] =
-      kind === "combine"
+      kind === ModuleKind.Combine
         ? [
-            { ...makeModule("input", models, globalModel), label: "Document Input" },
-            makeModule("combine", models, globalModel),
+            { ...makeModule(ModuleKind.Input, models, globalModel), label: "Document Input" },
+            makeModule(ModuleKind.Combine, models, globalModel),
           ]
         : [makeModule(kind, models, globalModel)]
     const next = [...modules.slice(0, at), ...fresh, ...modules.slice(at)]
@@ -139,7 +140,7 @@ export function PipelineBuilder() {
     const errorsBlock = validationErrors.trim()
       ? `\n\nCurrent pipeline validation errors:\n${validationErrors}\n`
       : "\n\nCurrent pipeline: valid (no I/O errors).\n"
-    await navigator.clipboard.writeText(`${json}${errorsBlock}`)
+    await copyTextToClipboard(`${json}${errorsBlock}`)
     setCopied(true)
     setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)
   }

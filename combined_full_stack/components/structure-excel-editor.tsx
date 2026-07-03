@@ -3,6 +3,7 @@
 import { Plus, Trash2, Lock, Sparkles, AlertTriangle } from "lucide-react"
 import { useStore, uid } from "@/lib/store"
 import {
+  FieldType,
   type ModelField,
   type StructureModel,
 } from "@/lib/types"
@@ -33,7 +34,7 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
       id: uid(),
       name: "NewModel",
       description: "",
-      fields: [{ id: uid(), name: "field", type: "text", optional: false, description: "" }],
+      fields: [{ id: uid(), name: "field", type: FieldType.Text, optional: false, description: "" }],
     }
     setModels([...models, m])
     onSelectId(m.id)
@@ -53,7 +54,7 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
       ...selected,
       fields: [
         ...selected.fields,
-        { id: uid(), name: "field", type: "text", optional: false, description: "" },
+        { id: uid(), name: "field", type: FieldType.Text, optional: false, description: "" },
       ],
     })
   }
@@ -305,7 +306,7 @@ function FieldRow({ field, fields, rowIdx, locked, models, selectedId, onUpdate,
         <tr className={cn(stripe && "bg-secondary/15")}>
           <td className="border-b border-r border-border bg-secondary/25" />
           <td colSpan={6} className="border-b border-border px-2 py-1 text-[10px] text-amber-700 dark:text-amber-500">
-            Flexible data stores anything — prefer &ldquo;{fieldTypeLabel("model")}&rdquo; or a Type from the sidebar.
+            Flexible data stores anything — prefer &ldquo;{fieldTypeLabel(FieldType.Model)}&rdquo; or a Type from the sidebar.
           </td>
         </tr>
       )}

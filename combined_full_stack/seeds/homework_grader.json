@@ -236,7 +236,8 @@
           "name": "feedback",
           "type": "text",
           "optional": false,
-          "description": "Marking comments"
+          "description": "Marking comments",
+          "deterministic": false
         }
       ]
     }

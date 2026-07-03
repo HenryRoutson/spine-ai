@@ -19,12 +19,13 @@ import type {
   ProjectId,
   RunJob,
   RunJobId,
+  RunSource,
   RunStepStatus,
   StepDescriptionFields,
   StepProgress,
   StepSubProgress,
 } from "@/lib/types"
-import type { ClientStepSpec } from "@/lib/run-types"
+import { JobLogLevel, type ClientStepSpec } from "@/lib/run-types"
 
 export type StepUiState = StepDescriptionFields & {
   status: StepProgress["status"] | "idle"
@@ -115,7 +116,7 @@ export async function startRun(
   inputDocIds: DocId[] = [],
   inputDocsByModule?: Partial<Record<ModuleId, DocId[]>>,
   allowDuplicateRuns = false,
-  source?: "testing",
+  source?: RunSource.Testing,
 ): Promise<StartRunResult> {
   const res = await fetch(API_ROUTES.runs, {
     method: "POST",
@@ -196,7 +197,7 @@ function pipelineLogToConsole(entry: JobLogEntry): void {
 }
 
 function clientStepFailureLogLevel(tag: string): JobLogEntry["level"] {
-  return tag === "assert" || tag === "custom-code" ? "warn" : "error"
+  return tag === "assert" || tag === "custom-code" ? JobLogLevel.Warn : JobLogLevel.Error
 }
 
 function clientStepSubmitError(kind: string, err: unknown): string {
@@ -280,7 +281,7 @@ export async function awaitJobCompletion(
         for (const f of failures) {
           clientLogs.push({
             at: Date.now(),
-            level: "warn",
+            level: JobLogLevel.Warn,
             tag,
             line: formatCustomCodeFailureLog(f, tag),
             moduleId,
@@ -289,7 +290,7 @@ export async function awaitJobCompletion(
         if (failures.length) {
           clientLogs.push({
             at: Date.now(),
-            level: "info",
+            level: JobLogLevel.Info,
             tag,
             line: `${tag} succeeded on attempt ${attemptIndex + 1} (${language}) after ${failures.length} fallback(s)`,
             moduleId,

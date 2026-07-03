@@ -4,7 +4,7 @@ import { useMemo, useRef, useState, useEffect } from "react"
 import { useStore } from "@/lib/store"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { useAppShell } from "@/lib/app-shell"
-import { docsForProject } from "@/lib/project-docs"
+import { docLabelDisplay, docsForProject } from "@/lib/project-docs"
 import { DocProjectPicker } from "@/components/doc-project-picker"
 import { WindowHeader } from "@/components/window-header"
 import { Badge } from "@/components/ui/badge"
@@ -31,7 +31,8 @@ import { isTestingFileName } from "@/lib/testing-files"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
-import type { DocLabel, DocRef, InputType } from "@/lib/types"
+import { DocLabel } from "@/lib/types"
+import type { DocRef, InputType } from "@/lib/types"
 
 const TYPE_ICON: Record<InputType, typeof FileText> = {
   pdf: FileText,
@@ -140,8 +141,8 @@ export function Documents() {
             className="h-8 pl-8 font-mono text-xs"
           />
         </div>
-        {/* AI : "testing" docs are stored under the "training" DocLabel; re-click to clear the filter. */}
-        {(["inference", "training"] as const).map((f) => (
+        {/* AI : "testing" docs are stored under the legacy Training DocLabel; re-click to clear the filter. */}
+        {[DocLabel.Inference, DocLabel.Training].map((f) => (
           <Button
             key={f}
             size="sm"
@@ -149,7 +150,7 @@ export function Documents() {
             className={cn("h-8 capitalize", filter !== f && "bg-transparent")}
             onClick={() => setFilter(filter === f ? "all" : f)}
           >
-            {f === "training" ? "testing" : f}
+            {docLabelDisplay(f)}
           </Button>
         ))}
       </div>
@@ -164,7 +165,7 @@ export function Documents() {
           onDrop={(e) => {
             e.preventDefault()
             setDragOver(false)
-            ingest(e.dataTransfer.files, "inference")
+            ingest(e.dataTransfer.files, DocLabel.Inference)
           }}
           onClick={() => fileRef.current?.click()}
           className={cn(
@@ -174,7 +175,7 @@ export function Documents() {
         >
           <UploadCloud className={cn("h-5 w-5", dragOver ? "text-primary" : "text-muted-foreground")} />
           <p className="text-xs font-medium">Drop files to add to the store</p>
-          <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => ingest(e.target.files, "inference")} />
+          <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => ingest(e.target.files, DocLabel.Inference)} />
         </div>
         {uploadWarning && (
           <p className="mt-2 flex items-center gap-1.5 font-mono text-[10px] text-destructive">
@@ -219,10 +220,10 @@ export function Documents() {
                       variant="outline"
                       className={cn(
                         "font-mono text-[9px] capitalize",
-                        doc.label === "training" ? "border-chart-2/40 text-chart-2" : "border-primary/40 text-primary",
+                        doc.label === DocLabel.Training ? "border-chart-2/40 text-chart-2" : "border-primary/40 text-primary",
                       )}
                     >
-                      {doc.label}
+                      {docLabelDisplay(doc.label)}
                     </Badge>
                     {isTest && (
                       <Badge variant="outline" className="border-chart-3/40 font-mono text-[9px] text-chart-3">

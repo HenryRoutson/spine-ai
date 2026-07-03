@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { dataDir } from "./config";
 import { hashContent, saveOriginalDocBytes, type Store } from "./store";
 import { shouldSaveOriginalBytes } from "./doc_upload_parse";
-import type { DocId, DocLabel, DocRef, InputType, ModuleId, SharedLinkId } from "./types";
+import { DocLabel } from "./types";
+import { InputType, type DocId, type DocRef, type ModuleId, type SharedLinkId } from "./types";
 import type { SharedLinkDefaultDoc } from "@/lib/shared-link-types";
 
 function linksDir(): string {
@@ -53,7 +54,7 @@ export function loadDefaultDocContent(
   if (fromInline?.content != null) {
     return {
       content: fromInline.content,
-      type: fromInline.type ?? "text",
+      type: fromInline.type ?? InputType.Text,
       name: filename,
     };
   }
@@ -63,7 +64,7 @@ export function loadDefaultDocContent(
   const metaPath = `${textPath}.meta.json`;
   const meta = existsSync(metaPath)
     ? (JSON.parse(readFileSync(metaPath, "utf8")) as { type: InputType; filename: string })
-    : { type: "text" as InputType, filename };
+    : { type: InputType.Text, filename };
   return { content: readFileSync(textPath, "utf8"), type: meta.type, name: meta.filename ?? filename };
 }
 
@@ -81,7 +82,7 @@ export async function saveSessionUpload(
     id,
     name: file.name,
     type,
-    label: "inference",
+    label: DocLabel.Inference,
     sizeKb: Math.max(1, Math.round(content.length / 1024)),
     uploadedAt: Date.now(),
     preview: content.slice(0, 180),
@@ -101,7 +102,7 @@ export async function saveSessionUpload(
     saveOriginalDocBytes(id, fileBytes, ext);
   }
   const existing = readSessionDocs(linkId, sessionId).filter((d) => d.moduleId !== moduleId);
-  existing.push({ id, name: doc.name, type, label: "inference", moduleId });
+  existing.push({ id, name: doc.name, type, label: DocLabel.Inference, moduleId });
   writeSessionDocs(linkId, sessionId, existing);
   return doc;
 }
@@ -149,7 +150,7 @@ export function overlayStoreForSharedRun(
       id,
       name: loaded.name,
       type: loaded.type,
-      label: "inference",
+      label: DocLabel.Inference,
       sizeKb: Math.max(1, Math.round(loaded.content.length / 1024)),
       uploadedAt: Date.now(),
       preview: loaded.content.slice(0, 180),

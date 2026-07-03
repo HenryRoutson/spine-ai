@@ -41,7 +41,8 @@
           "name": "summary",
           "type": "text",
           "optional": false,
-          "description": "One-sentence summary"
+          "description": "One-sentence summary",
+          "deterministic": false
         }
       ]
     },
@@ -62,7 +63,8 @@
           "name": "body",
           "type": "text",
           "optional": false,
-          "description": "Joined summaries"
+          "description": "Joined summaries",
+          "deterministic": false
         }
       ]
     }

@@ -63,6 +63,8 @@ Need to hash code and use input and output descriptions rather than anything spe
 
 Hash code to errors and also set a bunch of default functions to pick from
 
+non deterministic tests can be evaluated by an llm.
+
 
 need to save and hash errors, including any validation errors from LLMS. 
 

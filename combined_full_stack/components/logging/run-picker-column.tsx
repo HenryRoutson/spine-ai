@@ -13,11 +13,11 @@ import { timeAgo } from "@/lib/time-ago"
 import { cn } from "@/lib/utils"
 import { compactPreview, PREVIEW_RUN_NOTES_CHARS } from "@/lib/text-preview"
 import { useStatusPalette } from "@/lib/chart-colors"
-import type { DocId, PipelineRun } from "@/lib/types"
+import { RunSource, type DocId, type PipelineRun } from "@/lib/types"
 
 // AI : Testing-tab runs carry source "testing" — badge + searchable via "testing".
 export function isTestingRun(run: PipelineRun): boolean {
-  return run.source === "testing"
+  return run.source === RunSource.Testing
 }
 
 export function filterRuns(runs: PipelineRun[], query: string): PipelineRun[] {

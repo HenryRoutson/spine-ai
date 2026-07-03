@@ -1,7 +1,7 @@
-import type { CustomCodeEntry, ModelId, ModuleId, ModuleKind, PipelineModule, StructureModel, StructureModelId } from "@/lib/types"
+import type { CustomCodeEntry, ModelId, ModuleId, PipelineModule, StructureModel, StructureModelId } from "@/lib/types"
 import { makeCustomCodeEntry } from "@/lib/custom_code_entries"
 import { DEFAULT_ASSERT_TS } from "@/lib/assert_steps"
-import { MODULE_META } from "@/lib/types"
+import { CustomCodeLanguage, InputType, ModuleKind, MODULE_META } from "@/lib/types"
 import { uid } from "@/lib/id"
 import { isLlmKind, stepRequiresNote, usesPassthroughStructure } from "@/lib/module-kinds"
 import { migrateModuleSpineTypes } from "@/lib/server/spine_types"
@@ -55,10 +55,10 @@ export function createPipelineModule(
     cached: true,
     avgMs: 0,
     avgCostCents: 0,
-    inputType: kind === "input" ? (opts.inputType ?? "pdf") : undefined,
-    inputNameContains: kind === "input" ? opts.inputNameContains?.trim() || undefined : undefined,
+    inputType: kind === ModuleKind.Input ? (opts.inputType ?? InputType.Pdf) : undefined,
+    inputNameContains: kind === ModuleKind.Input ? opts.inputNameContains?.trim() || undefined : undefined,
     inputDescription: opts.inputDescription?.trim() || undefined,
-    inStructureId: kind !== "input" ? opts.inStructureId ?? defaultModel : undefined,
+    inStructureId: kind !== ModuleKind.Input ? opts.inStructureId ?? defaultModel : undefined,
     outStructureId:
       usesPassthroughStructure(kind)
         ? opts.outStructureId ?? opts.inStructureId ?? defaultModel
@@ -66,10 +66,10 @@ export function createPipelineModule(
     outIsList: opts.outIsList,
     prompt: isLlm ? opts.prompt ?? "" : undefined,
     fallbackList:
-      kind === "custom-code"
-        ? (opts.fallbackList ?? [makeCustomCodeEntry("typescript", opts.code ?? "(input) => input")])
-        : kind === "assert"
-          ? (opts.fallbackList ?? [makeCustomCodeEntry("typescript", DEFAULT_ASSERT_TS)])
+      kind === ModuleKind.CustomCode
+        ? (opts.fallbackList ?? [makeCustomCodeEntry(CustomCodeLanguage.TypeScript, opts.code ?? "(input) => input")])
+        : kind === ModuleKind.Assert
+          ? (opts.fallbackList ?? [makeCustomCodeEntry(CustomCodeLanguage.TypeScript, DEFAULT_ASSERT_TS)])
           : undefined,
     model: isLlm ? opts.model ?? globalModel : undefined,
   })

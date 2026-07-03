@@ -1,8 +1,26 @@
 // AI : stable deep equality for assert steps — ignores key order; optional key stripping.
 
+import { tryParseJson } from "@/lib/json-utils";
+
 export type DeepEqualOpts = {
   ignoreKeys?: string[];
 };
+
+// AI : document.content often holds JSON.stringify output — expand object/array strings so key order does not fail tests.
+function expandEmbeddedJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(expandEmbeddedJson);
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = expandEmbeddedJson(v);
+    }
+    return out;
+  }
+  if (typeof value !== "string") return value;
+  const parsed = tryParseJson(value, { trim: true });
+  if (!parsed.ok || parsed.value === null || typeof parsed.value !== "object") return value;
+  return expandEmbeddedJson(parsed.value);
+}
 
 function stripIgnoredKeys(value: unknown, ignore: Set<string>): unknown {
   if (Array.isArray(value)) return value.map((v) => stripIgnoredKeys(v, ignore));
@@ -30,8 +48,8 @@ function sortKeys(value: unknown): unknown {
 
 export function deepEqual(a: unknown, b: unknown, opts?: DeepEqualOpts): boolean {
   const ignore = new Set(opts?.ignoreKeys ?? []);
-  const left = sortKeys(stripIgnoredKeys(a, ignore));
-  const right = sortKeys(stripIgnoredKeys(b, ignore));
+  const left = sortKeys(stripIgnoredKeys(expandEmbeddedJson(a), ignore));
+  const right = sortKeys(stripIgnoredKeys(expandEmbeddedJson(b), ignore));
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
@@ -57,6 +75,12 @@ export function deepEqualDiffPath(a: unknown, b: unknown, path = ""): string | u
       if (d) return d;
     }
     return undefined;
+  }
+  if (typeof a === "string" && typeof b === "string") {
+    const expandedA = expandEmbeddedJson(a);
+    const expandedB = expandEmbeddedJson(b);
+    if (expandedA !== a || expandedB !== b) return deepEqualDiffPath(expandedA, expandedB, path);
+    return a === b ? undefined : path || "(root)";
   }
   return path || "(root)";
 }

@@ -197,12 +197,15 @@ testing isn't limited to whole runs and shouldn't need to cover all the steps. y
 
 
 you should describe if certain fields are deterministic like a maths answer, or probabilistic if they're something like a summary which will almost never be the same. if they are they can be tested, otherwise not.
+deterministic param is on a field level, it shouldnt be something per test. An answer_ACBD for q1 is either A,B,C or D. This doesn't change across examples, and often needs to be finer grain than just struct level.
 
 for each test there is a button to run it
 
 
 tests should be saved to the logging system with a test tag,
-and share the same UI but with extra visualisations of where any erorrs occured
+and share the same UI but with extra visualisations of where any erorrs occured. if there is a different from actual to expected, there should be a git diff view.
+
+non deterministic tests can be evaluated by an llm.
 
 # inference
 

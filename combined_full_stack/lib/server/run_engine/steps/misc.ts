@@ -9,7 +9,7 @@ import type { PipelineModule, StructureModelId } from "../../types";
 import { resolveOutIsList } from "../../spine_types";
 import { materializeHints, materializeStepOutput, modelById, prevModuleFor, sourceDocumentBlock } from "../helpers";
 import { requireLinearInput } from "../context";
-import { buildAssertResult } from "../results";
+import { buildAssertResult, jsonStringifyStepValue } from "../results";
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types";
 
 export async function execCombineStep(m: PipelineModule, ctx: RunCtx, _log: RunLogger): Promise<ExecResult> {
@@ -20,14 +20,12 @@ export async function execCombineStep(m: PipelineModule, ctx: RunCtx, _log: RunL
   const newInput = Array.isArray(rawInput) ? rawInput[0] : rawInput;
   const pipelineData = ctx.byModel.get(m.inStructureId as StructureModelId);
   const value: Record<string, unknown> = {};
-  const summary: Record<string, unknown> = {};
   const newDocHints = { docId: documentDocIdFrom(newInput), docName: documentFilenameFrom(newInput) };
   for (const f of out.fields) {
     const isDoc = f.type === "document";
     value[f.name] = isDoc
       ? documentValueFrom(newInput, newDocHints, documentContentFrom(newInput))
       : pipelineData ?? [];
-    summary[f.name] = isDoc ? documentFilenameFrom(newInput, newDocHints) : Array.isArray(pipelineData) ? `${pipelineData.length} items` : pipelineData;
   }
   const prev = prevModuleFor(project.modules, ctx.prevModuleId);
   const merged = materializeStepOutput(
@@ -40,7 +38,7 @@ export async function execCombineStep(m: PipelineModule, ctx: RunCtx, _log: RunL
   return {
     value: merged,
     preview: `merged → {${out.fields.map((f) => `"${f.name}"`).join(", ")}}`,
-    json: JSON.stringify(summary, null, 2),
+    json: jsonStringifyStepValue(merged),
   };
 }
 

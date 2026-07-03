@@ -8,6 +8,7 @@ import { UsageLedger } from "./usage";
 import type { ModelId, Project, DocRef } from "./types";
 import {
   isTestingFileName,
+  probabilisticPathsForModule,
   TESTING_FILE_SUFFIX,
   validateTestFile,
   type SpineTestFile,
@@ -53,6 +54,14 @@ function buildPrompt(project: Project, projectDocs: DocRef[], instruction: strin
     ? `Known-good outputs for some steps (reuse these where they fit):\n${JSON.stringify(project.expectedOutputs, null, 2)}`
     : "No golden outputs are stored for this project — derive plausible exact outputs from the step prompts and types.";
 
+  // AI : per-step probabilistic field paths (from structure defs) — the compare ignores these.
+  const probabilistic = project.modules
+    .map((m) => ({ step: m.label, ignoredFields: probabilisticPathsForModule(m, project.models) }))
+    .filter((x) => x.ignoredFields.length);
+  const ignoredNote = probabilistic.length
+    ? `Probabilistic fields per step (ignored when comparing — values only need to be plausible):\n${JSON.stringify(probabilistic, null, 2)}`
+    : "";
+
   return `You write test files for a linear LLM pipeline. A test file pins input documents and the EXACT expected JSON output at each step, so a run can pinpoint the first step that diverges.
 
 Project: ${project.name} (${project.kind})
@@ -67,12 +76,13 @@ Documents available in this project (use exact names in "inputs"):
 ${JSON.stringify(inputDocs, null, 2)}
 
 ${golden}
-
+${ignoredNote ? `\n${ignoredNote}\n` : ""}
 Rules:
 - "inputs" maps every input step label to an existing document name (or list of names).
 - "expectedOutputs" maps step labels to the exact expected JSON output of that step; every value must type-check against the pipeline-state shape above.
 - Only use step labels that exist in the pipeline. Do not include input steps in expectedOutputs.
 - Tests are partial by design: cover only the steps the user asks about (a single step is fine). Only the listed steps are checked.
+- Structure fields marked deterministic:false (probabilistic — LLM prose like a summary or feedback that will almost never match exactly) are automatically IGNORED when comparing. Still include a plausible value for them in expectedOutputs (as a reference), but only deterministic fields (maths answers, ids, enums, scores) decide pass/fail — so make those exact.
 - "fileName" is a short snake_case base name (the ${TESTING_FILE_SUFFIX} suffix is added automatically).
 
 User request:

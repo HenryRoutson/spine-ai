@@ -2,7 +2,7 @@
 // AI : HTTP transport lives in openrouter_http.ts; this file is the public facade.
 import { type ZodType } from "zod";
 import { structuredLlmPrompt } from "./structure";
-import { type FailureKind } from "./types";
+import { FailureKind } from "./types";
 import { type ServerLogger, logger } from "./server_logger";
 import {
   acquireOpenRouterSlot,
@@ -67,9 +67,9 @@ function parseStructured<T>(
     const parsed = JSON.parse(json);
     const result = schema.safeParse(parsed);
     if (result.success) return { ok: true, data: result.data };
-    return { ok: false, kind: "schema", error: result.error.toString() };
+    return { ok: false, kind: FailureKind.Schema, error: result.error.toString() };
   } catch (e) {
-    return { ok: false, kind: "json_parse", error: (e as Error).message };
+    return { ok: false, kind: FailureKind.JsonParse, error: (e as Error).message };
   }
 }
 

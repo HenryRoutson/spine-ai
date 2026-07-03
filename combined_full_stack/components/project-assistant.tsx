@@ -12,6 +12,7 @@ import { useStore } from "@/lib/store"
 import { MODULE_META } from "@/lib/types"
 import { AssistantChat, type AssistantChatMessage } from "@/components/assistant-chat"
 import { Badge } from "@/components/ui/badge"
+import { docLabelDisplay } from "@/lib/project-docs"
 import { useProjectAssistantSession } from "@/lib/project-assistant-context"
 import {
   PROJECT_ASSISTANT_INITIAL_MESSAGE,
@@ -334,7 +335,7 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
                 <FileText className="h-3 w-3 shrink-0 text-muted-foreground" />
                 <span className="truncate text-foreground">{doc.name}</span>
                 <span className="text-muted-foreground">
-                  · {doc.label} · {Math.round(doc.content.length / 1024)}kb
+                  · {docLabelDisplay(doc.label)} · {Math.round(doc.content.length / 1024)}kb
                 </span>
               </li>
             ))}

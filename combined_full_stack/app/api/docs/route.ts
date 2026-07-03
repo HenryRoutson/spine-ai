@@ -10,7 +10,8 @@ import {
 } from "@/lib/server/doc_upload_parse";
 import { linkDocToProject, saveOriginalDocBytes } from "@/lib/server/store";
 import { logger } from "@/lib/server/server_logger";
-import type { DocLabel, ProjectId } from "@/lib/server/types";
+import { DocLabel } from "@/lib/server/types";
+import type { ProjectId } from "@/lib/server/types";
 
 const apiLog = logger("api:docs");
 
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
     return apiError(uploadErr.message, uploadErr.status);
   }
   const uploadFile = file as File;
-  const label = (form.get("label") as DocLabel) ?? "inference";
+  const label = (form.get("label") as DocLabel | null) ?? DocLabel.Inference;
   const projectId = (form.get("projectId") as ProjectId | null) ?? undefined;
   const type = inputTypeFromFilename(uploadFile.name);
   apiLog.info(`POST /api/docs upload`, {

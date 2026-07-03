@@ -1,26 +1,26 @@
-import type { InputType } from "@/lib/server/types"
+import { InputType } from "@/lib/server/types"
 
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 export const EXT_TYPE: Record<string, InputType> = {
-  pdf: "pdf",
-  doc: "word",
-  docx: "word",
-  xls: "excel",
-  xlsx: "excel",
-  csv: "excel",
-  json: "json",
-  txt: "text",
-  md: "text",
-  html: "web",
-  png: "image",
-  jpg: "image",
-  jpeg: "image",
+  pdf: InputType.Pdf,
+  doc: InputType.Word,
+  docx: InputType.Word,
+  xls: InputType.Excel,
+  xlsx: InputType.Excel,
+  csv: InputType.Excel,
+  json: InputType.Json,
+  txt: InputType.Text,
+  md: InputType.Text,
+  html: InputType.Web,
+  png: InputType.Image,
+  jpg: InputType.Image,
+  jpeg: InputType.Image,
 }
 
 export function inputTypeFromFilename(filename: string): InputType {
   const ext = filename.split(".").pop()?.toLowerCase() ?? ""
-  return EXT_TYPE[ext] ?? "text"
+  return EXT_TYPE[ext] ?? InputType.Text
 }
 
 export function uploadSizeErrorMessage(): string {

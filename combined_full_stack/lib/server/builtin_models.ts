@@ -1,3 +1,4 @@
+import { FieldType } from "./types";
 import type { StructureModel, StructureModelId } from "./types";
 
 export const BUILTIN_DOCUMENT_ID = "m_builtin_document" as StructureModelId;
@@ -13,7 +14,7 @@ export const BUILTIN_DOCUMENT_MODEL: StructureModel = {
     {
       id: "f_content",
       name: "content",
-      type: "text",
+      type: FieldType.Text,
       optional: false,
       description: "Full extracted text of the file",
       example: "# Expense policy\n\n| Category | Limit |\n| --- | --- |\n| Meals | $75 |",
@@ -21,7 +22,7 @@ export const BUILTIN_DOCUMENT_MODEL: StructureModel = {
     {
       id: "f_filename",
       name: "filename",
-      type: "text",
+      type: FieldType.Text,
       optional: false,
       description: "Original upload filename",
       example: "expense_policy_2024.txt",

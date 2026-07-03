@@ -21,7 +21,7 @@ import {
   PipelineConnector,
   PipelineNode,
 } from "@/lib/module-ui"
-import type { ModuleId, PipelineModule, RunStepStatus, StructureModel } from "@/lib/types"
+import { ModuleKind, type ModuleId, type PipelineModule, type RunStepStatus, type StructureModel } from "@/lib/types"
 import { inputTypeLabel } from "@/lib/inference-input"
 import {
   invalidStepMessage,
@@ -163,7 +163,7 @@ function SegmentRow({
         >
           <StepButton onClick={() => onSelect?.(combine.id)} className="flex w-full items-start gap-2 text-left">
             <StepIndex index={index} />
-            <KindIcon kind="combine" />
+            <KindIcon kind={ModuleKind.Combine} />
             <StepBody
               label={combine.label}
               detail={
@@ -195,7 +195,7 @@ function SegmentRow({
                 : statusBorder(inputStatus) ?? "border-border hover:border-muted-foreground/40",
             )}
           >
-            <KindIcon kind="input" size="sm" />
+            <KindIcon kind={ModuleKind.Input} size="sm" />
             <StepBody
               label={input.label}
               labelClass="text-xs"
@@ -253,7 +253,7 @@ function SegmentRow({
             >
               <div className="flex items-center justify-center gap-2">
                 <StepIndex index={i} className="text-output/80" />
-                <KindIcon kind="output" />
+                <KindIcon kind={ModuleKind.Output} />
               </div>
               <StepBody
                 label={m.label}

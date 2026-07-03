@@ -15,6 +15,7 @@ import {
 import { JsonHighlight } from "@/components/highlight"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { copyTextToClipboard } from "@/lib/clipboard"
 import type { RunErrorDisplay } from "@/lib/run-errors"
 import type { ClientStepSpec } from "@/lib/run-types"
 import type { PipelineModule } from "@/lib/types"
@@ -179,7 +180,7 @@ export function ErrorBanner({ text }: { text: string }) {
   }, [])
 
   async function copyError() {
-    await navigator.clipboard.writeText(text)
+    await copyTextToClipboard(text)
     setCopied(true)
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
     copyTimerRef.current = setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)

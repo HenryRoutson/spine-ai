@@ -1,5 +1,6 @@
 import { fieldToTypeExpr } from "@/lib/server/type_expr"
 import type { PrimName, TypeExpr } from "@/lib/server/type_expr"
+import { FieldType } from "@/lib/types"
 import type { StructureModel, StructureModelId } from "@/lib/types"
 
 const PRIM_ALIASES: Record<string, PrimName> = {
@@ -186,28 +187,28 @@ export function formatTypeExprPy(expr: TypeExpr, models: StructureModel[] = []):
 // AI : map simple TypeExpr shapes back to legacy FieldType + ref for older code paths.
 export function legacyFieldFromTypeExpr(
   expr: TypeExpr,
-): { type: import("@/lib/types").FieldType; ref?: StructureModelId } | null {
+): { type: FieldType; ref?: StructureModelId } | null {
   switch (expr.kind) {
     case "prim":
-      if (expr.name === "json") return { type: "json" }
-      if (expr.name === "text") return { type: "text" }
-      if (expr.name === "int") return { type: "int" }
-      if (expr.name === "float") return { type: "float" }
-      if (expr.name === "bool") return { type: "bool" }
-      if (expr.name === "datetime") return { type: "datetime" }
+      if (expr.name === "json") return { type: FieldType.Json }
+      if (expr.name === "text") return { type: FieldType.Text }
+      if (expr.name === "int") return { type: FieldType.Int }
+      if (expr.name === "float") return { type: FieldType.Float }
+      if (expr.name === "bool") return { type: FieldType.Bool }
+      if (expr.name === "datetime") return { type: FieldType.Datetime }
       return null
     case "document":
-      return { type: "document" }
+      return { type: FieldType.Document }
     case "text_quote":
-      return { type: "tuple[text,quote]" }
+      return { type: FieldType.TupleTextQuote }
     case "list":
-      if (expr.item.kind === "text_quote") return { type: "list[tuple[text,quote]]" }
-      if (expr.item.kind === "document") return { type: "list[document]" }
-      if (expr.item.kind === "prim" && expr.item.name === "text") return { type: "list[text]" }
-      if (expr.item.kind === "ref") return { type: "list[model]", ref: expr.item.modelId }
+      if (expr.item.kind === "text_quote") return { type: FieldType.ListTupleTextQuote }
+      if (expr.item.kind === "document") return { type: FieldType.ListDocument }
+      if (expr.item.kind === "prim" && expr.item.name === "text") return { type: FieldType.ListText }
+      if (expr.item.kind === "ref") return { type: FieldType.ListModel, ref: expr.item.modelId }
       return null
     case "ref":
-      return { type: "model", ref: expr.modelId }
+      return { type: FieldType.Model, ref: expr.modelId }
     default:
       return null
   }

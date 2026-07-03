@@ -6,6 +6,7 @@ import { basename, join } from "node:path";
 import { buildDefaultInputDocs, orderedInputModules } from "../lib/inference-input";
 import { loadProjectSeed, SEEDS_DIR } from "../lib/server/seed";
 import { validateTestFile, type SpineTestFile } from "../lib/testing-files";
+import { DocLabel } from "../lib/server/types";
 import type { DocId, DocRef, Project } from "../lib/server/types";
 
 function seedDocRefs(project: Project, rawDocs: { name: string; type: string; label: string }[]): DocRef[] {
@@ -29,7 +30,7 @@ function buildInputs(project: Project, docRefs: DocRef[]): Record<string, string
     if (Array.isArray(v)) inputs[m.label.trim()] = v.map((d) => d.name);
     else if (v) inputs[m.label.trim()] = v.name;
     // AI : type-mismatch seeds (e.g. json doc on a text input) — fall back to the first inference doc.
-    else inputs[m.label.trim()] = docRefs.find((d) => d.label === "inference")?.name ?? "";
+    else inputs[m.label.trim()] = docRefs.find((d) => d.label === DocLabel.Inference)?.name ?? "";
   }
   return inputs;
 }
@@ -37,8 +38,7 @@ function buildInputs(project: Project, docRefs: DocRef[]): Record<string, string
 function buildExpectedOutputs(project: Project): Record<string, unknown> {
   const golden = project.expectedOutputs ?? {};
   if (Object.keys(golden).length) {
-    // AI : skip input steps ({doc_id} refs in the run trace) and combine steps (trace stores a
-    // AI : field summary, not the merged value) — golden content can never match either.
+    // AI : input steps log doc refs; combine logs a field summary — same data, not scored in tests.
     const unpinnable = new Set(
       project.modules.filter((m) => m.kind === "input" || m.kind === "combine").map((m) => m.label.trim()),
     );
@@ -76,7 +76,7 @@ for (const f of readdirSync(SEEDS_DIR).filter((x) => x.endsWith(".json")).sort()
 
   writeFileSync(join(SEEDS_DIR, "..", "documents", testRelFile), `${JSON.stringify(test, null, 2)}\n`);
   if (!raw.docs.some((d) => d.name === testName)) {
-    raw.docs.push({ name: testName, type: "json", label: "training", file: testRelFile });
+    raw.docs.push({ name: testName, type: "json", label: DocLabel.Training, file: testRelFile });
     writeFileSync(seedPath, `${JSON.stringify(raw, null, 2)}\n`);
   }
   wrote += 1;

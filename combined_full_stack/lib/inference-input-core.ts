@@ -1,4 +1,4 @@
-import { INPUT_TYPES, type DocRef, type InputType, type InputTypeSpec, type ModuleId, type PipelineModule } from "@/lib/types"
+import { INPUT_TYPES, InputType, type DocRef, type InputTypeSpec, type ModuleId, type PipelineModule } from "@/lib/types"
 
 export type InputDocsAssignment = Partial<Record<ModuleId, DocRef | DocRef[]>>
 
@@ -26,7 +26,7 @@ export function inputTypesForModule(inputModule: PipelineModule): InputType[] {
 }
 
 export function inputTypesNeedOcr(types: InputType[]): boolean {
-  return types.includes("pdf") || types.includes("image")
+  return types.includes(InputType.Pdf) || types.includes(InputType.Image)
 }
 
 export function inputModuleNeedsOcr(inputModule: PipelineModule): boolean {

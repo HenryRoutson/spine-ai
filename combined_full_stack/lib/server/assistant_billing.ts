@@ -9,6 +9,7 @@ import {
 } from "./billing_account";
 import { logger } from "./server_logger";
 import type { Store } from "./store";
+import { ModuleKind, RunSource, RunStatus, RunStepStatus } from "./types";
 import type {
   ModelId,
   ModuleId,
@@ -44,10 +45,10 @@ function buildAssistantRun(input: AssistantBillingInput): PipelineRun {
   const costCents = +Math.max(0, input.usageCents).toFixed(4);
   const step: RunStep = {
     moduleId: uid<ModuleId>(),
-    kind: "llm",
+    kind: ModuleKind.Llm,
     label: ASSISTANT_BILLING_CHART_KEY,
     model: input.model,
-    status: "ok",
+    status: RunStepStatus.Ok,
     ms,
     costCents,
     inputPreview: input.message.slice(0, 600),
@@ -56,12 +57,12 @@ function buildAssistantRun(input: AssistantBillingInput): PipelineRun {
   return {
     id: uid<RunId>(),
     startedAt: input.startedAt,
-    status: "ok",
+    status: RunStatus.Ok,
     totalMs: ms,
     billedCents: costCents,
     savedCents: 0,
     model: input.model,
-    source: "assistant",
+    source: RunSource.Assistant,
     notes: ASSISTANT_BILLING_CHART_KEY,
     steps: [step],
   };

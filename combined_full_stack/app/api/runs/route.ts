@@ -28,7 +28,7 @@ import {
   collectInferenceInputIssues,
   inferenceInputIssueMessage,
 } from "@/lib/inference-validity";
-import type { DocId, DocRef, ModelId, ModuleId, ProjectId } from "@/lib/server/types";
+import { RunSource, type DocId, type DocRef, type ModelId, type ModuleId, type ProjectId } from "@/lib/server/types";
 
 const apiLog = logger("api:runs");
 
@@ -46,7 +46,7 @@ interface RunRequest {
   model?: ModelId;
   allowDuplicateRuns?: boolean;
   // AI : "testing" flags Testing-tab runs in Logging; anything else is a normal app run.
-  source?: string;
+  source?: RunSource;
 }
 
 export async function POST(req: NextRequest) {
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
   const { auth, store } = ctx;
 
   const { projectId, inputDocId, inputDocIds, inputDocsByModule, model, allowDuplicateRuns, source } = (await req.json()) as RunRequest;
-  const runSource = source === "testing" ? ("testing" as const) : undefined;
+  const runSource = source === RunSource.Testing ? RunSource.Testing : undefined;
   apiLog.info(`POST /api/runs`, { projectId, inputDocId, inputDocIds, inputDocsByModule, model, source: runSource, ownerId: auth.userId });
 
   if (!store.project(projectId)) {

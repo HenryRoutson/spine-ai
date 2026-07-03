@@ -83,14 +83,16 @@
           "name": "nearest_settlement",
           "type": "text",
           "optional": false,
-          "description": "Nearest city or settlement"
+          "description": "Nearest city or settlement",
+          "deterministic": false
         },
         {
           "id": "f_climate",
           "name": "climate_zone",
           "type": "text",
           "optional": false,
-          "description": "Climate classification (e.g. subarctic, polar, temperate)"
+          "description": "Climate classification (e.g. subarctic, polar, temperate)",
+          "deterministic": false
         },
         {
           "id": "f_cold",
@@ -104,7 +106,8 @@
           "name": "facility_type_guess",
           "type": "text",
           "optional": false,
-          "description": "Best guess: research lab, military, industrial, logistics, etc."
+          "description": "Best guess: research lab, military, industrial, logistics, etc.",
+          "deterministic": false
         },
         {
           "id": "f_research",
@@ -125,7 +128,8 @@
           "name": "profile_summary",
           "type": "text",
           "optional": false,
-          "description": "Two-sentence analyst profile of the location"
+          "description": "Two-sentence analyst profile of the location",
+          "deterministic": false
         }
       ]
     },
@@ -160,14 +164,16 @@
           "name": "executive_summary",
           "type": "text",
           "optional": false,
-          "description": "High-level findings across all sites"
+          "description": "High-level findings across all sites",
+          "deterministic": false
         },
         {
           "id": "f_clusters",
           "name": "similarity_clusters",
           "type": "list[text]",
           "optional": false,
-          "description": "Named clusters with member site ids and shared traits"
+          "description": "Named clusters with member site ids and shared traits",
+          "deterministic": false
         },
         {
           "id": "f_russian",
@@ -195,7 +201,8 @@
           "name": "notable_pairs",
           "type": "list[text]",
           "optional": false,
-          "description": "Most similar site pairs with brief rationale"
+          "description": "Most similar site pairs with brief rationale",
+          "deterministic": false
         }
       ]
     }

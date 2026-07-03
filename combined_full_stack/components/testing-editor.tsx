@@ -16,6 +16,7 @@ import {
   MinusCircle,
   Pencil,
   Plus,
+  Shuffle,
   Trash2,
   TriangleAlert,
 } from "lucide-react"
@@ -31,7 +32,7 @@ import { useDocViewer } from "@/lib/doc-viewer"
 import { modelName } from "@/lib/validity"
 import { labelAsStateKey, validatePipelineStateEntry } from "@/lib/server/pipeline_state"
 import { tryParseJson } from "@/lib/json-utils"
-import { inputModulesOf, type SpineTestFile } from "@/lib/testing-files"
+import { inputModulesOf, probabilisticPathsForModule, type SpineTestFile } from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
 import type { DocId, DocRef, PipelineModule, Project } from "@/lib/types"
 
@@ -40,6 +41,7 @@ type doc_name_string = string
 type json_text_string = string
 
 // AI : expected values live as editable JSON text so half-typed input never gets lost.
+// AI : deterministic-ness is not per test — it lives on structure fields (Structures tab).
 export type TestDraft = {
   description: string
   inputs: Record<step_label_string, doc_name_string[]>
@@ -263,6 +265,7 @@ export function TestFileEditor({
                 row={row}
                 project={project}
                 stale={false}
+                ignoredFields={probabilisticPathsForModule(m, project.models)}
                 actual={actuals.has(labelAsStateKey(m.label)) ? actuals.get(labelAsStateKey(m.label)) : undefined}
                 onText={(text) => setRowText(row.label, text)}
                 onRemove={() => removeRow(row.label)}
@@ -295,6 +298,7 @@ export function TestFileEditor({
               row={row}
               project={project}
               stale
+              ignoredFields={[]}
               actual={undefined}
               onText={(text) => setRowText(row.label, text)}
               onRemove={() => removeRow(row.label)}
@@ -321,6 +325,7 @@ function ExpectedRow({
   row,
   project,
   stale,
+  ignoredFields,
   actual,
   onText,
   onRemove,
@@ -329,6 +334,8 @@ function ExpectedRow({
   row: TestDraft["expected"][number]
   project: Project
   stale: boolean
+  // AI : probabilistic field paths per structure defs — shown so it's clear what won't be compared
+  ignoredFields: string[]
   actual: unknown
   onText: (text: json_text_string) => void
   onRemove: () => void
@@ -414,6 +421,15 @@ function ExpectedRow({
       </div>
       {open && (
         <div className="space-y-1.5 border-t border-border p-2.5">
+          {ignoredFields.length > 0 && (
+            <p className="flex items-start gap-1.5 font-mono text-[10px] text-muted-foreground">
+              <Shuffle className="mt-0.5 h-3 w-3 shrink-0" />
+              <span>
+                probabilistic fields (marked on the structure) are ignored when comparing:{" "}
+                {ignoredFields.join(", ")}
+              </span>
+            </p>
+          )}
           {editing ? (
             <Textarea
               value={row.text}

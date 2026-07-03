@@ -99,7 +99,8 @@
           "name": "finding",
           "type": "text",
           "optional": false,
-          "description": "Auditor note"
+          "description": "Auditor note",
+          "deterministic": false
         }
       ]
     }

@@ -1,4 +1,5 @@
-import type { CustomCodeEntry, CustomCodeLanguage, PipelineModule } from "@/lib/types";
+import { CustomCodeLanguage } from "@/lib/types";
+import type { CustomCodeEntry, PipelineModule } from "@/lib/types";
 export type ParsedCustomCodeEntry = { language: CustomCodeLanguage; code: string };
 
 // AI : legacy shape from first fallback iteration — still parsed on load.
@@ -20,19 +21,19 @@ export function parseCustomCodeEntry(raw: CustomCodeEntry | LegacyCustomCodeEntr
     if (!code) return null;
     return { language: raw.language, code };
   }
-  if (raw.typescript?.trim()) return { language: "typescript", code: raw.typescript.trim() };
-  if (raw.python?.trim()) return { language: "python", code: raw.python.trim() };
+  if (raw.typescript?.trim()) return { language: CustomCodeLanguage.TypeScript, code: raw.typescript.trim() };
+  if (raw.python?.trim()) return { language: CustomCodeLanguage.Python, code: raw.python.trim() };
   return null;
 }
 
 export function makeCustomCodeEntry(language: CustomCodeLanguage, code: string): CustomCodeEntry {
-  return language === "python" ? { python: code } : { typescript: code };
+  return language === CustomCodeLanguage.Python ? { python: code } : { typescript: code };
 }
 
 export function languageOfEntry(entry: CustomCodeEntry | LegacyCustomCodeEntry): CustomCodeLanguage {
   if (isLegacyEntry(entry)) return entry.language;
-  if (entry.python !== undefined) return "python";
-  return "typescript";
+  if (entry.python !== undefined) return CustomCodeLanguage.Python;
+  return CustomCodeLanguage.TypeScript;
 }
 
 export function codeOfEntry(entry: CustomCodeEntry | LegacyCustomCodeEntry): string {
@@ -51,11 +52,11 @@ export function normalizeCustomCodeFallbackList(
       continue;
     }
     if (raw.python !== undefined) {
-      out.push(makeCustomCodeEntry("python", raw.python));
+      out.push(makeCustomCodeEntry(CustomCodeLanguage.Python, raw.python));
       continue;
     }
     if (raw.typescript !== undefined) {
-      out.push(makeCustomCodeEntry("typescript", raw.typescript));
+      out.push(makeCustomCodeEntry(CustomCodeLanguage.TypeScript, raw.typescript));
     }
   }
   return out;
@@ -73,11 +74,11 @@ export function customCodeEntriesForModule(m: PipelineModule): ParsedCustomCodeE
     );
     if (fromList.length) return fromList;
     if (legacy.code?.trim()) {
-      return [{ language: legacy.codeLanguage ?? "typescript", code: legacy.code.trim() }];
+      return [{ language: legacy.codeLanguage ?? CustomCodeLanguage.TypeScript, code: legacy.code.trim() }];
     }
     return [];
   }
-  if (m.code?.trim()) return [{ language: "typescript", code: m.code.trim() }];
+  if (m.code?.trim()) return [{ language: CustomCodeLanguage.TypeScript, code: m.code.trim() }];
   return [];
 }
 
@@ -86,7 +87,7 @@ export function migrateCustomCodeModule(m: PipelineModule): PipelineModule {
   const legacy = m as LegacyCustomCodeModule;
   const fallbackList = normalizeCustomCodeFallbackList(m.fallbackList);
   if (!fallbackList.length && legacy.code?.trim()) {
-    fallbackList.push(makeCustomCodeEntry(legacy.codeLanguage ?? "typescript", legacy.code.trim()));
+    fallbackList.push(makeCustomCodeEntry(legacy.codeLanguage ?? CustomCodeLanguage.TypeScript, legacy.code.trim()));
   }
   const { code: _c, ...rest } = legacy;
   delete (rest as LegacyCustomCodeModule).codeLanguage;

@@ -6,7 +6,7 @@ import type {
   StructureModel,
   StructureModelId,
 } from "./types";
-import { MODULE_META } from "./types";
+import { MODULE_META, ModuleKind } from "./types";
 import { migrateCustomCodeModule } from "@/lib/custom_code_entries";
 import { resolveModuleNote } from "@/lib/pipeline-module-factory";
 import { usesPassthroughStructure, isLlmKind } from "@/lib/module-kinds";
@@ -146,7 +146,7 @@ export function syncAutoQuoteSteps(
     taken.add(label);
     out.push({
       id: (existing?.id ?? (`mod_quote_${m.id}` as ModuleId)) as ModuleId,
-      kind: "quote",
+      kind: ModuleKind.Quote,
       label,
       auto: true,
       note: `Auto · ${outModel.name} → ${outModel.name} · links LLM quote strings to source spans.`,

@@ -1,6 +1,7 @@
 import { parseCsv, sanitizeFieldName } from "@/lib/csv-parse"
 import { tryParseJson } from "@/lib/json-utils"
-import type { FieldType, InputType, ModelField, StructureModel, StructureModelId } from "@/lib/types"
+import { FieldType } from "@/lib/types"
+import type { InputType, ModelField, StructureModel, StructureModelId } from "@/lib/types"
 import type { StructureMatchKind } from "@/lib/structure-match"
 
 export { parseCsv, sanitizeFieldName } from "@/lib/csv-parse"
@@ -35,25 +36,25 @@ function isPlainObject(val: unknown): val is Record<string, unknown> {
 }
 
 function inferScalarType(val: unknown): FieldType {
-  if (typeof val === "boolean") return "bool"
-  if (typeof val === "number") return Number.isInteger(val) ? "int" : "float"
+  if (typeof val === "boolean") return FieldType.Bool
+  if (typeof val === "number") return Number.isInteger(val) ? FieldType.Int : FieldType.Float
   if (typeof val === "string") {
     const t = val.trim()
     if ((t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"))) {
-      if (tryParseJson(t).ok) return "json"
+      if (tryParseJson(t).ok) return FieldType.Json
     }
   }
-  return "text"
+  return FieldType.Text
 }
 
 function inferListElementType(values: unknown[]): FieldType {
   const flat = values.flatMap((v) => (Array.isArray(v) ? v : [v]))
   const nonEmpty = flat.filter((v) => v !== null && v !== undefined && v !== "")
-  if (!nonEmpty.length) return "list[text]"
-  if (nonEmpty.every((v) => typeof v === "boolean")) return "list[text]"
-  if (nonEmpty.every((v) => typeof v === "number")) return "list[text]"
-  if (nonEmpty.every((v) => typeof v === "string")) return "list[text]"
-  return "list[text]"
+  if (!nonEmpty.length) return FieldType.ListText
+  if (nonEmpty.every((v) => typeof v === "boolean")) return FieldType.ListText
+  if (nonEmpty.every((v) => typeof v === "number")) return FieldType.ListText
+  if (nonEmpty.every((v) => typeof v === "string")) return FieldType.ListText
+  return FieldType.ListText
 }
 
 function nestedModelName(parentName: string, key: string): string {
@@ -115,7 +116,7 @@ function inferFieldFromValue(
       return {
         id: `f_${name}`,
         name,
-        type: "list[model]",
+        type: FieldType.ListModel,
         ref: child.root.id,
         optional,
         description: "",
@@ -135,7 +136,7 @@ function inferFieldFromValue(
       return {
         id: `f_${name}`,
         name,
-        type: "model",
+        type: FieldType.Model,
         ref: ensureMappingRuleCompanion(val, idGen, companions),
         optional,
         description: "",
@@ -147,7 +148,7 @@ function inferFieldFromValue(
     return {
       id: `f_${name}`,
       name,
-      type: "model",
+      type: FieldType.Model,
       ref: child.root.id,
       optional,
       description: "",
@@ -206,7 +207,7 @@ function inferModelsFromRows(
       return {
         id: `f_${i}`,
         name: key,
-        type: "list[model]" as const,
+        type: FieldType.ListModel,
         ref: child.root.id,
         optional,
         description: "",
@@ -223,7 +224,7 @@ function inferModelsFromRows(
         return {
           id: `f_${i}`,
           name: key,
-          type: "list[model]" as const,
+          type: FieldType.ListModel,
           ref: child.root.id,
           optional,
           description: "",
