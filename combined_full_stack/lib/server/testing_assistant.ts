@@ -82,7 +82,7 @@ Rules:
 - "expectedOutputs" maps step labels to the exact expected JSON output of that step; every value must type-check against the pipeline-state shape above.
 - Only use step labels that exist in the pipeline. Do not include input steps in expectedOutputs.
 - Tests are partial by design: cover only the steps the user asks about (a single step is fine). Only the listed steps are checked.
-- Structure fields marked deterministic:false (probabilistic — LLM prose like a summary or feedback that will almost never match exactly) are automatically IGNORED when comparing. Still include a plausible value for them in expectedOutputs (as a reference), but only deterministic fields (maths answers, ids, enums, scores) decide pass/fail — so make those exact.
+- Structure fields marked deterministic:false (probabilistic — LLM prose like feedback) are excluded from exact JSON compare; include reference values in expectedOutputs and they are LLM-checked for semantic match after deterministic fields pass.
 - "fileName" is a short snake_case base name (the ${TESTING_FILE_SUFFIX} suffix is added automatically).
 
 User request:

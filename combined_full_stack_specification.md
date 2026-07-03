@@ -239,6 +239,8 @@ this can be a demo for the inference. assert actual output equals expected
 
 inference contains a list of possible runs which have been pre selected, not just a single default one. these possible runs are named for example for a homework grader you could do a 1st grade example and a university grade example where the university includes latex formatting as a more advnaced test. you can also select from the tests in the inference tab.
 
+The inference tab should be able to save multiple named setups like for the homework example '10th grade' and 'pre school' with specific input files associated. there should not be a single default setup to the inference tab. use the same backend logic that is used to save the input setup in the testing tab.
+
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.
 you can search for runs, based on descriptions provided and editable when selecting the run.

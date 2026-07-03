@@ -2,11 +2,13 @@
 // AI : validated against the live pipeline (labels + spine output types) since pipelines drift.
 
 import { deepEqual, deepEqualDiffPath } from "@/lib/deep_equal"
-import { namedInputDocNames, resolveNamedRunInputs, type ResolvedNamedInputs } from "@/lib/inference-presets"
+import { jsonUnifiedDiff } from "@/lib/json-diff"
+import { resolveNamedRunInputs, type ResolvedNamedInputs } from "@/lib/inference-presets"
+import { validateNamedInputs, isInferenceSetupFileName } from "@/lib/inference-setup-files"
 import { labelAsStateKey, validatePipelineStateEntry } from "@/lib/server/pipeline_state"
 import { fieldToTypeExpr, stepSpineOutType } from "@/lib/server/type_expr"
 import { tryParseJson } from "@/lib/json-utils"
-import { DocLabel, ModuleKind, RunTestStepStatus } from "@/lib/types"
+import { DocLabel, ModuleKind, RunTestStepStatus, type RunTestProbabilisticResult } from "@/lib/types"
 import type {
   DocRef,
   PipelineModule,
@@ -23,7 +25,7 @@ type step_label_string = string
 type doc_name_string = string
 
 // AI : deterministic-ness is NOT stored here — it lives on structure fields
-// AI : (ModelField.deterministic); probabilistic fields are ignored for every test.
+// AI : (ModelField.deterministic); probabilistic fields are exact-excluded then LLM-checked.
 export type SpineTestFile = {
   description?: string
   // AI : input step label → doc name(s) so a test pins its own inputs
@@ -72,7 +74,6 @@ export function parseTestFile(content: string): TestParseResult {
   }
 }
 
-const docNames = namedInputDocNames
 
 function moduleByLabel(modules: PipelineModule[], label: string): PipelineModule | undefined {
   return modules.find((m) => labelAsStateKey(m.label) === labelAsStateKey(label))
@@ -119,36 +120,7 @@ export function validateTestFile(
     }
   }
 
-  const inputs = test.inputs ?? {}
-  for (const [label, value] of Object.entries(inputs)) {
-    const mod = moduleByLabel(modules, label)
-    if (!mod) {
-      issues.push({ level: "error", where: label, message: "input step not found in the pipeline" })
-      continue
-    }
-    if (mod.kind !== ModuleKind.Input) {
-      issues.push({ level: "error", where: label, message: `"${label}" is a ${mod.kind} step, not an input` })
-      continue
-    }
-    const names = docNames(value)
-    if (!names.length) {
-      issues.push({ level: "warning", where: label, message: "no document name set for this input" })
-    }
-    for (const name of names) {
-      if (!projectDocs.some((d) => d.name === name)) {
-        issues.push({ level: "error", where: label, message: `document "${name}" not found in this project` })
-      }
-    }
-  }
-  for (const m of inputModulesOf(modules)) {
-    if (!(labelAsStateKey(m.label) in inputs) && !Object.keys(inputs).some((l) => labelAsStateKey(l) === labelAsStateKey(m.label))) {
-      issues.push({
-        level: "warning",
-        where: m.label,
-        message: "input step has no document assigned — the test cannot run until one is set",
-      })
-    }
-  }
+  issues.push(...validateNamedInputs(test.inputs ?? {}, project, projectDocs))
   return issues
 }
 
@@ -258,8 +230,108 @@ function stripPaths(value: unknown, paths: Set<field_path_string>, path: field_p
   return out
 }
 
+type path_value_pair = { path: field_path_string; value: unknown }
+
+// AI : collect every concrete value at probabilistic paths — e.g. "[].feedback" → "[0].feedback", …
+function collectPathValues(value: unknown, pattern: field_path_string, currentPath: field_path_string): path_value_pair[] {
+  if (!pattern) return [{ path: currentPath || "(root)", value }]
+  if (pattern.startsWith("[]")) {
+    if (!Array.isArray(value)) return []
+    const rest = pattern.slice(2).replace(/^\./, "")
+    return value.flatMap((item, i) =>
+      collectPathValues(item, rest, currentPath ? `${currentPath}[${i}]` : `[${i}]`),
+    )
+  }
+  const dot = pattern.indexOf(".")
+  const key = dot === -1 ? pattern : pattern.slice(0, dot)
+  const rest = dot === -1 ? "" : pattern.slice(dot + 1)
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return []
+  const obj = value as Record<string, unknown>
+  if (!(key in obj)) return []
+  const childPath = currentPath ? `${currentPath}.${key}` : key
+  return collectPathValues(obj[key], rest, childPath)
+}
+
+export type ProbabilisticFieldPair = {
+  path: field_path_string
+  expected: unknown
+  actual: unknown
+}
+
+export function probabilisticFieldPairs(
+  expected: unknown,
+  actual: unknown,
+  paths: field_path_string[],
+): ProbabilisticFieldPair[] {
+  const out: ProbabilisticFieldPair[] = []
+  for (const pattern of paths) {
+    const expVals = collectPathValues(expected, pattern, "")
+    const actVals = collectPathValues(actual, pattern, "")
+    const actByPath = new Map(actVals.map((v) => [v.path, v.value]))
+    for (const { path, value: exp } of expVals) {
+      out.push({ path, expected: exp, actual: actByPath.get(path) })
+    }
+  }
+  return out
+}
+
+export type ProbabilisticEvalPayload = {
+  label: string
+  fields: ProbabilisticFieldPair[]
+}
+
+export type ProbabilisticEvalResult = {
+  label: string
+  fieldResults: RunTestProbabilisticResult[]
+  pass: boolean
+}
+
+// AI : merge LLM probabilistic-field verdicts — deterministic JSON must already pass.
+export function mergeProbabilisticEvaluations(
+  results: TestStepResult[],
+  evaluations: ProbabilisticEvalResult[],
+): TestStepResult[] {
+  const evalByKey = new Map(evaluations.map((e) => [labelAsStateKey(e.label), e]))
+  return results.map((r) => {
+    const ev = evalByKey.get(labelAsStateKey(r.label))
+    if (!ev || r.status !== RunTestStepStatus.Pass) return r
+    const probabilisticPass = ev.fieldResults.every((x) => x.pass)
+    return {
+      ...r,
+      status: probabilisticPass ? RunTestStepStatus.Pass : RunTestStepStatus.Fail,
+      probabilisticResults: ev.fieldResults,
+      llmEvaluated: true,
+    }
+  })
+}
+
+export function probabilisticEvalPayloads(
+  run: PipelineRun,
+  test: SpineTestFile,
+  deterministicResults: TestStepResult[],
+  project: Pick<Project, "modules" | "models">,
+): ProbabilisticEvalPayload[] {
+  const expectedByKey = new Map(
+    Object.entries(test.expectedOutputs).map(([label, v]) => [labelAsStateKey(label), v]),
+  )
+  const out: ProbabilisticEvalPayload[] = []
+  for (const r of deterministicResults) {
+    if (r.status !== RunTestStepStatus.Pass || !r.ignoredPaths?.length) continue
+    const m = project.modules.find((mod) => labelAsStateKey(mod.label) === labelAsStateKey(r.label))
+    if (!m) continue
+    const expected = expectedByKey.get(labelAsStateKey(r.label))
+    const step = run.steps.find((s) => labelAsStateKey(s.label) === labelAsStateKey(r.label))
+    const parsed = step?.outputJson ? tryParseJson(step.outputJson) : null
+    const actual = parsed?.ok ? parsed.value : r.actual
+    if (expected === undefined || actual === undefined) continue
+    const fields = probabilisticFieldPairs(expected, actual, r.ignoredPaths)
+    if (fields.length) out.push({ label: r.label, fields })
+  }
+  return out
+}
+
 // AI : the pinpoint view — first failing step in pipeline order is where the pipeline goes wrong.
-// AI : Only deterministic fields are compared; probabilistic ones surface as ignoredPaths.
+// AI : Deterministic fields are exact-compared (git diff on fail); probabilistic fields go to LLM after.
 export function compareRunToTest(
   run: PipelineRun,
   test: SpineTestFile,
@@ -302,6 +374,7 @@ export function compareRunToTest(
         label: m.label,
         status: RunTestStepStatus.Fail,
         diffPath: deepEqualDiffPath(actualCore, expectedCore),
+        deterministicDiff: jsonUnifiedDiff(expectedCore, actualCore),
         ignoredPaths,
         expected,
         actual,
@@ -322,7 +395,9 @@ export function firstFailure(results: TestStepResult[]): TestStepResult | undefi
 export function testFileSkeleton(project: Project, projectDocs: DocRef[]): string {
   const inputs: Record<step_label_string, doc_name_string> = {}
   for (const m of inputModulesOf(project.modules)) {
-    const candidate = projectDocs.find((d) => d.label === DocLabel.Inference && !isTestingFileName(d.name))
+    const candidate = projectDocs.find(
+      (d) => d.label === DocLabel.Inference && !isTestingFileName(d.name) && !isInferenceSetupFileName(d.name),
+    )
     inputs[labelAsStateKey(m.label)] = candidate?.name ?? ""
   }
   const golden = project.expectedOutputs ?? {}

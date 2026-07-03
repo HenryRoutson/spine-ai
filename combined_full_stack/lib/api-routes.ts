@@ -30,6 +30,7 @@ export const API_ROUTES = {
   pipelineSummary: "/api/pipeline-summary",
   structureAssistant: "/api/structure-assistant",
   testingAssistant: "/api/testing-assistant",
+  testingEvaluate: "/api/testing-evaluate",
   docsContent: "/api/docs/content",
   feedback: "/api/feedback",
   supabaseEnv: "/api/supabase-env",

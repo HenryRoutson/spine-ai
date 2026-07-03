@@ -7,10 +7,12 @@ export const FETCH_NO_STORE = { cache: "no-store" as const };
 export type ApiErrorBody = { error?: string; detail?: string; code?: string };
 
 export async function readApiErrorBody(res: Response): Promise<ApiErrorBody | null> {
+  const raw = await res.text();
+  if (!raw.trim()) return null;
   try {
-    return (await res.json()) as ApiErrorBody;
+    return JSON.parse(raw) as ApiErrorBody;
   } catch {
-    return null;
+    return { error: raw.slice(0, 240) };
   }
 }
 

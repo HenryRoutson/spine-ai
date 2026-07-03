@@ -14,13 +14,13 @@ import { RunTestStepStatus, type RunTestStepResult } from "@/lib/types"
 export function TestResults({ results, action }: { results: RunTestStepResult[]; action?: ReactNode }) {
   const failure = firstFailure(results)
   const passed = results.filter((r) => r.status === RunTestStepStatus.Pass).length
-  // AI : skipped steps (input/combine) are recorded but never compared — out of the score.
+  // AI : skipped steps (input/combine) are recorded but never scored — out of the score.
   const skipped = results.filter((r) => r.status === RunTestStepStatus.Skipped).length
   const compared = results.length - skipped
-  const ignoredCount = results.reduce((n, r) => n + (r.ignoredPaths?.length ?? 0), 0)
+  const llmChecked = results.filter((r) => r.llmEvaluated).length
   const skippedNote =
     (skipped ? ` · ${skipped} step(s) skipped` : "") +
-    (ignoredCount ? ` · ${ignoredCount} probabilistic field(s) ignored` : "")
+    (llmChecked ? ` · ${llmChecked} step(s) LLM-checked (probabilistic fields)` : "")
   return (
     <section>
       <div className="flex items-center justify-between gap-2">
@@ -90,27 +90,54 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
             {result.skipReason ?? "skipped"}
           </span>
         )}
-        {result.status !== RunTestStepStatus.Skipped && !!result.ignoredPaths?.length && (
+        {result.llmEvaluated && !!result.probabilisticResults?.length && (
           <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-            {result.ignoredPaths.length} field(s) ignored
+            {result.probabilisticResults.filter((x) => x.pass).length}/{result.probabilisticResults.length} probabilistic
           </span>
         )}
       </button>
-      {open && !!result.ignoredPaths?.length && (
-        // AI : what the compare ignored — probabilistic fields per the structure definitions
-        <p className="border-t border-border px-2.5 py-1.5 font-mono text-[10px] text-muted-foreground">
-          ignored probabilistic fields: {result.ignoredPaths.join(", ")}
-        </p>
+      {open && result.deterministicDiff && (
+        <div className="border-t border-border px-2.5 py-2">
+          <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">deterministic diff</p>
+          <pre className="max-h-48 overflow-auto rounded border border-border bg-secondary/30 p-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
+            {result.deterministicDiff}
+          </pre>
+        </div>
       )}
-      {open && (
+      {open && !!result.probabilisticResults?.length && (
+        <ul className="space-y-1 border-t border-border px-2.5 py-1.5">
+          {result.probabilisticResults.map((pr) => (
+            <li
+              key={pr.path}
+              className={cn(
+                "flex items-start gap-1.5 font-mono text-[10px]",
+                pr.pass ? "text-chart-2" : "text-destructive",
+              )}
+            >
+              {pr.pass ? (
+                <CircleCheck className="mt-0.5 h-3 w-3 shrink-0" />
+              ) : (
+                <CircleX className="mt-0.5 h-3 w-3 shrink-0" />
+              )}
+              <span className="whitespace-pre-wrap">
+                {pr.path}
+                {!pr.pass && pr.reason ? ` — ${pr.reason}` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {open && (result.expected !== undefined || result.actual !== undefined) && (
         <div className="grid grid-cols-1 gap-2 border-t border-border p-2.5 lg:grid-cols-2">
-          <div>
-            <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">expected</p>
-            <div className="max-h-72 overflow-auto rounded border border-border bg-secondary/30 p-2">
-              <JsonHighlight json={JSON.stringify(result.expected, null, 2)} />
+          {result.expected !== undefined && (
+            <div>
+              <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">expected</p>
+              <div className="max-h-72 overflow-auto rounded border border-border bg-secondary/30 p-2">
+                <JsonHighlight json={JSON.stringify(result.expected, null, 2)} />
+              </div>
             </div>
-          </div>
-          <div>
+          )}
+          <div className={result.expected === undefined ? "lg:col-span-2" : ""}>
             <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">actual</p>
             <div className="max-h-72 overflow-auto rounded border border-border bg-secondary/30 p-2">
               {result.actual === undefined ? (

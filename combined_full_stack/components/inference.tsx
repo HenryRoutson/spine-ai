@@ -1,15 +1,17 @@
 "use client"
 
 // AI : TODO — per-step cache toggles, run-from-step, and cache probe (see requirements/inference_tab_requirements.md).
-import { useEffect, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  FileText,
-  Loader2,
-  RotateCcw,
   AlertTriangle,
-  Zap,
-  GitBranch,
   CreditCard,
+  GitBranch,
+  Layers,
+  Loader2,
+  Plus,
+  RotateCcw,
+  TriangleAlert,
+  Zap,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
@@ -19,11 +21,25 @@ import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { WindowHeader } from "@/components/window-header"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { docsForInputModule, resolveRunInputDocIds, inputDocsByModuleFromFlat, isMultiDocInputModule, type InputDocsAssignment } from "@/lib/inference-input"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import {
+  docsForInputModule,
+  resolveRunInputDocIds,
+  inputDocsByModuleFromFlat,
+  isMultiDocInputModule,
+  type InputDocsAssignment,
+} from "@/lib/inference-input"
 import { inferenceInputIssueMessage } from "@/lib/inference-validity"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
 import { InferenceRunPresetMenu } from "@/components/inference/inference-run-preset-menu"
+import {
+  draftFromSetup,
+  draftToSetupContent,
+  InferenceSetupEditor,
+  type SetupDraft,
+} from "@/components/inference-setup-editor"
 import { useInferenceRun } from "@/lib/use-inference-run"
 import { RunNotesPad } from "@/components/run-notes-pad"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
@@ -41,6 +57,47 @@ import { ShareLinkDialog } from "@/components/share-link-dialog"
 import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 import { timeAgo } from "@/lib/time-ago"
 import { useRerenderOnEvent } from "@/lib/use-browser-pref-event"
+import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
+import { docsForProject } from "@/lib/project-docs"
+import {
+  INFERENCE_SETUP_SUFFIX,
+  inferenceSetupSkeleton,
+  isInferenceSetupFileName,
+  nextInferenceSetupFileName,
+  parseInferenceSetupFile,
+  resolveInferenceSetupInputs,
+  setupDisplayName,
+  validateInferenceSetupFile,
+  type SetupFileIssue,
+  type SpineInferenceSetupFile,
+} from "@/lib/inference-setup-files"
+import { cn } from "@/lib/utils"
+import { DocLabel, InputType } from "@/lib/types"
+import type { DocId, DocRef, Project } from "@/lib/types"
+
+type SetupDocState = {
+  doc: DocRef
+  content?: string
+  parseError?: string
+  setup?: SpineInferenceSetupFile
+  issues: SetupFileIssue[]
+}
+
+function setupStatus(t: SetupDocState): "loading" | "broken" | "errors" | "warnings" | "ok" {
+  if (t.content === undefined) return "loading"
+  if (t.parseError) return "broken"
+  if (t.issues.some((i) => i.level === "error")) return "errors"
+  if (t.issues.length) return "warnings"
+  return "ok"
+}
+
+const STATUS_BADGE: Record<ReturnType<typeof setupStatus>, { label: string; className: string }> = {
+  loading: { label: "loading", className: "border-border text-muted-foreground" },
+  broken: { label: "invalid json", className: "border-destructive/40 text-destructive" },
+  errors: { label: "stale", className: "border-destructive/40 text-destructive" },
+  warnings: { label: "incomplete", className: "border-yellow-500/40 text-yellow-500" },
+  ok: { label: "valid", className: "border-chart-2/40 text-chart-2" },
+}
 
 export function Inference() {
   const {
@@ -58,6 +115,8 @@ export function Inference() {
     setInferenceInputDocIds,
     flushPendingSave,
     typeAliases,
+    addDocContent,
+    removeDoc,
   } = useStore()
   const { setActiveWindow, openLogging } = useAppShell()
   const { open } = useDocViewer()
@@ -66,6 +125,42 @@ export function Inference() {
   const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
   const insufficientCredit =
     billingAccount != null && billingAccount.balanceCents < minRunBalanceCents
+
+  const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
+  const setupDocs = useMemo(() => projectDocs.filter((d) => isInferenceSetupFileName(d.name)), [projectDocs])
+
+  const [contents, setContents] = useState<Record<DocId, string>>({})
+  const [selectedId, setSelectedId] = useState<DocId | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [creatingSetup, setCreatingSetup] = useState(false)
+
+  useEffect(() => {
+    for (const d of setupDocs) {
+      if (contents[d.id] !== undefined) continue
+      void fetchDocText(d.id)
+        .then((data) => setContents((prev) => ({ ...prev, [d.id]: docTextContent(data) })))
+        .catch((err) => setContents((prev) => ({ ...prev, [d.id]: `<<load failed: ${(err as Error).message}>>` })))
+    }
+  }, [setupDocs, contents])
+
+  const setupStates: SetupDocState[] = useMemo(
+    () =>
+      setupDocs.map((doc) => {
+        const content = contents[doc.id]
+        if (content === undefined) return { doc, issues: [] }
+        const parsed = parseInferenceSetupFile(content)
+        if (!parsed.ok) return { doc, content, parseError: parsed.error, issues: [] }
+        return {
+          doc,
+          content,
+          setup: parsed.setup,
+          issues: validateInferenceSetupFile(parsed.setup, project, projectDocs),
+        }
+      }),
+    [setupDocs, contents, project, projectDocs],
+  )
+
+  const selected = setupStates.find((s) => s.doc.id === selectedId)
 
   const run = useInferenceRun({
     project,
@@ -81,9 +176,69 @@ export function Inference() {
     flushPendingSave,
   })
 
+  const applySetupInputs = useCallback(
+    (setup: SpineInferenceSetupFile) => {
+      const resolved = resolveInferenceSetupInputs(setup, run.inputModules, projectDocs)
+      if (resolved.ok) run.applyInputAssignment(resolved.assignment)
+    },
+    [run, projectDocs],
+  )
+
+  const selectSetup = useCallback(
+    (id: DocId) => {
+      setSelectedId(id)
+      setActionError(null)
+      const state = setupStates.find((s) => s.doc.id === id)
+      if (state?.setup) applySetupInputs(state.setup)
+    },
+    [setupStates, applySetupInputs],
+  )
+
   useEffect(() => {
     refreshBilling().catch(console.error)
   }, [refreshBilling])
+
+  async function createBlankSetup() {
+    setActionError(null)
+    setCreatingSetup(true)
+    try {
+      const doc = await addDocContent(
+        nextInferenceSetupFileName(projectDocs),
+        InputType.Json,
+        inferenceSetupSkeleton(project),
+        DocLabel.Inference,
+        project.id,
+      )
+      invalidateDocText(doc.id)
+      setContents(({ [doc.id]: _stale, ...rest }) => rest)
+      selectSetup(doc.id)
+    } catch (err) {
+      setActionError((err as Error).message)
+    } finally {
+      setCreatingSetup(false)
+    }
+  }
+
+  async function saveEdit(state: SetupDocState, draft: string): Promise<DocId | null> {
+    setActionError(null)
+    const parsed = parseInferenceSetupFile(draft)
+    if (!parsed.ok) {
+      setActionError(parsed.error)
+      return null
+    }
+    try {
+      await removeDoc(state.doc.id, project.id)
+      const doc = await addDocContent(state.doc.name, InputType.Json, draft, DocLabel.Inference, project.id)
+      invalidateDocText(doc.id)
+      setContents(({ [state.doc.id]: _old, [doc.id]: _stale, ...rest }) => rest)
+      selectSetup(doc.id)
+      applySetupInputs(parsed.setup)
+      return doc.id
+    } catch (err) {
+      setActionError((err as Error).message)
+      return null
+    }
+  }
 
   const finalOutputSteps = useMemo(
     () => (run.run ? pipelineFinalOutputSteps(run.run.steps) : []),
@@ -119,7 +274,9 @@ export function Inference() {
       ? "Run in progress — inputs locked until it finishes"
       : run.phase === "done"
         ? "Change files here to run again with different inputs"
-        : "Choose files for each input slot, then run the pipeline"
+        : selected
+          ? `Using setup · ${setupDisplayName(selected.doc.name)}`
+          : "Pick a saved setup or assign inputs manually, then run"
 
   const lastRunSubtitle = run.run
     ? `${run.run.status === "ok" ? "Completed" : "Failed"} · ${timeAgo(run.run.startedAt)} · ${run.run.id}`
@@ -130,9 +287,17 @@ export function Inference() {
       <WindowHeader
         step="04 / Inference"
         title="Run Pipeline"
-        description="Assign inputs and run the pipeline. Final output appears here when the run finishes."
+        description="Save named input setups, then run the pipeline. Final output appears when the run finishes."
         actions={
           <div className="flex items-center gap-2">
+            <Button size="sm" className="h-8" onClick={() => void createBlankSetup()} disabled={creatingSetup}>
+              {creatingSetup ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              New setup
+            </Button>
             <ShareLinkDialog
               project={project}
               docs={docs}
@@ -149,6 +314,12 @@ export function Inference() {
       <p className="border-b border-border px-5 py-2 text-[11px] text-muted-foreground">
         AI outputs are not professional, medical, or legal advice — verify before acting.
       </p>
+
+      {actionError && (
+        <p className="border-b border-destructive/30 bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive">
+          {actionError}
+        </p>
+      )}
 
       {pipelineInvalid ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
@@ -169,15 +340,67 @@ export function Inference() {
           </div>
         </div>
       ) : (
-      <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-4xl space-y-6 p-5">
-            <InferenceRunSection title="Next run" subtitle={nextRunSubtitle} variant="current">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    pipeline inputs · {run.inputModules.length} slot{run.inputModules.length === 1 ? "" : "s"}
-                  </p>
-                  <div className="flex items-center gap-2">
+        <div className="flex min-h-0 flex-1">
+          <div className="flex w-64 shrink-0 flex-col border-r border-border">
+            <p className="border-b border-border px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
+              saved setups ({setupDocs.length})
+            </p>
+            <ScrollArea className="min-h-0 flex-1">
+              {setupStates.length === 0 && (
+                <p className="px-3 py-4 text-xs text-muted-foreground">
+                  No setups yet. Create one — files ending in{" "}
+                  <span className="font-mono">{INFERENCE_SETUP_SUFFIX}</span> show up here and in Documents.
+                </p>
+              )}
+              <ul className="p-1.5">
+                {setupStates.map((s) => {
+                  const status = setupStatus(s)
+                  const badge = STATUS_BADGE[status]
+                  const isSelected = selected?.doc.id === s.doc.id
+                  return (
+                    <li key={s.doc.id}>
+                      <button
+                        type="button"
+                        onClick={() => selectSetup(s.doc.id)}
+                        className={cn(
+                          "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent",
+                          isSelected && "bg-secondary",
+                        )}
+                      >
+                        <Layers className="h-4 w-4 shrink-0 text-primary" />
+                        <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
+                          {setupDisplayName(s.doc.name)}
+                        </span>
+                        <Badge variant="outline" className={cn("shrink-0 font-mono text-[9px]", badge.className)}>
+                          {badge.label}
+                        </Badge>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            </ScrollArea>
+          </div>
+
+          <ScrollArea className="min-h-0 min-w-0 flex-1">
+            <div className="mx-auto max-w-4xl space-y-6 p-5">
+              {selected && (
+                <SetupDetail
+                  key={selected.doc.id}
+                  state={selected}
+                  project={project}
+                  projectDocs={projectDocs}
+                  onSaveEdit={(draft) => void saveEdit(selected, draft)}
+                  onApplyInputs={applySetupInputs}
+                />
+              )}
+
+              <InferenceRunSection title="Next run" subtitle={nextRunSubtitle} variant="current">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      pipeline inputs · {run.inputModules.length} slot{run.inputModules.length === 1 ? "" : "s"}
+                    </p>
                     <InferenceRunPresetMenu
                       project={project}
                       docs={docs}
@@ -186,191 +409,182 @@ export function Inference() {
                       disabled={run.phase === "running"}
                       onApply={run.applyInputAssignment}
                     />
+                  </div>
+                  <div className={run.phase === "running" ? "pointer-events-none opacity-60" : undefined}>
+                    {run.inputModules.map((m) => (
+                      <InferenceInputSlot
+                        key={m.id}
+                        inputModule={m}
+                        outModel={modelName(models, m.outStructureId)}
+                        docs={docsForInputModule(run.inputDocs, m.id)}
+                        issue={run.inputIssueByModule.get(m.id)}
+                        onOpenPicker={() => run.setPickerModuleId(m.id)}
+                        onOpenDoc={(docId) => open({ docId, start: 0, end: 0 })}
+                        onRemoveDoc={(docId) => run.removeInputDocForModule(m.id, docId)}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                <RunNotesPad
+                  value={run.runNotes}
+                  onChange={run.setRunNotes}
+                  hint={
+                    run.phase === "done"
+                      ? "Notes for your next run"
+                      : run.phase === "running"
+                        ? "Add notes while the run finishes"
+                        : "Describe what you're testing before you run"
+                  }
+                />
+
+                {insufficientCredit && run.phase !== "running" ? (
+                  <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-5 text-center">
+                    <AlertTriangle className="mx-auto h-8 w-8 text-destructive" />
+                    <p className="mt-3 text-sm font-medium text-destructive">
+                      Not enough credit to run a pipeline
+                    </p>
+                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                      Balance {formatUsdFromCents(billingAccount!.balanceCents)} ·{" "}
+                      {formatUsdFromCents(minRunBalanceCents)} minimum to run
+                    </p>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-7 bg-transparent"
-                      onClick={run.useSamples}
-                      disabled={run.phase === "running"}
+                      className="mt-4 gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      onClick={() => setActiveWindow("billing")}
                     >
-                      <FileText className="mr-1.5 h-3.5 w-3.5" /> Use samples
+                      <CreditCard className="h-3.5 w-3.5" />
+                      Go to Billing
                     </Button>
                   </div>
-                </div>
-                <div className={run.phase === "running" ? "pointer-events-none opacity-60" : undefined}>
-                {run.inputModules.map((m) => (
-                  <InferenceInputSlot
-                    key={m.id}
-                    inputModule={m}
-                    outModel={modelName(models, m.outStructureId)}
-                    docs={docsForInputModule(run.inputDocs, m.id)}
-                    issue={run.inputIssueByModule.get(m.id)}
-                    onOpenPicker={() => run.setPickerModuleId(m.id)}
-                    onOpenDoc={(docId) => open({ docId, start: 0, end: 0 })}
-                    onRemoveDoc={(docId) => run.removeInputDocForModule(m.id, docId)}
-                  />
-                ))}
-                </div>
-              </div>
-
-              <RunNotesPad
-                value={run.runNotes}
-                onChange={run.setRunNotes}
-                hint={
-                  run.phase === "done"
-                    ? "Notes for your next run"
-                    : run.phase === "running"
-                      ? "Add notes while the run finishes"
-                      : "Describe what you're testing before you run"
-                }
-              />
-
-              {insufficientCredit && run.phase !== "running" ? (
-                <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-5 text-center">
-                  <AlertTriangle className="mx-auto h-8 w-8 text-destructive" />
-                  <p className="mt-3 text-sm font-medium text-destructive">
-                    Not enough credit to run a pipeline
-                  </p>
-                  <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                    Balance {formatUsdFromCents(billingAccount!.balanceCents)} ·{" "}
-                    {formatUsdFromCents(minRunBalanceCents)} minimum to run
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-4 gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() => setActiveWindow("billing")}
-                  >
-                    <CreditCard className="h-3.5 w-3.5" />
-                    Go to Billing
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  {run.matchingPriorRun && run.phase === "idle" && (
-                    <div className="rounded-lg border border-chart-3/40 bg-chart-3/5 px-4 py-3">
-                      <p className="text-sm text-foreground">
-                        This setup already completed successfully.
-                      </p>
-                      <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                        {timeAgo(run.matchingPriorRun.startedAt)} · {run.matchingPriorRun.id}
-                      </p>
-                      <GoToLoggingButton
-                        className="mt-3"
-                        onClick={() => openLogging(run.matchingPriorRun!.id)}
-                      />
-                    </div>
-                  )}
-                  <Button
-                    className="w-full"
-                    disabled={
-                      !run.allInputsReady ||
-                      run.inputsInvalid ||
-                      run.phase === "running" ||
-                      insufficientCredit
-                    }
-                    onClick={run.start}
-                  >
-                    {run.runButtonBusy ? (
-                      <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Zap className="mr-1.5 h-4 w-4" />
-                    )}
-                    {run.runButtonLabel}
-                  </Button>
-                </>
-              )}
-
-              {run.pendingHumanReview && (
-                <HumanReviewPanel
-                  spec={run.pendingHumanReview}
-                  module={modules.find((m) => m.id === run.pendingHumanReview!.moduleId)}
-                  onApprove={() => run.resolveHumanReview("approved")}
-                  onReject={() => run.resolveHumanReview("rejected")}
-                />
-              )}
-
-              {run.inputsInvalid && (
-                <ErrorBanner text={inferenceInputIssueMessage(run.inputIssues)} />
-              )}
-
-              {run.error && run.phase !== "done" && <ErrorBanner text={run.error} />}
-
-              {run.deduped && run.phase === "done" && (
-                <div className="rounded-lg border border-chart-3/40 bg-chart-3/5 px-4 py-3 text-sm text-foreground">
-                  Reused a prior successful run with the same fingerprint — no new inference was billed.
-                </div>
-              )}
-
-              {run.phase === "running" && (
-                <InferenceStepTracePanel
-                  modules={modules}
-                  phase={run.phase}
-                  stepStates={run.stepStates}
-                  run={run.run}
-                  progressPct={run.progressPct}
-                  waitPhrase={run.waitPhrase}
-                  logsByModule={run.logsByModule}
-                  logEndRef={run.logEndRef}
-                  docs={docs}
-                  models={models}
-                  inputDocs={run.inputDocs}
-                />
-              )}
-            </InferenceRunSection>
-
-            {run.phase === "done" && run.run && (
-              <div ref={lastRunRef}>
-              <InferenceRunSection
-                title="Last run"
-                subtitle={lastRunSubtitle}
-                variant="last"
-              >
-                {finalOutputSteps.length > 0 && (
-                  <InferenceRunOutputs steps={finalOutputSteps} models={models} />
-                )}
-
-                {run.run.status !== "ok" && (
-                  <div className="rounded-lg border border-border bg-card px-6 py-6">
-                    {run.runErrorDisplay ? (
-                      <RunErrorSummary display={run.runErrorDisplay} technical={run.runErr} />
-                    ) : (
-                      <div className="text-center">
-                        <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
-                        <p className="mt-4 text-sm font-medium">Pipeline could not finish</p>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          See step trace below for details.
+                ) : (
+                  <>
+                    {run.matchingPriorRun && run.phase === "idle" && (
+                      <div className="rounded-lg border border-chart-3/40 bg-chart-3/5 px-4 py-3">
+                        <p className="text-sm text-foreground">
+                          This setup already completed successfully.
                         </p>
+                        <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                          {timeAgo(run.matchingPriorRun.startedAt)} · {run.matchingPriorRun.id}
+                        </p>
+                        <GoToLoggingButton
+                          className="mt-3"
+                          onClick={() => openLogging(run.matchingPriorRun!.id)}
+                        />
                       </div>
                     )}
+                    <Button
+                      className="w-full"
+                      disabled={
+                        !run.allInputsReady ||
+                        run.inputsInvalid ||
+                        run.phase === "running" ||
+                        insufficientCredit
+                      }
+                      onClick={run.start}
+                    >
+                      {run.runButtonBusy ? (
+                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Zap className="mr-1.5 h-4 w-4" />
+                      )}
+                      {run.runButtonLabel}
+                    </Button>
+                  </>
+                )}
+
+                {run.pendingHumanReview && (
+                  <HumanReviewPanel
+                    spec={run.pendingHumanReview}
+                    module={modules.find((m) => m.id === run.pendingHumanReview!.moduleId)}
+                    onApprove={() => run.resolveHumanReview("approved")}
+                    onReject={() => run.resolveHumanReview("rejected")}
+                  />
+                )}
+
+                {run.inputsInvalid && (
+                  <ErrorBanner text={inferenceInputIssueMessage(run.inputIssues)} />
+                )}
+
+                {run.error && run.phase !== "done" && <ErrorBanner text={run.error} />}
+
+                {run.deduped && run.phase === "done" && (
+                  <div className="rounded-lg border border-chart-3/40 bg-chart-3/5 px-4 py-3 text-sm text-foreground">
+                    Reused a prior successful run with the same fingerprint — no new inference was billed.
                   </div>
                 )}
 
-                {run.error && <ErrorBanner text={run.error} />}
-
-                <InferenceStepTracePanel
-                  modules={modules}
-                  phase={run.phase}
-                  stepStates={run.stepStates}
-                  run={run.run}
-                  progressPct={run.progressPct}
-                  waitPhrase={run.waitPhrase}
-                  logsByModule={run.logsByModule}
-                  docs={docs}
-                  models={models}
-                  inputDocs={lastRunInputDocs}
-                  footer={
-                    <GoToLoggingButton
-                      className="mt-4"
-                      onClick={() => openLogging(run.run!.id)}
-                    />
-                  }
-                />
+                {run.phase === "running" && (
+                  <InferenceStepTracePanel
+                    modules={modules}
+                    phase={run.phase}
+                    stepStates={run.stepStates}
+                    run={run.run}
+                    progressPct={run.progressPct}
+                    waitPhrase={run.waitPhrase}
+                    logsByModule={run.logsByModule}
+                    logEndRef={run.logEndRef}
+                    docs={docs}
+                    models={models}
+                    inputDocs={run.inputDocs}
+                  />
+                )}
               </InferenceRunSection>
-              </div>
-            )}
-          </div>
-      </div>
+
+              {run.phase === "done" && run.run && (
+                <div ref={lastRunRef}>
+                  <InferenceRunSection
+                    title="Last run"
+                    subtitle={lastRunSubtitle}
+                    variant="last"
+                  >
+                    {finalOutputSteps.length > 0 && (
+                      <InferenceRunOutputs steps={finalOutputSteps} models={models} />
+                    )}
+
+                    {run.run.status !== "ok" && (
+                      <div className="rounded-lg border border-border bg-card px-6 py-6">
+                        {run.runErrorDisplay ? (
+                          <RunErrorSummary display={run.runErrorDisplay} technical={run.runErr} />
+                        ) : (
+                          <div className="text-center">
+                            <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
+                            <p className="mt-4 text-sm font-medium">Pipeline could not finish</p>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              See step trace below for details.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {run.error && <ErrorBanner text={run.error} />}
+
+                    <InferenceStepTracePanel
+                      modules={modules}
+                      phase={run.phase}
+                      stepStates={run.stepStates}
+                      run={run.run}
+                      progressPct={run.progressPct}
+                      waitPhrase={run.waitPhrase}
+                      logsByModule={run.logsByModule}
+                      docs={docs}
+                      models={models}
+                      inputDocs={lastRunInputDocs}
+                      footer={
+                        <GoToLoggingButton
+                          className="mt-4"
+                          onClick={() => openLogging(run.run!.id)}
+                        />
+                      }
+                    />
+                  </InferenceRunSection>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </div>
       )}
       {run.pickerModule && (
         <InferenceInputPickerPopup
@@ -380,6 +594,106 @@ export function Inference() {
           onClose={() => run.setPickerModuleId(null)}
         />
       )}
+    </div>
+  )
+}
+
+function SetupDetail({
+  state,
+  project,
+  projectDocs,
+  onSaveEdit,
+  onApplyInputs,
+}: {
+  state: SetupDocState
+  project: Project
+  projectDocs: DocRef[]
+  onSaveEdit: (draft: string) => void
+  onApplyInputs: (setup: SpineInferenceSetupFile) => void
+}) {
+  const [draft, setDraft] = useState<SetupDraft | null>(null)
+  const [initialSig, setInitialSig] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (draft === null && state.setup) {
+      const d = draftFromSetup(state.setup)
+      setDraft(d)
+      setInitialSig(JSON.stringify(d))
+    }
+  }, [draft, state.setup])
+
+  const dirty = draft !== null && JSON.stringify(draft) !== initialSig
+  const serialized = draft ? draftToSetupContent(draft) : null
+
+  return (
+    <div className="space-y-4 rounded-lg border border-border bg-card/30 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <Layers className="h-4 w-4 text-primary" />
+            <span className="truncate font-mono">{setupDisplayName(state.doc.name)}</span>
+          </h3>
+          {state.issues.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {state.issues.map((issue, i) => (
+                <li
+                  key={i}
+                  className={cn(
+                    "flex items-start gap-1.5 font-mono text-[11px]",
+                    issue.level === "error" ? "text-destructive" : "text-yellow-500",
+                  )}
+                >
+                  <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
+                  <span className="whitespace-pre-wrap">
+                    <span className="font-semibold">{issue.where}</span> — {issue.message}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {dirty && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 bg-transparent"
+                onClick={() => initialSig && setDraft(JSON.parse(initialSig) as SetupDraft)}
+              >
+                Discard
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 bg-transparent"
+                disabled={serialized === null}
+                onClick={() => serialized && onSaveEdit(serialized)}
+              >
+                Save setup
+              </Button>
+            </>
+          )}
+          {!dirty && state.setup && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 bg-transparent"
+              onClick={() => onApplyInputs(state.setup!)}
+            >
+              Apply to run
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {state.parseError ? (
+        <p className="rounded border border-destructive/30 bg-destructive/10 p-2 font-mono text-[11px] text-destructive">
+          {state.parseError}
+        </p>
+      ) : draft ? (
+        <InferenceSetupEditor draft={draft} setDraft={setDraft} project={project} projectDocs={projectDocs} />
+      ) : null}
     </div>
   )
 }

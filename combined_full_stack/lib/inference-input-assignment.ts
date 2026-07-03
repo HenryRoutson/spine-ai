@@ -4,24 +4,23 @@ import { DocLabel } from "@/lib/types"
 import type { DocId, DocRef, ModuleId, PipelineModule, PipelineRun, Project } from "@/lib/types"
 import {
   docsForInputModule,
-  inputMinCountForModule,
   isMultiDocInputModule,
   orderedInputModules,
   sortMultiInputDocs,
   type InputDocsAssignment,
 } from "./inference-input-core"
-import { buildDefaultInputDocs, docMatchesInputModule } from "./inference-input-picker"
+import { docMatchesInputModule } from "./inference-input-picker"
 
 export function resolveInputDocs(
   docs: DocRef[],
   project: Project,
   inputModules: PipelineModule[],
   savedDocIds: Partial<Record<ModuleId, DocId | DocId[]>>,
-  preferred?: DocRef | null,
+  _preferred?: DocRef | null,
 ): InputDocsAssignment {
-  const defaults = buildDefaultInputDocs(docs, project, inputModules, preferred)
-  if (!Object.keys(savedDocIds).length) return defaults
-  const out: InputDocsAssignment = { ...defaults }
+  // AI : no default setup — only restore explicitly saved slot assignments.
+  if (!Object.keys(savedDocIds).length) return {}
+  const out: InputDocsAssignment = {}
   for (const m of inputModules) {
     const saved = savedDocIds[m.id]
     if (!saved) continue
@@ -32,16 +31,7 @@ export function resolveInputDocs(
     })
     if (!resolved.length) continue
     if (isMultiDocInputModule(m)) {
-      // AI : a saved multi-doc selection is authoritative (presets pick exact doc sets) —
-      // AI : only fall back to defaults when it no longer satisfies the slot's minimum.
-      const defaultDocs = docsForInputModule(defaults, m.id)
-      const picked = sortMultiInputDocs(resolved, project.seedDocNames)
-      out[m.id] =
-        picked.length >= inputMinCountForModule(m)
-          ? picked
-          : defaultDocs.length
-            ? defaultDocs
-            : picked
+      out[m.id] = sortMultiInputDocs(resolved, project.seedDocNames)
       continue
     }
     out[m.id] = resolved[0]

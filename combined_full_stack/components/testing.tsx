@@ -3,7 +3,7 @@
 // AI : Testing tab — *_testing.json files pin exact per-step outputs; a run pinpoints the
 // AI : first step that diverges. Static checks stay in Structure/Pipeline; this is for full runs.
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   CheckSquare,
   CircleCheck,
@@ -34,6 +34,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
+import { evaluateTestReport } from "@/lib/testing-evaluate"
 import { useAppShell } from "@/lib/app-shell"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
@@ -42,7 +43,6 @@ import { docsForProject } from "@/lib/project-docs"
 import { awaitRun, isRunBillingError, mergeStepStates, startRun, type StepUiState } from "@/lib/run-engine"
 import { useStore } from "@/lib/store"
 import {
-  compareRunToTest,
   isTestingFileName,
   nextTestFileName,
   parseTestFile,
@@ -60,6 +60,7 @@ import type { DocId, DocRef, ModuleId, PipelineModule, Project } from "@/lib/typ
 type TestDocState = {
   doc: DocRef
   content?: string
+  loadError?: string
   parseError?: string
   test?: SpineTestFile
   issues: TestFileIssue[]
@@ -69,7 +70,8 @@ type GeneratedTestFile = { name: string; content: string; issues: TestFileIssue[
 
 type RunPhase = "idle" | "running" | "done"
 
-function testStatus(t: TestDocState): "loading" | "broken" | "errors" | "warnings" | "ok" {
+function testStatus(t: TestDocState): "loading" | "load_failed" | "broken" | "errors" | "warnings" | "ok" {
+  if (t.loadError) return "load_failed"
   if (t.content === undefined) return "loading"
   if (t.parseError) return "broken"
   if (t.issues.some((i) => i.level === "error")) return "errors"
@@ -79,6 +81,7 @@ function testStatus(t: TestDocState): "loading" | "broken" | "errors" | "warning
 
 const STATUS_BADGE: Record<ReturnType<typeof testStatus>, { label: string; className: string }> = {
   loading: { label: "loading", className: "border-border text-muted-foreground" },
+  load_failed: { label: "load failed", className: "border-destructive/40 text-destructive" },
   broken: { label: "invalid json", className: "border-destructive/40 text-destructive" },
   errors: { label: "stale", className: "border-destructive/40 text-destructive" },
   warnings: { label: "incomplete", className: "border-yellow-500/40 text-yellow-500" },
@@ -107,6 +110,8 @@ export function Testing() {
   const pipelineInvalid = computeInvalidForUi(modules, models, typeAliases).size > 0
 
   const [contents, setContents] = useState<Record<DocId, string>>({})
+  const [loadErrors, setLoadErrors] = useState<Record<DocId, string>>({})
+  const loadingIds = useRef<Set<DocId>>(new Set())
   const [selectedId, setSelectedId] = useState<DocId | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [creatingTest, setCreatingTest] = useState(false)
@@ -126,25 +131,50 @@ export function Testing() {
   const [aiError, setAiError] = useState<string | null>(null)
   const [aiGenerated, setAiGenerated] = useState<GeneratedTestFile | null>(null)
 
+  const loadTestDoc = useCallback((docId: DocId) => {
+    if (loadingIds.current.has(docId)) return
+    loadingIds.current.add(docId)
+    invalidateDocText(docId)
+    setLoadErrors((prev) => {
+      const { [docId]: _gone, ...rest } = prev
+      return rest
+    })
+    void fetchDocText(docId)
+      .then((data) => setContents((prev) => ({ ...prev, [docId]: docTextContent(data) })))
+      .catch((err) => setLoadErrors((prev) => ({ ...prev, [docId]: (err as Error).message })))
+      .finally(() => loadingIds.current.delete(docId))
+  }, [])
+
   useEffect(() => {
     for (const d of testDocs) {
-      if (contents[d.id] !== undefined) continue
-      void fetchDocText(d.id)
-        .then((data) => setContents((prev) => ({ ...prev, [d.id]: docTextContent(data) })))
-        .catch((err) => setContents((prev) => ({ ...prev, [d.id]: `<<load failed: ${(err as Error).message}>>` })))
+      if (contents[d.id] !== undefined || loadErrors[d.id] || loadingIds.current.has(d.id)) continue
+      loadTestDoc(d.id)
     }
-  }, [testDocs, contents])
+  }, [testDocs, contents, loadErrors, loadTestDoc])
+
+const LOAD_FAILED_PREFIX = "<<load failed:"
+const LOAD_FAILED_SUFFIX = ">>"
+
+function staleLoadFailedContent(content: string): string | null {
+  const t = content.trim()
+  if (!t.startsWith(LOAD_FAILED_PREFIX) || !t.endsWith(LOAD_FAILED_SUFFIX)) return null
+  return t.slice(LOAD_FAILED_PREFIX.length, -LOAD_FAILED_SUFFIX.length).trim()
+}
 
   const testStates: TestDocState[] = useMemo(
     () =>
       testDocs.map((doc) => {
+        const loadError = loadErrors[doc.id]
+        if (loadError) return { doc, loadError, issues: [] }
         const content = contents[doc.id]
         if (content === undefined) return { doc, issues: [] }
+        const staleLoad = staleLoadFailedContent(content)
+        if (staleLoad) return { doc, loadError: staleLoad, issues: [] }
         const parsed = parseTestFile(content)
         if (!parsed.ok) return { doc, content, parseError: parsed.error, issues: [] }
         return { doc, content, test: parsed.test, issues: validateTestFile(parsed.test, project, projectDocs) }
       }),
-    [testDocs, contents, project, projectDocs],
+    [testDocs, contents, loadErrors, project, projectDocs],
   )
 
   const selected = testStates.find((t) => t.doc.id === selectedId) ?? testStates[0]
@@ -248,7 +278,8 @@ export function Testing() {
         onHumanReview: () => Promise.resolve("approved" as const),
       })
       if (!runs.some((r) => r.id === run.id)) addRun(run)
-      const report = compareRunToTest(run, state.test, project)
+      const report = await evaluateTestReport(run, state.test, project, model)
+      refreshBilling().catch(console.error)
       setResults(report)
       setResultRunId(run.id)
       setRunPhase("done")
@@ -395,6 +426,7 @@ export function Testing() {
               projectDocs={projectDocs}
               onSaveEdit={(draft) => void saveEdit(selected, draft)}
               onRun={(contentToSave) => void saveAndRun(selected, contentToSave)}
+              onRetryLoad={() => loadTestDoc(selected.doc.id)}
               runDisabled={pipelineInvalid || runPhase === "running"}
               runPhase={runningTestId === selected.doc.id ? runPhase : "idle"}
               stepStates={stepStates}
@@ -503,6 +535,7 @@ function TestDetail({
   projectDocs,
   onSaveEdit,
   onRun,
+  onRetryLoad,
   runDisabled,
   runPhase,
   stepStates,
@@ -516,6 +549,7 @@ function TestDetail({
   projectDocs: DocRef[]
   onSaveEdit: (draft: string) => void
   onRun: (contentToSave: string | null) => void
+  onRetryLoad: () => void
   runDisabled: boolean
   runPhase: RunPhase
   stepStates: Map<ModuleId, StepUiState>
@@ -588,7 +622,7 @@ function TestDetail({
               </Button>
             </>
           )}
-          {!state.parseError && (
+          {!state.parseError && !state.loadError && (
             <Button
               size="sm"
               className="h-8"
@@ -607,7 +641,17 @@ function TestDetail({
         </div>
       </div>
 
-      {state.parseError ? (
+      {state.loadError ? (
+        <div className="space-y-2 rounded border border-destructive/30 bg-destructive/10 p-3">
+          <p className="font-mono text-[11px] text-destructive">
+            Could not load this test file from the server:
+            <span className="mt-1 block whitespace-pre-wrap text-destructive/90">{state.loadError}</span>
+          </p>
+          <Button size="sm" variant="outline" className="h-8 bg-transparent" onClick={onRetryLoad}>
+            Retry load
+          </Button>
+        </div>
+      ) : state.parseError ? (
         // AI : recovery path only — a hand-broken file can't render as a form, so let the user fix the text.
         <div className="space-y-2">
           <p className="rounded border border-destructive/30 bg-destructive/10 p-2 font-mono text-[11px] text-destructive">

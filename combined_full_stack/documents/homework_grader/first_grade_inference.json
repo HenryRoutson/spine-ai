@@ -1,0 +1,7 @@
+{
+  "description": "Simple arithmetic worksheet — an easy smoke test for the grader.",
+  "inputs": {
+    "Marking Schema": "homework_marking_schema_first_grade.json",
+    "Student Submissions": ["homework_student_riley_first_grade.md"]
+  }
+}

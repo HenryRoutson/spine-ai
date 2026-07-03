@@ -1,10 +1,9 @@
 "use client"
 
-// AI : "pre-selected runs" menu (spec/TODO) — named seed presets plus every *_testing.json test,
-// AI : each resolving to a full input-slot assignment in one click.
+// AI : quick-load menu — saved *_inference.json setups plus *_testing.json test inputs.
 
 import { useEffect, useMemo, useState } from "react"
-import { Check, ChevronDown, CheckSquare, FileText, Sparkles } from "lucide-react"
+import { Check, ChevronDown, CheckSquare, Layers, Sparkles } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +15,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { docTextContent, fetchDocText } from "@/lib/doc-text-cache"
 import { resolveNamedRunInputs, type NamedRunInputs } from "@/lib/inference-presets"
+import {
+  isInferenceSetupFileName,
+  parseInferenceSetupFile,
+  setupDisplayName,
+} from "@/lib/inference-setup-files"
 import { docsForInputModule, type InputDocsAssignment } from "@/lib/inference-input"
 import { isTestingFileName, parseTestFile, TESTING_FILE_SUFFIX } from "@/lib/testing-files"
 import { docsForProject } from "@/lib/project-docs"
@@ -24,7 +28,7 @@ import type { DocId, DocRef, PipelineModule, Project } from "@/lib/types"
 
 type PresetOption = {
   id: string
-  kind: "preset" | "test"
+  kind: "setup" | "test"
   name: string
   description?: string
   inputs: NamedRunInputs
@@ -32,28 +36,37 @@ type PresetOption = {
 
 function useRunPresetOptions(project: Project, docs: DocRef[]): PresetOption[] {
   const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
+  const setupDocs = useMemo(() => projectDocs.filter((d) => isInferenceSetupFileName(d.name)), [projectDocs])
   const testDocs = useMemo(() => projectDocs.filter((d) => isTestingFileName(d.name)), [projectDocs])
-  const [testContents, setTestContents] = useState<Record<DocId, string>>({})
+  const [fileContents, setFileContents] = useState<Record<DocId, string>>({})
 
   useEffect(() => {
-    for (const d of testDocs) {
-      if (testContents[d.id] !== undefined) continue
+    for (const d of [...setupDocs, ...testDocs]) {
+      if (fileContents[d.id] !== undefined) continue
       void fetchDocText(d.id)
-        .then((data) => setTestContents((prev) => ({ ...prev, [d.id]: docTextContent(data) })))
-        .catch(() => setTestContents((prev) => ({ ...prev, [d.id]: "" })))
+        .then((data) => setFileContents((prev) => ({ ...prev, [d.id]: docTextContent(data) })))
+        .catch(() => setFileContents((prev) => ({ ...prev, [d.id]: "" })))
     }
-  }, [testDocs, testContents])
+  }, [setupDocs, testDocs, fileContents])
 
   return useMemo(() => {
-    const presets: PresetOption[] = (project.inferencePresets ?? []).map((p, i) => ({
-      id: `preset:${i}`,
-      kind: "preset",
-      name: p.name,
-      description: p.description,
-      inputs: p.inputs,
-    }))
+    const setups: PresetOption[] = setupDocs.flatMap((d) => {
+      const content = fileContents[d.id]
+      if (!content) return []
+      const parsed = parseInferenceSetupFile(content)
+      if (!parsed.ok || !Object.keys(parsed.setup.inputs ?? {}).length) return []
+      return [
+        {
+          id: `setup:${d.id}`,
+          kind: "setup" as const,
+          name: setupDisplayName(d.name),
+          description: parsed.setup.description,
+          inputs: parsed.setup.inputs,
+        },
+      ]
+    })
     const tests: PresetOption[] = testDocs.flatMap((d) => {
-      const content = testContents[d.id]
+      const content = fileContents[d.id]
       if (!content) return []
       const parsed = parseTestFile(content)
       if (!parsed.ok || !parsed.test.inputs || !Object.keys(parsed.test.inputs).length) return []
@@ -67,8 +80,8 @@ function useRunPresetOptions(project: Project, docs: DocRef[]): PresetOption[] {
         },
       ]
     })
-    return [...presets, ...tests]
-  }, [project.inferencePresets, testDocs, testContents])
+    return [...setups, ...tests]
+  }, [setupDocs, testDocs, fileContents])
 }
 
 function assignmentKey(assignment: InputDocsAssignment, inputModules: PipelineModule[]): string {
@@ -109,7 +122,7 @@ export function InferenceRunPresetMenu({
 
   if (!options.length) return null
 
-  const presets = resolved.filter((r) => r.option.kind === "preset")
+  const setups = resolved.filter((r) => r.option.kind === "setup")
   const tests = resolved.filter((r) => r.option.kind === "test")
 
   return (
@@ -122,28 +135,28 @@ export function InferenceRunPresetMenu({
         )}
       >
         <Sparkles className="h-3.5 w-3.5 text-primary" />
-        <span className="text-foreground">{active ? active.option.name : "Pre-selected runs"}</span>
+        <span className="text-foreground">{active ? active.option.name : "Load setup"}</span>
         <ChevronDown className="h-3 w-3" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80">
-        {presets.length > 0 && (
+        {setups.length > 0 && (
           <DropdownMenuGroup>
             <DropdownMenuLabel className="font-mono text-[10px] uppercase text-muted-foreground">
-              examples
+              saved setups
             </DropdownMenuLabel>
-            {presets.map(({ option, result }) => (
+            {setups.map(({ option, result }) => (
               <PresetMenuItem
                 key={option.id}
                 option={option}
                 result={result}
                 isActive={active?.option.id === option.id}
-                icon={<FileText className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                icon={<Layers className="h-3.5 w-3.5 shrink-0 text-primary" />}
                 onApply={onApply}
               />
             ))}
           </DropdownMenuGroup>
         )}
-        {presets.length > 0 && tests.length > 0 && <DropdownMenuSeparator />}
+        {setups.length > 0 && tests.length > 0 && <DropdownMenuSeparator />}
         {tests.length > 0 && (
           <DropdownMenuGroup>
             <DropdownMenuLabel className="font-mono text-[10px] uppercase text-muted-foreground">

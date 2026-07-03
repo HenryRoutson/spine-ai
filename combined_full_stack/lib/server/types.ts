@@ -198,7 +198,7 @@ export interface Project {
   strategies: Strategy[];
   seedDocNames?: string[]; // AI : filenames from seeds/*.json — scopes inference inputs to this project
   expectedOutputs?: Record<string, unknown>; // AI : golden step outputs keyed by step label — assert steps compare at run time
-  inferencePresets?: InferencePreset[]; // AI : named pre-selected runs shown in the Inference tab; first one is the default
+  inferencePresets?: InferencePreset[]; // AI : legacy seed examples — prefer *_inference.json setup files in Documents
   createdAt?: number; // AI : ms since epoch — set when blank/cloned; templates from seeds/*.json omit this
   lastOpenedAt?: number; // AI : ms since epoch — updated when user opens/switches to this project
   documentation?: string; // AI : freeform markdown — prepended to every agent/assistant prompt call to prevent regressions
@@ -354,15 +354,26 @@ export enum RunTestStepStatus {
   NotReached = "not-reached",
 }
 
+export type RunTestProbabilisticResult = {
+  path: string;
+  pass: boolean;
+  reason: string;
+};
+
 export type RunTestStepResult = {
   label: string;
   status: RunTestStepStatus;
   diffPath?: string;
   // AI : why a skipped step was not scored — input/combine traces are refs or summaries, not full values.
   skipReason?: string;
-  // AI : probabilistic field paths (ModelField.deterministic === false) excluded from the compare.
+  // AI : probabilistic field paths (ModelField.deterministic === false) excluded from exact JSON compare.
   ignoredPaths?: string[];
-  expected: unknown;
+  // AI : LLM semantic check for probabilistic fields after deterministic JSON match (spec § Testing).
+  probabilisticResults?: RunTestProbabilisticResult[];
+  llmEvaluated?: boolean;
+  // AI : git-diff style unified diff of deterministic JSON cores when compare fails.
+  deterministicDiff?: string;
+  expected?: unknown;
   actual?: unknown;
 };
 

@@ -5,7 +5,7 @@
 // AI : and can be captured one-click from the last run. Serialization stays compatible with
 // AI : lib/testing-files parse/validate.
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import {
   ChevronDown,
   ChevronRight,
@@ -31,6 +31,9 @@ import { isMultiDocInputModule } from "@/lib/inference-input"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { modelName } from "@/lib/validity"
 import { labelAsStateKey, validatePipelineStateEntry } from "@/lib/server/pipeline_state"
+import { SchemaJsonEditor } from "@/components/schema-json-editor"
+import { defaultFromSchema, jsonSchemaToFormRoot } from "@/lib/schema-form"
+import { stepOutputJsonSchema } from "@/lib/step-json-schema"
 import { tryParseJson } from "@/lib/json-utils"
 import { inputModulesOf, probabilisticPathsForModule, type SpineTestFile } from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
@@ -344,6 +347,10 @@ function ExpectedRow({
   const issue = expectedIssue(row, project, stale)
   const [open, setOpen] = useState(issue?.level === "error")
   const [editing, setEditing] = useState(false)
+  const stepSchema = useMemo(
+    () => (stale ? null : stepOutputJsonSchema(project, row.label)),
+    [project, row.label, stale],
+  )
   const isPlaceholder = row.text.trim() === "null"
   const validJson = tryParseJson(row.text, { trim: true }).ok
   const preview = row.text.replace(/\s+/g, " ").trim()
@@ -394,6 +401,10 @@ function ExpectedRow({
             className={cn("h-6 w-6 shrink-0", editing ? "text-primary" : "text-muted-foreground")}
             title="edit the expected value"
             onClick={() => {
+              if (isPlaceholder && stepSchema) {
+                const root = jsonSchemaToFormRoot(stepSchema)
+                if (root) onText(JSON.stringify(defaultFromSchema(root), null, 2))
+              }
               setEditing((v) => !v)
               setOpen(true)
             }}
@@ -425,19 +436,23 @@ function ExpectedRow({
             <p className="flex items-start gap-1.5 font-mono text-[10px] text-muted-foreground">
               <Shuffle className="mt-0.5 h-3 w-3 shrink-0" />
               <span>
-                probabilistic fields (marked on the structure) are ignored when comparing:{" "}
+                probabilistic fields (marked on the structure) are exact-excluded then LLM-checked after a run:{" "}
                 {ignoredFields.join(", ")}
               </span>
             </p>
           )}
           {editing ? (
-            <Textarea
-              value={row.text}
-              onChange={(e) => onText(e.target.value)}
-              className="min-h-[80px] font-mono text-[11px]"
-              spellCheck={false}
-              autoFocus
-            />
+            stepSchema ? (
+              <SchemaJsonEditor schema={stepSchema} text={row.text} onText={onText} />
+            ) : (
+              <Textarea
+                value={row.text}
+                onChange={(e) => onText(e.target.value)}
+                className="min-h-[80px] font-mono text-[11px]"
+                spellCheck={false}
+                autoFocus
+              />
+            )
           ) : isPlaceholder ? (
             <p className="font-mono text-[11px] text-muted-foreground">
               No expected output pinned yet — run the test once and click{" "}

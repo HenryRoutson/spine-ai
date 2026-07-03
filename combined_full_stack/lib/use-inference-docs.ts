@@ -14,7 +14,6 @@ import {
   collectInferenceInputIssues,
   type InferenceInputIssue,
 } from "@/lib/inference-validity"
-import { defaultInferenceDoc } from "@/lib/project-docs"
 import type { DocId, DocRef, ModuleId, PipelineModule, Project, ProjectId } from "@/lib/types"
 
 function inputDocsIdsKey(assignment: InputDocsAssignment, inputModules: PipelineModule[]): string {
@@ -100,13 +99,7 @@ export function useInferenceDocs({
     const switched = prevProjectIdRef.current != null && prevProjectIdRef.current !== project.id
     prevProjectIdRef.current = project.id as ProjectId
     setInputDocs((prev) => {
-      const next = resolveInputDocs(
-        docs,
-        project,
-        inputModules,
-        inferenceInputDocIds,
-        defaultInferenceDoc(docs, project),
-      )
+      const next = resolveInputDocs(docs, project, inputModules, inferenceInputDocIds)
       if (!switched && inputDocsIdsKey(prev, inputModules) === inputDocsIdsKey(next, inputModules)) {
         return prev
       }
@@ -151,7 +144,7 @@ export function useInferenceDocs({
   }
 
   function useSamples() {
-    setInputDocs(buildDefaultInputDocs(docs, project, inputModules, defaultInferenceDoc(docs, project)))
+    setInputDocs(buildDefaultInputDocs(docs, project, inputModules))
   }
 
   // AI : one-click "pre-selected run" — replace the whole slot assignment (presets pick exact doc sets).

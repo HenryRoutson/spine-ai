@@ -591,6 +591,24 @@
       "type": "json",
       "label": "training",
       "file": "homework_grader/homework_grader_testing.json"
+    },
+    {
+      "name": "classroom_algebra_ii_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "homework_grader/classroom_algebra_ii_inference.json"
+    },
+    {
+      "name": "first_grade_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "homework_grader/first_grade_inference.json"
+    },
+    {
+      "name": "university_latex_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "homework_grader/university_latex_inference.json"
     }
   ],
   "inferencePresets": [
