@@ -33,7 +33,7 @@ import {
 } from "@/lib/inference-input"
 import { inferenceInputIssueMessage } from "@/lib/inference-validity"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
-import { InferenceRunPresetMenu } from "@/components/inference/inference-run-preset-menu"
+import { InferenceRunPresetMenu, type PresetApplyMeta } from "@/components/inference/inference-run-preset-menu"
 import {
   draftFromSetup,
   draftToSetupContent,
@@ -41,6 +41,8 @@ import {
   type SetupDraft,
 } from "@/components/inference-setup-editor"
 import { useInferenceRun } from "@/lib/use-inference-run"
+import { useInferenceTestEval } from "@/lib/use-inference-test-eval"
+import { TestResults } from "@/components/test-results"
 import { RunNotesPad } from "@/components/run-notes-pad"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
 import { InferenceRunOutputs } from "@/components/inference/inference-outputs"
@@ -73,7 +75,7 @@ import {
 } from "@/lib/inference-setup-files"
 import { cn } from "@/lib/utils"
 import { DocLabel, InputType } from "@/lib/types"
-import type { DocId, DocRef, Project } from "@/lib/types"
+import type { DocId, DocRef, ModelId, Project } from "@/lib/types"
 
 type SetupDocState = {
   doc: DocRef
@@ -117,6 +119,7 @@ export function Inference() {
     typeAliases,
     addDocContent,
     removeDoc,
+    updateRunTest,
   } = useStore()
   const { setActiveWindow, openLogging } = useAppShell()
   const { open } = useDocViewer()
@@ -133,6 +136,8 @@ export function Inference() {
   const [selectedId, setSelectedId] = useState<DocId | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [creatingSetup, setCreatingSetup] = useState(false)
+  // AI : when inputs are loaded from a test preset, assert against that file after the run.
+  const [linkedTest, setLinkedTest] = useState<PresetApplyMeta | null>(null)
 
   useEffect(() => {
     for (const d of setupDocs) {
@@ -176,8 +181,32 @@ export function Inference() {
     flushPendingSave,
   })
 
+  const linkedTestForEval =
+    linkedTest?.kind === "test"
+      ? { docId: linkedTest.docId, docName: linkedTest.name }
+      : null
+
+  const { testResults, testEvaluating, testEvalError } = useInferenceTestEval({
+    phase: run.phase,
+    run: run.run,
+    linkedTest: linkedTestForEval,
+    project,
+    model: model as ModelId,
+    updateRunTest,
+    refreshBilling,
+  })
+
+  const applyPreset = useCallback(
+    (assignment: InputDocsAssignment, meta?: PresetApplyMeta) => {
+      run.applyInputAssignment(assignment)
+      setLinkedTest(meta?.kind === "test" ? meta : null)
+    },
+    [run],
+  )
+
   const applySetupInputs = useCallback(
     (setup: SpineInferenceSetupFile) => {
+      setLinkedTest(null)
       const resolved = resolveInferenceSetupInputs(setup, run.inputModules, projectDocs)
       if (resolved.ok) run.applyInputAssignment(resolved.assignment)
     },
@@ -304,7 +333,7 @@ export function Inference() {
               inferenceInputDocIds={inferenceInputDocIds}
             />
             {run.phase !== "idle" ? (
-              <Button variant="outline" size="sm" className="bg-transparent" onClick={run.reset} disabled={run.phase === "running"}>
+              <Button variant="outline" size="sm" className="bg-transparent" onClick={() => { setLinkedTest(null); run.reset() }} disabled={run.phase === "running"}>
                 <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
               </Button>
             ) : null}
@@ -407,7 +436,7 @@ export function Inference() {
                       inputModules={run.inputModules}
                       inputDocs={run.inputDocs}
                       disabled={run.phase === "running"}
-                      onApply={run.applyInputAssignment}
+                      onApply={applyPreset}
                     />
                   </div>
                   <div className={run.phase === "running" ? "pointer-events-none opacity-60" : undefined}>
@@ -541,6 +570,26 @@ export function Inference() {
                   >
                     {finalOutputSteps.length > 0 && (
                       <InferenceRunOutputs steps={finalOutputSteps} models={models} />
+                    )}
+
+                    {linkedTestForEval && (testEvaluating || testResults || testEvalError) && (
+                      <div className="space-y-2">
+                        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                          test assertion · {linkedTestForEval.docName}
+                        </p>
+                        {testEvaluating && (
+                          <p className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Comparing outputs against test expectations…
+                          </p>
+                        )}
+                        {testEvalError && (
+                          <p className="rounded border border-destructive/30 bg-destructive/10 p-2 font-mono text-[11px] text-destructive">
+                            {testEvalError}
+                          </p>
+                        )}
+                        {testResults && <TestResults results={testResults} />}
+                      </div>
                     )}
 
                     {run.run.status !== "ok" && (

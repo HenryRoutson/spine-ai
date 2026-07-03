@@ -21,7 +21,7 @@ import {
   setupDisplayName,
 } from "@/lib/inference-setup-files"
 import { docsForInputModule, type InputDocsAssignment } from "@/lib/inference-input"
-import { isTestingFileName, parseTestFile, TESTING_FILE_SUFFIX } from "@/lib/testing-files"
+import { isTestingFileName, parseTestFile } from "@/lib/testing-files"
 import { docsForProject } from "@/lib/project-docs"
 import { cn } from "@/lib/utils"
 import type { DocId, DocRef, PipelineModule, Project } from "@/lib/types"
@@ -29,10 +29,13 @@ import type { DocId, DocRef, PipelineModule, Project } from "@/lib/types"
 type PresetOption = {
   id: string
   kind: "setup" | "test"
+  docId: DocId
   name: string
   description?: string
   inputs: NamedRunInputs
 }
+
+export type PresetApplyMeta = Pick<PresetOption, "kind" | "docId" | "name">
 
 function useRunPresetOptions(project: Project, docs: DocRef[]): PresetOption[] {
   const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
@@ -59,6 +62,7 @@ function useRunPresetOptions(project: Project, docs: DocRef[]): PresetOption[] {
         {
           id: `setup:${d.id}`,
           kind: "setup" as const,
+          docId: d.id,
           name: setupDisplayName(d.name),
           description: parsed.setup.description,
           inputs: parsed.setup.inputs,
@@ -74,7 +78,8 @@ function useRunPresetOptions(project: Project, docs: DocRef[]): PresetOption[] {
         {
           id: `test:${d.id}`,
           kind: "test" as const,
-          name: d.name.slice(0, -TESTING_FILE_SUFFIX.length) || d.name,
+          docId: d.id,
+          name: d.name,
           description: parsed.test.description,
           inputs: parsed.test.inputs,
         },
@@ -103,7 +108,7 @@ export function InferenceRunPresetMenu({
   inputModules: PipelineModule[]
   inputDocs: InputDocsAssignment
   disabled?: boolean
-  onApply: (assignment: InputDocsAssignment) => void
+  onApply: (assignment: InputDocsAssignment, meta?: PresetApplyMeta) => void
 }) {
   const options = useRunPresetOptions(project, docs)
   const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
@@ -190,13 +195,20 @@ function PresetMenuItem({
   result: ReturnType<typeof resolveNamedRunInputs>
   isActive: boolean
   icon: React.ReactNode
-  onApply: (assignment: InputDocsAssignment) => void
+  onApply: (assignment: InputDocsAssignment, meta?: PresetApplyMeta) => void
 }) {
   return (
     <DropdownMenuItem
       disabled={!result.ok}
       title={result.ok ? undefined : result.error}
-      onClick={() => result.ok && onApply(result.assignment)}
+      onClick={() =>
+        result.ok &&
+        onApply(result.assignment, {
+          kind: option.kind,
+          docId: option.docId,
+          name: option.name,
+        })
+      }
       className="flex items-start gap-2"
     >
       {icon}
