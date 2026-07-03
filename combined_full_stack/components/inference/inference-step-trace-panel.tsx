@@ -5,6 +5,7 @@ import type { RefObject } from "react"
 import { ChevronDown, Copy, Check } from "lucide-react"
 import { runLogText } from "@/lib/run-log-text"
 import { runLogJson } from "@/lib/run-log-json"
+import { copyTextToClipboard } from "@/lib/clipboard"
 import { Progress } from "@/components/ui/progress"
 import { segmentPipeline, mergeCombineSegmentStatus } from "@/lib/pipeline-layout"
 import type { StepUiState } from "@/lib/run-engine"
@@ -79,8 +80,8 @@ export function InferenceStepTracePanel({
             <>
               <button
                 type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(runLogJson(run))
+                onClick={async () => {
+                  await copyTextToClipboard(await runLogJson(run, docs))
                   setJsonCopied(true)
                   setTimeout(() => setJsonCopied(false), 2000)
                 }}
@@ -92,7 +93,7 @@ export function InferenceStepTracePanel({
               <button
                 type="button"
                 onClick={() => {
-                  navigator.clipboard.writeText(runLogText(run))
+                  void copyTextToClipboard(runLogText(run))
                   setLogCopied(true)
                   setTimeout(() => setLogCopied(false), 2000)
                 }}

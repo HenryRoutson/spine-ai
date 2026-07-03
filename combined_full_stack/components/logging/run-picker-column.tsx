@@ -111,7 +111,7 @@ export function RunPickerColumn({
                       )}
                       {isTestingRun(run) && (
                         <Badge variant="outline" className="shrink-0 border-chart-3/40 font-mono text-[9px] text-chart-3">
-                          testing
+                          test
                         </Badge>
                       )}
                       {runInputDocIds(run).map((docId) => (

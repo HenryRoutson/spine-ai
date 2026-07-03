@@ -5,7 +5,7 @@ import { inputTypeLabel } from "../../inference-input";
 import { assertInputMatchesDescription, InputDescriptionRejectedError, shouldCheckInputDescription } from "../input_description_check";
 import { collectLogsDuring, withStepModuleContext } from "../job_log_sink";
 import { ClientStepPendingError, HumanReviewPendingError, PipelinePausedError } from "../run_checkpoint";
-import { expectedOutputsForProject } from "../seed";
+import { expectedOutputsForRun } from "../seed";
 import { stepCacheKey } from "../run_fingerprint";
 import { readStepCache, writeStepCache } from "../step_cache";
 import { hasQuoteField, validateStepOutput } from "../structure";
@@ -29,6 +29,17 @@ export async function runLinearStepsFrom(
 ): Promise<"ok" | "error" | "paused"> {
   const { project, projectId, model, cacheOwnerId, ctx, steps, artifacts, ledger, log, opts, writeLive, runId, startedAt, inputDocId, fingerprintInputDocIds, savedCentsAcc } =
     params;
+
+  // AI : golden picked per run — a preset matching these input docs overrides the project default,
+  // AI : so assert steps pass on alternate pre-selected runs (1st grade / university examples).
+  const runGolden = () =>
+    expectedOutputsForRun(
+      project,
+      fingerprintInputDocIds.flatMap((id) => {
+        const name = ctx.store.docs().find((d) => d.id === id)?.name;
+        return name ? [name] : [];
+      }),
+    );
 
   for (let i = startIndex; i < project.modules.length; i++) {
     const m = project.modules[i];
@@ -177,7 +188,7 @@ export async function runLinearStepsFrom(
         } catch (err) {
           if (err instanceof ClientStepPendingError) {
             const primary = err.entries[0];
-            const golden = expectedOutputsForProject(project);
+            const golden = runGolden();
             throw new PipelinePausedError({
               runId,
               projectId,
@@ -216,7 +227,7 @@ export async function runLinearStepsFrom(
               startedAt,
               steps: [...steps],
               ctx: serializeCtx(ctx),
-              expectedOutputs: expectedOutputsForProject(project),
+              expectedOutputs: runGolden(),
               clientStep: {
                 moduleId: m.id,
                 label: m.label,

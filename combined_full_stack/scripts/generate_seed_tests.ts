@@ -36,7 +36,14 @@ function buildInputs(project: Project, docRefs: DocRef[]): Record<string, string
 
 function buildExpectedOutputs(project: Project): Record<string, unknown> {
   const golden = project.expectedOutputs ?? {};
-  if (Object.keys(golden).length) return golden;
+  if (Object.keys(golden).length) {
+    // AI : skip input steps ({doc_id} refs in the run trace) and combine steps (trace stores a
+    // AI : field summary, not the merged value) — golden content can never match either.
+    const unpinnable = new Set(
+      project.modules.filter((m) => m.kind === "input" || m.kind === "combine").map((m) => m.label.trim()),
+    );
+    return Object.fromEntries(Object.entries(golden).filter(([label]) => !unpinnable.has(label.trim())));
+  }
   const out: Record<string, unknown> = {};
   for (const m of project.modules) {
     if (m.kind === "output" && m.label.trim()) out[m.label.trim()] = null;

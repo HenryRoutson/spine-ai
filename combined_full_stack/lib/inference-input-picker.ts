@@ -6,6 +6,7 @@ import {
   sortMultiInputDocs,
   type InputDocsAssignment,
 } from "@/lib/inference-input-core"
+import { resolveNamedRunInputs } from "@/lib/inference-presets"
 import { docsForProject } from "@/lib/project-docs"
 import type { DocRef, PipelineModule, Project } from "@/lib/types"
 
@@ -120,5 +121,12 @@ export function buildDefaultInputDocs(
   inputModules: PipelineModule[],
   preferred?: DocRef | null,
 ): InputDocsAssignment {
+  // AI : projects with named presets default to the first one — algorithmic slot-fill would
+  // AI : otherwise grab every passable doc (e.g. mix all example students across rubrics).
+  const preset = project.inferencePresets?.[0]
+  if (preset) {
+    const resolved = resolveNamedRunInputs(preset.inputs, inputModules, docsForProject(docs, project))
+    if (resolved.ok) return resolved.assignment
+  }
   return defaultInputDocsForModules(docs, project, inputModules, preferred ?? null)
 }

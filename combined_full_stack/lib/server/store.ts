@@ -27,6 +27,7 @@ import type {
   ProjectId,
   RunFingerprint,
   RunId,
+  RunTestReport,
 } from "./types";
 import {
   parserCacheKey,
@@ -173,6 +174,7 @@ export interface Store {
   findRunByFingerprint(projectId: ProjectId, fingerprint: RunFingerprint): PipelineRun | undefined;
   addRun(projectId: ProjectId, run: PipelineRun): void;
   updateRunNotes(runId: PipelineRun["id"], notes: string | undefined): boolean;
+  updateRunTest(runId: PipelineRun["id"], test: RunTestReport | undefined): boolean;
   flush(): Promise<void>;
 }
 
@@ -180,6 +182,7 @@ export interface Store {
 function mergeSeedPipelineIntoProject(existing: Project, seed: Project): Project {
   const seedDocNames = seed.seedDocNames?.length ? seed.seedDocNames : existing.seedDocNames;
   const expectedOutputs = seed.expectedOutputs ?? existing.expectedOutputs;
+  const inferencePresets = seed.inferencePresets ?? existing.inferencePresets;
   const models = structuredClone(seed.models);
   let modules = seed.modules.map((sm) => {
     const em = existing.modules.find((m) => m.id === sm.id);
@@ -195,7 +198,7 @@ function mergeSeedPipelineIntoProject(existing: Project, seed: Project): Project
     };
   });
   modules = syncAutoQuoteSteps(modules, models);
-  return migrateProjectModules({ ...existing, seedDocNames, expectedOutputs, models, modules });
+  return migrateProjectModules({ ...existing, seedDocNames, expectedOutputs, inferencePresets, models, modules });
 }
 
 // AI : keep persisted seed projects aligned with seeds/*.json — merge new modules (e.g. Link Quotes)
@@ -248,11 +251,13 @@ export function purgeSeedTemplateProjects(store: Store): number {
 export { userProjectsFrom, isSeedTemplateProject };
 
 // AI : idempotent — ingest bundled documents/ files into the global doc store (safe on every request).
-export async function ensureSeedDocs(store: Store): Promise<void> {
+// AI : refreshStale (explicit "Resync examples" only) also replaces bundled docs whose content
+// AI : drifted from seeds — never on bootstrap, or user edits to example docs would revert.
+export async function ensureSeedDocs(store: Store, opts?: { refreshStale?: boolean }): Promise<void> {
   for (const seed of allProjectSeeds()) {
     for (const spec of seed.docSpecs) {
       try {
-        await ingestSeedDoc(store, spec);
+        await ingestSeedDoc(store, spec, opts?.refreshStale ?? false);
       } catch (err) {
         console.error(`seed doc failed (${spec.name}):`, err);
       }
@@ -354,7 +359,7 @@ export async function ensureSeeded(store: Store): Promise<void> {
 }
 
 // AI : add missing seed docs; replace stale Vercel placeholder rows when real content is available.
-async function ingestSeedDoc(store: Store, spec: SeedDocSpec): Promise<void> {
+async function ingestSeedDoc(store: Store, spec: SeedDocSpec, refreshStale = false): Promise<void> {
   let fresh: string;
   try {
     fresh = await readSeedDocContent(spec);
@@ -366,11 +371,10 @@ async function ingestSeedDoc(store: Store, spec: SeedDocSpec): Promise<void> {
   const existingByName = store.docs().find((d) => d.name === spec.name);
   if (existingByName) {
     const content = store.docContent(existingByName.id);
-    if (
-      content &&
-      isUnavailableSeedDoc(content, spec.name) &&
-      !isUnavailableSeedDoc(fresh, spec.name)
-    ) {
+    const placeholderFixed =
+      content && isUnavailableSeedDoc(content, spec.name) && !isUnavailableSeedDoc(fresh, spec.name);
+    const stale = refreshStale && content !== undefined && content !== fresh && !isUnavailableSeedDoc(fresh, spec.name);
+    if (placeholderFixed || stale) {
       store.removeDoc(existingByName.id);
       store.addDoc(spec.name, spec.type, fresh, spec.label);
     }
@@ -613,6 +617,14 @@ export class JsonStore implements Store {
     const prev = this.state.runs[i].notes;
     if (prev === next) return true;
     this.state.runs[i] = { ...this.state.runs[i], notes: next };
+    this.persist();
+    return true;
+  }
+
+  updateRunTest(runId: PipelineRun["id"], test: RunTestReport | undefined): boolean {
+    const i = this.state.runs.findIndex((r) => r.id === runId);
+    if (i < 0) return false;
+    this.state.runs[i] = { ...this.state.runs[i], test };
     this.persist();
     return true;
   }

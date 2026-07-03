@@ -55,6 +55,25 @@ docs/new_type_system_plan.md
 
 
 
+allow plugins
+
+Make default input files mandatory 
+
+Need to hash code and use input and output descriptions rather than anything specific to make it generic. 
+
+Hash code to errors and also set a bunch of default functions to pick from
+
+
+need to save and hash errors, including any validation errors from LLMS. 
+
+
+Ensure custom code has typing 
+
+How to handle references, if you have ids you need to know which match which as you can’t match without this. Compare when the set of fields matches to add link
+
+
+
+
 inference contains a list of possible runs which have been pre selected, not just a single default one. these possible runs are named for example for a homework grader you could do a 1st grade example and a university grade example where the university includes latex formatting as a more advnaced test. you can also select from the tests in the inference tab.
 
 

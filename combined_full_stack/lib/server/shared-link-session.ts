@@ -213,6 +213,7 @@ export function overlayStoreForSharedRun(
     findRunByFingerprint: (pid, fp) => base.findRunByFingerprint(pid, fp),
     addRun: (pid, run) => base.addRun(pid, run),
     updateRunNotes: (rid, notes) => base.updateRunNotes(rid, notes),
+    updateRunTest: (rid, test) => base.updateRunTest(rid, test),
     flush: () => base.flush(),
   };
 }

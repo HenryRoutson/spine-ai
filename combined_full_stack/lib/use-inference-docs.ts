@@ -154,6 +154,12 @@ export function useInferenceDocs({
     setInputDocs(buildDefaultInputDocs(docs, project, inputModules, defaultInferenceDoc(docs, project)))
   }
 
+  // AI : one-click "pre-selected run" — replace the whole slot assignment (presets pick exact doc sets).
+  function applyInputAssignment(assignment: InputDocsAssignment) {
+    setInputDocs(assignment)
+    setPickerModuleId(null)
+  }
+
   return {
     inputDocs,
     inputDocIdsKey,
@@ -168,5 +174,6 @@ export function useInferenceDocs({
     setInputDocForModule,
     removeInputDocForModule,
     useSamples,
+    applyInputAssignment,
   }
 }

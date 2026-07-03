@@ -31,18 +31,16 @@ export function resolveInputDocs(
     })
     if (!resolved.length) continue
     if (isMultiDocInputModule(m)) {
+      // AI : a saved multi-doc selection is authoritative (presets pick exact doc sets) —
+      // AI : only fall back to defaults when it no longer satisfies the slot's minimum.
       const defaultDocs = docsForInputModule(defaults, m.id)
-      const seen = new Set(resolved.map((d) => d.id))
-      const merged = sortMultiInputDocs(
-        [...resolved, ...defaultDocs.filter((d) => !seen.has(d.id))],
-        project.seedDocNames,
-      )
+      const picked = sortMultiInputDocs(resolved, project.seedDocNames)
       out[m.id] =
-        merged.length >= inputMinCountForModule(m)
-          ? merged
+        picked.length >= inputMinCountForModule(m)
+          ? picked
           : defaultDocs.length
             ? defaultDocs
-            : merged
+            : picked
       continue
     }
     out[m.id] = resolved[0]

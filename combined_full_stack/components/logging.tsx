@@ -38,10 +38,12 @@ import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
 import type { DocRef, ModuleId, PipelineRun, RunStepStatus } from "@/lib/types"
 import { runLogText } from "@/lib/run-log-text"
 import { runLogJson } from "@/lib/run-log-json"
+import { copyTextToClipboard } from "@/lib/clipboard"
 import { IoSection } from "@/components/logging/io-section"
 import { IoPager } from "@/components/logging/io-pager"
 import { StepLoadedDocSection } from "@/components/step-loaded-doc-section"
 import { filterRuns, isTestingRun, RunNotesPreview } from "@/components/logging/run-picker-column"
+import { TestResults } from "@/components/test-results"
 import { CompareModal } from "@/components/logging/compare-modal"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
 import { LlmRetryGridSection } from "@/components/logging/llm-retry-grid"
@@ -159,7 +161,7 @@ export function Logging() {
                           )}
                           {isTestingRun(run) && (
                             <Badge variant="outline" className="shrink-0 border-chart-3/40 font-mono text-[9px] text-chart-3">
-                              testing
+                              test
                             </Badge>
                           )}
                           {runInputDocIds(run).map((docId) => (
@@ -214,8 +216,8 @@ export function Logging() {
                       variant="outline"
                       size="sm"
                       className="h-6 gap-1 font-mono text-[10px]"
-                      onClick={() => {
-                        navigator.clipboard.writeText(runLogJson(active))
+                      onClick={async () => {
+                        await copyTextToClipboard(await runLogJson(active, docs))
                         setJsonCopied(true)
                         setTimeout(() => setJsonCopied(false), 2000)
                       }}
@@ -229,7 +231,7 @@ export function Logging() {
                       size="sm"
                       className="h-6 gap-1 font-mono text-[10px]"
                       onClick={() => {
-                        navigator.clipboard.writeText(runLogText(active))
+                        void copyTextToClipboard(runLogText(active))
                         setLogCopied(true)
                         setTimeout(() => setLogCopied(false), 2000)
                       }}
@@ -245,6 +247,16 @@ export function Logging() {
                 ))}
 
                 <RunNotesEditor runId={active.id} notes={active.notes} />
+
+                {active.test && (
+                  // AI : persisted Testing-tab verdict — expected vs actual per pinned step.
+                  <div className="rounded-md border border-border bg-muted/20 px-3 py-2.5">
+                    <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">
+                      Test · {active.test.testDocName}
+                    </p>
+                    <TestResults results={active.test.results} />
+                  </div>
+                )}
 
                 {active.fingerprint && (
                   <div className="rounded-md border border-border bg-muted/20 px-3 py-2">

@@ -1,12 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, unknownRun } from "@/lib/server/api-errors";
-import type { RunId } from "@/lib/server/types";
+import type { RunId, RunTestReport } from "@/lib/server/types";
 
 export const dynamic = "force-dynamic";
 
 interface PatchRunRequest {
   notes?: string | null;
+  // AI : Testing tab attaches the expected-vs-actual verdict after the run completes.
+  test?: RunTestReport | null;
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -15,8 +17,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { store } = ctx;
 
   const { id } = await params;
-  const { notes } = (await req.json()) as PatchRunRequest;
-  const ok = store.updateRunNotes(id as RunId, notes === null || notes === "" ? undefined : notes);
+  const { notes, test } = (await req.json()) as PatchRunRequest;
+  const ok =
+    test !== undefined
+      ? store.updateRunTest(id as RunId, test ?? undefined)
+      : store.updateRunNotes(id as RunId, notes === null || notes === "" ? undefined : notes);
   if (!ok) return apiError(unknownRun(id), HTTP.NOT_FOUND);
   await store.flush();
   return NextResponse.json({ ok: true });

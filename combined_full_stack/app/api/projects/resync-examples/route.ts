@@ -12,7 +12,7 @@ export async function POST() {
   const { store } = ctx;
 
   const removed = purgeSeedTemplateProjects(store);
-  await ensureSeedDocs(store);
+  await ensureSeedDocs(store, { refreshStale: true });
   const backfilled = backfillAllProjectSeedDocNames(store);
   await store.flush();
   apiLog.info(`resynced example docs`, { removed, backfilled });

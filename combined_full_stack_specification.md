@@ -67,6 +67,8 @@ You need to have a page which doesn't edit structs but just single types. so you
 each structure should have a quick AI summarise button, which is not meant to replace human descriptions, but to quickly catch bugs or inconsistencyies like "document_summary : int".
 
 
+each of the fields will have a boolean for if something is deterministic
+
 # Pipeline
 
 A central visualisation of all steps of the pipeline with boxes for each step and a descrpition and associated icon.
@@ -194,9 +196,13 @@ testing output should go into logging with the testing flag
 testing isn't limited to whole runs and shouldn't need to cover all the steps. you can only provide the expected value for 3/8 steps for example, and you  only check those. you can also have 10 tests for one step and non for all the others.
 
 
-you should describe if certain fields are deterministic like a maths answer, or probabilistic if they're something like a summary which will almost never be the same.
+you should describe if certain fields are deterministic like a maths answer, or probabilistic if they're something like a summary which will almost never be the same. if they are they can be tested, otherwise not.
 
 for each test there is a button to run it
+
+
+tests should be saved to the logging system with a test tag,
+and share the same UI but with extra visualisations of where any erorrs occured
 
 # inference
 

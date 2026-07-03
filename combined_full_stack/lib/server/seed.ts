@@ -13,6 +13,7 @@ import {
   MODULE_META,
   STRATEGY_META,
   type DocLabel,
+  type InferencePreset,
   type InputType,
   type ModuleId,
   type ModuleKind,
@@ -119,6 +120,19 @@ const SeedFileSchema = z.object({
       }),
     )
     .optional(),
+  // AI : named pre-selected inference runs (spec/TODO) — input step label → doc name(s) from `docs`.
+  inferencePresets: z
+    .array(
+      z.object({
+        name: z.string(),
+        description: z.string().optional(),
+        inputs: z.record(z.string(), z.union([z.string(), z.array(z.string())])),
+        expectedOutputs: z
+          .array(z.object({ stepLabel: z.string(), file: z.string() }))
+          .optional(),
+      }),
+    )
+    .optional(),
 });
 
 export interface SeedDocSpec {
@@ -155,12 +169,20 @@ export async function readSeedDocContent(spec: SeedDocSpec): Promise<string> {
 
 function loadExpectedOutputs(
   entries: { stepLabel: string; file: string }[] | undefined,
+  // AI : lenient for preset fixtures — the generator script must be able to load the seed before they exist.
+  opts?: { lenient: boolean },
 ): Record<string, unknown> | undefined {
   if (!entries?.length) return undefined;
   const out: Record<string, unknown> = {};
   for (const e of entries) {
     const path = resolveSeedDocPath(e.file);
-    if (!existsSync(path)) throw new Error(`expected output missing: ${path} (step "${e.stepLabel}")`);
+    if (!existsSync(path)) {
+      if (opts?.lenient) {
+        console.warn(`preset expected output missing, skipped: ${path} (step "${e.stepLabel}")`);
+        continue;
+      }
+      throw new Error(`expected output missing: ${path} (step "${e.stepLabel}")`);
+    }
     out[e.stepLabel] = JSON.parse(readFileSync(path, "utf8")) as unknown;
   }
   return out;
@@ -176,10 +198,38 @@ export function expectedOutputsForProject(project: Project): Record<string, unkn
   return byName?.project.expectedOutputs ?? {};
 }
 
+// AI : same template fallback as expectedOutputsForProject — clones created before presets existed still get them.
+export function inferencePresetsForProject(project: Project): InferencePreset[] {
+  if (project.inferencePresets?.length) return project.inferencePresets;
+  const byId = allProjectSeeds().find((s) => s.project.id === project.id);
+  if (byId?.project.inferencePresets?.length) return byId.project.inferencePresets;
+  const baseName = project.name.replace(/ \d+$/, "");
+  const byName = allProjectSeeds().find((s) => s.project.name === baseName);
+  return byName?.project.inferencePresets ?? [];
+}
+
+// AI : run-aware golden — a preset whose doc names match the run's inputs overrides the project default,
+// AI : so assert steps pass on alternate pre-selected runs (e.g. the university LaTeX example).
+export function expectedOutputsForRun(project: Project, runInputDocNames: string[]): Record<string, unknown> {
+  const wanted = [...runInputDocNames].sort().join("\n");
+  for (const preset of inferencePresetsForProject(project)) {
+    if (!preset.expectedOutputs) continue;
+    const names = Object.values(preset.inputs).flatMap((v) => (Array.isArray(v) ? v : [v]));
+    if ([...names].sort().join("\n") === wanted) return preset.expectedOutputs;
+  }
+  return expectedOutputsForProject(project);
+}
+
 // AI : the generic entry point — any validated seed JSON becomes a project + its source docs.
 export function loadProjectSeed(path: string): ProjectSeed {
   const raw = SeedFileSchema.parse(JSON.parse(readFileSync(path, "utf8")));
   const expectedOutputs = loadExpectedOutputs(raw.expectedOutputs);
+  const inferencePresets: InferencePreset[] | undefined = raw.inferencePresets?.map((p) => ({
+    name: p.name,
+    description: p.description,
+    inputs: p.inputs,
+    expectedOutputs: loadExpectedOutputs(p.expectedOutputs, { lenient: true }),
+  }));
   return {
     // AI : zod-validated plain strings → branded contract types
     project: {
@@ -197,6 +247,7 @@ export function loadProjectSeed(path: string): ProjectSeed {
       strategies: raw.strategies as Strategy[],
       seedDocNames: raw.docs.map((d) => d.name),
       expectedOutputs,
+      inferencePresets,
     },
     // AI : bug fix — seed `file` entries are now repo-/documents/-relative paths
     // AI : ("legal/legal_doc_text.pdf"), so a fresh seed no longer ENOENTs in openStore().

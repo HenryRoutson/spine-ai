@@ -3,13 +3,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { compileCustomFn } from "../lib/custom_code";
 import { loadProjectSeed, resolveSeedDocPath, SEEDS_DIR } from "../lib/server/seed";
+import { materializeInputDocument } from "../lib/server/structure";
 import { readFileSync } from "node:fs";
 
 type StepState = Record<string, unknown>;
-
-function readJson(path: string): unknown {
-  return JSON.parse(readFileSync(path, "utf8"));
-}
 
 function readText(path: string): string {
   return readFileSync(path, "utf8");
@@ -27,14 +24,20 @@ function writeFixture(relativeFile: string, value: unknown): void {
   console.log(`wrote ${relativeFile}`);
 }
 
-function generateHomeworkGrader(): void {
+// AI : one fixture set per pre-selected run — the default sample plus each seed inferencePreset.
+function generateHomeworkFixtures(schemaFile: string, studentFiles: string[], outDir: string): void {
   const seed = loadProjectSeed(join(SEEDS_DIR, "homework_grader.json"));
-  const schema = readJson(resolveSeedDocPath("homework_grader/homework_marking_schema.json"));
-  const studentFiles = [
-    "homework_grader/homework_student_sam.md",
-    "homework_grader/homework_student_jordan.md",
-    "homework_grader/homework_student_alex.md",
-  ];
+  // AI : materialize like the run engine (not plain JSON.parse) — field order is rebuilt per the
+  // AI : StructureModel, and downstream fixtures embed JSON.stringify(schema) as a string.
+  const schemaMod = seed.project.modules.find((m) => m.id === "mod_in_schema")!;
+  const schemaName = schemaFile.split("/").pop()!;
+  const schema = materializeInputDocument(
+    readText(resolveSeedDocPath(schemaFile)),
+    `seed_${schemaName}`,
+    schemaMod,
+    seed.project.models,
+    { docName: schemaName, label: schemaMod.label, note: schemaMod.note },
+  );
   const students = studentFiles.map((f) => {
     const name = f.split("/").pop()!;
     const content = readText(resolveSeedDocPath(f));
@@ -42,35 +45,57 @@ function generateHomeworkGrader(): void {
   });
 
   const state: StepState = { "Marking Schema": schema };
-  writeFixture("homework_grader/expected/marking_schema.json", schema);
+  writeFixture(`${outDir}/marking_schema.json`, schema);
 
   const flattenMod = seed.project.modules.find((m) => m.id === "mod_questions")!;
   const flattenCode = flattenMod.fallbackList?.[0]?.typescript ?? "";
   const questions = runTs(flattenCode, schema, state);
   state["Marking Questions List"] = questions;
-  writeFixture("homework_grader/expected/marking_questions_list.json", questions);
+  writeFixture(`${outDir}/marking_questions_list.json`, questions);
 
   state["Student Submissions"] = students;
-  writeFixture("homework_grader/expected/student_submissions.json", students);
+  writeFixture(`${outDir}/student_submissions.json`, students);
 
   const combineValue = {
     student_submission: students[0],
     marking_questions: questions,
   };
   state["Combine Inputs"] = combineValue;
-  writeFixture("homework_grader/expected/combine_inputs.json", combineValue);
+  writeFixture(`${outDir}/combine_inputs.json`, combineValue);
 
   const assembleMod = seed.project.modules.find((m) => m.id === "mod_assemble")!;
   const assembleCode = assembleMod.fallbackList?.[0]?.typescript ?? "";
   const work = runTs(assembleCode, combineValue, state);
   state["Assemble Grader Work"] = work;
-  writeFixture("homework_grader/expected/assemble_grader_work.json", work);
+  writeFixture(`${outDir}/assemble_grader_work.json`, work);
 
   const flatMod = seed.project.modules.find((m) => m.id === "mod_flatten")!;
   const flatCode = flatMod.fallbackList?.[0]?.typescript ?? "";
   const gradable = runTs(flatCode, work, state);
   state["Flatten Sections"] = gradable;
-  writeFixture("homework_grader/expected/flatten_sections.json", gradable);
+  writeFixture(`${outDir}/flatten_sections.json`, gradable);
+}
+
+function generateHomeworkGrader(): void {
+  generateHomeworkFixtures(
+    "homework_grader/homework_marking_schema.json",
+    [
+      "homework_grader/homework_student_sam.md",
+      "homework_grader/homework_student_jordan.md",
+      "homework_grader/homework_student_alex.md",
+    ],
+    "homework_grader/expected",
+  );
+  generateHomeworkFixtures(
+    "homework_grader/homework_marking_schema_first_grade.json",
+    ["homework_grader/homework_student_riley_first_grade.md"],
+    "homework_grader/expected_first_grade",
+  );
+  generateHomeworkFixtures(
+    "homework_grader/homework_marking_schema_university.json",
+    ["homework_grader/homework_student_priya_university.md"],
+    "homework_grader/expected_university",
+  );
 }
 
 function generateBatchLlm(): void {

@@ -26,6 +26,7 @@ import type {
   PipelineRun,
   Project,
   ProjectId,
+  RunTestReport,
   Strategy,
   StructureModel,
   StructureModelId,
@@ -109,6 +110,8 @@ interface StoreState {
   runs: PipelineRun[]
   addRun: (r: PipelineRun) => void
   updateRunNotes: (runId: PipelineRun["id"], notes: string | undefined) => Promise<void>
+  // AI : persist the Testing-tab verdict (expected vs actual per step) onto the run for Logging.
+  updateRunTest: (runId: PipelineRun["id"], test: RunTestReport) => Promise<void>
   // AI : survives Inference tab unmount — doc ids only, resolved against hydrated docs on restore.
   inferenceInputDocIds: Partial<Record<ModuleId, DocId | DocId[]>>
   setInferenceInputDocIds: (docs: Partial<Record<ModuleId, DocId | DocId[]>>) => void
@@ -652,6 +655,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const updateRunTest = useCallback(async (runId: PipelineRun["id"], test: RunTestReport) => {
+    await apiJson(API_ROUTES.run(runId), {
+      method: "PATCH",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ test }),
+    })
+    setState((prev) => {
+      if (!prev) return prev
+      const i = prev.runs.findIndex((r) => r.id === runId)
+      if (i < 0) return prev
+      const runs = [...prev.runs]
+      runs[i] = { ...runs[i], test }
+      return { ...prev, runs }
+    })
+  }, [])
+
   const runs = state?.runs ?? []
   const billingRuns = state?.allRuns ?? state?.runs ?? []
   const modules = useMemo(
@@ -771,6 +790,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       runs,
       addRun,
       updateRunNotes,
+      updateRunTest,
       inferenceInputDocIds: inferenceInputsByProject[project.id] ?? {},
       setInferenceInputDocIds: boundSetInferenceInputDocIds,
       billingRuns,
@@ -802,6 +822,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     runs,
     addRun,
     updateRunNotes,
+    updateRunTest,
     inferenceInputsByProject,
     boundSetInferenceInputDocIds,
     billingRuns,

@@ -313,7 +313,7 @@
       "avgCostCents": 0,
       "fallbackList": [
         {
-          "typescript": "(_combined, state) => { const schema = state[\"Marking Schema\"]; const subs = state[\"Student Submissions\"]; const list = Array.isArray(subs) ? subs : subs ? [subs] : []; const text = (s) => (typeof s?.content === \"string\" ? s.content : typeof s?.body === \"string\" ? s.body : \"\"); const name = (s, i) => (typeof s?.filename === \"string\" && s.filename ? s.filename : typeof s?.doc_id === \"string\" ? s.doc_id : `student_${i + 1}.md`); return { marking_schema: { filename: \"marking_schema.json\", content: JSON.stringify(schema ?? {}) }, student_submissions: list.map((s, i) => ({ filename: name(s, i), content: text(s) })) }; }"
+          "typescript": "(_combined, state) => { const schema = state[\"Marking Schema\"]; const subs = state[\"Student Submissions\"]; const list = Array.isArray(subs) ? subs : subs ? [subs] : []; const text = (s) => (typeof s?.content === \"string\" ? s.content : typeof s?.body === \"string\" ? s.body : \"\"); const name = (s, i) => (typeof s?.filename === \"string\" && s.filename ? s.filename : typeof s?.doc_id === \"string\" ? s.doc_id : `student_${i + 1}.md`); const sortKeys = (v) => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === \"object\" ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k])])) : v); return { marking_schema: { filename: \"marking_schema.json\", content: JSON.stringify(sortKeys(schema ?? {})) }, student_submissions: list.map((s, i) => ({ filename: name(s, i), content: text(s) })) }; }"
         }
       ]
     },
@@ -562,10 +562,80 @@
       "file": "homework_grader/homework_student_alex.md"
     },
     {
+      "name": "homework_marking_schema_first_grade.json",
+      "type": "json",
+      "label": "inference",
+      "file": "homework_grader/homework_marking_schema_first_grade.json"
+    },
+    {
+      "name": "homework_student_riley_first_grade.md",
+      "type": "text",
+      "label": "inference",
+      "file": "homework_grader/homework_student_riley_first_grade.md"
+    },
+    {
+      "name": "homework_marking_schema_university.json",
+      "type": "json",
+      "label": "inference",
+      "file": "homework_grader/homework_marking_schema_university.json"
+    },
+    {
+      "name": "homework_student_priya_university.md",
+      "type": "text",
+      "label": "inference",
+      "file": "homework_grader/homework_student_priya_university.md"
+    },
+    {
       "name": "homework_grader_testing.json",
       "type": "json",
       "label": "training",
       "file": "homework_grader/homework_grader_testing.json"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Classroom sample — Algebra II",
+      "description": "Three student submissions graded against the bundled Algebra II rubric.",
+      "inputs": {
+        "Marking Schema": "homework_marking_schema.json",
+        "Student Submissions": [
+          "homework_student_sam.md",
+          "homework_student_jordan.md",
+          "homework_student_alex.md"
+        ]
+      }
+    },
+    {
+      "name": "1st grade example",
+      "description": "Simple arithmetic worksheet — an easy smoke test for the grader.",
+      "inputs": {
+        "Marking Schema": "homework_marking_schema_first_grade.json",
+        "Student Submissions": ["homework_student_riley_first_grade.md"]
+      },
+      "expectedOutputs": [
+        { "stepLabel": "Marking Schema", "file": "homework_grader/expected_first_grade/marking_schema.json" },
+        { "stepLabel": "Marking Questions List", "file": "homework_grader/expected_first_grade/marking_questions_list.json" },
+        { "stepLabel": "Student Submissions", "file": "homework_grader/expected_first_grade/student_submissions.json" },
+        { "stepLabel": "Combine Inputs", "file": "homework_grader/expected_first_grade/combine_inputs.json" },
+        { "stepLabel": "Assemble Grader Work", "file": "homework_grader/expected_first_grade/assemble_grader_work.json" },
+        { "stepLabel": "Flatten Sections", "file": "homework_grader/expected_first_grade/flatten_sections.json" }
+      ]
+    },
+    {
+      "name": "University example (LaTeX)",
+      "description": "Real analysis problem set with LaTeX-formatted working — a more advanced test.",
+      "inputs": {
+        "Marking Schema": "homework_marking_schema_university.json",
+        "Student Submissions": ["homework_student_priya_university.md"]
+      },
+      "expectedOutputs": [
+        { "stepLabel": "Marking Schema", "file": "homework_grader/expected_university/marking_schema.json" },
+        { "stepLabel": "Marking Questions List", "file": "homework_grader/expected_university/marking_questions_list.json" },
+        { "stepLabel": "Student Submissions", "file": "homework_grader/expected_university/student_submissions.json" },
+        { "stepLabel": "Combine Inputs", "file": "homework_grader/expected_university/combine_inputs.json" },
+        { "stepLabel": "Assemble Grader Work", "file": "homework_grader/expected_university/assemble_grader_work.json" },
+        { "stepLabel": "Flatten Sections", "file": "homework_grader/expected_university/flatten_sections.json" }
+      ]
     }
   ],
   "expectedOutputs": [

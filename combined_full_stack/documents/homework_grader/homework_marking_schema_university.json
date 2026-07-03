@@ -1,0 +1,45 @@
+{
+  "assignment_title": "MATH 301 Real Analysis — Problem Set 4",
+  "sections": [
+    {
+      "section_id": "A",
+      "title": "Section A — Integration and limits",
+      "max_score": 20,
+      "criteria": "LaTeX-formatted working and method required, not just the final value",
+      "questions": [
+        {
+          "question_id": "Q1",
+          "prompt": "Evaluate \\(\\int_0^1 3x^2 e^{x^3}\\,dx\\). Show the substitution explicitly.",
+          "max_score": 10,
+          "marking_criteria": "4 pts for the substitution \\(u = x^3\\), 4 pts for transformed bounds \\(u : 0 \\to 1\\), 2 pts for the value \\(e - 1\\)"
+        },
+        {
+          "question_id": "Q2",
+          "prompt": "Compute \\(\\lim_{n \\to \\infty} \\left(1 + \\frac{2}{n}\\right)^{n}\\).",
+          "max_score": 10,
+          "marking_criteria": "6 pts for reducing to an exponential limit (e.g. \\(e^{n \\ln(1 + 2/n)}\\)), 4 pts for the value \\(e^2\\)"
+        }
+      ]
+    },
+    {
+      "section_id": "B",
+      "title": "Section B — Series convergence",
+      "max_score": 20,
+      "criteria": "Name the convergence test used and verify its hypotheses",
+      "questions": [
+        {
+          "question_id": "Q3",
+          "prompt": "Determine whether \\(\\sum_{n=1}^{\\infty} \\frac{n!}{n^n}\\) converges. Justify with a named test.",
+          "max_score": 10,
+          "marking_criteria": "5 pts for a correct ratio-test setup, 5 pts for the limit \\(1/e < 1\\) and the conclusion"
+        },
+        {
+          "question_id": "Q4",
+          "prompt": "Prove that \\(\\sum_{n=2}^{\\infty} \\frac{1}{n \\ln^2 n}\\) converges.",
+          "max_score": 10,
+          "marking_criteria": "6 pts for the integral test or Cauchy condensation with hypotheses checked, 4 pts for a correct evaluation; a bare comparison with \\(\\sum 1/n^2\\) is invalid and earns at most 2 pts"
+        }
+      ]
+    }
+  ]
+}

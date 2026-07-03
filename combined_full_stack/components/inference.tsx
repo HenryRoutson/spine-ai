@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button"
 import { docsForInputModule, resolveRunInputDocIds, inputDocsByModuleFromFlat, isMultiDocInputModule, type InputDocsAssignment } from "@/lib/inference-input"
 import { inferenceInputIssueMessage } from "@/lib/inference-validity"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
+import { InferenceRunPresetMenu } from "@/components/inference/inference-run-preset-menu"
 import { useInferenceRun } from "@/lib/use-inference-run"
 import { RunNotesPad } from "@/components/run-notes-pad"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
@@ -176,15 +177,25 @@ export function Inference() {
                   <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                     pipeline inputs · {run.inputModules.length} slot{run.inputModules.length === 1 ? "" : "s"}
                   </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 bg-transparent"
-                    onClick={run.useSamples}
-                    disabled={run.phase === "running"}
-                  >
-                    <FileText className="mr-1.5 h-3.5 w-3.5" /> Use samples
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <InferenceRunPresetMenu
+                      project={project}
+                      docs={docs}
+                      inputModules={run.inputModules}
+                      inputDocs={run.inputDocs}
+                      disabled={run.phase === "running"}
+                      onApply={run.applyInputAssignment}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 bg-transparent"
+                      onClick={run.useSamples}
+                      disabled={run.phase === "running"}
+                    >
+                      <FileText className="mr-1.5 h-3.5 w-3.5" /> Use samples
+                    </Button>
+                  </div>
                 </div>
                 <div className={run.phase === "running" ? "pointer-events-none opacity-60" : undefined}>
                 {run.inputModules.map((m) => (

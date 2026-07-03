@@ -13,6 +13,18 @@ export function runLogText(run: PipelineRun): string {
   lines.push(`Cost: ${formatCostCents(run.billedCents)}`)
   if (run.savedCents > 0) lines.push(`Saved (cache): ${formatCostCents(run.savedCents)}`)
   if (run.notes) lines.push(`Notes: ${run.notes}`)
+
+  // AI : testing runs carry the persisted verdict — expected vs actual per pinned step.
+  if (run.test) {
+    lines.push("")
+    lines.push(`── Test · ${run.test.testDocName} ──`)
+    for (const r of run.test.results) {
+      lines.push(`[${r.status.toUpperCase()}] ${r.label}${r.diffPath ? `  (diff at ${r.diffPath})` : ""}`)
+      lines.push(`   Expected: ${JSON.stringify(r.expected)}`)
+      if (r.actual !== undefined) lines.push(`   Actual:   ${JSON.stringify(r.actual)}`)
+    }
+  }
+
   lines.push("")
   lines.push("── Steps ──")
 

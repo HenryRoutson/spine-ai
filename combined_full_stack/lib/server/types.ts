@@ -150,6 +150,18 @@ export interface PipelineModule {
   avgCostCents: number;
 }
 
+type step_label_string = string;
+type doc_name_string = string;
+
+// AI : a named, pre-selected inference run — input step label → bundled doc name(s).
+// AI : optional per-preset golden outputs let assert steps pass on non-default inputs.
+export interface InferencePreset {
+  name: string;
+  description?: string;
+  inputs: Record<step_label_string, doc_name_string | doc_name_string[]>;
+  expectedOutputs?: Record<step_label_string, unknown>;
+}
+
 // AI : a project owns its own models, pipeline, strategies (mirrors frontend store.tsx Project).
 export interface Project {
   id: ProjectId;
@@ -161,6 +173,7 @@ export interface Project {
   strategies: Strategy[];
   seedDocNames?: string[]; // AI : filenames from seeds/*.json — scopes inference inputs to this project
   expectedOutputs?: Record<string, unknown>; // AI : golden step outputs keyed by step label — assert steps compare at run time
+  inferencePresets?: InferencePreset[]; // AI : named pre-selected runs shown in the Inference tab; first one is the default
   createdAt?: number; // AI : ms since epoch — set when blank/cloned; templates from seeds/*.json omit this
   lastOpenedAt?: number; // AI : ms since epoch — updated when user opens/switches to this project
   documentation?: string; // AI : freeform markdown — prepended to every agent/assistant prompt call to prevent regressions
@@ -279,6 +292,21 @@ export type RunFingerprint = string & { __brand: "RunFingerprint" };
 export type SharedLinkId = string & { __brand: "SharedLinkId" };
 // AI : "testing" — run started from the Testing tab; flagged in Logging (spec § Testing).
 export type RunSource = "app" | "shared_link" | "assistant" | "testing";
+
+// AI : persisted test verdict — expected vs actual per pinned step, attached to the run
+// AI : after the Testing tab compares the finished run against its *_testing.json file.
+export type RunTestStepResult = {
+  label: string;
+  status: "pass" | "fail" | "not-reached";
+  diffPath?: string;
+  expected: unknown;
+  actual?: unknown;
+};
+
+export type RunTestReport = {
+  testDocName: string;
+  results: RunTestStepResult[];
+};
 export type SharedLinkFundingMode = "sharer_pays" | "viewer_pays" | "viewer_signs_in";
 
 export interface PipelineRun {
@@ -295,6 +323,8 @@ export interface PipelineRun {
   fingerprint?: RunFingerprint; // AI : hash of pipeline + inputs — identical reruns link here
   notes?: string; // AI : freeform context for this run — set before or after inference
   source?: RunSource;
+  test?: RunTestReport; // AI : only on source "testing" runs — keeps the verdict in Logging
+
   sharedLinkId?: SharedLinkId;
   viewerName?: string;
   viewerSessionId?: string;

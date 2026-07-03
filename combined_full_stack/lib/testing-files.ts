@@ -2,9 +2,10 @@
 // AI : validated against the live pipeline (labels + spine output types) since pipelines drift.
 
 import { deepEqual, deepEqualDiffPath } from "@/lib/deep_equal"
+import { namedInputDocNames, resolveNamedRunInputs, type ResolvedNamedInputs } from "@/lib/inference-presets"
 import { labelAsStateKey, validatePipelineStateEntry } from "@/lib/server/pipeline_state"
 import { tryParseJson } from "@/lib/json-utils"
-import type { DocId, DocRef, ModuleId, PipelineModule, PipelineRun, Project } from "@/lib/types"
+import type { DocRef, PipelineModule, PipelineRun, Project, RunTestStepResult } from "@/lib/types"
 
 export const TESTING_FILE_SUFFIX = "_testing.json"
 
@@ -59,9 +60,7 @@ export function parseTestFile(content: string): TestParseResult {
   }
 }
 
-function docNames(value: doc_name_string | doc_name_string[]): doc_name_string[] {
-  return (Array.isArray(value) ? value : [value]).filter((n) => n.trim())
-}
+const docNames = namedInputDocNames
 
 function moduleByLabel(modules: PipelineModule[], label: string): PipelineModule | undefined {
   return modules.find((m) => labelAsStateKey(m.label) === labelAsStateKey(label))
@@ -141,45 +140,20 @@ export function validateTestFile(
   return issues
 }
 
-export type ResolvedTestInputs =
-  | { ok: true; primary: DocId; rest: DocId[]; byModule: Partial<Record<ModuleId, DocId[]>> }
-  | { ok: false; error: string }
+export type ResolvedTestInputs = ResolvedNamedInputs
 
+// AI : delegates to the shared named-inputs resolver (lib/inference-presets.ts).
 export function resolveTestRunInputs(
   test: SpineTestFile,
   modules: PipelineModule[],
   projectDocs: DocRef[],
 ): ResolvedTestInputs {
-  const inputs = test.inputs ?? {}
-  const byModule: Partial<Record<ModuleId, DocId[]>> = {}
-  const ordered: DocId[] = []
-  for (const m of inputModulesOf(modules)) {
-    const key = Object.keys(inputs).find((l) => labelAsStateKey(l) === labelAsStateKey(m.label))
-    const names = key ? docNames(inputs[key]) : []
-    if (!names.length) return { ok: false, error: `no input document set for step "${m.label}"` }
-    const ids: DocId[] = []
-    for (const name of names) {
-      const doc = projectDocs.find((d) => d.name === name)
-      if (!doc) return { ok: false, error: `document "${name}" not found for step "${m.label}"` }
-      ids.push(doc.id)
-    }
-    byModule[m.id] = ids
-    ordered.push(...ids)
-  }
-  const [primary, ...rest] = ordered
-  if (!primary) return { ok: false, error: "test has no input documents" }
-  return { ok: true, primary, rest, byModule }
+  return resolveNamedRunInputs(test.inputs ?? {}, modules, projectDocs)
 }
 
-export type TestStepStatus = "pass" | "fail" | "not-reached"
-
-export type TestStepResult = {
-  label: step_label_string
-  status: TestStepStatus
-  diffPath?: string
-  expected: unknown
-  actual?: unknown
-}
+// AI : same shape the run persists (PipelineRun.test.results) — one type, no drift.
+export type TestStepResult = RunTestStepResult
+export type TestStepStatus = TestStepResult["status"]
 
 // AI : the pinpoint view — first failing step in pipeline order is where the pipeline goes wrong.
 export function compareRunToTest(

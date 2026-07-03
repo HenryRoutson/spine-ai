@@ -35,6 +35,7 @@ import type {
   Project,
   ProjectId,
   RunFingerprint,
+  RunTestReport,
 } from "./types";
 
 interface RunRow {
@@ -414,9 +415,20 @@ export class SupabaseStore implements Store {
     const next = notes?.trim() ? notes.trim() : undefined;
     const prev = this.state.runs[i].notes;
     if (prev === next) return true;
-    const run = { ...this.state.runs[i], notes: next };
+    return this.patchRun(i, { notes: next });
+  }
+
+  updateRunTest(runId: PipelineRun["id"], test: RunTestReport | undefined): boolean {
+    const i = this.state.runs.findIndex((r) => r.id === runId);
+    if (i < 0) return false;
+    return this.patchRun(i, { test });
+  }
+
+  // AI : shared upsert for post-run field patches (notes, test report).
+  private patchRun(i: number, patch: Partial<PipelineRun>): boolean {
+    const run = { ...this.state.runs[i], ...patch };
     this.state.runs[i] = run;
-    const projectId = this.state.runProjects[runId];
+    const projectId = this.state.runProjects[run.id];
     this.pending.push(
       this.db.from("runs").upsert(this.withUserId(this.runRow(projectId, run)), { onConflict: "user_id,id" }),
     );
