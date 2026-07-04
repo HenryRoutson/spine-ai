@@ -1,6 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
+import { useRouter } from "next/navigation"
 import { useEffect, useRef, useState } from "react"
 import {
   Boxes,
@@ -16,7 +17,6 @@ import {
   Pencil,
   ArrowLeft,
   Loader2,
-  FolderKanban,
   LayoutGrid,
   ChevronDown,
   BookOpen,
@@ -47,6 +47,7 @@ import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
 import { SpineLogoBox } from "@/components/spine-mark"
+import { clearActiveProjectSession } from "@/lib/active-project-session"
 import { LEGAL } from "@shared/legal/site"
 import type { Project } from "@/lib/types"
 
@@ -54,9 +55,6 @@ import type { Project } from "@/lib/types"
 const LANDING_PAGE_URL = "https://withspine.dev/"
 
 // AI : code-split heavy tabs — only Structure ships on first paint.
-const Projects = dynamic(() => import("@/components/projects").then((m) => ({ default: m.Projects })), {
-  loading: () => <PanelLoading label="loading projects…" />,
-})
 const StructureBuilder = dynamic(
   () => import("@/components/structure-builder").then((m) => ({ default: m.StructureBuilder })),
   { loading: () => <PanelLoading label="loading structure…" /> },
@@ -94,7 +92,6 @@ const DocumentationPanel = dynamic(
 type WindowId = AppWindowId
 
 const WINDOWS: { id: WindowId; label: string; hint: string; icon: typeof Boxes }[] = [
-  { id: "projects", label: "Projects", hint: "·", icon: FolderKanban },
   { id: "structure", label: "Structure", hint: "01", icon: Boxes },
   { id: "pipeline", label: "Pipeline", hint: "02", icon: GitBranch },
   // AI : Testing sits before Inference — tests run before demoing (spec § Testing).
@@ -160,9 +157,9 @@ function ProjectRenameInput({
 }
 
 function ProjectSelector() {
+  const router = useRouter()
   const { projects, project, setActiveProjectId, prefetchProject, addProject, renameProject, deleteProject } =
     useStore()
-  const { setActiveWindow } = useAppShell()
   const [editing, setEditing] = useState<{ id: string; initialName: string } | null>(null)
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
   const displayProjects = mergeWithGhosts(projects)
@@ -259,9 +256,15 @@ function ProjectSelector() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-        <DropdownMenuItem onClick={() => setActiveWindow("projects")} className="gap-2 py-2.5 font-medium">
+        <DropdownMenuItem
+          onClick={() => {
+            clearActiveProjectSession()
+            router.push("/projects")
+          }}
+          className="gap-2 py-2.5 font-medium"
+        >
           <LayoutGrid className="h-4 w-4" />
-          Manage projects…
+          All projects…
         </DropdownMenuItem>
         <DropdownMenuItem onClick={addProject} className="gap-2 py-2.5 font-medium text-primary">
           <Plus className="h-4 w-4" />
@@ -373,7 +376,6 @@ export function AppShellLayout() {
 
         <main className="relative flex-1 overflow-hidden" id="main-content">
           {projectLoading && <ProjectSwitchOverlay projectName={project.name} />}
-          {activeWindow === "projects" && <Projects />}
           {activeWindow === "structure" && <StructureBuilder />}
           {activeWindow === "pipeline" && <PipelineBuilder />}
           {activeWindow === "testing" && <Testing />}

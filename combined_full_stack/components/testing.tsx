@@ -43,6 +43,10 @@ import { labelAsStateKey } from "@/lib/server/pipeline_state"
 import { docsForProject } from "@/lib/project-docs"
 import { awaitRun, isRunBillingError, mergeStepStates, startRun, type StepUiState } from "@/lib/run-engine"
 import { useStore } from "@/lib/store"
+import { formatCostCents, formatSecondsShort } from "@/lib/format"
+import { runBilledCents, runTotalMs } from "@/lib/run-metrics"
+import { useStatusPalette } from "@/lib/chart-colors"
+import { timeAgo } from "@/lib/time-ago"
 import {
   isTestingFileName,
   latestTestVerdictForDoc,
@@ -53,13 +57,15 @@ import {
   testContentSig,
   testPipelineSig,
   testRunContextSig,
+  testRunHistoryForDoc,
+  testVerdictPassed,
   validateTestFile,
   type SpineTestFile,
   type TestFileIssue,
   type TestStepResult,
 } from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
-import { DocLabel, InputType, RunSource, type RunTestReport } from "@/lib/types"
+import { DocLabel, InputType, RunSource, type PipelineRun, type RunTestReport } from "@/lib/types"
 import type { DocId, DocRef, ModuleId, PipelineModule, Project } from "@/lib/types"
 
 type doc_name_string = string
@@ -395,7 +401,6 @@ function staleLoadFailedContent(content: string): string | null {
         // AI : tests are unattended — auto-approve human-review gates.
         onHumanReview: () => Promise.resolve("approved" as const),
       })
-      if (!runs.some((r) => r.id === run.id)) addRun(run)
       const report = await evaluateTestReport(run, state.test, project, model)
       refreshBilling().catch(console.error)
       const content = state.content ?? ""
@@ -405,6 +410,8 @@ function staleLoadFailedContent(content: string): string | null {
         testContentSig: testContentSig(content),
         pipelineSig,
       }
+      // AI : upsert locally with verdict immediately so run history updates before PATCH returns.
+      addRun({ ...run, source: run.source ?? RunSource.Testing, test: persistedTest })
       setResults(report)
       setResultRunId(run.id)
       setRunPhase("done")
@@ -618,6 +625,7 @@ function staleLoadFailedContent(content: string): string | null {
               onRetryLoad={() => loadTestDoc(selected.doc.id)}
               onDirtyContentChange={onDirtyContentChange}
               lastVerdict={resolveLastVerdict(selected.doc.name)}
+              runs={runs}
               runDisabled={pipelineInvalid || runBusy}
               runPhase={runningTestId === selected.doc.id ? runPhase : "idle"}
               stepStates={stepStates}
@@ -720,6 +728,66 @@ function IssueList({ issues, className }: { issues: TestFileIssue[]; className?:
   )
 }
 
+function TestRunHistory({
+  docName,
+  runs,
+  onOpenLog,
+}: {
+  docName: doc_name_string
+  runs: PipelineRun[]
+  onOpenLog: (runId: string) => void
+}) {
+  const palette = useStatusPalette()
+  const history = useMemo(() => testRunHistoryForDoc(runs, docName), [runs, docName])
+
+  return (
+    <section>
+      <SectionLabel>run history{history.length ? ` (${history.length})` : ""}</SectionLabel>
+      {history.length === 0 ? (
+        <p className="mt-1.5 rounded-md border border-dashed border-border px-2.5 py-2 font-mono text-[11px] text-muted-foreground">
+          no logs
+        </p>
+      ) : (
+      <ul className="mt-1.5 space-y-1">
+        {history.map((run) => {
+          const passed = run.test ? testVerdictPassed(run.test.results) : run.status === "ok"
+          const verdictColor = passed ? palette.ok : palette.err
+          return (
+            <li key={run.id}>
+              <button
+                type="button"
+                onClick={() => onOpenLog(run.id)}
+                className="flex w-full items-center gap-2 rounded-md border border-border px-2.5 py-2 text-left transition-colors hover:bg-accent"
+              >
+                {passed ? (
+                  <CircleCheck className="h-3.5 w-3.5 shrink-0" style={{ color: verdictColor }} />
+                ) : (
+                  <CircleX className="h-3.5 w-3.5 shrink-0" style={{ color: verdictColor }} />
+                )}
+                <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
+                  {new Date(run.startedAt).toLocaleString()} · {timeAgo(run.startedAt)}
+                </span>
+                <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                  {formatSecondsShort(runTotalMs(run))} · {formatCostCents(runBilledCents(run))}
+                </span>
+                <Badge
+                  variant="outline"
+                  className="shrink-0 font-mono text-[9px]"
+                  style={{ color: verdictColor, borderColor: `${verdictColor}66` }}
+                >
+                  {passed ? "passed" : "failed"}
+                </Badge>
+                <ScrollText className="h-3 w-3 shrink-0 text-primary" />
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      )}
+    </section>
+  )
+}
+
 function TestDetail({
   state,
   project,
@@ -729,6 +797,7 @@ function TestDetail({
   onRetryLoad,
   onDirtyContentChange,
   lastVerdict,
+  runs,
   runDisabled,
   runPhase,
   stepStates,
@@ -745,6 +814,7 @@ function TestDetail({
   onRetryLoad: () => void
   onDirtyContentChange: (docName: doc_name_string, content: string | null) => void
   lastVerdict: boolean | null
+  runs: PipelineRun[]
   runDisabled: boolean
   runPhase: RunPhase
   stepStates: Map<ModuleId, StepUiState>
@@ -867,6 +937,10 @@ function TestDetail({
           )}
         </div>
       </div>
+
+      {!state.loadError && !state.parseError && (
+        <TestRunHistory docName={state.doc.name} runs={runs} onOpenLog={openLogging} />
+      )}
 
       {state.loadError ? (
         <div className="space-y-2 rounded border border-destructive/30 bg-destructive/10 p-3">

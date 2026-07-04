@@ -26,6 +26,8 @@ project was created and give a date in the ui.
 
 please have a last opened variable for every project and open on load the one that is latest so you don't keep opening the same project on load
 
+please make a sepearte page for selecting the project where you don't have to checkout a specific proejct becuase it just keeps loading and switching, just select when i go into a proejct and don't have active project while in proect select mode 
+
 # example projects
 
   1. a company legal evaluation, where you provide a document about legal requirements for some type of company and then a document of what that company has done to comply with regulation. what is produced is an excel file which has broken down the atomic rules and if they are followed or not. use parallel llm calls by breaking down the legal requirements into atomic rules. accept diverse inputs.
@@ -213,7 +215,7 @@ can't be UI stored, need this in supabase to persist. Don't have syncing logic t
 i want to see for all tests on the sidebar either pass or fail.
 as storing many copies of tests and pipelines can be space intensive, you can use an expires in for around 7 days until you need to re run tests. however, if there is integration with git history logic, you can store things longer.
 
-
+can you please have a run history for each test which is a list of logs you can see for each test, ignoring any changes to the test or pipeline for this.
 
 # inference
 

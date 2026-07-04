@@ -484,6 +484,13 @@ export function latestTestVerdictForDoc(
   return testVerdictPassed(latest.test.results)
 }
 
+// AI : all persisted runs for a test file — unlike lastVerdict, no sig filter (spec § run history).
+export function testRunHistoryForDoc(runs: PipelineRun[], testDocName: string): PipelineRun[] {
+  return runs
+    .filter((r) => r.source === RunSource.Testing && r.test?.testDocName === testDocName)
+    .sort((a, b) => b.startedAt - a.startedAt)
+}
+
 // AI : starter file — golden outputs when the project ships them; otherwise just the output
 // AI : steps as null placeholders. Tests are partial by design — cover only the steps you care about.
 export function testFileSkeleton(project: Project, projectDocs: DocRef[]): string {

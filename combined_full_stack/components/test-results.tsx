@@ -9,7 +9,7 @@ import { JsonFieldKindHighlight, JsonFieldKindLegend } from "@/components/highli
 import { SectionLabel } from "@/components/testing-editor"
 import { firstFailure } from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
-import { RunTestStepStatus, type RunTestStepResult } from "@/lib/types"
+import { RunTestStepStatus, type RunTestProbabilisticResult, type RunTestStepResult } from "@/lib/types"
 
 export function TestResults({ results, action }: { results: RunTestStepResult[]; action?: ReactNode }) {
   const failure = firstFailure(results)
@@ -105,27 +105,17 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
         </div>
       )}
       {open && !!result.probabilisticResults?.length && (
-        <ul className="space-y-1 border-t border-border px-2.5 py-1.5">
-          {result.probabilisticResults.map((pr) => (
-            <li
-              key={pr.path}
-              className={cn(
-                "flex items-start gap-1.5 font-mono text-[10px]",
-                pr.pass ? "text-chart-2" : "text-destructive",
-              )}
-            >
-              {pr.pass ? (
-                <CircleCheck className="mt-0.5 h-3 w-3 shrink-0" />
-              ) : (
-                <CircleX className="mt-0.5 h-3 w-3 shrink-0" />
-              )}
-              <span className="whitespace-pre-wrap">
-                {pr.path}
-                {!pr.pass && pr.reason ? ` — ${pr.reason}` : ""}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="border-t border-border px-2.5 py-2">
+          <p className="mb-2 font-mono text-[10px] uppercase text-muted-foreground">
+            LLM semantic checks · {result.probabilisticResults.filter((x) => x.pass).length}/
+            {result.probabilisticResults.length} pass
+          </p>
+          <ul className="space-y-2">
+            {result.probabilisticResults.map((pr) => (
+              <ProbabilisticFieldCheck key={pr.path} result={pr} />
+            ))}
+          </ul>
+        </div>
       )}
       {open && (result.expected !== undefined || result.actual !== undefined) && (
         <div className="space-y-2 border-t border-border p-2.5">
@@ -158,6 +148,67 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
           </div>
         </div>
       )}
+    </li>
+  )
+}
+
+function ProbabilisticFieldCheck({ result }: { result: RunTestProbabilisticResult }) {
+  const showValues = result.expected !== undefined || result.actual !== undefined
+  return (
+    <li
+      className={cn(
+        "rounded border p-2",
+        result.pass ? "border-chart-2/30 bg-chart-2/5" : "border-destructive/30 bg-destructive/5",
+      )}
+    >
+      <div className="flex items-start gap-1.5">
+        {result.pass ? (
+          <CircleCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-chart-2" />
+        ) : (
+          <CircleX className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-[10px] text-foreground">{result.path}</span>
+            <span
+              className={cn(
+                "rounded-sm px-1.5 py-0.5 font-mono text-[9px] uppercase",
+                result.pass ? "bg-chart-3/15 text-chart-3" : "bg-destructive/15 text-destructive",
+              )}
+            >
+              ≈ LLM
+            </span>
+          </div>
+          {!result.pass && result.reason && (
+            <p className="mt-1 font-mono text-[10px] text-destructive">{result.reason}</p>
+          )}
+          {showValues && (
+            <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2">
+              {result.expected !== undefined && (
+                <div>
+                  <p className="mb-1 font-mono text-[9px] uppercase text-muted-foreground">expected reference</p>
+                  <pre className="max-h-24 overflow-auto rounded border border-border bg-secondary/30 p-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                    {JSON.stringify(result.expected, null, 2)}
+                  </pre>
+                </div>
+              )}
+              <div className={result.expected === undefined ? "lg:col-span-2" : ""}>
+                <p className="mb-1 font-mono text-[9px] uppercase text-muted-foreground">actual</p>
+                <pre
+                  className={cn(
+                    "max-h-24 overflow-auto rounded border p-1.5 font-mono text-[10px] leading-relaxed",
+                    result.pass
+                      ? "border-chart-2/30 bg-chart-2/10 text-muted-foreground"
+                      : "border-destructive/30 bg-destructive/10 text-destructive",
+                  )}
+                >
+                  {result.actual === undefined ? "— missing —" : JSON.stringify(result.actual, null, 2)}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </li>
   )
 }

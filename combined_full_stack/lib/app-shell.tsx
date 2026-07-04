@@ -6,7 +6,6 @@ import { createContext, useCallback, useContext, useState, type ReactNode } from
 import type { DocId, StructureModelId } from "@/lib/types"
 
 export type AppWindowId =
-  | "projects"
   | "structure"
   | "pipeline"
   | "testing"

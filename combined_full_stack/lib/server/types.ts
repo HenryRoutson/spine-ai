@@ -357,6 +357,9 @@ export type RunTestProbabilisticResult = {
   path: string;
   pass: boolean;
   reason: string;
+  // AI : persisted for Testing/Logging — side-by-side LLM semantic check display.
+  expected?: unknown;
+  actual?: unknown;
 };
 
 export type RunTestStepResult = {

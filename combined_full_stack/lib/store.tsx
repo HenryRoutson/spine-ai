@@ -42,9 +42,18 @@ import { migrateProjectModules, syncAutoQuoteSteps } from "@/lib/quote-steps"
 import { stripSharedModels, withSharedModels } from "@/lib/structure"
 import { mergeInferredStructuresForDoc, modelsChanged } from "@/lib/sync-doc-structures"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
-import { mostRecentlyOpenedProject, resolveActiveProject } from "@/lib/project-active"
+import {
+  clearActiveProjectSession,
+  openProjectInWorkspace,
+  readActiveProjectSession,
+  writeActiveProjectSession,
+} from "@/lib/active-project-session"
+import { mostRecentlyOpenedProject } from "@/lib/project-active"
 import { dedupeDocsNewestByName } from "@/lib/project-docs"
+import { readStateSnapshot, writeStateSnapshot } from "@/lib/state-snapshot-cache"
 import { NoProjectsPage } from "@/components/no-projects-page"
+
+export type StoreMode = "workspace" | "picker"
 
 export type BillingAccountView = {
   balanceCents: number
@@ -133,6 +142,20 @@ interface StoreState {
   flushPendingSave: () => Promise<void>
 }
 
+export interface ProjectPickerStoreState {
+  projects: Project[]
+  addProject: () => void
+  cloneFromTemplate: (templateId: string) => Promise<Project>
+  cloneProject: (projectId: string) => Promise<Project>
+  resyncExamples: () => Promise<number>
+  renameProject: (id: string, name: string) => void
+  deleteProject: (id: string) => Promise<void>
+  openProject: (id: ProjectId) => void
+  saveError: string | null
+  clearSaveError: () => void
+  syncing: boolean
+}
+
 type PrefetchEntry = {
   promise: Promise<ServerState>
   data?: ServerState
@@ -166,14 +189,24 @@ function computeDocStructureSync(
 }
 
 const StoreContext = createContext<StoreState | null>(null)
+const ProjectPickerContext = createContext<ProjectPickerStoreState | null>(null)
 
-export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<ServerState | null>(null)
+export function StoreProvider({
+  children,
+  mode = "workspace",
+}: {
+  children: ReactNode
+  mode?: StoreMode
+}) {
+  const [state, setState] = useState<ServerState | null>(() => readStateSnapshot())
   const [loadError, setLoadError] = useState<string | null>(null)
   const [billingAccount, setBillingAccount] = useState<BillingAccountView | null>(null)
-  const [activeProjectId, setActiveProjectId] = useState<string>("")
+  const [activeProjectId, setActiveProjectId] = useState<string>(() =>
+    mode === "workspace" ? (readActiveProjectSession() ?? "") : "",
+  )
   const [model, setModel] = useState<string>(DEFAULT_MODEL)
   const [projectLoading, setProjectLoading] = useState(false)
+  const [stateSyncing, setStateSyncing] = useState(true)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [inferenceInputsByProject, setInferenceInputsByProject] = useState<
     Record<string, Partial<Record<ModuleId, DocId | DocId[]>>>
@@ -258,12 +291,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })
         return { ...data, projects: mergedProjects, docs: dedupeDocsNewestByName(data.docs) }
       })
-      const resolved = resolveActiveProject(visibleProjects, projectId)
-      const activeId = resolved?.id ?? ""
-      if (!projectId || !visibleProjects.some((p) => p.id === projectId)) setActiveProjectId(activeId)
+      // AI : picker mode stays projectless; workspace only adopts an id the user already chose.
+      if (mode === "workspace" && projectId && visibleProjects.some((p) => p.id === projectId)) {
+        setActiveProjectId(projectId)
+        writeActiveProjectSession(projectId as ProjectId)
+      }
       refreshBilling().catch(console.error) // AI : billing failure must not block pipeline UI
     },
-    [refreshBilling],
+    [mode, refreshBilling],
   )
 
   const stampProjectOpened = useCallback(
@@ -284,10 +319,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     (id: string) => {
       if (id === activeProjectId) return
       stampProjectOpened(id)
+      writeActiveProjectSession(id as ProjectId)
       setActiveProjectId(id)
     },
     [activeProjectId, stampProjectOpened],
   )
+
+  const openProject = useCallback(
+    (id: ProjectId) => {
+      stampProjectOpened(id)
+      openProjectInWorkspace(id)
+    },
+    [stampProjectOpened],
+  )
+
+  useEffect(() => {
+    if (mode === "picker") clearActiveProjectSession()
+  }, [mode])
 
   const refresh = useCallback(async (projectId = activeProjectId) => {
     applyState(await fetchState(projectId), projectId)
@@ -296,15 +344,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let alive = true
     const loadGen = stateLoadGenRef.current
-    const cached = activeProjectId ? prefetchCache.current.get(activeProjectId) : undefined
+    const scopedProjectId = mode === "picker" ? "" : activeProjectId
+    const cached = scopedProjectId ? prefetchCache.current.get(scopedProjectId) : undefined
     const instant = !!cached?.data
     // AI : prefetched project data applies without blanking the main pane.
-    if (hydratedRef.current && activeProjectId && !instant) setProjectLoading(true)
+    if (mode === "workspace" && hydratedRef.current && scopedProjectId && !instant) setProjectLoading(true)
+    setStateSyncing(true)
 
-    loadProjectState(activeProjectId)
+    loadProjectState(scopedProjectId)
       .then((data) => {
         if (!alive || loadGen !== stateLoadGenRef.current) return
-        applyState(data, activeProjectId)
+        applyState(data, scopedProjectId)
       })
       .catch((err) => {
         if (alive) setLoadError(err instanceof Error ? err.message : "Failed to load store")
@@ -312,6 +362,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .finally(() => {
         if (alive) {
           setProjectLoading(false)
+          setStateSyncing(false)
           hydratedRef.current = true
         }
       })
@@ -320,7 +371,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       alive = false
     }
     // AI : refetch on project switch so runs/billing re-scope to the active project.
-  }, [activeProjectId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [activeProjectId, mode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (state) writeStateSnapshot(state)
+  }, [state])
 
   useEffect(() => {
     return () => {
@@ -356,7 +411,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [projects],
   )
   const project = useMemo(
-    () => migratedProjects.find((p) => p.id === activeProjectId) ?? migratedProjects[0],
+    () => migratedProjects.find((p) => p.id === activeProjectId),
     [migratedProjects, activeProjectId],
   )
 
@@ -400,6 +455,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify(body),
     })
       .then(async (fresh) => {
+        if (mode === "picker") {
+          openProject(fresh.id as ProjectId)
+          return fresh
+        }
         selectActiveProject(fresh.id)
         // AI : clone may ingest/rename bundled seed docs server-side — reload docs + backfilled seedDocNames.
         await refresh(fresh.id)
@@ -409,7 +468,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setSaveError(err instanceof Error ? err.message : "Failed to create project")
         throw err
       })
-  }, [refresh, selectActiveProject])
+  }, [mode, openProject, refresh, selectActiveProject])
 
   const addProject = useCallback(() => {
     void postNewProject({}).catch((err) =>
@@ -478,7 +537,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           })
           stateLoadGenRef.current += 1
           if (nextActiveId) selectActiveProject(nextActiveId)
-          else if (emptied) setActiveProjectId("")
+          else if (emptied) {
+            setActiveProjectId("")
+            clearActiveProjectSession()
+            if (mode === "workspace") window.location.assign("/projects")
+          }
         })
         .catch((err) => {
           deletedProjectIdsRef.current.delete(id)
@@ -486,7 +549,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           throw err
         })
     },
-    [activeProjectId, selectActiveProject],
+    [activeProjectId, mode, selectActiveProject],
   )
 
   const addDoc = useCallback(async (file: File, label: DocLabel, projectId?: string) => {
@@ -654,12 +717,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  // AI : the server already persisted the run (run engine) — just mirror it locally.
+  // AI : mirror server runs locally — upsert so Testing can attach test verdict on an existing row.
   const addRun = useCallback((r: PipelineRun) => {
     setState((prev) => {
-      if (!prev || prev.runs.some((x) => x.id === r.id)) return prev
-      const allRuns = prev.allRuns.some((x) => x.id === r.id) ? prev.allRuns : [r, ...prev.allRuns]
-      return { ...prev, runs: [r, ...prev.runs], allRuns }
+      if (!prev) return prev
+      const i = prev.runs.findIndex((x) => x.id === r.id)
+      const runs =
+        i >= 0 ? prev.runs.map((x, idx) => (idx === i ? { ...x, ...r } : x)) : [r, ...prev.runs]
+      const allRuns = prev.allRuns.some((x) => x.id === r.id)
+        ? prev.allRuns.map((x) => (x.id === r.id ? { ...x, ...r } : x))
+        : [r, ...prev.allRuns]
+      return { ...prev, runs, allRuns }
     })
   }, [])
 
@@ -689,19 +757,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const updateRunTest = useCallback(async (runId: PipelineRun["id"], test: RunTestReport) => {
+    setState((prev) => {
+      if (!prev) return prev
+      const patch = (r: PipelineRun) => (r.id === runId ? { ...r, test } : r)
+      const i = prev.runs.findIndex((r) => r.id === runId)
+      if (i < 0) return prev
+      return {
+        ...prev,
+        runs: prev.runs.map(patch),
+        allRuns: prev.allRuns.map(patch),
+      }
+    })
     await apiJson(API_ROUTES.run(runId), {
       method: "PATCH",
       headers: JSON_HEADERS,
       body: JSON.stringify({ test }),
-    })
-    setState((prev) => {
-      if (!prev) return prev
-      const i = prev.runs.findIndex((r) => r.id === runId)
-      if (i < 0) return prev
-      const runs = [...prev.runs]
-      runs[i] = { ...runs[i], test }
-      const allRuns = prev.allRuns.map((r) => (r.id === runId ? { ...r, test } : r))
-      return { ...prev, runs, allRuns }
     })
   }, [])
 
@@ -908,12 +978,58 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     </div>
   ) : null
 
+  const pickerValue = useMemo<ProjectPickerStoreState | null>(() => {
+    if (!state) return null
+    return {
+      projects: migratedProjects,
+      addProject,
+      cloneFromTemplate,
+      cloneProject: cloneProjectById,
+      resyncExamples,
+      renameProject,
+      deleteProject,
+      openProject,
+      saveError,
+      clearSaveError,
+      syncing: stateSyncing,
+    }
+  }, [
+    state,
+    migratedProjects,
+    addProject,
+    cloneFromTemplate,
+    cloneProjectById,
+    resyncExamples,
+    renameProject,
+    deleteProject,
+    openProject,
+    saveError,
+    clearSaveError,
+    stateSyncing,
+  ])
+
   // AI : zero projects is valid — replace the whole app shell (no sub tabs) with an empty-state page.
   if (state && migratedProjects.length === 0) {
     return (
       <>
         {saveErrorBanner}
         <NoProjectsPage onCreateBlank={addProject} onCloneTemplate={cloneFromTemplate} />
+      </>
+    )
+  }
+
+  if (mode === "picker") {
+    if (!state || !pickerValue) {
+      return (
+        <div className="flex h-dvh items-center justify-center bg-background">
+          <p className="font-mono text-xs text-muted-foreground">loading projects…</p>
+        </div>
+      )
+    }
+    return (
+      <>
+        {saveErrorBanner}
+        <ProjectPickerContext.Provider value={pickerValue}>{children}</ProjectPickerContext.Provider>
       </>
     )
   }
@@ -941,6 +1057,12 @@ export function useOptionalStore() {
 export function useStore() {
   const ctx = useOptionalStore()
   if (!ctx) throw new Error("useStore must be used within StoreProvider")
+  return ctx
+}
+
+export function useStorePicker() {
+  const ctx = useContext(ProjectPickerContext)
+  if (!ctx) throw new Error("useStorePicker must be used within StoreProvider mode=\"picker\"")
   return ctx
 }
 

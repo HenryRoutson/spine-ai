@@ -60,6 +60,8 @@ export async function evaluateProbabilisticFields(
         path: f.path,
         pass: hit?.pass ?? false,
         reason: hit?.reason ?? "LLM did not return a verdict for this field",
+        expected: f.expected,
+        actual: f.actual,
       };
     });
     results.push({

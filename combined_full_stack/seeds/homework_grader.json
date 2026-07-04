@@ -477,6 +477,18 @@
       "file": "homework_grader/homework_grader_testing.json"
     },
     {
+      "name": "homework_first_grade_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "homework_grader/homework_first_grade_testing.json"
+    },
+    {
+      "name": "homework_university_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "homework_grader/homework_university_testing.json"
+    },
+    {
       "name": "classroom_algebra_ii_inference.json",
       "type": "json",
       "label": "inference",

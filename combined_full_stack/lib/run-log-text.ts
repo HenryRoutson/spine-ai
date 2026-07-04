@@ -22,8 +22,11 @@ export function runLogText(run: PipelineRun): string {
       lines.push(`[${r.status.toUpperCase()}] ${r.label}${r.diffPath ? `  (diff at ${r.diffPath})` : ""}`)
       if (r.ignoredPaths?.length) lines.push(`   Probabilistic (LLM-checked): ${r.ignoredPaths.join(", ")}`)
       if (r.probabilisticResults?.length) {
+        lines.push(`   LLM semantic checks (${r.probabilisticResults.filter((x) => x.pass).length}/${r.probabilisticResults.length} pass):`)
         for (const pr of r.probabilisticResults) {
           lines.push(`   [${pr.pass ? "OK" : "FAIL"}] ${pr.path}${pr.reason && !pr.pass ? ` — ${pr.reason}` : ""}`)
+          if (pr.expected !== undefined) lines.push(`     expected: ${JSON.stringify(pr.expected)}`)
+          if (pr.actual !== undefined) lines.push(`     actual:   ${JSON.stringify(pr.actual)}`)
         }
       }
       if (r.deterministicDiff) lines.push(`   Diff:\n${r.deterministicDiff.split("\n").map((l) => `     ${l}`).join("\n")}`)
