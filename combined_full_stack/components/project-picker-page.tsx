@@ -2,7 +2,6 @@
 
 import { useCallback, useState } from "react"
 import {
-  ArrowLeft,
   Copy,
   FolderKanban,
   Loader2,
@@ -12,7 +11,7 @@ import {
 } from "lucide-react"
 import { useStorePicker } from "@/lib/store"
 import { WindowHeader } from "@/components/window-header"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -96,16 +95,13 @@ export function ProjectPickerPage() {
         <a
           href={LANDING_PAGE_URL}
           title="Back to landing page"
-          className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), "text-muted-foreground")}
+          className="flex items-center gap-2.5 rounded-md transition-opacity hover:opacity-80"
         >
-          <ArrowLeft className="h-4 w-4" />
-        </a>
-        <div className="flex items-center gap-2.5">
           <SpineLogoBox />
           <div className="hidden leading-tight sm:block">
             <h1 className="text-sm font-semibold tracking-tight">{LEGAL.productName}</h1>
           </div>
-        </div>
+        </a>
         <div className="mx-1 h-6 w-px bg-border" />
         <span className="font-mono text-[11px] text-muted-foreground">select a project</span>
         {syncing && (

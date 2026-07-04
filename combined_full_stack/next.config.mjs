@@ -53,15 +53,27 @@ const nextConfig = {
       "base-uri 'self'",
       "form-action 'self'",
     ].join("; ")
+    const demoFrameAncestors =
+      "frame-ancestors 'self' https://withspine.dev https://www.withspine.dev http://localhost:* https://localhost:*"
+    const baseSecurityHeaders = [
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+    ]
     return [
       {
-        source: "/(.*)",
+        source: "/((?!demo$).*)",
         headers: [
-          { key: "X-Content-Type-Options", value: "nosniff" },
+          ...baseSecurityHeaders,
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           { key: "Content-Security-Policy", value: csp },
+        ],
+      },
+      {
+        source: "/demo",
+        headers: [
+          ...baseSecurityHeaders,
+          { key: "Content-Security-Policy", value: `${csp}; ${demoFrameAncestors}` },
         ],
       },
     ]

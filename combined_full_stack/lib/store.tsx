@@ -10,6 +10,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -52,8 +53,10 @@ import { mostRecentlyOpenedProject } from "@/lib/project-active"
 import { dedupeDocsNewestByName } from "@/lib/project-docs"
 import { readStateSnapshot, writeStateSnapshot } from "@/lib/state-snapshot-cache"
 import { NoProjectsPage } from "@/components/no-projects-page"
+import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
+import { setDemoMode } from "@/lib/demo-mode"
 
-export type StoreMode = "workspace" | "picker"
+export type StoreMode = "workspace" | "picker" | "demo"
 
 // AI : PUT /api/projects/[id] — id is in the URL; createdAt is immutable server-side.
 function serializeProjectPutBody(p: Project): string {
@@ -89,6 +92,19 @@ export type BillingAccountView = {
   subCentsPerMonth: number
   billingCapCents: number
   creditHistory: BillingCreditHistoryEntry[]
+}
+
+const DEMO_BILLING: BillingAccountView = {
+  balanceCents: 4_200,
+  totalBilledCents: 12_000,
+  totalUsageCents: 7_800,
+  freeCreditCents: 4_200,
+  subscribed: false,
+  minRunBalanceCents: 50,
+  topupOptionsCents: [500, 1000, 2500],
+  subCentsPerMonth: 2900,
+  billingCapCents: 50_000,
+  creditHistory: [],
 }
 
 interface ServerState {
@@ -222,12 +238,16 @@ export function StoreProvider({
   children: ReactNode
   mode?: StoreMode
 }) {
-  const [state, setState] = useState<ServerState | null>(() => readStateSnapshot())
+  // AI : demo must not hydrate from auth-gated session snapshots — stale [] projects stuck "loading projects…".
+  const [state, setState] = useState<ServerState | null>(() =>
+    mode === "demo" ? null : readStateSnapshot(),
+  )
   const [loadError, setLoadError] = useState<string | null>(null)
   const [billingAccount, setBillingAccount] = useState<BillingAccountView | null>(null)
-  const [activeProjectId, setActiveProjectId] = useState<string>(() =>
-    mode === "workspace" ? (readActiveProjectSession() ?? "") : "",
-  )
+  const [activeProjectId, setActiveProjectId] = useState<string>(() => {
+    if (mode === "demo") return DEMO_DEFAULT_PROJECT_ID
+    return mode === "workspace" ? (readActiveProjectSession() ?? "") : ""
+  })
   const [model, setModel] = useState<string>(DEFAULT_MODEL)
   const [projectLoading, setProjectLoading] = useState(false)
   const [stateSyncing, setStateSyncing] = useState(true)
@@ -247,23 +267,29 @@ export function StoreProvider({
   const clearSaveError = useCallback(() => setSaveError(null), [])
 
   const persistProject = useCallback(async (id: string, body: string) => {
+    if (mode === "demo") return
     const result = await apiPut(API_ROUTES.project(id), body)
     if (!result.ok) {
       setSaveError(result.error)
       return
     }
     setSaveError(null)
-  }, [])
+  }, [mode])
 
   const refreshBilling = useCallback(async () => {
+    if (mode === "demo") {
+      setBillingAccount(DEMO_BILLING)
+      return
+    }
     const data = await apiJson<BillingAccountView>(API_ROUTES.billing)
     setBillingAccount({ ...data, creditHistory: data.creditHistory ?? [] })
-  }, [])
+  }, [mode])
 
   const fetchState = useCallback(async (projectId: string) => {
     const q = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""
-    return apiJson<ServerState>(`${API_ROUTES.state}${q}`)
-  }, [])
+    const route = mode === "demo" ? API_ROUTES.demoState : API_ROUTES.state
+    return apiJson<ServerState>(`${route}${q}`)
+  }, [mode])
 
   const loadProjectState = useCallback(
     async (projectId: string) => {
@@ -321,6 +347,9 @@ export function StoreProvider({
         setActiveProjectId(projectId)
         writeActiveProjectSession(projectId as ProjectId)
       }
+      if (mode === "demo" && projectId && visibleProjects.some((p) => p.id === projectId)) {
+        setActiveProjectId(projectId)
+      }
       refreshBilling().catch(console.error) // AI : billing failure must not block pipeline UI
     },
     [mode, refreshBilling],
@@ -358,8 +387,15 @@ export function StoreProvider({
     [stampProjectOpened],
   )
 
+  useLayoutEffect(() => {
+    if (mode !== "demo") return
+    setDemoMode(true)
+    return () => setDemoMode(false)
+  }, [mode])
+
   useEffect(() => {
     if (mode === "picker") clearActiveProjectSession()
+    if (mode === "demo") writeActiveProjectSession(DEMO_DEFAULT_PROJECT_ID)
   }, [mode])
 
   const refresh = useCallback(async (projectId = activeProjectId) => {
@@ -548,6 +584,24 @@ export function StoreProvider({
         saveTimer.current = null
         pendingSaveRef.current = null
       }
+
+      const applyLocalDelete = () => {
+        let nextActiveId: string | undefined
+        setState((prev) => {
+          if (!prev) return prev
+          const nextProjects = prev.projects.filter((p) => p.id !== id)
+          if (activeProjectId === id) nextActiveId = mostRecentlyOpenedProject(nextProjects)?.id
+          return { ...prev, projects: nextProjects }
+        })
+        stateLoadGenRef.current += 1
+        if (nextActiveId) selectActiveProject(nextActiveId)
+      }
+
+      if (mode === "demo") {
+        applyLocalDelete()
+        return Promise.resolve()
+      }
+
       return apiJson<{ ok: true }>(API_ROUTES.project(id), { method: "DELETE" })
         .then(() => {
           // AI : deleting the last project is allowed — zero projects renders NoProjectsPage below.
@@ -1037,8 +1091,17 @@ export function StoreProvider({
     stateSyncing,
   ])
 
+  if (mode === "demo" && loadError && !state) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-2 bg-background px-6 text-center">
+        <p className="font-mono text-xs text-muted-foreground">preview unavailable</p>
+        <p className="max-w-sm text-[11px] text-muted-foreground">{loadError}</p>
+      </div>
+    )
+  }
+
   // AI : zero projects is valid — replace the whole app shell (no sub tabs) with an empty-state page.
-  if (migratedProjects.length === 0 && (stateSyncing || state)) {
+  if (mode !== "demo" && migratedProjects.length === 0 && (stateSyncing || state)) {
     return (
       <>
         {saveErrorBanner}

@@ -25,6 +25,7 @@ import { JsonFieldKindHighlight, JsonFieldKindLegend } from "@/components/highli
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
+import { TestingPipelineAlignView } from "@/components/testing-pipeline-align-view"
 import { StructureLink } from "@/components/structure-link"
 import {
   Select,
@@ -43,21 +44,26 @@ import { stepOutputJsonSchema } from "@/lib/step-json-schema"
 import { tryParseJson } from "@/lib/json-utils"
 import {
   analyzeTestPipelineAlignment,
+  buildTestCoverageMap,
   isComparableStep,
   probabilisticPathsForModule,
   skipReasonForTestStep,
   type SpineTestFile,
+  type TestStepTrackStatus,
 } from "@/lib/testing-files"
 import { ResizableSplit } from "@/components/resizable-split"
 import {
   readTestingCompareWidth,
+  readTestingPipelineWidth,
   TESTING_COMPARE_MAX,
   TESTING_COMPARE_MIN,
   useTestingCompareWidth,
+  useTestingPipelineWidth,
   writeTestingCompareWidth,
+  writeTestingPipelineWidth,
 } from "@/lib/testing-settings"
 import { cn } from "@/lib/utils"
-import { ModuleKind, type DocId, DocRef, PipelineModule, Project } from "@/lib/types"
+import { ModuleKind, type DocId, DocRef, ModuleId, PipelineModule, Project } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 
 type step_label_string = string
@@ -168,6 +174,21 @@ function StepTypeLine({ module, project }: { module: PipelineModule; project: Pr
       <span className="text-muted-foreground/60"> → </span>
       <StructureLink models={project.models} structureId={module.outStructureId} />
     </p>
+  )
+}
+
+function PipelineCoverageLegend() {
+  return (
+    <div className="flex flex-wrap gap-x-3 gap-y-1 border-t border-border px-3 py-2 font-mono text-[9px] text-muted-foreground">
+      <span>
+        <span className="text-chart-2">checked</span> — expected output pinned
+      </span>
+      <span>
+        <span className="text-sky-600">input</span> — document slot
+      </span>
+      <span>skip — not scored</span>
+      <span className="text-muted-foreground/80">dashed — not checked on run</span>
+    </div>
   )
 }
 
@@ -290,6 +311,11 @@ export function TestFileEditor({
     () => analyzeTestPipelineAlignment(draftAlignmentInput(draft), project),
     [draft, project],
   )
+  const testCoverage = useMemo(() => buildTestCoverageMap(alignment), [alignment])
+  const [selectedModuleId, setSelectedModuleId] = useState<ModuleId | null>(null)
+  const savedPipelineWidth = useTestingPipelineWidth()
+  const [pipelineWidth, setPipelineWidth] = useState(readTestingPipelineWidth)
+  useEffect(() => setPipelineWidth(savedPipelineWidth), [savedPipelineWidth])
 
   const setInputNames = (key: step_label_string, names: doc_name_string[]) =>
     setDraft({ ...draft, inputs: { ...draft.inputs, [key]: names } })
@@ -357,6 +383,44 @@ export function TestFileEditor({
     })
   }
 
+  const renderTestStep = (m: PipelineModule, trackStatus: TestStepTrackStatus) => {
+    if (trackStatus === "input") {
+      return (
+        <InputStepCard
+          module={m}
+          slotDocs={slotDocs(m)}
+          missing={namesFor(m).filter((n) => n.trim() && !projectDocs.some((d) => d.name === n))}
+          onOpenPicker={() => setPickerModule(m)}
+          onOpenDoc={(docId) => openDoc({ docId, start: 0, end: 0 })}
+          onRemoveDoc={(docId) => {
+            const doc = projectDocs.find((d) => d.id === docId)
+            if (doc) removeDocName(m, doc.name)
+          }}
+          onRemoveMissing={(name) => removeDocName(m, name)}
+          project={project}
+        />
+      )
+    }
+    if (trackStatus === "passthrough") {
+      return <PassthroughStepCard module={m} project={project} />
+    }
+    if (trackStatus === "tracked") {
+      return (
+        <ScoredStepCard
+          module={m}
+          row={rowFor(m.label)!}
+          project={project}
+          ignoredFields={probabilisticPathsForModule(m, project.models)}
+          actual={actuals.get(labelAsStateKey(m.label))}
+          onText={(text) => setRowText(m.label, text)}
+          onRemove={() => removeRow(m.label)}
+          onExpand={setPopup}
+        />
+      )
+    }
+    return <UntrackedStepCard module={m} project={project} onTrack={() => trackStep(m)} />
+  }
+
   return (
     <div className="space-y-6">
       <section>
@@ -369,120 +433,105 @@ export function TestFileEditor({
         />
       </section>
 
-      <section>
+      <section className="space-y-0">
         <SectionLabel>pipeline</SectionLabel>
         <p className="mt-1 font-mono text-[10px] leading-relaxed text-muted-foreground">
-          Aligned with the live pipeline — each row is a step in order. Pin input files once per input step; only
-          computation steps can be scored. Typed outputs show where expected JSON fits.
+          One scroll — each pipeline step stays on the same row as its test config. Click either side to select a step.
         </p>
         <PipelineAlignmentBanner
           orphanExpectedCount={alignment.orphanedExpected.length}
           orphanInputCount={alignment.orphanedInputs.length}
         />
-        <ol className="relative mt-4 space-y-5 border-l border-border/80 pl-5">
-          {alignment.stepRows.map(({ module: m, trackStatus }, idx) => (
-            <li key={m.id} className="relative">
-              <span className="absolute -left-5 top-3 flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-background font-mono text-[8px] text-muted-foreground">
-                {idx + 1}
-              </span>
-              {trackStatus === "input" ? (
-                <InputStepCard
-                  module={m}
-                  slotDocs={slotDocs(m)}
-                  missing={namesFor(m).filter((n) => n.trim() && !projectDocs.some((d) => d.name === n))}
-                  onOpenPicker={() => setPickerModule(m)}
-                  onOpenDoc={(docId) => openDoc({ docId, start: 0, end: 0 })}
-                  onRemoveDoc={(docId) => {
-                    const doc = projectDocs.find((d) => d.id === docId)
-                    if (doc) removeDocName(m, doc.name)
-                  }}
-                  onRemoveMissing={(name) => removeDocName(m, name)}
-                  project={project}
-                />
-              ) : trackStatus === "passthrough" ? (
-                <PassthroughStepCard module={m} project={project} />
-              ) : trackStatus === "tracked" ? (
-                <ScoredStepCard
-                  module={m}
-                  row={rowFor(m.label)!}
-                  project={project}
-                  ignoredFields={probabilisticPathsForModule(m, project.models)}
-                  actual={actuals.get(labelAsStateKey(m.label))}
-                  onText={(text) => setRowText(m.label, text)}
-                  onRemove={() => removeRow(m.label)}
-                  onExpand={setPopup}
-                />
-              ) : (
-                <UntrackedStepCard module={m} project={project} onTrack={() => trackStep(m)} />
-              )}
-            </li>
-          ))}
-        </ol>
-        {alignment.orphanedInputs.map(({ label, remapCandidates }) => {
-          const inputKey = Object.keys(draft.inputs).find((l) => sameStep(l, label)) ?? label
-          const names = draft.inputs[inputKey] ?? []
-          return (
-            <div
-              key={label}
-              className="mt-3 space-y-2 rounded-md border border-destructive/40 px-2.5 py-2"
-            >
-              <div className="flex items-center gap-2">
-                <CircleX className="h-3.5 w-3.5 shrink-0 text-destructive" />
-                <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{label}</span>
-                <Badge variant="outline" className="shrink-0 border-destructive/40 font-mono text-[9px] text-destructive">
-                  orphaned input
-                </Badge>
-                <IconTrashButton onClick={() => removeInputKey(inputKey)} />
-              </div>
-              {names.length > 0 && (
-                <p className="font-mono text-[10px] text-muted-foreground">pinned: {names.join(", ")}</p>
-              )}
-              {remapCandidates.length > 0 ? (
-                <RemapSelect candidates={remapCandidates} onRemap={(to) => remapInputKey(label, to)} />
-              ) : (
-                <p className="font-mono text-[10px] text-destructive">no free input slot — remove or merge by hand</p>
-              )}
-            </div>
-          )
-        })}
-        {alignment.orphanedExpected.map(({ label, remapCandidates }) => {
-          const row = draft.expected.find((r) => sameStep(r.label, label))
-          if (!row) return null
-          const mod = project.modules.find((m) => sameStep(m.label, label))
-          const notScored = mod && !isComparableStep(mod)
-          return (
-            <div key={label} className="mt-3 space-y-2">
-              <ScoredStepCard
-                module={(mod ?? { id: label, kind: ModuleKind.Llm, label }) as PipelineModule}
-                row={row}
-                project={project}
-                stale
-                ignoredFields={[]}
-                actual={undefined}
-                onText={(text) => setRowText(row.label, text)}
-                onRemove={() => removeRow(row.label)}
-                onExpand={setPopup}
-              />
-              <div className="rounded-md border border-dashed border-destructive/30 bg-destructive/5 px-3 py-2">
-                <p className="font-mono text-[10px] text-destructive">
-                  {notScored
-                    ? "this step is input/combine — remove expected output; pin files under inputs instead"
-                    : remapCandidates.length
-                      ? `${remapCandidates.length} pipeline step${remapCandidates.length === 1 ? "" : "s"} accept this typed output`
-                      : "no matching output type in the current pipeline — update expected JSON or remove"}
-                </p>
-                {!notScored && remapCandidates.length > 0 && (
-                  <div className="mt-2">
-                    <RemapSelect
-                      candidates={remapCandidates}
-                      onRemap={(to) => remapExpectedRow(label, to)}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })}
+        <div className="mt-3">
+          <TestingPipelineAlignView
+            project={project}
+            alignment={alignment}
+            testCoverage={testCoverage}
+            selectedModuleId={selectedModuleId}
+            onSelectModule={setSelectedModuleId}
+            pipelineWidth={pipelineWidth}
+            onPipelineWidthChange={setPipelineWidth}
+            onPipelineWidthCommit={writeTestingPipelineWidth}
+            renderTestStep={renderTestStep}
+            legend={<PipelineCoverageLegend />}
+            orphansFooter={
+              alignment.orphanedInputs.length || alignment.orphanedExpected.length ? (
+                <>
+                  {alignment.orphanedInputs.map(({ label, remapCandidates }) => {
+                    const inputKey = Object.keys(draft.inputs).find((l) => sameStep(l, label)) ?? label
+                    const names = draft.inputs[inputKey] ?? []
+                    return (
+                      <div
+                        key={label}
+                        className="space-y-2 rounded-md border border-destructive/40 px-2.5 py-2"
+                      >
+                        <div className="flex items-center gap-2">
+                          <CircleX className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                          <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{label}</span>
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 border-destructive/40 font-mono text-[9px] text-destructive"
+                          >
+                            orphaned input
+                          </Badge>
+                          <IconTrashButton onClick={() => removeInputKey(inputKey)} />
+                        </div>
+                        {names.length > 0 && (
+                          <p className="font-mono text-[10px] text-muted-foreground">pinned: {names.join(", ")}</p>
+                        )}
+                        {remapCandidates.length > 0 ? (
+                          <RemapSelect candidates={remapCandidates} onRemap={(to) => remapInputKey(label, to)} />
+                        ) : (
+                          <p className="font-mono text-[10px] text-destructive">
+                            no free input slot — remove or merge by hand
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {alignment.orphanedExpected.map(({ label, remapCandidates }) => {
+                    const row = draft.expected.find((r) => sameStep(r.label, label))
+                    if (!row) return null
+                    const mod = project.modules.find((m) => sameStep(m.label, label))
+                    const notScored = mod && !isComparableStep(mod)
+                    return (
+                      <div key={label} className="space-y-2">
+                        <ScoredStepCard
+                          module={(mod ?? { id: label, kind: ModuleKind.Llm, label }) as PipelineModule}
+                          row={row}
+                          project={project}
+                          stale
+                          ignoredFields={[]}
+                          actual={undefined}
+                          onText={(text) => setRowText(row.label, text)}
+                          onRemove={() => removeRow(row.label)}
+                          onExpand={setPopup}
+                        />
+                        <div className="rounded-md border border-dashed border-destructive/30 bg-destructive/5 px-3 py-2">
+                          <p className="font-mono text-[10px] text-destructive">
+                            {notScored
+                              ? "this step is input/combine — remove expected output; pin files under inputs instead"
+                              : remapCandidates.length
+                                ? `${remapCandidates.length} pipeline step${remapCandidates.length === 1 ? "" : "s"} accept this typed output`
+                                : "no matching output type in the current pipeline — update expected JSON or remove"}
+                          </p>
+                          {!notScored && remapCandidates.length > 0 && (
+                            <div className="mt-2">
+                              <RemapSelect
+                                candidates={remapCandidates}
+                                onRemap={(to) => remapExpectedRow(label, to)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </>
+              ) : undefined
+            }
+          />
+        </div>
       </section>
 
       {pickerModule && (

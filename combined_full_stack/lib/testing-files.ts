@@ -15,6 +15,7 @@ import { DocLabel, ModuleKind, RunSource, RunTestStepStatus, type RunTestProbabi
 import type {
   DocRef,
   ModelId,
+  ModuleId,
   PipelineModule,
   PipelineRun,
   Project,
@@ -232,6 +233,12 @@ export function analyzeTestPipelineAlignment(
     }))
 
   return { stepRows, orphanedExpected, orphanedInputs }
+}
+
+export function buildTestCoverageMap(alignment: TestPipelineAlignment): Map<ModuleId, TestStepTrackStatus> {
+  const out = new Map<ModuleId, TestStepTrackStatus>()
+  for (const { module, trackStatus } of alignment.stepRows) out.set(module.id, trackStatus)
+  return out
 }
 
 export type ResolvedTestInputs = ResolvedNamedInputs

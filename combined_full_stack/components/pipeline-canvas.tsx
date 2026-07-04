@@ -39,12 +39,15 @@ import { useStatusPalette } from "@/lib/chart-colors"
 import { Badge } from "@/components/ui/badge"
 import { StructureLink } from "@/components/structure-link"
 
+type PipelineTestCoverageStatus = "input" | "passthrough" | "tracked" | "untracked"
+
 type PipelineCanvasProps = {
   modules: PipelineModule[]
   models: StructureModel[]
   selectedId?: ModuleId
   onSelect?: (id: ModuleId) => void
   stepStatus?: Map<ModuleId, RunStepStatus>
+  testCoverage?: Map<ModuleId, PipelineTestCoverageStatus>
   invalid?: InvalidMap
   warnings?: Map<ModuleId, PipelineWarning[]>
   renderInsertBefore?: (insertAt: number) => React.ReactNode
@@ -61,6 +64,7 @@ export function PipelineCanvas({
   selectedId,
   onSelect,
   stepStatus,
+  testCoverage,
   invalid,
   warnings,
   renderInsertBefore,
@@ -92,6 +96,7 @@ export function PipelineCanvas({
           selectedId={selectedId}
           onSelect={onSelect}
           stepStatus={stepStatus}
+          testCoverage={testCoverage}
           invalid={invalid}
           warnings={warnings}
           editMode={editMode}
@@ -115,6 +120,7 @@ function SegmentRow({
   selectedId,
   onSelect,
   stepStatus,
+  testCoverage,
   invalid,
   warnings,
   editMode,
@@ -126,6 +132,7 @@ function SegmentRow({
   selectedId?: ModuleId
   onSelect?: (id: ModuleId) => void
   stepStatus?: Map<ModuleId, RunStepStatus>
+  testCoverage?: Map<ModuleId, PipelineTestCoverageStatus>
   invalid?: InvalidMap
   warnings?: Map<ModuleId, PipelineWarning[]>
   editMode: boolean
@@ -146,6 +153,8 @@ function SegmentRow({
         : undefined
     const combineStatus = stepStatus?.get(combine.id)
     const inputStatus = stepStatus?.get(input.id)
+    const combineCoverage = testCoverage?.get(combine.id)
+    const inputCoverage = testCoverage?.get(input.id)
     const groupSelected = selectedId === combine.id || selectedId === input.id
     return (
       <div className="mx-auto flex w-full flex-col items-center">
@@ -156,7 +165,8 @@ function SegmentRow({
               ? "border-destructive/70 bg-destructive/5"
               : combineIoLinked
                 ? "border-destructive/60 bg-destructive/[0.03]"
-                : statusBorder(combineStatus) ?? (
+                : testCoverageBorder(combineCoverage, selectedId === combine.id) ??
+                  statusBorder(combineStatus) ?? (
                     groupSelected ? "border-primary bg-primary/5" : "border-chart-3/40 bg-chart-3/5"
                   ),
           )}
@@ -177,6 +187,7 @@ function SegmentRow({
               }
             />
             {combine.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
+            {combineCoverage && <TestCoverageBadge status={combineCoverage} />}
             <StepTrailingIcon
               invalid={combineInvalid || combineIoLinked}
               status={combineStatus}
@@ -192,7 +203,9 @@ function SegmentRow({
               "mt-2 flex w-full items-start gap-3 rounded-md border bg-card px-3 py-2.5 text-left transition-colors",
               selectedId === input.id
                 ? "border-primary"
-                : statusBorder(inputStatus) ?? "border-border hover:border-muted-foreground/40",
+                : testCoverageBorder(inputCoverage, selectedId === input.id) ??
+                  statusBorder(inputStatus) ??
+                  "border-border hover:border-muted-foreground/40",
             )}
           >
             <KindIcon kind={ModuleKind.Input} size="sm" />
@@ -207,6 +220,7 @@ function SegmentRow({
                 </>
               }
             />
+            {inputCoverage && <TestCoverageBadge status={inputCoverage} />}
             {!editMode && <RunStatusIcon status={inputStatus} />}
           </StepButton>
         </div>
@@ -233,6 +247,7 @@ function SegmentRow({
   const stepWarnings = warnings?.get(m.id)
   const locked = isAutoQuoteStep(m)
   const status = stepStatus?.get(m.id)
+  const coverage = testCoverage?.get(m.id)
 
   if (m.kind === "output") {
     return (
@@ -246,9 +261,15 @@ function SegmentRow({
                 "border-output/50 bg-output/5 shadow-sm",
                 isInvalid && "border-destructive/70 bg-destructive/5",
                 !isInvalid && ioLinked && "border-destructive/60 bg-destructive/[0.03]",
+                testCoverageBorder(coverage, m.id === selectedId),
                 statusBorder(status),
                 m.id === selectedId && "border-output ring-1 ring-output/40",
-                m.id !== selectedId && !isInvalid && !ioLinked && !status && "hover:border-output/80 hover:bg-output/10",
+                m.id !== selectedId &&
+                  !isInvalid &&
+                  !ioLinked &&
+                  !status &&
+                  !coverage &&
+                  "hover:border-output/80 hover:bg-output/10",
               )}
             >
               <div className="flex items-center justify-center gap-2">
@@ -267,6 +288,7 @@ function SegmentRow({
               />
               <div className="flex items-center justify-center gap-1.5">
                 {m.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
+                {coverage && <TestCoverageBadge status={coverage} />}
                 {(isInvalid || ioLinked || status) && (
                   <StepTrailingIcon invalid={isInvalid || ioLinked} status={status} editMode={editMode} />
                 )}
@@ -301,9 +323,10 @@ function SegmentRow({
             ? "border-destructive/70"
             : ioLinked
               ? "border-destructive/60"
-              : statusBorder(status) ?? (
+              : testCoverageBorder(coverage, m.id === selectedId) ??
+                statusBorder(status) ?? (
                 m.id === selectedId
-                  ? "border-primary"
+                  ? "border-primary ring-1 ring-primary/30"
                   : !locked && "border-border hover:border-muted-foreground/40"
               ),
         )}
@@ -346,6 +369,7 @@ function SegmentRow({
           )
         )}
         {m.cached && <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />}
+        {coverage && <TestCoverageBadge status={coverage} />}
         <StepTrailingIcon invalid={isInvalid || ioLinked} status={status} editMode={editMode} />
       </StepButton>
       <InvalidMessage
@@ -364,6 +388,59 @@ function SegmentRow({
       {renderInsertAfter?.(insertAt, { blocked, connectionInvalid }) ?? (
         <PipelineConnector invalid={connectionInvalid} />
       )}
+    </div>
+  )
+}
+
+export type PipelineCanvasSegmentProps = {
+  seg: PipelineSegment
+  modules: PipelineModule[]
+  models: StructureModel[]
+  selectedId?: ModuleId
+  onSelect?: (id: ModuleId) => void
+  stepStatus?: Map<ModuleId, RunStepStatus>
+  testCoverage?: Map<ModuleId, PipelineTestCoverageStatus>
+  invalid?: InvalidMap
+  warnings?: Map<ModuleId, PipelineWarning[]>
+  showConnector?: boolean
+  className?: string
+}
+
+// AI : one pipeline segment — used by Testing align view (pair with test config in the same scroll row).
+export function PipelineCanvasSegment({
+  showConnector = true,
+  className: _className,
+  ...props
+}: PipelineCanvasSegmentProps) {
+  return (
+    <SegmentRow
+      {...props}
+      editMode={false}
+      renderInsertAfter={showConnector ? undefined : () => null}
+    />
+  )
+}
+
+export function PipelineCanvasConnector({ invalid }: { invalid?: boolean }) {
+  return (
+    <div className="mx-auto flex w-full flex-col items-center">
+      <PipelineConnector invalid={invalid} />
+    </div>
+  )
+}
+
+export function PipelineCanvasStart() {
+  return (
+    <div className="mx-auto flex w-full flex-col items-center">
+      <PipelineNode label="Start" subtle />
+    </div>
+  )
+}
+
+export function PipelineCanvasEnd() {
+  return (
+    <div className="mx-auto flex w-full flex-col items-center">
+      <PipelineNode label="End" subtle />
     </div>
   )
 }
@@ -454,6 +531,53 @@ function statusBorder(status?: RunStepStatus): string | undefined {
   if (status === "cached") return "border-chart-3/50 bg-chart-3/5"
   if (status === "ok") return "border-primary/40"
   return undefined
+}
+
+function testCoverageBorder(
+  status?: PipelineTestCoverageStatus,
+  selected?: boolean,
+): string | undefined {
+  if (!status) return undefined
+  const selectedRing = selected ? "ring-1 ring-primary/40" : undefined
+  switch (status) {
+    case "tracked":
+      return cn("border-chart-2/50 bg-chart-2/5", selectedRing)
+    case "untracked":
+      return cn("border-dashed border-muted-foreground/45 bg-muted/10", selectedRing)
+    case "input":
+      return cn("border-sky-500/40 bg-sky-500/5", selectedRing)
+    case "passthrough":
+      return cn("border-dashed border-muted-foreground/30 bg-muted/15", selectedRing)
+  }
+}
+
+function TestCoverageBadge({ status }: { status: PipelineTestCoverageStatus }) {
+  if (status === "tracked") {
+    return (
+      <Badge variant="outline" className="shrink-0 border-chart-2/40 font-mono text-[9px] text-chart-2">
+        checked
+      </Badge>
+    )
+  }
+  if (status === "untracked") {
+    return (
+      <Badge variant="outline" className="shrink-0 border-muted-foreground/40 font-mono text-[9px] text-muted-foreground">
+        not checked
+      </Badge>
+    )
+  }
+  if (status === "input") {
+    return (
+      <Badge variant="outline" className="shrink-0 border-sky-500/40 font-mono text-[9px] text-sky-600">
+        input
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="outline" className="shrink-0 border-muted-foreground/35 font-mono text-[9px] text-muted-foreground">
+      skip
+    </Badge>
+  )
 }
 
 function RunStatusIcon({ status }: { status?: RunStepStatus }) {

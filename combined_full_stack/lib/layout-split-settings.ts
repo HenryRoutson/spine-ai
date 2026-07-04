@@ -82,6 +82,13 @@ export const testingCompareSplit = defineSplit({
   max: 900,
 })
 
+export const testingPipelineSplit = defineSplit({
+  keySuffix: "testing-pipeline-width",
+  defaultWidth: 380,
+  min: 280,
+  max: 560,
+})
+
 export const inferenceSidebarSplit = defineSplit({
   keySuffix: "inference-sidebar-width",
   defaultWidth: 320,

@@ -3,6 +3,7 @@
 import {
   LAYOUT_SPLIT_SETTINGS_CHANGED_EVENT,
   testingCompareSplit,
+  testingPipelineSplit,
   testingSidebarSplit,
   useLayoutSplitWidth,
 } from "@/lib/layout-split-settings"
@@ -27,4 +28,14 @@ export function useTestingSidebarWidth() {
 
 export function useTestingCompareWidth() {
   return useLayoutSplitWidth(testingCompareSplit.read)
+}
+
+export const TESTING_PIPELINE_MIN = testingPipelineSplit.min
+export const TESTING_PIPELINE_MAX = testingPipelineSplit.max
+export const DEFAULT_TESTING_PIPELINE_WIDTH = testingPipelineSplit.defaultWidth
+export const readTestingPipelineWidth = testingPipelineSplit.read
+export const writeTestingPipelineWidth = testingPipelineSplit.write
+
+export function useTestingPipelineWidth() {
+  return useLayoutSplitWidth(testingPipelineSplit.read)
 }

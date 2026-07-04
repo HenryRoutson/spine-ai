@@ -1,5 +1,6 @@
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson } from "@/lib/api-client"
+import { isDemoMode } from "@/lib/demo-mode"
 
 type doc_text_layer = "parser" | "vision"
 
@@ -35,7 +36,9 @@ async function fetchDocTextOnce(docId: string, layer: doc_text_layer): Promise<d
   // AI : first fetch during a cold SupabaseStore init can 500 — one short retry before surfacing.
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      return await apiJson<doc_text_payload>(API_ROUTES.docText(docId, layer))
+      return await apiJson<doc_text_payload>(
+        isDemoMode() ? API_ROUTES.demoDocText(docId, layer) : API_ROUTES.docText(docId, layer),
+      )
     } catch (err) {
       if (attempt === 0 && isRetryableDocTextError(err)) {
         await new Promise((r) => setTimeout(r, 450))

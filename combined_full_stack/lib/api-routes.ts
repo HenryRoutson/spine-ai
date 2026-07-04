@@ -41,6 +41,9 @@ export const API_ROUTES = {
   sharedLinkDocs: (id: string) => `/api/shared-links/${id}/docs`,
   sharedLinkDownload: (id: string) => `/api/shared-links/${id}/download`,
   sharedLinkClientStep: (id: string) => `/api/shared-links/${id}/client-step`,
+  demoState: "/api/demo/state",
+  demoDocText: (id: string, layer: "parser" | "vision" = "parser") =>
+    `/api/demo/docs/${id}/text${layer === "vision" ? "?layer=vision" : ""}`,
 } as const
 
 function isSharedLinkPublicApi(pathname: string): boolean {
@@ -50,8 +53,13 @@ function isSharedLinkPublicApi(pathname: string): boolean {
   )
 }
 
+function isDemoPublicApi(pathname: string): boolean {
+  return pathname === API_ROUTES.demoState || /^\/api\/demo\/docs\/[^/]+\/text$/.test(pathname);
+}
+
 export function isPublicApiPath(pathname: string): boolean {
   if (PUBLIC_API_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return true
+  if (isDemoPublicApi(pathname)) return true
   return isSharedLinkPublicApi(pathname)
 }
 

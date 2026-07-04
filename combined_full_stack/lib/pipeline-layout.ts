@@ -45,6 +45,12 @@ export function insertAfterIndex(seg: PipelineSegment): number {
   return seg.index + 1
 }
 
+// AI : modules whose test config belongs on the same aligned row as this canvas segment.
+export function modulesInSegment(seg: PipelineSegment): PipelineModule[] {
+  if (seg.kind === "combine") return [seg.input, seg.combine]
+  return [seg.module]
+}
+
 // AI : don't offer an insert slot between a quote-emitting LLM and its locked Link Quotes step.
 export function blocksInsertBefore(modules: PipelineModule[], insertAt: number): boolean {
   if (insertAt <= 0 || insertAt >= modules.length) return false

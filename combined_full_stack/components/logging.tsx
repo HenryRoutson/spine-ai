@@ -128,7 +128,7 @@ export function Logging() {
         minLeading={loggingSidebarSplit.min}
         maxLeading={loggingSidebarSplit.max}
         leading={
-          <>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="border-b border-border p-3">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -211,16 +211,15 @@ export function Logging() {
                 </ul>
               )}
             </ScrollArea>
-          </>
+          </div>
         }
         trailing={
-        <div className="min-w-0 flex-1">
-          {!active ? (
-            <div className="flex h-full items-center justify-center">
+          !active ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center">
               <p className="text-xs text-muted-foreground">Select a run to view its trace.</p>
             </div>
           ) : (
-            <ScrollArea className="h-full">
+            <ScrollArea className="min-h-0 min-w-0 flex-1">
               <div className="space-y-4 p-4">
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
@@ -573,8 +572,7 @@ export function Logging() {
                 <StepProfiling runs={runs} stepOrder={active.steps} />
               </div>
             </ScrollArea>
-          )}
-        </div>
+          )
         }
       />
 

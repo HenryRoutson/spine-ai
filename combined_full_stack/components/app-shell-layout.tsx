@@ -14,7 +14,6 @@ import {
   Plus,
   Check,
   Pencil,
-  ArrowLeft,
   Loader2,
   LayoutGrid,
   ChevronDown,
@@ -51,7 +50,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
@@ -167,7 +166,7 @@ function ProjectRenameInput({
   )
 }
 
-function ProjectSelector() {
+function ProjectSelector({ embed = false }: { embed?: boolean }) {
   const router = useRouter()
   const { projects, project, setActiveProjectId, prefetchProject, addProject, renameProject, deleteProject } =
     useStore()
@@ -230,6 +229,8 @@ function ProjectSelector() {
                 </span>
               </span>
               <div className="flex shrink-0 items-center gap-1">
+                {!embed && (
+                  <>
                 <Button
                   type="button"
                   size="icon"
@@ -257,6 +258,8 @@ function ProjectSelector() {
                     void runDelete(p, projects, () => deleteProject(p.id))
                   }}
                 />
+                  </>
+                )}
                 {p.id === project.id && <Check className="h-3.5 w-3.5 text-primary" />}
               </div>
             </>
@@ -265,6 +268,8 @@ function ProjectSelector() {
           ),
         )}
         </DropdownMenuGroup>
+        {!embed && (
+          <>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
         <DropdownMenuItem
@@ -282,6 +287,8 @@ function ProjectSelector() {
           New project
         </DropdownMenuItem>
         </DropdownMenuGroup>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -298,7 +305,8 @@ function ProjectSwitchOverlay({ projectName }: { projectName: string }) {
   )
 }
 
-export function AppShellLayout() {
+export function AppShellLayout({ variant = "default" }: { variant?: "default" | "embed" }) {
+  const embed = variant === "embed"
   const { activeWindow, setActiveWindow } = useAppShell()
   const { modules, models, project, projectLoading, typeAliases } = useStore()
   useSyncProjectDocStructures()
@@ -320,29 +328,34 @@ export function AppShellLayout() {
     <div className="flex h-dvh flex-col bg-background text-foreground">
       <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-3">
+          {embed ? (
+            <div className="flex items-center gap-2.5 rounded-md">
+              <SpineLogoBox />
+              <div className="hidden leading-tight sm:block">
+                <h1 className="text-sm font-semibold tracking-tight">{LEGAL.productName}</h1>
+              </div>
+            </div>
+          ) : (
           <a
             href={LANDING_PAGE_URL}
             title="Back to landing page"
-            className={cn(
-              buttonVariants({ variant: "ghost", size: "icon-sm" }),
-              "text-muted-foreground",
-            )}
+            className="flex items-center gap-2.5 rounded-md transition-opacity hover:opacity-80"
           >
-            <ArrowLeft className="h-4 w-4" />
-          </a>
-          <div className="flex items-center gap-2.5">
             <SpineLogoBox />
             <div className="hidden leading-tight sm:block">
               <h1 className="text-sm font-semibold tracking-tight">{LEGAL.productName}</h1>
             </div>
-          </div>
+          </a>
+          )}
           <div className="mx-1 h-6 w-px bg-border" />
-          <ProjectSelector />
+          <ProjectSelector embed={embed} />
         </div>
+        {!embed && (
         <div className="flex items-center gap-2">
           <ProjectAssistantDock />
           <FeedbackButton />
         </div>
+        )}
       </header>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
