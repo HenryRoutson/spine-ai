@@ -70,7 +70,7 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
     <div className={cn("flex h-full flex-col", className)}>
       <AssistantChat<ProjectProposal>
         key={activeChatId ?? project.id}
-        title="Project assistant"
+        title="Agent"
         subtitle={`${modules.length} steps · ${models.length} models · ${typeAliases.length} types · ${docs.length} docs`}
         showDebug
         initialMessage={PROJECT_ASSISTANT_INITIAL_MESSAGE}

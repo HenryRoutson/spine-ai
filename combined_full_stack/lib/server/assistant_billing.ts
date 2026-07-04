@@ -21,7 +21,7 @@ import type {
 
 const billLog = logger("assistant-billing");
 
-export const ASSISTANT_BILLING_CHART_KEY = "project assistant" as const;
+export const ASSISTANT_BILLING_CHART_KEY = "Agent" as const;
 export const TESTING_ASSISTANT_BILLING_CHART_KEY = "testing assistant" as const;
 export const PIPELINE_SUMMARY_BILLING_CHART_KEY = "pipeline summary" as const;
 

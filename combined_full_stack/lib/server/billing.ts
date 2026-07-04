@@ -21,7 +21,7 @@ export function billingFromRuns(runs: PipelineRun[]): BillingPoint[] {
       if (step.costCents <= 0) continue;
       const key =
         run.source === RunSource.Assistant
-          ? "project assistant"
+          ? "Agent"
           : run.source === RunSource.SharedLink
             ? "shared link"
             : step.kind === "doc-to-text" && !step.model

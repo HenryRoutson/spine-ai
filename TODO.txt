@@ -4,6 +4,12 @@ rename everything to spine
 name might already be taken https://www.getspine.ai/
 
 
+add translations and new langauges by using constants
+
+
+use learning_tips.txt under loading bar
+use new loading animation automic_code/loader
+
 No Langfuse-style open SDK for arbitrary apps; observability is scoped to spine pipelines only.
 
 

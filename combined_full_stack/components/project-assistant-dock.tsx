@@ -31,21 +31,22 @@ export function ProjectAssistantDock() {
     <>
       <Button
         type="button"
-        size="icon-sm"
+        size="sm"
         variant={open ? "secondary" : "outline"}
         onClick={toggle}
-        aria-label="Project assistant"
-        title="Project assistant"
-        className="shrink-0"
+        aria-label="Agent"
+        title="Agent"
+        className="shrink-0 font-mono text-[11px]"
       >
-        <Sparkles className="h-4 w-4" />
+        <Sparkles className="h-3.5 w-3.5" />
+        Agent
       </Button>
 
       {open && (
         <div className="fixed inset-y-0 right-0 z-50 flex w-full sm:max-w-md flex-col border-l border-border bg-background shadow-xl">
           <div className="flex items-center justify-between border-b border-border px-3 py-2">
             <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              project assistant
+              Agent
             </p>
             <div className="flex items-center gap-1">
               <Button
