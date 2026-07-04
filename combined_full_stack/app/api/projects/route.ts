@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const { store } = ctx;
 
   const body = await parseRequestJson(req, createProjectBodySchema, {});
-  if ("error" in body) return apiError(body.error, HTTP.BAD_REQUEST);
+  if ("validationError" in body) return apiError(body.validationError, HTTP.BAD_REQUEST);
   const existing = store.projects();
 
   let project;

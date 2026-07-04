@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
-import { checkRateLimit } from "@/lib/rate_limit";
+import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate_limit";
 import { type RateLimitKey, type RateLimitTier } from "@/lib/rate_limit_config";
 import { HTTP } from "./api-errors";
 import { getStore } from "./app_store";
@@ -32,6 +32,17 @@ export async function enforceUserRateLimit(
   tier: RateLimitTier,
 ): Promise<NextResponse | null> {
   const key = `user:${userId}:${tier}` as RateLimitKey;
+  const hit = await checkRateLimit(key, tier);
+  if (hit.ok) return null;
+  return rateLimitResponse(hit.retryAfterSec);
+}
+
+export async function enforceIpRateLimit(
+  req: Request,
+  tier: RateLimitTier,
+): Promise<NextResponse | null> {
+  const ip = clientIpFromHeaders(req.headers);
+  const key = `ip:${ip}:${tier}` as RateLimitKey;
   const hit = await checkRateLimit(key, tier);
   if (hit.ok) return null;
   return rateLimitResponse(hit.retryAfterSec);

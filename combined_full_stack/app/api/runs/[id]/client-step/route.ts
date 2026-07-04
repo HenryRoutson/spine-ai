@@ -2,6 +2,7 @@ import { invariant } from "@/lib/assert";
 import { NextResponse, after, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, unknownJob } from "@/lib/server/api-errors";
+import { clientStepBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
 import { billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { resumeRunPipeline } from "@/lib/server/run_engine";
@@ -32,12 +33,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { auth, store } = authCtx;
 
   const { id } = await ctx.params;
-  const body = (await req.json()) as {
-    output?: unknown;
-    error?: string;
-    clientLogs?: JobLogEntry[];
-  };
-  if (body.output === undefined && !body.error) return apiError("output or error required", 400);
+  const body = await parseRequestJson(req, clientStepBodySchema);
+  if ("validationError" in body) return apiError(body.validationError, HTTP.BAD_REQUEST);
 
   const jobId = id as RunJobId;
   const jobDb = await openJobDb();
@@ -58,7 +55,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   });
 
   after(async () => {
-    if (body.clientLogs?.length) await appendJobLogs(auth.userId, jobId, body.clientLogs, jobDb);
+    if (body.clientLogs?.length) await appendJobLogs(auth.userId, jobId, body.clientLogs as JobLogEntry[], jobDb);
     await withJobLogging(auth.userId, jobId, jobDb, async () => {
       try {
         const run = await resumeRunPipeline(
@@ -67,7 +64,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           { output: body.output, error: body.error },
           {
             cacheOwnerId: checkpoint.cacheOwnerId ?? auth.userId,
-            clientLogs: body.clientLogs,
+            clientLogs: body.clientLogs as JobLogEntry[] | undefined,
             onStep: (p) => {
             void jobProgress(auth.userId, jobId, p, jobDb).catch((err) =>
               apiLog.error(`jobProgress failed`, { jobId, error: (err as Error).message }),

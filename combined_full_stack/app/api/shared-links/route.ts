@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
+import { createSharedLinkBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
 import { UnknownModelError, parseOptionalRequestModel } from "@/lib/server/model_catalog";
 import { listSharedLinksForOwner, publishSharedLink } from "@/lib/server/shared_links";
 import { migrateProjectModules } from "@/lib/server/validity";
@@ -8,14 +9,6 @@ import { logger } from "@/lib/server/server_logger";
 import type { DocId, ModelId, ModuleId, ProjectId, SharedLinkFundingMode } from "@/lib/server/types";
 
 const apiLog = logger("api:shared-links");
-
-type CreateBody = {
-  projectId: ProjectId;
-  defaultModel?: ModelId;
-  fundingMode?: SharedLinkFundingMode;
-  viewerNameRequired?: boolean;
-  defaultDocsByModule?: Partial<Record<ModuleId, DocId[]>>;
-};
 
 export async function GET() {
   const ctx = await requireAuthStore();
@@ -28,8 +21,10 @@ export async function POST(req: NextRequest) {
   try {
     const ctx = await requireAuthStore();
     if (ctx instanceof NextResponse) return ctx;
-    const body = (await req.json().catch(() => ({}))) as CreateBody;
-    const project = ctx.store.project(body.projectId);
+    const parsed = await parseRequestJson(req, createSharedLinkBodySchema);
+    if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
+    const body = parsed;
+    const project = ctx.store.project(body.projectId as ProjectId);
     if (!project) return apiError(`unknown project ${body.projectId}`, 404);
 
     let defaultModel: ModelId | undefined;
@@ -44,9 +39,9 @@ export async function POST(req: NextRequest) {
       ownerId: ctx.auth.userId,
       project: migrateProjectModules(project),
       defaultModel,
-      fundingMode: body.fundingMode,
+      fundingMode: body.fundingMode as SharedLinkFundingMode | undefined,
       viewerNameRequired: body.viewerNameRequired,
-      defaultDocsByModule: body.defaultDocsByModule ?? {},
+      defaultDocsByModule: (body.defaultDocsByModule ?? {}) as Partial<Record<ModuleId, DocId[]>>,
       store: ctx.store,
     });
     apiLog.info(`published shared link`, { linkId: link.id, projectId: body.projectId });

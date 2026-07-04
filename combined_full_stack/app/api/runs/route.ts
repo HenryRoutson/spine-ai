@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest, after } from "next/server";
 import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, unknownDoc, unknownProject } from "@/lib/server/api-errors";
+import { parseRequestJson, runBodySchema } from "@/lib/server/api_schemas";
 import { assertCanStartRun, billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
@@ -40,24 +41,17 @@ const apiLog = logger("api:runs");
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-interface RunRequest {
-  projectId: ProjectId;
-  inputDocId: DocId;
-  inputDocIds?: DocId[];
-  inputDocsByModule?: Partial<Record<ModuleId, DocId[]>>;
-  model?: ModelId;
-  allowDuplicateRuns?: boolean;
-  // AI : "testing" flags Testing-tab runs in Logging; anything else is a normal app run.
-  source?: RunSource;
-}
-
 export async function POST(req: NextRequest) {
   const ctx = await requireAuthStore("llm");
   if (ctx instanceof NextResponse) return ctx;
   const { auth, store } = ctx;
 
-  const { projectId, inputDocId, inputDocIds, inputDocsByModule, model, allowDuplicateRuns, source } = (await req.json()) as RunRequest;
-  const runSource = source === RunSource.Testing ? RunSource.Testing : undefined;
+  const parsed = await parseRequestJson(req, runBodySchema);
+  if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
+  const { projectId, inputDocId, inputDocIds, inputDocsByModule, model, allowDuplicateRuns, source } = parsed;
+  const runSource = source === "testing" ? RunSource.Testing : undefined;
+  const pid = projectId as ProjectId;
+  const primaryDocId = inputDocId as DocId;
 
   let resolvedModel: ModelId | undefined;
   try {
@@ -71,11 +65,11 @@ export async function POST(req: NextRequest) {
 
   await ensureModelOptionsFresh();
 
-  if (!store.project(projectId)) {
-    apiLog.warn(`unknown project`, { projectId });
-    return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
+  if (!store.project(pid)) {
+    apiLog.warn(`unknown project`, { projectId: pid });
+    return apiError(unknownProject(pid), HTTP.NOT_FOUND);
   }
-  const project = store.project(projectId)!;
+  const project = store.project(pid)!;
   const inputModules = orderedInputModules(project.modules);
   const assignment: InputDocsAssignment = {};
   const contentByDocId: Partial<Record<string, string>> = {};
@@ -83,12 +77,12 @@ export async function POST(req: NextRequest) {
     inputDocsByModule && Object.keys(inputDocsByModule).length ? inputDocsByModule : undefined;
   if (byModule) {
     for (const m of inputModules) {
-      const ids = byModule[m.id] ?? [];
+      const ids = (byModule[m.id] ?? []) as DocId[];
       if (ids.length < inputMinCountForModule(m)) {
         return apiError(`input "${m.label}" needs at least ${inputMinCountForModule(m)} document(s)`, 400);
       }
       const docs = ids.flatMap((docId) => {
-        if (store.docContent(docId) === undefined) return [];
+        if (store.docContent(docId as DocId) === undefined) return [];
         const doc = store.docs().find((d: DocRef) => d.id === docId);
         return doc ? [{ docId, doc }] : [];
       });
@@ -102,7 +96,7 @@ export async function POST(req: NextRequest) {
       assignment[m.id] = docs.map((d) => d.doc);
     }
   } else {
-    const orderedDocIds = [inputDocId, ...(inputDocIds ?? [])];
+    const orderedDocIds = [primaryDocId, ...((inputDocIds ?? []) as DocId[])];
     for (let i = 0; i < inputModules.length; i++) {
       const docId = orderedDocIds[i];
       if (!docId) continue;
@@ -131,8 +125,8 @@ export async function POST(req: NextRequest) {
     store,
     project,
     resolvedModel,
-    inputDocId,
-    inputDocIds,
+    primaryDocId,
+    inputDocIds as DocId[] | undefined,
     resolvedByModule,
   );
 
@@ -167,16 +161,16 @@ export async function POST(req: NextRequest) {
       apiLog.info(`after() pipeline starting`, { jobId, projectId, inputDocId, model: resolvedModel });
       try {
         if (!allowDuplicateRuns) {
-          const cached = findMatchingRun(store, migratedProject, projectId, fingerprint, resolvedModel);
+          const cached = findMatchingRun(store, migratedProject, pid, fingerprint, resolvedModel);
           if (cached) {
             apiLog.info(`run deduped — reusing prior ok run`, { jobId, cachedRunId: cached.id, fingerprint });
             await finishJob(auth.userId, jobId, { run: cached, deduped: true, cachedRunId: cached.id }, jobDb);
             return;
           }
         }
-        const run = await runPipeline(store, projectId, inputDocId, {
+        const run = await runPipeline(store, pid, primaryDocId, {
           model: resolvedModel,
-          inputDocIds,
+          inputDocIds: inputDocIds as DocId[] | undefined,
           inputDocsByModule: resolvedByModule,
           fingerprint,
           fingerprintInputDocIds,

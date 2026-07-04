@@ -1,5 +1,6 @@
 // AI : shared Zod schemas for API route bodies — reject unknown keys and cap sizes server-side.
 
+import { JobLogLevel } from "@/lib/run-types";
 import { z } from "zod";
 import { ASSISTANT_HISTORY_LIMIT } from "@/lib/assistant-chat-types";
 import { TOPUP_OPTIONS_CENTS } from "@/lib/billing_config";
@@ -28,7 +29,7 @@ function jsonSizeBounded(maxChars: number) {
 
 export const jobLogEntrySchema = z.object({
   at: z.number(),
-  level: z.enum(["debug", "info", "warn", "error"]),
+  level: z.nativeEnum(JobLogLevel),
   tag: z.string().max(256),
   line: z.string().max(8_000),
   moduleId: z.string().max(128).optional(),
@@ -89,24 +90,187 @@ export const testingAssistantBodySchema = z.object({
   model: z.string().max(128).optional(),
 });
 
+const inputDocsByModuleSchema = z.record(z.string().max(128), z.array(docIdSchema).max(50)).optional();
+
+export const runBodySchema = z
+  .object({
+    projectId: projectIdSchema,
+    inputDocId: docIdSchema,
+    inputDocIds: z.array(docIdSchema).max(50).optional(),
+    inputDocsByModule: inputDocsByModuleSchema,
+    model: z.string().max(128).optional(),
+    allowDuplicateRuns: z.boolean().optional(),
+    source: z.enum(["app", "shared_link", "assistant", "testing"]).optional(),
+  })
+  .strict();
+
+const runTestStepResultSchema = z.object({
+  label: z.string().max(256),
+  status: z.enum(["pass", "fail", "skipped", "not-reached"]),
+  diffPath: z.string().max(500).optional(),
+  skipReason: z.string().max(2_000).optional(),
+  ignoredPaths: z.array(z.string().max(500)).max(100).optional(),
+  probabilisticResults: z
+    .array(
+      z.object({
+        path: z.string().max(500),
+        pass: z.boolean(),
+        reason: z.string().max(4_000),
+        expected: z.unknown().optional(),
+        actual: z.unknown().optional(),
+      }),
+    )
+    .max(50)
+    .optional(),
+  llmEvaluated: z.boolean().optional(),
+  deterministicDiff: z.string().max(32_000).optional(),
+  expected: z.unknown().optional(),
+  actual: z.unknown().optional(),
+});
+
+export const patchRunBodySchema = z
+  .object({
+    notes: z.string().max(MAX_RUN_NOTES_CHARS).nullable().optional(),
+    test: z
+      .object({
+        testDocName: z.string().max(256),
+        results: z.array(runTestStepResultSchema).max(100),
+        testContentSig: z.string().max(128).optional(),
+        pipelineSig: z.string().max(128).optional(),
+        contextSig: z.string().max(128).optional(),
+      })
+      .nullable()
+      .optional(),
+  })
+  .strict();
+
+export const clientStepBodySchema = z
+  .object({
+    output: jsonSizeBounded(MAX_CLIENT_STEP_OUTPUT_CHARS).optional(),
+    error: z.string().max(4_000).optional(),
+    clientLogs: z.array(jobLogEntrySchema).max(MAX_CLIENT_LOGS).optional(),
+  })
+  .strict()
+  .refine((d) => d.output !== undefined || !!d.error, { message: "output or error required" });
+
+export const abtestBodySchema = z
+  .object({
+    projectId: projectIdSchema,
+    inputDocId: docIdSchema.optional(),
+  })
+  .strict();
+
+export const createSharedLinkBodySchema = z
+  .object({
+    projectId: projectIdSchema,
+    defaultModel: z.string().max(128).optional(),
+    fundingMode: z.enum(["sharer_pays", "viewer_pays", "viewer_signs_in"]).optional(),
+    viewerNameRequired: z.boolean().optional(),
+    defaultDocsByModule: inputDocsByModuleSchema,
+  })
+  .strict();
+
+export const sharedLinkRunBodySchema = z
+  .object({
+    inputDocsByModule: inputDocsByModuleSchema,
+    viewerName: z.string().max(200).optional(),
+    sessionId: z.string().max(128).optional(),
+  })
+  .strict();
+
+export const sharedLinkClientStepBodySchema = z
+  .object({
+    jobId: z.string().trim().min(1).max(128),
+    token: z.string().trim().min(1).max(256),
+    output: jsonSizeBounded(MAX_CLIENT_STEP_OUTPUT_CHARS).optional(),
+    error: z.string().max(4_000).optional(),
+    clientLogs: z.array(jobLogEntrySchema).max(MAX_CLIENT_LOGS).optional(),
+  })
+  .strict()
+  .refine((d) => d.output !== undefined || !!d.error, { message: "output or error required" });
+
+const assistantChatMessageSchema = z.object({
+  id: z.string().max(128),
+  role: z.enum(["user", "assistant"]),
+  content: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS),
+  proposal: z.unknown().optional(),
+  status: z.string().max(64).optional(),
+  invalidCount: z.number().int().min(0).max(100).optional(),
+  retryCount: z.number().int().min(0).max(100).optional(),
+  validationErrors: z.string().max(4_000).nullable().optional(),
+  debugTrace: z.array(z.unknown()).max(200).optional(),
+});
+
+export const assistantChatCreateBodySchema = z
+  .object({
+    projectId: projectIdSchema,
+    messages: z.array(assistantChatMessageSchema).max(200).optional(),
+  })
+  .strict();
+
+export const assistantChatSaveBodySchema = z
+  .object({
+    messages: z.array(assistantChatMessageSchema).max(200),
+  })
+  .strict();
+
+export const billingConfirmBodySchema = z
+  .object({
+    sessionId: z.string().trim().min(1).max(256),
+  })
+  .strict();
+
+const topupAmountSchema = z.union([
+  z.literal(TOPUP_OPTIONS_CENTS[0]),
+  z.literal(TOPUP_OPTIONS_CENTS[1]),
+  z.literal(TOPUP_OPTIONS_CENTS[2]),
+]);
+
+export const billingCheckoutBodySchema = z
+  .object({
+    mode: z.enum(["payment", "subscription"]),
+    amountCents: topupAmountSchema.optional(),
+  })
+  .strict()
+  .refine((d) => d.mode !== "payment" || d.amountCents != null, {
+    message: "amountCents must be a valid top-up amount",
+  });
+
+const chatTurnSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS),
+});
+
+export const assistantRequestBodySchema = z
+  .object({
+    projectId: projectIdSchema,
+    message: z.string().trim().min(1).max(MAX_ASSISTANT_MESSAGE_CHARS),
+    history: z.array(chatTurnSchema).max(ASSISTANT_HISTORY_LIMIT * 2).optional(),
+    model: z.string().max(128).optional(),
+    stream: z.boolean().optional(),
+  })
+  .strict();
+
 export function formatZodError(err: z.ZodError): string {
   return err.issues.map((i) => i.message).join("; ") || "Invalid request body";
 }
+
+export type ParsedRequestJson<T> = T | { validationError: string };
 
 export async function parseRequestJson<T>(
   req: Request,
   schema: z.ZodType<T>,
   emptyDefault?: T,
-): Promise<T | { error: string }> {
+): Promise<ParsedRequestJson<T>> {
   let body: unknown;
   try {
     const raw = await req.text();
     body = raw.trim() ? JSON.parse(raw) : (emptyDefault ?? undefined);
-    if (body === undefined) return { error: "Invalid JSON body" };
+    if (body === undefined) return { validationError: "Invalid JSON body" };
   } catch {
-    return { error: "Invalid JSON body" };
+    return { validationError: "Invalid JSON body" };
   }
   const parsed = schema.safeParse(body);
-  if (!parsed.success) return { error: formatZodError(parsed.error) };
+  if (!parsed.success) return { validationError: formatZodError(parsed.error) };
   return parsed.data;
 }

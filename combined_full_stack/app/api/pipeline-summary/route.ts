@@ -23,7 +23,7 @@ export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
   const body = await parseRequestJson(req, pipelineSummaryBodySchema);
-  if ("error" in body) return apiError(body.error, HTTP.BAD_REQUEST);
+  if ("validationError" in body) return apiError(body.validationError, HTTP.BAD_REQUEST);
 
   let model: ModelId;
   try {

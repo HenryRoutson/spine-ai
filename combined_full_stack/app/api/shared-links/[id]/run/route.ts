@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest, after } from "next/server";
 import { cookies } from "next/headers";
 import { apiError } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
+import { parseRequestJson, sharedLinkRunBodySchema } from "@/lib/server/api_schemas";
 import {
   assertCanStartRun,
   billRunUsage,
@@ -57,12 +58,6 @@ export const dynamic = "force-dynamic";
 
 const SESSION_COOKIE = "shared_run_session";
 import { MAX_UPLOAD_BYTES } from "@/lib/server/upload_constants";
-
-type RunBody = {
-  inputDocsByModule?: Partial<Record<ModuleId, DocId[]>>;
-  viewerName?: string;
-  sessionId?: string;
-};
 
 function defaultDocId(linkId: SharedLinkId, moduleId: ModuleId, filename: string): DocId {
   return hashContent(`shared_default:${linkId}:${moduleId}:${filename}`);
@@ -125,7 +120,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   let sessionId = jar.get(SESSION_COOKIE)?.value;
   if (!sessionId) sessionId = newSessionId();
 
-  const body = (await req.json().catch(() => ({}))) as RunBody;
+  const parsed = await parseRequestJson(req, sharedLinkRunBodySchema, {});
+  if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
+  const body = parsed;
   if (link.viewerNameRequired && !body.viewerName?.trim()) {
     return apiError("name required", 400);
   }
@@ -150,7 +147,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     link.id,
     sessionId,
     link,
-    body.inputDocsByModule,
+    body.inputDocsByModule as Partial<Record<ModuleId, DocId[]>> | undefined,
   );
 
   for (const m of inputModules) {

@@ -22,7 +22,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     return apiError(unknownProject(id), HTTP.NOT_FOUND);
   }
   const patchBody = await parseRequestJson(req, projectPatchSchema);
-  if ("error" in patchBody) return apiError(patchBody.error, HTTP.BAD_REQUEST);
+  if ("validationError" in patchBody) return apiError(patchBody.validationError, HTTP.BAD_REQUEST);
   const patch = patchBody as Partial<Project>;
   const sanitized: Partial<Project> = patch.modules
     ? { ...patch, modules: sanitizeModuleModels(patch.modules) }

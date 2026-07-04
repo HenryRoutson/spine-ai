@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   if (limited) return limited;
 
   const body = await parseRequestJson(req, feedbackBodySchema);
-  if ("error" in body) return apiError(body.error, HTTP.BAD_REQUEST);
+  if ("validationError" in body) return apiError(body.validationError, HTTP.BAD_REQUEST);
 
   try {
     const entry = await saveUserFeedback(auth, body.message);

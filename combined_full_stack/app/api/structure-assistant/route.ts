@@ -1,28 +1,26 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
+import { assistantRequestBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
 import {
   parseAssistantRequestModel,
-  requireAssistantMessage,
   requireProjectOr404,
   runBilledProjectAssistant,
   trimAssistantHistory,
-  type AssistantRequestBody,
 } from "@/lib/server/assistant-route";
 import { logger } from "@/lib/server/server_logger";
+import type { ProjectId } from "@/lib/server/types";
 
 const apiLog = logger("api:structure-assistant");
 
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as AssistantRequestBody;
-  const { projectId, message, history = [] } = body;
+  const parsed = await parseRequestJson(req, assistantRequestBodySchema);
+  if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
+  const { projectId, message, history = [] } = parsed;
 
-  const messageErr = requireAssistantMessage(message);
-  if (messageErr) return messageErr;
-
-  const modelOrErr = parseAssistantRequestModel(body.model);
+  const modelOrErr = parseAssistantRequestModel(parsed.model);
   if (modelOrErr instanceof NextResponse) return modelOrErr;
   const model = modelOrErr;
 
@@ -30,7 +28,7 @@ export async function POST(req: NextRequest) {
   if (ctx instanceof NextResponse) return ctx;
   const { store } = ctx;
 
-  const projectOrErr = requireProjectOr404(store, projectId, apiLog);
+  const projectOrErr = requireProjectOr404(store, projectId as ProjectId, apiLog);
   if (projectOrErr instanceof NextResponse) return projectOrErr;
   const project = projectOrErr;
 

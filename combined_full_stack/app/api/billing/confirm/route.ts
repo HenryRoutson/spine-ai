@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
+import { billingConfirmBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
 import { type BillingUserKey, confirmCheckoutSession } from "@/lib/server/billing_account";
 import { STRIPE_ENABLED } from "@/lib/stripe-enabled";
 
@@ -9,8 +10,9 @@ export async function POST(req: NextRequest) {
   const ctx = await requireAuthStore();
   if (ctx instanceof NextResponse) return ctx;
 
-  const { sessionId } = (await req.json()) as { sessionId?: string };
-  if (!sessionId) return apiError("sessionId required", HTTP.BAD_REQUEST);
+  const parsed = await parseRequestJson(req, billingConfirmBodySchema);
+  if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
+  const { sessionId } = parsed;
 
   try {
     const key = ctx.auth.userId as unknown as BillingUserKey;

@@ -2053,7 +2053,7 @@ function drawDataTable() {
         if (val&&typeof val==='object'&&val.$ref==='array') {
           const btn=document.createElement('button'); btn.className='ref-arr';
           btn.style.fontSize='10.5px';
-          btn.innerHTML=`📄 ${val.$count} ${val.$label} →`;
+          btn.innerHTML=`📄 ${esc(val.$count)} ${esc(val.$label)} →`;
           btn.onclick=()=>{
             log('table:drill-in', { label:val.$label, depth:excelStack.length+1, count:val.$count });
             excelStack.push({ label:val.$label, rows:val.$val, jsonPath:cellJsonPath, isArray:true });
@@ -2064,7 +2064,7 @@ function drawDataTable() {
         } else if (val&&typeof val==='object'&&val.$ref==='object') {
           const btn=document.createElement('button'); btn.className='ref-obj';
           btn.style.fontSize='10.5px';
-          btn.innerHTML=`🔗 ${val.$label} ↗`;
+          btn.innerHTML=`🔗 ${esc(val.$label)} ↗`;
           btn.onclick=()=>openDetailPanel(val.$label,val.$val);
           td.appendChild(btn);
           appendCellJumps(td, cellJsonPath);
@@ -2104,7 +2104,7 @@ function fillCell(td, val, key, label, cellJsonPath, rowPath) {
   // Array ref → drill into sub-table
   if (val&&typeof val==='object'&&val.$ref==='array') {
     const btn=document.createElement('button'); btn.className='ref-arr';
-    btn.innerHTML=`📄 ${val.$count} ${val.$label} →`;
+    btn.innerHTML=`📄 ${esc(val.$count)} ${esc(val.$label)} →`;
     btn.title=`Open ${val.$label} as table (${val.$count} items)`;
     const drillPath=cellJsonPath || joinJsonPath(rowPath, key);
     btn.onclick=()=>{
@@ -2120,7 +2120,7 @@ function fillCell(td, val, key, label, cellJsonPath, rowPath) {
   if (val&&typeof val==='object'&&val.$ref==='object') {
     const expBtn=document.createElement('button'); expBtn.className='ref-obj';
     expBtn.style.marginRight='4px';
-    expBtn.innerHTML=`🔗 ${val.$label} ↗`;
+    expBtn.innerHTML=`🔗 ${esc(val.$label)} ↗`;
     expBtn.title=`View ${val.$label} details`;
     expBtn.onclick=()=>openDetailPanel(val.$label,val.$val);
     td.appendChild(expBtn);
@@ -2383,6 +2383,7 @@ if (_isEmbed) {
 }
 
 window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin) return;
   if (!e.data) return;
 
   if (e.data.type === 'json-viewer:settings') {

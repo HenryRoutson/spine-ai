@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
+import { assistantChatSaveBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
 import {
   deleteAssistantChat,
   getAssistantChat,
@@ -27,10 +28,8 @@ export async function GET(_req: NextRequest, ctx: RouteCtx) {
 
 export async function PUT(req: NextRequest, ctx: RouteCtx) {
   const { id } = await ctx.params;
-  const body = (await req.json()) as { messages?: StoredAssistantChatMessage[] };
-  if (!Array.isArray(body.messages)) {
-    return apiError("messages array is required", HTTP.BAD_REQUEST);
-  }
+  const parsed = await parseRequestJson(req, assistantChatSaveBodySchema);
+  if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
 
   const authCtx = await requireAuthStore();
   if (authCtx instanceof NextResponse) return authCtx;
@@ -38,7 +37,7 @@ export async function PUT(req: NextRequest, ctx: RouteCtx) {
   const chat = await saveAssistantChatMessages(
     authCtx.auth,
     id as assistant_chat_id_string,
-    toStoredAssistantMessages(body.messages),
+    toStoredAssistantMessages(parsed.messages as StoredAssistantChatMessage[]),
   );
   if (!chat) return apiError("Chat not found", HTTP.NOT_FOUND);
 

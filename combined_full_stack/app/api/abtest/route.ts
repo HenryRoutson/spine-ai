@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, unknownProject } from "@/lib/server/api-errors";
+import { abtestBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
 import { assertCanStartRun, billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
 import { mergeBenchmarkStrategies, runBenchmark } from "@/lib/server/strategies";
 import { ensureModelOptionsFresh } from "@/lib/server/openrouter_models";
@@ -21,9 +22,11 @@ export async function POST(req: NextRequest) {
   if (ctx instanceof NextResponse) return ctx;
   const { store } = ctx;
 
-  const { projectId, inputDocId } = (await req.json()) as { projectId: ProjectId; inputDocId?: DocId };
+  const parsed = await parseRequestJson(req, abtestBodySchema);
+  if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
+  const { projectId, inputDocId } = parsed;
   apiLog.info(`POST /api/abtest`, { projectId, inputDocId });
-  const project = store.project(projectId);
+  const project = store.project(projectId as ProjectId);
   if (!project) {
     apiLog.warn(`unknown project`, { projectId });
     return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
@@ -45,7 +48,7 @@ export async function POST(req: NextRequest) {
   try {
     await ensureModelOptionsFresh();
     apiLog.info(`benchmark starting`, { projectId, docId });
-    const result = await runBenchmark(project, store, docId);
+    const result = await runBenchmark(project, store, docId as DocId);
     if (result.totalCostCents > 0) {
       try {
         await billRunUsage(billingKey, result.totalCostCents);
