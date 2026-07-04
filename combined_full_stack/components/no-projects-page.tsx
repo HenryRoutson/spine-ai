@@ -10,14 +10,25 @@ import type { ProjectId } from "@/lib/types"
 // AI : standalone zero-projects page — rendered by StoreProvider INSTEAD of the app shell,
 // AI : so none of the sub tabs (pipeline / structure / docs / …) exist until a project does.
 export function NoProjectsPage({
+  syncing = false,
   onCreateBlank,
   onCloneTemplate,
 }: {
+  syncing?: boolean
   onCreateBlank: () => void
   onCloneTemplate: (templateId: ProjectId) => Promise<unknown>
 }) {
   const { templates, loading } = useProjectTemplates()
   const [busy, setBusy] = useState<string | null>(null)
+
+  if (syncing) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-2 bg-background px-6">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        <p className="font-mono text-xs text-muted-foreground">loading projects…</p>
+      </div>
+    )
+  }
 
   async function handleClone(templateId: ProjectId) {
     setBusy(templateId)
@@ -59,7 +70,7 @@ export function NoProjectsPage({
           <Copy className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold">Example templates</h2>
         </div>
-        {loading ? (
+        {loading && templates.length === 0 ? (
           <p className="font-mono text-[11px] text-muted-foreground">Loading templates…</p>
         ) : (
           <ul className="grid gap-3 sm:grid-cols-2">

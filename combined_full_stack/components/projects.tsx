@@ -229,7 +229,7 @@ export function Projects() {
             <span className="font-mono">Company Legal Evaluation 1</span>, then{" "}
             <span className="font-mono">Company Legal Evaluation 2</span>.
           </p>
-          {loadingTemplates ? (
+          {loadingTemplates && templates.length === 0 ? (
             <p className="font-mono text-[11px] text-muted-foreground">Loading templates…</p>
           ) : (
             <ul className="grid gap-3 sm:grid-cols-2">

@@ -254,7 +254,7 @@ export function ProjectPickerPage() {
             <p className="mb-3 text-xs text-muted-foreground">
               Example templates are read-only until you clone them into your workspace.
             </p>
-            {loadingTemplates ? (
+            {loadingTemplates && templates.length === 0 ? (
               <p className="font-mono text-[11px] text-muted-foreground">Loading templates…</p>
             ) : (
               <ul className="grid gap-3 sm:grid-cols-2">

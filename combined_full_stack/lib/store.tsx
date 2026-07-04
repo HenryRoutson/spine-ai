@@ -1039,11 +1039,15 @@ export function StoreProvider({
   ])
 
   // AI : zero projects is valid — replace the whole app shell (no sub tabs) with an empty-state page.
-  if (state && migratedProjects.length === 0) {
+  if (migratedProjects.length === 0 && (stateSyncing || state)) {
     return (
       <>
         {saveErrorBanner}
-        <NoProjectsPage onCreateBlank={addProject} onCloneTemplate={cloneFromTemplate} />
+        <NoProjectsPage
+          syncing={stateSyncing}
+          onCreateBlank={addProject}
+          onCloneTemplate={cloneFromTemplate}
+        />
       </>
     )
   }

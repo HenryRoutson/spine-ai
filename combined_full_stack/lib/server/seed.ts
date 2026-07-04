@@ -350,14 +350,41 @@ export type ProjectTemplateSummary = {
   inputCount: number;
 };
 
+// AI : lightweight seed scan — no expected-output file reads, no full project validation.
+const SeedTemplateSummaryFileSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  kind: z.string(),
+  modules: z.array(z.object({ kind: ModuleKindSchema })),
+});
+
+export const PROJECT_TEMPLATE_STREAM_EVENT = {
+  TEMPLATE: "template",
+  DONE: "done",
+  ERROR: "error",
+} as const;
+
+export function seedJsonFilenames(): string[] {
+  return readdirSync(SEEDS_DIR)
+    .filter((f) => f.endsWith(".json"))
+    .sort();
+}
+
+export function projectTemplateSummaryFromFile(filename: string): ProjectTemplateSummary {
+  const raw = SeedTemplateSummaryFileSchema.parse(
+    JSON.parse(readFileSync(join(SEEDS_DIR, filename), "utf8")),
+  );
+  return {
+    id: raw.id as ProjectId,
+    name: raw.name,
+    kind: raw.kind,
+    moduleCount: raw.modules.length,
+    inputCount: raw.modules.filter((m) => m.kind === "input").length,
+  };
+}
+
 export function projectTemplateSummaries(): ProjectTemplateSummary[] {
-  return allProjectSeeds().map((s) => ({
-    id: s.project.id,
-    name: s.project.name,
-    kind: s.project.kind,
-    moduleCount: s.project.modules.length,
-    inputCount: s.project.modules.filter((m) => m.kind === "input").length,
-  }));
+  return seedJsonFilenames().map(projectTemplateSummaryFromFile);
 }
 
 // AI : clones are always numbered — "Company Legal Evaluation" → "Company Legal Evaluation 1", …
