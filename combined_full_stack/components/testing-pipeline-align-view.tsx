@@ -9,7 +9,6 @@ import {
   PipelineCanvasSegment,
   PipelineCanvasStart,
 } from "@/components/pipeline-canvas"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { segmentPipeline, modulesInSegment } from "@/lib/pipeline-layout"
 import {
   TESTING_PIPELINE_MAX,
@@ -109,8 +108,8 @@ export function TestingPipelineAlignView({
   }
 
   return (
-    <div className="flex h-[min(680px,68vh)] flex-col overflow-hidden rounded-lg border border-border">
-      <div className="flex shrink-0 border-b border-border bg-muted/20">
+    <div className="rounded-lg border border-border">
+      <div className="flex border-b border-border bg-muted/20">
         <p
           className="shrink-0 border-r border-border px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground"
           style={{ width: pipelineWidth }}
@@ -122,8 +121,7 @@ export function TestingPipelineAlignView({
         </p>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
-        <div ref={scrollRef} className="relative">
+      <div ref={scrollRef} className="relative">
           <div
             role="separator"
             aria-orientation="vertical"
@@ -195,8 +193,7 @@ export function TestingPipelineAlignView({
               <div className="min-w-0 flex-1 space-y-4 p-3">{orphansFooter}</div>
             </div>
           ) : null}
-        </div>
-      </ScrollArea>
+      </div>
 
       {legend}
     </div>

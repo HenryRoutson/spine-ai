@@ -797,8 +797,8 @@ function staleLoadFailedContent(content: string): string | null {
           </>
         }
         trailing={
-          /* AI : min-w-0 — without it the flex child grows to fit nowrap truncate spans, pushing the Run button off-screen */
-          <ScrollArea className="min-h-0 min-w-0 flex-1">
+          /* AI : single native scroll for the whole test editor — no nested ScrollArea inside the pipeline block */
+          <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
             {selected ? (
               <TestDetail
                 key={selected.doc.name} // AI : stable test filename — doc id changes on content-hash edits
@@ -825,7 +825,7 @@ function staleLoadFailedContent(content: string): string | null {
                 Select or create a test file to describe the exact output of each pipeline step.
               </div>
             )}
-          </ScrollArea>
+          </div>
         }
       />
         </>

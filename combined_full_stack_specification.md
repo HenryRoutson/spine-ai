@@ -226,6 +226,13 @@ you don't want to have to reconfigure your tests because you're changing your pi
 
 please note that from a testing pespective, if you're checking the inputs are correct to each step, you need to make sure that you can check inputs for 'combine input' steps and also configure what files are being uploaded.
 
+please make scrolling expected and actual something where both scroll together and things line up only if there is the same number of lines / items. otherwise you might want to do more of a git diff to see the difference.
+when there are the same number of lines, you can use a red backround for each line which isn't the same, which is behind the highlighting showing the type of check between deterinistic, tollerance and llm.
+
+git diffs should be coloured based on + being green and red being -.
+please add // not "{actual}" commens to the lines of json which are diferent. with actual replaced so that copying the text easily shows the difference when there is a 1 to 1 number of lines
+
+
 # inference
 
 All inputs are shown with the option to select documents.

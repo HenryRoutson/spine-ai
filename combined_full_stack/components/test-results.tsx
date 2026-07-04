@@ -3,10 +3,19 @@
 // AI : expected-vs-actual verdict list — shared by the Testing tab (live run) and
 // AI : Logging (persisted run.test report), so the rendering exists exactly once.
 
-import { useState, type ReactNode } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { ChevronDown, ChevronRight, CircleCheck, CircleX, MinusCircle } from "lucide-react"
+import { ExpectedActualCompare } from "@/components/expected-actual-compare"
+import { JsonUnifiedDiffView } from "@/components/json-unified-diff-view"
 import { JsonFieldKindHighlight, JsonFieldKindLegend } from "@/components/highlight"
 import { SectionLabel } from "@/components/testing-editor"
+import {
+  readTestingCompareWidth,
+  TESTING_COMPARE_MAX,
+  TESTING_COMPARE_MIN,
+  useTestingCompareWidth,
+  writeTestingCompareWidth,
+} from "@/lib/testing-settings"
 import { firstFailure, probabilisticReferencePaths } from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
 import { RunTestStepStatus, type RunTestProbabilisticResult, type RunTestStepResult } from "@/lib/types"
@@ -52,6 +61,9 @@ export function TestResults({ results, action }: { results: RunTestStepResult[];
 
 function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; isFirstFailure: boolean }) {
   const [open, setOpen] = useState(isFirstFailure)
+  const savedCompareWidth = useTestingCompareWidth()
+  const [compareWidth, setCompareWidth] = useState(readTestingCompareWidth)
+  useEffect(() => setCompareWidth(savedCompareWidth), [savedCompareWidth])
   const inputCheckFailed = result.inputDescriptionCheck?.matches === false
   const failed =
     result.status === RunTestStepStatus.Fail ||
@@ -115,9 +127,9 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
       {open && result.deterministicDiff && (
         <div className="border-t border-border px-2.5 py-2">
           <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">deterministic diff</p>
-          <pre className="max-h-48 overflow-auto rounded border border-border bg-secondary/30 p-2 font-mono text-[10px] leading-relaxed text-muted-foreground">
-            {result.deterministicDiff}
-          </pre>
+          <div className="max-h-48 overflow-auto rounded border border-border bg-secondary/30 p-2">
+            <JsonUnifiedDiffView diff={result.deterministicDiff} />
+          </div>
         </div>
       )}
       {open && !!result.probabilisticResults?.length && (
@@ -136,36 +148,53 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
       {open && (result.expected !== undefined || result.actual !== undefined) && (
         <div className="space-y-2 border-t border-border p-2.5">
           <JsonFieldKindLegend />
-          <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-            {result.expected !== undefined && (
-              <div>
-                <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">expected</p>
+          {result.expected !== undefined && result.actual !== undefined ? (
+            <ExpectedActualCompare
+              expectedJson={JSON.stringify(result.expected, null, 2)}
+              actual={result.actual}
+              probabilisticPaths={result.ignoredPaths ?? []}
+              probabilisticCheckedPaths={probabilisticCheckedPaths}
+              tolerantPaths={result.tolerantPaths ?? []}
+              expectedLabel="expected"
+              actualLabel="actual"
+              compareWidth={compareWidth}
+              onCompareWidthChange={setCompareWidth}
+              onCompareWidthCommit={writeTestingCompareWidth}
+              minLeading={TESTING_COMPARE_MIN}
+              maxLeading={TESTING_COMPARE_MAX}
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+              {result.expected !== undefined && (
+                <div>
+                  <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">expected</p>
+                  <div className="max-h-72 overflow-auto rounded border border-border bg-secondary/30 p-2">
+                    <JsonFieldKindHighlight
+                      json={JSON.stringify(result.expected, null, 2)}
+                      probabilisticPaths={result.ignoredPaths ?? []}
+                      probabilisticCheckedPaths={probabilisticCheckedPaths}
+                      tolerantPaths={result.tolerantPaths ?? []}
+                    />
+                  </div>
+                </div>
+              )}
+              <div className={result.expected === undefined ? "lg:col-span-2" : ""}>
+                <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">actual</p>
                 <div className="max-h-72 overflow-auto rounded border border-border bg-secondary/30 p-2">
-                  <JsonFieldKindHighlight
-                    json={JSON.stringify(result.expected, null, 2)}
-                    probabilisticPaths={result.ignoredPaths ?? []}
-                    probabilisticCheckedPaths={probabilisticCheckedPaths}
-                    tolerantPaths={result.tolerantPaths ?? []}
-                  />
+                  {result.actual === undefined ? (
+                    <p className="font-mono text-[11px] text-muted-foreground">— no output —</p>
+                  ) : (
+                    <JsonFieldKindHighlight
+                      json={JSON.stringify(result.actual, null, 2)}
+                      probabilisticPaths={result.ignoredPaths ?? []}
+                      probabilisticCheckedPaths={probabilisticCheckedPaths}
+                      tolerantPaths={result.tolerantPaths ?? []}
+                    />
+                  )}
                 </div>
               </div>
-            )}
-            <div className={result.expected === undefined ? "lg:col-span-2" : ""}>
-              <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">actual</p>
-              <div className="max-h-72 overflow-auto rounded border border-border bg-secondary/30 p-2">
-                {result.actual === undefined ? (
-                  <p className="font-mono text-[11px] text-muted-foreground">— no output —</p>
-                ) : (
-                  <JsonFieldKindHighlight
-                    json={JSON.stringify(result.actual, null, 2)}
-                    probabilisticPaths={result.ignoredPaths ?? []}
-                    probabilisticCheckedPaths={probabilisticCheckedPaths}
-                    tolerantPaths={result.tolerantPaths ?? []}
-                  />
-                )}
-              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
     </li>

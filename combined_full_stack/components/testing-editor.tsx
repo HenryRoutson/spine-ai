@@ -57,7 +57,7 @@ import {
   type SpineTestFile,
   type TestStepTrackStatus,
 } from "@/lib/testing-files"
-import { ResizableSplit } from "@/components/resizable-split"
+import { ExpectedActualCompare } from "@/components/expected-actual-compare"
 import {
   readTestingCompareWidth,
   readTestingPipelineWidth,
@@ -882,39 +882,17 @@ function ScoredStepCard({
             edit by hand.
           </p>
         ) : actualJson ? (
-          <ResizableSplit
-            className="w-full"
-            leadingWidth={compareWidth}
-            onLeadingWidthChange={setCompareWidth}
-            onLeadingWidthCommit={writeTestingCompareWidth}
+          <ExpectedActualCompare
+            expectedJson={row.text}
+            actual={actual}
+            probabilisticPaths={ignoredFields}
+            probabilisticCheckedPaths={probabilisticCheckedPaths}
+            tolerantPaths={tolerantFields}
+            compareWidth={compareWidth}
+            onCompareWidthChange={setCompareWidth}
+            onCompareWidthCommit={writeTestingCompareWidth}
             minLeading={TESTING_COMPARE_MIN}
             maxLeading={TESTING_COMPARE_MAX}
-            leading={
-              <div className="min-w-0 space-y-1 pr-1">
-                <SectionLabel>expected</SectionLabel>
-                <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
-                  <JsonFieldKindHighlight
-                    json={row.text}
-                    probabilisticPaths={ignoredFields}
-                    probabilisticCheckedPaths={probabilisticCheckedPaths}
-                    tolerantPaths={tolerantFields}
-                  />
-                </div>
-              </div>
-            }
-            trailing={
-              <div className="min-w-0 space-y-1 pl-1">
-                <SectionLabel>last run actual</SectionLabel>
-                <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
-                  <JsonFieldKindHighlight
-                    json={actualJson}
-                    probabilisticPaths={ignoredFields}
-                    probabilisticCheckedPaths={probabilisticCheckedPaths}
-                    tolerantPaths={tolerantFields}
-                  />
-                </div>
-              </div>
-            }
           />
         ) : (
           <div className="min-w-0 space-y-1">

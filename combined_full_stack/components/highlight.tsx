@@ -1,11 +1,17 @@
 "use client"
 
+import { useMemo } from "react"
 import { Link2 } from "lucide-react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { tryParseJson } from "@/lib/json-utils"
+import {
+  assignPathsToPrettyLines,
+  prettyJsonLineCompareComment,
+  valueAtJsonPath,
+} from "@/lib/json-pretty-lines"
 import { isProbabilisticFieldPath, isProbabilisticReferenceValue, toleranceForFieldPath } from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
 import type { DocId, JobLogLevel, TolerantFieldPath } from "@/lib/types"
@@ -22,7 +28,7 @@ function jsonTokenClass(token: string): string {
 
 // AI : inline JSON token coloring — shared by JsonHighlight and server log lines.
 export function InlineJsonTokens({ text }: { text: string }) {
-  const tokens = text.split(JSON_TOKEN_RE)
+  const tokens = (text ?? "").split(JSON_TOKEN_RE)
   return (
     <>
       {tokens.map((t, i) =>
@@ -93,7 +99,7 @@ function JsonLeafValue({
   const isProb = isProbabilisticFieldPath(path, probabilisticPaths)
   const tolerance = toleranceForFieldPath(path, tolerantPaths)
   const isTolerant = tolerance !== undefined
-  const text = JSON.stringify(value)
+  const text = jsonLeafDisplayText(value)
   const llmChecked = isProb
     ? probabilisticCheckedPaths !== undefined
       ? isProbabilisticFieldPath(path, probabilisticCheckedPaths)
@@ -217,20 +223,169 @@ function JsonFieldKindNode({
   )
 }
 
+const PRETTY_KEY_VALUE_LINE_RE = /^(\s*)"((?:\\.|[^"\\])*)"\s*:\s*(.*?)(,?)$/
+
+function jsonLeafDisplayText(value: unknown): string {
+  const text = JSON.stringify(value)
+  return text ?? "undefined"
+}
+
+function leafValueAtPath(root: unknown, path: field_path_string, lineFragment: string): unknown {
+  const atPath = valueAtJsonPath(root, path)
+  if (atPath !== undefined) return atPath
+  const parsed = tryParseJson(lineFragment.trim().replace(/,$/, ""))
+  return parsed.ok ? parsed.value : atPath
+}
+
+function PrettyJsonLineContent({
+  line,
+  path,
+  root,
+  probabilisticPaths,
+  probabilisticCheckedPaths,
+  tolerantPaths = [],
+}: {
+  line: string
+  path: field_path_string | undefined
+  root: unknown
+  probabilisticPaths: field_path_string[]
+  probabilisticCheckedPaths?: field_path_string[]
+  tolerantPaths?: TolerantFieldPath[]
+}) {
+  const keyVal = line.match(PRETTY_KEY_VALUE_LINE_RE)
+  if (keyVal && path) {
+    const [, indent, keyEsc, valuePart, comma] = keyVal
+    const key = JSON.parse(`"${keyEsc}"`) as string
+    const rest = valuePart.trim()
+    const tol = toleranceForFieldPath(path, tolerantPaths)
+    if (rest === "{" || rest === "[" || rest === "{," || rest === "[,") {
+      return <InlineJsonTokens text={line} />
+    }
+    return (
+      <>
+        {indent}
+        <span className={cn(tol !== undefined ? "text-output" : "text-chart-2")}>&quot;{key}&quot;</span>
+        {": "}
+        <JsonLeafValue
+          value={leafValueAtPath(root, path, rest)}
+          path={path}
+          probabilisticPaths={probabilisticPaths}
+          probabilisticCheckedPaths={probabilisticCheckedPaths}
+          tolerantPaths={tolerantPaths}
+        />
+        {comma ?? ""}
+      </>
+    )
+  }
+
+  if (path) {
+    const indent = line.slice(0, line.length - line.trimStart().length)
+    const body = line.trim().replace(/,$/, "")
+    if (body !== "{" && body !== "[" && body !== "}" && body !== "]") {
+      return (
+        <>
+          {indent}
+          <JsonLeafValue
+            value={leafValueAtPath(root, path, body)}
+            path={path}
+            probabilisticPaths={probabilisticPaths}
+            probabilisticCheckedPaths={probabilisticCheckedPaths}
+            tolerantPaths={tolerantPaths}
+          />
+          {line.endsWith(",") ? "," : ""}
+        </>
+      )
+    }
+  }
+
+  return <InlineJsonTokens text={line} />
+}
+
+function JsonFieldKindLineView({
+  root,
+  lines,
+  differingLineIndexes,
+  pairedLines,
+  probabilisticPaths,
+  probabilisticCheckedPaths,
+  tolerantPaths = [],
+}: {
+  root: unknown
+  lines: string[]
+  differingLineIndexes: ReadonlySet<number>
+  // AI : same-index lines from the other compare pane — used for // not "…" copy hints.
+  pairedLines?: string[]
+  probabilisticPaths: field_path_string[]
+  probabilisticCheckedPaths?: field_path_string[]
+  tolerantPaths?: TolerantFieldPath[]
+}) {
+  const paths = useMemo(() => assignPathsToPrettyLines(lines), [lines])
+  return (
+    <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed">
+      <code>
+        {lines.map((line, i) => {
+          const paired = pairedLines?.[i]
+          const notComment =
+            differingLineIndexes.has(i) && paired !== undefined
+              ? prettyJsonLineCompareComment(paired)
+              : undefined
+          return (
+            <span
+              key={i}
+              className={cn("block whitespace-pre", differingLineIndexes.has(i) && "bg-destructive/15")}
+            >
+              <PrettyJsonLineContent
+                line={line}
+                path={paths[i]}
+                root={root}
+                probabilisticPaths={probabilisticPaths}
+                probabilisticCheckedPaths={probabilisticCheckedPaths}
+                tolerantPaths={tolerantPaths}
+              />
+              {notComment !== undefined && (
+                <span className="text-muted-foreground/75">{` // not "${notComment}"`}</span>
+              )}
+            </span>
+          )
+        })}
+      </code>
+    </pre>
+  )
+}
+
 // AI : structure-aware JSON view — leaf values tinted by ModelField.deterministic on the step output type.
 export function JsonFieldKindHighlight({
   json,
   probabilisticPaths,
   probabilisticCheckedPaths,
   tolerantPaths = [],
+  differingLineIndexes,
+  pairedLines,
 }: {
   json: string
   probabilisticPaths: field_path_string[]
   probabilisticCheckedPaths?: field_path_string[]
   tolerantPaths?: TolerantFieldPath[]
+  // AI : when set, render line-by-line with red row bg on indexes that differ from the paired side.
+  differingLineIndexes?: ReadonlySet<number>
+  pairedLines?: string[]
 }) {
   const parsed = tryParseJson(json, { trim: true })
   if (!parsed.ok) return <JsonHighlight json={json} />
+  if (differingLineIndexes) {
+    const lines = JSON.stringify(parsed.value, null, 2).split("\n")
+    return (
+      <JsonFieldKindLineView
+        root={parsed.value}
+        lines={lines}
+        differingLineIndexes={differingLineIndexes}
+        pairedLines={pairedLines}
+        probabilisticPaths={probabilisticPaths}
+        probabilisticCheckedPaths={probabilisticCheckedPaths}
+        tolerantPaths={tolerantPaths}
+      />
+    )
+  }
   return (
     <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed">
       <code>
