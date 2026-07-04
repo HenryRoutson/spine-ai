@@ -38,7 +38,6 @@ function catalogToOption(entry: ModelCatalogEntry, rates: OpenRouterRates): Mode
     costPer1k: blendedCentsPer1k(rates),
     promptUsdPerToken: rates.promptUsdPerToken,
     completionUsdPerToken: rates.completionUsdPerToken,
-    cheap: entry.cheap,
     slug: entry.slug,
   };
 }
@@ -106,12 +105,11 @@ export async function ensureModelOptionsFresh(): Promise<void> {
 
 // AI : strip slug + raw OpenRouter rates before sending modelOptions to the browser.
 export function toPublicModelOptions(options: readonly ModelOption[]): ModelOptionPublic[] {
-  return options.map(({ id, label, provider, costPer1k, cheap }) => ({
+  return options.map(({ id, label, provider, costPer1k }) => ({
     id,
     label,
     provider,
     costPer1k,
-    ...(cheap ? { cheap } : {}),
   }));
 }
 
@@ -132,7 +130,6 @@ export function modelOption(modelId: ModelId): ModelOption {
     costPer1k: 0,
     promptUsdPerToken: 0,
     completionUsdPerToken: 0,
-    cheap: entry.cheap,
     slug: entry.slug,
   };
 }

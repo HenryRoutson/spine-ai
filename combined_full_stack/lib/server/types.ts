@@ -433,7 +433,6 @@ export interface ModelOptionPublic {
   label: string;
   provider: string;
   costPer1k: number; // cents per 1k tokens (blended, OpenRouter + 40%)
-  cheap?: boolean;
 }
 
 export interface ModelOption extends ModelOptionPublic {

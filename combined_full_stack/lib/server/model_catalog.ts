@@ -6,13 +6,12 @@ export type ModelCatalogEntry = {
   id: ModelId;
   label: string;
   slug: OpenRouterSlug;
-  cheap?: boolean;
 };
 
 export const MODEL_CATALOG: ModelCatalogEntry[] = [
-  { id: "qwen-2.5-72b", label: "Qwen 2.5 72B", slug: "qwen/qwen-2.5-72b-instruct" as OpenRouterSlug, cheap: true },
-  { id: "deepseek-v3", label: "DeepSeek V3", slug: DEEPSEEK_SLUG as OpenRouterSlug, cheap: true },
-  { id: "glm-5.2", label: "GLM 5.2", slug: "z-ai/glm-5.2" as OpenRouterSlug, cheap: true },
+  { id: "qwen-2.5-72b", label: "Qwen 2.5 72B", slug: "qwen/qwen-2.5-72b-instruct" as OpenRouterSlug },
+  { id: "deepseek-v3", label: "DeepSeek V3", slug: DEEPSEEK_SLUG as OpenRouterSlug },
+  { id: "glm-5.2", label: "GLM 5.2", slug: "z-ai/glm-5.2" as OpenRouterSlug },
   { id: "gpt-5-mini", label: "GPT-5 mini", slug: "openai/gpt-4o-mini" as OpenRouterSlug },
   { id: "claude-opus-4.6", label: "Claude Opus 4.6", slug: "anthropic/claude-opus-4.1" as OpenRouterSlug },
   { id: "sonnet-4.7", label: "Claude Sonnet 4.7", slug: "anthropic/claude-sonnet-4.5" as OpenRouterSlug },
