@@ -1031,36 +1031,6 @@ export function StoreProvider({
     selectActiveProject,
   ])
 
-  if (loadError) {
-    return (
-      <div className="flex h-dvh flex-col items-center justify-center gap-2 bg-background px-6 text-center">
-        <p className="font-mono text-xs text-destructive">{loadError}</p>
-        <button
-          type="button"
-          onClick={() => {
-            setLoadError(null)
-            refresh().catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load store"))
-          }}
-          className="font-mono text-[11px] text-muted-foreground underline"
-        >
-          retry
-        </button>
-      </div>
-    )
-  }
-
-  const saveErrorBanner = saveError ? (
-    <div
-      role="alert"
-      className="fixed inset-x-0 top-0 z-50 flex items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive"
-    >
-      <span>Save failed: {saveError}</span>
-      <button type="button" onClick={clearSaveError} className="shrink-0 underline">
-        dismiss
-      </button>
-    </div>
-  ) : null
-
   const pickerValue = useMemo<ProjectPickerStoreState | null>(() => {
     if (!state) return null
     return {
@@ -1090,6 +1060,36 @@ export function StoreProvider({
     clearSaveError,
     stateSyncing,
   ])
+
+  if (loadError) {
+    return (
+      <div className="flex h-dvh flex-col items-center justify-center gap-2 bg-background px-6 text-center">
+        <p className="font-mono text-xs text-destructive">{loadError}</p>
+        <button
+          type="button"
+          onClick={() => {
+            setLoadError(null)
+            refresh().catch((err) => setLoadError(err instanceof Error ? err.message : "Failed to load store"))
+          }}
+          className="font-mono text-[11px] text-muted-foreground underline"
+        >
+          retry
+        </button>
+      </div>
+    )
+  }
+
+  const saveErrorBanner = saveError ? (
+    <div
+      role="alert"
+      className="fixed inset-x-0 top-0 z-50 flex items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive"
+    >
+      <span>Save failed: {saveError}</span>
+      <button type="button" onClick={clearSaveError} className="shrink-0 underline">
+        dismiss
+      </button>
+    </div>
+  ) : null
 
   if (mode === "demo" && loadError && !state) {
     return (
