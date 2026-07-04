@@ -36,8 +36,7 @@
           "name": "repro_steps",
           "type": "list[text]",
           "optional": false,
-          "description": "Numbered repro steps",
-          "deterministic": false
+          "description": "Numbered repro steps"
         },
         {
           "id": "f_sev",
@@ -51,16 +50,14 @@
           "name": "likely_component",
           "type": "text",
           "optional": false,
-          "description": "Suspected code area",
-          "deterministic": false
+          "description": "Suspected code area"
         },
         {
           "id": "f_summary",
           "name": "summary",
           "type": "text",
           "optional": false,
-          "description": "One-line title",
-          "deterministic": false
+          "description": "One-line title"
         }
       ]
     }
@@ -76,8 +73,7 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "User-submitted bug report describing steps to reproduce and expected behavior",
-      "note": "User-submitted bug report describing steps to reproduce and expected behavior"
+      "inputDescription": "User-submitted bug report describing steps to reproduce and expected behavior"
     },
     {
       "id": "mod_in_logs",
@@ -89,8 +85,7 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "Application log snippet around the time of the reported failure",
-      "note": "Application log snippet around the time of the reported failure"
+      "inputDescription": "Application log snippet around the time of the reported failure"
     },
     {
       "id": "mod_combine",
@@ -101,8 +96,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "User-submitted bug report describing steps to reproduce and expected behavior",
-      "note": "User-submitted bug report describing steps to reproduce and expected behavior"
+      "inputDescription": "User-submitted bug report describing steps to reproduce and expected behavior"
     },
     {
       "id": "mod_enrich",
@@ -115,8 +109,7 @@
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2400,
-      "avgCostCents": 7,
-      "note": "Combined bug input — user_report document plus app_logs log excerpt"
+      "avgCostCents": 7
     },
     {
       "id": "mod_out",
@@ -127,8 +120,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "Single EnrichedBug object — structured ticket ready for engineering triage",
-      "note": ""
+      "inputDescription": "Single EnrichedBug object — structured ticket ready for engineering triage"
     }
   ],
   "strategies": [
@@ -178,12 +170,6 @@
       "type": "text",
       "label": "inference",
       "file": "bug_enricher/app_logs_snippet.md"
-    },
-    {
-      "name": "bug_enricher_testing.json",
-      "type": "json",
-      "label": "training",
-      "file": "bug_enricher/bug_enricher_testing.json"
     }
   ]
 }

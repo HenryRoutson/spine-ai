@@ -9,3 +9,4 @@ Missing Input Validation (SQLi and XSS)
 Dangerous Defaults (RCE)
 "Slopsquatting" and Supply Chain Risks
 "Fake" Client-Side Authentication
+Hardcoded Secrets and Exposed API Keys

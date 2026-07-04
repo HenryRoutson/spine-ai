@@ -22,6 +22,8 @@ import type {
 const billLog = logger("assistant-billing");
 
 export const ASSISTANT_BILLING_CHART_KEY = "project assistant" as const;
+export const TESTING_ASSISTANT_BILLING_CHART_KEY = "testing assistant" as const;
+export const PIPELINE_SUMMARY_BILLING_CHART_KEY = "pipeline summary" as const;
 
 export type AssistantBillingInput = {
   store: Store;
@@ -31,6 +33,7 @@ export type AssistantBillingInput = {
   responseMessage: string;
   usageCents: number;
   startedAt: number;
+  chartKey?: string;
 };
 
 export async function gateAssistantBilling(): Promise<BillingUserKey> {
@@ -43,10 +46,11 @@ function buildAssistantRun(input: AssistantBillingInput): PipelineRun {
   const finishedAt = Date.now();
   const ms = Math.max(1, finishedAt - input.startedAt);
   const costCents = +Math.max(0, input.usageCents).toFixed(4);
+  const chartKey = input.chartKey ?? ASSISTANT_BILLING_CHART_KEY;
   const step: RunStep = {
     moduleId: uid<ModuleId>(),
     kind: ModuleKind.Llm,
-    label: ASSISTANT_BILLING_CHART_KEY,
+    label: chartKey,
     model: input.model,
     status: RunStepStatus.Ok,
     ms,
@@ -63,7 +67,7 @@ function buildAssistantRun(input: AssistantBillingInput): PipelineRun {
     savedCents: 0,
     model: input.model,
     source: RunSource.Assistant,
-    notes: ASSISTANT_BILLING_CHART_KEY,
+    notes: chartKey,
     steps: [step],
   };
 }

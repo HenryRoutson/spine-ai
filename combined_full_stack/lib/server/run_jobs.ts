@@ -54,7 +54,7 @@ function queueSupabasePersist(ownerId: JobOwnerId, id: RunJobId, db: JobDb): voi
         .then(async () => {
           const job = jobs().get(key);
           if (!job) return;
-          await supabaseMergePersist(db, id, job);
+          await supabaseMergePersist(db, ownerId, id, job);
         });
       supabasePersistChains.set(key, next);
       void next.finally(() => {
@@ -86,7 +86,7 @@ async function flushPersistChain(
   if (!db) return;
   const prev = supabasePersistChains.get(key) ?? Promise.resolve();
   await prev.catch(() => {});
-  await supabasePersistJob(db, id, job);
+  await supabasePersistJob(db, ownerId, id, job);
   supabasePersistChains.delete(key);
 }
 
@@ -159,8 +159,15 @@ function supabaseErrorMessage(err: unknown): string {
   return String(err);
 }
 
-async function supabasePersistJob(db: SupabaseClient, id: RunJobId, job: RunJob): Promise<void> {
-  const { error } = await db.from("run_jobs").upsert({ id, data: job, updated_at: Date.now() });
+async function supabasePersistJob(
+  db: SupabaseClient,
+  ownerId: JobOwnerId,
+  id: RunJobId,
+  job: RunJob,
+): Promise<void> {
+  const { error } = await db
+    .from("run_jobs")
+    .upsert({ id, user_id: ownerId, data: job, updated_at: Date.now() });
   if (error) throw new Error(`run_jobs upsert failed: ${supabaseErrorMessage(error)}`);
 }
 
@@ -189,20 +196,34 @@ function mergeJobForPersist(remote: RunJob, local: RunJob): RunJob {
   return merged;
 }
 
-async function supabaseMergePersist(db: SupabaseClient, id: RunJobId, local: RunJob): Promise<void> {
+async function supabaseMergePersist(
+  db: SupabaseClient,
+  ownerId: JobOwnerId,
+  id: RunJobId,
+  local: RunJob,
+): Promise<void> {
   try {
-    const remote = await supabaseLoadJob(db, id);
-    await supabasePersistJob(db, id, remote ? mergeJobForPersist(remote, local) : local);
+    const remote = await supabaseLoadJob(db, ownerId, id);
+    await supabasePersistJob(db, ownerId, id, remote ? mergeJobForPersist(remote, local) : local);
   } catch (err) {
     jobLog.warn(`supabaseMergePersist failed — writing local`, { jobId: id, error: supabaseErrorMessage(err) });
-    await supabasePersistJob(db, id, local);
+    await supabasePersistJob(db, ownerId, id, local);
   }
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-async function supabaseLoadJob(db: SupabaseClient, id: RunJobId): Promise<RunJob | undefined> {
-  const { data, error } = await db.from("run_jobs").select("data").eq("id", id).maybeSingle();
+async function supabaseLoadJob(
+  db: SupabaseClient,
+  ownerId: JobOwnerId,
+  id: RunJobId,
+): Promise<RunJob | undefined> {
+  const { data, error } = await db
+    .from("run_jobs")
+    .select("data")
+    .eq("id", id)
+    .eq("user_id", ownerId)
+    .maybeSingle();
   if (error) throw new Error(`run_jobs load failed: ${supabaseErrorMessage(error)}`);
   return data?.data as RunJob | undefined;
 }
@@ -269,7 +290,7 @@ async function loadJob(ownerId: JobOwnerId, id: RunJobId, db: JobDb): Promise<Ru
   const onDisk = loadJobLocal(ownerId, id);
   if (onDisk) return onDisk;
   if (!db) return undefined;
-  const job = await supabaseLoadJob(db, id);
+  const job = await supabaseLoadJob(db, ownerId, id);
   if (job) setJob(ownerId, id, job);
   return job;
 }
@@ -318,7 +339,7 @@ async function loadJobForClaim(
   const key = cacheKey(ownerId, id);
   let job = jobs().get(key) ?? loadJobLocal(ownerId, id);
   if (!db) return job ?? (await loadJob(ownerId, id, db));
-  const remote = await supabaseLoadJob(db, id);
+  const remote = await supabaseLoadJob(db, ownerId, id);
   if (!remote) return job;
   if (!job) return remote;
   return mergeJobForPersist(remote, job);
@@ -475,7 +496,7 @@ export async function getJobForProgress(
   const job = await loadJob(ownerId, id, db);
   if (!job || !db || job.run || job.error) return job;
   try {
-    const remote = await supabaseLoadJob(db, id);
+    const remote = await supabaseLoadJob(db, ownerId, id);
     if (!remote) return job;
     if (!remote.paused) {
       delete job.paused;
@@ -501,7 +522,7 @@ export async function jobMissingDetail(
 ): Promise<string> {
   if (db) {
     try {
-      const job = await supabaseLoadJob(db, id);
+      const job = await supabaseLoadJob(db, ownerId, id);
       if (job) return "job exists in Supabase but failed to load from cache";
       return "no run_jobs row in Supabase — POST /api/runs may not have created this job (check run_jobs table exists)";
     } catch (err) {

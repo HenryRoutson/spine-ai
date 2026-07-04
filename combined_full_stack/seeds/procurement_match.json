@@ -143,8 +143,7 @@
           "name": "detail",
           "type": "text",
           "optional": false,
-          "description": "Cited qty/price differences",
-          "deterministic": false
+          "description": "Cited qty/price differences"
         }
       ]
     }
@@ -160,8 +159,7 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "Purchase order markdown table listing SKU lines, quantities, and unit prices",
-      "note": "Purchase order markdown table listing SKU lines, quantities, and unit prices"
+      "inputDescription": "Purchase order markdown table listing SKU lines, quantities, and unit prices"
     },
     {
       "id": "mod_parse_po",
@@ -191,8 +189,7 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "Delivery note markdown table showing quantities actually shipped",
-      "note": "Delivery note markdown table showing quantities actually shipped"
+      "inputDescription": "Delivery note markdown table showing quantities actually shipped"
     },
     {
       "id": "mod_combine_dn",
@@ -203,8 +200,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "Parsed PO rows from the first input, ready to merge with the delivery note document",
-      "note": "Parsed PO rows from the first input, ready to merge with the delivery note document"
+      "inputDescription": "Parsed PO rows from the first input, ready to merge with the delivery note document"
     },
     {
       "id": "mod_merge_po_dn",
@@ -233,8 +229,7 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "Vendor invoice markdown table billing SKUs, quantities, and prices",
-      "note": "Vendor invoice markdown table billing SKUs, quantities, and prices"
+      "inputDescription": "Vendor invoice markdown table billing SKUs, quantities, and prices"
     },
     {
       "id": "mod_combine_inv",
@@ -245,8 +240,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "Parsed PO and delivery JSON bundle, ready to merge with the vendor invoice",
-      "note": "Parsed PO and delivery JSON bundle, ready to merge with the vendor invoice"
+      "inputDescription": "Parsed PO and delivery JSON bundle, ready to merge with the vendor invoice"
     },
     {
       "id": "mod_merge_all",
@@ -277,8 +271,7 @@
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 3200,
-      "avgCostCents": 11,
-      "note": "Merged JSON — purchase order, delivery note, and vendor invoice row arrays"
+      "avgCostCents": 11
     },
     {
       "id": "mod_out",
@@ -290,8 +283,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of MatchLine records — one three-way match verdict per SKU",
-      "note": ""
+      "inputDescription": "List of MatchLine records — one three-way match verdict per SKU"
     }
   ],
   "strategies": [
@@ -347,12 +339,6 @@
       "type": "text",
       "label": "inference",
       "file": "procurement_match/vendor_invoice.md"
-    },
-    {
-      "name": "procurement_match_testing.json",
-      "type": "json",
-      "label": "training",
-      "file": "procurement_match/procurement_match_testing.json"
     }
   ]
 }

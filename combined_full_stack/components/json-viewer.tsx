@@ -22,8 +22,11 @@ interface JsonViewerEmbedProps {
 export function JsonViewerEmbed({ json, className, defaultView }: JsonViewerEmbedProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
+  // AI : same-origin only — avoids leaking JSON to arbitrary embedders via postMessage("*").
   function post(payload: object) {
-    iframeRef.current?.contentWindow?.postMessage(payload, "*")
+    const target = iframeRef.current?.contentWindow
+    if (!target) return
+    target.postMessage(payload, window.location.origin)
   }
 
   const resolvedDefaultView = defaultView ?? readJsonViewerDefaultView()

@@ -86,11 +86,12 @@ export async function summarizePipelineStream(
   project: Project,
   globalModel: ModelId,
   onDelta: (delta: string) => void,
-): Promise<string> {
+): Promise<{ text: string; usageCents: number }> {
   const ledger = new UsageLedger();
-  return llmStreamString(
+  const text = await llmStreamString(
     buildUserPrompt(project),
     { model: globalModel, ledger, system: buildSystemPrompt() },
     onDelta,
   );
+  return { text, usageCents: +ledger.totalCents().toFixed(4) };
 }

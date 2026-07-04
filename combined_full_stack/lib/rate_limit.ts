@@ -22,9 +22,10 @@ const upstashLimiters = new Map<RateLimitTier, Ratelimit>();
 function warnMissingUpstash(): void {
   if (warnedMissingUpstash) return;
   warnedMissingUpstash = true;
-  console.warn(
-    "[rate-limit] RATE_LIMIT_BACKEND=upstash but UPSTASH_REDIS_REST_URL/TOKEN missing — falling back to in-memory (per-instance only)",
-  );
+  const msg =
+    "[rate-limit] RATE_LIMIT_BACKEND=upstash but UPSTASH_REDIS_REST_URL/TOKEN missing — falling back to in-memory (per-instance only)";
+  if (process.env.VERCEL) console.error(msg);
+  else console.warn(msg);
 }
 
 function effectiveBackend(): RateLimitBackend {

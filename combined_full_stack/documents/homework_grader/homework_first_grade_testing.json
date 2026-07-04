@@ -1,5 +1,5 @@
 {
-  "description": "Homework Grader — 1st grade worksheet smoke test. Deterministic scores exact; feedback is LLM-checked.",
+  "description": "Homework Grader — 1st grade worksheet smoke test. Scores and correct are exact; mistake_explanation is LLM-checked.",
   "inputs": {
     "Marking Schema": "homework_marking_schema_first_grade.json",
     "Student Submissions": [
@@ -194,35 +194,40 @@
         "section_id": "A",
         "score": 2,
         "max_score": 2,
-        "feedback": "Correct addition with working shown; total is 5."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Riley Park",
         "section_id": "A",
         "score": 2,
         "max_score": 2,
-        "feedback": "Correct answer 7 with counting shown."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Riley Park",
         "section_id": "A",
         "score": 1,
         "max_score": 2,
-        "feedback": "Good counting-back attempt but final answer 5 is incorrect (should be 4)."
+        "correct": false,
+        "mistake_explanation": "Good counting-back attempt but final answer 5 is incorrect (should be 4)."
       },
       {
         "student_label": "Riley Park",
         "section_id": "B",
         "score": 2,
         "max_score": 2,
-        "feedback": "Correct — a triangle has 3 sides."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Riley Park",
         "section_id": "B",
         "score": 2,
         "max_score": 2,
-        "feedback": "Correct — 8 is bigger than 5."
+        "correct": true,
+        "mistake_explanation": ""
       }
     ],
     "Final Output": [
@@ -231,35 +236,40 @@
         "section_id": "A",
         "score": 2,
         "max_score": 2,
-        "feedback": "Correct addition with working shown; total is 5."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Riley Park",
         "section_id": "A",
         "score": 2,
         "max_score": 2,
-        "feedback": "Correct answer 7 with counting shown."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Riley Park",
         "section_id": "A",
         "score": 1,
         "max_score": 2,
-        "feedback": "Good counting-back attempt but final answer 5 is incorrect (should be 4)."
+        "correct": false,
+        "mistake_explanation": "Good counting-back attempt but final answer 5 is incorrect (should be 4)."
       },
       {
         "student_label": "Riley Park",
         "section_id": "B",
         "score": 2,
         "max_score": 2,
-        "feedback": "Correct — a triangle has 3 sides."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Riley Park",
         "section_id": "B",
         "score": 2,
         "max_score": 2,
-        "feedback": "Correct — 8 is bigger than 5."
+        "correct": true,
+        "mistake_explanation": ""
       }
     ],
     "Grade Count Check": [
@@ -268,35 +278,40 @@
         "section_id": "A",
         "score": 2,
         "max_score": 2,
-        "feedback": "Correct addition with working shown; total is 5."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Riley Park",
         "section_id": "A",
         "score": 2,
         "max_score": 2,
-        "feedback": "Correct answer 7 with counting shown."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Riley Park",
         "section_id": "A",
         "score": 1,
         "max_score": 2,
-        "feedback": "Good counting-back attempt but final answer 5 is incorrect (should be 4)."
+        "correct": false,
+        "mistake_explanation": "Good counting-back attempt but final answer 5 is incorrect (should be 4)."
       },
       {
         "student_label": "Riley Park",
         "section_id": "B",
         "score": 2,
         "max_score": 2,
-        "feedback": "Correct — a triangle has 3 sides."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Riley Park",
         "section_id": "B",
         "score": 2,
         "max_score": 2,
-        "feedback": "Correct — 8 is bigger than 5."
+        "correct": true,
+        "mistake_explanation": ""
       }
     ]
   }

@@ -23,7 +23,7 @@ const field = (
   name: string,
   type: `${FieldType}`,
   description: string,
-  extra: { ref?: string; minItems?: number } = {},
+  extra: { ref?: string; minItems?: number; deterministic?: boolean } = {},
 ): StructureFieldDef => ({
   id,
   name,
@@ -32,6 +32,7 @@ const field = (
   description,
   ...(extra.ref ? { ref: sid(extra.ref) } : {}),
   ...(extra.minItems !== undefined ? { minItems: extra.minItems } : {}),
+  ...(extra.deterministic !== undefined ? { deterministic: extra.deterministic } : {}),
 });
 
 const PARSE_TABLE = customCodeParseDocBodyToParsedTable();
@@ -135,7 +136,9 @@ const STUDENT_SUBMISSIONS_INPUT_DESC =
 const HOMEWORK_COMBINE_INPUT_DESC =
   "One student homework Document (new input) plus flat RubricQuestion list from Marking Questions List (pipeline state)";
 const SECTION_GRADES_OUTPUT_DESC =
-  "List of SectionGrade rows — student_label, section_id, score, max_score, feedback (one row per student × rubric question)";
+  "List of SectionGrade rows — student_label, section_id, score, max_score, correct, mistake_explanation (one row per student × rubric question)";
+const HOMEWORK_GRADE_PROMPT =
+  "Grade this student's homework section using max_score and criteria. Award partial credit for correct method. Return student_label and section_id exactly matching the input (do not change them). Set correct to true only when score equals max_score. When correct is false, fill mistake_explanation with specific details — wrong values, missing steps, incomplete roots, or what the rubric penalised. When correct is true, set mistake_explanation to an empty string.";
 const FEEDBACK_DUMP_INPUT_DESC = "Raw product feedback dump — bullet list of user comments";
 const FEEDBACK_DUMP_SPLIT_DESC = "Product feedback Document from the upload step, ready to split into bullet items";
 const SLA_UPTIME_INPUT_DESC = "Vendor SLA uptime report markdown table with measured availability per service";
@@ -625,7 +628,14 @@ const seeds: Record<string, unknown> = {
           field("f_sid", "section_id", "text", "Matches section id"),
           field("f_score", "score", "int", "Points awarded"),
           field("f_max", "max_score", "int", "Points possible"),
-          field("f_feedback", "feedback", "text", "Marking comments"),
+          field("f_correct", "correct", "bool", "True when the student earns full marks (score equals max_score)"),
+          field(
+            "f_mistake",
+            "mistake_explanation",
+            "text",
+            "When correct is false, explain what went wrong with concrete details; empty string when correct",
+            { deterministic: false },
+          ),
         ],
       }),
     ],
@@ -729,8 +739,7 @@ const seeds: Record<string, unknown> = {
         outStructureId: "m_grade",
         outIsList: true,
         inputDescription: "List of GradableSection objects — student_label, question body, max_score, and criteria",
-        prompt:
-          "Grade this student's homework section using max_score and criteria. Award partial credit for correct method. Return student_label and section_id exactly matching the input (do not change them).",
+        prompt: HOMEWORK_GRADE_PROMPT,
         model: "deepseek-v3",
         cached: true,
         avgMs: 2400,

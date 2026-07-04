@@ -99,8 +99,7 @@
           "name": "finding",
           "type": "text",
           "optional": false,
-          "description": "Auditor note",
-          "deterministic": false
+          "description": "Auditor note"
         }
       ]
     }
@@ -116,8 +115,7 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "AP transaction sample markdown table drawn for audit testing",
-      "note": "AP transaction sample markdown table drawn for audit testing"
+      "inputDescription": "AP transaction sample markdown table drawn for audit testing"
     },
     {
       "id": "mod_parse_txn",
@@ -147,8 +145,7 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "Journal entry excerpt markdown table with refs and amounts",
-      "note": "Journal entry excerpt markdown table with refs and amounts"
+      "inputDescription": "Journal entry excerpt markdown table with refs and amounts"
     },
     {
       "id": "mod_combine",
@@ -159,8 +156,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "Parsed transaction rows from the first input, ready to merge with journal entries",
-      "note": "Parsed transaction rows from the first input, ready to merge with journal entries"
+      "inputDescription": "Parsed transaction rows from the first input, ready to merge with journal entries"
     },
     {
       "id": "mod_merge",
@@ -191,8 +187,7 @@
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 3000,
-      "avgCostCents": 10,
-      "note": "Merged JSON — AP transactions in table_a_json and journal entries in table_b_json"
+      "avgCostCents": 10
     },
     {
       "id": "mod_out",
@@ -204,8 +199,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of SampleVerdict records — one audit test result per sampled transaction",
-      "note": ""
+      "inputDescription": "List of SampleVerdict records — one audit test result per sampled transaction"
     }
   ],
   "strategies": [
@@ -255,12 +249,6 @@
       "type": "text",
       "label": "inference",
       "file": "audit_sampler/journal_entries.md"
-    },
-    {
-      "name": "audit_sampler_testing.json",
-      "type": "json",
-      "label": "training",
-      "file": "audit_sampler/audit_sampler_testing.json"
     }
   ]
 }

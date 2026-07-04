@@ -1,5 +1,5 @@
 {
-  "description": "Homework Grader — university real analysis (LaTeX). Full pipeline test including LLM grading feedback.",
+  "description": "Homework Grader — university real analysis (LaTeX). Full pipeline test; mistake_explanation is LLM-checked.",
   "inputs": {
     "Marking Schema": "homework_marking_schema_university.json",
     "Student Submissions": [
@@ -168,28 +168,32 @@
         "section_id": "A",
         "score": 10,
         "max_score": 10,
-        "feedback": "Clear u-substitution, correct bounds, and final value e − 1."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Priya Nair",
         "section_id": "A",
         "score": 10,
         "max_score": 10,
-        "feedback": "Correct exponential rewrite and limit e²."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Priya Nair",
         "section_id": "B",
         "score": 10,
         "max_score": 10,
-        "feedback": "Ratio test set up correctly with limit 1/e < 1."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Priya Nair",
         "section_id": "B",
         "score": 2,
         "max_score": 10,
-        "feedback": "Invalid comparison with ∑1/n² — comparison test hypotheses not satisfied; at most 2 pts per rubric."
+        "correct": false,
+        "mistake_explanation": "Invalid comparison with ∑1/n² — comparison test hypotheses not satisfied; at most 2 pts per rubric."
       }
     ],
     "Final Output": [
@@ -198,28 +202,32 @@
         "section_id": "A",
         "score": 10,
         "max_score": 10,
-        "feedback": "Clear u-substitution, correct bounds, and final value e − 1."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Priya Nair",
         "section_id": "A",
         "score": 10,
         "max_score": 10,
-        "feedback": "Correct exponential rewrite and limit e²."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Priya Nair",
         "section_id": "B",
         "score": 10,
         "max_score": 10,
-        "feedback": "Ratio test set up correctly with limit 1/e < 1."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Priya Nair",
         "section_id": "B",
         "score": 2,
         "max_score": 10,
-        "feedback": "Invalid comparison with ∑1/n² — comparison test hypotheses not satisfied; at most 2 pts per rubric."
+        "correct": false,
+        "mistake_explanation": "Invalid comparison with ∑1/n² — comparison test hypotheses not satisfied; at most 2 pts per rubric."
       }
     ],
     "Grade Count Check": [
@@ -228,28 +236,32 @@
         "section_id": "A",
         "score": 10,
         "max_score": 10,
-        "feedback": "Clear u-substitution, correct bounds, and final value e − 1."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Priya Nair",
         "section_id": "A",
         "score": 10,
         "max_score": 10,
-        "feedback": "Correct exponential rewrite and limit e²."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Priya Nair",
         "section_id": "B",
         "score": 10,
         "max_score": 10,
-        "feedback": "Ratio test set up correctly with limit 1/e < 1."
+        "correct": true,
+        "mistake_explanation": ""
       },
       {
         "student_label": "Priya Nair",
         "section_id": "B",
         "score": 2,
         "max_score": 10,
-        "feedback": "Invalid comparison with ∑1/n² — comparison test hypotheses not satisfied; at most 2 pts per rubric."
+        "correct": false,
+        "mistake_explanation": "Invalid comparison with ∑1/n² — comparison test hypotheses not satisfied; at most 2 pts per rubric."
       }
     ]
   }

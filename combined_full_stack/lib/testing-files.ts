@@ -178,7 +178,7 @@ function stripDocIds(value: unknown): unknown {
 type field_path_string = string
 
 // AI : static walk of a type — every field path whose structure definition says
-// AI : deterministic:false (probabilistic — LLM prose that varies per run), e.g. "grades[].feedback".
+// AI : deterministic:false (probabilistic — LLM prose that varies per run), e.g. "[].mistake_explanation".
 function collectProbabilisticPaths(
   expr: TypeExpr | undefined,
   models: StructureModel[],

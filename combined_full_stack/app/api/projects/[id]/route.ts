@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { parseRequestJson, projectPatchSchema } from "@/lib/server/api_schemas";
 import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { logger } from "@/lib/server/server_logger";
 import { sanitizeModuleModels } from "@/lib/server/model_catalog";
@@ -20,7 +21,9 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     apiLog.warn(`PUT /api/projects — unknown`, { projectId: id });
     return apiError(unknownProject(id), HTTP.NOT_FOUND);
   }
-  const patch = (await req.json()) as Partial<Project>;
+  const patchBody = await parseRequestJson(req, projectPatchSchema);
+  if ("error" in patchBody) return apiError(patchBody.error, HTTP.BAD_REQUEST);
+  const patch = patchBody as Partial<Project>;
   const sanitized: Partial<Project> = patch.modules
     ? { ...patch, modules: sanitizeModuleModels(patch.modules) }
     : patch;

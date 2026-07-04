@@ -7,8 +7,37 @@ type GradeRow = {
   section_id: string;
   score: number;
   max_score: number;
-  feedback: string;
+  correct: boolean;
+  mistake_explanation: string;
 };
+
+type LegacyGradeRow = Omit<GradeRow, "correct" | "mistake_explanation"> & { feedback: string };
+
+function gradeRow(
+  row: Omit<GradeRow, "correct" | "mistake_explanation"> & { mistake_explanation?: string },
+): GradeRow {
+  const correct = row.score === row.max_score;
+  return {
+    student_label: row.student_label,
+    section_id: row.section_id,
+    score: row.score,
+    max_score: row.max_score,
+    correct,
+    mistake_explanation: row.mistake_explanation ?? (correct ? "" : ""),
+  };
+}
+
+function fromLegacyFeedback(row: LegacyGradeRow): GradeRow {
+  const correct = row.score === row.max_score;
+  return {
+    student_label: row.student_label,
+    section_id: row.section_id,
+    score: row.score,
+    max_score: row.max_score,
+    correct,
+    mistake_explanation: correct ? "" : row.feedback,
+  };
+}
 
 function readJson<T>(relativeFile: string): T {
   return JSON.parse(readFileSync(resolveSeedDocPath(relativeFile), "utf8")) as T;
@@ -64,15 +93,20 @@ function buildTest(opts: {
   };
 }
 
-const algebraGrades: GradeRow[] = readJson("homework_grader/homework_grader_testing.json").expectedOutputs[
-  "Final Output"
-];
+function readGradeRows(relativeFile: string): GradeRow[] {
+  const rows = readJson<{ expectedOutputs: { "Final Output": (GradeRow | LegacyGradeRow)[] } }>(
+    relativeFile,
+  ).expectedOutputs["Final Output"];
+  return rows.map((row) => ("feedback" in row ? fromLegacyFeedback(row) : row));
+}
+
+const algebraGrades: GradeRow[] = readGradeRows("homework_grader/homework_grader_testing.json");
 
 writeTest(
   "homework_grader/homework_grader_testing.json",
   buildTest({
     description:
-      "Homework Grader — Algebra II classroom sample. Full step-by-step expected JSON; feedback fields are LLM-checked.",
+      "Homework Grader — Algebra II classroom sample. Full step-by-step expected JSON; mistake_explanation is LLM-checked.",
     inputs: {
       "Marking Schema": "homework_marking_schema.json",
       "Student Submissions": [
@@ -87,48 +121,44 @@ writeTest(
 );
 
 const firstGradeGrades: GradeRow[] = [
-  {
+  gradeRow({
     student_label: "Riley Park",
     section_id: "A",
     score: 2,
     max_score: 2,
-    feedback: "Correct addition with working shown; total is 5.",
-  },
-  {
+  }),
+  gradeRow({
     student_label: "Riley Park",
     section_id: "A",
     score: 2,
     max_score: 2,
-    feedback: "Correct answer 7 with counting shown.",
-  },
-  {
+  }),
+  gradeRow({
     student_label: "Riley Park",
     section_id: "A",
     score: 1,
     max_score: 2,
-    feedback: "Good counting-back attempt but final answer 5 is incorrect (should be 4).",
-  },
-  {
+    mistake_explanation: "Good counting-back attempt but final answer 5 is incorrect (should be 4).",
+  }),
+  gradeRow({
     student_label: "Riley Park",
     section_id: "B",
     score: 2,
     max_score: 2,
-    feedback: "Correct — a triangle has 3 sides.",
-  },
-  {
+  }),
+  gradeRow({
     student_label: "Riley Park",
     section_id: "B",
     score: 2,
     max_score: 2,
-    feedback: "Correct — 8 is bigger than 5.",
-  },
+  }),
 ];
 
 writeTest(
   "homework_grader/homework_first_grade_testing.json",
   buildTest({
     description:
-      "Homework Grader — 1st grade worksheet smoke test. Deterministic scores exact; feedback is LLM-checked.",
+      "Homework Grader — 1st grade worksheet smoke test. Scores and correct are exact; mistake_explanation is LLM-checked.",
     inputs: {
       "Marking Schema": "homework_marking_schema_first_grade.json",
       "Student Submissions": ["homework_student_riley_first_grade.md"],
@@ -139,42 +169,39 @@ writeTest(
 );
 
 const universityGrades: GradeRow[] = [
-  {
+  gradeRow({
     student_label: "Priya Nair",
     section_id: "A",
     score: 10,
     max_score: 10,
-    feedback: "Clear u-substitution, correct bounds, and final value e − 1.",
-  },
-  {
+  }),
+  gradeRow({
     student_label: "Priya Nair",
     section_id: "A",
     score: 10,
     max_score: 10,
-    feedback: "Correct exponential rewrite and limit e².",
-  },
-  {
+  }),
+  gradeRow({
     student_label: "Priya Nair",
     section_id: "B",
     score: 10,
     max_score: 10,
-    feedback: "Ratio test set up correctly with limit 1/e < 1.",
-  },
-  {
+  }),
+  gradeRow({
     student_label: "Priya Nair",
     section_id: "B",
     score: 2,
     max_score: 10,
-    feedback:
+    mistake_explanation:
       "Invalid comparison with ∑1/n² — comparison test hypotheses not satisfied; at most 2 pts per rubric.",
-  },
+  }),
 ];
 
 writeTest(
   "homework_grader/homework_university_testing.json",
   buildTest({
     description:
-      "Homework Grader — university real analysis (LaTeX). Full pipeline test including LLM grading feedback.",
+      "Homework Grader — university real analysis (LaTeX). Full pipeline test; mistake_explanation is LLM-checked.",
     inputs: {
       "Marking Schema": "homework_marking_schema_university.json",
       "Student Submissions": ["homework_student_priya_university.md"],

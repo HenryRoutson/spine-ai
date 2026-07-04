@@ -180,7 +180,7 @@ export class SupabaseStore implements Store {
       }
     }
 
-    const vision = await this.db.from("doc_vision_cache").select("*");
+    const vision = await this.db.from("doc_vision_cache").select("*").eq("user_id", this.scopedUserId);
     if (vision.error) {
       this.hasVisionCacheTable = !isMissingSchemaError(vision.error);
       if (!isMissingSchemaError(vision.error)) throw vision.error;
@@ -199,7 +199,7 @@ export class SupabaseStore implements Store {
       }
     }
 
-    const parser = await this.db.from("doc_parser_cache").select("*");
+    const parser = await this.db.from("doc_parser_cache").select("*").eq("user_id", this.scopedUserId);
     if (parser.error) {
       this.hasParserCacheTable = !isMissingSchemaError(parser.error);
       if (!isMissingSchemaError(parser.error)) throw parser.error;

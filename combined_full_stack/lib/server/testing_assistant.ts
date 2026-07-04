@@ -26,6 +26,7 @@ export type GeneratedTestFile = {
   name: string;
   content: string;
   issues: TestFileIssue[];
+  usageCents: number;
 };
 
 function sanitizeTestFileName(raw: string): string {
@@ -109,5 +110,6 @@ export async function generateTestFile(
     name: sanitizeTestFileName(generated.fileName),
     content: JSON.stringify(test, null, 2),
     issues: validateTestFile(test, project, projectDocs),
+    usageCents: +ledger.totalCents().toFixed(4),
   };
 }

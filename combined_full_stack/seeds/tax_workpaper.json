@@ -115,8 +115,7 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "W-2 wage statement for tax year 2024 as a markdown table of box values",
-      "note": "W-2 wage statement for tax year 2024 as a markdown table of box values"
+      "inputDescription": "W-2 wage statement for tax year 2024 as a markdown table of box values"
     },
     {
       "id": "mod_parse_w2",
@@ -146,8 +145,7 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "1099-MISC supplemental income form as a markdown table",
-      "note": "1099-MISC supplemental income form as a markdown table"
+      "inputDescription": "1099-MISC supplemental income form as a markdown table"
     },
     {
       "id": "mod_combine",
@@ -158,8 +156,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "Parsed W-2 box rows from the first input, ready to merge with the 1099 document",
-      "note": "Parsed W-2 box rows from the first input, ready to merge with the 1099 document"
+      "inputDescription": "Parsed W-2 box rows from the first input, ready to merge with the 1099 document"
     },
     {
       "id": "mod_merge",
@@ -190,8 +187,7 @@
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2600,
-      "avgCostCents": 8,
-      "note": "Merged form tables — parsed W-2 rows and 1099 field rows as JSON arrays"
+      "avgCostCents": 8
     },
     {
       "id": "mod_out",
@@ -203,8 +199,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of WorkpaperField entries sourced from W-2 and 1099 forms",
-      "note": ""
+      "inputDescription": "List of WorkpaperField entries sourced from W-2 and 1099 forms"
     }
   ],
   "strategies": [
@@ -254,12 +249,6 @@
       "type": "text",
       "label": "inference",
       "file": "tax_workpaper/form_1099_misc.md"
-    },
-    {
-      "name": "tax_workpaper_testing.json",
-      "type": "json",
-      "label": "training",
-      "file": "tax_workpaper/tax_workpaper_testing.json"
     }
   ]
 }

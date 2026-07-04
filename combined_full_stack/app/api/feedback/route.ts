@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { apiError, enforceUserRateLimit } from "@/lib/server/api_context";
+import { feedbackBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
 import { HTTP } from "@/lib/server/api-errors";
 import { isAuthSession, requireAuth } from "@/lib/server/require_auth";
 import { saveUserFeedback } from "@/lib/server/user_feedback";
@@ -11,15 +12,11 @@ export async function POST(req: Request) {
   const limited = await enforceUserRateLimit(auth.userId, "feedback");
   if (limited) return limited;
 
-  let body: { message?: string };
-  try {
-    body = (await req.json()) as { message?: string };
-  } catch {
-    return apiError("Invalid JSON body", HTTP.BAD_REQUEST);
-  }
+  const body = await parseRequestJson(req, feedbackBodySchema);
+  if ("error" in body) return apiError(body.error, HTTP.BAD_REQUEST);
 
   try {
-    const entry = await saveUserFeedback(auth, String(body.message ?? ""));
+    const entry = await saveUserFeedback(auth, body.message);
     return NextResponse.json({
       id: entry.id,
       createdAt: entry.createdAt,

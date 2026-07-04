@@ -106,8 +106,7 @@
           "name": "issue",
           "type": "text",
           "optional": true,
-          "description": "Violation description if non-compliant",
-          "deterministic": false
+          "description": "Violation description if non-compliant"
         }
       ]
     }
@@ -123,8 +122,7 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "Markdown expense policy table listing category limits and approval rules",
-      "note": "Markdown expense policy table listing category limits and approval rules"
+      "inputDescription": "Markdown expense policy table listing category limits and approval rules"
     },
     {
       "id": "mod_parse_policy",
@@ -154,8 +152,7 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "Submitted employee expense report as a markdown table of line items",
-      "note": "Submitted employee expense report as a markdown table of line items"
+      "inputDescription": "Submitted employee expense report as a markdown table of line items"
     },
     {
       "id": "mod_combine",
@@ -166,8 +163,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "Parsed policy rows from the first input, ready to merge with the expense report document",
-      "note": "Parsed policy rows from the first input, ready to merge with the expense report document"
+      "inputDescription": "Parsed policy rows from the first input, ready to merge with the expense report document"
     },
     {
       "id": "mod_merge",
@@ -198,8 +194,7 @@
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2800,
-      "avgCostCents": 9,
-      "note": "Merged JSON tables — policy limits in table_a_json and expense lines in table_b_json"
+      "avgCostCents": 9
     },
     {
       "id": "mod_out",
@@ -211,8 +206,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of ComplianceFlag records — one per audited expense line",
-      "note": ""
+      "inputDescription": "List of ComplianceFlag records — one per audited expense line"
     }
   ],
   "strategies": [
@@ -262,12 +256,6 @@
       "type": "text",
       "label": "inference",
       "file": "expense_auditor/expense_report.md"
-    },
-    {
-      "name": "expense_auditor_testing.json",
-      "type": "json",
-      "label": "training",
-      "file": "expense_auditor/expense_auditor_testing.json"
     }
   ]
 }

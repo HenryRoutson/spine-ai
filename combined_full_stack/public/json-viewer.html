@@ -641,7 +641,7 @@ const PALETTE = [
 ];
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function humanize(key) {
   return String(key).replace(/[-_]/g,' ').replace(/([a-z])([A-Z])/g,'$1 $2')
     .replace(/\b\w/g,c=>c.toUpperCase()).trim();

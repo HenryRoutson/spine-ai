@@ -219,6 +219,13 @@ export function ServerLogLineHighlight({ line, level, tag }: { line: string; lev
   )
 }
 
+function isSafeMarkdownHref(href: string | undefined): href is string {
+  if (!href) return false
+  const trimmed = href.trim()
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return true
+  return /^(https?:|mailto:)/i.test(trimmed)
+}
+
 const markdownComponents: Components = {
   h1: ({ children }) => <h1 className="mb-2 text-base font-semibold text-foreground">{children}</h1>,
   h2: ({ children }) => <h2 className="mb-1.5 mt-4 text-sm font-semibold text-foreground">{children}</h2>,
@@ -233,11 +240,14 @@ const markdownComponents: Components = {
     <blockquote className="mb-2 border-l-2 border-primary/40 pl-3 text-muted-foreground">{children}</blockquote>
   ),
   hr: () => <hr className="my-4 border-border" />,
-  a: ({ href, children }) => (
-    <a href={href} className="text-primary underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
-      {children}
-    </a>
-  ),
+  a: ({ href, children }) =>
+    isSafeMarkdownHref(href) ? (
+      <a href={href} className="text-primary underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
+        {children}
+      </a>
+    ) : (
+      <span className="text-muted-foreground">{children}</span>
+    ),
   code: ({ className, children }) =>
     className ? (
       <code className="font-mono text-[11px] text-primary">{children}</code>

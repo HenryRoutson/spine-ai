@@ -55,8 +55,7 @@
           "name": "credit_note",
           "type": "text",
           "optional": true,
-          "description": "Contract credit if any",
-          "deterministic": false
+          "description": "Contract credit if any"
         }
       ]
     }
@@ -72,8 +71,7 @@
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "Vendor SLA uptime report markdown table with measured availability per service",
-      "note": "Vendor SLA uptime report markdown table with measured availability per service"
+      "inputDescription": "Vendor SLA uptime report markdown table with measured availability per service"
     },
     {
       "id": "mod_parse",
@@ -104,8 +102,7 @@
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2200,
-      "avgCostCents": 7,
-      "note": "ParsedTable with rows_json — JSON array of uptime rows from the SLA report"
+      "avgCostCents": 7
     },
     {
       "id": "mod_out",
@@ -117,8 +114,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of SlaBreachRow records — one breach verdict per monitored service",
-      "note": ""
+      "inputDescription": "List of SlaBreachRow records — one breach verdict per monitored service"
     }
   ],
   "strategies": [
@@ -162,12 +158,6 @@
       "type": "text",
       "label": "inference",
       "file": "sla_breach/sla_uptime_report.md"
-    },
-    {
-      "name": "sla_breach_testing.json",
-      "type": "json",
-      "label": "training",
-      "file": "sla_breach/sla_breach_testing.json"
     }
   ]
 }

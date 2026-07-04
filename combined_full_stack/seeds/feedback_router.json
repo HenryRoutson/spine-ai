@@ -48,8 +48,7 @@
           "name": "representative_quote",
           "type": "text",
           "optional": false,
-          "description": "Short quote",
-          "deterministic": false
+          "description": "Short quote"
         }
       ]
     }
@@ -65,8 +64,7 @@
       "cached": true,
       "avgMs": 80,
       "avgCostCents": 0,
-      "inputDescription": "Raw product feedback dump — bullet list of user comments",
-      "note": "Raw product feedback dump — bullet list of user comments"
+      "inputDescription": "Raw product feedback dump — bullet list of user comments"
     },
     {
       "id": "mod_split",
@@ -83,8 +81,7 @@
         {
           "typescript": "(doc)=>doc.content.split(\"\\n\").filter((l)=>l.trim().startsWith(\"-\")).map((l,i)=>({feedback_id:String(i+1),text:l.replace(/^-\\s*/,\"\").trim()}))"
         }
-      ],
-      "note": ""
+      ]
     },
     {
       "id": "mod_route",
@@ -98,8 +95,7 @@
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 1800,
-      "avgCostCents": 4,
-      "note": "List of FeedbackItem objects — one bullet of verbatim user feedback"
+      "avgCostCents": 4
     },
     {
       "id": "mod_out",
@@ -111,8 +107,7 @@
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of RoutedFeedback records — bucket and quote per feedback item",
-      "note": ""
+      "inputDescription": "List of RoutedFeedback records — bucket and quote per feedback item"
     }
   ],
   "strategies": [
@@ -156,12 +151,6 @@
       "type": "text",
       "label": "inference",
       "file": "feedback_router/product_feedback.txt"
-    },
-    {
-      "name": "feedback_router_testing.json",
-      "type": "json",
-      "label": "training",
-      "file": "feedback_router/feedback_router_testing.json"
     }
   ]
 }

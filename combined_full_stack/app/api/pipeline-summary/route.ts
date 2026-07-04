@@ -1,7 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
+import { parseRequestJson, pipelineSummaryBodySchema } from "@/lib/server/api_schemas";
 import { HTTP } from "@/lib/server/api-errors";
 import { requireProjectOr404 } from "@/lib/server/assistant-route";
+import {
+  gateAssistantBilling,
+  PIPELINE_SUMMARY_BILLING_CHART_KEY,
+  recordAssistantBilling,
+} from "@/lib/server/assistant_billing";
 import { UnknownModelError, parseRequestModel } from "@/lib/server/model_catalog";
 import { ensureModelOptionsFresh } from "@/lib/server/openrouter_models";
 import {
@@ -15,16 +21,9 @@ const apiLog = logger("api:pipeline-summary");
 
 export const maxDuration = 120;
 
-type SummaryRequestBody = {
-  projectId: ProjectId;
-  model?: ModelId;
-};
-
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as SummaryRequestBody;
-  const { projectId } = body;
-
-  if (!projectId?.trim()) return apiError("projectId required", HTTP.BAD_REQUEST);
+  const body = await parseRequestJson(req, pipelineSummaryBodySchema);
+  if ("error" in body) return apiError(body.error, HTTP.BAD_REQUEST);
 
   let model: ModelId;
   try {
@@ -38,13 +37,23 @@ export async function POST(req: NextRequest) {
   if (ctx instanceof NextResponse) return ctx;
   const { store } = ctx;
 
-  const projectOrErr = requireProjectOr404(store, projectId, apiLog);
+  const projectOrErr = requireProjectOr404(store, body.projectId as ProjectId, apiLog);
   if (projectOrErr instanceof NextResponse) return projectOrErr;
   const project = projectOrErr;
 
-  apiLog.info(`POST /api/pipeline-summary`, { projectId, model, stepCount: project.modules.length });
+  let billingKey;
+  try {
+    billingKey = await gateAssistantBilling();
+  } catch (err) {
+    const billed = billingResponse(err);
+    if (billed) return billed;
+    throw err;
+  }
+
+  apiLog.info(`POST /api/pipeline-summary`, { projectId: body.projectId, model, stepCount: project.modules.length });
 
   const encoder = new TextEncoder();
+  const startedAt = Date.now();
   const bodyStream = new ReadableStream({
     async start(controller) {
       const push = (payload: unknown) => {
@@ -52,10 +61,22 @@ export async function POST(req: NextRequest) {
       };
       try {
         await ensureModelOptionsFresh();
-        const text = await summarizePipelineStream(project, model, (delta) => {
+        const { text, usageCents } = await summarizePipelineStream(project, model, (delta) => {
           push({ type: PIPELINE_SUMMARY_STREAM_EVENT.DELTA, text: delta });
         });
-        push({ type: PIPELINE_SUMMARY_STREAM_EVENT.DONE, text });
+        if (usageCents > 0) {
+          await recordAssistantBilling(billingKey, {
+            store,
+            projectId: project.id,
+            model,
+            message: `Pipeline summary: ${project.name}`,
+            responseMessage: text.slice(0, 600),
+            usageCents,
+            startedAt,
+            chartKey: PIPELINE_SUMMARY_BILLING_CHART_KEY,
+          });
+        }
+        push({ type: PIPELINE_SUMMARY_STREAM_EVENT.DONE, text, usageCents });
       } catch (err) {
         push({ type: PIPELINE_SUMMARY_STREAM_EVENT.ERROR, error: (err as Error).message });
       } finally {

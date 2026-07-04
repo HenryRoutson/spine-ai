@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { apiError } from "@/lib/server/api_context";
+import { apiError, enforceUserRateLimit } from "@/lib/server/api_context";
 import { HTTP, unknownJob } from "@/lib/server/api-errors";
 import {
   getJobForProgress,
@@ -19,6 +19,9 @@ const apiLog = logger("api:runs:progress");
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const auth = await requireAuth();
   if (!isAuthSession(auth)) return auth;
+
+  const limited = await enforceUserRateLimit(auth.userId, "poll");
+  if (limited) return limited;
 
   const { id } = await ctx.params;
   const jobDb = await openJobDb();
