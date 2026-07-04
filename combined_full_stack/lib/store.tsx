@@ -55,6 +55,13 @@ import { NoProjectsPage } from "@/components/no-projects-page"
 
 export type StoreMode = "workspace" | "picker"
 
+export type BillingCreditHistoryEntry = {
+  creditKey: string
+  amountCents: number
+  source: "checkout" | "invoice"
+  createdAt: string
+}
+
 export type BillingAccountView = {
   balanceCents: number
   totalBilledCents: number
@@ -65,6 +72,7 @@ export type BillingAccountView = {
   topupOptionsCents: number[]
   subCentsPerMonth: number
   billingCapCents: number
+  creditHistory: BillingCreditHistoryEntry[]
 }
 
 interface ServerState {
@@ -232,7 +240,8 @@ export function StoreProvider({
   }, [])
 
   const refreshBilling = useCallback(async () => {
-    setBillingAccount(await apiJson<BillingAccountView>(API_ROUTES.billing))
+    const data = await apiJson<BillingAccountView>(API_ROUTES.billing)
+    setBillingAccount({ ...data, creditHistory: data.creditHistory ?? [] })
   }, [])
 
   const fetchState = useCallback(async (projectId: string) => {

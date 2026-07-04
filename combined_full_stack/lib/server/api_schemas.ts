@@ -310,7 +310,7 @@ export const assistantChatSaveBodySchema = z
 
 export const billingConfirmBodySchema = z
   .object({
-    sessionId: z.string().trim().min(1).max(256),
+    sessionId: z.string().trim().regex(/^cs_[a-zA-Z0-9_]{8,200}$/, "invalid Stripe session id"),
   })
   .strict();
 

@@ -7,22 +7,27 @@ import {
   TOPUP_OPTIONS_CENTS,
   type BillingUserKey,
   loadBillingAccount,
+  loadBillingCreditHistory,
 } from "@/lib/server/billing_account";
 import { logger } from "@/lib/server/server_logger";
 
 const apiLog = logger("api:billing");
 
 export async function GET() {
-  const ctx = await requireAuthStore();
+  const ctx = await requireAuthStore("billing");
   if (ctx instanceof NextResponse) return ctx;
 
   const key = ctx.auth.userId as unknown as BillingUserKey;
-  const account = await loadBillingAccount(key);
+  const [account, creditHistory] = await Promise.all([
+    loadBillingAccount(key),
+    loadBillingCreditHistory(key),
+  ]);
   apiLog.debug(`GET /api/billing`, {
     key,
     balanceCents: account.balanceCents,
     totalUsageCents: account.totalUsageCents,
     subscribed: account.subscribed,
+    creditHistoryCount: creditHistory.length,
   });
   return NextResponse.json({
     balanceCents: account.balanceCents,
@@ -35,5 +40,6 @@ export async function GET() {
     topupOptionsCents: [...TOPUP_OPTIONS_CENTS],
     subCentsPerMonth: SUB_CENTS_PER_MONTH,
     billingCapCents: BILLING_CAP_CENTS,
+    creditHistory,
   });
 }

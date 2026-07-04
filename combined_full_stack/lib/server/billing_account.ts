@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type Stripe from "stripe";
 import { createClient } from "@/utils/supabase/server";
+import { getSiteUrl } from "@/utils/supabase/site_url";
 import { dataDir } from "./config";
 import { createAdminClient } from "./supabase_admin";
 import {
@@ -34,6 +35,13 @@ export type BillingAccount = {
   totalUsageCents: number;
   subscribed: boolean;
   creditedSessions: string[];
+};
+
+export type BillingCreditHistoryEntry = {
+  creditKey: string;
+  amountCents: number;
+  source: "checkout" | "invoice";
+  createdAt: string;
 };
 
 export {
@@ -88,6 +96,115 @@ function saveJsonAccount(key: BillingUserKey, account: BillingAccount): void {
 function isMissingBillingTable(error: { message?: string }): boolean {
   const msg = error.message ?? "";
   return msg.includes("billing_accounts") || msg.includes("schema cache");
+}
+
+function isMissingCreditLedgerTable(error: { message?: string; code?: string }): boolean {
+  const msg = error.message ?? "";
+  return msg.includes("billing_credit_ledger") || msg.includes("schema cache");
+}
+
+type BillingCreditSource = "checkout" | "invoice";
+
+function checkoutSessionUserId(session: Stripe.Checkout.Session, key: BillingUserKey): void {
+  if (session.client_reference_id !== key) {
+    throw new Error("Checkout session belongs to a different account");
+  }
+  const metaUser = session.metadata?.user_id;
+  if (metaUser && metaUser !== key) {
+    throw new Error("Checkout session belongs to a different account");
+  }
+}
+
+// AI : never credit more than Stripe collected — amounts must match server-configured prices.
+function checkoutCreditCents(session: Stripe.Checkout.Session): number {
+  if (session.payment_status !== "paid") throw new Error("Checkout not paid");
+  if (session.amount_total == null || session.amount_total <= 0) {
+    throw new Error("Checkout has no paid amount");
+  }
+  const total = session.amount_total;
+  if (session.mode === "payment") {
+    if (!TOPUP_OPTIONS_CENTS.includes(total as (typeof TOPUP_OPTIONS_CENTS)[number])) {
+      throw new Error("Checkout amount does not match a valid top-up");
+    }
+    return total;
+  }
+  if (session.mode === "subscription") {
+    if (total !== SUB_CENTS_PER_MONTH) {
+      throw new Error("Checkout amount does not match subscription price");
+    }
+    return total;
+  }
+  throw new Error("Unsupported checkout mode");
+}
+
+async function claimBillingCredit(
+  key: BillingUserKey,
+  creditKey: string,
+  creditCents: number,
+  source: BillingCreditSource,
+  subscribed?: boolean,
+): Promise<{ claimed: boolean; account: BillingAccount }> {
+  const credit = toWholeCents(creditCents);
+  if (credit <= 0) return { claimed: false, account: await loadBillingAccount(key) };
+
+  let account = await loadBillingAccount(key);
+  if (account.creditedSessions.includes(creditKey)) {
+    return { claimed: false, account };
+  }
+
+  if (!isLocalJsonBillingKey(key)) {
+    const admin = await createAdminClient();
+    if (admin) {
+      const { error } = await admin.from("billing_credit_ledger").insert({
+        credit_key: creditKey,
+        user_id: key,
+        amount_cents: credit,
+        source,
+      });
+      if (error?.code === "23505") {
+        billLog.info(`claimBillingCredit duplicate`, { key, creditKey, source });
+        return { claimed: false, account: await loadBillingAccount(key) };
+      }
+      if (error && !isMissingCreditLedgerTable(error)) throw error;
+    }
+  }
+
+  account = await loadBillingAccount(key);
+  if (account.creditedSessions.includes(creditKey)) {
+    return { claimed: false, account };
+  }
+  if (!canBill(account, credit)) throw new BillingError("cap_reached");
+
+  const next: BillingAccount = {
+    ...account,
+    balanceCents: account.balanceCents + credit,
+    totalBilledCents: account.totalBilledCents + credit,
+    subscribed: subscribed ?? account.subscribed,
+    creditedSessions: [...account.creditedSessions, creditKey],
+  };
+  await saveBillingAccount(key, next);
+  billLog.info(`claimBillingCredit ok`, { key, creditKey, credit, source });
+  return { claimed: true, account: next };
+}
+
+async function seedSupabaseBillingAccount(key: BillingUserKey): Promise<BillingAccount> {
+  const admin = await createAdminClient();
+  if (!admin) return { ...EMPTY };
+  const row = {
+    user_id: key,
+    balance_cents: toExactCents(NEW_ACCOUNT_BALANCE_CENTS),
+    total_billed_cents: 0,
+    total_usage_cents: 0,
+    subscribed: false,
+    credited_sessions: [] as string[],
+  };
+  const { error } = await admin.from("billing_accounts").insert(row);
+  if (error && error.code !== "23505") {
+    if (!isMissingBillingTable(error)) throw error;
+    return { ...EMPTY };
+  }
+  const loaded = await loadSupabaseAccount(key);
+  return loaded ?? { ...EMPTY };
 }
 
 // AI : prefer service role — webhooks and shared-link runs bill users without their session.
@@ -184,9 +301,14 @@ export async function loadBillingAccount(key: BillingUserKey): Promise<BillingAc
   }
   const row = await loadSupabaseAccount(key);
   if (row) return row;
-  // AI : no Supabase row yet, or billing_accounts table missing — reuse local JSON keyed by user id.
-  const local = loadJsonAccounts()[key] ?? { ...EMPTY };
-  return { ...EMPTY, ...local, totalUsageCents: local.totalUsageCents ?? 0 };
+  try {
+    return await seedSupabaseBillingAccount(key);
+  } catch (err) {
+    if (!isMissingBillingTable(err as { message?: string })) throw err;
+  }
+  const local = loadJsonAccounts()[key];
+  if (local) return { ...EMPTY, ...local, totalUsageCents: local.totalUsageCents ?? 0 };
+  return { ...EMPTY };
 }
 
 export async function saveBillingAccount(key: BillingUserKey, account: BillingAccount): Promise<void> {
@@ -256,7 +378,7 @@ export async function billRunUsage(key: BillingUserKey, cents: number): Promise<
 export async function createCheckoutSession(
   key: BillingUserKey,
   mode: "payment" | "subscription",
-  origin: string,
+  _origin: string,
   topupCents?: number,
 ): Promise<{ sessionId: string; url: string | null }> {
   const account = await loadBillingAccount(key);
@@ -270,6 +392,8 @@ export async function createCheckoutSession(
         })()
       : SUB_CENTS_PER_MONTH;
   if (!canBill(account, amount)) throw new BillingError("cap_reached");
+
+  const siteUrl = getSiteUrl().replace(/\/$/, "");
 
   const lineItem =
     mode === "payment"
@@ -292,8 +416,8 @@ export async function createCheckoutSession(
   const session = await getStripe().checkout.sessions.create({
     mode,
     line_items: [{ ...lineItem, quantity: 1 }],
-    success_url: `${origin}/?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/?canceled=1`,
+    success_url: `${siteUrl}/?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${siteUrl}/?canceled=1`,
     client_reference_id: key,
     metadata: { user_id: key },
     ...(mode === "subscription"
@@ -309,28 +433,17 @@ export async function confirmCheckoutSession(
   key: BillingUserKey,
   sessionId: string,
 ): Promise<{ account: BillingAccount; creditedCents: number }> {
-  const account = await loadBillingAccount(key);
-  if (account.creditedSessions.includes(sessionId)) {
-    return { account, creditedCents: 0 };
-  }
-
   const session = await getStripe().checkout.sessions.retrieve(sessionId);
-  if (session.payment_status !== "paid" || session.amount_total == null) {
-    return { account, creditedCents: 0 };
-  }
-  if (session.client_reference_id && session.client_reference_id !== key) {
-    throw new Error("Checkout session belongs to a different account");
-  }
-
-  const next: BillingAccount = {
-    ...account,
-    balanceCents: account.balanceCents + session.amount_total,
-    totalBilledCents: account.totalBilledCents + session.amount_total,
-    subscribed: account.subscribed || session.mode === "subscription",
-    creditedSessions: [...account.creditedSessions, sessionId],
-  };
-  await saveBillingAccount(key, next);
-  return { account: next, creditedCents: session.amount_total };
+  checkoutSessionUserId(session, key);
+  const creditCents = checkoutCreditCents(session);
+  const { claimed, account } = await claimBillingCredit(
+    key,
+    sessionId,
+    creditCents,
+    "checkout",
+    session.mode === "subscription" ? true : undefined,
+  );
+  return { account, creditedCents: claimed ? creditCents : 0 };
 }
 
 // AI : monthly renewal credits — invoice.paid webhook grants SUB_CENTS_PER_MONTH (idempotent per invoice id).
@@ -372,25 +485,19 @@ export async function handleStripeWebhook(event: Stripe.Event): Promise<void> {
     return;
   }
 
-  const account = await loadBillingAccount(userId);
-  const creditKey = `inv_${invoice.id}`;
-  if (account.creditedSessions.includes(creditKey)) return;
-
-  const creditCents =
-    invoice.amount_paid === SUB_CENTS_PER_MONTH ? invoice.amount_paid : SUB_CENTS_PER_MONTH;
-  if (!canBill(account, creditCents)) {
-    billLog.warn(`invoice.paid cap reached`, { invoiceId: invoice.id, userId });
+  const creditCents = toWholeCents(invoice.amount_paid);
+  if (creditCents !== SUB_CENTS_PER_MONTH) {
+    billLog.warn(`invoice.paid unexpected amount — skipping credit`, {
+      invoiceId: invoice.id,
+      userId,
+      amountPaid: invoice.amount_paid,
+      expected: SUB_CENTS_PER_MONTH,
+    });
     return;
   }
 
-  const next: BillingAccount = {
-    ...account,
-    balanceCents: account.balanceCents + creditCents,
-    totalBilledCents: account.totalBilledCents + creditCents,
-    subscribed: true,
-    creditedSessions: [...account.creditedSessions, creditKey],
-  };
-  await saveBillingAccount(userId, next);
+  const creditKey = `inv_${invoice.id}`;
+  await claimBillingCredit(userId, creditKey, creditCents, "invoice", true);
   billLog.info(`invoice.paid credited`, { invoiceId: invoice.id, userId, creditCents });
 }
 
@@ -399,4 +506,29 @@ export function verifyStripeWebhookPayload(body: string, signature: string | nul
   if (!secret) throw new Error("STRIPE_WEBHOOK_SECRET missing");
   if (!signature) throw new Error("Missing stripe-signature header");
   return getStripe().webhooks.constructEvent(body, signature, secret);
+}
+
+// AI : paid credit ledger for Billing tab — RLS-scoped read via service role after auth gate.
+export async function loadBillingCreditHistory(key: BillingUserKey): Promise<BillingCreditHistoryEntry[]> {
+  const admin = await createAdminClient();
+  if (admin) {
+    const { data, error } = await admin
+      .from("billing_credit_ledger")
+      .select("credit_key, amount_cents, source, created_at")
+      .eq("user_id", key)
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (!error && data) {
+      return data.map((row) => ({
+        creditKey: row.credit_key as string,
+        amountCents: Number(row.amount_cents),
+        source: row.source as BillingCreditHistoryEntry["source"],
+        createdAt: row.created_at as string,
+      }));
+    }
+    if (error && !isMissingCreditLedgerTable(error)) {
+      billLog.warn(`loadBillingCreditHistory failed`, { key, error: error.message });
+    }
+  }
+  return [];
 }

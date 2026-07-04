@@ -10,7 +10,7 @@ import { STRIPE_ENABLED } from "@/lib/stripe-enabled";
 
 export async function POST(req: NextRequest) {
   if (!STRIPE_ENABLED) return apiError("Stripe is disabled", HTTP.UNAVAILABLE);
-  const ctx = await requireAuthStore();
+  const ctx = await requireAuthStore("billing");
   if (ctx instanceof NextResponse) return ctx;
 
   const parsed = await parseRequestJson(req, billingCheckoutBodySchema);

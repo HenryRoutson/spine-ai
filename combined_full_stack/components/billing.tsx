@@ -6,7 +6,7 @@ import { JSON_HEADERS } from "@/lib/api-client"
 import { formatCents } from "@/lib/format"
 import { useMemo, useState } from "react"
 import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts"
-import { useStore } from "@/lib/store"
+import { useStore, type BillingAccountView } from "@/lib/store"
 import { billingSeries, totalSaved, totalUsageFromRuns } from "@/lib/billing"
 import { redirectToCheckout } from "@/lib/stripe-client"
 import { STRIPE_ENABLED } from "@/lib/stripe-enabled"
@@ -35,6 +35,16 @@ function chartYMaxCents(peakCents: number): number {
 }
 
 type BillingScope = "all" | "project"
+
+function creditHistoryLabel(source: BillingAccountView["creditHistory"][number]["source"]): string {
+  return source === "invoice" ? "Subscription renewal" : "Checkout payment"
+}
+
+function formatCreditWhen(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+}
 
 export function Billing() {
   const { runs, billingRuns, project, billingAccount, refreshBilling } = useStore()
@@ -345,6 +355,32 @@ export function Billing() {
           ) : (
             <p className="px-4 py-6 font-mono text-xs text-muted-foreground">
               {hasRuns ? "All recent runs were cache hits — no billed spend yet." : "No cost data yet."}
+            </p>
+          )}
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border">
+          <div className="border-b border-border px-4 py-2.5">
+            <h3 className="text-sm font-medium">Credit history</h3>
+            <p className="font-mono text-[10px] text-muted-foreground">
+              Paid top-ups and subscription credits · welcome {formatCents(billingAccount?.freeCreditCents ?? 0)} not listed
+            </p>
+          </div>
+          {billingAccount?.creditHistory.length ? (
+            <ul className="divide-y divide-border">
+              {billingAccount.creditHistory.map((entry) => (
+                <li key={entry.creditKey} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
+                  <span className="w-36 shrink-0 font-mono text-[10px] text-muted-foreground">
+                    {formatCreditWhen(entry.createdAt)}
+                  </span>
+                  <span className="min-w-0 flex-1 font-mono text-xs">{creditHistoryLabel(entry.source)}</span>
+                  <span className="font-mono text-xs text-primary">+{formatCents(entry.amountCents)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="px-4 py-6 font-mono text-xs text-muted-foreground">
+              No paid credits yet — top up or subscribe to see entries here.
             </p>
           )}
         </div>
