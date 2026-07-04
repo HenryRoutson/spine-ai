@@ -182,6 +182,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const pendingSaveRef = useRef<{ id: string; body: string } | null>(null)
   const hydratedRef = useRef(false)
   const prefetchCache = useRef(new Map<string, PrefetchEntry>())
+  // AI : ignore in-flight /api/state responses that started before a delete switched projects.
+  const stateLoadGenRef = useRef(0)
+  // AI : filter stale refetches that still list projects the user already deleted this session.
+  const deletedProjectIdsRef = useRef(new Set<string>())
 
   const clearSaveError = useCallback(() => setSaveError(null), [])
 
@@ -239,9 +243,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const applyState = useCallback(
     (data: ServerState, projectId: string) => {
       setLoadError(null)
+      const tombstones = deletedProjectIdsRef.current
+      for (const id of [...tombstones]) {
+        if (!data.projects.some((p) => p.id === id)) tombstones.delete(id)
+      }
+      const visibleProjects = data.projects.filter((p) => !tombstones.has(p.id))
       setState((prev) => {
         // AI : keep in-flight lastOpenedAt when refetch races the open-stamp PUT
-        const mergedProjects = data.projects.map((p) => {
+        const mergedProjects = visibleProjects.map((p) => {
           const local = prev?.projects.find((x) => x.id === p.id)
           if (!local?.lastOpenedAt) return p
           if (!p.lastOpenedAt || local.lastOpenedAt > p.lastOpenedAt) return { ...p, lastOpenedAt: local.lastOpenedAt }
@@ -249,9 +258,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })
         return { ...data, projects: mergedProjects, docs: dedupeDocsNewestByName(data.docs) }
       })
-      const resolved = resolveActiveProject(data.projects, projectId)
+      const resolved = resolveActiveProject(visibleProjects, projectId)
       const activeId = resolved?.id ?? ""
-      if (!projectId || !data.projects.some((p) => p.id === projectId)) setActiveProjectId(activeId)
+      if (!projectId || !visibleProjects.some((p) => p.id === projectId)) setActiveProjectId(activeId)
       refreshBilling().catch(console.error) // AI : billing failure must not block pipeline UI
     },
     [refreshBilling],
@@ -286,6 +295,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let alive = true
+    const loadGen = stateLoadGenRef.current
     const cached = activeProjectId ? prefetchCache.current.get(activeProjectId) : undefined
     const instant = !!cached?.data
     // AI : prefetched project data applies without blanking the main pane.
@@ -293,7 +303,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
     loadProjectState(activeProjectId)
       .then((data) => {
-        if (!alive) return
+        if (!alive || loadGen !== stateLoadGenRef.current) return
         applyState(data, activeProjectId)
       })
       .catch((err) => {
@@ -444,8 +454,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [persistProject])
 
   const deleteProject = useCallback(
-    (id: string): Promise<void> =>
-      apiJson<{ ok: true }>(API_ROUTES.project(id), { method: "DELETE" })
+    (id: string): Promise<void> => {
+      // AI : drop stale prefetches and debounced saves so a project switch cannot resurrect this row.
+      deletedProjectIdsRef.current.add(id)
+      prefetchCache.current.clear()
+      stateLoadGenRef.current += 1
+      if (pendingSaveRef.current?.id === id) {
+        if (saveTimer.current) clearTimeout(saveTimer.current)
+        saveTimer.current = null
+        pendingSaveRef.current = null
+      }
+      return apiJson<{ ok: true }>(API_ROUTES.project(id), { method: "DELETE" })
         .then(() => {
           // AI : deleting the last project is allowed — zero projects renders NoProjectsPage below.
           let nextActiveId: string | undefined
@@ -457,13 +476,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             if (activeProjectId === id) nextActiveId = mostRecentlyOpenedProject(nextProjects)?.id
             return { ...prev, projects: nextProjects }
           })
+          stateLoadGenRef.current += 1
           if (nextActiveId) selectActiveProject(nextActiveId)
           else if (emptied) setActiveProjectId("")
         })
         .catch((err) => {
+          deletedProjectIdsRef.current.delete(id)
           setSaveError(err instanceof Error ? err.message : "Failed to delete project")
           throw err
-        }),
+        })
+    },
     [activeProjectId, selectActiveProject],
   )
 

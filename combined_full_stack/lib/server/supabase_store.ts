@@ -2,9 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // AI : TODO refactor (prod) — add original doc bytes via Supabase Storage (see store.ts saveOriginalDocBytes).
 // AI : TODO bug (prod) — user-uploaded PDF/image bytes lost on redeploy; GET /api/docs/[id]/file 404s.
 // AI : adopted from backend_with_users/ — implements the same Store contract, so
-// AI : runPipeline & co accept this store unchanged. RLS scopes every row to the
-// AI : signed-in user behind `db`; no user_id handling anywhere in app code.
+// AI : runPipeline & co accept this store unchanged. Session JWT + explicit user_id
+// AI : on writes keep rows scoped to the signed-in user.
 import { hashContent, type Store } from "./store";
+import type { user_id_string } from "./require_auth";
 import { storeErrorMessage } from "./errors";
 import { migrateProjectModules } from "./validity";
 import { stripSharedModels } from "./builtin_models";
@@ -88,32 +89,44 @@ export class SupabaseStore implements Store {
     runProjects: {} as Record<string, ProjectId>,
   };
   private cacheIndex = createParserVisionCacheIndex();
-  private pending: PromiseLike<{ error: unknown }>[] = [];
+  private pendingRest: PromiseLike<{ error: unknown }>[] = [];
+  // AI : last upsert wins per project id — lets flush drop rows deleted by a concurrent request.
+  private pendingProjectUpserts = new Map<ProjectId, PromiseLike<{ error: unknown }>>();
+  private projectIdsAtInit = new Set<ProjectId>();
+  private createdProjectIds = new Set<ProjectId>();
   private hasFingerprintColumn = false;
   private hasVisionCacheTable = false;
   private hasParserCacheTable = false;
 
   constructor(
     private db: SupabaseClient,
-    private scopedUserId?: string,
+    private scopedUserId: user_id_string,
   ) {}
 
-  private rowUserId(): string | undefined {
-    return this.scopedUserId;
+  private withUserId<T extends Record<string, unknown>>(row: T): T {
+    return { ...row, user_id: this.scopedUserId };
   }
 
-  private withUserId<T extends Record<string, unknown>>(row: T): T {
-    const uid = this.rowUserId();
-    return uid ? { ...row, user_id: uid } : row;
+  // AI : Supabase DELETE with RLS deny returns 204 + 0 rows — treat that as failure.
+  private queueProjectDelete(id: ProjectId): void {
+    this.pendingRest.push(
+      (async () => {
+        const { data, error } = await this.db
+          .from("projects")
+          .delete()
+          .eq("user_id", this.scopedUserId)
+          .eq("id", id)
+          .select("id");
+        if (error) return { error };
+        if (!data?.length) return { error: new Error(`DELETE projects/${id} matched 0 rows`) };
+        return { error: null };
+      })(),
+    );
   }
 
   async init(): Promise<void> {
-    let projectsQ = this.db.from("projects").select("data");
-    let docsQ = this.db.from("docs").select("*").order("uploaded_at", { ascending: false });
-    if (this.scopedUserId) {
-      projectsQ = projectsQ.eq("user_id", this.scopedUserId);
-      docsQ = docsQ.eq("user_id", this.scopedUserId);
-    }
+    let projectsQ = this.db.from("projects").select("data").eq("user_id", this.scopedUserId);
+    let docsQ = this.db.from("docs").select("*").order("uploaded_at", { ascending: false }).eq("user_id", this.scopedUserId);
     const [projects, docs] = await Promise.all([projectsQ, docsQ]);
     for (const r of [projects, docs]) if (r.error) throw r.error;
 
@@ -122,7 +135,7 @@ export class SupabaseStore implements Store {
       .from("runs")
       .select("project_id, started_at, data, fingerprint")
       .order("started_at", { ascending: false });
-    if (this.scopedUserId) runsWithFpQ = runsWithFpQ.eq("user_id", this.scopedUserId);
+    runsWithFpQ = runsWithFpQ.eq("user_id", this.scopedUserId);
     const runsWithFp = await runsWithFpQ;
     if (runsWithFp.error?.message?.includes("fingerprint")) {
       this.hasFingerprintColumn = false;
@@ -130,7 +143,7 @@ export class SupabaseStore implements Store {
         .from("runs")
         .select("project_id, started_at, data")
         .order("started_at", { ascending: false });
-      if (this.scopedUserId) runsLegacyQ = runsLegacyQ.eq("user_id", this.scopedUserId);
+      runsLegacyQ = runsLegacyQ.eq("user_id", this.scopedUserId);
       const runsLegacy = await runsLegacyQ;
       if (runsLegacy.error) throw runsLegacy.error;
       runRows = (runsLegacy.data ?? []) as RunRow[];
@@ -141,6 +154,7 @@ export class SupabaseStore implements Store {
     }
 
     this.state.projects = (projects.data ?? []).map((row) => row.data as Project);
+    this.projectIdsAtInit = new Set(this.state.projects.map((p) => p.id));
     for (const row of (docs.data ?? []) as DocRow[]) {
       this.state.docs.push({
         id: row.id as DocId,
@@ -160,7 +174,7 @@ export class SupabaseStore implements Store {
       this.state.runs.push(run);
       this.state.runProjects[run.id] = row.project_id as ProjectId;
       if (this.hasFingerprintColumn && fingerprint && !row.fingerprint) {
-        this.pending.push(
+        this.pendingRest.push(
           this.db.from("runs").update({ fingerprint }).eq("id", run.id),
         );
       }
@@ -227,9 +241,12 @@ export class SupabaseStore implements Store {
     const migrated = migrateProjectModules(p);
     const toPersist = { ...migrated, models: stripSharedModels(migrated.models) };
     const i = this.state.projects.findIndex((x) => x.id === toPersist.id);
-    if (i === -1) this.state.projects.push(toPersist);
-    else this.state.projects[i] = toPersist;
-    this.pending.push(
+    if (i === -1) {
+      this.state.projects.push(toPersist);
+      this.createdProjectIds.add(toPersist.id);
+    } else this.state.projects[i] = toPersist;
+    this.pendingProjectUpserts.set(
+      toPersist.id,
       this.db.from("projects").upsert(this.withUserId({ id: toPersist.id, data: toPersist }), {
         onConflict: "user_id,id",
       }),
@@ -240,6 +257,9 @@ export class SupabaseStore implements Store {
     const i = this.state.projects.findIndex((p) => p.id === id);
     if (i === -1) return false;
     this.state.projects.splice(i, 1);
+    this.pendingProjectUpserts.delete(id);
+    this.projectIdsAtInit.delete(id);
+    this.createdProjectIds.delete(id);
     const runIds = new Set(
       Object.entries(this.state.runProjects)
         .filter(([, pid]) => pid === id)
@@ -247,9 +267,12 @@ export class SupabaseStore implements Store {
     );
     this.state.runs = this.state.runs.filter((r) => !runIds.has(r.id));
     for (const rid of runIds) delete this.state.runProjects[rid];
-    this.pending.push(this.db.from("projects").delete().eq("id", id));
-    if (runIds.size)
-      this.pending.push(this.db.from("runs").delete().eq("project_id", id));
+    this.queueProjectDelete(id);
+    if (runIds.size) {
+      this.pendingRest.push(
+        this.db.from("runs").delete().eq("user_id", this.scopedUserId).eq("project_id", id),
+      );
+    }
     return true;
   }
 
@@ -273,7 +296,7 @@ export class SupabaseStore implements Store {
     const payload: ParserCacheRow = { ...row, createdAt: row.createdAt ?? Date.now() };
     indexParserRow(this.cacheIndex, payload);
     if (!this.hasParserCacheTable) return;
-    this.pending.push(
+    this.pendingRest.push(
       this.db.from("doc_parser_cache").upsert(
         {
           cache_key: row.key,
@@ -296,7 +319,7 @@ export class SupabaseStore implements Store {
     const payload: VisionCacheRow = { ...row, createdAt: row.createdAt ?? Date.now() };
     indexVisionRow(this.cacheIndex, payload);
     if (!this.hasVisionCacheTable) return;
-    this.pending.push(
+    this.pendingRest.push(
       this.db.from("doc_vision_cache").upsert(
         {
           cache_key: row.key,
@@ -324,7 +347,7 @@ export class SupabaseStore implements Store {
     this.state.docs[i] = doc;
     const content = this.state.contents.get(id);
     if (content !== undefined) {
-      this.pending.push(
+      this.pendingRest.push(
         this.db.from("docs").upsert(
           this.withUserId({
             id,
@@ -360,7 +383,7 @@ export class SupabaseStore implements Store {
       };
       this.state.docs = [doc, ...this.state.docs.filter((_, j) => j !== i)];
       this.state.contents.set(id, content);
-      this.pending.push(
+      this.pendingRest.push(
         this.db.from("docs").upsert(
           this.withUserId({
             id,
@@ -388,7 +411,7 @@ export class SupabaseStore implements Store {
     };
     this.state.docs = [doc, ...this.state.docs];
     this.state.contents.set(id, content);
-    this.pending.push(
+    this.pendingRest.push(
       this.db.from("docs").upsert(
         this.withUserId({
           id,
@@ -412,12 +435,12 @@ export class SupabaseStore implements Store {
     this.state.docs.splice(i, 1);
     this.state.contents.delete(id);
     purgeParserVisionCacheForDoc(this.cacheIndex, id);
-    this.pending.push(this.db.from("docs").delete().eq("id", id));
+    this.pendingRest.push(this.db.from("docs").delete().eq("id", id));
     if (this.hasParserCacheTable) {
-      this.pending.push(this.db.from("doc_parser_cache").delete().eq("doc_id", id));
+      this.pendingRest.push(this.db.from("doc_parser_cache").delete().eq("doc_id", id));
     }
     if (this.hasVisionCacheTable) {
-      this.pending.push(this.db.from("doc_vision_cache").delete().eq("doc_id", id));
+      this.pendingRest.push(this.db.from("doc_vision_cache").delete().eq("doc_id", id));
     }
     return true;
   }
@@ -434,7 +457,7 @@ export class SupabaseStore implements Store {
   addRun(projectId: ProjectId, run: PipelineRun): void {
     this.state.runProjects[run.id] = projectId;
     this.state.runs = [run, ...this.state.runs];
-    this.pending.push(
+    this.pendingRest.push(
       this.db.from("runs").upsert(this.withUserId(this.runRow(projectId, run)), { onConflict: "user_id,id" }),
     );
   }
@@ -459,16 +482,34 @@ export class SupabaseStore implements Store {
     const run = { ...this.state.runs[i], ...patch };
     this.state.runs[i] = run;
     const projectId = this.state.runProjects[run.id];
-    this.pending.push(
+    this.pendingRest.push(
       this.db.from("runs").upsert(this.withUserId(this.runRow(projectId, run)), { onConflict: "user_id,id" }),
     );
     return true;
   }
 
+  // AI : drop project upserts when another request deleted the row after this store loaded.
+  private async dropConcurrentlyDeletedProjects(): Promise<void> {
+    if (this.pendingProjectUpserts.size === 0) return;
+    const { data, error } = await this.db.from("projects").select("id").eq("user_id", this.scopedUserId);
+    if (error) return;
+    const dbIds = new Set((data ?? []).map((row) => row.id as ProjectId));
+    for (const id of [...this.pendingProjectUpserts.keys()]) {
+      if (this.createdProjectIds.has(id)) continue;
+      if (this.projectIdsAtInit.has(id) && !dbIds.has(id)) {
+        this.pendingProjectUpserts.delete(id);
+        this.state.projects = this.state.projects.filter((p) => p.id !== id);
+      }
+    }
+  }
+
   // AI : await all queued writes; routes call this once before (or right after) responding.
   async flush(): Promise<void> {
-    const results = await Promise.all(this.pending);
-    this.pending = [];
+    await this.dropConcurrentlyDeletedProjects();
+    const projectUpserts = [...this.pendingProjectUpserts.values()];
+    this.pendingProjectUpserts.clear();
+    const results = await Promise.all([...projectUpserts, ...this.pendingRest]);
+    this.pendingRest = [];
     const failed = results.find((r) => r.error);
     if (failed) throw failed.error;
   }
@@ -491,8 +532,8 @@ export function isMissingSchemaError(error: unknown): boolean {
 
 // AI : a ready store for one signed-in user — zero projects is valid (client shows the
 // AI : no-projects page), so nothing is auto-created here anymore.
-export async function openUserStore(db: SupabaseClient): Promise<SupabaseStore> {
-  const s = new SupabaseStore(db);
+export async function openUserStore(db: SupabaseClient, userId: user_id_string): Promise<SupabaseStore> {
+  const s = new SupabaseStore(db, userId);
   await s.init();
   return s;
 }

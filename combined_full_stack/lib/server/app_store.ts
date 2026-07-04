@@ -1,6 +1,6 @@
 import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
 import { createClient } from "@/utils/supabase/server";
-import { isProductionDeploy, isVercelWithoutSupabase } from "./require_auth";
+import { isProductionDeploy, isVercelWithoutSupabase, type user_id_string } from "./require_auth";
 import {
   ensureSeeded,
   ensureSeedDocs,
@@ -52,17 +52,17 @@ export async function getStore(): Promise<Store> {
     const { data } = await supabase.auth.getClaims();
     if (!data?.claims?.sub) throw new Error(AUTH_SIGN_IN_REQUIRED);
     storeLog.info(`authenticated user — SupabaseStore`, { sub: data.claims.sub });
-    const store = await openUserStore(supabase);
+    const store = await openUserStore(supabase, data.claims.sub as user_id_string);
     return hydrateUserStore(store);
   }
 
   try {
     const supabase = await createClient();
     const { data } = await supabase.auth.getClaims();
-    if (data?.claims) {
+    if (data?.claims?.sub) {
       storeLog.info(`authenticated user — trying SupabaseStore`, { sub: data.claims.sub });
       try {
-        const store = await openUserStore(supabase);
+        const store = await openUserStore(supabase, data.claims.sub as user_id_string);
         storeLog.info(`using SupabaseStore`);
         return hydrateUserStore(store);
       } catch (err) {
