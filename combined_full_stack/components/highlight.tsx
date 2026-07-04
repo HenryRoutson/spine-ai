@@ -5,6 +5,9 @@ import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { useDocViewer } from "@/lib/doc-viewer"
+import { tryParseJson } from "@/lib/json-utils"
+import { isProbabilisticFieldPath } from "@/lib/testing-files"
+import { cn } from "@/lib/utils"
 import type { DocId, JobLogLevel } from "@/lib/types"
 
 const JSON_TOKEN_RE =
@@ -39,6 +42,143 @@ export function JsonHighlight({ json }: { json: string }) {
     <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed">
       <code>
         <InlineJsonTokens text={json} />
+      </code>
+    </pre>
+  )
+}
+
+type field_path_string = string
+
+const JSON_INDENT = "  "
+
+// AI : legend for testing views — matches structure tab "=" / "≈" badges.
+export function JsonFieldKindLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-3 font-mono text-[10px] text-muted-foreground">
+      <span className="inline-flex items-center gap-1.5">
+        <span className="rounded-sm bg-chart-2/15 px-1.5 py-0.5 text-chart-2">=</span>
+        deterministic — exact match
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="rounded-sm bg-chart-3/15 px-1.5 py-0.5 text-chart-3">≈</span>
+        probabilistic — LLM-checked
+      </span>
+    </div>
+  )
+}
+
+function JsonLeafValue({
+  value,
+  path,
+  probabilisticPaths,
+}: {
+  value: unknown
+  path: field_path_string
+  probabilisticPaths: field_path_string[]
+}) {
+  const isProb = isProbabilisticFieldPath(path, probabilisticPaths)
+  const text = JSON.stringify(value)
+  return (
+    <span
+      className={cn(
+        "rounded-sm px-0.5",
+        isProb ? "bg-chart-3/15" : "bg-chart-2/10",
+      )}
+      title={isProb ? "probabilistic — excluded from exact compare, LLM-checked" : "deterministic — exact compare"}
+    >
+      <InlineJsonTokens text={text} />
+    </span>
+  )
+}
+
+function JsonFieldKindNode({
+  value,
+  path,
+  probabilisticPaths,
+  depth,
+}: {
+  value: unknown
+  path: field_path_string
+  probabilisticPaths: field_path_string[]
+  depth: number
+}) {
+  const pad = JSON_INDENT.repeat(depth)
+  const inner = JSON_INDENT.repeat(depth + 1)
+
+  if (value === null || typeof value !== "object") {
+    return <JsonLeafValue value={value} path={path} probabilisticPaths={probabilisticPaths} />
+  }
+
+  if (Array.isArray(value)) {
+    if (!value.length) return <InlineJsonTokens text="[]" />
+    return (
+      <>
+        {"[\n"}
+        {value.map((item, i) => {
+          const childPath = path ? `${path}[${i}]` : `[${i}]`
+          return (
+            <span key={i}>
+              {inner}
+              <JsonFieldKindNode
+                value={item}
+                path={childPath}
+                probabilisticPaths={probabilisticPaths}
+                depth={depth + 1}
+              />
+              {i < value.length - 1 ? "," : ""}
+              {"\n"}
+            </span>
+          )
+        })}
+        {pad}
+        {"]"}
+      </>
+    )
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>)
+  if (!entries.length) return <InlineJsonTokens text="{}" />
+  return (
+    <>
+      {"{\n"}
+      {entries.map(([k, v], i) => {
+        const childPath = path ? `${path}.${k}` : k
+        return (
+          <span key={k}>
+            {inner}
+            <span className="text-chart-2">&quot;{k}&quot;</span>
+            {": "}
+            <JsonFieldKindNode
+              value={v}
+              path={childPath}
+              probabilisticPaths={probabilisticPaths}
+              depth={depth + 1}
+            />
+            {i < entries.length - 1 ? "," : ""}
+            {"\n"}
+          </span>
+        )
+      })}
+      {pad}
+      {"}"}
+    </>
+  )
+}
+
+// AI : structure-aware JSON view — leaf values tinted by ModelField.deterministic on the step output type.
+export function JsonFieldKindHighlight({
+  json,
+  probabilisticPaths,
+}: {
+  json: string
+  probabilisticPaths: field_path_string[]
+}) {
+  const parsed = tryParseJson(json, { trim: true })
+  if (!parsed.ok) return <JsonHighlight json={json} />
+  return (
+    <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed">
+      <code>
+        <JsonFieldKindNode value={parsed.value} path="" probabilisticPaths={probabilisticPaths} depth={0} />
       </code>
     </pre>
   )

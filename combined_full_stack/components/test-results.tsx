@@ -5,7 +5,7 @@
 
 import { useState, type ReactNode } from "react"
 import { ChevronDown, ChevronRight, CircleCheck, CircleX, MinusCircle } from "lucide-react"
-import { JsonHighlight } from "@/components/highlight"
+import { JsonFieldKindHighlight, JsonFieldKindLegend } from "@/components/highlight"
 import { SectionLabel } from "@/components/testing-editor"
 import { firstFailure } from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
@@ -128,23 +128,32 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
         </ul>
       )}
       {open && (result.expected !== undefined || result.actual !== undefined) && (
-        <div className="grid grid-cols-1 gap-2 border-t border-border p-2.5 lg:grid-cols-2">
-          {result.expected !== undefined && (
-            <div>
-              <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">expected</p>
-              <div className="max-h-72 overflow-auto rounded border border-border bg-secondary/30 p-2">
-                <JsonHighlight json={JSON.stringify(result.expected, null, 2)} />
+        <div className="space-y-2 border-t border-border p-2.5">
+          <JsonFieldKindLegend />
+          <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+            {result.expected !== undefined && (
+              <div>
+                <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">expected</p>
+                <div className="max-h-72 overflow-auto rounded border border-border bg-secondary/30 p-2">
+                  <JsonFieldKindHighlight
+                    json={JSON.stringify(result.expected, null, 2)}
+                    probabilisticPaths={result.ignoredPaths ?? []}
+                  />
+                </div>
               </div>
-            </div>
-          )}
-          <div className={result.expected === undefined ? "lg:col-span-2" : ""}>
-            <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">actual</p>
-            <div className="max-h-72 overflow-auto rounded border border-border bg-secondary/30 p-2">
-              {result.actual === undefined ? (
-                <p className="font-mono text-[11px] text-muted-foreground">— no output —</p>
-              ) : (
-                <JsonHighlight json={JSON.stringify(result.actual, null, 2)} />
-              )}
+            )}
+            <div className={result.expected === undefined ? "lg:col-span-2" : ""}>
+              <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">actual</p>
+              <div className="max-h-72 overflow-auto rounded border border-border bg-secondary/30 p-2">
+                {result.actual === undefined ? (
+                  <p className="font-mono text-[11px] text-muted-foreground">— no output —</p>
+                ) : (
+                  <JsonFieldKindHighlight
+                    json={JSON.stringify(result.actual, null, 2)}
+                    probabilisticPaths={result.ignoredPaths ?? []}
+                  />
+                )}
+              </div>
             </div>
           </div>
         </div>

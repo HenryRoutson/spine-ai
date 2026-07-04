@@ -227,6 +227,20 @@ export function probabilisticPathsForModule(
   return [...out].sort()
 }
 
+// AI : concrete run paths use [0] indices — patterns use [] (same grammar as stripPaths).
+export function normalizeFieldPath(path: field_path_string): field_path_string {
+  return path.replace(/\[\d+\]/g, "[]")
+}
+
+export function isProbabilisticFieldPath(
+  path: field_path_string,
+  probabilisticPaths: field_path_string[],
+): boolean {
+  if (!path) return false
+  const norm = normalizeFieldPath(path)
+  return probabilisticPaths.some((p) => normalizeFieldPath(p) === norm)
+}
+
 // AI : structural walk mirroring the path grammar above — array items normalize to "[]",
 // AI : so a value path can be matched against the static probabilistic paths and dropped.
 function stripPaths(value: unknown, paths: Set<field_path_string>, path: field_path_string): unknown {

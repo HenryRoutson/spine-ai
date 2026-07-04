@@ -20,7 +20,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { JsonHighlight } from "@/components/highlight"
+import { JsonFieldKindHighlight, JsonFieldKindLegend } from "@/components/highlight"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
@@ -523,11 +523,10 @@ function ScoredStepCard({
         {ignoredFields.length > 0 && (
           <p className="flex items-start gap-1.5 font-mono text-[10px] text-muted-foreground">
             <Shuffle className="mt-0.5 h-3 w-3 shrink-0" />
-            <span>
-              probabilistic fields excluded from exact match, then LLM-checked: {ignoredFields.join(", ")}
-            </span>
+            <span>probabilistic fields on this step: {ignoredFields.join(", ")}</span>
           </p>
         )}
+        {!stale && !editing && !isPlaceholder && <JsonFieldKindLegend />}
 
         {editing ? (
           stepSchema ? (
@@ -551,14 +550,14 @@ function ScoredStepCard({
             <div className="min-w-0 space-y-1">
               <SectionLabel>expected</SectionLabel>
               <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
-                <JsonHighlight json={row.text} />
+                <JsonFieldKindHighlight json={row.text} probabilisticPaths={ignoredFields} />
               </div>
             </div>
             {actualJson && (
               <div className="min-w-0 space-y-1">
                 <SectionLabel>last run actual</SectionLabel>
                 <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
-                  <JsonHighlight json={actualJson} />
+                  <JsonFieldKindHighlight json={actualJson} probabilisticPaths={ignoredFields} />
                 </div>
               </div>
             )}
