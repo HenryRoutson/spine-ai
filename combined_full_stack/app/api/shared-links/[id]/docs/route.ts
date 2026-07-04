@@ -1,26 +1,34 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { apiError } from "@/lib/server/api_context";
+import { HTTP } from "@/lib/server/api-errors";
+import { parseSharedLinkId } from "@/lib/server/api_schemas";
 import {
   inputTypeFromFilename,
   parseUploadedBytes,
   validateUploadFile,
 } from "@/lib/server/doc_upload_parse";
+import { orderedInputModules } from "@/lib/inference-input";
 import { getSharedLink, newSessionId } from "@/lib/server/shared_links";
 import { saveSessionUpload } from "@/lib/server/shared-link-session";
-import type { ModuleId, SharedLinkId } from "@/lib/server/types";
+import type { ModuleId } from "@/lib/server/types";
 
 const SESSION_COOKIE = "shared_run_session";
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const { id: linkId } = await ctx.params;
-  const link = await getSharedLink(linkId as SharedLinkId);
+  const { id } = await ctx.params;
+  const linkId = parseSharedLinkId(id);
+  if (!linkId) return apiError("link not found", 404);
+  const link = await getSharedLink(linkId);
   if (!link) return apiError("link not found", 404);
 
   const form = await req.formData();
   const file = form.get("file");
   const moduleId = form.get("moduleId") as ModuleId | null;
   if (!(file instanceof File) || !moduleId) return apiError("file and moduleId required", 400);
+  if (!orderedInputModules(link.snapshot.modules).some((m) => m.id === moduleId)) {
+    return apiError("invalid moduleId", HTTP.BAD_REQUEST);
+  }
   const uploadErr = validateUploadFile(file);
   if (uploadErr) return apiError(uploadErr.message, uploadErr.status);
 

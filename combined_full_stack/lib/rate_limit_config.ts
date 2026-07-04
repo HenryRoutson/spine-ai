@@ -32,5 +32,6 @@ export function publicApiTier(pathname: string): RateLimitTier | null {
   if (!pathname.startsWith("/api/shared-links/")) return null;
   if (/\/run$/.test(pathname)) return "llm";
   if (/\/progress$/.test(pathname)) return "poll";
+  if (/\/client-step$/.test(pathname)) return "default";
   return "public";
 }

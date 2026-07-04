@@ -1,15 +1,29 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { HTTP } from "@/lib/server/api-errors";
 import { listStepCacheEntries } from "@/lib/server/step_cache";
 import type { Project, ProjectId } from "@/lib/server/types";
+
+const MAX_CACHE_QUERY_CHARS = 500;
 
 export async function GET(req: NextRequest) {
   const ctx = await requireAuthStore();
   if (ctx instanceof NextResponse) return ctx;
   const { auth, store } = ctx;
 
-  const q = req.nextUrl.searchParams.get("q") ?? undefined;
-  const projectId = (req.nextUrl.searchParams.get("projectId") as ProjectId | null) ?? undefined;
+  const rawQ = req.nextUrl.searchParams.get("q") ?? undefined;
+  if (rawQ && rawQ.length > MAX_CACHE_QUERY_CHARS) {
+    return apiError(`query too long (max ${MAX_CACHE_QUERY_CHARS} chars)`, HTTP.BAD_REQUEST);
+  }
+  const q = rawQ;
+  const projectIdRaw = req.nextUrl.searchParams.get("projectId");
+  if (projectIdRaw && (projectIdRaw.length < 1 || projectIdRaw.length > 128)) {
+    return apiError("invalid projectId", HTTP.BAD_REQUEST);
+  }
+  const projectId = (projectIdRaw as ProjectId | null) ?? undefined;
+  if (projectId && !store.project(projectId)) {
+    return apiError("invalid projectId", HTTP.BAD_REQUEST);
+  }
   const searchStep = req.nextUrl.searchParams.get("searchStep") === "1";
   const searchInput = req.nextUrl.searchParams.get("searchInput") === "1";
   const searchOutput = req.nextUrl.searchParams.get("searchOutput") === "1";

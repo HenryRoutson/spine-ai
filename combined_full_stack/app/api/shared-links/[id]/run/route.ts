@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest, after } from "next/server";
 import { cookies } from "next/headers";
 import { apiError } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
-import { parseRequestJson, sharedLinkRunBodySchema } from "@/lib/server/api_schemas";
+import { parseRequestJson, parseSharedLinkId, sharedLinkRunBodySchema } from "@/lib/server/api_schemas";
 import {
   assertCanStartRun,
   billRunUsage,
@@ -112,8 +112,10 @@ async function resolveAssignment(
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const { id: linkId } = await ctx.params;
-  const link = await getSharedLink(linkId as SharedLinkId);
+  const { id } = await ctx.params;
+  const linkId = parseSharedLinkId(id);
+  if (!linkId) return apiError("link not found", 404);
+  const link = await getSharedLink(linkId);
   if (!link) return apiError("link not found", 404);
 
   const jar = await cookies();

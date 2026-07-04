@@ -8,7 +8,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ key: string }>
   const { auth, store } = authCtx;
 
   const { key: rawKey } = await ctx.params;
+  if (rawKey.length > 512) return apiError("invalid cache key", 400);
   const key = decodeURIComponent(rawKey);
+  if (key.length > 256) return apiError("invalid cache key", 400);
   const entry = getStepCacheEntryDetail({
     cacheOwnerId: auth.userId,
     projects: store.projects(),

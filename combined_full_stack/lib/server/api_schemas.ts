@@ -4,7 +4,7 @@ import { JobLogLevel } from "@/lib/run-types";
 import { z } from "zod";
 import { ASSISTANT_HISTORY_LIMIT } from "@/lib/assistant-chat-types";
 import { TOPUP_OPTIONS_CENTS } from "@/lib/billing_config";
-import { DocLabel, InputType } from "@/lib/server/types";
+import { DocLabel, InputType, ModuleKind, StrategyKind, type SharedLinkId } from "@/lib/server/types";
 import { MAX_ASSISTANT_MESSAGE_CHARS } from "./assistant-route";
 
 export const MAX_FEEDBACK_MESSAGE_CHARS = 8_000;
@@ -16,6 +16,82 @@ export const MAX_API_BODY_CHARS = 4_000_000;
 
 const projectIdSchema = z.string().trim().min(1).max(128);
 const docIdSchema = z.string().trim().min(1).max(128);
+const MAX_MODULE_STRING_CHARS = 64_000;
+const MAX_MODULE_PAYLOAD_CHARS = 120_000;
+const MAX_STRUCTURE_PAYLOAD_CHARS = 50_000;
+
+export const sharedLinkIdSchema = z.string().regex(/^pub_[a-z0-9]{10,14}$/i);
+
+export const sharedProgressQuerySchema = z.object({
+  jobId: z.string().trim().min(1).max(128),
+  token: z.string().trim().min(1).max(256),
+});
+
+export const sharedDownloadQuerySchema = sharedProgressQuerySchema.extend({
+  runId: z.string().trim().min(1).max(128),
+  format: z.enum(["json", "markdown"]).optional(),
+});
+
+// AI : reject malformed ids early — same 404 as missing link to avoid enumeration.
+export function parseSharedLinkId(raw: string): SharedLinkId | null {
+  const parsed = sharedLinkIdSchema.safeParse(raw);
+  return parsed.success ? (parsed.data as SharedLinkId) : null;
+}
+
+const pipelineModulePatchSchema = z
+  .object({
+    id: z.string().max(128),
+    kind: z.nativeEnum(ModuleKind),
+    label: z.string().max(200),
+  })
+  .passthrough()
+  .superRefine((val, ctx) => {
+    try {
+      if (JSON.stringify(val).length > MAX_MODULE_PAYLOAD_CHARS) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "module payload too large" });
+      }
+    } catch {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "module must be JSON-serializable" });
+    }
+    for (const [key, v] of Object.entries(val)) {
+      if (typeof v === "string" && v.length > MAX_MODULE_STRING_CHARS) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `module.${key} exceeds max ${MAX_MODULE_STRING_CHARS} chars`,
+        });
+      }
+    }
+  });
+
+const structureModelPatchSchema = z
+  .object({
+    id: z.string().max(128),
+    name: z.string().max(200),
+  })
+  .passthrough()
+  .superRefine((val, ctx) => {
+    try {
+      if (JSON.stringify(val).length > MAX_STRUCTURE_PAYLOAD_CHARS) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "structure model payload too large" });
+      }
+    } catch {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "structure model must be JSON-serializable" });
+    }
+  });
+
+const strategyPatchSchema = z
+  .object({
+    id: z.string().max(128),
+    kind: z.nativeEnum(StrategyKind),
+    name: z.string().max(200),
+    enabled: z.boolean(),
+    model: z.string().max(128),
+    accuracy: z.number().min(0).max(100),
+    latencyMs: z.number().min(0).max(86_400_000),
+    costCents: z.number().min(0).max(1_000_000),
+    passRate: z.number().min(0).max(100),
+  })
+  .strict();
 
 // AI : bound arbitrary JSON payloads without losing structure — prevents multi-MB POST bodies.
 function jsonSizeBounded(maxChars: number) {
@@ -53,13 +129,13 @@ export const projectPatchSchema = z
   .object({
     name: z.string().max(200).optional(),
     kind: z.string().max(64).optional(),
-    models: z.array(z.unknown()).max(200).optional(),
-    typeAliases: z.array(z.unknown()).max(100).optional(),
-    modules: z.array(z.unknown()).max(200).optional(),
-    strategies: z.array(z.unknown()).max(50).optional(),
+    models: z.array(structureModelPatchSchema).max(200).optional(),
+    typeAliases: z.array(jsonSizeBounded(10_000)).max(100).optional(),
+    modules: z.array(pipelineModulePatchSchema).max(200).optional(),
+    strategies: z.array(strategyPatchSchema).max(50).optional(),
     seedDocNames: z.array(z.string().max(256)).max(200).optional(),
-    expectedOutputs: z.record(z.string(), z.unknown()).optional(),
-    inferencePresets: z.array(z.unknown()).max(50).optional(),
+    expectedOutputs: z.record(z.string().max(256), jsonSizeBounded(100_000)).optional(),
+    inferencePresets: z.array(jsonSizeBounded(50_000)).max(50).optional(),
     documentation: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS).optional(),
   })
   .strict();

@@ -3,7 +3,7 @@ import { NextResponse, after, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { apiError } from "@/lib/server/api_context";
 import { HTTP, unknownJob } from "@/lib/server/api-errors";
-import { parseRequestJson, sharedLinkClientStepBodySchema } from "@/lib/server/api_schemas";
+import { parseRequestJson, parseSharedLinkId, sharedLinkClientStepBodySchema } from "@/lib/server/api_schemas";
 import { billRunUsage, billingKeyForUser } from "@/lib/server/billing_account";
 import { orderedInputModules } from "@/lib/inference-input";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
@@ -28,7 +28,6 @@ import {
 import { overlayStoreForSharedRun } from "@/lib/server/shared-link-session";
 import { logger } from "@/lib/server/server_logger";
 import type { JobLogEntry } from "@/lib/run-types";
-import type { SharedLinkId } from "@/lib/server/types";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -37,15 +36,18 @@ const SESSION_COOKIE = "shared_run_session";
 const apiLog = logger("api:shared-links:client-step");
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const { id: linkId } = await ctx.params;
+  const { id } = await ctx.params;
+  const linkId = parseSharedLinkId(id);
+  if (!linkId) return apiError("link not found", 404);
+
   const parsed = await parseRequestJson(req, sharedLinkClientStepBodySchema);
   if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
   const body = parsed;
 
-  const entry = verifySharedProgressToken(linkId as SharedLinkId, body.jobId, body.token);
+  const entry = verifySharedProgressToken(linkId, body.jobId, body.token);
   if (!entry) return apiError("invalid progress token", 403);
 
-  const link = await getSharedLink(linkId as SharedLinkId);
+  const link = await getSharedLink(linkId);
   if (!link) return apiError("link not found", 404);
 
   const jar = await cookies();
