@@ -78,7 +78,6 @@ export function StructureBuilder() {
     }
     setModels([...models, m])
     setTarget({ kind: "struct", id: m.id })
-    setView("ui")
   }
 
   function addType() {
@@ -218,8 +217,7 @@ export function StructureBuilder() {
       />
 
       <div className="flex min-h-0 flex-1">
-        {/* model list — hidden in excel view (sheet tabs handle navigation) */}
-        {view !== "excel" && view !== "playground" && (
+        {view !== "playground" && (
         <aside className="flex w-56 shrink-0 flex-col border-r border-border">
           <div className="space-y-1 px-2 pt-2">
             <div className="flex items-center justify-between px-1 py-1">
@@ -245,10 +243,7 @@ export function StructureBuilder() {
             {models.map((m) => (
               <button
                 key={m.id}
-                onClick={() => {
-                  setTarget({ kind: "struct", id: m.id })
-                  setView("ui")
-                }}
+                onClick={() => setTarget({ kind: "struct", id: m.id })}
                 className={cn(
                   "group mb-1 flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-colors",
                   target.kind === "struct" && m.id === selectedStructId

@@ -29,17 +29,6 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
     setModels(models.map((m) => (m.id === next.id ? next : m)))
   }
 
-  function addModel() {
-    const m: StructureModel = {
-      id: uid(),
-      name: "NewModel",
-      description: "",
-      fields: [{ id: uid(), name: "field", type: FieldType.Text, optional: false, description: "" }],
-    }
-    setModels([...models, m])
-    onSelectId(m.id)
-  }
-
   function deleteModel(id: string) {
     const target = models.find((m) => m.id === id)
     if (target && isLockedStructureModel(target)) return
@@ -78,7 +67,7 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
   if (!selected) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p className="text-xs text-muted-foreground">No structure selected — add one below.</p>
+        <p className="text-xs text-muted-foreground">No structure selected — add one in the sidebar.</p>
       </div>
     )
   }
@@ -184,33 +173,6 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
               <Plus className="mr-1 h-3.5 w-3.5" /> Add row
             </Button>
           </div>
-        )}
-      </div>
-
-      {/* AI : sheet tabs — one tab per structure model */}
-      <div className="flex shrink-0 items-end gap-0 overflow-x-auto border-t border-border bg-secondary/20 px-1 pt-1">
-        {models.map((m) => (
-          <button
-            key={m.id}
-            onClick={() => onSelectId(m.id)}
-            className={cn(
-              "relative shrink-0 rounded-t border border-b-0 px-3 py-1.5 text-[11px] transition-colors",
-              m.id === selected.id
-                ? "z-[1] -mb-px border-border bg-[oklch(0.16_0.004_264)] font-medium text-foreground"
-                : "border-transparent bg-secondary/40 text-muted-foreground hover:bg-secondary/70 hover:text-foreground",
-            )}
-          >
-            {m.name}
-            {isLockedStructureModel(m) && <Lock className="ml-1 inline h-2.5 w-2.5 opacity-60" />}
-          </button>
-        ))}
-        {!selectedLocked && (
-          <button
-            onClick={addModel}
-            className="mb-0.5 ml-1 shrink-0 rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary/60 hover:text-foreground"
-          >
-            <Plus className="inline h-3 w-3" />
-          </button>
         )}
       </div>
     </div>
