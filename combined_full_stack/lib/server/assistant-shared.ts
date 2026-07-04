@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { uid } from "@/lib/id";
 import { tryParseTypeExprString } from "@/lib/type-expr-parse";
+import { isLockedStructureModel } from "./builtin_models";
 import { FIELD_TYPES, FieldType, type ModelField, type StructureModel, type StructureModelId, type TypeAlias, type TypeAliasId } from "./types";
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
@@ -189,6 +190,7 @@ export function materializeStructureModels(
 
   return specs.map((spec, i) => {
     const prev = existingByName.get(spec.name.toLowerCase());
+    if (prev && isLockedStructureModel(prev)) return prev;
     const id = byName.get(spec.name.toLowerCase())!;
     const prevFieldsByName = new Map(prev?.fields.map((f) => [f.name.toLowerCase(), f]) ?? []);
     const modelShell = draftModels[i]!;
@@ -210,6 +212,14 @@ export function materializeStructureModels(
       description: spec.description,
       fields,
       auto: prev?.auto,
+      locked: prev?.locked,
+      sourceDocId: prev?.sourceDocId,
     };
-  });
+  }).concat(
+    existing.filter(
+      (m) =>
+        isLockedStructureModel(m) &&
+        !specs.some((s) => s.name.toLowerCase() === m.name.toLowerCase()),
+    ),
+  );
 }

@@ -82,6 +82,7 @@ export function buildStructureRulesPromptBlock(): string {
 - Prefer preset field types from the Field types list; use type alias names or typeExpr for complex shapes (see Reusable type aliases).
 - Every field needs a description string (use "" if nothing to add).
 - Optional fields: set optional true.
+- Auto-generated models (auto: true — Combine Inputs output or document inference) are locked: return them unchanged in any models array; do not rename or edit their fields.
 - When changing structures, return a FULL replacement models array (include untouched models too) — not a patch.
 - When answering questions without schema changes, set models to null.`;
 }

@@ -19,7 +19,7 @@ spine-ai.dev — combined_full_stack specification
 · field types: text, int, float, bool, datetime, document, lists, tuple[text,quote], nested model refs
 · code view: generated models.py
 · AI view: chat assistant proposes models → approve / reject
-· auto-generated models (from Combine Inputs) flagged read-only-ish
+· auto-generated models (from Combine Inputs / doc infer) locked read-only in Structure tab
 · deep-link from JSON “validates as” links
 
 === 02 — pipeline ===
