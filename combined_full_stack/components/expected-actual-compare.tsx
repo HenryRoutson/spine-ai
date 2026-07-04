@@ -7,8 +7,10 @@ import { useMemo } from "react"
 import { JsonFieldKindHighlight } from "@/components/highlight"
 import { JsonUnifiedDiffView } from "@/components/json-unified-diff-view"
 import { ResizableSplit } from "@/components/resizable-split"
+import { stablePrettyJson } from "@/lib/deep_equal"
 import { jsonUnifiedDiff, jsonUnifiedDiffSourceIndexes } from "@/lib/json-diff"
-import { differingPrettyLineIndexes } from "@/lib/json-pretty-lines"
+import { deterministicCompareCores } from "@/lib/testing-files"
+import { differingDeterministicPrettyLineIndexes } from "@/lib/json-pretty-lines"
 import { tryParseJson } from "@/lib/json-utils"
 import { cn } from "@/lib/utils"
 import type { RunTestDeterministicDiffResult, TolerantFieldPath } from "@/lib/types"
@@ -58,25 +60,59 @@ export function ExpectedActualCompare({
   className,
   deterministicDiffExplanations,
 }: ExpectedActualCompareProps) {
-  const actualJson = useMemo(() => JSON.stringify(actual, null, 2) ?? "undefined", [actual])
+  const actualJson = useMemo(
+    () => (actual === undefined ? "undefined" : stablePrettyJson(actual)),
+    [actual],
+  )
   const expectedPretty = useMemo(() => {
     const parsed = tryParseJson(expectedJson, { trim: true })
-    return parsed.ok ? JSON.stringify(parsed.value, null, 2) : expectedJson
+    return parsed.ok ? stablePrettyJson(parsed.value) : expectedJson
   }, [expectedJson])
-  const aligned = useMemo(
-    () => prettyLineCount(expectedPretty) === prettyLineCount(actualJson),
-    [expectedPretty, actualJson],
+  const parsedExpected = useMemo(() => tryParseJson(expectedJson, { trim: true }), [expectedJson])
+  const expectedValue = parsedExpected.ok ? parsedExpected.value : expectedJson
+  const deterministicCores = useMemo(
+    () =>
+      parsedExpected.ok && actual !== undefined
+        ? deterministicCompareCores(expectedValue, actual, probabilisticPaths)
+        : undefined,
+    [parsedExpected.ok, expectedValue, actual, probabilisticPaths],
   )
+  const aligned = useMemo(() => {
+    if (deterministicCores) {
+      return (
+        prettyLineCount(stablePrettyJson(deterministicCores.expectedCore)) ===
+        prettyLineCount(stablePrettyJson(deterministicCores.actualCore))
+      )
+    }
+    return prettyLineCount(expectedPretty) === prettyLineCount(actualJson)
+  }, [deterministicCores, expectedPretty, actualJson])
   const diff = useMemo(() => {
-    const parsed = tryParseJson(expectedJson, { trim: true })
-    const expectedValue = parsed.ok ? parsed.value : expectedJson
+    if (deterministicCores) {
+      return jsonUnifiedDiff(deterministicCores.expectedCore, deterministicCores.actualCore)
+    }
     return jsonUnifiedDiff(expectedValue, actual)
-  }, [expectedJson, actual])
+  }, [deterministicCores, expectedValue, actual])
   const expectedLines = useMemo(() => expectedPretty.split("\n"), [expectedPretty])
   const actualLines = useMemo(() => actualJson.split("\n"), [actualJson])
   const mismatchLines = useMemo(
-    () => differingPrettyLineIndexes(expectedPretty, actualJson),
-    [expectedPretty, actualJson],
+    () =>
+      differingDeterministicPrettyLineIndexes(
+        expectedValue,
+        actual,
+        expectedPretty,
+        actualJson,
+        probabilisticPaths,
+        tolerantPaths,
+      ),
+    [expectedValue, actual, expectedPretty, actualJson, probabilisticPaths, tolerantPaths],
+  )
+  const deterministicExpectedPretty = useMemo(
+    () => (deterministicCores ? stablePrettyJson(deterministicCores.expectedCore) : expectedPretty),
+    [deterministicCores, expectedPretty],
+  )
+  const deterministicActualPretty = useMemo(
+    () => (deterministicCores ? stablePrettyJson(deterministicCores.actualCore) : actualJson),
+    [deterministicCores, actualJson],
   )
   const diffExplanations = useMemo(() => {
     const out = new Map<field_path_string, string>()
@@ -86,10 +122,11 @@ export function ExpectedActualCompare({
     return out
   }, [deterministicDiffExplanations])
   const diffSourceIndexes = useMemo(() => {
-    const parsed = tryParseJson(expectedJson, { trim: true })
-    const expectedValue = parsed.ok ? parsed.value : expectedJson
+    if (deterministicCores) {
+      return jsonUnifiedDiffSourceIndexes(deterministicCores.expectedCore, deterministicCores.actualCore)
+    }
     return jsonUnifiedDiffSourceIndexes(expectedValue, actual)
-  }, [expectedJson, actual])
+  }, [deterministicCores, expectedValue, actual])
 
   const highlightProps = {
     probabilisticPaths,
@@ -109,8 +146,8 @@ export function ExpectedActualCompare({
           <JsonUnifiedDiffView
             diff={diff}
             diffExplanations={diffExplanations}
-            expectedPretty={expectedPretty}
-            actualPretty={actualJson}
+            expectedPretty={deterministicExpectedPretty}
+            actualPretty={deterministicActualPretty}
             diffSourceIndexes={diffSourceIndexes}
           />
         </div>

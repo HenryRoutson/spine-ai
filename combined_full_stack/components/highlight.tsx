@@ -6,6 +6,7 @@ import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { useDocViewer } from "@/lib/doc-viewer"
+import { normalizeTestJson, stablePrettyJson } from "@/lib/deep_equal"
 import { tryParseJson } from "@/lib/json-utils"
 import {
   assignPathsToPrettyLines,
@@ -327,20 +328,20 @@ function JsonFieldKindLineView({
       <code>
         {lines.map((line, i) => {
           const paired = pairedLines?.[i]
+          const path = paths[i]
+          const isProb = path ? isProbabilisticFieldPath(path, probabilisticPaths) : false
+          const showMismatch = differingLineIndexes.has(i) && !isProb
           const notComment =
-            differingLineIndexes.has(i) && paired !== undefined
-              ? prettyJsonLineCompareComment(paired)
-              : undefined
-          const explanation =
-            differingLineIndexes.has(i) && paths[i] ? diffExplanations?.get(paths[i]!) : undefined
+            showMismatch && paired !== undefined ? prettyJsonLineCompareComment(paired) : undefined
+          const explanation = showMismatch && path ? diffExplanations?.get(path) : undefined
           return (
             <span
               key={i}
-              className={cn("block whitespace-pre", differingLineIndexes.has(i) && "bg-destructive/15")}
+              className={cn("block whitespace-pre", showMismatch && "bg-destructive/15")}
             >
               <PrettyJsonLineContent
                 line={line}
-                path={paths[i]}
+                path={path}
                 root={root}
                 probabilisticPaths={probabilisticPaths}
                 probabilisticCheckedPaths={probabilisticCheckedPaths}
@@ -381,11 +382,12 @@ export function JsonFieldKindHighlight({
 }) {
   const parsed = tryParseJson(json, { trim: true })
   if (!parsed.ok) return <JsonHighlight json={json} />
+  const normalized = normalizeTestJson(parsed.value)
   if (differingLineIndexes) {
-    const lines = JSON.stringify(parsed.value, null, 2).split("\n")
+    const lines = stablePrettyJson(normalized).split("\n")
     return (
       <JsonFieldKindLineView
-        root={parsed.value}
+        root={normalized}
         lines={lines}
         differingLineIndexes={differingLineIndexes}
         pairedLines={pairedLines}
@@ -400,7 +402,7 @@ export function JsonFieldKindHighlight({
     <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed">
       <code>
         <JsonFieldKindNode
-          value={parsed.value}
+          value={normalized}
           path=""
           probabilisticPaths={probabilisticPaths}
           probabilisticCheckedPaths={probabilisticCheckedPaths}

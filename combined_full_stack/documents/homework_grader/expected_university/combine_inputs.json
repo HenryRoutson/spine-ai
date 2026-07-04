@@ -9,25 +9,25 @@
       "question_id": "Q1",
       "prompt": "Evaluate \\(\\int_0^1 3x^2 e^{x^3}\\,dx\\). Show the substitution explicitly.",
       "max_score": 10,
-      "marking_criteria": "4 pts for the substitution \\(u = x^3\\), 4 pts for transformed bounds \\(u : 0 \\to 1\\), 2 pts for the value \\(e - 1\\)"
+      "marking_criteria": "Award exactly by summing (max 10): 4 pts for substitution u=x³; 4 pts for transformed bounds u:0→1; 2 pts for value e−1. Final answer alone without substitution shown: exactly 0."
     },
     {
       "question_id": "Q2",
       "prompt": "Compute \\(\\lim_{n \\to \\infty} \\left(1 + \\frac{2}{n}\\right)^{n}\\).",
       "max_score": 10,
-      "marking_criteria": "6 pts for reducing to an exponential limit (e.g. \\(e^{n \\ln(1 + 2/n)}\\)), 4 pts for the value \\(e^2\\)"
+      "marking_criteria": "Award exactly by summing (max 10): 6 pts for reducing to an exponential limit (e.g. e^{n ln(1+2/n)}); 4 pts for value e². Final answer alone: exactly 0."
     },
     {
       "question_id": "Q3",
       "prompt": "Determine whether \\(\\sum_{n=1}^{\\infty} \\frac{n!}{n^n}\\) converges. Justify with a named test.",
       "max_score": 10,
-      "marking_criteria": "5 pts for a correct ratio-test setup, 5 pts for the limit \\(1/e < 1\\) and the conclusion"
+      "marking_criteria": "Award exactly by summing (max 10): 5 pts for correct ratio-test setup; 5 pts for limit 1/e<1 and convergence conclusion. Wrong test or missing limit: sum only earned components."
     },
     {
       "question_id": "Q4",
       "prompt": "Prove that \\(\\sum_{n=2}^{\\infty} \\frac{1}{n \\ln^2 n}\\) converges.",
       "max_score": 10,
-      "marking_criteria": "6 pts for the integral test or Cauchy condensation with hypotheses checked, 4 pts for a correct evaluation; a bare comparison with \\(\\sum 1/n^2\\) is invalid and earns at most 2 pts"
+      "marking_criteria": "Award exactly by summing (max 10): 6 pts for integral test or Cauchy condensation with hypotheses checked; 4 pts for correct evaluation. Bare comparison with ∑1/n² without valid hypotheses: exactly 2 pts maximum (not 6+4)."
     }
   ]
 }

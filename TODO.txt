@@ -7,6 +7,9 @@ name might already be taken https://www.getspine.ai/
 No Langfuse-style open SDK for arbitrary apps; observability is scoped to spine pipelines only.
 
 
+Remove playground in structs, components/structure-builder.tsx
+
+add export to Rust
 
 there should be a group by on the fields where you can see the mapping of what has been mapped to what with autmoatically generated confusion matricies.
 

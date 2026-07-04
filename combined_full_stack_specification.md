@@ -238,6 +238,8 @@ there should be a group by on the fields where you can see the mapping of what h
 
 in addition to the very fast per field comparisons, there should also be a larger comparison between the entirety of the json actual and expected, where an llm can give a high level overview of where there are differences.
 
+ensure that the order of keys inside each object does not cause issues with comparisons with git diff or on a line level.
+
 # inference
 
 All inputs are shown with the option to select documents.

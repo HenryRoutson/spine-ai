@@ -1,8 +1,14 @@
 // AI : line unified diff for test failures — git-diff style over pretty-printed JSON.
 
+import { stablePrettyJson } from "@/lib/deep_equal";
+
+function prettyJsonLines(value: unknown): string[] {
+  return stablePrettyJson(value).split("\n");
+}
+
 export function jsonUnifiedDiff(expected: unknown, actual: unknown): string {
-  const a = JSON.stringify(expected, null, 2).split("\n")
-  const b = JSON.stringify(actual, null, 2).split("\n")
+  const a = prettyJsonLines(expected)
+  const b = prettyJsonLines(actual)
   const out: string[] = []
   const n = Math.max(a.length, b.length)
   for (let i = 0; i < n; i++) {
@@ -20,8 +26,8 @@ export function jsonUnifiedDiff(expected: unknown, actual: unknown): string {
 
 // AI : map each unified-diff output row to its source pretty-print line index (for path → LLM reason).
 export function jsonUnifiedDiffSourceIndexes(expected: unknown, actual: unknown): (number | undefined)[] {
-  const a = JSON.stringify(expected, null, 2).split("\n")
-  const b = JSON.stringify(actual, null, 2).split("\n")
+  const a = prettyJsonLines(expected)
+  const b = prettyJsonLines(actual)
   const out: (number | undefined)[] = []
   const n = Math.max(a.length, b.length)
   for (let i = 0; i < n; i++) {

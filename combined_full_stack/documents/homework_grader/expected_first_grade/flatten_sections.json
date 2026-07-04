@@ -5,7 +5,7 @@
     "title": "Section A — Counting and addition — Q1",
     "body": "Maya has 2 red apples and 3 green apples. How many apples does she have altogether?\nStudent work: 2 + 3 = 5 apples!",
     "max_score": 2,
-    "criteria": "2 pts for 5, 1 pt if counting is shown but the total is wrong"
+    "criteria": "Exactly 2 pts for answer 5. Exactly 1 pt if counting or addition work is shown but the total is wrong. Otherwise 0."
   },
   {
     "student_label": "Riley Park",
@@ -13,7 +13,7 @@
     "title": "Section A — Counting and addition — Q2",
     "body": "What is 3 + 4?\nStudent work: 7 (counted on fingers)",
     "max_score": 2,
-    "criteria": "2 pts for 7, 1 pt for a counting attempt with a near miss"
+    "criteria": "Exactly 2 pts for answer 7. Exactly 1 pt if a counting attempt is shown (e.g. fingers) but the answer is wrong. Otherwise 0."
   },
   {
     "student_label": "Riley Park",
@@ -21,7 +21,7 @@
     "title": "Section A — Counting and addition — Q3",
     "body": "What is 10 - 6?\nStudent work: 5 (counted back 10, 9, 8, 7, 6, 5)",
     "max_score": 2,
-    "criteria": "2 pts for 4, 1 pt for a counting-back attempt"
+    "criteria": "Exactly 2 pts for answer 4. Exactly 1 pt if counting-back work is shown but the final answer is wrong. Otherwise 0."
   },
   {
     "student_label": "Riley Park",
@@ -29,7 +29,7 @@
     "title": "Section B — Shapes and comparing — Q4",
     "body": "How many sides does a triangle have?\nStudent work: 3 sides",
     "max_score": 2,
-    "criteria": "2 pts for 3"
+    "criteria": "Exactly 2 pts for 3. Exactly 0 otherwise."
   },
   {
     "student_label": "Riley Park",
@@ -37,6 +37,6 @@
     "title": "Section B — Shapes and comparing — Q5",
     "body": "Which number is bigger: 8 or 5?\nStudent work: 8",
     "max_score": 2,
-    "criteria": "2 pts for 8"
+    "criteria": "Exactly 2 pts for 8. Exactly 0 otherwise."
   }
 ]

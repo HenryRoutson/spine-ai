@@ -25,6 +25,11 @@ function numbersWithinTolerance(a: number, b: number, tolerance: number): boolea
   return Math.abs(a - b) <= tolerance;
 }
 
+// AI : null, undefined, and "" are equivalent for optional text fields (e.g. mistake_explanation when correct).
+function isEmptyComparableText(value: unknown): boolean {
+  return value === null || value === undefined || value === "";
+}
+
 // AI : test compare — exact everywhere except int/float paths listed in tolerantByPattern.
 export function testValuesEqual(a: unknown, b: unknown, opts?: TestCompareOpts, path = ""): boolean {
   const aE = expandEmbeddedJson(a);
@@ -34,6 +39,7 @@ export function testValuesEqual(a: unknown, b: unknown, opts?: TestCompareOpts, 
     return numbersWithinTolerance(aE, bE, tolerance);
   }
   if (aE === bE) return true;
+  if (isEmptyComparableText(aE) && isEmptyComparableText(bE)) return true;
   if (typeof aE !== typeof bE) return false;
   if (aE === null || bE === null) return aE === bE;
   if (Array.isArray(aE) && Array.isArray(bE)) {
@@ -71,6 +77,7 @@ export function testValuesDiffPath(
     return numbersWithinTolerance(aE, bE, tolerance) ? undefined : path || "(root)";
   }
   if (aE === bE) return undefined;
+  if (isEmptyComparableText(aE) && isEmptyComparableText(bE)) return undefined;
   if (typeof aE !== typeof bE) return path || "(root)";
   if (aE === null || bE === null) return path || "(root)";
   if (Array.isArray(aE) && Array.isArray(bE)) {
@@ -119,6 +126,7 @@ export function collectTestDiffFields(
       : [{ path: path || "(root)", expected: aE, actual: bE }];
   }
   if (aE === bE) return [];
+  if (isEmptyComparableText(aE) && isEmptyComparableText(bE)) return [];
   if (typeof aE !== typeof bE) return [{ path: path || "(root)", expected: aE, actual: bE }];
   if (aE === null || bE === null) return [{ path: path || "(root)", expected: aE, actual: bE }];
   if (Array.isArray(aE) && Array.isArray(bE)) {
@@ -200,6 +208,20 @@ function sortKeys(value: unknown): unknown {
     return out;
   }
   return value;
+}
+
+// AI : canonical form for test diff/display — expand embedded JSON strings and sort object keys recursively.
+export function normalizeTestJson(value: unknown): unknown {
+  return sortKeys(expandEmbeddedJson(value));
+}
+
+export function stablePrettyJson(value: unknown, space = 2): string {
+  return JSON.stringify(normalizeTestJson(value), null, space);
+}
+
+// AI : edit/save path — sort keys only; do not parse document.content JSON strings into objects.
+export function stablePrettyJsonForEdit(value: unknown, space = 2): string {
+  return JSON.stringify(sortKeys(value), null, space);
 }
 
 export function deepEqual(a: unknown, b: unknown, opts?: DeepEqualOpts): boolean {

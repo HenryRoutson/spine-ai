@@ -44,6 +44,7 @@ import { labelAsStateKey, validatePipelineStateEntry } from "@/lib/server/pipeli
 import { SchemaJsonEditor } from "@/components/schema-json-editor"
 import { applySchemaDefaults, defaultFromSchema, jsonSchemaToFormRoot } from "@/lib/schema-form"
 import { stepOutputJsonSchema } from "@/lib/step-json-schema"
+import { stablePrettyJsonForEdit } from "@/lib/deep_equal"
 import { tryParseJson } from "@/lib/json-utils"
 import {
   analyzeTestPipelineAlignment,
@@ -96,7 +97,7 @@ export function draftFromTest(test: SpineTestFile, project: Project): TestDraft 
     const schema = mod && isComparableStep(mod) ? stepOutputJsonSchema(project, key) : null
     const root = schema ? jsonSchemaToFormRoot(schema) : null
     const value = root && v !== null ? applySchemaDefaults(v, root) : v
-    expected.push({ label: key, text: JSON.stringify(value, null, 2) })
+    expected.push({ label: key, text: stablePrettyJsonForEdit(value) })
   }
   return {
     description: cleaned.description ?? "",
@@ -391,7 +392,7 @@ export function TestFileEditor({
     const golden = project.expectedOutputs?.[key]
     setDraft({
       ...draft,
-      expected: [...draft.expected, { label: key, text: JSON.stringify(golden ?? null, null, 2) }],
+      expected: [...draft.expected, { label: key, text: stablePrettyJsonForEdit(golden ?? null) }],
     })
   }
 
@@ -801,7 +802,7 @@ function ScoredStepCard({
               onClick={() => {
                 const root = stepSchema ? jsonSchemaToFormRoot(stepSchema) : null
                 const payload = root && actual !== undefined ? applySchemaDefaults(actual, root) : actual
-                onText(JSON.stringify(payload, null, 2))
+                onText(stablePrettyJsonForEdit(payload))
                 setEditing(false)
               }}
             >

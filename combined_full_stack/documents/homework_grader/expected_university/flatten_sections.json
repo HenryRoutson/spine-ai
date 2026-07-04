@@ -5,7 +5,7 @@
     "title": "Section A — Integration and limits — Q1",
     "body": "Evaluate \\(\\int_0^1 3x^2 e^{x^3}\\,dx\\). Show the substitution explicitly.\nStudent work: Let \\(u = x^3\\), so \\(du = 3x^2\\,dx\\); the bounds transform as \\(u : 0 \\to 1\\), giving \\(\\int_0^1 e^u\\,du = e - 1\\).",
     "max_score": 10,
-    "criteria": "4 pts for the substitution \\(u = x^3\\), 4 pts for transformed bounds \\(u : 0 \\to 1\\), 2 pts for the value \\(e - 1\\)"
+    "criteria": "Award exactly by summing (max 10): 4 pts for substitution u=x³; 4 pts for transformed bounds u:0→1; 2 pts for value e−1. Final answer alone without substitution shown: exactly 0."
   },
   {
     "student_label": "Priya Nair",
@@ -13,7 +13,7 @@
     "title": "Section A — Integration and limits — Q2",
     "body": "Compute \\(\\lim_{n \\to \\infty} \\left(1 + \\frac{2}{n}\\right)^{n}\\).\nStudent work: Write \\(\\left(1 + \\frac{2}{n}\\right)^{n} = e^{n \\ln(1 + 2/n)}\\); since \\(n \\ln(1 + 2/n) \\to 2\\), the limit is \\(e^2\\).",
     "max_score": 10,
-    "criteria": "6 pts for reducing to an exponential limit (e.g. \\(e^{n \\ln(1 + 2/n)}\\)), 4 pts for the value \\(e^2\\)"
+    "criteria": "Award exactly by summing (max 10): 6 pts for reducing to an exponential limit (e.g. e^{n ln(1+2/n)}); 4 pts for value e². Final answer alone: exactly 0."
   },
   {
     "student_label": "Priya Nair",
@@ -21,7 +21,7 @@
     "title": "Section B — Series convergence — Q3",
     "body": "Determine whether \\(\\sum_{n=1}^{\\infty} \\frac{n!}{n^n}\\) converges. Justify with a named test.\nStudent work: Ratio test — \\(\\frac{a_{n+1}}{a_n} = \\left(\\frac{n}{n+1}\\right)^{n} \\to \\frac{1}{e} < 1\\), hence the series converges.",
     "max_score": 10,
-    "criteria": "5 pts for a correct ratio-test setup, 5 pts for the limit \\(1/e < 1\\) and the conclusion"
+    "criteria": "Award exactly by summing (max 10): 5 pts for correct ratio-test setup; 5 pts for limit 1/e<1 and convergence conclusion. Wrong test or missing limit: sum only earned components."
   },
   {
     "student_label": "Priya Nair",
@@ -29,6 +29,6 @@
     "title": "Section B — Series convergence — Q4",
     "body": "Prove that \\(\\sum_{n=2}^{\\infty} \\frac{1}{n \\ln^2 n}\\) converges.\nStudent work: The terms are smaller than \\(\\frac{1}{n^2}\\), so it converges by comparison with \\(\\sum \\frac{1}{n^2}\\).",
     "max_score": 10,
-    "criteria": "6 pts for the integral test or Cauchy condensation with hypotheses checked, 4 pts for a correct evaluation; a bare comparison with \\(\\sum 1/n^2\\) is invalid and earns at most 2 pts"
+    "criteria": "Award exactly by summing (max 10): 6 pts for integral test or Cauchy condensation with hypotheses checked; 4 pts for correct evaluation. Bare comparison with ∑1/n² without valid hypotheses: exactly 2 pts maximum (not 6+4)."
   }
 ]

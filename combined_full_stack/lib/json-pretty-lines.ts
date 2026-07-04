@@ -1,5 +1,12 @@
 // AI : map pretty-printed JSON lines to field paths for per-line compare highlighting.
 
+import {
+  isProbabilisticFieldPath,
+  isTolerantFieldPath,
+  toleranceForFieldPath,
+} from "@/lib/testing-files"
+import type { TolerantFieldPath } from "@/lib/types"
+
 type field_path_string = string
 
 type path_frame =
@@ -104,6 +111,55 @@ export function differingPrettyLineIndexes(a: string, b: string): ReadonlySet<nu
   const n = Math.min(left.length, right.length)
   for (let i = 0; i < n; i++) {
     if (left[i] !== right[i]) out.add(i)
+  }
+  return out
+}
+
+function isEmptyComparableText(value: unknown): boolean {
+  return value === null || value === undefined || value === ""
+}
+
+function numbersWithinTolerance(a: number, b: number, tolerance: number): boolean {
+  return Math.abs(a - b) <= tolerance
+}
+
+// AI : line diffs for compare UI — skip probabilistic, tolerant, and empty-sentinel-only rows.
+export function differingDeterministicPrettyLineIndexes(
+  expected: unknown,
+  actual: unknown,
+  expectedPretty: string,
+  actualPretty: string,
+  probabilisticPaths: field_path_string[],
+  tolerantPaths: TolerantFieldPath[] = [],
+): ReadonlySet<number> {
+  const left = expectedPretty.split("\n")
+  const right = actualPretty.split("\n")
+  const paths = assignPathsToPrettyLines(left)
+  const out = new Set<number>()
+  const n = Math.min(left.length, right.length)
+  for (let i = 0; i < n; i++) {
+    if (left[i] === right[i]) continue
+    const path = paths[i]
+    if (path && isProbabilisticFieldPath(path, probabilisticPaths)) continue
+    if (path && isTolerantFieldPath(path, tolerantPaths)) {
+      const ev = valueAtJsonPath(expected, path)
+      const av = valueAtJsonPath(actual, path)
+      const tol = toleranceForFieldPath(path, tolerantPaths)
+      if (
+        tol !== undefined &&
+        typeof ev === "number" &&
+        typeof av === "number" &&
+        numbersWithinTolerance(ev, av, tol)
+      ) {
+        continue
+      }
+    }
+    if (path) {
+      const ev = valueAtJsonPath(expected, path)
+      const av = valueAtJsonPath(actual, path)
+      if (isEmptyComparableText(ev) && isEmptyComparableText(av)) continue
+    }
+    out.add(i)
   }
   return out
 }

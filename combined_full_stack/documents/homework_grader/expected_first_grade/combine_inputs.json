@@ -9,31 +9,31 @@
       "question_id": "Q1",
       "prompt": "Maya has 2 red apples and 3 green apples. How many apples does she have altogether?",
       "max_score": 2,
-      "marking_criteria": "2 pts for 5, 1 pt if counting is shown but the total is wrong"
+      "marking_criteria": "Exactly 2 pts for answer 5. Exactly 1 pt if counting or addition work is shown but the total is wrong. Otherwise 0."
     },
     {
       "question_id": "Q2",
       "prompt": "What is 3 + 4?",
       "max_score": 2,
-      "marking_criteria": "2 pts for 7, 1 pt for a counting attempt with a near miss"
+      "marking_criteria": "Exactly 2 pts for answer 7. Exactly 1 pt if a counting attempt is shown (e.g. fingers) but the answer is wrong. Otherwise 0."
     },
     {
       "question_id": "Q3",
       "prompt": "What is 10 - 6?",
       "max_score": 2,
-      "marking_criteria": "2 pts for 4, 1 pt for a counting-back attempt"
+      "marking_criteria": "Exactly 2 pts for answer 4. Exactly 1 pt if counting-back work is shown but the final answer is wrong. Otherwise 0."
     },
     {
       "question_id": "Q4",
       "prompt": "How many sides does a triangle have?",
       "max_score": 2,
-      "marking_criteria": "2 pts for 3"
+      "marking_criteria": "Exactly 2 pts for 3. Exactly 0 otherwise."
     },
     {
       "question_id": "Q5",
       "prompt": "Which number is bigger: 8 or 5?",
       "max_score": 2,
-      "marking_criteria": "2 pts for 8"
+      "marking_criteria": "Exactly 2 pts for 8. Exactly 0 otherwise."
     }
   ]
 }

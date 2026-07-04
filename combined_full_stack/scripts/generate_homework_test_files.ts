@@ -58,6 +58,10 @@ function writeTest(relativeFile: string, body: Record<string, unknown>): void {
   console.log(`wrote ${relativeFile}`);
 }
 
+function gradesForPassthrough(rows: GradeRow[]): GradeRow[] {
+  return rows.map((row) => ({ ...row, mistake_explanation: null }));
+}
+
 function buildTest(opts: {
   description: string;
   inputs: Record<string, string | string[]>;
@@ -68,6 +72,7 @@ function buildTest(opts: {
   const markingQuestions = readJson<unknown>(`${dir}/marking_questions_list.json`);
   const assembleWork = readJson<unknown>(`${dir}/assemble_grader_work.json`);
   const flattenSections = readJson<unknown>(`${dir}/flatten_sections.json`);
+  const passthrough = gradesForPassthrough(opts.grades);
 
   return {
     description: opts.description,
@@ -78,16 +83,17 @@ function buildTest(opts: {
       "Assemble Grader Work": assembleWork,
       "Flatten Sections": flattenSections,
       "Grade Each Section": opts.grades,
-      "Final Output": opts.grades,
-      "Grade Count Check": opts.grades,
+      "Final Output": passthrough,
+      "Grade Count Check": passthrough,
     },
   };
 }
 
 function readGradeRows(relativeFile: string): GradeRow[] | undefined {
-  const rows = readJson<{ expectedOutputs: { "Final Output"?: (GradeRow | LegacyGradeRow)[] | null } }>(
+  const file = readJson<{ expectedOutputs: Record<string, (GradeRow | LegacyGradeRow)[] | null | undefined> }>(
     relativeFile,
-  ).expectedOutputs["Final Output"];
+  ).expectedOutputs;
+  const rows = file["Grade Each Section"] ?? file["Final Output"];
   if (!Array.isArray(rows)) return undefined;
   return rows.map((row) => normalizeGradeRow(row));
 }
@@ -151,7 +157,7 @@ writeTest(
   "homework_grader/homework_grader_testing.json",
   buildTest({
     description:
-      "Homework Grader — Algebra II classroom sample. score compared ±2 (structure testTolerance); mistake_explanation is LLM-checked when present.",
+      "Homework Grader — Algebra II classroom sample. score compared exactly (testTolerance 0); mistake_explanation is LLM-checked when present.",
     inputs: {
       "Marking Schema": "homework_marking_schema.json",
       "Student Submissions": [
@@ -183,7 +189,7 @@ const firstGradeGrades: GradeRow[] = [
     section_id: "A",
     score: 1,
     max_score: 2,
-    mistake_explanation: "Good counting-back attempt but final answer 5 is incorrect (should be 4).",
+    mistake_explanation: "Exactly 1 pt — counting-back shown but final answer 5 is wrong (correct answer is 4).",
   }),
   gradeRow({
     student_label: "Riley Park",
@@ -203,7 +209,7 @@ writeTest(
   "homework_grader/homework_first_grade_testing.json",
   buildTest({
     description:
-      "Homework Grader — 1st grade worksheet smoke test. score compared ±2; mistake_explanation is LLM-checked when present.",
+      "Homework Grader — 1st grade worksheet smoke test. score compared exactly (testTolerance 0); mistake_explanation is LLM-checked when present.",
     inputs: {
       "Marking Schema": "homework_marking_schema_first_grade.json",
       "Student Submissions": ["homework_student_riley_first_grade.md"],
@@ -238,7 +244,7 @@ const universityGrades: GradeRow[] = [
     score: 2,
     max_score: 10,
     mistake_explanation:
-      "Invalid comparison with ∑1/n² — comparison test hypotheses not satisfied; at most 2 pts per rubric.",
+      "Bare comparison with ∑1/n² — exactly 2 pts maximum per rubric; comparison hypotheses not satisfied.",
   }),
 ];
 
@@ -246,7 +252,7 @@ writeTest(
   "homework_grader/homework_university_testing.json",
   buildTest({
     description:
-      "Homework Grader — university real analysis (LaTeX). score compared ±2; mistake_explanation is LLM-checked when present.",
+      "Homework Grader — university real analysis (LaTeX). score compared exactly (testTolerance 0); mistake_explanation is LLM-checked when present.",
     inputs: {
       "Marking Schema": "homework_marking_schema_university.json",
       "Student Submissions": ["homework_student_priya_university.md"],

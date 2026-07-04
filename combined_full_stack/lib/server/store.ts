@@ -19,7 +19,6 @@ import { computeInvalid, migrateProjectModules, syncAutoQuoteSteps } from "./val
 import { stripSharedModels } from "./builtin_models";
 import type {
   DocId,
-  DocLabel,
   DocRef,
   InputType,
   PipelineModule,

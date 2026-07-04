@@ -17,6 +17,7 @@ import {
   writeTestingCompareWidth,
 } from "@/lib/testing-settings"
 import { firstFailure, probabilisticReferencePaths, diffExplanationMap, deterministicCompareCores } from "@/lib/testing-files"
+import { stablePrettyJson } from "@/lib/deep_equal"
 import { jsonUnifiedDiffSourceIndexes } from "@/lib/json-diff"
 import { cn } from "@/lib/utils"
 import { RunTestStepStatus, type RunTestProbabilisticResult, type RunTestStepResult } from "@/lib/types"
@@ -80,9 +81,9 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
       ? deterministicCompareCores(result.expected, result.actual, result.ignoredPaths)
       : undefined
   const expectedCorePretty =
-    deterministicCores ? JSON.stringify(deterministicCores.expectedCore, null, 2) : undefined
+    deterministicCores ? stablePrettyJson(deterministicCores.expectedCore) : undefined
   const actualCorePretty =
-    deterministicCores ? JSON.stringify(deterministicCores.actualCore, null, 2) : undefined
+    deterministicCores ? stablePrettyJson(deterministicCores.actualCore) : undefined
   const diffSourceIndexes =
     deterministicCores
       ? jsonUnifiedDiffSourceIndexes(deterministicCores.expectedCore, deterministicCores.actualCore)
@@ -170,7 +171,7 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
           <JsonFieldKindLegend />
           {result.expected !== undefined && result.actual !== undefined ? (
             <ExpectedActualCompare
-              expectedJson={JSON.stringify(result.expected, null, 2)}
+              expectedJson={stablePrettyJson(result.expected)}
               actual={result.actual}
               probabilisticPaths={result.ignoredPaths ?? []}
               probabilisticCheckedPaths={probabilisticCheckedPaths}
@@ -191,7 +192,7 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
                   <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">expected</p>
                   <div className="max-h-72 overflow-auto rounded border border-border bg-secondary/30 p-2">
                     <JsonFieldKindHighlight
-                      json={JSON.stringify(result.expected, null, 2)}
+                      json={stablePrettyJson(result.expected)}
                       probabilisticPaths={result.ignoredPaths ?? []}
                       probabilisticCheckedPaths={probabilisticCheckedPaths}
                       tolerantPaths={result.tolerantPaths ?? []}
@@ -206,7 +207,7 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
                     <p className="font-mono text-[11px] text-muted-foreground">— no output —</p>
                   ) : (
                     <JsonFieldKindHighlight
-                      json={JSON.stringify(result.actual, null, 2)}
+                      json={stablePrettyJson(result.actual)}
                       probabilisticPaths={result.ignoredPaths ?? []}
                       probabilisticCheckedPaths={probabilisticCheckedPaths}
                       tolerantPaths={result.tolerantPaths ?? []}
@@ -258,7 +259,7 @@ function ProbabilisticFieldCheck({ result }: { result: RunTestProbabilisticResul
                 <div>
                   <p className="mb-1 font-mono text-[9px] uppercase text-muted-foreground">expected reference</p>
                   <pre className="max-h-24 overflow-auto rounded border border-border bg-secondary/30 p-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
-                    {JSON.stringify(result.expected, null, 2)}
+                    {stablePrettyJson(result.expected)}
                   </pre>
                 </div>
               )}
@@ -272,7 +273,7 @@ function ProbabilisticFieldCheck({ result }: { result: RunTestProbabilisticResul
                       : "border-destructive/30 bg-destructive/10 text-destructive",
                   )}
                 >
-                  {result.actual === undefined ? "— missing —" : JSON.stringify(result.actual, null, 2)}
+                  {result.actual === undefined ? "— missing —" : stablePrettyJson(result.actual)}
                 </pre>
               </div>
             </div>

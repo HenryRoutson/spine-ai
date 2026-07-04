@@ -1,5 +1,5 @@
 {
-  "description": "Homework Grader — 1st grade worksheet smoke test. score compared ±2; mistake_explanation is LLM-checked when present.",
+  "description": "Homework Grader — 1st grade worksheet smoke test. score compared exactly (testTolerance 0); mistake_explanation is LLM-checked when present.",
   "inputs": {
     "Marking Schema": "homework_marking_schema_first_grade.json",
     "Student Submissions": [
@@ -12,37 +12,37 @@
         "question_id": "Q1",
         "prompt": "Maya has 2 red apples and 3 green apples. How many apples does she have altogether?",
         "max_score": 2,
-        "marking_criteria": "2 pts for 5, 1 pt if counting is shown but the total is wrong"
+        "marking_criteria": "Exactly 2 pts for answer 5. Exactly 1 pt if counting or addition work is shown but the total is wrong. Otherwise 0."
       },
       {
         "question_id": "Q2",
         "prompt": "What is 3 + 4?",
         "max_score": 2,
-        "marking_criteria": "2 pts for 7, 1 pt for a counting attempt with a near miss"
+        "marking_criteria": "Exactly 2 pts for answer 7. Exactly 1 pt if a counting attempt is shown (e.g. fingers) but the answer is wrong. Otherwise 0."
       },
       {
         "question_id": "Q3",
         "prompt": "What is 10 - 6?",
         "max_score": 2,
-        "marking_criteria": "2 pts for 4, 1 pt for a counting-back attempt"
+        "marking_criteria": "Exactly 2 pts for answer 4. Exactly 1 pt if counting-back work is shown but the final answer is wrong. Otherwise 0."
       },
       {
         "question_id": "Q4",
         "prompt": "How many sides does a triangle have?",
         "max_score": 2,
-        "marking_criteria": "2 pts for 3"
+        "marking_criteria": "Exactly 2 pts for 3. Exactly 0 otherwise."
       },
       {
         "question_id": "Q5",
         "prompt": "Which number is bigger: 8 or 5?",
         "max_score": 2,
-        "marking_criteria": "2 pts for 8"
+        "marking_criteria": "Exactly 2 pts for 8. Exactly 0 otherwise."
       }
     ],
     "Assemble Grader Work": {
       "marking_schema": {
         "filename": "marking_schema.json",
-        "content": "{\"assignment_title\":\"1st Grade Maths — Worksheet 3\",\"sections\":[{\"section_id\":\"A\",\"title\":\"Section A — Counting and addition\",\"max_score\":6,\"criteria\":\"Full marks for the correct number; 1 pt for a good try with counting shown\",\"questions\":[{\"question_id\":\"Q1\",\"prompt\":\"Maya has 2 red apples and 3 green apples. How many apples does she have altogether?\",\"max_score\":2,\"marking_criteria\":\"2 pts for 5, 1 pt if counting is shown but the total is wrong\"},{\"question_id\":\"Q2\",\"prompt\":\"What is 3 + 4?\",\"max_score\":2,\"marking_criteria\":\"2 pts for 7, 1 pt for a counting attempt with a near miss\"},{\"question_id\":\"Q3\",\"prompt\":\"What is 10 - 6?\",\"max_score\":2,\"marking_criteria\":\"2 pts for 4, 1 pt for a counting-back attempt\"}]},{\"section_id\":\"B\",\"title\":\"Section B — Shapes and comparing\",\"max_score\":4,\"criteria\":\"Answer must match exactly\",\"questions\":[{\"question_id\":\"Q4\",\"prompt\":\"How many sides does a triangle have?\",\"max_score\":2,\"marking_criteria\":\"2 pts for 3\"},{\"question_id\":\"Q5\",\"prompt\":\"Which number is bigger: 8 or 5?\",\"max_score\":2,\"marking_criteria\":\"2 pts for 8\"}]}]}"
+        "content": "{\"assignment_title\":\"1st Grade Maths — Worksheet 3\",\"sections\":[{\"criteria\":\"Only the scores 0, 1, or 2 per question — no other values\",\"max_score\":6,\"questions\":[{\"marking_criteria\":\"Exactly 2 pts for answer 5. Exactly 1 pt if counting or addition work is shown but the total is wrong. Otherwise 0.\",\"max_score\":2,\"prompt\":\"Maya has 2 red apples and 3 green apples. How many apples does she have altogether?\",\"question_id\":\"Q1\"},{\"marking_criteria\":\"Exactly 2 pts for answer 7. Exactly 1 pt if a counting attempt is shown (e.g. fingers) but the answer is wrong. Otherwise 0.\",\"max_score\":2,\"prompt\":\"What is 3 + 4?\",\"question_id\":\"Q2\"},{\"marking_criteria\":\"Exactly 2 pts for answer 4. Exactly 1 pt if counting-back work is shown but the final answer is wrong. Otherwise 0.\",\"max_score\":2,\"prompt\":\"What is 10 - 6?\",\"question_id\":\"Q3\"}],\"section_id\":\"A\",\"title\":\"Section A — Counting and addition\"},{\"criteria\":\"Answer must match exactly — only 0 or 2 pts per question\",\"max_score\":4,\"questions\":[{\"marking_criteria\":\"Exactly 2 pts for 3. Exactly 0 otherwise.\",\"max_score\":2,\"prompt\":\"How many sides does a triangle have?\",\"question_id\":\"Q4\"},{\"marking_criteria\":\"Exactly 2 pts for 8. Exactly 0 otherwise.\",\"max_score\":2,\"prompt\":\"Which number is bigger: 8 or 5?\",\"question_id\":\"Q5\"}],\"section_id\":\"B\",\"title\":\"Section B — Shapes and comparing\"}]}"
       },
       "student_submissions": [
         {
@@ -58,7 +58,7 @@
         "title": "Section A — Counting and addition — Q1",
         "body": "Maya has 2 red apples and 3 green apples. How many apples does she have altogether?\nStudent work: 2 + 3 = 5 apples!",
         "max_score": 2,
-        "criteria": "2 pts for 5, 1 pt if counting is shown but the total is wrong"
+        "criteria": "Exactly 2 pts for answer 5. Exactly 1 pt if counting or addition work is shown but the total is wrong. Otherwise 0."
       },
       {
         "student_label": "Riley Park",
@@ -66,7 +66,7 @@
         "title": "Section A — Counting and addition — Q2",
         "body": "What is 3 + 4?\nStudent work: 7 (counted on fingers)",
         "max_score": 2,
-        "criteria": "2 pts for 7, 1 pt for a counting attempt with a near miss"
+        "criteria": "Exactly 2 pts for answer 7. Exactly 1 pt if a counting attempt is shown (e.g. fingers) but the answer is wrong. Otherwise 0."
       },
       {
         "student_label": "Riley Park",
@@ -74,7 +74,7 @@
         "title": "Section A — Counting and addition — Q3",
         "body": "What is 10 - 6?\nStudent work: 5 (counted back 10, 9, 8, 7, 6, 5)",
         "max_score": 2,
-        "criteria": "2 pts for 4, 1 pt for a counting-back attempt"
+        "criteria": "Exactly 2 pts for answer 4. Exactly 1 pt if counting-back work is shown but the final answer is wrong. Otherwise 0."
       },
       {
         "student_label": "Riley Park",
@@ -82,7 +82,7 @@
         "title": "Section B — Shapes and comparing — Q4",
         "body": "How many sides does a triangle have?\nStudent work: 3 sides",
         "max_score": 2,
-        "criteria": "2 pts for 3"
+        "criteria": "Exactly 2 pts for 3. Exactly 0 otherwise."
       },
       {
         "student_label": "Riley Park",
@@ -90,7 +90,7 @@
         "title": "Section B — Shapes and comparing — Q5",
         "body": "Which number is bigger: 8 or 5?\nStudent work: 8",
         "max_score": 2,
-        "criteria": "2 pts for 8"
+        "criteria": "Exactly 2 pts for 8. Exactly 0 otherwise."
       }
     ],
     "Grade Each Section": [
@@ -116,7 +116,7 @@
         "score": 1,
         "max_score": 2,
         "correct": false,
-        "mistake_explanation": "Good counting-back attempt but final answer 5 is incorrect (should be 4)."
+        "mistake_explanation": "Exactly 1 pt — counting-back shown but final answer 5 is wrong (correct answer is 4)."
       },
       {
         "student_label": "Riley Park",
@@ -158,7 +158,7 @@
         "score": 1,
         "max_score": 2,
         "correct": false,
-        "mistake_explanation": "Good counting-back attempt but final answer 5 is incorrect (should be 4)."
+        "mistake_explanation": null
       },
       {
         "student_label": "Riley Park",
@@ -200,7 +200,7 @@
         "score": 1,
         "max_score": 2,
         "correct": false,
-        "mistake_explanation": "Good counting-back attempt but final answer 5 is incorrect (should be 4)."
+        "mistake_explanation": null
       },
       {
         "student_label": "Riley Park",
