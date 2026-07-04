@@ -9,6 +9,9 @@ import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { MarkdownView } from "@/components/highlight"
 import { useStore } from "@/lib/store"
+import { ResizableSplit } from "@/components/resizable-split"
+import { docsEditorSplit } from "@/lib/layout-split-settings"
+import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
 
 type TabId = "edit" | "preview" | "split"
@@ -35,6 +38,8 @@ export function Documentation() {
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const isDirty = draft !== documentation
+  const { width: editorWidth, setWidth: setEditorWidth, commitWidth: commitEditorWidth } =
+    usePersistedLeadingWidth(docsEditorSplit)
 
   const handleSave = useCallback(() => {
     setDocumentation(draft)
@@ -91,27 +96,55 @@ export function Documentation() {
       </div>
 
       {/* panels */}
-      <div className="flex flex-1 overflow-hidden">
-        {tab !== "preview" && (
-          <textarea
-            className={cn(
-              "resize-none bg-background p-5 font-mono text-xs leading-relaxed text-foreground placeholder:text-muted-foreground/40 focus:outline-none",
-              tab === "split" ? "w-1/2 border-r border-border" : "flex-1",
-            )}
-            placeholder={PLACEHOLDER}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            spellCheck
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {tab === "split" ? (
+          <ResizableSplit
+            className="min-h-0 flex-1"
+            leadingWidth={editorWidth}
+            onLeadingWidthChange={setEditorWidth}
+            onLeadingWidthCommit={commitEditorWidth}
+            minLeading={docsEditorSplit.min}
+            maxLeading={docsEditorSplit.max}
+            leading={
+              <textarea
+                className="h-full min-h-0 w-full resize-none bg-background p-5 font-mono text-xs leading-relaxed text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+                placeholder={PLACEHOLDER}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                spellCheck
+              />
+            }
+            trailing={
+              <div className="min-h-0 flex-1 overflow-auto p-5">
+                {draft.trim() ? (
+                  <MarkdownView md={draft} />
+                ) : (
+                  <p className="font-mono text-xs text-muted-foreground/50">Nothing to preview yet.</p>
+                )}
+              </div>
+            }
           />
-        )}
-        {tab !== "edit" && (
-          <div className={cn("overflow-auto p-5", tab === "split" ? "w-1/2" : "flex-1")}>
-            {draft.trim() ? (
-              <MarkdownView md={draft} />
-            ) : (
-              <p className="font-mono text-xs text-muted-foreground/50">Nothing to preview yet.</p>
+        ) : (
+          <>
+            {tab === "edit" && (
+              <textarea
+                className="min-h-0 flex-1 resize-none bg-background p-5 font-mono text-xs leading-relaxed text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+                placeholder={PLACEHOLDER}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                spellCheck
+              />
             )}
-          </div>
+            {tab === "preview" && (
+              <div className="min-h-0 flex-1 overflow-auto p-5">
+                {draft.trim() ? (
+                  <MarkdownView md={draft} />
+                ) : (
+                  <p className="font-mono text-xs text-muted-foreground/50">Nothing to preview yet.</p>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

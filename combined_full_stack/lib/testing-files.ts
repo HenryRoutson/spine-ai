@@ -1,6 +1,8 @@
 // AI : *_testing.json format — per-step expected outputs to pinpoint where a pipeline diverges.
 // AI : validated against the live pipeline (labels + spine output types) since pipelines drift.
 
+import { applySchemaDefaults, jsonSchemaToFormRoot } from "@/lib/schema-form"
+import { stepOutputJsonSchema } from "@/lib/step-json-schema"
 import { deepEqual, deepEqualDiffPath } from "@/lib/deep_equal"
 import { jsonUnifiedDiff } from "@/lib/json-diff"
 import { resolveNamedRunInputs, type ResolvedNamedInputs } from "@/lib/inference-presets"
@@ -121,7 +123,10 @@ export function validateTestFile(
       issues.push({ level: "warning", where: label, message: "placeholder — fill in the expected output" })
       continue
     }
-    const check = validatePipelineStateEntry(labelAsStateKey(label), value, project)
+    const schema = stepOutputJsonSchema(project, label)
+    const root = schema ? jsonSchemaToFormRoot(schema) : null
+    const normalized = root ? applySchemaDefaults(value, root) : value
+    const check = validatePipelineStateEntry(labelAsStateKey(label), normalized, project)
     if (!check.ok) {
       issues.push({
         level: "error",
@@ -133,6 +138,100 @@ export function validateTestFile(
 
   issues.push(...validateNamedInputs(test.inputs ?? {}, project, projectDocs))
   return issues
+}
+
+export type TestStepTrackStatus = "input" | "passthrough" | "tracked" | "untracked"
+
+export type OrphanedExpectedStep = {
+  label: step_label_string
+  remapCandidates: step_label_string[]
+}
+
+export type OrphanedInputStep = {
+  label: step_label_string
+  remapCandidates: step_label_string[]
+}
+
+// AI : live pipeline vs test file — which steps are covered, and what no longer exists.
+export type TestPipelineAlignment = {
+  stepRows: Array<{ module: PipelineModule; trackStatus: TestStepTrackStatus }>
+  orphanedExpected: OrphanedExpectedStep[]
+  orphanedInputs: OrphanedInputStep[]
+}
+
+function trackedExpectedKeys(expectedOutputs: Record<step_label_string, unknown>): Set<string> {
+  return new Set(Object.keys(expectedOutputs).map(labelAsStateKey))
+}
+
+// AI : typed remap targets — pipeline steps whose output type accepts this expected value.
+export function remapCandidatesForExpectedValue(
+  expectedValue: unknown,
+  expectedOutputs: Record<step_label_string, unknown>,
+  project: Project,
+): step_label_string[] {
+  const tracked = trackedExpectedKeys(expectedOutputs)
+  const candidates: step_label_string[] = []
+  for (const m of project.modules) {
+    if (!isComparableStep(m)) continue
+    const key = labelAsStateKey(m.label)
+    if (tracked.has(key)) continue
+    if (expectedValue === null) {
+      candidates.push(key)
+      continue
+    }
+    const check = validatePipelineStateEntry(key, expectedValue, project)
+    if (check.ok) candidates.push(key)
+  }
+  return candidates
+}
+
+function remapCandidatesForOrphanInput(
+  orphanLabel: step_label_string,
+  inputs: SpineTestFile["inputs"],
+  project: Project,
+): step_label_string[] {
+  const used = new Set(Object.keys(inputs ?? {}).map(labelAsStateKey))
+  used.delete(labelAsStateKey(orphanLabel))
+  return inputModulesOf(project.modules)
+    .map((m) => labelAsStateKey(m.label))
+    .filter((key) => !used.has(key))
+}
+
+export function analyzeTestPipelineAlignment(
+  test: Pick<SpineTestFile, "inputs" | "expectedOutputs">,
+  project: Project,
+): TestPipelineAlignment {
+  const tracked = trackedExpectedKeys(test.expectedOutputs)
+  const stepRows = project.modules.map((module) => {
+    const key = labelAsStateKey(module.label)
+    let trackStatus: TestStepTrackStatus
+    if (module.kind === ModuleKind.Input) trackStatus = "input"
+    else if (!isComparableStep(module)) trackStatus = "passthrough"
+    else if (tracked.has(key)) trackStatus = "tracked"
+    else trackStatus = "untracked"
+    return { module, trackStatus }
+  })
+
+  const orphanedExpected: OrphanedExpectedStep[] = []
+  for (const [label, value] of Object.entries(test.expectedOutputs)) {
+    const mod = moduleByLabel(project.modules, label)
+    if (mod && isComparableStep(mod)) continue
+    orphanedExpected.push({
+      label: labelAsStateKey(label),
+      remapCandidates: mod
+        ? []
+        : remapCandidatesForExpectedValue(value, test.expectedOutputs, project),
+    })
+  }
+
+  const orphanedInputs: OrphanedInputStep[] = Object.keys(test.inputs ?? {})
+    .filter((label) => !inputModulesOf(project.modules).some((m) => labelAsStateKey(m.label) === labelAsStateKey(label)))
+    .map((label) => ({
+      label: labelAsStateKey(label),
+      remapCandidates: remapCandidatesForOrphanInput(label, test.inputs, project),
+    }))
+
+  return { stepRows, orphanedExpected, orphanedInputs }
 }
 
 export type ResolvedTestInputs = ResolvedNamedInputs

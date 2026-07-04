@@ -79,6 +79,7 @@ const structureModelPatchSchema = z
     }
   });
 
+// AI : config fields are what PUT may change; benchmark metrics are accepted but ignored (see mergeStrategyConfigPatch).
 const strategyPatchSchema = z
   .object({
     id: z.string().max(128),
@@ -86,10 +87,10 @@ const strategyPatchSchema = z
     name: z.string().max(200),
     enabled: z.boolean(),
     model: z.string().max(128),
-    accuracy: z.number().min(0).max(100),
-    latencyMs: z.number().min(0).max(86_400_000),
-    costCents: z.number().min(0).max(1_000_000),
-    passRate: z.number().min(0).max(100),
+    accuracy: z.number().min(0).max(100).optional(),
+    passRate: z.number().min(0).max(100).optional(),
+    latencyMs: z.number().min(0).optional(),
+    costCents: z.number().min(0).optional(),
   })
   .strict();
 
@@ -137,7 +138,6 @@ export const projectPatchSchema = z
     expectedOutputs: z.record(z.string().max(256), jsonSizeBounded(100_000)).optional(),
     inferencePresets: z.array(jsonSizeBounded(50_000)).max(50).optional(),
     documentation: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS).optional(),
-    lastOpenedAt: z.number().min(0).max(8_640_000_000_000).optional(),
   })
   .strict();
 
@@ -261,6 +261,7 @@ export const createSharedLinkBodySchema = z
     defaultModel: z.string().max(128).optional(),
     fundingMode: z.enum(["sharer_pays", "viewer_pays", "viewer_signs_in"]).optional(),
     viewerNameRequired: z.boolean().optional(),
+    spendLimitCents: z.number().min(0).optional(),
     defaultDocsByModule: inputDocsByModuleSchema,
   })
   .strict();

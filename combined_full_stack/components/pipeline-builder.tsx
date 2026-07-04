@@ -1,7 +1,7 @@
 "use client"
 
 // AI : TODO refactor — only extract shared pipeline chrome if a third layout consumer appears (Logging already uses PipelineCanvas).
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Plus,
   Trash2,
@@ -51,6 +51,14 @@ import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { copyTextToClipboard } from "@/lib/clipboard"
 import { downloadBlob } from "@/lib/download-blob"
+import { ResizableSplit } from "@/components/resizable-split"
+import {
+  PIPELINE_CANVAS_MAX,
+  PIPELINE_CANVAS_MIN,
+  readPipelineCanvasWidth,
+  usePipelineCanvasWidth,
+  writePipelineCanvasWidth,
+} from "@/lib/editor-split-settings"
 
 export function PipelineBuilder() {
   const { modules, setModules, models, model: globalModel, runs, typeAliases, project } = useStore()
@@ -59,6 +67,9 @@ export function PipelineBuilder() {
   const [exportedTs, setExportedTs] = useState(false)
   const [exportedPy, setExportedPy] = useState(false)
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
+  const savedCanvasWidth = usePipelineCanvasWidth()
+  const [canvasWidth, setCanvasWidth] = useState(readPipelineCanvasWidth)
+  useEffect(() => setCanvasWidth(savedCanvasWidth), [savedCanvasWidth])
 
   const selected = modules.find((m) => m.id === selectedId)
   const { pipelineEditingBlocked: editingBlocked } = computeWorkspaceValidity(
@@ -264,117 +275,126 @@ export function PipelineBuilder() {
           </div>
         )}
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(24rem,44%)]">
-          <div className="min-w-0 overflow-auto">
-            <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col items-stretch px-6 py-8">
-              <PipelineCanvas
-                modules={modules}
-                models={models}
-                selectedId={selectedId as ModuleId}
-                onSelect={setSelectedId}
-                invalid={invalidMap}
-                warnings={warningMap}
-                renderInsertBefore={(insertAt) => (
-                  <InsertSlot insertAt={insertAt} onInsert={insertModule} blocked={editingBlocked} />
-                )}
-                renderInsertAfter={(insertAt, opts) => (
-                  <InsertSlot
-                    insertAt={insertAt}
-                    onInsert={insertModule}
-                    connectionInvalid={opts.connectionInvalid}
-                    blocked={editingBlocked || opts.blocked}
-                  />
-                )}
-                renderFooter={() => (
-                  <div className="mt-6 flex w-full flex-col items-center">
-                    {!editingBlocked && (
-                      <AddStepMenu insertAt={modules.length} onInsert={insertModule} variant="button" />
+        <ResizableSplit
+          className="min-h-0 flex-1"
+          leadingWidth={canvasWidth}
+          onLeadingWidthChange={setCanvasWidth}
+          onLeadingWidthCommit={writePipelineCanvasWidth}
+          minLeading={PIPELINE_CANVAS_MIN}
+          maxLeading={PIPELINE_CANVAS_MAX}
+          leading={
+            <div className="min-h-0 min-w-0 overflow-auto">
+              <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col items-stretch px-6 py-8">
+                <PipelineCanvas
+                  modules={modules}
+                  models={models}
+                  selectedId={selectedId as ModuleId}
+                  onSelect={setSelectedId}
+                  invalid={invalidMap}
+                  warnings={warningMap}
+                  renderInsertBefore={(insertAt) => (
+                    <InsertSlot insertAt={insertAt} onInsert={insertModule} blocked={editingBlocked} />
+                  )}
+                  renderInsertAfter={(insertAt, opts) => (
+                    <InsertSlot
+                      insertAt={insertAt}
+                      onInsert={insertModule}
+                      connectionInvalid={opts.connectionInvalid}
+                      blocked={editingBlocked || opts.blocked}
+                    />
+                  )}
+                  renderFooter={() => (
+                    <div className="mt-6 flex w-full flex-col items-center">
+                      {!editingBlocked && (
+                        <AddStepMenu insertAt={modules.length} onInsert={insertModule} variant="button" />
+                      )}
+                      <PipelineSummaryBox />
+                    </div>
+                  )}
+                />
+              </div>
+            </div>
+          }
+          trailing={
+            <aside className="flex min-h-0 flex-col overflow-hidden">
+              <div className="border-b border-border px-3 py-2">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Inspector
+                </span>
+              </div>
+
+              {selected ? (
+                <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      {MODULE_META[selected.kind].label}
+                    </span>
+                    {isAutoQuoteStep(selected) ? (
+                      <AutoQuoteLockTooltip />
+                    ) : editingBlocked ? null : (
+                      <div className="flex items-center gap-1">
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, -1)}>
+                          <ArrowUp className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, 1)}>
+                          <ArrowDown className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => remove(selected.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     )}
-                    <PipelineSummaryBox />
                   </div>
-                )}
-              />
-            </div>
-          </div>
-
-          <aside className="flex min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-border">
-            <div className="border-b border-border px-3 py-2">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                Inspector
-              </span>
-            </div>
-
-            {selected ? (
-              <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    {MODULE_META[selected.kind].label}
-                  </span>
-                  {isAutoQuoteStep(selected) ? (
-                    <AutoQuoteLockTooltip />
-                  ) : editingBlocked ? null : (
-                    <div className="flex items-center gap-1">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, -1)}>
-                        <ArrowUp className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, 1)}>
-                        <ArrowDown className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                        onClick={() => remove(selected.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                  <PipelineModuleFields
+                    module={selected}
+                    models={models}
+                    typeAliases={typeAliases}
+                    modules={modules}
+                    mode={editingBlocked ? "view" : "edit"}
+                    globalModel={globalModel}
+                    invalid={invalidForModule(invalid, selected.id)}
+                    invalidIssues={invalidIssuesForModule(invalid, selected.id)}
+                    warnings={warnings.get(selected.id)}
+                    ioMismatchFix={ioMismatchInspectorFix(selected.id as ModuleId, modules, invalid, models)}
+                    onUpdate={editingBlocked ? undefined : (patch) => update(selected.id, patch)}
+                    onFixIoMismatch={
+                      editingBlocked ? undefined : (mismatchModuleId, kind) => fixIoMismatch(mismatchModuleId, kind)
+                    }
+                  />
+                  {!isAutoQuoteStep(selected) && (
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <Stat
+                        label="avg latency"
+                        value={
+                          metrics.has(selected.id) ? `${metrics.get(selected.id)!.avgMs}ms` : "—"
+                        }
+                      />
+                      <Stat
+                        label="avg cost"
+                        value={
+                          metrics.has(selected.id)
+                            ? formatCostCents(metrics.get(selected.id)!.avgCostCents)
+                            : "—"
+                        }
+                      />
                     </div>
                   )}
                 </div>
-                <PipelineModuleFields
-                  module={selected}
-                  models={models}
-                  typeAliases={typeAliases}
-                  modules={modules}
-                  mode={editingBlocked ? "view" : "edit"}
-                  globalModel={globalModel}
-                  invalid={invalidForModule(invalid, selected.id)}
-                  invalidIssues={invalidIssuesForModule(invalid, selected.id)}
-                  warnings={warnings.get(selected.id)}
-                  ioMismatchFix={ioMismatchInspectorFix(selected.id as ModuleId, modules, invalid, models)}
-                  onUpdate={editingBlocked ? undefined : (patch) => update(selected.id, patch)}
-                  onFixIoMismatch={
-                    editingBlocked ? undefined : (mismatchModuleId, kind) => fixIoMismatch(mismatchModuleId, kind)
-                  }
-                />
-                {!isAutoQuoteStep(selected) && (
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <Stat
-                      label="avg latency"
-                      value={
-                        metrics.has(selected.id) ? `${metrics.get(selected.id)!.avgMs}ms` : "—"
-                      }
-                    />
-                    <Stat
-                      label="avg cost"
-                      value={
-                        metrics.has(selected.id)
-                          ? formatCostCents(metrics.get(selected.id)!.avgCostCents)
-                          : "—"
-                      }
-                    />
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-1 items-center justify-center p-6 text-center">
-                <p className="text-xs text-muted-foreground">
-                  Add a module and select it to configure.
-                </p>
-              </div>
-            )}
-          </aside>
-        </div>
+              ) : (
+                <div className="flex flex-1 items-center justify-center p-6 text-center">
+                  <p className="text-xs text-muted-foreground">
+                    Add a module and select it to configure.
+                  </p>
+                </div>
+              )}
+            </aside>
+          }
+        />
       </div>
     </TooltipProvider>
   )

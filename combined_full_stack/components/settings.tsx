@@ -8,6 +8,9 @@ import { ModelSelector } from "@/components/model-selector"
 import { Button } from "@/components/ui/button"
 import { WindowHeader } from "@/components/window-header"
 import { JsonHighlight } from "@/components/highlight"
+import { ResizableSplit } from "@/components/resizable-split"
+import { settingsNavSplit } from "@/lib/layout-split-settings"
+import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
 import {
   DEFAULT_JSON_VIEWER_HUMAN_VIEW,
@@ -91,6 +94,18 @@ function SyntaxThemePreview({ theme }: { theme: JsonViewerSyntaxThemeId }) {
   )
 }
 
+const SETTINGS_SECTIONS = [
+  { id: "settings-account", label: "Account" },
+  { id: "settings-model", label: "Default model" },
+  { id: "settings-json-reader", label: "JSON reader" },
+  { id: "settings-json-syntax", label: "JSON syntax" },
+  { id: "settings-logging", label: "Run logging" },
+  { id: "settings-pipeline", label: "Pipeline" },
+  { id: "settings-inference", label: "Inference" },
+  { id: "settings-colors", label: "Status colours" },
+  { id: "settings-privacy", label: "Privacy" },
+] as const
+
 export function Settings() {
   const { model, setModel } = useStore()
   const [email, setEmail] = useState<string | null>(null)
@@ -102,6 +117,8 @@ export function Settings() {
   const [inferenceOutputStepsOnly, setInferenceOutputStepsOnly] = useState(DEFAULT_INFERENCE_OUTPUT_STEPS_ONLY)
   const [allowDuplicateRuns, setAllowDuplicateRuns] = useState(DEFAULT_ALLOW_DUPLICATE_RUNS)
   const [colorScheme, setColorScheme] = useState<ColorSchemeId>(DEFAULT_COLOR_SCHEME)
+  const { width: navWidth, setWidth: setNavWidth, commitWidth: commitNavWidth } =
+    usePersistedLeadingWidth(settingsNavSplit)
 
   useEffect(() => {
     void createClient()
@@ -168,9 +185,34 @@ export function Settings() {
         title="Settings"
         description="App preferences — stored locally in your browser."
       />
-      <div className="flex-1 overflow-auto p-5">
-        <div className="flex max-w-lg flex-col gap-4">
-          <section className="rounded-lg border border-border bg-card">
+      <ResizableSplit
+        className="min-h-0 flex-1"
+        leadingWidth={navWidth}
+        onLeadingWidthChange={setNavWidth}
+        onLeadingWidthCommit={commitNavWidth}
+        minLeading={settingsNavSplit.min}
+        maxLeading={settingsNavSplit.max}
+        leading={
+          <nav className="flex h-full flex-col gap-0.5 overflow-y-auto p-2">
+            <p className="px-2 py-1.5 font-mono text-[10px] uppercase text-muted-foreground">sections</p>
+            {SETTINGS_SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() =>
+                  document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+                className="rounded-md px-2.5 py-2 text-left font-mono text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                {s.label}
+              </button>
+            ))}
+          </nav>
+        }
+        trailing={
+          <div className="min-h-0 flex-1 overflow-auto p-5">
+            <div className="mx-auto flex max-w-lg flex-col gap-4">
+          <section id="settings-account" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Account</h3>
             </div>
@@ -192,7 +234,7 @@ export function Settings() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-border bg-card">
+          <section id="settings-model" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Default model</h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -204,7 +246,7 @@ export function Settings() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-border bg-card">
+          <section id="settings-json-reader" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">JSON reader</h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -235,7 +277,7 @@ export function Settings() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-border bg-card">
+          <section id="settings-json-syntax" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">JSON side panel syntax</h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -269,7 +311,7 @@ export function Settings() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-border bg-card">
+          <section id="settings-logging" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Run logging</h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -304,7 +346,7 @@ export function Settings() {
             </label>
           </section>
 
-          <section className="rounded-lg border border-border bg-card">
+          <section id="settings-pipeline" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Pipeline</h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -326,7 +368,7 @@ export function Settings() {
             </label>
           </section>
 
-          <section className="rounded-lg border border-border bg-card">
+          <section id="settings-inference" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Inference</h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -361,7 +403,7 @@ export function Settings() {
             </label>
           </section>
 
-          <section className="rounded-lg border border-border bg-card">
+          <section id="settings-colors" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Status colours</h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -399,9 +441,13 @@ export function Settings() {
             </div>
           </section>
 
-          <PrivacySettings />
-        </div>
-      </div>
+          <div id="settings-privacy">
+            <PrivacySettings />
+          </div>
+            </div>
+          </div>
+        }
+      />
     </div>
   )
 }

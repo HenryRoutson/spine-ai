@@ -143,9 +143,15 @@ function SharedRunContent({ link, linkId }: { link: SharedLinkPublicView; linkId
             </p>
           )}
 
+          {link.spendLimitReached && run.phase !== "running" && (
+            <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              This link has reached its spending limit and cannot accept new runs.
+            </p>
+          )}
+
           <Button
             className="w-full"
-            disabled={!run.allInputsReady || run.phase === "running"}
+            disabled={!run.allInputsReady || run.phase === "running" || link.spendLimitReached}
             onClick={run.start}
           >
             {run.runButtonBusy ? (

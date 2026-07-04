@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Boxes,
-  GitBranch,
   Play,
   ScrollText,
   Database,
@@ -22,6 +21,9 @@ import {
   BookOpen,
   SquareCheck,
 } from "lucide-react"
+import { ResizableSplit } from "@/components/resizable-split"
+import { navSplit, NAV_ICON_ONLY_MAX_WIDTH } from "@/lib/layout-split-settings"
+import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
 import {
@@ -53,7 +55,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
-import { SpineLogoBox } from "@/components/spine-mark"
+import { SpineLogoBox, SpineNavIcon } from "@/components/spine-mark"
 import { clearActiveProjectSession } from "@/lib/active-project-session"
 import { LEGAL } from "@shared/legal/site"
 import type { Project } from "@/lib/types"
@@ -98,9 +100,11 @@ const DocumentationPanel = dynamic(
 
 type WindowId = AppWindowId
 
-const WINDOWS: { id: WindowId; label: string; hint: string; icon: typeof Boxes }[] = [
+type NavIcon = React.ComponentType<{ className?: string }>
+
+const WINDOWS: { id: WindowId; label: string; hint: string; icon: NavIcon }[] = [
   { id: "structure", label: "Structure", hint: "01", icon: Boxes },
-  { id: "pipeline", label: "Pipeline", hint: "02", icon: GitBranch },
+  { id: "pipeline", label: "Pipeline", hint: "02", icon: SpineNavIcon },
   // AI : Testing sits before Inference — tests run before demoing (spec § Testing).
   { id: "testing", label: "Testing", hint: "03", icon: SquareCheck },
   { id: "inference", label: "Inference", hint: "04", icon: Play },
@@ -308,6 +312,10 @@ export function AppShellLayout() {
     if (params.has("session_id") || params.has("canceled")) setActiveWindow("billing")
   }, [setActiveWindow])
 
+  const { width: navWidth, setWidth: setNavWidth, commitWidth: commitNavWidth } =
+    usePersistedLeadingWidth(navSplit)
+  const showNavLabels = navWidth > NAV_ICON_ONLY_MAX_WIDTH
+
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
       <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
@@ -337,57 +345,77 @@ export function AppShellLayout() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        <nav className="flex w-14 flex-col items-center gap-1 border-r border-border py-3 lg:w-44 lg:items-stretch lg:px-2">
-          {WINDOWS.map((w) => {
-            const Icon = w.icon
-            const isActive = activeWindow === w.id
-            const issue = workspaceNavTabIssue(w.id, validity)
-            const disabled = workspaceNavTabDisabled(w.id, validity)
-            return (
-              <button
-                key={w.id}
-                type="button"
-                disabled={disabled}
-                onClick={() => {
-                  if (disabled) return
-                  setActiveWindow(w.id)
-                }}
-                title={workspaceNavTabTitle(w.id, w.label, validity)}
-                className={cn(
-                  "group flex items-center gap-3 rounded-md px-2.5 py-2 text-sm transition-colors",
-                  "min-h-[44px] justify-center lg:min-h-0 lg:justify-start",
-                  workspaceNavTabButtonClass(isActive, issue, disabled),
-                )}
-              >
-                <Icon
-                  className={cn(
-                    "h-4 w-4 shrink-0",
-                    workspaceNavTabIconClass(isActive, issue),
-                  )}
-                />
-                <span className="hidden flex-1 text-left lg:inline">{w.label}</span>
-                <span className="hidden font-mono text-[10px] text-muted-foreground lg:inline">
-                  {w.hint}
-                </span>
-              </button>
-            )
-          })}
-        </nav>
-
-        <main className="relative flex-1 overflow-hidden" id="main-content">
-          {projectLoading && <ProjectSwitchOverlay projectName={project.name} />}
-          {activeWindow === "structure" && <StructureBuilder />}
-          {activeWindow === "pipeline" && <PipelineBuilder />}
-          {activeWindow === "testing" && <Testing />}
-          {activeWindow === "inference" && <Inference />}
-          {activeWindow === "logging" && <Logging />}
-          {activeWindow === "cache" && <Cache />}
-          {activeWindow === "documents" && <Documents />}
-          {activeWindow === "docs" && <DocumentationPanel />}
-          {activeWindow === "billing" && <Billing />}
-          {activeWindow === "settings" && <SettingsPanel />}
-        </main>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <ResizableSplit
+          className="min-h-0 flex-1"
+          leadingWidth={navWidth}
+          onLeadingWidthChange={setNavWidth}
+          onLeadingWidthCommit={commitNavWidth}
+          minLeading={navSplit.min}
+          maxLeading={navSplit.max}
+          leading={
+            <nav
+              className={cn(
+                "flex h-full flex-col gap-1 overflow-x-hidden overflow-y-auto py-3",
+                showNavLabels ? "items-stretch px-2" : "items-center px-0.5",
+              )}
+            >
+              {WINDOWS.map((w) => {
+                const Icon = w.icon
+                const isActive = activeWindow === w.id
+                const issue = workspaceNavTabIssue(w.id, validity)
+                const disabled = workspaceNavTabDisabled(w.id, validity)
+                return (
+                  <button
+                    key={w.id}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => {
+                      if (disabled) return
+                      setActiveWindow(w.id)
+                    }}
+                    title={workspaceNavTabTitle(w.id, w.label, validity)}
+                    className={cn(
+                      "group flex items-center rounded-md text-sm transition-colors",
+                      showNavLabels
+                        ? "min-h-0 justify-start gap-3 px-2.5 py-2"
+                        : "h-10 w-10 shrink-0 justify-center p-0",
+                      workspaceNavTabButtonClass(isActive, issue, disabled),
+                    )}
+                  >
+                    <Icon
+                      className={cn(
+                        "h-4 w-4 shrink-0",
+                        workspaceNavTabIconClass(isActive, issue),
+                      )}
+                    />
+                    {showNavLabels ? (
+                      <>
+                        <span className="min-w-0 flex-1 break-words text-left">{w.label}</span>
+                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{w.hint}</span>
+                      </>
+                    ) : null}
+                  </button>
+                )
+              })}
+            </nav>
+          }
+          trailing={
+            <main className="relative min-w-0 flex-1 overflow-hidden" id="main-content">
+              {projectLoading && <ProjectSwitchOverlay projectName={project.name} />}
+              {activeWindow === "structure" && <StructureBuilder />}
+              {activeWindow === "pipeline" && <PipelineBuilder />}
+              {activeWindow === "testing" && <Testing />}
+              {activeWindow === "inference" && <Inference />}
+              {activeWindow === "logging" && <Logging />}
+              {activeWindow === "cache" && <Cache />}
+              {activeWindow === "documents" && <Documents />}
+              {activeWindow === "docs" && <DocumentationPanel />}
+              {activeWindow === "billing" && <Billing />}
+              {activeWindow === "settings" && <SettingsPanel />}
+            </main>
+          }
+        />
       </div>
 
       <LazyDocViewer />

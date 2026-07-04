@@ -3,23 +3,21 @@
 // AI : Testing tab — *_testing.json files pin exact per-step outputs; a run pinpoints the
 // AI : first step that diverges. Static checks stay in Structure/Pipeline; this is for full runs.
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Boxes,
   CheckSquare,
   CircleCheck,
   CircleX,
-  GitBranch,
   ListChecks,
   Loader2,
   MinusCircle,
-  Play,
   Plus,
   ScrollText,
   Sparkles,
-  Square,
   TriangleAlert,
 } from "lucide-react"
+import { SpineNavIcon } from "@/components/spine-mark"
 import { JsonHighlight } from "@/components/highlight"
 import { TestResults } from "@/components/test-results"
 import {
@@ -31,11 +29,13 @@ import {
   type TestDraft,
 } from "@/components/testing-editor"
 import { GoToLoggingButton } from "@/components/inference/inference-run-chrome"
+import { RunStopButton, RunWithStopButton } from "@/components/run-with-stop-button"
 import { WindowHeader } from "@/components/window-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { evaluateTestReport } from "@/lib/testing-evaluate"
@@ -44,7 +44,8 @@ import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
 import { labelAsStateKey } from "@/lib/server/pipeline_state"
 import { docsForProject } from "@/lib/project-docs"
-import { awaitRun, cancelRun, isRunBillingError, mergeStepStates, startRunWithRetry, type StepUiState } from "@/lib/run-engine"
+import { awaitRun, isRunBillingError, mergeStepStates, startRunWithRetry, type StepUiState } from "@/lib/run-engine"
+import { isRunAbortedError, useCancellableRunRegistry } from "@/lib/use-cancellable-run"
 import { useStore } from "@/lib/store"
 import { formatCostCents, formatSecondsShort } from "@/lib/format"
 import { runBilledCents, runTotalMs } from "@/lib/run-metrics"
@@ -69,6 +70,14 @@ import {
   type TestFileIssue,
   type TestStepResult,
 } from "@/lib/testing-files"
+import { ResizableSplit } from "@/components/resizable-split"
+import {
+  readTestingSidebarWidth,
+  TESTING_SIDEBAR_MAX,
+  TESTING_SIDEBAR_MIN,
+  useTestingSidebarWidth,
+  writeTestingSidebarWidth,
+} from "@/lib/testing-settings"
 import { cn } from "@/lib/utils"
 import { DocLabel, InputType, RunSource, type PipelineRun, type RunTestReport } from "@/lib/types"
 import type { DocId, DocRef, ModuleId, PipelineModule, Project, RunJobId } from "@/lib/types"
@@ -107,27 +116,6 @@ const EMPTY_TEST_RUN: TestRunUiState = {
   jobId: null,
 }
 
-function RunStopButton({
-  onClick,
-  className,
-}: {
-  onClick: (e: MouseEvent<HTMLButtonElement>) => void
-  className?: string
-}) {
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant="outline"
-      className={cn("h-6 shrink-0 bg-transparent px-2", className)}
-      onClick={onClick}
-      title="Stop run"
-    >
-      <Square className="h-3 w-3 fill-current" />
-    </Button>
-  )
-}
-
 function testStatus(t: TestDocState): "loading" | "load_failed" | "broken" | "errors" | "warnings" | "ok" {
   if (t.loadError) return "load_failed"
   if (t.content === undefined) return "loading"
@@ -143,13 +131,36 @@ function isRunnableTest(t: TestDocState): boolean {
   return true
 }
 
-const STATUS_BADGE: Record<ReturnType<typeof testStatus>, { label: string; className: string }> = {
-  loading: { label: "loading", className: "border-border text-muted-foreground" },
-  load_failed: { label: "load failed", className: "border-destructive/40 text-destructive" },
-  broken: { label: "invalid json", className: "border-destructive/40 text-destructive" },
-  errors: { label: "stale", className: "border-destructive/40 text-destructive" },
-  warnings: { label: "incomplete", className: "border-yellow-500/40 text-yellow-500" },
-  ok: { label: "valid", className: "border-chart-2/40 text-chart-2" },
+type TestSidebarBadgeInfo = { label: string; className: string; tooltip: string }
+
+function sidebarValidationBadge(status: ReturnType<typeof testStatus>): TestSidebarBadgeInfo | null {
+  if (status !== "errors") return null
+  return {
+    label: "validation failed",
+    className: "border-destructive/40 text-destructive",
+    tooltip:
+      "Validation failed — see the errors below. Usually a removed pipeline step, missing input doc, or type mismatch in expectedOutputs.",
+  }
+}
+
+function TestSidebarBadge({ badge }: { badge: TestSidebarBadgeInfo }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Badge
+            variant="outline"
+            className={cn("shrink-0 cursor-help font-mono text-[9px]", badge.className)}
+          />
+        }
+      >
+        {badge.label}
+      </TooltipTrigger>
+      <TooltipContent side="left" className="max-w-xs text-left leading-relaxed">
+        {badge.tooltip}
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 function TestLastVerdictIcon({ passed }: { passed: boolean }) {
@@ -158,19 +169,6 @@ function TestLastVerdictIcon({ passed }: { passed: boolean }) {
   ) : (
     <CircleX className="h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Failed last run" />
   )
-}
-
-const VERDICT_BADGE = {
-  passed: { label: "passed", className: "border-chart-2/40 text-chart-2" },
-  failed: { label: "failed", className: "border-destructive/40 text-destructive" },
-} as const
-
-function sidebarTestBadge(
-  status: ReturnType<typeof testStatus>,
-  lastVerdict: boolean | null,
-): { label: string; className: string } {
-  if (lastVerdict !== null) return lastVerdict ? VERDICT_BADGE.passed : VERDICT_BADGE.failed
-  return STATUS_BADGE[status]
 }
 
 export function Testing() {
@@ -208,11 +206,15 @@ export function Testing() {
 
   // AI : per-test run state — stale batch runs many jobs in parallel, each with its own progress.
   const [runByName, setRunByName] = useState<Map<doc_name_string, TestRunUiState>>(new Map())
-  const abortByName = useRef<Map<doc_name_string, AbortController>>(new Map())
+  const cancellable = useCancellableRunRegistry<doc_name_string>()
   const [runAllActive, setRunAllActive] = useState(false)
   const [runAllDone, setRunAllDone] = useState(0)
   const [runAllTotal, setRunAllTotal] = useState(0)
   const [dirtyContentByName, setDirtyContentByName] = useState<Partial<Record<doc_name_string, string>>>({})
+
+  const savedSidebarWidth = useTestingSidebarWidth()
+  const [sidebarWidth, setSidebarWidth] = useState(readTestingSidebarWidth)
+  useEffect(() => setSidebarWidth(savedSidebarWidth), [savedSidebarWidth])
 
   // AI panel
   const [aiOpen, setAiOpen] = useState(false)
@@ -267,19 +269,11 @@ function staleLoadFailedContent(content: string): string | null {
     [testDocs, contents, loadErrors, project, projectDocs],
   )
 
-  const runnableTests = useMemo(() => testStates.filter(isRunnableTest), [testStates])
   const selected =
     testStates.find((t) => t.doc.id === selectedId) ??
     (selectedName ? testStates.find((t) => t.doc.name === selectedName) : undefined) ??
     testStates[0]
   const selectedRun = selected ? (runByName.get(selected.doc.name) ?? EMPTY_TEST_RUN) : EMPTY_TEST_RUN
-  const anyTestRunning = useMemo(() => {
-    for (const s of runByName.values()) {
-      if (s.phase === "running") return true
-    }
-    return false
-  }, [runByName])
-  const runBusy = anyTestRunning || runAllActive
 
   const patchRunState = useCallback((docName: doc_name_string, patch: Partial<TestRunUiState>) => {
     setRunByName((prev) => {
@@ -340,10 +334,34 @@ function staleLoadFailedContent(content: string): string | null {
     [testSigSets, runs],
   )
 
-  const staleTests = useMemo(
-    () => runnableTests.filter((t) => resolveLastVerdict(t.doc.name) === null),
-    [runnableTests, resolveLastVerdict],
+  const testsNeedingRun = useMemo(
+    () => testStates.filter((t) => resolveLastVerdict(t.doc.name) === null),
+    [testStates, resolveLastVerdict],
   )
+  const staleTests = useMemo(
+    () => testsNeedingRun.filter(isRunnableTest),
+    [testsNeedingRun],
+  )
+  const staleBlockedCount = useMemo(
+    () => testsNeedingRun.filter((t) => !isRunnableTest(t) && t.content !== undefined).length,
+    [testsNeedingRun],
+  )
+  const runAllStaleTitle = useMemo(() => {
+    if (runBlocked) {
+      return typesInvalid ? "fix type errors first" : "fix pipeline errors first"
+    }
+    if (runAllActive) return undefined
+    if (staleTests.length > 0) {
+      return `Run ${staleTests.length} stale test(s) in parallel — test or pipeline changed, or not run yet for the current configuration`
+    }
+    if (staleBlockedCount > 0) {
+      return `${staleBlockedCount} test(s) failed validation — fix them before running`
+    }
+    if (testsNeedingRun.some((t) => t.content === undefined)) {
+      return "waiting for test files to finish loading"
+    }
+    return "all runnable tests have a current pass/fail verdict"
+  }, [runBlocked, typesInvalid, runAllActive, staleTests.length, staleBlockedCount, testsNeedingRun])
 
   // AI : hide stale run results when test/pipeline no longer matches the persisted verdict.
   useEffect(() => {
@@ -370,25 +388,25 @@ function staleLoadFailedContent(content: string): string | null {
     setActionError(null)
   }, [])
 
-  const stopTest = useCallback((docName: doc_name_string) => {
-    abortByName.current.get(docName)?.abort()
-    setRunByName((prev) => {
-      const jobId = prev.get(docName)?.jobId
-      if (jobId) void cancelRun(jobId).catch(console.error)
-      const next = new Map(prev)
-      const cur = next.get(docName) ?? EMPTY_TEST_RUN
-      next.set(docName, { ...cur, phase: "idle", runError: "Stopped" })
-      return next
-    })
-  }, [])
+  const stopTest = useCallback(
+    (docName: doc_name_string) => {
+      cancellable.stop(docName)
+      setRunByName((prev) => {
+        const next = new Map(prev)
+        const cur = next.get(docName) ?? EMPTY_TEST_RUN
+        next.set(docName, { ...cur, phase: "idle", runError: "Stopped" })
+        return next
+      })
+    },
+    [cancellable],
+  )
 
   const stopAllRunningTests = useCallback(() => {
+    cancellable.stopAll()
     setRunByName((prev) => {
       const next = new Map(prev)
       for (const [docName, rs] of prev) {
         if (rs.phase !== "running") continue
-        abortByName.current.get(docName)?.abort()
-        if (rs.jobId) void cancelRun(rs.jobId).catch(console.error)
         next.set(docName, { ...rs, phase: "idle", runError: "Stopped" })
       }
       return next
@@ -396,7 +414,7 @@ function staleLoadFailedContent(content: string): string | null {
     setRunAllActive(false)
     setRunAllDone(0)
     setRunAllTotal(0)
-  }, [])
+  }, [cancellable])
 
   async function createBlankTest() {
     setActionError(null)
@@ -476,8 +494,7 @@ function staleLoadFailedContent(content: string): string | null {
       patchRunState(docName, { runError: resolved.error, phase: "idle" })
       return "error"
     }
-    const ac = new AbortController()
-    abortByName.current.set(docName, ac)
+    const signal = cancellable.begin(docName)
     patchRunState(docName, {
       phase: "running",
       stepStates: new Map(),
@@ -499,10 +516,11 @@ function staleLoadFailedContent(content: string): string | null {
         true,
         RunSource.Testing, // AI : flags the run in Logging (spec § Testing)
       )
+      cancellable.trackJobId(docName, jobId)
       patchRunState(docName, { jobId })
       refreshBilling().catch(console.error)
       const { run } = await awaitRun(jobId, {
-        signal: ac.signal,
+        signal,
         onStep: (steps) =>
           setRunByName((prev) => {
             const next = new Map(prev)
@@ -529,7 +547,7 @@ function staleLoadFailedContent(content: string): string | null {
       updateRunTest(run.id, persistedTest).catch(console.error)
       return "ok"
     } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
+      if (isRunAbortedError(err)) {
         patchRunState(docName, { phase: "idle", runError: "Stopped" })
         return "stopped"
       }
@@ -541,13 +559,13 @@ function staleLoadFailedContent(content: string): string | null {
       patchRunState(docName, { runError: (err as Error).message, phase: "idle" })
       return "error"
     } finally {
-      abortByName.current.delete(docName)
+      cancellable.clear(docName)
     }
   }
 
   async function runAllStaleTests() {
     if (!staleTests.length) {
-      setActionError("No stale tests — every runnable test already has a current pass/fail verdict.")
+      setActionError("No stale tests — every runnable test already has a current pass/fail for this configuration.")
       return
     }
     setActionError(null)
@@ -624,35 +642,19 @@ function staleLoadFailedContent(content: string): string | null {
         description={`Pin exact per-step outputs in *_testing.json files, then run to pinpoint where ${project.name} goes wrong.`}
         actions={
           <>
-            {runAllActive ? (
-              <div className="flex items-center gap-1">
-                <Button size="sm" variant="outline" className="h-8 bg-transparent" disabled>
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  Running stale ({runAllDone}/{runAllTotal})…
-                </Button>
-                <RunStopButton className="h-8" onClick={() => stopAllRunningTests()} />
-              </div>
-            ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 bg-transparent"
-                onClick={() => void runAllStaleTests()}
-                disabled={runBlocked || runBusy || staleTests.length === 0}
-                title={
-                  staleTests.length === 0
-                    ? "no stale tests — all runnable tests have a current verdict"
-                    : runBlocked
-                      ? typesInvalid
-                        ? "fix type errors first"
-                        : "fix pipeline errors first"
-                      : undefined
-                }
-              >
-                <ListChecks className="mr-1.5 h-3.5 w-3.5" />
-                Run all stale
-              </Button>
-            )}
+            <RunWithStopButton
+              variant="outline"
+              running={runAllActive}
+              onRun={() => void runAllStaleTests()}
+              onStop={() => stopAllRunningTests()}
+              disabled={runBlocked || staleTests.length === 0}
+              title={runAllStaleTitle}
+              label={`Run all stale${staleTests.length > 0 ? ` (${staleTests.length})` : ""}`}
+              runningLabel={`Running stale (${runAllDone}/${runAllTotal})…`}
+              stopLabel="Stop all"
+              stopTitle="Stop all running tests"
+              idleIcon={<ListChecks className="mr-1.5 h-3.5 w-3.5" />}
+            />
             <Button size="sm" variant="outline" className="h-8 bg-transparent" onClick={() => setAiOpen((v) => !v)}>
               <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Generate with AI
             </Button>
@@ -690,7 +692,7 @@ function staleLoadFailedContent(content: string): string | null {
                 </>
               ) : (
                 <>
-                  <GitBranch className="h-3.5 w-3.5" />
+                  <SpineNavIcon className="h-3.5 w-3.5" />
                   Go to Pipeline
                 </>
               )}
@@ -718,97 +720,111 @@ function staleLoadFailedContent(content: string): string | null {
         />
       )}
 
-      <div className="flex min-h-0 flex-1">
-        <div className="flex w-64 shrink-0 flex-col border-r border-border">
-          <p className="border-b border-border px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
-            test files ({testDocs.length})
-          </p>
-          <ScrollArea className="min-h-0 flex-1">
-            {testStates.length === 0 && (
-              <p className="px-3 py-4 text-xs text-muted-foreground">
-                No test files yet. Create one — files ending in <span className="font-mono">_testing.json</span> show
-                up here and in Documents.
-              </p>
+      <ResizableSplit
+        className="min-h-0 flex-1"
+        leadingWidth={sidebarWidth}
+        onLeadingWidthChange={setSidebarWidth}
+        onLeadingWidthCommit={writeTestingSidebarWidth}
+        minLeading={TESTING_SIDEBAR_MIN}
+        maxLeading={TESTING_SIDEBAR_MAX}
+        leading={
+          <>
+            <p className="border-b border-border px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
+              test files ({testDocs.length})
+            </p>
+            <ScrollArea className="min-h-0 flex-1">
+              {testStates.length === 0 && (
+                <p className="px-3 py-4 text-xs text-muted-foreground">
+                  No test files yet. Create one — files ending in <span className="font-mono">_testing.json</span> show
+                  up here and in Documents.
+                </p>
+              )}
+              <TooltipProvider delay={200}>
+                <ul className="p-1.5">
+                  {testStates.map((t) => {
+                    const status = testStatus(t)
+                    const isSelected = selected?.doc.id === t.doc.id
+                    const lastVerdict = resolveLastVerdict(t.doc.name)
+                    const testRun = runByName.get(t.doc.name) ?? EMPTY_TEST_RUN
+                    const isRunning = testRun.phase === "running"
+                    const validationBadge = sidebarValidationBadge(status)
+                    return (
+                      <li key={t.doc.id}>
+                        <div
+                          className={cn(
+                            "flex items-center gap-1 rounded-md px-1 py-1",
+                            isSelected && "bg-secondary",
+                          )}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => selectTest(t.doc.id, t.doc.name)}
+                            className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-1 py-1 text-left hover:bg-accent"
+                          >
+                            {isRunning ? (
+                              <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary" />
+                            ) : lastVerdict === null ? (
+                              <CheckSquare className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                            ) : (
+                              <TestLastVerdictIcon passed={lastVerdict} />
+                            )}
+                            <span
+                              className="min-w-0 flex-1 break-all font-mono text-[11px] leading-snug"
+                              title={t.doc.name}
+                            >
+                              {t.doc.name}
+                            </span>
+                            {validationBadge && <TestSidebarBadge badge={validationBadge} />}
+                          </button>
+                          {isRunning && (
+                            <RunStopButton
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                stopTest(t.doc.name)
+                              }}
+                            />
+                          )}
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </TooltipProvider>
+            </ScrollArea>
+          </>
+        }
+        trailing={
+          /* AI : min-w-0 — without it the flex child grows to fit nowrap truncate spans, pushing the Run button off-screen */
+          <ScrollArea className="min-h-0 min-w-0 flex-1">
+            {selected ? (
+              <TestDetail
+                key={selected.doc.name} // AI : stable test filename — doc id changes on content-hash edits
+                state={selected}
+                project={project}
+                projectDocs={projectDocs}
+                onSaveEdit={(draft) => void saveEdit(selected, draft)}
+                onRun={(contentToSave) => void saveAndRun(selected, contentToSave)}
+                onStop={() => stopTest(selected.doc.name)}
+                onRetryLoad={() => loadTestDoc(selected.doc.id)}
+                onDirtyContentChange={onDirtyContentChange}
+                lastVerdict={resolveLastVerdict(selected.doc.name)}
+                runs={runs}
+                runDisabled={runBlocked || runAllActive || selectedRun.phase === "running"}
+                runPhase={selectedRun.phase}
+                stepStates={selectedRun.stepStates}
+                results={selectedRun.results}
+                resultRunId={selectedRun.resultRunId}
+                runError={selectedRun.runError}
+                modules={modules}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center p-8 text-center text-xs text-muted-foreground">
+                Select or create a test file to describe the exact output of each pipeline step.
+              </div>
             )}
-            <ul className="p-1.5">
-              {testStates.map((t) => {
-                const status = testStatus(t)
-                const isSelected = selected?.doc.id === t.doc.id
-                const lastVerdict = resolveLastVerdict(t.doc.name)
-                const testRun = runByName.get(t.doc.name) ?? EMPTY_TEST_RUN
-                const isRunning = testRun.phase === "running"
-                const badge = sidebarTestBadge(status, lastVerdict)
-                return (
-                  <li key={t.doc.id}>
-                    <div
-                      className={cn(
-                        "flex items-center gap-1 rounded-md px-1 py-1",
-                        isSelected && "bg-secondary",
-                      )}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => selectTest(t.doc.id, t.doc.name)}
-                        className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-accent"
-                      >
-                        {isRunning ? (
-                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
-                        ) : lastVerdict === null ? (
-                          <CheckSquare className="h-4 w-4 shrink-0 text-primary" />
-                        ) : (
-                          <TestLastVerdictIcon passed={lastVerdict} />
-                        )}
-                        <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{t.doc.name}</span>
-                        <Badge variant="outline" className={cn("shrink-0 font-mono text-[9px]", badge.className)}>
-                          {badge.label}
-                        </Badge>
-                      </button>
-                      {isRunning && (
-                        <RunStopButton
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            stopTest(t.doc.name)
-                          }}
-                        />
-                      )}
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
           </ScrollArea>
-        </div>
-
-        {/* AI : min-w-0 — without it the flex child grows to fit nowrap truncate spans, pushing the Run button off-screen */}
-        <ScrollArea className="min-h-0 min-w-0 flex-1">
-          {selected ? (
-            <TestDetail
-              key={selected.doc.name} // AI : stable test filename — doc id changes on content-hash edits
-              state={selected}
-              project={project}
-              projectDocs={projectDocs}
-              onSaveEdit={(draft) => void saveEdit(selected, draft)}
-              onRun={(contentToSave) => void saveAndRun(selected, contentToSave)}
-              onStop={() => stopTest(selected.doc.name)}
-              onRetryLoad={() => loadTestDoc(selected.doc.id)}
-              onDirtyContentChange={onDirtyContentChange}
-              lastVerdict={resolveLastVerdict(selected.doc.name)}
-              runs={runs}
-              runDisabled={runBlocked || runBusy}
-              runPhase={selectedRun.phase}
-              stepStates={selectedRun.stepStates}
-              results={selectedRun.results}
-              resultRunId={selectedRun.resultRunId}
-              runError={selectedRun.runError}
-              modules={modules}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center p-8 text-center text-xs text-muted-foreground">
-              Select or create a test file to describe the exact output of each pipeline step.
-            </div>
-          )}
-        </ScrollArea>
-      </div>
+        }
+      />
         </>
       )}
     </div>
@@ -1055,7 +1071,7 @@ function TestDetail({
             ) : (
               <TestLastVerdictIcon passed={lastVerdict} />
             )}
-            <span className="truncate font-mono">{state.doc.name}</span>
+            <span className="break-all font-mono">{state.doc.name}</span>
             {lastVerdict !== null && (
               <span
                 className={cn(
@@ -1092,32 +1108,25 @@ function TestDetail({
             </>
           )}
           {!state.parseError && !state.loadError && (
-            runPhase === "running" ? (
-              <div className="flex items-center gap-1">
-                <Button size="sm" className="h-8" disabled>
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  Running…
-                </Button>
-                <RunStopButton className="h-8" onClick={onStop} />
-              </div>
-            ) : (
-              <Button
-                size="sm"
-                className="h-8"
-                onClick={() => onRun(dirty ? serialized : null)}
-                disabled={runDisabled || draftBlocked}
-                title={runTitle}
-              >
-                <Play className="mr-1.5 h-3.5 w-3.5" />
-                {dirty ? "Save & run" : "Run test"}
-              </Button>
-            )
+            <RunWithStopButton
+              running={runPhase === "running"}
+              onRun={() => onRun(dirty ? serialized : null)}
+              onStop={() => onStop()}
+              disabled={runDisabled || draftBlocked}
+              title={runTitle}
+              label={dirty ? "Save & run" : "Run test"}
+              stopTitle="Stop this test run"
+            />
           )}
         </div>
       </div>
 
       {!state.loadError && !state.parseError && (
         <TestRunHistory docName={state.doc.name} runs={runs} onOpenLog={openLogging} />
+      )}
+
+      {!state.loadError && !state.parseError && state.issues.some((i) => i.level === "error") && (
+        <IssueList issues={state.issues.filter((i) => i.level === "error")} />
       )}
 
       {state.loadError ? (

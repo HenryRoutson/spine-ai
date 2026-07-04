@@ -16,6 +16,27 @@ const SIZE_CONFIG = {
   md: { w: 16, h: 24, spineW: 2, nodeH: 2.5, nodeW: 13, wideNodeW: 16 },
 } satisfies Record<SpineMarkSize, { w: number; h: number; spineW: number; nodeH: number; nodeW: number; wideNodeW: number }>
 
+// AI : nav / inline icon — inherits text color like lucide icons (linear spine, not a fork).
+export function SpineNavIcon({ className }: { className?: string }) {
+  const { w, h, spineW, nodeH, nodeW, wideNodeW } = SIZE_CONFIG.sm
+  const cx = w / 2
+
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      fill="none"
+      aria-hidden="true"
+      overflow="visible"
+      className={className}
+    >
+      <rect x={cx - spineW / 2} y={0} width={spineW} height={h} rx={1} fill="currentColor" opacity={0.55} />
+      <rect x={cx - nodeW / 2} y={3} width={nodeW} height={nodeH} rx={1} fill="currentColor" opacity={0.45} />
+      <rect x={cx - wideNodeW / 2} y={h / 2 - nodeH / 2} width={wideNodeW} height={nodeH} rx={1} fill="currentColor" />
+      <rect x={cx - nodeW / 2} y={h - 3 - nodeH} width={nodeW} height={nodeH} rx={1} fill="currentColor" opacity={0.45} />
+    </svg>
+  )
+}
+
 export function SpineMark({ size = "sm", onLight = false, className }: SpineMarkProps) {
   const { w, h, spineW, nodeH, nodeW, wideNodeW } = SIZE_CONFIG[size]
   const cx = w / 2

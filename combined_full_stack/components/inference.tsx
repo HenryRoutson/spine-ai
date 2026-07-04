@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   Boxes,
   CreditCard,
-  GitBranch,
   Layers,
   Loader2,
   Plus,
@@ -14,6 +13,7 @@ import {
   TriangleAlert,
   Zap,
 } from "lucide-react"
+import { SpineNavIcon } from "@/components/spine-mark"
 import { useStore } from "@/lib/store"
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { formatUsdFromCents } from "@/lib/format"
@@ -74,6 +74,9 @@ import {
   type SetupFileIssue,
   type SpineInferenceSetupFile,
 } from "@/lib/inference-setup-files"
+import { ResizableSplit } from "@/components/resizable-split"
+import { inferenceSidebarSplit } from "@/lib/layout-split-settings"
+import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
 import { DocLabel, InputType } from "@/lib/types"
 import type { DocId, DocRef, ModelId, Project } from "@/lib/types"
@@ -138,6 +141,8 @@ export function Inference() {
   const [creatingSetup, setCreatingSetup] = useState(false)
   // AI : when inputs are loaded from a test preset, assert against that file after the run.
   const [linkedTest, setLinkedTest] = useState<PresetApplyMeta | null>(null)
+  const { width: sidebarWidth, setWidth: setSidebarWidth, commitWidth: commitSidebarWidth } =
+    usePersistedLeadingWidth(inferenceSidebarSplit)
 
   useEffect(() => {
     for (const d of setupDocs) {
@@ -392,56 +397,67 @@ export function Inference() {
               className="mt-4 gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
               onClick={() => setActiveWindow("pipeline")}
             >
-              <GitBranch className="h-3.5 w-3.5" />
+              <SpineNavIcon className="h-3.5 w-3.5" />
               Go to Pipeline
             </Button>
           </div>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1">
-          <div className="flex w-64 shrink-0 flex-col border-r border-border">
-            <p className="border-b border-border px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
-              saved setups ({setupDocs.length})
-            </p>
-            <ScrollArea className="min-h-0 flex-1">
-              {setupStates.length === 0 && (
-                <p className="px-3 py-4 text-xs text-muted-foreground">
-                  No setups yet. Create one — files ending in{" "}
-                  <span className="font-mono">{INFERENCE_SETUP_SUFFIX}</span> show up here and in Documents.
-                </p>
-              )}
-              <ul className="p-1.5">
-                {setupStates.map((s) => {
-                  const status = setupStatus(s)
-                  const badge = STATUS_BADGE[status]
-                  const isSelected = selected?.doc.id === s.doc.id
-                  return (
-                    <li key={s.doc.id}>
-                      <button
-                        type="button"
-                        onClick={() => selectSetup(s.doc.id)}
-                        className={cn(
-                          "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent",
-                          isSelected && "bg-secondary",
-                        )}
-                      >
-                        <Layers className="h-4 w-4 shrink-0 text-primary" />
-                        <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
-                          {setupDisplayName(s.doc.name)}
-                        </span>
-                        <Badge variant="outline" className={cn("shrink-0 font-mono text-[9px]", badge.className)}>
-                          {badge.label}
-                        </Badge>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-            </ScrollArea>
-          </div>
-
-          <ScrollArea className="min-h-0 min-w-0 flex-1">
-            <div className="mx-auto max-w-4xl space-y-6 p-5">
+        <ResizableSplit
+          className="min-h-0 flex-1"
+          leadingWidth={sidebarWidth}
+          onLeadingWidthChange={setSidebarWidth}
+          onLeadingWidthCommit={commitSidebarWidth}
+          minLeading={inferenceSidebarSplit.min}
+          maxLeading={inferenceSidebarSplit.max}
+          leading={
+            <>
+              <p className="border-b border-border px-3 py-2 font-mono text-[10px] uppercase text-muted-foreground">
+                saved setups ({setupDocs.length})
+              </p>
+              <ScrollArea className="min-h-0 flex-1">
+                {setupStates.length === 0 && (
+                  <p className="px-3 py-4 text-xs text-muted-foreground">
+                    No setups yet. Create one — files ending in{" "}
+                    <span className="font-mono">{INFERENCE_SETUP_SUFFIX}</span> show up here and in Documents.
+                  </p>
+                )}
+                <ul className="p-1.5">
+                  {setupStates.map((s) => {
+                    const status = setupStatus(s)
+                    const badge = STATUS_BADGE[status]
+                    const isSelected = selected?.doc.id === s.doc.id
+                    return (
+                      <li key={s.doc.id}>
+                        <button
+                          type="button"
+                          onClick={() => selectSetup(s.doc.id)}
+                          className={cn(
+                            "flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-accent",
+                            isSelected && "bg-secondary",
+                          )}
+                        >
+                          <Layers className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          <span
+                            className="min-w-0 flex-1 break-all font-mono text-[11px] leading-snug"
+                            title={setupDisplayName(s.doc.name)}
+                          >
+                            {setupDisplayName(s.doc.name)}
+                          </span>
+                          <Badge variant="outline" className={cn("shrink-0 font-mono text-[9px]", badge.className)}>
+                            {badge.label}
+                          </Badge>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </ScrollArea>
+            </>
+          }
+          trailing={
+            <ScrollArea className="min-h-0 min-w-0 flex-1">
+              <div className="mx-auto max-w-4xl space-y-6 p-5">
               {selected && (
                 <SetupDetail
                   key={selected.doc.id}
@@ -662,7 +678,8 @@ export function Inference() {
               )}
             </div>
           </ScrollArea>
-        </div>
+          }
+        />
       )}
       {run.pickerModule && (
         <InferenceInputPickerPopup

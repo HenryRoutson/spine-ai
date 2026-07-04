@@ -215,7 +215,7 @@ export function Documents() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-xs font-medium">{doc.name}</span>
+                    <span className="break-all text-xs font-medium">{doc.name}</span>
                     <Badge
                       variant="outline"
                       className={cn(

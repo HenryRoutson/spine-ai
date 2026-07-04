@@ -5,7 +5,7 @@
 // AI : and can be captured one-click from the last run. Serialization stays compatible with
 // AI : lib/testing-files parse/validate.
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import {
   CircleCheck,
   CircleX,
@@ -16,6 +16,7 @@ import {
   Shuffle,
   Trash2,
   TriangleAlert,
+  Unlink,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,7 +25,15 @@ import { JsonFieldKindHighlight, JsonFieldKindLegend } from "@/components/highli
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
-import { isMultiDocInputModule } from "@/lib/inference-input"
+import { StructureLink } from "@/components/structure-link"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { isMultiDocInputModule, inputTypeLabel } from "@/lib/inference-input"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { modelName } from "@/lib/validity"
 import { labelAsStateKey, validatePipelineStateEntry } from "@/lib/server/pipeline_state"
@@ -33,12 +42,20 @@ import { applySchemaDefaults, defaultFromSchema, jsonSchemaToFormRoot } from "@/
 import { stepOutputJsonSchema } from "@/lib/step-json-schema"
 import { tryParseJson } from "@/lib/json-utils"
 import {
-  inputModulesOf,
+  analyzeTestPipelineAlignment,
   isComparableStep,
   probabilisticPathsForModule,
   skipReasonForTestStep,
   type SpineTestFile,
 } from "@/lib/testing-files"
+import { ResizableSplit } from "@/components/resizable-split"
+import {
+  readTestingCompareWidth,
+  TESTING_COMPARE_MAX,
+  TESTING_COMPARE_MIN,
+  useTestingCompareWidth,
+  writeTestingCompareWidth,
+} from "@/lib/testing-settings"
 import { cn } from "@/lib/utils"
 import { ModuleKind, type DocId, DocRef, PipelineModule, Project } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
@@ -56,16 +73,14 @@ export type TestDraft = {
 }
 
 export function draftFromTest(test: SpineTestFile, project: Project): TestDraft {
-  const comparable = new Set(
-    project.modules.filter(isComparableStep).map((m) => labelAsStateKey(m.label)),
-  )
   const seen = new Set<step_label_string>()
   const expected: TestDraft["expected"] = []
   for (const [label, v] of Object.entries(test.expectedOutputs)) {
     const key = labelAsStateKey(label)
-    if (!comparable.has(key) || seen.has(key)) continue
+    if (seen.has(key)) continue
     seen.add(key)
-    const schema = stepOutputJsonSchema(project, key)
+    const mod = project.modules.find((m) => labelAsStateKey(m.label) === key)
+    const schema = mod && isComparableStep(mod) ? stepOutputJsonSchema(project, key) : null
     const root = schema ? jsonSchemaToFormRoot(schema) : null
     const value = root && v !== null ? applySchemaDefaults(v, root) : v
     expected.push({ label: key, text: JSON.stringify(value, null, 2) })
@@ -114,6 +129,111 @@ function sameStep(a: step_label_string, b: step_label_string): boolean {
   return labelAsStateKey(a) === labelAsStateKey(b)
 }
 
+// AI : draft → alignment input without requiring valid JSON for every row.
+function draftAlignmentInput(draft: TestDraft): Pick<SpineTestFile, "inputs" | "expectedOutputs"> {
+  const expectedOutputs: Record<step_label_string, unknown> = {}
+  for (const row of draft.expected) {
+    const parsed = tryParseJson(row.text, { trim: true })
+    expectedOutputs[row.label] = parsed.ok ? parsed.value : null
+  }
+  const inputs: NonNullable<SpineTestFile["inputs"]> = {}
+  for (const [label, names] of Object.entries(draft.inputs)) {
+    const clean = names.filter((n) => n.trim())
+    inputs[label] = clean.length === 1 ? clean[0] : clean
+  }
+  return { inputs, expectedOutputs }
+}
+
+function StepTypeLine({ module, project }: { module: PipelineModule; project: Project }) {
+  if (module.kind === ModuleKind.Input) {
+    return (
+      <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+        <StructureLink models={project.models} structureId={module.outStructureId} />
+        <span className="text-muted-foreground/60"> · </span>
+        {inputTypeLabel(module.inputType)}
+      </p>
+    )
+  }
+  if (!isComparableStep(module)) {
+    return (
+      <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+        <StructureLink models={project.models} structureId={module.inStructureId} />
+        <span className="text-muted-foreground/60"> · same model in/out</span>
+      </p>
+    )
+  }
+  return (
+    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+      <StructureLink models={project.models} structureId={module.inStructureId} />
+      <span className="text-muted-foreground/60"> → </span>
+      <StructureLink models={project.models} structureId={module.outStructureId} />
+    </p>
+  )
+}
+
+function PipelineAlignmentBanner({
+  orphanExpectedCount,
+  orphanInputCount,
+}: {
+  orphanExpectedCount: number
+  orphanInputCount: number
+}) {
+  const total = orphanExpectedCount + orphanInputCount
+  if (!total) return null
+  return (
+    <div className="mt-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2.5">
+      <div className="flex items-start gap-2">
+        <Unlink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+        <div className="min-w-0 space-y-1">
+          <p className="font-mono text-[11px] text-destructive">
+            {total} orphaned step{total === 1 ? "" : "s"} — no longer in the pipeline
+          </p>
+          <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
+            Remap typed expected outputs to a matching pipeline step, or remove entries you no longer need. Tests stay
+            partial — only tracked steps are checked on run.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RemapSelect({
+  candidates,
+  onRemap,
+}: {
+  candidates: step_label_string[]
+  onRemap: (target: step_label_string) => void
+}) {
+  const [target, setTarget] = useState(candidates[0] ?? "")
+  if (!candidates.length) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Select value={target} onValueChange={(v) => v && setTarget(v)}>
+        <SelectTrigger size="sm" className="h-7 min-w-[10rem] font-mono text-[10px]">
+          <SelectValue placeholder="pick step" />
+        </SelectTrigger>
+        <SelectContent>
+          {candidates.map((key) => (
+            <SelectItem key={key} value={key} className="font-mono text-[10px]">
+              {key}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 bg-transparent px-2 font-mono text-[10px]"
+        disabled={!target}
+        onClick={() => onRemap(target)}
+      >
+        move here
+      </Button>
+    </div>
+  )
+}
+
 type RowIssue = { level: "error" | "warning"; message: string }
 
 function expectedIssue(
@@ -121,7 +241,11 @@ function expectedIssue(
   project: Project,
   stale: boolean,
 ): RowIssue | null {
-  if (stale) return { level: "error", message: "step no longer exists in the pipeline — remove this entry" }
+  if (stale)
+    return {
+      level: "error",
+      message: "orphaned — this step is not in the pipeline; remap to a matching step or remove",
+    }
   const parsed = tryParseJson(row.text, { trim: true })
   if (!parsed.ok) return { level: "error", message: `invalid JSON: ${parsed.error.message}` }
   if (parsed.value === null)
@@ -158,13 +282,13 @@ export function TestFileEditor({
   // AI : step key → actual output from the last test run, for one-click capture
   actuals: Map<step_label_string, unknown>
 }) {
-  const inputMods = inputModulesOf(project.modules)
   const [pickerModule, setPickerModule] = useState<PipelineModule | null>(null)
   const [popup, setPopup] = useState<PopupPayload | null>(null)
   const { open: openDoc } = useDocViewer()
 
-  const staleInputKeys = Object.keys(draft.inputs).filter(
-    (label) => !inputMods.some((m) => sameStep(m.label, label)),
+  const alignment = useMemo(
+    () => analyzeTestPipelineAlignment(draftAlignmentInput(draft), project),
+    [draft, project],
   )
 
   const setInputNames = (key: step_label_string, names: doc_name_string[]) =>
@@ -172,6 +296,14 @@ export function TestFileEditor({
   const removeInputKey = (key: step_label_string) => {
     const { [key]: _gone, ...rest } = draft.inputs
     setDraft({ ...draft, inputs: rest })
+  }
+  const remapInputKey = (from: step_label_string, to: step_label_string) => {
+    const fromKey = Object.keys(draft.inputs).find((l) => sameStep(l, from)) ?? from
+    const toKey = labelAsStateKey(to)
+    const names = draft.inputs[fromKey] ?? []
+    const { [fromKey]: _gone, ...rest } = draft.inputs
+    const merged = [...(rest[toKey] ?? []), ...names]
+    setDraft({ ...draft, inputs: { ...rest, [toKey]: merged } })
   }
 
   // AI : the file stores doc *names*; slots and the picker speak DocRef — convert at the edge.
@@ -203,6 +335,18 @@ export function TestFileEditor({
     })
   const removeRow = (label: step_label_string) =>
     setDraft({ ...draft, expected: draft.expected.filter((r) => !sameStep(r.label, label)) })
+  const remapExpectedRow = (from: step_label_string, to: step_label_string) => {
+    const row = draft.expected.find((r) => sameStep(r.label, from))
+    if (!row) return
+    const toKey = labelAsStateKey(to)
+    setDraft({
+      ...draft,
+      expected: [
+        ...draft.expected.filter((r) => !sameStep(r.label, from) && !sameStep(r.label, toKey)),
+        { label: toKey, text: row.text },
+      ],
+    })
+  }
   const trackStep = (m: PipelineModule) => {
     const key = labelAsStateKey(m.label)
     if (rowFor(key)) return
@@ -212,10 +356,6 @@ export function TestFileEditor({
       expected: [...draft.expected, { label: key, text: JSON.stringify(golden ?? null, null, 2) }],
     })
   }
-
-  const staleRows = draft.expected.filter(
-    (r) => !project.modules.some((m) => sameStep(m.label, r.label) && isComparableStep(m)),
-  )
 
   return (
     <div className="space-y-6">
@@ -232,16 +372,20 @@ export function TestFileEditor({
       <section>
         <SectionLabel>pipeline</SectionLabel>
         <p className="mt-1 font-mono text-[10px] leading-relaxed text-muted-foreground">
-          Steps run top to bottom. Pin input files once per input step — they are not duplicated as expected JSON.
-          Only computation steps can be scored.
+          Aligned with the live pipeline — each row is a step in order. Pin input files once per input step; only
+          computation steps can be scored. Typed outputs show where expected JSON fits.
         </p>
+        <PipelineAlignmentBanner
+          orphanExpectedCount={alignment.orphanedExpected.length}
+          orphanInputCount={alignment.orphanedInputs.length}
+        />
         <ol className="relative mt-4 space-y-5 border-l border-border/80 pl-5">
-          {project.modules.map((m, idx) => (
+          {alignment.stepRows.map(({ module: m, trackStatus }, idx) => (
             <li key={m.id} className="relative">
               <span className="absolute -left-5 top-3 flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-background font-mono text-[8px] text-muted-foreground">
                 {idx + 1}
               </span>
-              {m.kind === ModuleKind.Input ? (
+              {trackStatus === "input" ? (
                 <InputStepCard
                   module={m}
                   slotDocs={slotDocs(m)}
@@ -255,9 +399,9 @@ export function TestFileEditor({
                   onRemoveMissing={(name) => removeDocName(m, name)}
                   project={project}
                 />
-              ) : !isComparableStep(m) ? (
-                <PassthroughStepCard module={m} />
-              ) : rowFor(m.label) ? (
+              ) : trackStatus === "passthrough" ? (
+                <PassthroughStepCard module={m} project={project} />
+              ) : trackStatus === "tracked" ? (
                 <ScoredStepCard
                   module={m}
                   row={rowFor(m.label)!}
@@ -269,37 +413,76 @@ export function TestFileEditor({
                   onExpand={setPopup}
                 />
               ) : (
-                <UntrackedStepCard module={m} onTrack={() => trackStep(m)} />
+                <UntrackedStepCard module={m} project={project} onTrack={() => trackStep(m)} />
               )}
             </li>
           ))}
         </ol>
-        {staleInputKeys.map((key) => (
-          <div
-            key={key}
-            className="mt-3 flex items-center gap-2 rounded-md border border-destructive/40 px-2.5 py-2"
-          >
-            <CircleX className="h-3.5 w-3.5 shrink-0 text-destructive" />
-            <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{key}</span>
-            <span className="font-mono text-[10px] text-destructive">stale input — remove</span>
-            <IconTrashButton onClick={() => removeInputKey(key)} />
-          </div>
-        ))}
-        {staleRows.map((row) => (
-          <div key={row.label} className="mt-3">
-            <ScoredStepCard
-              module={{ id: row.label, kind: ModuleKind.Llm, label: row.label } as PipelineModule}
-              row={row}
-              project={project}
-              stale
-              ignoredFields={[]}
-              actual={undefined}
-              onText={(text) => setRowText(row.label, text)}
-              onRemove={() => removeRow(row.label)}
-              onExpand={setPopup}
-            />
-          </div>
-        ))}
+        {alignment.orphanedInputs.map(({ label, remapCandidates }) => {
+          const inputKey = Object.keys(draft.inputs).find((l) => sameStep(l, label)) ?? label
+          const names = draft.inputs[inputKey] ?? []
+          return (
+            <div
+              key={label}
+              className="mt-3 space-y-2 rounded-md border border-destructive/40 px-2.5 py-2"
+            >
+              <div className="flex items-center gap-2">
+                <CircleX className="h-3.5 w-3.5 shrink-0 text-destructive" />
+                <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{label}</span>
+                <Badge variant="outline" className="shrink-0 border-destructive/40 font-mono text-[9px] text-destructive">
+                  orphaned input
+                </Badge>
+                <IconTrashButton onClick={() => removeInputKey(inputKey)} />
+              </div>
+              {names.length > 0 && (
+                <p className="font-mono text-[10px] text-muted-foreground">pinned: {names.join(", ")}</p>
+              )}
+              {remapCandidates.length > 0 ? (
+                <RemapSelect candidates={remapCandidates} onRemap={(to) => remapInputKey(label, to)} />
+              ) : (
+                <p className="font-mono text-[10px] text-destructive">no free input slot — remove or merge by hand</p>
+              )}
+            </div>
+          )
+        })}
+        {alignment.orphanedExpected.map(({ label, remapCandidates }) => {
+          const row = draft.expected.find((r) => sameStep(r.label, label))
+          if (!row) return null
+          const mod = project.modules.find((m) => sameStep(m.label, label))
+          const notScored = mod && !isComparableStep(mod)
+          return (
+            <div key={label} className="mt-3 space-y-2">
+              <ScoredStepCard
+                module={(mod ?? { id: label, kind: ModuleKind.Llm, label }) as PipelineModule}
+                row={row}
+                project={project}
+                stale
+                ignoredFields={[]}
+                actual={undefined}
+                onText={(text) => setRowText(row.label, text)}
+                onRemove={() => removeRow(row.label)}
+                onExpand={setPopup}
+              />
+              <div className="rounded-md border border-dashed border-destructive/30 bg-destructive/5 px-3 py-2">
+                <p className="font-mono text-[10px] text-destructive">
+                  {notScored
+                    ? "this step is input/combine — remove expected output; pin files under inputs instead"
+                    : remapCandidates.length
+                      ? `${remapCandidates.length} pipeline step${remapCandidates.length === 1 ? "" : "s"} accept this typed output`
+                      : "no matching output type in the current pipeline — update expected JSON or remove"}
+                </p>
+                {!notScored && remapCandidates.length > 0 && (
+                  <div className="mt-2">
+                    <RemapSelect
+                      candidates={remapCandidates}
+                      onRemap={(to) => remapExpectedRow(label, to)}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
       </section>
 
       {pickerModule && (
@@ -370,6 +553,9 @@ function InputStepCard({
         <span className="font-mono text-[11px] font-medium">{module.label}</span>
         <span className="font-mono text-[10px] text-muted-foreground">files only — not scored as expected output</span>
       </div>
+      <div className="border-b border-sky-500/10 px-3 py-1.5">
+        <StepTypeLine module={module} project={project} />
+      </div>
       <div className="space-y-1.5 p-3">
         <InferenceInputSlot
           inputModule={module}
@@ -386,7 +572,7 @@ function InputStepCard({
             className="flex items-center gap-2 rounded-md border border-destructive/40 px-2.5 py-1.5"
           >
             <CircleX className="h-3 w-3 shrink-0 text-destructive" />
-            <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-destructive">{name}</span>
+            <span className="min-w-0 flex-1 break-all font-mono text-[10px] text-destructive">{name}</span>
             <IconTrashButton onClick={() => onRemoveMissing(name)} />
           </div>
         ))}
@@ -395,7 +581,7 @@ function InputStepCard({
   )
 }
 
-function PassthroughStepCard({ module }: { module: PipelineModule }) {
+function PassthroughStepCard({ module, project }: { module: PipelineModule; project: Project }) {
   return (
     <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
@@ -405,11 +591,20 @@ function PassthroughStepCard({ module }: { module: PipelineModule }) {
           {skipReasonForTestStep(module) ?? "not scored"}
         </span>
       </div>
+      <StepTypeLine module={module} project={project} />
     </div>
   )
 }
 
-function UntrackedStepCard({ module, onTrack }: { module: PipelineModule; onTrack: () => void }) {
+function UntrackedStepCard({
+  module,
+  project,
+  onTrack,
+}: {
+  module: PipelineModule
+  project: Project
+  onTrack: () => void
+}) {
   return (
     <div className="rounded-lg border border-dashed border-border/70 bg-background px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
@@ -419,6 +614,7 @@ function UntrackedStepCard({ module, onTrack }: { module: PipelineModule; onTrac
           <Plus className="mr-1 h-3 w-3" /> pin expected output
         </Button>
       </div>
+      <StepTypeLine module={module} project={project} />
     </div>
   )
 }
@@ -453,6 +649,9 @@ function ScoredStepCard({
   const isPlaceholder = row.text.trim() === "null"
   const validJson = tryParseJson(row.text, { trim: true }).ok
   const actualJson = actual !== undefined ? JSON.stringify(actual, null, 2) : null
+  const savedCompareWidth = useTestingCompareWidth()
+  const [compareWidth, setCompareWidth] = useState(readTestingCompareWidth)
+  useEffect(() => setCompareWidth(savedCompareWidth), [savedCompareWidth])
 
   return (
     <div
@@ -530,6 +729,7 @@ function ScoredStepCard({
       </div>
 
       <div className="space-y-3 p-3">
+        {!stale && <StepTypeLine module={module} project={project} />}
         {ignoredFields.length > 0 && (
           <p className="flex items-start gap-1.5 font-mono text-[10px] text-muted-foreground">
             <Shuffle className="mt-0.5 h-3 w-3 shrink-0" />
@@ -555,22 +755,37 @@ function ScoredStepCard({
             No expected output yet — run the test and click <span className="text-primary">use run output</span>, or
             edit by hand.
           </p>
-        ) : (
-          <div className={cn("grid gap-3", actualJson ? "lg:grid-cols-2" : "grid-cols-1")}>
-            <div className="min-w-0 space-y-1">
-              <SectionLabel>expected</SectionLabel>
-              <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
-                <JsonFieldKindHighlight json={row.text} probabilisticPaths={ignoredFields} />
+        ) : actualJson ? (
+          <ResizableSplit
+            className="w-full"
+            leadingWidth={compareWidth}
+            onLeadingWidthChange={setCompareWidth}
+            onLeadingWidthCommit={writeTestingCompareWidth}
+            minLeading={TESTING_COMPARE_MIN}
+            maxLeading={TESTING_COMPARE_MAX}
+            leading={
+              <div className="min-w-0 space-y-1 pr-1">
+                <SectionLabel>expected</SectionLabel>
+                <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
+                  <JsonFieldKindHighlight json={row.text} probabilisticPaths={ignoredFields} />
+                </div>
               </div>
-            </div>
-            {actualJson && (
-              <div className="min-w-0 space-y-1">
+            }
+            trailing={
+              <div className="min-w-0 space-y-1 pl-1">
                 <SectionLabel>last run actual</SectionLabel>
                 <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
                   <JsonFieldKindHighlight json={actualJson} probabilisticPaths={ignoredFields} />
                 </div>
               </div>
-            )}
+            }
+          />
+        ) : (
+          <div className="min-w-0 space-y-1">
+            <SectionLabel>expected</SectionLabel>
+            <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
+              <JsonFieldKindHighlight json={row.text} probabilisticPaths={ignoredFields} />
+            </div>
           </div>
         )}
 

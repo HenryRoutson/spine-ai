@@ -68,7 +68,6 @@ function serializeProjectPutBody(p: Project): string {
     expectedOutputs: p.expectedOutputs,
     inferencePresets: p.inferencePresets,
     documentation: p.documentation,
-    lastOpenedAt: p.lastOpenedAt,
   })
 }
 

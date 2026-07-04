@@ -1,18 +1,19 @@
 "use client"
 
 import { useState } from "react"
-import { Play, Loader2, Trophy, Cpu, AlertTriangle } from "lucide-react"
+import { Trophy, Cpu, AlertTriangle } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { STRATEGY_META, type Strategy } from "@/lib/types"
 // AI : type-only — erased at compile time, no server code reaches the client bundle.
 import type { BenchmarkOutcome, JudgeVerdict } from "@/lib/strategies"
 import { WindowHeader } from "@/components/window-header"
-import { Button } from "@/components/ui/button"
+import { RunWithStopButton } from "@/components/run-with-stop-button"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { API_ROUTES } from "@/lib/api-routes"
 import { JSON_HEADERS } from "@/lib/api-client"
 import { formatSecondsShort, formatUsdFromCents } from "@/lib/format"
+import { isRunAbortedError, useCancellableRun } from "@/lib/use-cancellable-run"
 import { cn } from "@/lib/utils"
 
 type Metric = "accuracy" | "passRate" | "latencyMs" | "costCents"
@@ -23,6 +24,7 @@ export function AbTesting() {
   const [hasRun, setHasRun] = useState(true)
   const [verdict, setVerdict] = useState<JudgeVerdict | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const cancellable = useCancellableRun()
 
   const enabled = strategies.filter((s) => s.enabled)
 
@@ -36,6 +38,7 @@ export function AbTesting() {
   // AI : cheap model (Sonnet fallback if none work) and the LLM judge scores them; results
   // AI : are written back into project.strategies so they persist.
   async function run() {
+    const signal = cancellable.begin()
     setRunning(true)
     setHasRun(false)
     setError(null)
@@ -44,6 +47,7 @@ export function AbTesting() {
         method: "POST",
         headers: JSON_HEADERS,
         body: JSON.stringify({ projectId: project.id }),
+        signal,
       })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? `benchmark failed (${res.status})`)
       refreshBilling().catch(console.error)
@@ -58,10 +62,18 @@ export function AbTesting() {
       )
       setVerdict(outcome.verdict)
     } catch (e) {
+      if (isRunAbortedError(e)) return
       setError((e as Error).message)
+    } finally {
+      cancellable.clear()
+      setRunning(false)
+      setHasRun(true)
     }
+  }
+
+  function stopBenchmark() {
+    cancellable.stop()
     setRunning(false)
-    setHasRun(true)
   }
 
   // AI : prefer the real judge's pick; fall back to the local heuristic for seeded values.
@@ -77,14 +89,14 @@ export function AbTesting() {
         title="Strategy Comparison"
         description="Benchmark approaches on the same pipeline task. Pick the best accuracy/cost trade-off."
         actions={
-          <Button size="sm" onClick={run} disabled={running || enabled.length === 0}>
-            {running ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Play className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            {running ? "Benchmarking…" : "Run benchmark"}
-          </Button>
+          <RunWithStopButton
+            running={running}
+            onRun={() => void run()}
+            onStop={() => stopBenchmark()}
+            disabled={enabled.length === 0}
+            label="Run benchmark"
+            runningLabel="Benchmarking…"
+          />
         }
       />
 

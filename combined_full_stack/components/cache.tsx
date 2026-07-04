@@ -2,9 +2,11 @@
 
 // AI : TODO — run list rows still use flat inputPreview; detail modal uses IoPager for multi-file inputs.
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { createPortal } from "react-dom"
 import { useStore } from "@/lib/store"
 import { WindowHeader } from "@/components/window-header"
+import { ResizableSplit } from "@/components/resizable-split"
+import { cacheListSplit } from "@/lib/layout-split-settings"
+import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -25,7 +27,7 @@ import {
 } from "@/lib/cache-list-cache"
 import { timeAgo } from "@/lib/time-ago"
 import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
-import { Database, Maximize2, Search, X, Zap } from "lucide-react"
+import { Database, Search, Zap } from "lucide-react"
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
@@ -76,6 +78,8 @@ export function Cache() {
   const [loading, setLoading] = useState(() => !readCachedCacheList(listKey))
   const [detail, setDetail] = useState<CacheEntryDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const { width: listWidth, setWidth: setListWidth, commitWidth: commitListWidth } =
+    usePersistedLeadingWidth(cacheListSplit)
 
   const load = useCallback(async () => {
     const key = cacheListKey({ projectId: project.id, scope, query, searchFields })
@@ -220,164 +224,165 @@ export function Cache() {
         </div>
       </div>
 
-      <ScrollArea className="flex-1">
-        {loading ? (
-          <p className="px-4 py-8 text-center font-mono text-xs text-muted-foreground">loading cache…</p>
-        ) : entries.length === 0 ? (
-          <p className="px-4 py-8 text-center text-xs text-muted-foreground">
-            No cached steps yet. Run inference with cache enabled — steps are cached on first execution.
-          </p>
-        ) : (
-          <div className="divide-y divide-border">
-            {entries.map((e) => (
-              <div
-                key={e.key}
-                role="button"
-                tabIndex={0}
-                onClick={() => void openDetail(e.key)}
-                onKeyDown={(ev) => {
-                  if (ev.key === "Enter" || ev.key === " ") {
-                    ev.preventDefault()
-                    void openDetail(e.key)
-                  }
-                }}
-                className="cursor-pointer px-4 py-3 hover:bg-secondary/30"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium">{e.moduleLabel ?? e.moduleId}</span>
-                      {scope === "all" && e.projectName && (
+      <ResizableSplit
+        className="min-h-0 flex-1"
+        leadingWidth={listWidth}
+        onLeadingWidthChange={setListWidth}
+        onLeadingWidthCommit={commitListWidth}
+        minLeading={cacheListSplit.min}
+        maxLeading={cacheListSplit.max}
+        leading={
+          <ScrollArea className="min-h-0 flex-1">
+            {loading ? (
+              <p className="px-4 py-8 text-center font-mono text-xs text-muted-foreground">loading cache…</p>
+            ) : entries.length === 0 ? (
+              <p className="px-4 py-8 text-center text-xs text-muted-foreground">
+                No cached steps yet. Run inference with cache enabled — steps are cached on first execution.
+              </p>
+            ) : (
+              <div className="divide-y divide-border">
+                {entries.map((e) => (
+                  <div
+                    key={e.key}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => void openDetail(e.key)}
+                    onKeyDown={(ev) => {
+                      if (ev.key === "Enter" || ev.key === " ") {
+                        ev.preventDefault()
+                        void openDetail(e.key)
+                      }
+                    }}
+                    className={cn(
+                      "cursor-pointer px-4 py-3 transition-colors hover:bg-accent",
+                      detail?.key === e.key && "bg-accent",
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="break-all font-mono text-xs font-medium">{e.moduleLabel ?? e.moduleId}</span>
+                          {scope === "all" && e.projectName && (
+                            <Badge variant="outline" className="font-mono text-[10px]">
+                              {e.projectName}
+                            </Badge>
+                          )}
+                          <Badge variant="secondary" className="gap-1 font-mono text-[10px]">
+                            <Zap className="h-2.5 w-2.5 text-primary" />
+                            {e.hits} {e.hits === 1 ? "hit" : "hits"}
+                          </Badge>
+                          {e.costCents != null && e.hits > 0 && (
+                            <span className="font-mono text-[10px] text-muted-foreground">
+                              ~{(e.costCents * e.hits).toFixed(2)}¢ saved
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
+                          {e.model}
+                          {e.inputDocIds.length > 0 ? ` · ${e.inputDocIds.join(", ")}` : ""}
+                        </p>
+                        {e.inputPreview && (
+                          <p className="mt-1 text-[11px] text-muted-foreground/90">
+                            {compactPreview(e.inputPreview, PREVIEW_STEP_IO_CHARS)}
+                          </p>
+                        )}
+                      </div>
+                      <div className="shrink-0 text-right font-mono text-[10px] text-muted-foreground">
+                        <p>{formatBytes(e.sizeBytes)}</p>
+                        {e.lastHitAt != null && <p className="mt-0.5">last hit {timeAgo(e.lastHitAt)}</p>}
+                        {e.createdAt != null && !e.lastHitAt && <p className="mt-0.5">written {timeAgo(e.createdAt)}</p>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        }
+        trailing={
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {!detail && !detailLoading ? (
+              <div className="flex h-full items-center justify-center p-8 text-center text-xs text-muted-foreground">
+                Select a cache entry to inspect input and output.
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+                  <span className="min-w-0 break-all font-mono text-xs text-muted-foreground">
+                    {detail
+                      ? `${detail.moduleLabel ?? detail.moduleId} · ${detail.model}`
+                      : "loading cache entry…"}
+                  </span>
+                  {detail && (
+                    <button
+                      type="button"
+                      onClick={() => setDetail(null)}
+                      className="shrink-0 rounded px-2 py-1 font-mono text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground"
+                    >
+                      clear
+                    </button>
+                  )}
+                </div>
+                {detailLoading && !detail ? (
+                  <p className="p-6 font-mono text-xs text-muted-foreground">loading…</p>
+                ) : detail ? (
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
+                      {detail.projectName && (
                         <Badge variant="outline" className="font-mono text-[10px]">
-                          {e.projectName}
+                          {detail.projectName}
                         </Badge>
                       )}
                       <Badge variant="secondary" className="gap-1 font-mono text-[10px]">
                         <Zap className="h-2.5 w-2.5 text-primary" />
-                        {e.hits} {e.hits === 1 ? "hit" : "hits"}
+                        {detail.hits} hits
                       </Badge>
-                      {e.costCents != null && e.hits > 0 && (
-                        <span className="font-mono text-[10px] text-muted-foreground">
-                          ~{(e.costCents * e.hits).toFixed(2)}¢ saved
+                      <span className="font-mono text-[10px] text-muted-foreground">{formatBytes(detail.sizeBytes)}</span>
+                      {detail.inputDocIds.length > 0 && (
+                        <span className="break-all font-mono text-[10px] text-muted-foreground">
+                          {detail.inputDocIds.join(", ")}
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                      {e.model}
-                      {e.inputDocIds.length > 0 ? ` · ${e.inputDocIds.join(", ")}` : ""}
-                    </p>
-                    {e.inputPreview && (
-                      <p className="mt-1 text-[11px] text-muted-foreground/90">
-                        {compactPreview(e.inputPreview, PREVIEW_STEP_IO_CHARS)}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <button
-                      type="button"
-                      onClick={(ev) => {
-                        ev.stopPropagation()
-                        void openDetail(e.key)
-                      }}
-                      className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                      title="Open full cache entry"
-                    >
-                      <Maximize2 className="h-3.5 w-3.5" />
-                    </button>
-                    <div className="text-right font-mono text-[10px] text-muted-foreground">
-                      <p>{formatBytes(e.sizeBytes)}</p>
-                      {e.lastHitAt != null && <p className="mt-0.5">last hit {timeAgo(e.lastHitAt)}</p>}
-                      {e.createdAt != null && !e.lastHitAt && <p className="mt-0.5">written {timeAgo(e.createdAt)}</p>}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </ScrollArea>
-
-      {(detail || detailLoading) &&
-        createPortal(
-          <div className="fixed inset-0 z-50 flex flex-col">
-            <button
-              aria-label="Close viewer"
-              className="absolute inset-0 bg-background/70 backdrop-blur-sm"
-              onClick={() => setDetail(null)}
-            />
-            <div className="relative m-6 flex flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-              <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-                <span className="font-mono text-xs text-muted-foreground">
-                  {detail
-                    ? `${detail.moduleLabel ?? detail.moduleId} · ${detail.model}`
-                    : "loading cache entry…"}
-                </span>
-                <button
-                  onClick={() => setDetail(null)}
-                  className="rounded p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              {detailLoading && !detail ? (
-                <p className="p-6 font-mono text-xs text-muted-foreground">loading…</p>
-              ) : detail ? (
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                  <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
-                    {detail.projectName && (
-                      <Badge variant="outline" className="font-mono text-[10px]">
-                        {detail.projectName}
-                      </Badge>
-                    )}
-                    <Badge variant="secondary" className="gap-1 font-mono text-[10px]">
-                      <Zap className="h-2.5 w-2.5 text-primary" />
-                      {detail.hits} hits
-                    </Badge>
-                    <span className="font-mono text-[10px] text-muted-foreground">{formatBytes(detail.sizeBytes)}</span>
-                    {detail.inputDocIds.length > 0 && (
-                      <span className="font-mono text-[10px] text-muted-foreground">
-                        {detail.inputDocIds.join(", ")}
-                      </span>
-                    )}
-                  </div>
-                  <ScrollArea className="min-h-0 flex-1">
-                    <div className="space-y-4 p-4">
-                      {detail.inputPreview && (
+                    <ScrollArea className="min-h-0 flex-1">
+                      <div className="space-y-4 p-4">
+                        {detail.inputPreview && (
+                          <section>
+                            <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                              Input
+                            </h3>
+                            {detail.inputPreviewItems && detail.inputPreviewItems.length > 1 ? (
+                              <IoPager
+                                items={detail.inputPreviewItems}
+                                renderItem={(item) => (
+                                  <div className="rounded border border-border bg-muted/20 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                                    <PromptText text={item.text} />
+                                  </div>
+                                )}
+                              />
+                            ) : (
+                              <div className="rounded border border-border bg-muted/20 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
+                                <PromptText text={detail.inputPreview} />
+                              </div>
+                            )}
+                          </section>
+                        )}
                         <section>
                           <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                            Input
+                            Output
                           </h3>
-                          {detail.inputPreviewItems && detail.inputPreviewItems.length > 1 ? (
-                            <IoPager
-                              items={detail.inputPreviewItems}
-                              renderItem={(item) => (
-                                <div className="rounded border border-border bg-muted/20 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
-                                  <PromptText text={item.text} />
-                                </div>
-                              )}
-                            />
-                          ) : (
-                            <div className="rounded border border-border bg-muted/20 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
-                              <PromptText text={detail.inputPreview} />
-                            </div>
-                          )}
+                          {detailQuotes.length > 0 && <QuoteLinks quotes={detailQuotes} className="mb-2" />}
+                          <JsonPreviewPanel json={detail.outputJson} className="min-h-[12rem]" />
                         </section>
-                      )}
-                      <section>
-                        <h3 className="mb-2 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
-                          Output
-                        </h3>
-                        {detailQuotes.length > 0 && <QuoteLinks quotes={detailQuotes} className="mb-2" />}
-                        <JsonPreviewPanel json={detail.outputJson} className="min-h-[12rem]" />
-                      </section>
-                    </div>
-                  </ScrollArea>
-                </div>
-              ) : null}
-            </div>
-          </div>,
-          document.body,
-        )}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </div>
+        }
+      />
     </div>
   )
 }

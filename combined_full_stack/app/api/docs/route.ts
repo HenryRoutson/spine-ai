@@ -1,6 +1,7 @@
 // AI : TODO refactor (prod) — persist original bytes to Supabase Storage on upload, not local disk only.
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import {
   inputTypeFromFilename,
   parseUploadedBytes,
@@ -28,8 +29,16 @@ export async function POST(req: NextRequest) {
     return apiError(uploadErr.message, uploadErr.status);
   }
   const uploadFile = file as File;
-  const label = (form.get("label") as DocLabel | null) ?? DocLabel.Inference;
-  const projectId = (form.get("projectId") as ProjectId | null) ?? undefined;
+  const labelRaw = form.get("label");
+  const label =
+    typeof labelRaw === "string" && labelRaw === DocLabel.Training
+      ? DocLabel.Training
+      : DocLabel.Inference;
+  const projectIdRaw = form.get("projectId");
+  const projectId =
+    typeof projectIdRaw === "string" && projectIdRaw.length >= 1 && projectIdRaw.length <= 128
+      ? (projectIdRaw as ProjectId)
+      : undefined;
   const type = inputTypeFromFilename(uploadFile.name);
   apiLog.info(`POST /api/docs upload`, {
     name: uploadFile.name,
@@ -41,6 +50,10 @@ export async function POST(req: NextRequest) {
   const ctx = await requireAuthStore();
   if (ctx instanceof NextResponse) return ctx;
   const { store } = ctx;
+
+  if (projectId && !store.project(projectId)) {
+    return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
+  }
 
   const bytes = new Uint8Array(await uploadFile.arrayBuffer());
   const bytesErr = validateUploadBytes(bytes, uploadFile.name, type);

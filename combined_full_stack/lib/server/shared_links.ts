@@ -28,6 +28,29 @@ import type { SharedLinkDefaultDoc, SharedLinkRecord } from "@/lib/shared-link-t
 
 export type { SharedLinkDefaultDoc, SharedLinkRecord };
 
+export class SharedLinkSpendLimitError extends Error {
+  constructor() {
+    super("This link has reached its spending limit.");
+  }
+}
+
+export function sharedLinkSpendLimitReached(
+  link: Pick<SharedLinkRecord, "spendLimitCents" | "totalSpendCents">,
+): boolean {
+  if (link.spendLimitCents == null) return false;
+  return link.totalSpendCents >= link.spendLimitCents;
+}
+
+export function assertSharedLinkCanAcceptRun(
+  link: Pick<SharedLinkRecord, "spendLimitCents" | "totalSpendCents">,
+): void {
+  if (sharedLinkSpendLimitReached(link)) throw new SharedLinkSpendLimitError();
+}
+
+function toExactSpendCents(cents: number): number {
+  return +Math.max(0, cents).toFixed(4);
+}
+
 const linkLog = logger("shared-links");
 
 const SHARED_LINK_PREFIX = "pub_";
@@ -122,7 +145,8 @@ export function newSessionId(): string {
 function loadLocalLink(id: SharedLinkId): StoredSharedLink | null {
   const path = linkFile(id);
   if (!existsSync(path)) return null;
-  return JSON.parse(readFileSync(path, "utf8")) as StoredSharedLink;
+  const row = JSON.parse(readFileSync(path, "utf8")) as StoredSharedLink;
+  return { ...row, totalSpendCents: row.totalSpendCents ?? 0 };
 }
 
 function saveLocalLink(row: StoredSharedLink): void {
@@ -155,6 +179,9 @@ async function loadSupabaseLink(id: SharedLinkId): Promise<StoredSharedLink | nu
     fundingMode: data.funding_mode as SharedLinkFundingMode,
     viewerNameRequired: data.viewer_name_required,
     defaultDocs: (data.default_docs ?? []) as SharedLinkDefaultDoc[],
+    spendLimitCents:
+      data.spend_limit_cents != null ? Number(data.spend_limit_cents) : undefined,
+    totalSpendCents: Number(data.total_spend_cents ?? 0),
     runCount: data.run_count ?? 0,
     createdAt: data.created_at,
     revoked: data.revoked,
@@ -198,6 +225,9 @@ export async function listSharedLinksForOwner(ownerId: user_id_string): Promise<
       fundingMode: row.funding_mode as SharedLinkFundingMode,
       viewerNameRequired: row.viewer_name_required,
       defaultDocs: (row.default_docs ?? []) as SharedLinkDefaultDoc[],
+      spendLimitCents:
+        row.spend_limit_cents != null ? Number(row.spend_limit_cents) : undefined,
+      totalSpendCents: Number(row.total_spend_cents ?? 0),
       runCount: row.run_count ?? 0,
       createdAt: row.created_at,
       revoked: row.revoked,
@@ -215,6 +245,8 @@ function toPublicRecord(row: StoredSharedLink): SharedLinkRecord {
     fundingMode: row.fundingMode,
     viewerNameRequired: row.viewerNameRequired,
     defaultDocs: row.defaultDocs,
+    spendLimitCents: row.spendLimitCents,
+    totalSpendCents: row.totalSpendCents,
     runCount: row.runCount,
     createdAt: row.createdAt,
     revoked: row.revoked,
@@ -227,6 +259,7 @@ export type PublishSharedLinkInput = {
   defaultModel?: ModelId;
   fundingMode?: SharedLinkFundingMode;
   viewerNameRequired?: boolean;
+  spendLimitCents?: number;
   defaultDocsByModule: Partial<Record<ModuleId, DocId[]>>;
   store: Store;
 };
@@ -277,6 +310,9 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     defaultModel: input.defaultModel,
     fundingMode: input.fundingMode ?? SharedLinkFundingMode.SharerPays,
     viewerNameRequired: input.viewerNameRequired ?? false,
+    spendLimitCents:
+      input.spendLimitCents != null ? toExactSpendCents(input.spendLimitCents) : undefined,
+    totalSpendCents: 0,
     defaultDocs,
     runCount: 0,
     createdAt: Date.now(),
@@ -301,6 +337,8 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     default_model: row.defaultModel ?? null,
     funding_mode: row.fundingMode,
     viewer_name_required: row.viewerNameRequired,
+    spend_limit_cents: row.spendLimitCents ?? null,
+    total_spend_cents: row.totalSpendCents,
     revoked: false,
     run_count: 0,
     created_at: row.createdAt,
@@ -342,6 +380,30 @@ export async function incrementSharedLinkRunCount(id: SharedLinkId): Promise<voi
   }
 }
 
+export async function recordSharedLinkSpend(id: SharedLinkId, cents: number): Promise<void> {
+  const billed = toExactSpendCents(cents);
+  if (billed <= 0) return;
+
+  const link = loadLocalLink(id);
+  if (link) {
+    link.totalSpendCents = toExactSpendCents((link.totalSpendCents ?? 0) + billed);
+    saveLocalLink(link);
+  }
+
+  const admin = await createAdminClient();
+  if (!admin) return;
+  const { data } = await admin
+    .from("shared_links")
+    .select("total_spend_cents")
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return;
+  await admin
+    .from("shared_links")
+    .update({ total_spend_cents: toExactSpendCents(Number(data.total_spend_cents ?? 0) + billed) })
+    .eq("id", id);
+}
+
 export async function openStoreForUser(userId: user_id_string): Promise<Store> {
   if (userId === LOCAL_DEV_USER_ID && isLocalDevMode()) {
     const { openStore, ensureSeeded } = await import("./store");
@@ -376,6 +438,7 @@ export function publicLinkView(link: StoredSharedLink) {
     defaultDocs: link.defaultDocs.map((d) => ({ moduleId: d.moduleId, filename: d.filename })),
     modules: link.snapshot.modules.map(sanitizeModuleForPublic),
     models: link.snapshot.models,
+    spendLimitReached: sharedLinkSpendLimitReached(link),
   };
 }
 

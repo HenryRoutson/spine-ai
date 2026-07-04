@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { Copy, Link2, Loader2, Share2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -35,6 +36,8 @@ export function ShareLinkDialog({
   const [copied, setCopied] = useState(false)
   const [fundingMode, setFundingMode] = useState<SharedLinkFundingMode>(SharedLinkFundingMode.SharerPays)
   const [viewerNameRequired, setViewerNameRequired] = useState(false)
+  const [spendLimitEnabled, setSpendLimitEnabled] = useState(false)
+  const [spendLimitUsd, setSpendLimitUsd] = useState("5.00")
 
   const inputModules = useMemo(() => orderedInputModules(project.modules), [project.modules])
 
@@ -55,6 +58,16 @@ export function ShareLinkDialog({
   async function createLink() {
     setBusy(true)
     setError(null)
+    let spendLimitCents: number | undefined
+    if (spendLimitEnabled) {
+      const parsed = Number.parseFloat(spendLimitUsd)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setError("Enter a valid spending limit greater than $0")
+        setBusy(false)
+        return
+      }
+      spendLimitCents = Math.round(parsed * 100)
+    }
     try {
       const body = await apiJson<{ url: string }>(API_ROUTES.sharedLinks, {
         method: "POST",
@@ -63,6 +76,7 @@ export function ShareLinkDialog({
           projectId: project.id,
           fundingMode,
           viewerNameRequired,
+          spendLimitCents,
           defaultDocsByModule: defaultDocsByModule,
         }),
       })
@@ -137,6 +151,31 @@ export function ShareLinkDialog({
               />
               Require viewer name
             </label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={spendLimitEnabled}
+                  onChange={(e) => setSpendLimitEnabled(e.target.checked)}
+                />
+                Set spending limit
+              </label>
+              {spendLimitEnabled && (
+                <div className="flex items-center gap-2 pl-5">
+                  <span className="text-xs text-muted-foreground">$</span>
+                  <Input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={spendLimitUsd}
+                    onChange={(e) => setSpendLimitUsd(e.target.value)}
+                    className="h-8 font-mono text-xs"
+                    placeholder="5.00"
+                  />
+                  <span className="text-[10px] text-muted-foreground">max billed via this link</span>
+                </div>
+              )}
+            </div>
             <div className="rounded-md border border-border bg-muted/20 p-3">
               <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                 Default files

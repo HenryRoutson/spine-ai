@@ -7,6 +7,7 @@ import { llmSchema, validate } from "./structure";
 import type { Store } from "./store";
 import { UsageLedger } from "./usage";
 import { pipelineOutputModel, pipelineTaskPrompt } from "./validity";
+import { catalogHasModel, resolveModelId } from "./model_catalog";
 import {
   DEFAULT_MODEL,
   STRATEGY_KINDS,
@@ -219,6 +220,29 @@ export function mergeBenchmarkStrategies(project: Project, results: StrategyResu
     return r
       ? { ...s, model: r.model, accuracy: r.accuracy, passRate: r.passRate, latencyMs: r.latencyMs, costCents: r.costCents }
       : s;
+  });
+}
+
+// AI : PUT /api/projects may change enabled/name/model only — preserve benchmark metrics from store.
+export function mergeStrategyConfigPatch(existing: Strategy[], incoming: Strategy[]): Strategy[] {
+  const prevById = new Map(existing.map((s) => [s.id, s]));
+  return incoming.map((s) => {
+    const prev = prevById.get(s.id);
+    const model =
+      s.model != null && s.model !== "" && catalogHasModel(s.model)
+        ? resolveModelId(s.model)
+        : (prev?.model ?? s.model);
+    return {
+      id: s.id,
+      kind: s.kind,
+      name: s.name,
+      enabled: s.enabled,
+      model,
+      accuracy: prev?.accuracy ?? 0,
+      passRate: prev?.passRate ?? 0,
+      latencyMs: prev?.latencyMs ?? 0,
+      costCents: prev?.costCents ?? 0,
+    };
   });
 }
 

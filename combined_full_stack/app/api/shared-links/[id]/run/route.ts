@@ -39,11 +39,14 @@ import {
   withJobLogging,
 } from "@/lib/server/run_jobs";
 import {
+  assertSharedLinkCanAcceptRun,
   getSharedLink,
   incrementSharedLinkRunCount,
   newSessionId,
   openStoreForUser,
+  recordSharedLinkSpend,
   registerSharedProgressToken,
+  SharedLinkSpendLimitError,
 } from "@/lib/server/shared_links";
 import {
   loadDefaultDocContent,
@@ -194,8 +197,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   }
 
   try {
+    assertSharedLinkCanAcceptRun(link);
     await assertCanStartRun(billingKey);
   } catch (err) {
+    if (err instanceof SharedLinkSpendLimitError) {
+      return apiError(err.message, 402, "spend_limit_reached");
+    }
     const code = (err as { code?: string }).code;
     if (code === "insufficient_funds") {
       return apiError(
@@ -246,6 +253,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         if (run.billedCents > 0) {
           try {
             await billRunUsage(billingKey, run.billedCents);
+            await recordSharedLinkSpend(link.id, run.billedCents);
           } catch {
             /* post-run billing */
           }

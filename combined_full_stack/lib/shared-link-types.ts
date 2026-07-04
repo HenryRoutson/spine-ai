@@ -19,6 +19,8 @@ export type SharedLinkRecord = {
   fundingMode: SharedLinkFundingMode;
   viewerNameRequired: boolean;
   defaultDocs: SharedLinkDefaultDoc[];
+  spendLimitCents?: number;
+  totalSpendCents: number;
   runCount: number;
   createdAt: number;
   revoked: boolean;
@@ -36,6 +38,7 @@ export type SharedLinkPublicView = Pick<
 > & {
   modules: Project["modules"];
   models: Project["models"];
+  spendLimitReached: boolean;
 };
 
 export const SHARED_LINK_SPEND_KEY = "shared link";

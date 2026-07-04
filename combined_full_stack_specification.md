@@ -219,6 +219,12 @@ as storing many copies of tests and pipelines can be space intensive, you can us
 
 can you please have a run history for each test which is a list of logs you can see for each test, ignoring any changes to the test or pipeline for this.
 
+please add a view to align each step in the testing UI with the actual pipeline at the moment and show orphaned steps 
+testing needs to easily adapt to the changes in the pipeline,
+you don't want to have to reconfigure your tests because you're changing your pipeline. because each step is typed, it's easy to see where test data can match into each step. You just need to make this easy to visualise and reorganise.
+
+
+
 # inference
 
 All inputs are shown with the option to select documents.
@@ -252,6 +258,8 @@ this can be a demo for the inference. assert actual output equals expected
 inference contains a list of possible runs which have been pre selected, not just a single default one. these possible runs are named for example for a homework grader you could do a 1st grade example and a university grade example where the university includes latex formatting as a more advnaced test. you can also select from the tests in the inference tab.
 
 The inference tab should be able to save multiple named setups like for the homework example '10th grade' and 'pre school' with specific input files associated. there should not be a single default setup to the inference tab. use the same backend logic that is used to save the input setup in the testing tab.
+
+please add the ability to put spending limits on shared links
 
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.
@@ -356,6 +364,10 @@ there should be checks for duplicate requests, trying not to waste inference. to
 
 please disable pipeline editing until you fix bugs in your types and then if pipeline is disabled inference and testing are disabled
 if a tab is disabled it turns red and so it should be a waterfall or if you fix billing you can fix the pipeline and then inference will pop up.
+
+please make a shared component which is the run with stop button which should have a play icon, which when clicked shows a loading animation and a stop button next to it. ensure you handle stop logic elegantly and with shared logic.
+
+you can resize different parts of the UI with ResizableSplit.
 
 
 # history and merging changes 

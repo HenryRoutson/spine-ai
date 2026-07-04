@@ -23,6 +23,7 @@ import {
 import {
   getSharedLink,
   openStoreForUser,
+  recordSharedLinkSpend,
   verifySharedProgressToken,
 } from "@/lib/server/shared_links";
 import { overlayStoreForSharedRun } from "@/lib/server/shared-link-session";
@@ -102,6 +103,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         if (run.billedCents > 0 && link.fundingMode === "sharer_pays") {
           try {
             await billRunUsage(billingKeyForUser(link.ownerId), run.billedCents);
+            await recordSharedLinkSpend(link.id, run.billedCents);
           } catch (billErr) {
             apiLog.warn(`resume billing failed`, { jobId, error: (billErr as Error).message });
           }

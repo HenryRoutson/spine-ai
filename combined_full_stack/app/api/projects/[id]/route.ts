@@ -4,6 +4,7 @@ import { parseRequestJson, projectPatchSchema } from "@/lib/server/api_schemas";
 import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { logger } from "@/lib/server/server_logger";
 import { sanitizeModuleModels } from "@/lib/server/model_catalog";
+import { mergeStrategyConfigPatch } from "@/lib/server/strategies";
 import type { Project, ProjectId } from "@/lib/server/types";
 
 const apiLog = logger("api:projects");
@@ -24,9 +25,13 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   const patchBody = await parseRequestJson(req, projectPatchSchema);
   if ("validationError" in patchBody) return apiError(patchBody.validationError, HTTP.BAD_REQUEST);
   const patch = patchBody as Partial<Project>;
-  const sanitized: Partial<Project> = patch.modules
-    ? { ...patch, modules: sanitizeModuleModels(patch.modules) }
-    : patch;
+  const sanitized: Partial<Project> = {
+    ...patch,
+    ...(patch.modules ? { modules: sanitizeModuleModels(patch.modules) } : {}),
+    ...(patch.strategies
+      ? { strategies: mergeStrategyConfigPatch(project.strategies, patch.strategies) }
+      : {}),
+  };
   apiLog.info(`PUT /api/projects`, {
     projectId: id,
     patchKeys: Object.keys(sanitized),

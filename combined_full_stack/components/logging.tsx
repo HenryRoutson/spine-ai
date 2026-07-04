@@ -20,6 +20,9 @@ import { timeAgo } from "@/lib/time-ago"
 import { runBilledCents, runSavedCents, runTotalMs } from "@/lib/run-metrics"
 import { useStatusPalette } from "@/lib/chart-colors"
 import { isSharedRun } from "@/lib/shared-link-types"
+import { ResizableSplit } from "@/components/resizable-split"
+import { loggingPipelineCanvasSplit, loggingSidebarSplit } from "@/lib/layout-split-settings"
+import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
 import { useAppShell } from "@/lib/app-shell"
 import { stepDocId, stepDocLinkLabels, stepSourceDocId, isDocReferenceOutputJson } from "@/lib/step-doc"
@@ -60,6 +63,13 @@ export function Logging() {
   const [compareOpen, setCompareOpen] = useState(false)
   const [logCopied, setLogCopied] = useState(false)
   const [jsonCopied, setJsonCopied] = useState(false)
+  const { width: sidebarWidth, setWidth: setSidebarWidth, commitWidth: commitSidebarWidth } =
+    usePersistedLeadingWidth(loggingSidebarSplit)
+  const {
+    width: pipelineCanvasWidth,
+    setWidth: setPipelineCanvasWidth,
+    commitWidth: commitPipelineCanvasWidth,
+  } = usePersistedLeadingWidth(loggingPipelineCanvasSplit)
 
   useEffect(() => {
     if (!focusRunId) return
@@ -110,94 +120,100 @@ export function Logging() {
         title="Run History"
         description="Every inference run is recorded with a full per-step trace, token counts, and cost."
       />
-      <div className="flex min-h-0 flex-1">
-        {/* Run list */}
-        <div className="flex w-[340px] flex-col border-r border-border">
-          <div className="border-b border-border p-3">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Filter by model, step, run id…"
-                className="h-8 pl-8 font-mono text-xs"
-              />
+      <ResizableSplit
+        className="min-h-0 flex-1"
+        leadingWidth={sidebarWidth}
+        onLeadingWidthChange={setSidebarWidth}
+        onLeadingWidthCommit={commitSidebarWidth}
+        minLeading={loggingSidebarSplit.min}
+        maxLeading={loggingSidebarSplit.max}
+        leading={
+          <>
+            <div className="border-b border-border p-3">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Filter by model, step, run id…"
+                  className="h-8 pl-8 font-mono text-xs"
+                />
+              </div>
             </div>
-          </div>
-          <ScrollArea className="min-h-0 flex-1">
-            {filtered.length === 0 ? (
-              <p className="p-4 text-xs text-muted-foreground">
-                No runs yet. Execute a pipeline from the Inference window.
-              </p>
-            ) : (
-              <ul className="divide-y divide-border">
-                {filtered.map((run) => (
-                  <li key={run.id}>
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => {
-                        setSelectedRun(run.id)
-                        setSelectedPipelineModuleId(undefined)
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault()
+            <ScrollArea className="min-h-0 flex-1">
+              {filtered.length === 0 ? (
+                <p className="p-4 text-xs text-muted-foreground">
+                  No runs yet. Execute a pipeline from the Inference window.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {filtered.map((run) => (
+                    <li key={run.id}>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
                           setSelectedRun(run.id)
                           setSelectedPipelineModuleId(undefined)
-                        }
-                      }}
-                      className={cn(
-                        "flex w-full cursor-pointer flex-col gap-1 px-3 py-2.5 text-left transition-colors hover:bg-accent",
-                        active?.id === run.id && "bg-accent",
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate font-mono text-xs">{runInputLabel(run)}</span>
-                        <div className="flex shrink-0 items-center gap-1.5">
-                          {isSharedRun(run) && (
-                            <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
-                              shared run
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            setSelectedRun(run.id)
+                            setSelectedPipelineModuleId(undefined)
+                          }
+                        }}
+                        className={cn(
+                          "flex w-full cursor-pointer flex-col gap-1 px-3 py-2.5 text-left transition-colors hover:bg-accent",
+                          active?.id === run.id && "bg-accent",
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="min-w-0 flex-1 break-all font-mono text-xs">{runInputLabel(run)}</span>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {isSharedRun(run) && (
+                              <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
+                                shared run
+                              </Badge>
+                            )}
+                            {isTestingRun(run) && (
+                              <Badge variant="outline" className="shrink-0 border-chart-3/40 font-mono text-[9px] text-chart-3">
+                                test
+                              </Badge>
+                            )}
+                            {runInputDocIds(run).map((docId) => (
+                              <OpenInDocumentsLink key={docId} docId={docId} label="store" className="text-[9px]" />
+                            ))}
+                            <Badge
+                              variant="outline"
+                              className="shrink-0 font-mono text-[10px]"
+                              style={run.status === "ok"
+                                ? { color: palette.ok, borderColor: `${palette.ok}66` }
+                                : { color: palette.err, borderColor: `${palette.err}66` }}
+                            >
+                              {run.status}
                             </Badge>
-                          )}
-                          {isTestingRun(run) && (
-                            <Badge variant="outline" className="shrink-0 border-chart-3/40 font-mono text-[9px] text-chart-3">
-                              test
-                            </Badge>
-                          )}
-                          {runInputDocIds(run).map((docId) => (
-                            <OpenInDocumentsLink key={docId} docId={docId} label="store" className="text-[9px]" />
-                          ))}
-                          <Badge
-                            variant="outline"
-                            className="shrink-0 font-mono text-[10px]"
-                            style={run.status === "ok"
-                              ? { color: palette.ok, borderColor: `${palette.ok}66` }
-                              : { color: palette.err, borderColor: `${palette.err}66` }}
-                          >
-                            {run.status}
-                          </Badge>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground">
-                        <span>{run.model}</span>
-                        <span>
-                          {formatSecondsShort(runTotalMs(run))} · {formatCostCents(runBilledCents(run))}
+                        <div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground">
+                          <span className="min-w-0 truncate">{run.model}</span>
+                          <span className="shrink-0">
+                            {formatSecondsShort(runTotalMs(run))} · {formatCostCents(runBilledCents(run))}
+                          </span>
+                        </div>
+                        <span className="break-all font-mono text-[10px] text-muted-foreground">
+                          {new Date(run.startedAt).toLocaleString()} · {timeAgo(run.startedAt)} · {run.id}
                         </span>
+                        {run.notes && <RunNotesPreview notes={run.notes} />}
                       </div>
-                      <span className="font-mono text-[10px] text-muted-foreground">
-                        {new Date(run.startedAt).toLocaleString()} · {timeAgo(run.startedAt)} · {run.id}
-                      </span>
-                      {run.notes && <RunNotesPreview notes={run.notes} />}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </ScrollArea>
-        </div>
-
-        {/* Detail */}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </ScrollArea>
+          </>
+        }
+        trailing={
         <div className="min-w-0 flex-1">
           {!active ? (
             <div className="flex h-full items-center justify-center">
@@ -514,30 +530,42 @@ export function Logging() {
                         compare_logs
                       </Button>
                     </div>
-                    <div className="grid min-h-[20rem] grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,32%)]">
-                      <div className="overflow-x-auto border-b border-border px-4 py-6 xl:border-b-0 xl:border-r">
-                        <PipelineCanvas
-                          modules={runPipeline.modules}
-                          models={models}
-                          selectedId={selectedPipelineModuleId}
-                          onSelect={setSelectedPipelineModuleId}
-                          stepStatus={runPipeline.stepStatus}
-                          invalid={runPipelineInvalid}
-                        />
-                      </div>
-                      <aside className="flex min-h-0 flex-col overflow-hidden">
-                        <div className="border-b border-border px-4 py-2">
-                          <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                            Inspector
-                          </span>
-                        </div>
-                        <PipelineInspector
-                          module={selectedPipelineModule}
-                          models={models}
-                          typeAliases={typeAliases}
-                          modules={runPipeline.modules}
-                        />
-                      </aside>
+                    <div className="min-h-[20rem]">
+                      <ResizableSplit
+                        className="h-full min-h-[20rem]"
+                        leadingWidth={pipelineCanvasWidth}
+                        onLeadingWidthChange={setPipelineCanvasWidth}
+                        onLeadingWidthCommit={commitPipelineCanvasWidth}
+                        minLeading={loggingPipelineCanvasSplit.min}
+                        maxLeading={loggingPipelineCanvasSplit.max}
+                        leading={
+                          <div className="min-h-0 overflow-x-auto px-4 py-6">
+                            <PipelineCanvas
+                              modules={runPipeline.modules}
+                              models={models}
+                              selectedId={selectedPipelineModuleId}
+                              onSelect={setSelectedPipelineModuleId}
+                              stepStatus={runPipeline.stepStatus}
+                              invalid={runPipelineInvalid}
+                            />
+                          </div>
+                        }
+                        trailing={
+                          <aside className="flex min-h-0 flex-col overflow-hidden">
+                            <div className="border-b border-border px-4 py-2">
+                              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                                Inspector
+                              </span>
+                            </div>
+                            <PipelineInspector
+                              module={selectedPipelineModule}
+                              models={models}
+                              typeAliases={typeAliases}
+                              modules={runPipeline.modules}
+                            />
+                          </aside>
+                        }
+                      />
                     </div>
                   </div>
                 )}
@@ -547,7 +575,8 @@ export function Logging() {
             </ScrollArea>
           )}
         </div>
-      </div>
+        }
+      />
 
       {compareOpen && (
         <CompareModal
