@@ -71,6 +71,8 @@ each structure should have a quick AI summarise button, which is not meant to re
 
 each of the fields will have a boolean for if something is deterministic
 
+if a struct is auto generated then lock it.
+
 # Pipeline
 
 A central visualisation of all steps of the pipeline with boxes for each step and a descrpition and associated icon.

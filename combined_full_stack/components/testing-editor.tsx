@@ -29,7 +29,7 @@ import { useDocViewer } from "@/lib/doc-viewer"
 import { modelName } from "@/lib/validity"
 import { labelAsStateKey, validatePipelineStateEntry } from "@/lib/server/pipeline_state"
 import { SchemaJsonEditor } from "@/components/schema-json-editor"
-import { defaultFromSchema, jsonSchemaToFormRoot } from "@/lib/schema-form"
+import { applySchemaDefaults, defaultFromSchema, jsonSchemaToFormRoot } from "@/lib/schema-form"
 import { stepOutputJsonSchema } from "@/lib/step-json-schema"
 import { tryParseJson } from "@/lib/json-utils"
 import {
@@ -65,7 +65,10 @@ export function draftFromTest(test: SpineTestFile, project: Project): TestDraft 
     const key = labelAsStateKey(label)
     if (!comparable.has(key) || seen.has(key)) continue
     seen.add(key)
-    expected.push({ label: key, text: JSON.stringify(v, null, 2) })
+    const schema = stepOutputJsonSchema(project, key)
+    const root = schema ? jsonSchemaToFormRoot(schema) : null
+    const value = root && v !== null ? applySchemaDefaults(v, root) : v
+    expected.push({ label: key, text: JSON.stringify(value, null, 2) })
   }
   return {
     description: test.description ?? "",
@@ -77,16 +80,18 @@ export function draftFromTest(test: SpineTestFile, project: Project): TestDraft 
 }
 
 // AI : null when some expected value is not valid JSON yet — caller disables Save.
-export function draftToContent(draft: TestDraft, modules: PipelineModule[]): string | null {
+export function draftToContent(draft: TestDraft, project: Project): string | null {
   const comparable = new Set(
-    modules.filter(isComparableStep).map((m) => labelAsStateKey(m.label)),
+    project.modules.filter(isComparableStep).map((m) => labelAsStateKey(m.label)),
   )
   const expectedOutputs: Record<step_label_string, unknown> = {}
   for (const row of draft.expected) {
     if (!comparable.has(labelAsStateKey(row.label))) continue
     const parsed = tryParseJson(row.text, { trim: true })
     if (!parsed.ok) return null
-    expectedOutputs[row.label] = parsed.value
+    const schema = stepOutputJsonSchema(project, row.label)
+    const root = schema ? jsonSchemaToFormRoot(schema) : null
+    expectedOutputs[row.label] = root ? applySchemaDefaults(parsed.value, root) : parsed.value
   }
   const inputs: NonNullable<SpineTestFile["inputs"]> = {}
   for (const [label, names] of Object.entries(draft.inputs)) {
@@ -121,7 +126,10 @@ function expectedIssue(
   if (!parsed.ok) return { level: "error", message: `invalid JSON: ${parsed.error.message}` }
   if (parsed.value === null)
     return { level: "warning", message: "placeholder — write the expected output or capture it from a run" }
-  const check = validatePipelineStateEntry(labelAsStateKey(row.label), parsed.value, project)
+  const schema = stepOutputJsonSchema(project, row.label)
+  const root = schema ? jsonSchemaToFormRoot(schema) : null
+  const value = root ? applySchemaDefaults(parsed.value, root) : parsed.value
+  const check = validatePipelineStateEntry(labelAsStateKey(row.label), value, project)
   if (!check.ok)
     return { level: "error", message: `value does not match this step's output type:\n${check.error}` }
   return null
@@ -471,7 +479,9 @@ function ScoredStepCard({
               className="h-7 px-2 font-mono text-[10px] text-primary"
               title="copy the last run's actual output into expected"
               onClick={() => {
-                onText(actualJson!)
+                const root = stepSchema ? jsonSchemaToFormRoot(stepSchema) : null
+                const payload = root && actual !== undefined ? applySchemaDefaults(actual, root) : actual
+                onText(JSON.stringify(payload, null, 2))
                 setEditing(false)
               }}
             >

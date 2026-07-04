@@ -96,6 +96,46 @@ export function jsonSchemaToFormRoot(schema: Record<string, unknown>): FormSchem
   return normalizeNode(schema, "root", true)
 }
 
+// AI : when score/max_score are present, derive correct before generic defaults (SectionGrade-style rows).
+function inferScoreCorrectFields(obj: Record<string, unknown>): void {
+  const score = obj.score
+  const maxScore = obj.max_score
+  if (typeof score !== "number" || typeof maxScore !== "number") return
+  if (obj.correct === undefined || obj.correct === null) obj.correct = score === maxScore
+  if (obj.correct === true && (obj.mistake_explanation === undefined || obj.mistake_explanation === null)) {
+    obj.mistake_explanation = ""
+  }
+}
+
+function fieldMissing(val: unknown, type: SchemaType): boolean {
+  return val === undefined || val === null || (type !== "boolean" && val === "")
+}
+
+// AI : merge missing required keys from schema defaults; keeps partial guided-form rows valid for Zod.
+export function applySchemaDefaults(data: unknown, node: FormSchemaNode): unknown {
+  if (node.type === "object" && node.properties) {
+    const raw =
+      data && typeof data === "object" && !Array.isArray(data) ? { ...(data as Record<string, unknown>) } : {}
+    inferScoreCorrectFields(raw)
+    for (const [k, sub] of Object.entries(node.properties)) {
+      const val = raw[k]
+      if (fieldMissing(val, sub.type) && sub.required) raw[k] = defaultFromSchema(sub)
+      else if (!fieldMissing(val, sub.type) && (sub.type === "object" || sub.type === "array")) {
+        raw[k] = applySchemaDefaults(val, sub)
+      }
+    }
+    if (raw.correct === true && (raw.mistake_explanation === undefined || raw.mistake_explanation === null)) {
+      raw.mistake_explanation = ""
+    }
+    return raw
+  }
+  if (node.type === "array" && node.items) {
+    if (!Array.isArray(data)) return data
+    return data.map((item) => applySchemaDefaults(item, node.items!))
+  }
+  return data
+}
+
 export function defaultFromSchema(node: FormSchemaNode): unknown {
   if (node.type === "object" && node.properties) {
     const o: Record<string, unknown> = {}
@@ -161,8 +201,8 @@ export function validateFormData(
     for (const [k, sub] of Object.entries(node.properties)) {
       const p = path ? `${path}.${k}` : k
       const val = obj[k]
-      const missing = val === undefined || val === null || val === ""
-      if (sub.required && missing && sub.type !== "boolean") {
+      const missing = fieldMissing(val, sub.type)
+      if (sub.required && missing) {
         errors[p] = "Required"
         continue
       }

@@ -57,8 +57,10 @@ import {
   resolveTestRunInputs,
   testFileSkeleton,
   testContentSig,
+  testContentStableSig,
   testPipelineSig,
-  testRunContextSig,
+  testPipelineStableSig,
+  testRunContextStableSig,
   testRunHistoryForDoc,
   testVerdictPassed,
   validateTestFile,
@@ -249,14 +251,22 @@ function staleLoadFailedContent(content: string): string | null {
   const testSigSets = useMemo(() => {
     const m = new Map<
       doc_name_string,
-      { testContentSig: string; pipelineSig: string; legacyCombined: string }
+      {
+        testContentSig: string
+        pipelineSig: string
+        legacy: { contentStable: string; pipelineStable: string; combinedStable: string }
+      }
     >()
     for (const t of testStates) {
       const content = dirtyContentByName[t.doc.name] ?? t.content ?? ""
       m.set(t.doc.name, {
         testContentSig: testContentSig(content),
         pipelineSig,
-        legacyCombined: testRunContextSig(content, project, model, pipelineSnapshot),
+        legacy: {
+          contentStable: testContentStableSig(content),
+          pipelineStable: testPipelineStableSig(project, model, pipelineSnapshot),
+          combinedStable: testRunContextStableSig(content, project, model, pipelineSnapshot),
+        },
       })
     }
     return m
@@ -272,7 +282,7 @@ function staleLoadFailedContent(content: string): string | null {
         docName,
         sigs.testContentSig,
         sigs.pipelineSig,
-        sigs.legacyCombined,
+        sigs.legacy,
       )
     },
     [testSigSets, runs],
@@ -881,7 +891,7 @@ function TestDetail({
   }, [state.doc.id, state.content, state.parseError])
 
   const dirty = draft !== null && JSON.stringify(draft) !== initialSig
-  const serialized = draft ? draftToContent(draft, project.modules) : null
+  const serialized = draft ? draftToContent(draft, project) : null
   const draftBlocked = draft === null || serialized === null || draftHasErrors(draft, project)
 
   useEffect(() => {

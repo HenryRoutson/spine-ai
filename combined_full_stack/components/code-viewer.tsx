@@ -1,5 +1,6 @@
 "use client"
 
+import "@/lib/monaco-loader"
 import dynamic from "next/dynamic"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import type { editor } from "monaco-editor"

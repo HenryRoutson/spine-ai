@@ -183,7 +183,8 @@ export function stepSpineOutType(m: PipelineModule | undefined): TypeExpr | unde
   if (m.outType) return m.outType;
   if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review") {
     const id = m.inStructureId ?? m.outStructureId;
-    return id ? structureSpineType(id, false) : undefined;
+    // AI : output/assert/human-review may snapshot a list — honour legacy outIsList (see deriveOutType).
+    return id ? structureSpineType(id, stepEmitsList(m)) : undefined;
   }
   if (!m.outStructureId) return undefined;
   if (m.kind === "transform" && !m.code?.trim() && !m.outIsList) {

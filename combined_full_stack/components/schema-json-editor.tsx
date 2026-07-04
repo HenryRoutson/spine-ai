@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { tryParseJson } from "@/lib/json-utils"
 import {
+  applySchemaDefaults,
   defaultFromSchema,
   friendlyType,
   humanizeKey,
@@ -38,19 +39,23 @@ export function SchemaJsonEditor({
 
   useEffect(() => {
     const parsed = tryParseJson(text, { trim: true })
-    if (parsed.ok && parsed.value !== null) {
-      setData(parsed.value)
-      setJsonDraft(text)
+    if (!parsed.ok || parsed.value === null) return
+    const normalized = formRoot ? applySchemaDefaults(parsed.value, formRoot) : parsed.value
+    setData(normalized)
+    setJsonDraft(JSON.stringify(normalized, null, 2))
+    if (formRoot && JSON.stringify(normalized) !== JSON.stringify(parsed.value)) {
+      onText(JSON.stringify(normalized, null, 2))
     }
-  }, [text])
+  }, [text, formRoot, onText])
 
   const fieldErrors = formRoot ? validateFormData(data, formRoot) : {}
   const errorCount = Object.keys(fieldErrors).length
 
   const pushData = (next: unknown) => {
-    setData(next)
-    onText(JSON.stringify(next, null, 2))
-    setJsonDraft(JSON.stringify(next, null, 2))
+    const normalized = formRoot ? applySchemaDefaults(next, formRoot) : next
+    setData(normalized)
+    onText(JSON.stringify(normalized, null, 2))
+    setJsonDraft(JSON.stringify(normalized, null, 2))
     setJsonError(null)
   }
 
@@ -159,8 +164,8 @@ export function SchemaJsonEditor({
 
 function parseOrDefault(text: json_text_string, formRoot: FormSchemaNode | null): unknown {
   const parsed = tryParseJson(text, { trim: true })
-  if (parsed.ok && parsed.value !== null) return parsed.value
-  return formRoot ? defaultFromSchema(formRoot) : {}
+  const base = parsed.ok && parsed.value !== null ? parsed.value : formRoot ? defaultFromSchema(formRoot) : {}
+  return formRoot ? applySchemaDefaults(base, formRoot) : base
 }
 
 function FormFields({

@@ -8,7 +8,7 @@ import { validateNamedInputs, isInferenceSetupFileName } from "@/lib/inference-s
 import { labelAsStateKey, validatePipelineStateEntry } from "@/lib/server/pipeline_state"
 import { fieldToTypeExpr, stepSpineOutType } from "@/lib/server/type_expr"
 import { tryParseJson } from "@/lib/json-utils"
-import { buildRunConfigPayload, stableJson } from "@/lib/run-fingerprint"
+import { buildRunConfigPayload, hashStableJson, stableJson } from "@/lib/run-fingerprint"
 import { DocLabel, ModuleKind, RunSource, RunTestStepStatus, type RunTestProbabilisticResult } from "@/lib/types"
 import type {
   DocRef,
@@ -419,10 +419,38 @@ export function testVerdictPassed(results: TestStepResult[]): boolean {
   return firstFailure(results) === undefined
 }
 
-export function testContentSig(content: string): string {
+function testContentPayload(content: string): unknown {
   const parsed = parseTestFile(content)
-  if (parsed.ok) return stableJson(parsed.test)
-  return stableJson({ raw: content })
+  if (parsed.ok) return parsed.test
+  return { raw: content }
+}
+
+function pipelinePayload(
+  project: Project,
+  model: ModelId | undefined,
+  pipeline?: { modules: PipelineModule[]; models: StructureModel[]; typeAliases: TypeAlias[] },
+): ReturnType<typeof buildRunConfigPayload> {
+  const p = pipeline
+    ? { ...project, modules: pipeline.modules, models: pipeline.models, typeAliases: pipeline.typeAliases }
+    : project
+  return buildRunConfigPayload(p, model)
+}
+
+function runContextPayload(
+  content: string,
+  project: Project,
+  model: ModelId | undefined,
+  pipeline?: { modules: PipelineModule[]; models: StructureModel[]; typeAliases: TypeAlias[] },
+): { pipeline: ReturnType<typeof buildRunConfigPayload>; content: string } {
+  return { pipeline: pipelinePayload(project, model, pipeline), content }
+}
+
+export function testContentSig(content: string): string {
+  return hashStableJson(testContentPayload(content))
+}
+
+export function testContentStableSig(content: string): string {
+  return stableJson(testContentPayload(content))
 }
 
 export function testPipelineSig(
@@ -430,10 +458,15 @@ export function testPipelineSig(
   model: ModelId | undefined,
   pipeline?: { modules: PipelineModule[]; models: StructureModel[]; typeAliases: TypeAlias[] },
 ): string {
-  const p = pipeline
-    ? { ...project, modules: pipeline.modules, models: pipeline.models, typeAliases: pipeline.typeAliases }
-    : project
-  return stableJson(buildRunConfigPayload(p, model))
+  return hashStableJson(pipelinePayload(project, model, pipeline))
+}
+
+export function testPipelineStableSig(
+  project: Project,
+  model: ModelId | undefined,
+  pipeline?: { modules: PipelineModule[]; models: StructureModel[]; typeAliases: TypeAlias[] },
+): string {
+  return stableJson(pipelinePayload(project, model, pipeline))
 }
 
 // AI : legacy combined sig — older runs only; new runs store testContentSig + pipelineSig separately.
@@ -443,27 +476,46 @@ export function testRunContextSig(
   model: ModelId | undefined,
   pipeline?: { modules: PipelineModule[]; models: StructureModel[]; typeAliases: TypeAlias[] },
 ): string {
-  return stableJson({
-    pipeline: buildRunConfigPayload(
-      pipeline
-        ? { ...project, modules: pipeline.modules, models: pipeline.models, typeAliases: pipeline.typeAliases }
-        : project,
-      model,
-    ),
-    content,
-  })
+  return hashStableJson(runContextPayload(content, project, model, pipeline))
+}
+
+export function testRunContextStableSig(
+  content: string,
+  project: Project,
+  model: ModelId | undefined,
+  pipeline?: { modules: PipelineModule[]; models: StructureModel[]; typeAliases: TypeAlias[] },
+): string {
+  return stableJson(runContextPayload(content, project, model, pipeline))
+}
+
+export type TestSigLegacy = {
+  contentStable?: string
+  pipelineStable?: string
+  combinedStable?: string
+}
+
+function sigMatches(stored: string | undefined, hash: string, stable?: string): boolean {
+  if (!stored) return false
+  if (stored === hash) return true
+  // AI : legacy runs persisted full stableJson before hash sigs were introduced.
+  return !!stable && stored === stable
 }
 
 export function testReportMatchesSigs(
   report: { testContentSig?: string; pipelineSig?: string; contextSig?: string },
   testContentSig: string,
   pipelineSig: string,
-  legacyCombined?: string,
+  legacy?: TestSigLegacy,
 ): boolean {
   if (report.testContentSig !== undefined && report.pipelineSig !== undefined) {
-    return report.testContentSig === testContentSig && report.pipelineSig === pipelineSig
+    return (
+      sigMatches(report.testContentSig, testContentSig, legacy?.contentStable) &&
+      sigMatches(report.pipelineSig, pipelineSig, legacy?.pipelineStable)
+    )
   }
-  if (report.contextSig && legacyCombined) return report.contextSig === legacyCombined
+  if (report.contextSig && legacy?.combinedStable) {
+    return report.contextSig === legacy.combinedStable
+  }
   return false
 }
 
@@ -472,12 +524,12 @@ export function latestTestVerdictForDoc(
   testDocName: string,
   testContentSig: string,
   pipelineSig: string,
-  legacyCombined?: string,
+  legacy?: TestSigLegacy,
 ): boolean | null {
   let latest: PipelineRun | undefined
   for (const r of runs) {
     if (r.source !== RunSource.Testing || r.test?.testDocName !== testDocName) continue
-    if (!testReportMatchesSigs(r.test, testContentSig, pipelineSig, legacyCombined)) continue
+    if (!testReportMatchesSigs(r.test, testContentSig, pipelineSig, legacy)) continue
     if (!latest || r.startedAt > latest.startedAt) latest = r
   }
   if (!latest?.test) return null
