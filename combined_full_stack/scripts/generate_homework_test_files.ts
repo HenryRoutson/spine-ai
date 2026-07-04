@@ -8,13 +8,13 @@ type GradeRow = {
   score: number;
   max_score: number;
   correct: boolean;
-  mistake_explanation: string;
+  mistake_explanation: string | null;
 };
 
 type LegacyGradeRow = Omit<GradeRow, "correct" | "mistake_explanation"> & { feedback: string };
 
 function gradeRow(
-  row: Omit<GradeRow, "correct" | "mistake_explanation"> & { mistake_explanation?: string },
+  row: Omit<GradeRow, "correct" | "mistake_explanation"> & { mistake_explanation?: string | null },
 ): GradeRow {
   const correct = row.score === row.max_score;
   return {
@@ -23,7 +23,7 @@ function gradeRow(
     score: row.score,
     max_score: row.max_score,
     correct,
-    mistake_explanation: row.mistake_explanation ?? (correct ? "" : ""),
+    mistake_explanation: row.mistake_explanation ?? null,
   };
 }
 
@@ -35,7 +35,16 @@ function fromLegacyFeedback(row: LegacyGradeRow): GradeRow {
     score: row.score,
     max_score: row.max_score,
     correct,
-    mistake_explanation: correct ? "" : row.feedback,
+    mistake_explanation: correct ? null : row.feedback,
+  };
+}
+
+function normalizeGradeRow(row: GradeRow | LegacyGradeRow): GradeRow {
+  if ("feedback" in row) return fromLegacyFeedback(row);
+  return {
+    ...row,
+    mistake_explanation:
+      row.mistake_explanation === "" || row.mistake_explanation === undefined ? null : row.mistake_explanation,
   };
 }
 
@@ -80,7 +89,7 @@ function readGradeRows(relativeFile: string): GradeRow[] | undefined {
     relativeFile,
   ).expectedOutputs["Final Output"];
   if (!Array.isArray(rows)) return undefined;
-  return rows.map((row) => ("feedback" in row ? fromLegacyFeedback(row) : row));
+  return rows.map((row) => normalizeGradeRow(row));
 }
 
 // AI : canonical algebra II grade rows — also read from an existing test file when present.
@@ -142,7 +151,7 @@ writeTest(
   "homework_grader/homework_grader_testing.json",
   buildTest({
     description:
-      "Homework Grader — Algebra II classroom sample. Full step-by-step expected JSON; mistake_explanation is LLM-checked.",
+      "Homework Grader — Algebra II classroom sample. Full step-by-step expected JSON; mistake_explanation is LLM-checked when present.",
     inputs: {
       "Marking Schema": "homework_marking_schema.json",
       "Student Submissions": [
@@ -194,7 +203,7 @@ writeTest(
   "homework_grader/homework_first_grade_testing.json",
   buildTest({
     description:
-      "Homework Grader — 1st grade worksheet smoke test. Scores and correct are exact; mistake_explanation is LLM-checked.",
+      "Homework Grader — 1st grade worksheet smoke test. Scores and correct are exact; mistake_explanation is LLM-checked when present.",
     inputs: {
       "Marking Schema": "homework_marking_schema_first_grade.json",
       "Student Submissions": ["homework_student_riley_first_grade.md"],
@@ -237,7 +246,7 @@ writeTest(
   "homework_grader/homework_university_testing.json",
   buildTest({
     description:
-      "Homework Grader — university real analysis (LaTeX). Full pipeline test; mistake_explanation is LLM-checked.",
+      "Homework Grader — university real analysis (LaTeX). Full pipeline test; mistake_explanation is LLM-checked when present.",
     inputs: {
       "Marking Schema": "homework_marking_schema_university.json",
       "Student Submissions": ["homework_student_priya_university.md"],

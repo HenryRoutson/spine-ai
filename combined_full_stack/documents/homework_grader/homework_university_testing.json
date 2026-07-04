@@ -1,5 +1,5 @@
 {
-  "description": "Homework Grader — university real analysis (LaTeX). Full pipeline test; mistake_explanation is LLM-checked.",
+  "description": "Homework Grader — university real analysis (LaTeX). Full pipeline test; mistake_explanation is LLM-checked when present.",
   "inputs": {
     "Marking Schema": "homework_marking_schema_university.json",
     "Student Submissions": [
@@ -86,7 +86,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Priya Nair",
@@ -94,7 +94,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Priya Nair",
@@ -102,7 +102,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Priya Nair",
@@ -120,7 +120,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Priya Nair",
@@ -128,7 +128,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Priya Nair",
@@ -136,7 +136,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Priya Nair",
@@ -154,7 +154,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Priya Nair",
@@ -162,7 +162,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Priya Nair",
@@ -170,7 +170,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Priya Nair",

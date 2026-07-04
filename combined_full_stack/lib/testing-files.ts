@@ -469,6 +469,24 @@ export type ProbabilisticFieldPair = {
   actual: unknown
 }
 
+// AI : null/undefined/"" expected refs mean "do not LLM-check this path on this row".
+export function isProbabilisticReferenceValue(value: unknown): boolean {
+  return value !== null && value !== undefined && value !== ""
+}
+
+export function probabilisticReferencePaths(
+  expected: unknown,
+  paths: field_path_string[],
+): field_path_string[] {
+  const out: field_path_string[] = []
+  for (const pattern of paths) {
+    for (const { path, value } of collectPathValues(expected, pattern, "")) {
+      if (isProbabilisticReferenceValue(value)) out.push(path)
+    }
+  }
+  return out
+}
+
 export function probabilisticFieldPairs(
   expected: unknown,
   actual: unknown,
@@ -480,6 +498,7 @@ export function probabilisticFieldPairs(
     const actVals = collectPathValues(actual, pattern, "")
     const actByPath = new Map(actVals.map((v) => [v.path, v.value]))
     for (const { path, value: exp } of expVals) {
+      if (!isProbabilisticReferenceValue(exp)) continue
       out.push({ path, expected: exp, actual: actByPath.get(path) })
     }
   }

@@ -7,7 +7,7 @@ import { useState, type ReactNode } from "react"
 import { ChevronDown, ChevronRight, CircleCheck, CircleX, MinusCircle } from "lucide-react"
 import { JsonFieldKindHighlight, JsonFieldKindLegend } from "@/components/highlight"
 import { SectionLabel } from "@/components/testing-editor"
-import { firstFailure } from "@/lib/testing-files"
+import { firstFailure, probabilisticReferencePaths } from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
 import { RunTestStepStatus, type RunTestProbabilisticResult, type RunTestStepResult } from "@/lib/types"
 import { StepInputDescription } from "@/components/step-input-description"
@@ -57,6 +57,10 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
     result.status === RunTestStepStatus.Fail ||
     result.status === RunTestStepStatus.NotReached ||
     inputCheckFailed
+  const probabilisticCheckedPaths =
+    result.expected !== undefined && result.ignoredPaths?.length
+      ? probabilisticReferencePaths(result.expected, result.ignoredPaths)
+      : undefined
   return (
     <li
       className={cn(
@@ -140,6 +144,7 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
                   <JsonFieldKindHighlight
                     json={JSON.stringify(result.expected, null, 2)}
                     probabilisticPaths={result.ignoredPaths ?? []}
+                    probabilisticCheckedPaths={probabilisticCheckedPaths}
                   />
                 </div>
               </div>
@@ -153,6 +158,7 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
                   <JsonFieldKindHighlight
                     json={JSON.stringify(result.actual, null, 2)}
                     probabilisticPaths={result.ignoredPaths ?? []}
+                    probabilisticCheckedPaths={probabilisticCheckedPaths}
                   />
                 )}
               </div>

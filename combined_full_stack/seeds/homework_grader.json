@@ -242,8 +242,8 @@
           "id": "f_mistake",
           "name": "mistake_explanation",
           "type": "text",
-          "optional": false,
-          "description": "When correct is false, explain what went wrong with concrete details; empty string when correct",
+          "optional": true,
+          "description": "When correct is false, explain what went wrong with concrete details; null when correct",
           "deterministic": false
         }
       ]

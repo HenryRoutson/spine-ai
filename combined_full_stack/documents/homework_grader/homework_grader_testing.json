@@ -1,5 +1,5 @@
 {
-  "description": "Homework Grader — Algebra II classroom sample. Full step-by-step expected JSON; mistake_explanation is LLM-checked.",
+  "description": "Homework Grader — Algebra II classroom sample. Full step-by-step expected JSON; mistake_explanation is LLM-checked when present.",
   "inputs": {
     "Marking Schema": "homework_marking_schema.json",
     "Student Submissions": [
@@ -190,7 +190,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Sam Rivera",
@@ -198,7 +198,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Sam Rivera",
@@ -206,7 +206,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Sam Rivera",
@@ -230,7 +230,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Jordan Lee",
@@ -246,7 +246,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Jordan Lee",
@@ -254,7 +254,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Jordan Lee",
@@ -262,7 +262,7 @@
         "score": 15,
         "max_score": 15,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Alex Kim",
@@ -286,7 +286,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Alex Kim",
@@ -294,7 +294,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Alex Kim",
@@ -312,7 +312,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Sam Rivera",
@@ -320,7 +320,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Sam Rivera",
@@ -328,7 +328,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Sam Rivera",
@@ -352,7 +352,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Jordan Lee",
@@ -368,7 +368,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Jordan Lee",
@@ -376,7 +376,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Jordan Lee",
@@ -384,7 +384,7 @@
         "score": 15,
         "max_score": 15,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Alex Kim",
@@ -408,7 +408,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Alex Kim",
@@ -416,7 +416,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Alex Kim",
@@ -434,7 +434,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Sam Rivera",
@@ -442,7 +442,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Sam Rivera",
@@ -450,7 +450,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Sam Rivera",
@@ -474,7 +474,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Jordan Lee",
@@ -490,7 +490,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Jordan Lee",
@@ -498,7 +498,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Jordan Lee",
@@ -506,7 +506,7 @@
         "score": 15,
         "max_score": 15,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Alex Kim",
@@ -530,7 +530,7 @@
         "score": 5,
         "max_score": 5,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Alex Kim",
@@ -538,7 +538,7 @@
         "score": 10,
         "max_score": 10,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Alex Kim",

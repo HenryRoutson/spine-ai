@@ -102,9 +102,6 @@ function inferScoreCorrectFields(obj: Record<string, unknown>): void {
   const maxScore = obj.max_score
   if (typeof score !== "number" || typeof maxScore !== "number") return
   if (obj.correct === undefined || obj.correct === null) obj.correct = score === maxScore
-  if (obj.correct === true && (obj.mistake_explanation === undefined || obj.mistake_explanation === null)) {
-    obj.mistake_explanation = ""
-  }
 }
 
 function fieldMissing(val: unknown, type: SchemaType): boolean {
@@ -123,9 +120,6 @@ export function applySchemaDefaults(data: unknown, node: FormSchemaNode): unknow
       else if (!fieldMissing(val, sub.type) && (sub.type === "object" || sub.type === "array")) {
         raw[k] = applySchemaDefaults(val, sub)
       }
-    }
-    if (raw.correct === true && (raw.mistake_explanation === undefined || raw.mistake_explanation === null)) {
-      raw.mistake_explanation = ""
     }
     return raw
   }

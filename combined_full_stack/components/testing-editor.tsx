@@ -50,6 +50,7 @@ import {
   buildTestCoverageMap,
   isComparableStep,
   probabilisticPathsForModule,
+  probabilisticReferencePaths,
   sanitizeTestFile,
   skipReasonForTestStep,
   type SpineTestFile,
@@ -759,6 +760,12 @@ function ScoredStepCard({
   const isPlaceholder = row.text.trim() === "null"
   const validJson = tryParseJson(row.text, { trim: true }).ok
   const actualJson = actual !== undefined ? JSON.stringify(actual, null, 2) : null
+  const probabilisticCheckedPaths = useMemo(() => {
+    if (!ignoredFields.length) return undefined
+    const parsed = tryParseJson(row.text, { trim: true })
+    if (!parsed.ok) return undefined
+    return probabilisticReferencePaths(parsed.value, ignoredFields)
+  }, [row.text, ignoredFields])
   const savedCompareWidth = useTestingCompareWidth()
   const [compareWidth, setCompareWidth] = useState(readTestingCompareWidth)
   useEffect(() => setCompareWidth(savedCompareWidth), [savedCompareWidth])
@@ -877,7 +884,11 @@ function ScoredStepCard({
               <div className="min-w-0 space-y-1 pr-1">
                 <SectionLabel>expected</SectionLabel>
                 <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
-                  <JsonFieldKindHighlight json={row.text} probabilisticPaths={ignoredFields} />
+                  <JsonFieldKindHighlight
+                    json={row.text}
+                    probabilisticPaths={ignoredFields}
+                    probabilisticCheckedPaths={probabilisticCheckedPaths}
+                  />
                 </div>
               </div>
             }
@@ -885,7 +896,11 @@ function ScoredStepCard({
               <div className="min-w-0 space-y-1 pl-1">
                 <SectionLabel>last run actual</SectionLabel>
                 <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
-                  <JsonFieldKindHighlight json={actualJson} probabilisticPaths={ignoredFields} />
+                  <JsonFieldKindHighlight
+                    json={actualJson}
+                    probabilisticPaths={ignoredFields}
+                    probabilisticCheckedPaths={probabilisticCheckedPaths}
+                  />
                 </div>
               </div>
             }
@@ -894,7 +909,11 @@ function ScoredStepCard({
           <div className="min-w-0 space-y-1">
             <SectionLabel>expected</SectionLabel>
             <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
-              <JsonFieldKindHighlight json={row.text} probabilisticPaths={ignoredFields} />
+              <JsonFieldKindHighlight
+                json={row.text}
+                probabilisticPaths={ignoredFields}
+                probabilisticCheckedPaths={probabilisticCheckedPaths}
+              />
             </div>
           </div>
         )}

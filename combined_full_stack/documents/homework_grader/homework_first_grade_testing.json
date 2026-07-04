@@ -1,5 +1,5 @@
 {
-  "description": "Homework Grader — 1st grade worksheet smoke test. Scores and correct are exact; mistake_explanation is LLM-checked.",
+  "description": "Homework Grader — 1st grade worksheet smoke test. Scores and correct are exact; mistake_explanation is LLM-checked when present.",
   "inputs": {
     "Marking Schema": "homework_marking_schema_first_grade.json",
     "Student Submissions": [
@@ -100,7 +100,7 @@
         "score": 2,
         "max_score": 2,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Riley Park",
@@ -108,7 +108,7 @@
         "score": 2,
         "max_score": 2,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Riley Park",
@@ -124,7 +124,7 @@
         "score": 2,
         "max_score": 2,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Riley Park",
@@ -132,7 +132,7 @@
         "score": 2,
         "max_score": 2,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       }
     ],
     "Final Output": [
@@ -142,7 +142,7 @@
         "score": 2,
         "max_score": 2,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Riley Park",
@@ -150,7 +150,7 @@
         "score": 2,
         "max_score": 2,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Riley Park",
@@ -166,7 +166,7 @@
         "score": 2,
         "max_score": 2,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Riley Park",
@@ -174,7 +174,7 @@
         "score": 2,
         "max_score": 2,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       }
     ],
     "Grade Count Check": [
@@ -184,7 +184,7 @@
         "score": 2,
         "max_score": 2,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Riley Park",
@@ -192,7 +192,7 @@
         "score": 2,
         "max_score": 2,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Riley Park",
@@ -208,7 +208,7 @@
         "score": 2,
         "max_score": 2,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       },
       {
         "student_label": "Riley Park",
@@ -216,7 +216,7 @@
         "score": 2,
         "max_score": 2,
         "correct": true,
-        "mistake_explanation": ""
+        "mistake_explanation": null
       }
     ]
   }

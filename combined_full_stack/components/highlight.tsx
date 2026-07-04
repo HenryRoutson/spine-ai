@@ -6,7 +6,7 @@ import remarkGfm from "remark-gfm"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { tryParseJson } from "@/lib/json-utils"
-import { isProbabilisticFieldPath } from "@/lib/testing-files"
+import { isProbabilisticFieldPath, isProbabilisticReferenceValue } from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
 import type { DocId, JobLogLevel } from "@/lib/types"
 
@@ -63,6 +63,12 @@ export function JsonFieldKindLegend() {
         <span className="rounded-sm bg-chart-3/15 px-1.5 py-0.5 text-chart-3">≈</span>
         probabilistic — LLM-checked
       </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="rounded-sm border border-dashed border-muted-foreground/50 px-1.5 py-0.5 text-muted-foreground">
+          −
+        </span>
+        not checked — reference omitted
+      </span>
     </div>
   )
 }
@@ -71,20 +77,35 @@ function JsonLeafValue({
   value,
   path,
   probabilisticPaths,
+  probabilisticCheckedPaths,
 }: {
   value: unknown
   path: field_path_string
   probabilisticPaths: field_path_string[]
+  probabilisticCheckedPaths?: field_path_string[]
 }) {
   const isProb = isProbabilisticFieldPath(path, probabilisticPaths)
   const text = JSON.stringify(value)
+  const llmChecked = isProb
+    ? probabilisticCheckedPaths !== undefined
+      ? isProbabilisticFieldPath(path, probabilisticCheckedPaths)
+      : isProbabilisticReferenceValue(value)
+    : false
   return (
     <span
       className={cn(
         "rounded-sm px-0.5",
-        isProb ? "bg-chart-3/15" : "bg-chart-2/10",
+        !isProb && "bg-chart-2/10",
+        llmChecked && "bg-chart-3/15",
+        isProb && !llmChecked && "border border-dashed border-muted-foreground/40",
       )}
-      title={isProb ? "probabilistic — excluded from exact compare, LLM-checked" : "deterministic — exact compare"}
+      title={
+        !isProb
+          ? "deterministic — exact compare"
+          : llmChecked
+            ? "probabilistic — excluded from exact compare, LLM-checked"
+            : "probabilistic — not checked (no expected reference)"
+      }
     >
       <InlineJsonTokens text={text} />
     </span>
@@ -95,18 +116,27 @@ function JsonFieldKindNode({
   value,
   path,
   probabilisticPaths,
+  probabilisticCheckedPaths,
   depth,
 }: {
   value: unknown
   path: field_path_string
   probabilisticPaths: field_path_string[]
+  probabilisticCheckedPaths?: field_path_string[]
   depth: number
 }) {
   const pad = JSON_INDENT.repeat(depth)
   const inner = JSON_INDENT.repeat(depth + 1)
 
   if (value === null || typeof value !== "object") {
-    return <JsonLeafValue value={value} path={path} probabilisticPaths={probabilisticPaths} />
+    return (
+      <JsonLeafValue
+        value={value}
+        path={path}
+        probabilisticPaths={probabilisticPaths}
+        probabilisticCheckedPaths={probabilisticCheckedPaths}
+      />
+    )
   }
 
   if (Array.isArray(value)) {
@@ -123,6 +153,7 @@ function JsonFieldKindNode({
                 value={item}
                 path={childPath}
                 probabilisticPaths={probabilisticPaths}
+                probabilisticCheckedPaths={probabilisticCheckedPaths}
                 depth={depth + 1}
               />
               {i < value.length - 1 ? "," : ""}
@@ -152,6 +183,7 @@ function JsonFieldKindNode({
               value={v}
               path={childPath}
               probabilisticPaths={probabilisticPaths}
+              probabilisticCheckedPaths={probabilisticCheckedPaths}
               depth={depth + 1}
             />
             {i < entries.length - 1 ? "," : ""}
@@ -169,16 +201,24 @@ function JsonFieldKindNode({
 export function JsonFieldKindHighlight({
   json,
   probabilisticPaths,
+  probabilisticCheckedPaths,
 }: {
   json: string
   probabilisticPaths: field_path_string[]
+  probabilisticCheckedPaths?: field_path_string[]
 }) {
   const parsed = tryParseJson(json, { trim: true })
   if (!parsed.ok) return <JsonHighlight json={json} />
   return (
     <pre className="overflow-x-auto font-mono text-[11px] leading-relaxed">
       <code>
-        <JsonFieldKindNode value={parsed.value} path="" probabilisticPaths={probabilisticPaths} depth={0} />
+        <JsonFieldKindNode
+          value={parsed.value}
+          path=""
+          probabilisticPaths={probabilisticPaths}
+          probabilisticCheckedPaths={probabilisticCheckedPaths}
+          depth={0}
+        />
       </code>
     </pre>
   )
