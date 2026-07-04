@@ -12,7 +12,7 @@ const apiLog = logger("api:projects");
 // AI : persistence for the structure / pipeline / A/B builders — the client sends a
 // AI : partial {models | modules | strategies | name} and the store flushes to disk.
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const authCtx = await requireAuthStore();
+  const authCtx = await requireAuthStore("write");
   if (authCtx instanceof NextResponse) return authCtx;
   const { store } = authCtx;
 
@@ -44,7 +44,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 }
 
 export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
-  const authCtx = await requireAuthStore();
+  const authCtx = await requireAuthStore("write");
   if (authCtx instanceof NextResponse) return authCtx;
   const { store } = authCtx;
 

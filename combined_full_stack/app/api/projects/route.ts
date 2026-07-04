@@ -12,7 +12,7 @@ const apiLog = logger("api:projects");
 
 // AI : blank project, numbered clone of a template, or numbered clone of an existing project.
 export async function POST(req: NextRequest) {
-  const ctx = await requireAuthStore();
+  const ctx = await requireAuthStore("write");
   if (ctx instanceof NextResponse) return ctx;
   const { store } = ctx;
 

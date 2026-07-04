@@ -24,7 +24,7 @@ import { SpineLogoBox } from "@/components/spine-mark"
 import { LEGAL } from "@shared/legal/site"
 import type { Project, ProjectId } from "@/lib/types"
 
-const LANDING_PAGE_URL = "https://withspine.dev/"
+const LANDING_PAGE_URL = "https://www.spine-ai.dev/"
 
 export function ProjectPickerPage() {
   const {

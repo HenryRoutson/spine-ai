@@ -11,7 +11,9 @@ import {
   upstashConfigured,
 } from "./rate_limit_config";
 
-export type RateLimitResult = { ok: true } | { ok: false; retryAfterSec: number };
+export type RateLimitResult =
+  | { ok: true }
+  | { ok: false; retryAfterSec: number; misconfigured?: boolean };
 
 type MemoryBucket = number[];
 
@@ -79,7 +81,7 @@ async function upstashCheck(key: string, tier: RateLimitTier): Promise<RateLimit
 
 export async function checkRateLimit(key: RateLimitKey, tier: RateLimitTier): Promise<RateLimitResult> {
   const backend = effectiveBackend();
-  if (backend === "blocked") return { ok: false, retryAfterSec: 60 };
+  if (backend === "blocked") return { ok: false, retryAfterSec: 60, misconfigured: true };
   if (backend === "memory") return memoryCheck(key, tier);
   return upstashCheck(key, tier);
 }

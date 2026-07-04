@@ -54,7 +54,7 @@ const nextConfig = {
       "form-action 'self'",
     ].join("; ")
     const demoFrameAncestors =
-      "frame-ancestors 'self' https://withspine.dev https://www.withspine.dev http://localhost:* https://localhost:*"
+      "frame-ancestors 'self' https://spine-ai.dev https://www.spine-ai.dev http://localhost:* https://localhost:*"
     const baseSecurityHeaders = [
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

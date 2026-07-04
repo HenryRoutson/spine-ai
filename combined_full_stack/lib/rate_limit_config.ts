@@ -8,19 +8,22 @@ export type RateLimitTier =
   | "feedback"
   | "poll"
   | "read"
+  | "write"
   | "webhook"
   | "billing"
   | "shared_run";
 export type RateLimitKey = string & { __brand: "RateLimitKey" };
 
 export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number }> = {
-  default: { windowMs: 60_000, max: 60 },
+  default: { windowMs: 60_000, max: 90 },
   llm: { windowMs: 60_000, max: 10 },
   public: { windowMs: 60_000, max: 20 },
   feedback: { windowMs: 60_000, max: 5 },
   poll: { windowMs: 60_000, max: 120 },
-  // AI : GET /api/docs/:id/text — many docs load on project open; keep off the default bucket.
+  // AI : GET /api/state, /api/docs/:id/text, templates — must not share the write/autosave bucket.
   read: { windowMs: 60_000, max: 240 },
+  // AI : debounced PUT /api/projects/[id] can fire ~120/min while editing — keep off default/read.
+  write: { windowMs: 60_000, max: 180 },
   webhook: { windowMs: 60_000, max: 120 },
   billing: { windowMs: 60_000, max: 20 },
   // AI : per-link + IP — limits anonymous credit drain on sharer_pays links.

@@ -37,7 +37,7 @@ import type {
   ModelOptionPublic,
 } from "@/lib/types"
 import { DEFAULT_MODEL } from "@/lib/types"
-import { apiJson, apiPut, JSON_HEADERS } from "@/lib/api-client"
+import { apiJson, apiPut, formatApiError, JSON_HEADERS, readApiErrorBody } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { migrateProjectModules, syncAutoQuoteSteps } from "@/lib/quote-steps"
 import { stripSharedModels, withSharedModels } from "@/lib/structure"
@@ -105,6 +105,12 @@ const DEMO_BILLING: BillingAccountView = {
   subCentsPerMonth: 2900,
   billingCapCents: 50_000,
   creditHistory: [],
+}
+
+async function fetchStateOnce(route: string): Promise<ServerState> {
+  const res = await fetch(route, { credentials: "same-origin" })
+  if (!res.ok) throw new Error(formatApiError(route, res, await readApiErrorBody(res)))
+  return res.json() as Promise<ServerState>
 }
 
 interface ServerState {
@@ -288,7 +294,7 @@ export function StoreProvider({
   const fetchState = useCallback(async (projectId: string) => {
     const q = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""
     const route = mode === "demo" ? API_ROUTES.demoState : API_ROUTES.state
-    return apiJson<ServerState>(`${route}${q}`)
+    return fetchStateOnce(`${route}${q}`)
   }, [mode])
 
   const loadProjectState = useCallback(

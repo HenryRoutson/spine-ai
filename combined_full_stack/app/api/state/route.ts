@@ -12,7 +12,7 @@ const apiLog = logger("api:state");
 // AI : ONE read endpoint — the client store hydrates everything from here on mount,
 // AI : after mutations, and on project switch (runs are scoped to the active project).
 export async function GET(req: NextRequest) {
-  const ctx = await requireAuthStore();
+  const ctx = await requireAuthStore("read");
   if (ctx instanceof NextResponse) return ctx;
   const { store } = ctx;
 

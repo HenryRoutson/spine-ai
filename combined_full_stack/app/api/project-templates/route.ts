@@ -11,7 +11,7 @@ import {
 export async function GET() {
   const auth = await requireAuth();
   if (!isAuthSession(auth)) return auth;
-  const limited = await enforceUserRateLimit(auth.userId, "default");
+  const limited = await enforceUserRateLimit(auth.userId, "read");
   if (limited) return limited;
 
   const encoder = new TextEncoder();

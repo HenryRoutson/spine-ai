@@ -60,7 +60,7 @@ import { LEGAL } from "@shared/legal/site"
 import type { Project } from "@/lib/types"
 
 // AI : marketing site lives on a separate deploy from the app
-const LANDING_PAGE_URL = "https://withspine.dev/"
+const LANDING_PAGE_URL = "https://www.spine-ai.dev/"
 
 // AI : code-split heavy tabs — only Structure ships on first paint.
 const StructureBuilder = dynamic(

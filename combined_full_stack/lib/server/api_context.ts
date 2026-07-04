@@ -20,7 +20,14 @@ export function storeAuthError(err: unknown): NextResponse {
   return apiError(message, HTTP.INTERNAL);
 }
 
-export function rateLimitResponse(retryAfterSec: number): NextResponse {
+export function rateLimitResponse(retryAfterSec: number, misconfigured = false): NextResponse {
+  if (misconfigured) {
+    return apiError(
+      "Rate limiting unavailable — set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN on Vercel (or RATE_LIMIT_BACKEND=memory).",
+      HTTP.UNAVAILABLE,
+      "rate_limit_unconfigured",
+    );
+  }
   return NextResponse.json(
     { error: "Too many requests — try again shortly.", code: "rate_limited" },
     { status: HTTP.TOO_MANY_REQUESTS, headers: { "Retry-After": String(retryAfterSec) } },
@@ -34,7 +41,7 @@ export async function enforceUserRateLimit(
   const key = `user:${userId}:${tier}` as RateLimitKey;
   const hit = await checkRateLimit(key, tier);
   if (hit.ok) return null;
-  return rateLimitResponse(hit.retryAfterSec);
+  return rateLimitResponse(hit.retryAfterSec, hit.misconfigured);
 }
 
 export async function enforceIpRateLimit(
@@ -45,7 +52,7 @@ export async function enforceIpRateLimit(
   const key = `ip:${ip}:${tier}` as RateLimitKey;
   const hit = await checkRateLimit(key, tier);
   if (hit.ok) return null;
-  return rateLimitResponse(hit.retryAfterSec);
+  return rateLimitResponse(hit.retryAfterSec, hit.misconfigured);
 }
 
 // AI : one entry point for routes that need both session identity and the data store.
