@@ -2,66 +2,78 @@ import { confidentialUploadWarning } from "@/lib/confidential-upload";
 import { prettyJsonString, tryParseJson } from "@/lib/json-utils";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
-import { HTTP, MESSAGE_REQUIRED } from "@/lib/server/api-errors";
+import { HTTP, MESSAGE_REQUIRED, unknownProject } from "@/lib/server/api-errors";
+import { docContentBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
 import { linkDocToProject, deleteDocForProject } from "@/lib/server/store";
 import { logger } from "@/lib/server/server_logger";
-import { DocLabel } from "@/lib/server/types";
-import type { DocId, InputType, ProjectId } from "@/lib/server/types";
+import { DocLabel, InputType } from "@/lib/server/types";
+import type { DocId, ProjectId } from "@/lib/server/types";
 import { inputTypeFromFilename } from "@/lib/server/upload_constants";
 
 const apiLog = logger("api:docs-content");
 
-const MAX_CONTENT_CHARS = 32_000;
-
-type DocContentBody = {
-  name?: string;
-  type?: InputType;
-  content?: string;
-  label?: DocLabel;
+type ValidatedDocContent = {
+  name: string;
+  type: InputType;
+  content: string;
+  label: DocLabel;
   projectId?: ProjectId;
-  // AI : content-addressed docs get a new id on edit — drop the superseded row first.
-  replaceDocId?: string;
+  replaceDocId?: DocId;
 };
 
-function validateDocContent(body: DocContentBody): NextResponse | { name: string; type: InputType; content: string; label: DocLabel; projectId?: ProjectId } {
-  const name = body.name?.trim();
+function validateDocContent(body: {
+  name: string;
+  type?: InputType;
+  content: string;
+  label?: DocLabel;
+  projectId?: string;
+  replaceDocId?: string;
+}): NextResponse | ValidatedDocContent {
   const content = body.content;
-  if (!name) return apiError("missing name", HTTP.BAD_REQUEST);
-  if (content == null || !content.trim()) return apiError(MESSAGE_REQUIRED, HTTP.BAD_REQUEST);
-  if (content.length > MAX_CONTENT_CHARS) {
-    return apiError(`content too large (max ${MAX_CONTENT_CHARS} chars)`, HTTP.BAD_REQUEST);
-  }
-  const confidentialBlock = confidentialUploadWarning(name);
+  if (!content.trim()) return apiError(MESSAGE_REQUIRED, HTTP.BAD_REQUEST);
+  const confidentialBlock = confidentialUploadWarning(body.name);
   if (confidentialBlock) return apiError(confidentialBlock, HTTP.FORBIDDEN);
 
-  const inferred = inputTypeFromFilename(name);
+  const inferred = inputTypeFromFilename(body.name);
   const type = body.type ?? inferred;
-  if (type !== "text" && type !== "json") {
+  if (type !== InputType.Text && type !== InputType.Json) {
     return apiError("only text and json documents can be created from content", HTTP.BAD_REQUEST);
   }
-  if (type !== inferred && !(type === "text" && (name.endsWith(".txt") || name.endsWith(".md")))) {
+  if (type !== inferred && !(type === InputType.Text && (body.name.endsWith(".txt") || body.name.endsWith(".md")))) {
     return apiError(`filename extension does not match type "${type}"`, HTTP.BAD_REQUEST);
   }
 
   let normalized = content;
-  if (type === "json") {
+  if (type === InputType.Json) {
     const parsed = tryParseJson(content);
     if (!parsed.ok) return apiError(`invalid json: ${parsed.error.message}`, HTTP.BAD_REQUEST);
     normalized = prettyJsonString(content);
   }
 
   const label: DocLabel = body.label === DocLabel.Training ? DocLabel.Training : DocLabel.Inference;
-  return { name, type, content: normalized, label, projectId: body.projectId };
+  return {
+    name: body.name,
+    type,
+    content: normalized,
+    label,
+    projectId: body.projectId as ProjectId | undefined,
+    replaceDocId: body.replaceDocId as DocId | undefined,
+  };
 }
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json()) as DocContentBody;
-  const validated = validateDocContent(body);
-  if (validated instanceof NextResponse) return validated;
-
   const ctx = await requireAuthStore();
   if (ctx instanceof NextResponse) return ctx;
   const { store } = ctx;
+
+  const parsed = await parseRequestJson(req, docContentBodySchema);
+  if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
+  const validated = validateDocContent(parsed);
+  if (validated instanceof NextResponse) return validated;
+
+  if (validated.projectId && !store.project(validated.projectId)) {
+    return apiError(unknownProject(validated.projectId), HTTP.NOT_FOUND);
+  }
 
   apiLog.info(`POST /api/docs/content`, {
     name: validated.name,
@@ -74,8 +86,8 @@ export async function POST(req: NextRequest) {
   const doc = store.addDoc(validated.name, validated.type, validated.content, validated.label);
   if (validated.projectId) {
     // AI : write new bytes first — only drop superseded row when the content hash id actually changed.
-    if (body.replaceDocId && body.replaceDocId !== doc.id) {
-      deleteDocForProject(store, validated.projectId, body.replaceDocId as DocId);
+    if (validated.replaceDocId && validated.replaceDocId !== doc.id) {
+      deleteDocForProject(store, validated.projectId, validated.replaceDocId);
     }
     linkDocToProject(store, validated.projectId, validated.name);
   }

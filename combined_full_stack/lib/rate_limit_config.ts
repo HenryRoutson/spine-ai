@@ -31,5 +31,6 @@ export function publicApiTier(pathname: string): RateLimitTier | null {
   if (pathname === "/api/supabase-env") return "public";
   if (!pathname.startsWith("/api/shared-links/")) return null;
   if (/\/run$/.test(pathname)) return "llm";
+  if (/\/progress$/.test(pathname)) return "poll";
   return "public";
 }

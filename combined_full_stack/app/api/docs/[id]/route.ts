@@ -1,13 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, unknownDoc, unknownProject } from "@/lib/server/api-errors";
+import { docProjectsPatchSchema, parseRequestJson } from "@/lib/server/api_schemas";
 import { deleteDocForProject, projectsForDocName, setDocProjectAvailability } from "@/lib/server/store";
 import { logger } from "@/lib/server/server_logger";
 import type { DocId, ProjectId } from "@/lib/server/types";
 
 const apiLog = logger("api:docs");
-
-type PatchDocProjectsBody = { projectIds: ProjectId[] };
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const authCtx = await requireAuthStore();
@@ -22,23 +21,21 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
     return apiError(unknownDoc(id), HTTP.NOT_FOUND);
   }
 
-  const body = (await req.json()) as PatchDocProjectsBody;
-  if (!Array.isArray(body.projectIds)) {
-    return apiError("projectIds is required", HTTP.BAD_REQUEST);
-  }
-  for (const projectId of body.projectIds) {
-    if (!store.project(projectId)) {
+  const parsed = await parseRequestJson(req, docProjectsPatchSchema);
+  if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
+  for (const projectId of parsed.projectIds) {
+    if (!store.project(projectId as ProjectId)) {
       apiLog.warn(`PATCH /api/docs — unknown project`, { docId: id, projectId });
       return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
     }
   }
 
-  if (!setDocProjectAvailability(store, docId, body.projectIds)) {
+  if (!setDocProjectAvailability(store, docId, parsed.projectIds as ProjectId[])) {
     return apiError(unknownDoc(id), HTTP.NOT_FOUND);
   }
 
   await store.flush();
-  apiLog.info(`PATCH /api/docs projects`, { docId: id, projectIds: body.projectIds });
+  apiLog.info(`PATCH /api/docs projects`, { docId: id, projectIds: parsed.projectIds });
   return NextResponse.json({ projectIds: projectsForDocName(store, doc.name) });
 }
 

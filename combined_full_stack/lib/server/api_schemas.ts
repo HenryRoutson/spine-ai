@@ -4,12 +4,15 @@ import { JobLogLevel } from "@/lib/run-types";
 import { z } from "zod";
 import { ASSISTANT_HISTORY_LIMIT } from "@/lib/assistant-chat-types";
 import { TOPUP_OPTIONS_CENTS } from "@/lib/billing_config";
+import { DocLabel, InputType } from "@/lib/server/types";
 import { MAX_ASSISTANT_MESSAGE_CHARS } from "./assistant-route";
 
 export const MAX_FEEDBACK_MESSAGE_CHARS = 8_000;
 export const MAX_CLIENT_STEP_OUTPUT_CHARS = 2_000_000;
 export const MAX_CLIENT_LOGS = 500;
 export const MAX_RUN_NOTES_CHARS = 8_000;
+export const MAX_DOC_CONTENT_CHARS = 32_000;
+export const MAX_API_BODY_CHARS = 4_000_000;
 
 const projectIdSchema = z.string().trim().min(1).max(128);
 const docIdSchema = z.string().trim().min(1).max(128);
@@ -57,9 +60,24 @@ export const projectPatchSchema = z
     seedDocNames: z.array(z.string().max(256)).max(200).optional(),
     expectedOutputs: z.record(z.string(), z.unknown()).optional(),
     inferencePresets: z.array(z.unknown()).max(50).optional(),
-    createdAt: z.number().optional(),
-    lastOpenedAt: z.number().optional(),
     documentation: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS).optional(),
+  })
+  .strict();
+
+export const docProjectsPatchSchema = z
+  .object({
+    projectIds: z.array(projectIdSchema).max(200),
+  })
+  .strict();
+
+export const docContentBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(256),
+    type: z.nativeEnum(InputType).optional(),
+    content: z.string().min(1).max(MAX_DOC_CONTENT_CHARS),
+    label: z.nativeEnum(DocLabel).optional(),
+    projectId: projectIdSchema.optional(),
+    replaceDocId: docIdSchema.optional(),
   })
   .strict();
 
@@ -265,6 +283,9 @@ export async function parseRequestJson<T>(
   let body: unknown;
   try {
     const raw = await req.text();
+    if (raw.length > MAX_API_BODY_CHARS) {
+      return { validationError: `request body too large (max ${MAX_API_BODY_CHARS} chars)` };
+    }
     body = raw.trim() ? JSON.parse(raw) : (emptyDefault ?? undefined);
     if (body === undefined) return { validationError: "Invalid JSON body" };
   } catch {

@@ -642,6 +642,16 @@ const PALETTE = [
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+// AI : escape for single-quoted JS strings inside onclick attributes — backslash breaks esc() alone.
+function escJs(s) {
+  return String(s)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
 function humanize(key) {
   return String(key).replace(/[-_]/g,' ').replace(/([a-z])([A-Z])/g,'$1 $2')
     .replace(/\b\w/g,c=>c.toUpperCase()).trim();
@@ -850,14 +860,14 @@ function resetZoom() {
 function mkJumpLinks(path, stopProp) {
   if (!path) return '';
   const sp = stopProp ? 'event.stopPropagation();' : '';
-  return `<span class="t-jump" title="Show in JSON" onclick="${sp}jumpToJson('${esc(path)}')">↗ JSON</span>` +
-         `<span class="t-jump" title="Show in Structure" onclick="${sp}jumpToStructure('${esc(path)}')">↗ Structure</span>`;
+  return `<span class="t-jump" title="Show in JSON" onclick="${sp}jumpToJson('${escJs(path)}')">↗ JSON</span>` +
+         `<span class="t-jump" title="Show in Structure" onclick="${sp}jumpToStructure('${escJs(path)}')">↗ Structure</span>`;
 }
 function mkCellJumpLinks(path) {
   if (!path) return null;
   const el = document.createElement('span');
   el.className = 'td-jumps';
-  el.innerHTML = `<span class="cell-jump" onclick="event.stopPropagation();jumpToJson('${esc(path)}')">↗ JSON</span>`;
+  el.innerHTML = `<span class="cell-jump" onclick="event.stopPropagation();jumpToJson('${escJs(path)}')">↗ JSON</span>`;
   return el;
 }
 function mkThStructureLink(path) {
@@ -2225,7 +2235,7 @@ function openDetailPanel(title, obj) {
         btn.innerHTML=`📄 ${val.length} items →`;
         btn.onclick=()=>{ log('table:drill-in', { label:humanize(key), depth:excelStack.length+1, count:val.length }); excelStack.push({label:humanize(key),rows:val}); drawDataTable(); closeDetail(); };
       } else {
-        btn.innerHTML=`🔗 ${humanize(key)} ↗`;
+        btn.innerHTML=`🔗 ${esc(humanize(key))} ↗`;
         btn.onclick=()=>openDetailPanel(humanize(key),val);
       }
       row.appendChild(btn);

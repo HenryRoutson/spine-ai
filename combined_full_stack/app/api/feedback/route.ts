@@ -20,7 +20,6 @@ export async function POST(req: Request) {
     return NextResponse.json({
       id: entry.id,
       createdAt: entry.createdAt,
-      userId: entry.userId,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to save feedback";
