@@ -7,11 +7,11 @@ import { useMemo } from "react"
 import { JsonFieldKindHighlight } from "@/components/highlight"
 import { JsonUnifiedDiffView } from "@/components/json-unified-diff-view"
 import { ResizableSplit } from "@/components/resizable-split"
-import { jsonUnifiedDiff } from "@/lib/json-diff"
+import { jsonUnifiedDiff, jsonUnifiedDiffSourceIndexes } from "@/lib/json-diff"
 import { differingPrettyLineIndexes } from "@/lib/json-pretty-lines"
 import { tryParseJson } from "@/lib/json-utils"
 import { cn } from "@/lib/utils"
-import type { TolerantFieldPath } from "@/lib/types"
+import type { RunTestDeterministicDiffResult, TolerantFieldPath } from "@/lib/types"
 
 type field_path_string = string
 type pixel_width = number
@@ -39,6 +39,7 @@ export type ExpectedActualCompareProps = {
   minLeading?: pixel_width
   maxLeading?: pixel_width
   className?: string
+  deterministicDiffExplanations?: RunTestDeterministicDiffResult[]
 }
 
 export function ExpectedActualCompare({
@@ -55,6 +56,7 @@ export function ExpectedActualCompare({
   minLeading = 180,
   maxLeading = 720,
   className,
+  deterministicDiffExplanations,
 }: ExpectedActualCompareProps) {
   const actualJson = useMemo(() => JSON.stringify(actual, null, 2) ?? "undefined", [actual])
   const expectedPretty = useMemo(() => {
@@ -76,11 +78,24 @@ export function ExpectedActualCompare({
     () => differingPrettyLineIndexes(expectedPretty, actualJson),
     [expectedPretty, actualJson],
   )
+  const diffExplanations = useMemo(() => {
+    const out = new Map<field_path_string, string>()
+    for (const row of deterministicDiffExplanations ?? []) {
+      if (row.path && row.reason) out.set(row.path, row.reason)
+    }
+    return out
+  }, [deterministicDiffExplanations])
+  const diffSourceIndexes = useMemo(() => {
+    const parsed = tryParseJson(expectedJson, { trim: true })
+    const expectedValue = parsed.ok ? parsed.value : expectedJson
+    return jsonUnifiedDiffSourceIndexes(expectedValue, actual)
+  }, [expectedJson, actual])
 
   const highlightProps = {
     probabilisticPaths,
     probabilisticCheckedPaths,
     tolerantPaths,
+    diffExplanations,
   }
 
   if (!aligned) {
@@ -91,7 +106,13 @@ export function ExpectedActualCompare({
         </p>
         {compareLabel(`${expectedLabel} vs ${actualLabel}`)}
         <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
-          <JsonUnifiedDiffView diff={diff} />
+          <JsonUnifiedDiffView
+            diff={diff}
+            diffExplanations={diffExplanations}
+            expectedPretty={expectedPretty}
+            actualPretty={actualJson}
+            diffSourceIndexes={diffSourceIndexes}
+          />
         </div>
       </div>
     )

@@ -232,6 +232,11 @@ when there are the same number of lines, you can use a red backround for each li
 git diffs should be coloured based on + being green and red being -.
 please add // not "{actual}" commens to the lines of json which are diferent. with actual replaced so that copying the text easily shows the difference when there is a 1 to 1 number of lines
 
+please add pass fail indicators to the test selector menu so you can see which are passing or failing on the last run.
+
+there should be a group by on the fields where you can see the mapping of what has been mapped to what with autmoatically generated confusion matricies.
+
+in addition to the very fast per field comparisons, there should also be a larger comparison between the entirety of the json actual and expected, where an llm can give a high level overview of where there are differences.
 
 # inference
 

@@ -4,9 +4,12 @@ import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import {
   compareRunToTest,
+  deterministicDiffEvalPayloads,
+  mergeDeterministicDiffExplanations,
   mergeInputDescriptionChecks,
   mergeProbabilisticEvaluations,
   probabilisticEvalPayloads,
+  type DeterministicDiffEvalResult,
   type ProbabilisticEvalResult,
   type SpineTestFile,
   type TestStepResult,
@@ -21,15 +24,21 @@ export async function evaluateTestReport(
 ): Promise<TestStepResult[]> {
   let report = compareRunToTest(run, test, project)
   report = mergeInputDescriptionChecks(run, report, project)
-  const payloads = probabilisticEvalPayloads(run, test, report, project)
-  if (!payloads.length) return report
-  const { results: probabilisticResults } = await apiJson<{ results: ProbabilisticEvalResult[] }>(
-    API_ROUTES.testingEvaluate,
-    {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify({ steps: payloads, model }),
-    },
-  )
-  return mergeProbabilisticEvaluations(report, probabilisticResults)
+  const probabilisticPayloads = probabilisticEvalPayloads(run, test, report, project)
+  const diffPayloads = deterministicDiffEvalPayloads(report)
+  if (!probabilisticPayloads.length && !diffPayloads.length) return report
+  const { results: probabilisticResults, diffResults } = await apiJson<{
+    results: ProbabilisticEvalResult[]
+    diffResults: DeterministicDiffEvalResult[]
+  }>(API_ROUTES.testingEvaluate, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      steps: probabilisticPayloads.length ? probabilisticPayloads : undefined,
+      diffSteps: diffPayloads.length ? diffPayloads : undefined,
+      model,
+    }),
+  })
+  report = mergeProbabilisticEvaluations(report, probabilisticResults ?? [])
+  return mergeDeterministicDiffExplanations(report, diffResults ?? [])
 }

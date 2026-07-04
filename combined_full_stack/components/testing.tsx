@@ -53,6 +53,7 @@ import { useStatusPalette } from "@/lib/chart-colors"
 import { timeAgo } from "@/lib/time-ago"
 import {
   isTestingFileName,
+  lastTestRunVerdictForDoc,
   latestTestVerdictForDoc,
   nextTestFileName,
   parseTestFile,
@@ -164,11 +165,16 @@ function TestSidebarBadge({ badge }: { badge: TestSidebarBadgeInfo }) {
   )
 }
 
-function TestLastVerdictIcon({ passed }: { passed: boolean }) {
+function TestLastVerdictIcon({ passed, stale }: { passed: boolean; stale?: boolean }) {
+  const className = cn(
+    "h-3.5 w-3.5 shrink-0",
+    stale && "opacity-45",
+    passed ? "text-chart-2" : "text-destructive",
+  )
   return passed ? (
-    <CircleCheck className="h-3.5 w-3.5 shrink-0 text-chart-2" aria-label="Passed last run" />
+    <CircleCheck className={className} aria-label={stale ? "Passed last run (stale)" : "Passed last run"} />
   ) : (
-    <CircleX className="h-3.5 w-3.5 shrink-0 text-destructive" aria-label="Failed last run" />
+    <CircleX className={className} aria-label={stale ? "Failed last run (stale)" : "Failed last run"} />
   )
 }
 
@@ -334,6 +340,15 @@ function staleLoadFailedContent(content: string): string | null {
       )
     },
     [testSigSets, runs],
+  )
+
+  const resolveLastRunVerdict = useCallback(
+    (docName: doc_name_string): boolean | null => {
+      const live = runByName.get(docName)
+      if (live?.phase === "done" && live.results) return testVerdictPassed(live.results)
+      return lastTestRunVerdictForDoc(runs, docName)
+    },
+    [runByName, runs],
   )
 
   const testsNeedingRun = useMemo(
@@ -747,10 +762,22 @@ function staleLoadFailedContent(content: string): string | null {
                   {testStates.map((t) => {
                     const status = testStatus(t)
                     const isSelected = selected?.doc.id === t.doc.id
-                    const lastVerdict = resolveLastVerdict(t.doc.name)
+                    const currentVerdict = resolveLastVerdict(t.doc.name)
+                    const lastRunVerdict = resolveLastRunVerdict(t.doc.name)
+                    const verdictStale = lastRunVerdict !== null && currentVerdict === null
                     const testRun = runByName.get(t.doc.name) ?? EMPTY_TEST_RUN
                     const isRunning = testRun.phase === "running"
                     const validationBadge = sidebarValidationBadge(status)
+                    const verdictTooltip =
+                      lastRunVerdict === null
+                        ? "Not run yet"
+                        : verdictStale
+                          ? lastRunVerdict
+                            ? "Passed last run — test or pipeline changed since then"
+                            : "Failed last run — test or pipeline changed since then"
+                          : lastRunVerdict
+                            ? "Passed last run for current configuration"
+                            : "Failed last run for current configuration"
                     return (
                       <li key={t.doc.id}>
                         <div
@@ -764,13 +791,24 @@ function staleLoadFailedContent(content: string): string | null {
                             onClick={() => selectTest(t.doc.id, t.doc.name)}
                             className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-1 py-1 text-left hover:bg-accent"
                           >
-                            {isRunning ? (
-                              <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary" />
-                            ) : lastVerdict === null ? (
-                              <CheckSquare className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                            ) : (
-                              <TestLastVerdictIcon passed={lastVerdict} />
-                            )}
+                            <Tooltip>
+                              <TooltipTrigger
+                                render={
+                                  <span className="mt-0.5 inline-flex shrink-0">
+                                    {isRunning ? (
+                                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                    ) : lastRunVerdict === null ? (
+                                      <CheckSquare className="h-4 w-4 text-primary" />
+                                    ) : (
+                                      <TestLastVerdictIcon passed={lastRunVerdict} stale={verdictStale} />
+                                    )}
+                                  </span>
+                                }
+                              />
+                              <TooltipContent side="right" className="max-w-xs text-left font-mono text-[10px]">
+                                {verdictTooltip}
+                              </TooltipContent>
+                            </Tooltip>
                             <span
                               className="min-w-0 flex-1 break-all font-mono text-[11px] leading-snug"
                               title={t.doc.name}
@@ -810,7 +848,11 @@ function staleLoadFailedContent(content: string): string | null {
                 onStop={() => stopTest(selected.doc.name)}
                 onRetryLoad={() => loadTestDoc(selected.doc.id, true)}
                 onDirtyContentChange={onDirtyContentChange}
-                lastVerdict={resolveLastVerdict(selected.doc.name)}
+                lastRunVerdict={resolveLastRunVerdict(selected.doc.name)}
+                verdictStale={
+                  resolveLastRunVerdict(selected.doc.name) !== null &&
+                  resolveLastVerdict(selected.doc.name) === null
+                }
                 runs={runs}
                 runDisabled={runBlocked || runAllActive || selectedRun.phase === "running"}
                 runPhase={selectedRun.phase}
@@ -986,7 +1028,8 @@ function TestDetail({
   onStop,
   onRetryLoad,
   onDirtyContentChange,
-  lastVerdict,
+  lastRunVerdict,
+  verdictStale,
   runs,
   runDisabled,
   runPhase,
@@ -1004,7 +1047,8 @@ function TestDetail({
   onStop: () => void
   onRetryLoad: () => void
   onDirtyContentChange: (docName: doc_name_string, content: string | null) => void
-  lastVerdict: boolean | null
+  lastRunVerdict: boolean | null
+  verdictStale: boolean
   runs: PipelineRun[]
   runDisabled: boolean
   runPhase: RunPhase
@@ -1080,20 +1124,22 @@ function TestDetail({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="flex items-center gap-2 text-sm font-semibold">
-            {lastVerdict === null ? (
+            {lastRunVerdict === null ? (
               <CheckSquare className="h-4 w-4 text-primary" />
             ) : (
-              <TestLastVerdictIcon passed={lastVerdict} />
+              <TestLastVerdictIcon passed={lastRunVerdict} stale={verdictStale} />
             )}
             <span className="break-all font-mono">{state.doc.name}</span>
-            {lastVerdict !== null && (
+            {lastRunVerdict !== null && (
               <span
                 className={cn(
                   "shrink-0 font-mono text-[10px] font-normal",
-                  lastVerdict ? "text-chart-2" : "text-destructive",
+                  lastRunVerdict ? "text-chart-2" : "text-destructive",
+                  verdictStale && "opacity-60",
                 )}
               >
-                {lastVerdict ? "passed last run" : "failed last run"}
+                {lastRunVerdict ? "passed last run" : "failed last run"}
+                {verdictStale ? " · stale" : ""}
               </span>
             )}
           </h3>

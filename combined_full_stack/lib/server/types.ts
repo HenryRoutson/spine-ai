@@ -369,6 +369,13 @@ export type RunTestProbabilisticResult = {
   actual?: unknown;
 };
 
+export type RunTestDeterministicDiffResult = {
+  path: string;
+  reason: string;
+  expected?: unknown;
+  actual?: unknown;
+};
+
 export type RunTestStepResult = {
   label: string;
   status: RunTestStepStatus;
@@ -386,6 +393,8 @@ export type RunTestStepResult = {
   llmEvaluated?: boolean;
   // AI : git-diff style unified diff of deterministic JSON cores when compare fails.
   deterministicDiff?: string;
+  // AI : LLM chain-of-thought explanations for each deterministic diff field (spec § Testing).
+  deterministicDiffExplanations?: RunTestDeterministicDiffResult[];
   expected?: unknown;
   actual?: unknown;
 };

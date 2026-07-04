@@ -309,6 +309,7 @@ function JsonFieldKindLineView({
   probabilisticPaths,
   probabilisticCheckedPaths,
   tolerantPaths = [],
+  diffExplanations,
 }: {
   root: unknown
   lines: string[]
@@ -318,6 +319,7 @@ function JsonFieldKindLineView({
   probabilisticPaths: field_path_string[]
   probabilisticCheckedPaths?: field_path_string[]
   tolerantPaths?: TolerantFieldPath[]
+  diffExplanations?: ReadonlyMap<field_path_string, string>
 }) {
   const paths = useMemo(() => assignPathsToPrettyLines(lines), [lines])
   return (
@@ -329,6 +331,8 @@ function JsonFieldKindLineView({
             differingLineIndexes.has(i) && paired !== undefined
               ? prettyJsonLineCompareComment(paired)
               : undefined
+          const explanation =
+            differingLineIndexes.has(i) && paths[i] ? diffExplanations?.get(paths[i]!) : undefined
           return (
             <span
               key={i}
@@ -344,6 +348,9 @@ function JsonFieldKindLineView({
               />
               {notComment !== undefined && (
                 <span className="text-muted-foreground/75">{` // not "${notComment}"`}</span>
+              )}
+              {explanation && (
+                <span className="text-destructive/80">{` // because: ${explanation}`}</span>
               )}
             </span>
           )
@@ -361,6 +368,7 @@ export function JsonFieldKindHighlight({
   tolerantPaths = [],
   differingLineIndexes,
   pairedLines,
+  diffExplanations,
 }: {
   json: string
   probabilisticPaths: field_path_string[]
@@ -369,6 +377,7 @@ export function JsonFieldKindHighlight({
   // AI : when set, render line-by-line with red row bg on indexes that differ from the paired side.
   differingLineIndexes?: ReadonlySet<number>
   pairedLines?: string[]
+  diffExplanations?: ReadonlyMap<field_path_string, string>
 }) {
   const parsed = tryParseJson(json, { trim: true })
   if (!parsed.ok) return <JsonHighlight json={json} />
@@ -383,6 +392,7 @@ export function JsonFieldKindHighlight({
         probabilisticPaths={probabilisticPaths}
         probabilisticCheckedPaths={probabilisticCheckedPaths}
         tolerantPaths={tolerantPaths}
+        diffExplanations={diffExplanations}
       />
     )
   }

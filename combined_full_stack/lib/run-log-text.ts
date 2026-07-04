@@ -35,6 +35,12 @@ export function runLogText(run: PipelineRun): string {
         }
       }
       if (r.deterministicDiff) lines.push(`   Diff:\n${r.deterministicDiff.split("\n").map((l) => `     ${l}`).join("\n")}`)
+      if (r.deterministicDiffExplanations?.length) {
+        lines.push(`   Diff explanations:`)
+        for (const d of r.deterministicDiffExplanations) {
+          lines.push(`     ${d.path}: ${d.reason}`)
+        }
+      }
       if (r.expected !== undefined) lines.push(`   Expected: ${JSON.stringify(r.expected)}`)
       if (r.actual !== undefined) lines.push(`   Actual:   ${JSON.stringify(r.actual)}`)
     }

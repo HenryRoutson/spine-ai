@@ -8,6 +8,10 @@ No Langfuse-style open SDK for arbitrary apps; observability is scoped to spine 
 
 
 
+there should be a group by on the fields where you can see the mapping of what has been mapped to what with autmoatically generated confusion matricies.
+
+
+
 OCR
 
 

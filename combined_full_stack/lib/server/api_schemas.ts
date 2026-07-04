@@ -169,10 +169,35 @@ const probabilisticEvalStepSchema = z.object({
   fields: z.array(probabilisticFieldSchema).max(50),
 });
 
-export const testingEvaluateBodySchema = z.object({
-  steps: z.array(probabilisticEvalStepSchema).min(1).max(20),
-  model: z.string().max(128).optional(),
+const deterministicDiffFieldSchema = z.object({
+  path: z.string().max(500),
+  expected: z.unknown(),
+  actual: z.unknown(),
 });
+
+const deterministicDiffStepSchema = z.object({
+  label: z.string().max(200),
+  fields: z.array(deterministicDiffFieldSchema).max(50),
+  tolerantPaths: z
+    .array(
+      z.object({
+        path: z.string().max(500),
+        tolerance: z.number().min(0),
+      }),
+    )
+    .max(100)
+    .optional(),
+});
+
+export const testingEvaluateBodySchema = z
+  .object({
+    steps: z.array(probabilisticEvalStepSchema).max(20).optional(),
+    diffSteps: z.array(deterministicDiffStepSchema).max(20).optional(),
+    model: z.string().max(128).optional(),
+  })
+  .refine((body) => (body.steps?.length ?? 0) + (body.diffSteps?.length ?? 0) > 0, {
+    message: "Provide steps and/or diffSteps",
+  });
 
 export const pipelineSummaryBodySchema = z.object({
   projectId: projectIdSchema,
@@ -228,6 +253,17 @@ const runTestStepResultSchema = z.object({
     .optional(),
   llmEvaluated: z.boolean().optional(),
   deterministicDiff: z.string().max(32_000).optional(),
+  deterministicDiffExplanations: z
+    .array(
+      z.object({
+        path: z.string().max(500),
+        reason: z.string().max(4_000),
+        expected: z.unknown().optional(),
+        actual: z.unknown().optional(),
+      }),
+    )
+    .max(50)
+    .optional(),
   expected: z.unknown().optional(),
   actual: z.unknown().optional(),
 });

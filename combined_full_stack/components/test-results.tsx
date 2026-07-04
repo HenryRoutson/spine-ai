@@ -16,7 +16,8 @@ import {
   useTestingCompareWidth,
   writeTestingCompareWidth,
 } from "@/lib/testing-settings"
-import { firstFailure, probabilisticReferencePaths } from "@/lib/testing-files"
+import { firstFailure, probabilisticReferencePaths, diffExplanationMap, deterministicCompareCores } from "@/lib/testing-files"
+import { jsonUnifiedDiffSourceIndexes } from "@/lib/json-diff"
 import { cn } from "@/lib/utils"
 import { RunTestStepStatus, type RunTestProbabilisticResult, type RunTestStepResult } from "@/lib/types"
 import { StepInputDescription } from "@/components/step-input-description"
@@ -73,6 +74,19 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
     result.expected !== undefined && result.ignoredPaths?.length
       ? probabilisticReferencePaths(result.expected, result.ignoredPaths)
       : undefined
+  const diffExplanations = diffExplanationMap(result.deterministicDiffExplanations)
+  const deterministicCores =
+    result.expected !== undefined && result.actual !== undefined
+      ? deterministicCompareCores(result.expected, result.actual, result.ignoredPaths)
+      : undefined
+  const expectedCorePretty =
+    deterministicCores ? JSON.stringify(deterministicCores.expectedCore, null, 2) : undefined
+  const actualCorePretty =
+    deterministicCores ? JSON.stringify(deterministicCores.actualCore, null, 2) : undefined
+  const diffSourceIndexes =
+    deterministicCores
+      ? jsonUnifiedDiffSourceIndexes(deterministicCores.expectedCore, deterministicCores.actualCore)
+      : undefined
   return (
     <li
       className={cn(
@@ -128,7 +142,13 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
         <div className="border-t border-border px-2.5 py-2">
           <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">deterministic diff</p>
           <div className="max-h-48 overflow-auto rounded border border-border bg-secondary/30 p-2">
-            <JsonUnifiedDiffView diff={result.deterministicDiff} />
+            <JsonUnifiedDiffView
+              diff={result.deterministicDiff}
+              diffExplanations={diffExplanations}
+              expectedPretty={expectedCorePretty}
+              actualPretty={actualCorePretty}
+              diffSourceIndexes={diffSourceIndexes}
+            />
           </div>
         </div>
       )}
@@ -155,6 +175,7 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
               probabilisticPaths={result.ignoredPaths ?? []}
               probabilisticCheckedPaths={probabilisticCheckedPaths}
               tolerantPaths={result.tolerantPaths ?? []}
+              deterministicDiffExplanations={result.deterministicDiffExplanations}
               expectedLabel="expected"
               actualLabel="actual"
               compareWidth={compareWidth}

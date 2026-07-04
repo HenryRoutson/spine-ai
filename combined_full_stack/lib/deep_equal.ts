@@ -11,6 +11,12 @@ export type TestCompareOpts = {
   tolerantByPattern?: ReadonlyMap<string, number>;
 };
 
+export type TestDiffField = {
+  path: string;
+  expected: unknown;
+  actual: unknown;
+};
+
 function patternForPath(path: string): string {
   return path.replace(/\[\d+\]/g, "[]");
 }
@@ -95,6 +101,65 @@ export function testValuesDiffPath(
     return aE === bE ? undefined : path || "(root)";
   }
   return path || "(root)";
+}
+
+// AI : all leaf diffs for LLM explanations — same rules as testValuesEqual / testValuesDiffPath.
+export function collectTestDiffFields(
+  a: unknown,
+  b: unknown,
+  opts?: TestCompareOpts,
+  path = "",
+): TestDiffField[] {
+  const aE = expandEmbeddedJson(a);
+  const bE = expandEmbeddedJson(b);
+  const tolerance = opts?.tolerantByPattern?.get(patternForPath(path));
+  if (tolerance !== undefined && typeof aE === "number" && typeof bE === "number") {
+    return numbersWithinTolerance(aE, bE, tolerance)
+      ? []
+      : [{ path: path || "(root)", expected: aE, actual: bE }];
+  }
+  if (aE === bE) return [];
+  if (typeof aE !== typeof bE) return [{ path: path || "(root)", expected: aE, actual: bE }];
+  if (aE === null || bE === null) return [{ path: path || "(root)", expected: aE, actual: bE }];
+  if (Array.isArray(aE) && Array.isArray(bE)) {
+    if (aE.length !== bE.length) {
+      return [{ path: `${path}.length`, expected: aE.length, actual: bE.length }];
+    }
+    const out: TestDiffField[] = [];
+    for (let i = 0; i < aE.length; i++) {
+      const childPath = path ? `${path}[${i}]` : `[${i}]`;
+      out.push(...collectTestDiffFields(aE[i], bE[i], opts, childPath));
+    }
+    return out;
+  }
+  if (typeof aE === "object" && typeof bE === "object") {
+    const ao = aE as Record<string, unknown>;
+    const bo = bE as Record<string, unknown>;
+    const keys = new Set([...Object.keys(ao), ...Object.keys(bo)]);
+    const out: TestDiffField[] = [];
+    for (const k of [...keys].sort()) {
+      const childPath = path ? `${path}.${k}` : k;
+      if (!(k in ao)) {
+        out.push({ path: childPath, expected: undefined, actual: bo[k] });
+        continue;
+      }
+      if (!(k in bo)) {
+        out.push({ path: childPath, expected: ao[k], actual: undefined });
+        continue;
+      }
+      out.push(...collectTestDiffFields(ao[k], bo[k], opts, childPath));
+    }
+    return out;
+  }
+  if (typeof aE === "string" && typeof bE === "string") {
+    const expandedA = expandEmbeddedJson(aE);
+    const expandedB = expandEmbeddedJson(bE);
+    if (expandedA !== aE || expandedB !== bE) {
+      return collectTestDiffFields(expandedA, expandedB, opts, path);
+    }
+    return aE === bE ? [] : [{ path: path || "(root)", expected: aE, actual: bE }];
+  }
+  return [{ path: path || "(root)", expected: aE, actual: bE }];
 }
 
 // AI : document.content often holds JSON.stringify output — expand object/array strings so key order does not fail tests.

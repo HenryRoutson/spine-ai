@@ -3,7 +3,7 @@
 
 import { applySchemaDefaults, jsonSchemaToFormRoot } from "@/lib/schema-form"
 import { stepOutputJsonSchema } from "@/lib/step-json-schema"
-import { testValuesDiffPath, testValuesEqual, type TestCompareOpts } from "@/lib/deep_equal"
+import { collectTestDiffFields, testValuesDiffPath, testValuesEqual, type TestCompareOpts, type TestDiffField } from "@/lib/deep_equal"
 import { jsonUnifiedDiff } from "@/lib/json-diff"
 import { resolveNamedRunInputs, type ResolvedNamedInputs } from "@/lib/inference-presets"
 import { validateNamedInputs, isInferenceSetupFileName } from "@/lib/inference-setup-files"
@@ -20,6 +20,7 @@ import type {
   PipelineRun,
   Project,
   RunTestStepResult,
+  RunTestDeterministicDiffResult,
   StructureModel,
   TypeAlias,
   TypeExpr,
@@ -328,6 +329,7 @@ export function mergeInputDescriptionChecks(
         actual: existing?.actual,
         diffPath: existing?.diffPath,
         deterministicDiff: existing?.deterministicDiff,
+        deterministicDiffExplanations: existing?.deterministicDiffExplanations,
         ignoredPaths: existing?.ignoredPaths,
         tolerantPaths: existing?.tolerantPaths,
         probabilisticResults: existing?.probabilisticResults,
@@ -593,6 +595,17 @@ export type ProbabilisticEvalResult = {
   pass: boolean
 }
 
+export type DeterministicDiffEvalPayload = {
+  label: string
+  fields: TestDiffField[]
+  tolerantPaths?: TolerantFieldPath[]
+}
+
+export type DeterministicDiffEvalResult = {
+  label: string
+  fieldResults: RunTestDeterministicDiffResult[]
+}
+
 // AI : merge LLM probabilistic-field verdicts — deterministic JSON must already pass.
 export function mergeProbabilisticEvaluations(
   results: TestStepResult[],
@@ -635,6 +648,69 @@ export function probabilisticEvalPayloads(
     if (fields.length) out.push({ label: r.label, fields })
   }
   return out
+}
+
+const MAX_DETERMINISTIC_DIFF_FIELDS = 50
+
+function deterministicCoreCompareOpts(r: TestStepResult): TestCompareOpts | undefined {
+  if (!r.tolerantPaths?.length) return undefined
+  return { tolerantByPattern: new Map(r.tolerantPaths.map((t) => [t.path, t.tolerance])) }
+}
+
+function deterministicDiffFieldsForResult(r: TestStepResult): TestDiffField[] {
+  if (r.expected === undefined || r.actual === undefined) return []
+  const pathSet = new Set(r.ignoredPaths ?? [])
+  const expectedCore = stripPaths(r.expected, pathSet, "")
+  const actualCore = stripPaths(r.actual, pathSet, "")
+  return collectTestDiffFields(expectedCore, actualCore, deterministicCoreCompareOpts(r)).slice(
+    0,
+    MAX_DETERMINISTIC_DIFF_FIELDS,
+  )
+}
+
+export function deterministicDiffEvalPayloads(results: TestStepResult[]): DeterministicDiffEvalPayload[] {
+  const out: DeterministicDiffEvalPayload[] = []
+  for (const r of results) {
+    if (r.status !== RunTestStepStatus.Fail || !r.deterministicDiff) continue
+    const fields = deterministicDiffFieldsForResult(r)
+    if (!fields.length) continue
+    out.push({ label: r.label, fields, tolerantPaths: r.tolerantPaths })
+  }
+  return out
+}
+
+export function mergeDeterministicDiffExplanations(
+  results: TestStepResult[],
+  evaluations: DeterministicDiffEvalResult[],
+): TestStepResult[] {
+  const evalByKey = new Map(evaluations.map((e) => [labelAsStateKey(e.label), e]))
+  return results.map((r) => {
+    const ev = evalByKey.get(labelAsStateKey(r.label))
+    if (!ev?.fieldResults.length) return r
+    return { ...r, deterministicDiffExplanations: ev.fieldResults }
+  })
+}
+
+export function diffExplanationMap(
+  explanations: RunTestDeterministicDiffResult[] | undefined,
+): ReadonlyMap<field_path_string, string> {
+  const out = new Map<field_path_string, string>()
+  for (const row of explanations ?? []) {
+    if (row.path && row.reason) out.set(row.path, row.reason)
+  }
+  return out
+}
+
+export function deterministicCompareCores(
+  expected: unknown,
+  actual: unknown,
+  ignoredPaths?: field_path_string[],
+): { expectedCore: unknown; actualCore: unknown } {
+  const pathSet = new Set(ignoredPaths ?? [])
+  return {
+    expectedCore: stripPaths(expected, pathSet, ""),
+    actualCore: stripPaths(actual, pathSet, ""),
+  }
 }
 
 // AI : the pinpoint view — first failing step in pipeline order is where the pipeline goes wrong.
@@ -832,6 +908,13 @@ export function testRunHistoryForDoc(runs: PipelineRun[], testDocName: string): 
   return runs
     .filter((r) => r.source === RunSource.Testing && r.test?.testDocName === testDocName)
     .sort((a, b) => b.startedAt - a.startedAt)
+}
+
+// AI : sidebar pass/fail — most recent run for this file, even when test/pipeline changed since.
+export function lastTestRunVerdictForDoc(runs: PipelineRun[], testDocName: string): boolean | null {
+  const latest = testRunHistoryForDoc(runs, testDocName)[0]
+  if (!latest?.test) return null
+  return testVerdictPassed(latest.test.results)
 }
 
 // AI : starter file — golden outputs when the project ships them; otherwise just the output

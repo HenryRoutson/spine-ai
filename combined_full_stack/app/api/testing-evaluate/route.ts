@@ -6,7 +6,7 @@ import { assertCanStartRun, billRunUsage, getBillingUserKey } from "@/lib/server
 import { UnknownModelError, parseRequestModel } from "@/lib/server/model_catalog";
 import { ensureModelOptionsFresh } from "@/lib/server/openrouter_models";
 import { logger } from "@/lib/server/server_logger";
-import { evaluateProbabilisticFields } from "@/lib/server/test_evaluator";
+import { evaluateDeterministicDiffFields, evaluateProbabilisticFields } from "@/lib/server/test_evaluator";
 import { DEFAULT_MODEL, type ModelId } from "@/lib/server/types";
 
 const apiLog = logger("api:testing-evaluate");
@@ -37,11 +37,25 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
-  apiLog.info(`POST /api/testing-evaluate`, { stepCount: body.steps.length, model });
+  apiLog.info(`POST /api/testing-evaluate`, {
+    probabilisticStepCount: body.steps?.length ?? 0,
+    diffStepCount: body.diffSteps?.length ?? 0,
+    model,
+  });
 
   try {
     await ensureModelOptionsFresh();
-    const { results, costCents } = await evaluateProbabilisticFields(body.steps, model);
+    const probabilisticSteps = body.steps ?? [];
+    const diffSteps = body.diffSteps ?? [];
+    const [probabilistic, deterministic] = await Promise.all([
+      probabilisticSteps.length
+        ? evaluateProbabilisticFields(probabilisticSteps, model)
+        : Promise.resolve({ results: [], costCents: 0 }),
+      diffSteps.length
+        ? evaluateDeterministicDiffFields(diffSteps, model)
+        : Promise.resolve({ results: [], costCents: 0 }),
+    ]);
+    const costCents = +(probabilistic.costCents + deterministic.costCents).toFixed(4);
     if (costCents > 0) {
       try {
         await billRunUsage(billingKey, costCents);
@@ -49,7 +63,11 @@ export async function POST(req: NextRequest) {
         apiLog.warn(`testing evaluate billing failed`, { error: (billErr as Error).message });
       }
     }
-    return NextResponse.json({ results, costCents });
+    return NextResponse.json({
+      results: probabilistic.results,
+      diffResults: deterministic.results,
+      costCents,
+    });
   } catch (err) {
     apiLog.error(`testing evaluate failed`, { error: (err as Error).message });
     return apiError((err as Error).message, HTTP.UNPROCESSABLE);
