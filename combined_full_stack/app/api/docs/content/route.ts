@@ -3,10 +3,10 @@ import { prettyJsonString, tryParseJson } from "@/lib/json-utils";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, MESSAGE_REQUIRED } from "@/lib/server/api-errors";
-import { linkDocToProject } from "@/lib/server/store";
+import { linkDocToProject, deleteDocForProject } from "@/lib/server/store";
 import { logger } from "@/lib/server/server_logger";
 import { DocLabel } from "@/lib/server/types";
-import type { InputType, ProjectId } from "@/lib/server/types";
+import type { DocId, InputType, ProjectId } from "@/lib/server/types";
 import { inputTypeFromFilename } from "@/lib/server/upload_constants";
 
 const apiLog = logger("api:docs-content");
@@ -19,6 +19,8 @@ type DocContentBody = {
   content?: string;
   label?: DocLabel;
   projectId?: ProjectId;
+  // AI : content-addressed docs get a new id on edit — drop the superseded row first.
+  replaceDocId?: string;
 };
 
 function validateDocContent(body: DocContentBody): NextResponse | { name: string; type: InputType; content: string; label: DocLabel; projectId?: ProjectId } {
@@ -70,7 +72,13 @@ export async function POST(req: NextRequest) {
   });
 
   const doc = store.addDoc(validated.name, validated.type, validated.content, validated.label);
-  if (validated.projectId) linkDocToProject(store, validated.projectId, validated.name);
+  if (validated.projectId) {
+    // AI : write new bytes first — only drop superseded row when the content hash id actually changed.
+    if (body.replaceDocId && body.replaceDocId !== doc.id) {
+      deleteDocForProject(store, validated.projectId, body.replaceDocId as DocId);
+    }
+    linkDocToProject(store, validated.projectId, validated.name);
+  }
   await store.flush();
 
   apiLog.info(`doc saved from content`, { docId: doc.id, name: validated.name });

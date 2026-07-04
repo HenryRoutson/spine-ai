@@ -7,13 +7,10 @@
 
 import { useMemo, useState } from "react"
 import {
-  ChevronDown,
-  ChevronRight,
   CircleCheck,
   CircleX,
   Download,
   Maximize2,
-  MinusCircle,
   Pencil,
   Plus,
   Shuffle,
@@ -35,9 +32,16 @@ import { SchemaJsonEditor } from "@/components/schema-json-editor"
 import { defaultFromSchema, jsonSchemaToFormRoot } from "@/lib/schema-form"
 import { stepOutputJsonSchema } from "@/lib/step-json-schema"
 import { tryParseJson } from "@/lib/json-utils"
-import { inputModulesOf, probabilisticPathsForModule, type SpineTestFile } from "@/lib/testing-files"
+import {
+  inputModulesOf,
+  isComparableStep,
+  probabilisticPathsForModule,
+  skipReasonForTestStep,
+  type SpineTestFile,
+} from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
-import type { DocId, DocRef, PipelineModule, Project } from "@/lib/types"
+import { ModuleKind, type DocId, DocRef, PipelineModule, Project } from "@/lib/types"
+import { Badge } from "@/components/ui/badge"
 
 type step_label_string = string
 type doc_name_string = string
@@ -51,23 +55,35 @@ export type TestDraft = {
   expected: { label: step_label_string; text: json_text_string }[]
 }
 
-export function draftFromTest(test: SpineTestFile): TestDraft {
+export function draftFromTest(test: SpineTestFile, project: Project): TestDraft {
+  const comparable = new Set(
+    project.modules.filter(isComparableStep).map((m) => labelAsStateKey(m.label)),
+  )
+  const seen = new Set<step_label_string>()
+  const expected: TestDraft["expected"] = []
+  for (const [label, v] of Object.entries(test.expectedOutputs)) {
+    const key = labelAsStateKey(label)
+    if (!comparable.has(key) || seen.has(key)) continue
+    seen.add(key)
+    expected.push({ label: key, text: JSON.stringify(v, null, 2) })
+  }
   return {
     description: test.description ?? "",
     inputs: Object.fromEntries(
       Object.entries(test.inputs ?? {}).map(([label, v]) => [label, Array.isArray(v) ? v : [v]]),
     ),
-    expected: Object.entries(test.expectedOutputs).map(([label, v]) => ({
-      label,
-      text: JSON.stringify(v, null, 2),
-    })),
+    expected,
   }
 }
 
 // AI : null when some expected value is not valid JSON yet — caller disables Save.
-export function draftToContent(draft: TestDraft): string | null {
+export function draftToContent(draft: TestDraft, modules: PipelineModule[]): string | null {
+  const comparable = new Set(
+    modules.filter(isComparableStep).map((m) => labelAsStateKey(m.label)),
+  )
   const expectedOutputs: Record<step_label_string, unknown> = {}
   for (const row of draft.expected) {
+    if (!comparable.has(labelAsStateKey(row.label))) continue
     const parsed = tryParseJson(row.text, { trim: true })
     if (!parsed.ok) return null
     expectedOutputs[row.label] = parsed.value
@@ -114,8 +130,9 @@ function expectedIssue(
 // AI : error-level draft problems that should block Run (warnings like placeholders are runnable).
 export function draftHasErrors(draft: TestDraft, project: Project): boolean {
   return draft.expected.some((row) => {
-    const stale = !project.modules.some((m) => sameStep(m.label, row.label))
-    return expectedIssue(row, project, stale)?.level === "error"
+    const mod = project.modules.find((m) => sameStep(m.label, row.label))
+    if (!mod || !isComparableStep(mod)) return false
+    return expectedIssue(row, project, false)?.level === "error"
   })
 }
 
@@ -172,13 +189,15 @@ export function TestFileEditor({
   const setRowText = (label: step_label_string, text: json_text_string) =>
     setDraft({
       ...draft,
-      expected: draft.expected.map((r) => (r.label === label ? { ...r, text } : r)),
+      expected: draft.expected.map((r) =>
+        sameStep(r.label, label) ? { ...r, label: labelAsStateKey(label), text } : r,
+      ),
     })
   const removeRow = (label: step_label_string) =>
-    setDraft({ ...draft, expected: draft.expected.filter((r) => r.label !== label) })
+    setDraft({ ...draft, expected: draft.expected.filter((r) => !sameStep(r.label, label)) })
   const trackStep = (m: PipelineModule) => {
     const key = labelAsStateKey(m.label)
-    // AI : seed from the project's golden outputs when available (same as the skeleton file)
+    if (rowFor(key)) return
     const golden = project.expectedOutputs?.[key]
     setDraft({
       ...draft,
@@ -186,14 +205,12 @@ export function TestFileEditor({
     })
   }
 
-  // AI : render in pipeline order; input-kind steps only show if the file already pins them
-  const stepMods = project.modules.filter((m) => m.kind !== "input" || rowFor(m.label))
   const staleRows = draft.expected.filter(
-    (r) => !project.modules.some((m) => sameStep(m.label, r.label)),
+    (r) => !project.modules.some((m) => sameStep(m.label, r.label) && isComparableStep(m)),
   )
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <section>
         <SectionLabel>description</SectionLabel>
         <Input
@@ -205,99 +222,65 @@ export function TestFileEditor({
       </section>
 
       <section>
-        <SectionLabel>input documents</SectionLabel>
-        <div className="mt-1.5 space-y-2">
-          {inputMods.length === 0 && (
-            <p className="text-xs text-muted-foreground">The pipeline has no input steps.</p>
-          )}
-          {inputMods.map((m) => {
-            const missing = namesFor(m).filter((n) => n.trim() && !projectDocs.some((d) => d.name === n))
-            return (
-              <div key={m.id} className="space-y-1">
-                <InferenceInputSlot
-                  inputModule={m}
-                  outModel={modelName(project.models, m.outStructureId)}
-                  docs={slotDocs(m)}
-                  issue={
-                    missing.length
-                      ? { message: `not found in this project: ${missing.join(", ")}` }
-                      : undefined
-                  }
+        <SectionLabel>pipeline</SectionLabel>
+        <p className="mt-1 font-mono text-[10px] leading-relaxed text-muted-foreground">
+          Steps run top to bottom. Pin input files once per input step — they are not duplicated as expected JSON.
+          Only computation steps can be scored.
+        </p>
+        <ol className="relative mt-4 space-y-5 border-l border-border/80 pl-5">
+          {project.modules.map((m, idx) => (
+            <li key={m.id} className="relative">
+              <span className="absolute -left-5 top-3 flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-background font-mono text-[8px] text-muted-foreground">
+                {idx + 1}
+              </span>
+              {m.kind === ModuleKind.Input ? (
+                <InputStepCard
+                  module={m}
+                  slotDocs={slotDocs(m)}
+                  missing={namesFor(m).filter((n) => n.trim() && !projectDocs.some((d) => d.name === n))}
                   onOpenPicker={() => setPickerModule(m)}
-                  onOpenDoc={(docId: DocId) => openDoc({ docId, start: 0, end: 0 })}
-                  onRemoveDoc={(docId: DocId) => {
+                  onOpenDoc={(docId) => openDoc({ docId, start: 0, end: 0 })}
+                  onRemoveDoc={(docId) => {
                     const doc = projectDocs.find((d) => d.id === docId)
                     if (doc) removeDocName(m, doc.name)
                   }}
+                  onRemoveMissing={(name) => removeDocName(m, name)}
+                  project={project}
                 />
-                {missing.map((name) => (
-                  <div
-                    key={name}
-                    className="flex items-center gap-2 rounded-md border border-destructive/40 px-2.5 py-1.5"
-                  >
-                    <CircleX className="h-3 w-3 shrink-0 text-destructive" />
-                    <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-destructive">{name}</span>
-                    <IconTrashButton onClick={() => removeDocName(m, name)} />
-                  </div>
-                ))}
-              </div>
-            )
-          })}
-          {staleInputKeys.map((key) => (
-            <div
-              key={key}
-              className="flex items-center gap-2 rounded-md border border-destructive/40 px-2.5 py-2"
-            >
-              <CircleX className="h-3.5 w-3.5 shrink-0 text-destructive" />
-              <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{key}</span>
-              <span className="font-mono text-[10px] text-destructive">not an input step anymore</span>
-              <IconTrashButton onClick={() => removeInputKey(key)} />
-            </div>
+              ) : !isComparableStep(m) ? (
+                <PassthroughStepCard module={m} />
+              ) : rowFor(m.label) ? (
+                <ScoredStepCard
+                  module={m}
+                  row={rowFor(m.label)!}
+                  project={project}
+                  ignoredFields={probabilisticPathsForModule(m, project.models)}
+                  actual={actuals.get(labelAsStateKey(m.label))}
+                  onText={(text) => setRowText(m.label, text)}
+                  onRemove={() => removeRow(m.label)}
+                  onExpand={setPopup}
+                />
+              ) : (
+                <UntrackedStepCard module={m} onTrack={() => trackStep(m)} />
+              )}
+            </li>
           ))}
-        </div>
-      </section>
-
-      <section>
-        <SectionLabel>expected step outputs</SectionLabel>
-        <ul className="mt-1.5 space-y-1.5">
-          {stepMods.map((m) => {
-            const row = rowFor(m.label)
-            return row ? (
-              <ExpectedRow
-                key={m.id}
-                row={row}
-                project={project}
-                stale={false}
-                ignoredFields={probabilisticPathsForModule(m, project.models)}
-                actual={actuals.has(labelAsStateKey(m.label)) ? actuals.get(labelAsStateKey(m.label)) : undefined}
-                onText={(text) => setRowText(row.label, text)}
-                onRemove={() => removeRow(row.label)}
-                onExpand={setPopup}
-              />
-            ) : (
-              <li
-                key={m.id}
-                className="flex items-center gap-2 rounded-md border border-dashed border-border/70 px-2.5 py-1.5"
-              >
-                <MinusCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
-                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground">
-                  {m.label}
-                </span>
-                <span className="shrink-0 font-mono text-[10px] text-muted-foreground/70">not checked</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 shrink-0 px-1.5 font-mono text-[10px]"
-                  onClick={() => trackStep(m)}
-                >
-                  <Plus className="mr-1 h-3 w-3" /> check this step
-                </Button>
-              </li>
-            )
-          })}
-          {staleRows.map((row) => (
-            <ExpectedRow
-              key={row.label}
+        </ol>
+        {staleInputKeys.map((key) => (
+          <div
+            key={key}
+            className="mt-3 flex items-center gap-2 rounded-md border border-destructive/40 px-2.5 py-2"
+          >
+            <CircleX className="h-3.5 w-3.5 shrink-0 text-destructive" />
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{key}</span>
+            <span className="font-mono text-[10px] text-destructive">stale input — remove</span>
+            <IconTrashButton onClick={() => removeInputKey(key)} />
+          </div>
+        ))}
+        {staleRows.map((row) => (
+          <div key={row.label} className="mt-3">
+            <ScoredStepCard
+              module={{ id: row.label, kind: ModuleKind.Llm, label: row.label } as PipelineModule}
               row={row}
               project={project}
               stale
@@ -307,8 +290,8 @@ export function TestFileEditor({
               onRemove={() => removeRow(row.label)}
               onExpand={setPopup}
             />
-          ))}
-        </ul>
+          </div>
+        ))}
       </section>
 
       {pickerModule && (
@@ -324,159 +307,276 @@ export function TestFileEditor({
   )
 }
 
-function ExpectedRow({
+function StepKindBadge({ kind, scored }: { kind: ModuleKind; scored?: boolean }) {
+  if (kind === ModuleKind.Input) {
+    return (
+      <Badge variant="outline" className="shrink-0 border-sky-500/40 font-mono text-[9px] text-sky-600">
+        input
+      </Badge>
+    )
+  }
+  if (kind === ModuleKind.Combine) {
+    return (
+      <Badge variant="outline" className="shrink-0 border-muted-foreground/40 font-mono text-[9px] text-muted-foreground">
+        passthrough
+      </Badge>
+    )
+  }
+  if (scored === false) {
+    return (
+      <Badge variant="outline" className="shrink-0 border-muted-foreground/40 font-mono text-[9px] text-muted-foreground">
+        not checked
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant="outline" className="shrink-0 border-chart-2/40 font-mono text-[9px] text-chart-2">
+      scored
+    </Badge>
+  )
+}
+
+function InputStepCard({
+  module,
+  slotDocs,
+  missing,
+  onOpenPicker,
+  onOpenDoc,
+  onRemoveDoc,
+  onRemoveMissing,
+  project,
+}: {
+  module: PipelineModule
+  slotDocs: DocRef[]
+  missing: doc_name_string[]
+  onOpenPicker: () => void
+  onOpenDoc: (docId: DocId) => void
+  onRemoveDoc: (docId: DocId) => void
+  onRemoveMissing: (name: doc_name_string) => void
+  project: Project
+}) {
+  return (
+    <div className="rounded-lg border border-sky-500/20 bg-sky-500/5">
+      <div className="flex flex-wrap items-center gap-2 border-b border-sky-500/15 px-3 py-2">
+        <StepKindBadge kind={module.kind} />
+        <span className="font-mono text-[11px] font-medium">{module.label}</span>
+        <span className="font-mono text-[10px] text-muted-foreground">files only — not scored as expected output</span>
+      </div>
+      <div className="space-y-1.5 p-3">
+        <InferenceInputSlot
+          inputModule={module}
+          outModel={modelName(project.models, module.outStructureId)}
+          docs={slotDocs}
+          issue={missing.length ? { message: `not found in this project: ${missing.join(", ")}` } : undefined}
+          onOpenPicker={onOpenPicker}
+          onOpenDoc={onOpenDoc}
+          onRemoveDoc={onRemoveDoc}
+        />
+        {missing.map((name) => (
+          <div
+            key={name}
+            className="flex items-center gap-2 rounded-md border border-destructive/40 px-2.5 py-1.5"
+          >
+            <CircleX className="h-3 w-3 shrink-0 text-destructive" />
+            <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-destructive">{name}</span>
+            <IconTrashButton onClick={() => onRemoveMissing(name)} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PassthroughStepCard({ module }: { module: PipelineModule }) {
+  return (
+    <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <StepKindBadge kind={module.kind} />
+        <span className="font-mono text-[11px] text-muted-foreground">{module.label}</span>
+        <span className="font-mono text-[10px] text-muted-foreground/80">
+          {skipReasonForTestStep(module) ?? "not scored"}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function UntrackedStepCard({ module, onTrack }: { module: PipelineModule; onTrack: () => void }) {
+  return (
+    <div className="rounded-lg border border-dashed border-border/70 bg-background px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <StepKindBadge kind={module.kind} scored={false} />
+        <span className="min-w-0 flex-1 font-mono text-[11px] text-muted-foreground">{module.label}</span>
+        <Button variant="ghost" size="sm" className="h-7 shrink-0 px-2 font-mono text-[10px]" onClick={onTrack}>
+          <Plus className="mr-1 h-3 w-3" /> pin expected output
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function ScoredStepCard({
+  module,
   row,
   project,
-  stale,
+  stale = false,
   ignoredFields,
   actual,
   onText,
   onRemove,
   onExpand,
 }: {
+  module: PipelineModule
   row: TestDraft["expected"][number]
   project: Project
-  stale: boolean
-  // AI : probabilistic field paths per structure defs — shown so it's clear what won't be compared
+  stale?: boolean
   ignoredFields: string[]
-  actual: unknown
+  actual?: unknown
   onText: (text: json_text_string) => void
   onRemove: () => void
   onExpand: (payload: PopupPayload) => void
 }) {
   const issue = expectedIssue(row, project, stale)
-  const [open, setOpen] = useState(issue?.level === "error")
-  const [editing, setEditing] = useState(false)
+  const [editing, setEditing] = useState(issue?.level === "error")
   const stepSchema = useMemo(
     () => (stale ? null : stepOutputJsonSchema(project, row.label)),
     [project, row.label, stale],
   )
   const isPlaceholder = row.text.trim() === "null"
   const validJson = tryParseJson(row.text, { trim: true }).ok
-  const preview = row.text.replace(/\s+/g, " ").trim()
+  const actualJson = actual !== undefined ? JSON.stringify(actual, null, 2) : null
+
   return (
-    <li className={cn("rounded-md border", issue?.level === "error" ? "border-destructive/40" : "border-border")}>
-      <div className="flex items-center gap-2 px-2.5 py-1.5">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="flex min-w-0 flex-1 items-center gap-2 py-0.5 text-left"
-        >
-          {open ? (
-            <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
-          ) : (
-            <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-          )}
-          {issue === null ? (
-            <CircleCheck className="h-3.5 w-3.5 shrink-0 text-chart-2" />
-          ) : issue.level === "error" ? (
-            <CircleX className="h-3.5 w-3.5 shrink-0 text-destructive" />
-          ) : (
-            <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-yellow-500" />
-          )}
-          <span className="shrink-0 font-mono text-[11px]">{row.label}</span>
-          <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-muted-foreground">
-            {isPlaceholder ? "placeholder — no expected output yet" : preview}
-          </span>
-        </button>
-        {actual !== undefined && !stale && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 shrink-0 px-1.5 font-mono text-[10px] text-primary"
-            title="copy the last run's actual output into expected"
-            onClick={() => {
-              onText(JSON.stringify(actual, null, 2))
-              setEditing(false)
-              setOpen(true)
-            }}
-          >
-            <Download className="mr-1 h-3 w-3" /> use run output
-          </Button>
-        )}
-        {!stale && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn("h-6 w-6 shrink-0", editing ? "text-primary" : "text-muted-foreground")}
-            title="edit the expected value"
-            onClick={() => {
-              if (isPlaceholder && stepSchema) {
-                const root = jsonSchemaToFormRoot(stepSchema)
-                if (root) onText(JSON.stringify(defaultFromSchema(root), null, 2))
-              }
-              setEditing((v) => !v)
-              setOpen(true)
-            }}
-          >
-            <Pencil className="h-3 w-3" />
-          </Button>
-        )}
-        {!isPlaceholder && (
-          <button
-            type="button"
-            onClick={() =>
-              onExpand(
-                validJson
-                  ? { json: row.text, title: `expected output · ${row.label}` }
-                  : { text: row.text, title: `expected output · ${row.label}` },
-              )
-            }
-            className="rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
-            title="Open in full-screen viewer"
-          >
-            <Maximize2 className="h-3 w-3" />
-          </button>
-        )}
-        <IconTrashButton onClick={onRemove} />
-      </div>
-      {open && (
-        <div className="space-y-1.5 border-t border-border p-2.5">
-          {ignoredFields.length > 0 && (
-            <p className="flex items-start gap-1.5 font-mono text-[10px] text-muted-foreground">
-              <Shuffle className="mt-0.5 h-3 w-3 shrink-0" />
-              <span>
-                probabilistic fields (marked on the structure) are exact-excluded then LLM-checked after a run:{" "}
-                {ignoredFields.join(", ")}
-              </span>
-            </p>
-          )}
-          {editing ? (
-            stepSchema ? (
-              <SchemaJsonEditor schema={stepSchema} text={row.text} onText={onText} />
-            ) : (
-              <Textarea
-                value={row.text}
-                onChange={(e) => onText(e.target.value)}
-                className="min-h-[80px] font-mono text-[11px]"
-                spellCheck={false}
-                autoFocus
-              />
-            )
-          ) : isPlaceholder ? (
-            <p className="font-mono text-[11px] text-muted-foreground">
-              No expected output pinned yet — run the test once and click{" "}
-              <span className="text-primary">use run output</span>, or edit it by hand.
-            </p>
-          ) : (
-            // AI : same viewer as Logging step outputs — highlighted, expandable, never a raw textarea
-            <div className="max-h-72 overflow-auto rounded border border-border bg-muted/20 p-2">
-              <JsonHighlight json={row.text} />
-            </div>
-          )}
-          {issue && (
-            <p
-              className={cn(
-                "max-h-40 overflow-auto whitespace-pre-wrap font-mono text-[10px]",
-                issue.level === "error" ? "text-destructive" : "text-yellow-500",
-              )}
-            >
-              {issue.message}
-            </p>
-          )}
-        </div>
+    <div
+      className={cn(
+        "rounded-lg border bg-card shadow-sm",
+        issue?.level === "error" ? "border-destructive/40" : "border-border",
       )}
-    </li>
+    >
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+        <StepKindBadge kind={module.kind} />
+        {issue === null ? (
+          <CircleCheck className="h-3.5 w-3.5 shrink-0 text-chart-2" />
+        ) : issue.level === "error" ? (
+          <CircleX className="h-3.5 w-3.5 shrink-0 text-destructive" />
+        ) : (
+          <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-yellow-500" />
+        )}
+        <span className="font-mono text-[11px] font-medium">{row.label}</span>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {actual !== undefined && !stale && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 font-mono text-[10px] text-primary"
+              title="copy the last run's actual output into expected"
+              onClick={() => {
+                onText(actualJson!)
+                setEditing(false)
+              }}
+            >
+              <Download className="mr-1 h-3 w-3" /> use run output
+            </Button>
+          )}
+          {!stale && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn("h-7 w-7", editing ? "text-primary" : "text-muted-foreground")}
+              title="edit expected output"
+              onClick={() => {
+                if (isPlaceholder && stepSchema) {
+                  const root = jsonSchemaToFormRoot(stepSchema)
+                  if (root) onText(JSON.stringify(defaultFromSchema(root), null, 2))
+                }
+                setEditing((v) => !v)
+              }}
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+          )}
+          {!isPlaceholder && validJson && (
+            <button
+              type="button"
+              onClick={() => onExpand({ json: row.text, title: `expected · ${row.label}` })}
+              className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              title="full-screen expected"
+            >
+              <Maximize2 className="h-3 w-3" />
+            </button>
+          )}
+          {actualJson && (
+            <button
+              type="button"
+              onClick={() => onExpand({ json: actualJson, title: `last run · ${row.label}` })}
+              className="rounded p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+              title="full-screen actual"
+            >
+              <Maximize2 className="h-3 w-3 rotate-90" />
+            </button>
+          )}
+          <IconTrashButton onClick={onRemove} />
+        </div>
+      </div>
+
+      <div className="space-y-3 p-3">
+        {ignoredFields.length > 0 && (
+          <p className="flex items-start gap-1.5 font-mono text-[10px] text-muted-foreground">
+            <Shuffle className="mt-0.5 h-3 w-3 shrink-0" />
+            <span>
+              probabilistic fields excluded from exact match, then LLM-checked: {ignoredFields.join(", ")}
+            </span>
+          </p>
+        )}
+
+        {editing ? (
+          stepSchema ? (
+            <SchemaJsonEditor schema={stepSchema} text={row.text} onText={onText} />
+          ) : (
+            <Textarea
+              value={row.text}
+              onChange={(e) => onText(e.target.value)}
+              className="min-h-[120px] font-mono text-[11px]"
+              spellCheck={false}
+              autoFocus
+            />
+          )
+        ) : isPlaceholder ? (
+          <p className="font-mono text-[11px] text-muted-foreground">
+            No expected output yet — run the test and click <span className="text-primary">use run output</span>, or
+            edit by hand.
+          </p>
+        ) : (
+          <div className={cn("grid gap-3", actualJson ? "lg:grid-cols-2" : "grid-cols-1")}>
+            <div className="min-w-0 space-y-1">
+              <SectionLabel>expected</SectionLabel>
+              <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
+                <JsonHighlight json={row.text} />
+              </div>
+            </div>
+            {actualJson && (
+              <div className="min-w-0 space-y-1">
+                <SectionLabel>last run actual</SectionLabel>
+                <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
+                  <JsonHighlight json={actualJson} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {issue && (
+          <p
+            className={cn(
+              "max-h-32 overflow-auto whitespace-pre-wrap font-mono text-[10px]",
+              issue.level === "error" ? "text-destructive" : "text-yellow-500",
+            )}
+          >
+            {issue.message}
+          </p>
+        )}
+      </div>
+    </div>
   )
 }
 

@@ -379,6 +379,12 @@ export type RunTestStepResult = {
 export type RunTestReport = {
   testDocName: string;
   results: RunTestStepResult[];
+  // AI : persisted on the run row in Supabase — separate hashes so revert-to-old test/pipeline
+  // AI : re-matches a prior verdict without any client-side verdict cache.
+  testContentSig?: string;
+  pipelineSig?: string;
+  /** @deprecated legacy combined sig — match via testReportMatchesSigs only */
+  contextSig?: string;
 };
 export enum SharedLinkFundingMode {
   SharerPays = "sharer_pays",

@@ -118,7 +118,6 @@ export function Inference() {
     flushPendingSave,
     typeAliases,
     addDocContent,
-    removeDoc,
     updateRunTest,
   } = useStore()
   const { setActiveWindow, openLogging } = useAppShell()
@@ -191,6 +190,9 @@ export function Inference() {
     run: run.run,
     linkedTest: linkedTestForEval,
     project,
+    modules,
+    models,
+    typeAliases,
     model: model as ModelId,
     updateRunTest,
     refreshBilling,
@@ -256,10 +258,18 @@ export function Inference() {
       return null
     }
     try {
-      await removeDoc(state.doc.id, project.id)
-      const doc = await addDocContent(state.doc.name, InputType.Json, draft, DocLabel.Inference, project.id)
-      invalidateDocText(doc.id)
-      setContents(({ [state.doc.id]: _old, [doc.id]: _stale, ...rest }) => rest)
+      const doc = await addDocContent(
+        state.doc.name,
+        InputType.Json,
+        draft,
+        DocLabel.Inference,
+        project.id,
+        state.doc.id,
+      )
+      setContents((prev) => {
+        const { [state.doc.id]: _old, ...rest } = prev
+        return { ...rest, [doc.id]: draft }
+      })
       selectSetup(doc.id)
       applySetupInputs(parsed.setup)
       return doc.id

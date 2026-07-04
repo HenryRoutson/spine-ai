@@ -8,14 +8,17 @@ import { validateNamedInputs, isInferenceSetupFileName } from "@/lib/inference-s
 import { labelAsStateKey, validatePipelineStateEntry } from "@/lib/server/pipeline_state"
 import { fieldToTypeExpr, stepSpineOutType } from "@/lib/server/type_expr"
 import { tryParseJson } from "@/lib/json-utils"
-import { DocLabel, ModuleKind, RunTestStepStatus, type RunTestProbabilisticResult } from "@/lib/types"
+import { buildRunConfigPayload, stableJson } from "@/lib/run-fingerprint"
+import { DocLabel, ModuleKind, RunSource, RunTestStepStatus, type RunTestProbabilisticResult } from "@/lib/types"
 import type {
   DocRef,
+  ModelId,
   PipelineModule,
   PipelineRun,
   Project,
   RunTestStepResult,
   StructureModel,
+  TypeAlias,
   TypeExpr,
 } from "@/lib/types"
 
@@ -106,6 +109,14 @@ export function validateTestFile(
       })
       continue
     }
+    if (!isComparableStep(mod)) {
+      issues.push({
+        level: "warning",
+        where: label,
+        message: "input/combine steps are not scored — pin files under inputs instead and remove this expected output",
+      })
+      continue
+    }
     if (value === null) {
       issues.push({ level: "warning", where: label, message: "placeholder — fill in the expected output" })
       continue
@@ -140,7 +151,7 @@ export type TestStepResult = RunTestStepResult
 export type TestStepStatus = TestStepResult["status"]
 
 // AI : input/combine steps are not scored — run log now stores the full value (same shape as expected).
-function isComparableStep(m: PipelineModule): boolean {
+export function isComparableStep(m: PipelineModule): boolean {
   return m.kind !== ModuleKind.Input && m.kind !== ModuleKind.Combine
 }
 
@@ -390,6 +401,75 @@ export function firstFailure(results: TestStepResult[]): TestStepResult | undefi
   )
 }
 
+export function testVerdictPassed(results: TestStepResult[]): boolean {
+  return firstFailure(results) === undefined
+}
+
+export function testContentSig(content: string): string {
+  const parsed = parseTestFile(content)
+  if (parsed.ok) return stableJson(parsed.test)
+  return stableJson({ raw: content })
+}
+
+export function testPipelineSig(
+  project: Project,
+  model: ModelId | undefined,
+  pipeline?: { modules: PipelineModule[]; models: StructureModel[]; typeAliases: TypeAlias[] },
+): string {
+  const p = pipeline
+    ? { ...project, modules: pipeline.modules, models: pipeline.models, typeAliases: pipeline.typeAliases }
+    : project
+  return stableJson(buildRunConfigPayload(p, model))
+}
+
+// AI : legacy combined sig — older runs only; new runs store testContentSig + pipelineSig separately.
+export function testRunContextSig(
+  content: string,
+  project: Project,
+  model: ModelId | undefined,
+  pipeline?: { modules: PipelineModule[]; models: StructureModel[]; typeAliases: TypeAlias[] },
+): string {
+  return stableJson({
+    pipeline: buildRunConfigPayload(
+      pipeline
+        ? { ...project, modules: pipeline.modules, models: pipeline.models, typeAliases: pipeline.typeAliases }
+        : project,
+      model,
+    ),
+    content,
+  })
+}
+
+export function testReportMatchesSigs(
+  report: { testContentSig?: string; pipelineSig?: string; contextSig?: string },
+  testContentSig: string,
+  pipelineSig: string,
+  legacyCombined?: string,
+): boolean {
+  if (report.testContentSig !== undefined && report.pipelineSig !== undefined) {
+    return report.testContentSig === testContentSig && report.pipelineSig === pipelineSig
+  }
+  if (report.contextSig && legacyCombined) return report.contextSig === legacyCombined
+  return false
+}
+
+export function latestTestVerdictForDoc(
+  runs: PipelineRun[],
+  testDocName: string,
+  testContentSig: string,
+  pipelineSig: string,
+  legacyCombined?: string,
+): boolean | null {
+  let latest: PipelineRun | undefined
+  for (const r of runs) {
+    if (r.source !== RunSource.Testing || r.test?.testDocName !== testDocName) continue
+    if (!testReportMatchesSigs(r.test, testContentSig, pipelineSig, legacyCombined)) continue
+    if (!latest || r.startedAt > latest.startedAt) latest = r
+  }
+  if (!latest?.test) return null
+  return testVerdictPassed(latest.test.results)
+}
+
 // AI : starter file — golden outputs when the project ships them; otherwise just the output
 // AI : steps as null placeholders. Tests are partial by design — cover only the steps you care about.
 export function testFileSkeleton(project: Project, projectDocs: DocRef[]): string {
@@ -403,7 +483,7 @@ export function testFileSkeleton(project: Project, projectDocs: DocRef[]): strin
   const golden = project.expectedOutputs ?? {}
   const expectedOutputs: Record<step_label_string, unknown> = {}
   for (const m of project.modules) {
-    if (m.kind === ModuleKind.Input) continue
+    if (m.kind === ModuleKind.Input || m.kind === ModuleKind.Combine) continue
     const key = labelAsStateKey(m.label)
     if (!key) continue
     if (key in golden) expectedOutputs[key] = golden[key]

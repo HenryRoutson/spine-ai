@@ -43,6 +43,7 @@ import { stripSharedModels, withSharedModels } from "@/lib/structure"
 import { mergeInferredStructuresForDoc, modelsChanged } from "@/lib/sync-doc-structures"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
 import { mostRecentlyOpenedProject, resolveActiveProject } from "@/lib/project-active"
+import { dedupeDocsNewestByName } from "@/lib/project-docs"
 import { NoProjectsPage } from "@/components/no-projects-page"
 
 export type BillingAccountView = {
@@ -106,6 +107,7 @@ interface StoreState {
     content: string,
     label: DocLabel,
     projectId?: string,
+    replaceDocId?: DocId,
   ) => Promise<DocRef>
   removeDoc: (docId: DocId, projectId?: string) => Promise<void>
   setDocProjects: (docId: DocId, projectIds: ProjectId[]) => Promise<void>
@@ -245,7 +247,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (!p.lastOpenedAt || local.lastOpenedAt > p.lastOpenedAt) return { ...p, lastOpenedAt: local.lastOpenedAt }
           return p
         })
-        return { ...data, projects: mergedProjects }
+        return { ...data, projects: mergedProjects, docs: dedupeDocsNewestByName(data.docs) }
       })
       const resolved = resolveActiveProject(data.projects, projectId)
       const activeId = resolved?.id ?? ""
@@ -518,6 +520,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       content: string,
       label: DocLabel,
       projectId?: string,
+      replaceDocId?: DocId,
     ) => {
       const blocked = confidentialUploadWarning(name)
       if (blocked) throw new Error(blocked)
@@ -525,18 +528,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const doc = await apiJson<DocRef>(API_ROUTES.docsContent, {
         method: "POST",
         headers: JSON_HEADERS,
-        body: JSON.stringify({ name, type, content, label, projectId: projectId ?? activeProjectId }),
+        body: JSON.stringify({ name, type, content, label, projectId: projectId ?? activeProjectId, replaceDocId }),
       })
+      if (replaceDocId) invalidateDocText(replaceDocId)
       invalidateDocText(doc.id)
       const pid = projectId ?? activeProjectId
 
       setState((prev) => {
         if (!prev) return prev
-        const hasDoc = prev.docs.some((d) => d.id === doc.id)
-        const nextDocs = hasDoc ? prev.docs : [doc, ...prev.docs]
-        if (!pid) return hasDoc ? prev : { ...prev, docs: nextDocs }
+        // AI : one logical file per name — drop superseded content-hash rows after an in-place edit.
+        const withoutReplaced = prev.docs.filter(
+          (d) => d.id !== replaceDocId && !(d.name === doc.name && d.id !== doc.id),
+        )
+        const hasDoc = withoutReplaced.some((d) => d.id === doc.id)
+        const nextDocs = hasDoc ? withoutReplaced : [doc, ...withoutReplaced]
+        if (!pid) return { ...prev, docs: nextDocs }
         const names = prev.projects.find((p) => p.id === pid)?.seedDocNames ?? []
-        if (names.includes(doc.name)) return hasDoc ? prev : { ...prev, docs: nextDocs }
+        if (names.includes(doc.name)) return { ...prev, docs: nextDocs }
         const nextProjects = prev.projects.map((p) =>
           p.id === pid ? { ...p, seedDocNames: [...(p.seedDocNames ?? []), doc.name] } : p,
         )
@@ -670,7 +678,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (i < 0) return prev
       const runs = [...prev.runs]
       runs[i] = { ...runs[i], test }
-      return { ...prev, runs }
+      const allRuns = prev.allRuns.map((r) => (r.id === runId ? { ...r, test } : r))
+      return { ...prev, runs, allRuns }
     })
   }, [])
 

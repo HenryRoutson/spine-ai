@@ -206,6 +206,14 @@ tests should be saved to the logging system with a test tag,
 and share the same UI but with extra visualisations of where any erorrs occured. if there is a different from actual to expected, there should be a git diff view.
 
 non deterministic tests can be evaluated by an llm.
+there should be a run all tests button
+
+please have an indicator if the test passed last time it was run which resets when you change the test or the pipeline. 
+can't be UI stored, need this in supabase to persist. Don't have syncing logic to disable things to unrun, but store a reference to the pipeline and the test and match on hash so if you change and revert you will know if something will pass or fail.
+i want to see for all tests on the sidebar either pass or fail.
+as storing many copies of tests and pipelines can be space intensive, you can use an expires in for around 7 days until you need to re run tests. however, if there is integration with git history logic, you can store things longer.
+
+
 
 # inference
 
@@ -338,3 +346,15 @@ when things are deleted, please improve the animation of them being deleted. i w
 
 
 there should be checks for duplicate requests, trying not to waste inference. toggle to allow or disallow, and if allowed, the duplicates are collected and then denomalise to avoid extra billing. This should be visualised how many duplicate requests have been caught
+
+
+
+
+# history and merging changes 
+
+Copy this - using git :
+An integrated revision and branching system for colaboration, changes merging, and history
+"""
+For true 3D software with built-in version control featuring Git-like branching and commit changes, your primary options are cloud-native platforms like Onshape or multi-user ecosystems like Autodesk Fusion.
+"""
+

@@ -420,8 +420,22 @@ export class JsonStore implements Store {
 
   private ingest(name: string, type: InputType, content: string, label: DocLabel): DocRef {
     const id = hashContent(content);
-    const existing = this.state.docs.find((d) => d.id === id);
-    if (existing) return existing;
+    const now = Date.now();
+    const i = this.state.docs.findIndex((d) => d.id === id);
+    if (i >= 0) {
+      // AI : content-addressed reuse — bump uploadedAt + filename so docsForProject picks this edit.
+      const doc: DocRef = {
+        ...this.state.docs[i]!,
+        name,
+        type,
+        label,
+        sizeKb: Math.max(1, Math.round(content.length / 1024)),
+        uploadedAt: now,
+        preview: content.slice(0, 180),
+      };
+      this.state.docs = [doc, ...this.state.docs.filter((_, j) => j !== i)];
+      return doc;
+    }
     writeFileSync(join(this.docsDir, `${id}.txt`), content, "utf8");
     const doc: DocRef = {
       id,
@@ -429,7 +443,7 @@ export class JsonStore implements Store {
       type,
       label,
       sizeKb: Math.max(1, Math.round(content.length / 1024)),
-      uploadedAt: Date.now(),
+      uploadedAt: now,
       preview: content.slice(0, 180),
     };
     this.state.docs = [doc, ...this.state.docs];

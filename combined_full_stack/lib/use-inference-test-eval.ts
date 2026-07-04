@@ -4,10 +4,10 @@
 // AI : against that file's expectedOutputs (same path as the Testing tab).
 
 import { useEffect, useState } from "react"
-import { docTextContent, fetchDocText } from "@/lib/doc-text-cache"
 import { evaluateTestReport } from "@/lib/testing-evaluate"
-import { parseTestFile, type TestStepResult } from "@/lib/testing-files"
-import type { DocId, ModelId, PipelineRun, Project, RunTestReport } from "@/lib/types"
+import { docTextContent, fetchDocText } from "@/lib/doc-text-cache"
+import { parseTestFile, testContentSig, testPipelineSig, type TestStepResult } from "@/lib/testing-files"
+import type { DocId, ModelId, PipelineModule, PipelineRun, Project, RunTestReport, StructureModel, TypeAlias } from "@/lib/types"
 import type { InferencePhase } from "@/lib/use-inference-run-progress"
 
 type LinkedTest = { docId: DocId; docName: string }
@@ -16,7 +16,10 @@ type Args = {
   phase: InferencePhase
   run: PipelineRun | null
   linkedTest: LinkedTest | null
-  project: Pick<Project, "modules" | "models">
+  project: Pick<Project, "modules" | "models" | "typeAliases">
+  modules: PipelineModule[]
+  models: StructureModel[]
+  typeAliases: TypeAlias[]
   model: ModelId
   updateRunTest: (runId: PipelineRun["id"], test: RunTestReport) => Promise<void>
   refreshBilling: () => Promise<void>
@@ -27,6 +30,9 @@ export function useInferenceTestEval({
   run,
   linkedTest,
   project,
+  modules,
+  models,
+  typeAliases,
   model,
   updateRunTest,
   refreshBilling,
@@ -52,7 +58,8 @@ export function useInferenceTestEval({
       setResults(null)
       try {
         const data = await fetchDocText(linkedTest.docId)
-        const parsed = parseTestFile(docTextContent(data))
+        const content = docTextContent(data)
+        const parsed = parseTestFile(content)
         if (!parsed.ok) {
           if (!cancelled) setError(parsed.error)
           return
@@ -63,7 +70,12 @@ export function useInferenceTestEval({
         const report = await evaluateTestReport(run, parsed.test, project, model)
         if (cancelled) return
         setResults(report)
-        updateRunTest(run.id, { testDocName: linkedTest.docName, results: report }).catch(console.error)
+        updateRunTest(run.id, {
+          testDocName: linkedTest.docName,
+          results: report,
+          testContentSig: testContentSig(content),
+          pipelineSig: testPipelineSig(project as Project, model, { modules, models, typeAliases }),
+        }).catch(console.error)
         refreshBilling().catch(console.error)
       } catch (err) {
         if (!cancelled) setError((err as Error).message)
@@ -75,7 +87,7 @@ export function useInferenceTestEval({
     return () => {
       cancelled = true
     }
-  }, [phase, run?.id, linkedTest?.docId, linkedTest?.docName, project, model, updateRunTest, refreshBilling])
+  }, [phase, run?.id, linkedTest?.docId, linkedTest?.docName, project, modules, models, typeAliases, model, updateRunTest, refreshBilling])
 
   return { testResults: results, testEvaluating: evaluating, testEvalError: error }
 }

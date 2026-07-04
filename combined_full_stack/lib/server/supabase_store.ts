@@ -345,15 +345,45 @@ export class SupabaseStore implements Store {
 
   addDoc(name: string, type: InputType, content: string, label: DocLabel): DocRef {
     const id = hashContent(content);
-    const existing = this.state.docs.find((d) => d.id === id);
-    if (existing) return existing;
+    const now = Date.now();
+    const i = this.state.docs.findIndex((d) => d.id === id);
+    if (i >= 0) {
+      // AI : content-addressed reuse — bump uploadedAt + filename so docsForProject picks this edit.
+      const doc: DocRef = {
+        ...this.state.docs[i]!,
+        name,
+        type,
+        label,
+        sizeKb: Math.max(1, Math.round(content.length / 1024)),
+        uploadedAt: now,
+        preview: content.slice(0, 180),
+      };
+      this.state.docs = [doc, ...this.state.docs.filter((_, j) => j !== i)];
+      this.state.contents.set(id, content);
+      this.pending.push(
+        this.db.from("docs").upsert(
+          this.withUserId({
+            id,
+            name,
+            type,
+            label,
+            size_kb: doc.sizeKb,
+            uploaded_at: doc.uploadedAt,
+            preview: doc.preview,
+            content,
+          }),
+          { onConflict: "user_id,id" },
+        ),
+      );
+      return doc;
+    }
     const doc: DocRef = {
       id,
       name,
       type,
       label,
       sizeKb: Math.max(1, Math.round(content.length / 1024)),
-      uploadedAt: Date.now(),
+      uploadedAt: now,
       preview: content.slice(0, 180),
     };
     this.state.docs = [doc, ...this.state.docs];
