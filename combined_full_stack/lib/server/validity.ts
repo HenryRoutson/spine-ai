@@ -51,6 +51,7 @@ import {
 import { invalidStepMessage, warningStepMessage, warningStepMessages } from "./validity-messages";
 import {
   computeStructureIssues,
+  modelFieldExprsUseAlias,
   structureIssueMessage,
 } from "@/lib/structure-validity";
 import {
@@ -388,8 +389,18 @@ function computeStructureFieldInvalid(
   const allModels = withSharedModels(models);
   const reachable = pipelineReachableModelIds(modules, allModels);
   for (const issue of computeStructureIssues(models, typeAliases)) {
-    // AI : global alias rows aren't wired to a pipeline step — Structures tab only.
-    if (issue.aliasName && !issue.fieldId) continue;
+    if (issue.aliasName && !issue.fieldId) {
+      // AI : orphan alias rows (empty name, duplicate, etc.) — Structures tab only.
+      if (issue.kind !== "incomplete-type-expr") continue;
+      // AI : field refs to incomplete aliases get their own issues; this covers unused aliases.
+      if (modelFieldExprsUseAlias(models, issue.aliasName, reachable)) continue;
+      const message = structureIssueMessage(issue, allModels);
+      const anchor = modules[0];
+      if (anchor) {
+        pushInvalid(invalid, { moduleId: anchor.id, kind: "structure-field", structureMessage: message });
+      }
+      continue;
+    }
     // AI : auto-inferred orphans (Structure N from doc upload) must not block runs on step 1.
     if (!reachable.has(issue.modelId)) continue;
     const message = structureIssueMessage(issue, allModels);

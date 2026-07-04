@@ -350,6 +350,8 @@ when things are deleted, please improve the animation of them being deleted. i w
 there should be checks for duplicate requests, trying not to waste inference. toggle to allow or disallow, and if allowed, the duplicates are collected and then denomalise to avoid extra billing. This should be visualised how many duplicate requests have been caught
 
 
+please disable pipeline editing until you fix bugs in your types and then if pipeline is disabled inference and testing are disabled
+if a tab is disabled it turns red and so it should be a waterfall or if you fix billing you can fix the pipeline and then inference will pop up.
 
 
 # history and merging changes 

@@ -16,6 +16,8 @@ import {
 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
+import { structureIssueMessagesForUi } from "@/lib/structure-validity-ui"
+import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { computeWarnings, formatInvalidMapErrors, ioMismatchInspectorFix, invalidForModule, invalidIssuesForModule, prevModuleId, type IoMismatchFixKind } from "@/lib/validity"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import { useRerenderOnEvent } from "@/lib/use-browser-pref-event"
@@ -59,6 +61,12 @@ export function PipelineBuilder() {
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
 
   const selected = modules.find((m) => m.id === selectedId)
+  const { pipelineEditingBlocked: editingBlocked } = computeWorkspaceValidity(
+    modules,
+    models,
+    typeAliases,
+  )
+  const typeIssueMessages = structureIssueMessagesForUi(models, typeAliases)
   const invalid = computeInvalidForUi(modules, models, typeAliases)
   const warnings = computeWarnings(modules, models)
   const warningCount = [...warnings.values()].reduce((n, ws) => n + ws.length, 0)
@@ -235,6 +243,27 @@ export function PipelineBuilder() {
           }
         />
 
+        {editingBlocked && (
+          <div className="border-b border-destructive/30 bg-destructive/10 px-4 py-2.5">
+            <p className="flex items-center gap-1.5 font-mono text-[11px] text-destructive">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              Fix type errors in Structure before editing the pipeline.
+            </p>
+            <ul className="mt-1.5 space-y-0.5 pl-5 font-mono text-[10px] text-destructive/90">
+              {typeIssueMessages.slice(0, 5).map((msg) => (
+                <li key={msg} className="list-disc">
+                  {msg}
+                </li>
+              ))}
+              {typeIssueMessages.length > 5 && (
+                <li className="list-none text-destructive/70">
+                  +{typeIssueMessages.length - 5} more…
+                </li>
+              )}
+            </ul>
+          </div>
+        )}
+
         <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(24rem,44%)]">
           <div className="min-w-0 overflow-auto">
             <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col items-stretch px-6 py-8">
@@ -246,19 +275,21 @@ export function PipelineBuilder() {
                 invalid={invalidMap}
                 warnings={warningMap}
                 renderInsertBefore={(insertAt) => (
-                  <InsertSlot insertAt={insertAt} onInsert={insertModule} />
+                  <InsertSlot insertAt={insertAt} onInsert={insertModule} blocked={editingBlocked} />
                 )}
                 renderInsertAfter={(insertAt, opts) => (
                   <InsertSlot
                     insertAt={insertAt}
                     onInsert={insertModule}
                     connectionInvalid={opts.connectionInvalid}
-                    blocked={opts.blocked}
+                    blocked={editingBlocked || opts.blocked}
                   />
                 )}
                 renderFooter={() => (
                   <div className="mt-6 flex w-full flex-col items-center">
-                    <AddStepMenu insertAt={modules.length} onInsert={insertModule} variant="button" />
+                    {!editingBlocked && (
+                      <AddStepMenu insertAt={modules.length} onInsert={insertModule} variant="button" />
+                    )}
                     <PipelineSummaryBox />
                   </div>
                 )}
@@ -281,7 +312,7 @@ export function PipelineBuilder() {
                   </span>
                   {isAutoQuoteStep(selected) ? (
                     <AutoQuoteLockTooltip />
-                  ) : (
+                  ) : editingBlocked ? null : (
                     <div className="flex items-center gap-1">
                       <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, -1)}>
                         <ArrowUp className="h-3.5 w-3.5" />
@@ -305,14 +336,16 @@ export function PipelineBuilder() {
                   models={models}
                   typeAliases={typeAliases}
                   modules={modules}
-                  mode="edit"
+                  mode={editingBlocked ? "view" : "edit"}
                   globalModel={globalModel}
                   invalid={invalidForModule(invalid, selected.id)}
                   invalidIssues={invalidIssuesForModule(invalid, selected.id)}
                   warnings={warnings.get(selected.id)}
                   ioMismatchFix={ioMismatchInspectorFix(selected.id as ModuleId, modules, invalid, models)}
-                  onUpdate={(patch) => update(selected.id, patch)}
-                  onFixIoMismatch={(mismatchModuleId, kind) => fixIoMismatch(mismatchModuleId, kind)}
+                  onUpdate={editingBlocked ? undefined : (patch) => update(selected.id, patch)}
+                  onFixIoMismatch={
+                    editingBlocked ? undefined : (mismatchModuleId, kind) => fixIoMismatch(mismatchModuleId, kind)
+                  }
                 />
                 {!isAutoQuoteStep(selected) && (
                   <div className="mt-4 grid grid-cols-2 gap-2">

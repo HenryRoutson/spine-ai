@@ -55,6 +55,23 @@ import { NoProjectsPage } from "@/components/no-projects-page"
 
 export type StoreMode = "workspace" | "picker"
 
+// AI : PUT /api/projects/[id] — id is in the URL; createdAt is immutable server-side.
+function serializeProjectPutBody(p: Project): string {
+  return JSON.stringify({
+    name: p.name,
+    kind: p.kind,
+    models: p.models,
+    typeAliases: p.typeAliases,
+    modules: p.modules,
+    strategies: p.strategies,
+    seedDocNames: p.seedDocNames,
+    expectedOutputs: p.expectedOutputs,
+    inferencePresets: p.inferencePresets,
+    documentation: p.documentation,
+    lastOpenedAt: p.lastOpenedAt,
+  })
+}
+
 export type BillingCreditHistoryEntry = {
   creditKey: string
   amountCents: number
@@ -317,7 +334,7 @@ export function StoreProvider({
         const current = prev.projects.find((p) => p.id === id)
         if (!current) return prev
         const next = { ...current, lastOpenedAt: Date.now() }
-        void persistProject(id, JSON.stringify(next))
+        void persistProject(id, serializeProjectPutBody(next))
         return { ...prev, projects: prev.projects.map((p) => (p.id === id ? next : p)) }
       })
     },
@@ -434,7 +451,7 @@ export function StoreProvider({
         const nextProjects = prev.projects.map((p) => (p.id === id ? (next = { ...p, ...patch }) : p))
         if (next) {
           if (saveTimer.current) clearTimeout(saveTimer.current)
-          const body = JSON.stringify(next)
+          const body = serializeProjectPutBody(next)
           pendingSaveRef.current = { id, body }
           saveTimer.current = setTimeout(() => {
             pendingSaveRef.current = null
@@ -516,7 +533,7 @@ export function StoreProvider({
       const current = prev.projects.find((p) => p.id === id)
       if (!current || current.name === trimmed) return prev
       const next = { ...current, name: trimmed }
-      void persistProject(id, JSON.stringify(next))
+      void persistProject(id, serializeProjectPutBody(next))
       return { ...prev, projects: prev.projects.map((p) => (p.id === id ? next : p)) }
     })
   }, [persistProject])
@@ -595,8 +612,10 @@ export function StoreProvider({
           const { nextProjects, changed } = computeDocStructureSync(prev, pid, doc, content)
           if (!changed) return prev
           if (saveTimer.current) clearTimeout(saveTimer.current)
-          const body = JSON.stringify(nextProjects.find((x) => x.id === pid))
-          saveTimer.current = setTimeout(() => { void persistProject(pid, body!) }, 500)
+          const updated = nextProjects.find((x) => x.id === pid)
+          if (!updated) return prev
+          const body = serializeProjectPutBody(updated)
+          saveTimer.current = setTimeout(() => { void persistProject(pid, body) }, 500)
           return { ...prev, projects: nextProjects }
         })
       } catch (err) {
@@ -652,8 +671,10 @@ export function StoreProvider({
             const { nextProjects, changed } = computeDocStructureSync(prev, pid, doc, content)
             if (!changed) return prev
             if (saveTimer.current) clearTimeout(saveTimer.current)
-            const body = JSON.stringify(nextProjects.find((x) => x.id === pid))
-            saveTimer.current = setTimeout(() => { void persistProject(pid, body!) }, 500)
+            const updated = nextProjects.find((x) => x.id === pid)
+            if (!updated) return prev
+            const body = serializeProjectPutBody(updated)
+            saveTimer.current = setTimeout(() => { void persistProject(pid, body) }, 500)
             return { ...prev, projects: nextProjects }
           })
         } catch (err) {

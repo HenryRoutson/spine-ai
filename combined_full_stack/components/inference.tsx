@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertTriangle,
+  Boxes,
   CreditCard,
   GitBranch,
   Layers,
@@ -17,7 +18,7 @@ import { useStore } from "@/lib/store"
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { formatUsdFromCents } from "@/lib/format"
 import { useAppShell } from "@/lib/app-shell"
-import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
+import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { WindowHeader } from "@/components/window-header"
@@ -123,7 +124,7 @@ export function Inference() {
   const { setActiveWindow, openLogging } = useAppShell()
   const { open } = useDocViewer()
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
-  const pipelineInvalid = computeInvalidForUi(modules, models, typeAliases).size > 0
+  const { typesInvalid, pipelineInvalid } = computeWorkspaceValidity(modules, models, typeAliases)
   const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
   const insufficientCredit =
     billingAccount != null && billingAccount.balanceCents < minRunBalanceCents
@@ -360,7 +361,25 @@ export function Inference() {
         </p>
       )}
 
-      {pipelineInvalid ? (
+      {typesInvalid ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+          <div className="max-w-md rounded-lg border border-destructive/50 bg-destructive/10 px-6 py-8">
+            <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
+            <p className="mt-4 text-sm font-medium text-destructive">
+              Fix type errors in Structure before running inference.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4 gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setActiveWindow("structure")}
+            >
+              <Boxes className="h-3.5 w-3.5" />
+              Go to Structure
+            </Button>
+          </div>
+        </div>
+      ) : pipelineInvalid ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
           <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-6 py-8 max-w-md">
             <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />

@@ -5,9 +5,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
+  Boxes,
   CheckSquare,
   CircleCheck,
   CircleX,
+  GitBranch,
   ListChecks,
   Loader2,
   MinusCircle,
@@ -37,7 +39,7 @@ import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { evaluateTestReport } from "@/lib/testing-evaluate"
 import { useAppShell } from "@/lib/app-shell"
-import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
+import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
 import { labelAsStateKey } from "@/lib/server/pipeline_state"
 import { docsForProject } from "@/lib/project-docs"
@@ -147,7 +149,12 @@ export function Testing() {
 
   const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
   const testDocs = useMemo(() => projectDocs.filter((d) => isTestingFileName(d.name)), [projectDocs])
-  const pipelineInvalid = computeInvalidForUi(modules, models, typeAliases).size > 0
+  const { setActiveWindow } = useAppShell()
+  const { typesInvalid, runTabsBlocked: runBlocked } = computeWorkspaceValidity(
+    modules,
+    models,
+    typeAliases,
+  )
 
   const [contents, setContents] = useState<Record<DocId, string>>({})
   const [loadErrors, setLoadErrors] = useState<Record<DocId, string>>({})
@@ -511,12 +518,14 @@ function staleLoadFailedContent(content: string): string | null {
               variant="outline"
               className="h-8 bg-transparent"
               onClick={() => void runAllTests()}
-              disabled={pipelineInvalid || runBusy || runnableTests.length === 0}
+              disabled={runBlocked || runBusy || runnableTests.length === 0}
               title={
                 runnableTests.length === 0
                   ? "no runnable test files yet"
-                  : pipelineInvalid
-                    ? "fix pipeline errors first"
+                  : runBlocked
+                    ? typesInvalid
+                      ? "fix type errors first"
+                      : "fix pipeline errors first"
                     : undefined
               }
             >
@@ -542,12 +551,37 @@ function staleLoadFailedContent(content: string): string | null {
         }
       />
 
-      {pipelineInvalid && (
-        <p className="flex items-center gap-1.5 border-b border-destructive/30 bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive">
-          <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
-          The pipeline has validation errors — fix them in the Pipeline tab before running tests.
-        </p>
-      )}
+      {runBlocked ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+          <div className="max-w-md rounded-lg border border-destructive/50 bg-destructive/10 px-6 py-8">
+            <TriangleAlert className="mx-auto h-10 w-10 text-destructive" />
+            <p className="mt-4 text-sm font-medium text-destructive">
+              {typesInvalid
+                ? "Fix type errors in Structure before running tests."
+                : "Fix pipeline errors before running tests."}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4 gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setActiveWindow(typesInvalid ? "structure" : "pipeline")}
+            >
+              {typesInvalid ? (
+                <>
+                  <Boxes className="h-3.5 w-3.5" />
+                  Go to Structure
+                </>
+              ) : (
+                <>
+                  <GitBranch className="h-3.5 w-3.5" />
+                  Go to Pipeline
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
       {actionError && (
         <p className="border-b border-destructive/30 bg-destructive/10 px-4 py-2 font-mono text-[11px] text-destructive">
           {actionError}
@@ -626,7 +660,7 @@ function staleLoadFailedContent(content: string): string | null {
               onDirtyContentChange={onDirtyContentChange}
               lastVerdict={resolveLastVerdict(selected.doc.name)}
               runs={runs}
-              runDisabled={pipelineInvalid || runBusy}
+              runDisabled={runBlocked || runBusy}
               runPhase={runningTestId === selected.doc.id ? runPhase : "idle"}
               stepStates={stepStates}
               results={runningTestId === selected.doc.id ? results : null}
@@ -641,6 +675,8 @@ function staleLoadFailedContent(content: string): string | null {
           )}
         </ScrollArea>
       </div>
+        </>
+      )}
     </div>
   )
 }

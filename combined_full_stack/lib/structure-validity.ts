@@ -1,6 +1,5 @@
 // AI : structure field integrity — empty names, dangling refs, duplicate names within a model.
 import { fieldToTypeExpr, collectTypeExprRefModelIds, type TypeExpr } from "@/lib/server/type_expr";
-import { typeExprHasUnset } from "@/lib/type-expr-edit";
 import { withSharedModels } from "@/lib/structure";
 import type { ModelField, StructureModel, StructureModelId, TypeAlias } from "@/lib/types";
 
@@ -66,6 +65,68 @@ function unknownNamedTypes(expr: TypeExpr, typeAliases: TypeAlias[]): string[] {
   return [...names].filter((n) => !aliasNames.has(n.trim().toLowerCase()));
 }
 
+function aliasByName(typeAliases: TypeAlias[]): Map<string, TypeAlias> {
+  const byName = new Map<string, TypeAlias>();
+  for (const alias of typeAliases) {
+    const key = alias.name.trim().toLowerCase();
+    if (key) byName.set(key, alias);
+  }
+  return byName;
+}
+
+// AI : named refs don't embed UNSET — follow alias definitions (cycle-safe).
+function typeExprHasUnsetOrAliasUnset(
+  expr: TypeExpr,
+  typeAliases: TypeAlias[],
+  seenAliases = new Set<string>(),
+): boolean {
+  if (expr.kind === "unset") return true;
+  if (expr.kind === "named") {
+    const key = expr.name.trim().toLowerCase();
+    if (!key || seenAliases.has(key)) return false;
+    const alias = aliasByName(typeAliases).get(key);
+    if (!alias) return false;
+    seenAliases.add(key);
+    return typeExprHasUnsetOrAliasUnset(alias.expr, typeAliases, seenAliases);
+  }
+  switch (expr.kind) {
+    case "list":
+    case "set":
+      return typeExprHasUnsetOrAliasUnset(expr.item, typeAliases, seenAliases);
+    case "optional":
+      return typeExprHasUnsetOrAliasUnset(expr.inner, typeAliases, seenAliases);
+    case "map":
+      return (
+        typeExprHasUnsetOrAliasUnset(expr.key, typeAliases, seenAliases) ||
+        typeExprHasUnsetOrAliasUnset(expr.value, typeAliases, seenAliases)
+      );
+    case "union":
+      return expr.variants.some((v) => typeExprHasUnsetOrAliasUnset(v, typeAliases, seenAliases));
+    case "generic":
+      return expr.args.some((a) => typeExprHasUnsetOrAliasUnset(a, typeAliases, seenAliases));
+    default:
+      return false;
+  }
+}
+
+export function modelFieldExprsUseAlias(
+  models: StructureModel[],
+  aliasName: string,
+  modelIds?: Set<StructureModelId>,
+): boolean {
+  const key = aliasName.trim().toLowerCase();
+  if (!key) return false;
+  for (const model of models) {
+    if (modelIds && !modelIds.has(model.id)) continue;
+    for (const field of model.fields) {
+      const names = new Set<string>();
+      collectNamedTypeExprs(fieldToTypeExpr(field), names);
+      if ([...names].some((n) => n.trim().toLowerCase() === key)) return true;
+    }
+  }
+  return false;
+}
+
 export function computeStructureIssues(
   models: StructureModel[],
   typeAliases: TypeAlias[] = [],
@@ -118,7 +179,7 @@ export function computeStructureIssues(
           aliasName,
         });
       }
-      if (typeExprHasUnset(fieldExpr)) {
+      if (typeExprHasUnsetOrAliasUnset(fieldExpr, typeAliases)) {
         issues.push({
           modelId: model.id,
           kind: "incomplete-type-expr",
@@ -171,7 +232,9 @@ export function computeStructureIssues(
         aliasName: `${alias.name} → ${unknown}`,
       });
     }
-    if (typeExprHasUnset(alias.expr)) {
+    const aliasKey = alias.name.trim().toLowerCase();
+    const seenAliases = aliasKey ? new Set<string>([aliasKey]) : new Set<string>();
+    if (typeExprHasUnsetOrAliasUnset(alias.expr, typeAliases, seenAliases)) {
       issues.push({
         modelId: models[0]?.id ?? ("" as StructureModelId),
         kind: "incomplete-type-expr",

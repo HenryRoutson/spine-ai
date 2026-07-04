@@ -137,6 +137,7 @@ export const projectPatchSchema = z
     expectedOutputs: z.record(z.string().max(256), jsonSizeBounded(100_000)).optional(),
     inferencePresets: z.array(jsonSizeBounded(50_000)).max(50).optional(),
     documentation: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS).optional(),
+    lastOpenedAt: z.number().min(0).max(8_640_000_000_000).optional(),
   })
   .strict();
 

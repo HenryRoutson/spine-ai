@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Boxes,
   GitBranch,
@@ -24,7 +24,14 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useStore } from "@/lib/store"
-import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
+import {
+  computeWorkspaceValidity,
+  workspaceNavTabButtonClass,
+  workspaceNavTabDisabled,
+  workspaceNavTabIconClass,
+  workspaceNavTabIssue,
+  workspaceNavTabTitle,
+} from "@/lib/workspace-validity-ui"
 import { createClient } from "@/utils/supabase/client"
 import { useAppShell, type AppWindowId } from "@/lib/app-shell"
 import { useSyncProjectDocStructures } from "@/lib/use-sync-project-doc-structures"
@@ -291,7 +298,10 @@ export function AppShellLayout() {
   const { activeWindow, setActiveWindow } = useAppShell()
   const { modules, models, project, projectLoading, typeAliases } = useStore()
   useSyncProjectDocStructures()
-  const pipelineInvalid = computeInvalidForUi(modules, models, typeAliases).size > 0
+  const validity = useMemo(
+    () => computeWorkspaceValidity(modules, models, typeAliases),
+    [modules, models, typeAliases],
+  )
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -332,37 +342,28 @@ export function AppShellLayout() {
           {WINDOWS.map((w) => {
             const Icon = w.icon
             const isActive = activeWindow === w.id
-            const isInferenceInvalid = w.id === "inference" && pipelineInvalid
+            const issue = workspaceNavTabIssue(w.id, validity)
+            const disabled = workspaceNavTabDisabled(w.id, validity)
             return (
               <button
                 key={w.id}
                 type="button"
-                onClick={() => setActiveWindow(w.id)}
-                title={
-                  isInferenceInvalid
-                    ? "Fix pipeline errors before running inference"
-                    : w.label
-                }
+                disabled={disabled}
+                onClick={() => {
+                  if (disabled) return
+                  setActiveWindow(w.id)
+                }}
+                title={workspaceNavTabTitle(w.id, w.label, validity)}
                 className={cn(
                   "group flex items-center gap-3 rounded-md px-2.5 py-2 text-sm transition-colors",
                   "min-h-[44px] justify-center lg:min-h-0 lg:justify-start",
-                  isInferenceInvalid
-                    ? isActive
-                      ? "bg-destructive/10 text-destructive"
-                      : "text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    : isActive
-                      ? "bg-secondary text-foreground"
-                      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                  workspaceNavTabButtonClass(isActive, issue, disabled),
                 )}
               >
                 <Icon
                   className={cn(
                     "h-4 w-4 shrink-0",
-                    isInferenceInvalid
-                      ? "text-destructive"
-                      : isActive
-                        ? "text-primary"
-                        : "text-muted-foreground",
+                    workspaceNavTabIconClass(isActive, issue),
                   )}
                 />
                 <span className="hidden flex-1 text-left lg:inline">{w.label}</span>

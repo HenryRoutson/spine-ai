@@ -70,6 +70,24 @@ function resolveSelectValueWithAliases(
   return { value: field.type }
 }
 
+function resolveSelectDisplayLabel(
+  selectValue: string,
+  typeAliases: { id: string; name: string }[],
+  orphanLabel?: string,
+): string {
+  if (selectValue.startsWith(ALIAS_PREFIX)) {
+    const alias = typeAliases.find((t) => t.id === selectValue.slice(ALIAS_PREFIX.length))
+    return alias?.name ?? selectValue
+  }
+  if (selectValue === "__orphan__") {
+    return orphanLabel ? `${orphanLabel} (pick a type)` : "Unknown type"
+  }
+  if (selectValue === FieldType.Model) return "Nested record…"
+  if (selectValue === FieldType.ListModel) return "List of records…"
+  if (PRESET_TYPES.includes(selectValue as FieldType)) return fieldTypeLabel(selectValue as FieldType)
+  return selectValue
+}
+
 export function StructureFieldTypeEditor({
   field,
   fields,
@@ -87,6 +105,7 @@ export function StructureFieldTypeEditor({
 }) {
   const { typeAliases } = useStore()
   const { value: selectValue, orphanLabel } = resolveSelectValueWithAliases(field, models, typeAliases)
+  const selectDisplayLabel = resolveSelectDisplayLabel(selectValue, typeAliases, orphanLabel)
   const showRefPicker = isRefField(field)
 
   function selectType(next: string | null) {
@@ -124,7 +143,7 @@ export function StructureFieldTypeEditor({
     <div className="min-w-0 space-y-1">
       <Select value={selectValue} onValueChange={selectType} disabled={locked}>
         <SelectTrigger className="h-8 font-mono text-xs">
-          <SelectValue placeholder="Pick type…" />
+          <SelectValue placeholder="Pick type…">{selectDisplayLabel}</SelectValue>
         </SelectTrigger>
         <SelectContent>
           <SelectGroup>
