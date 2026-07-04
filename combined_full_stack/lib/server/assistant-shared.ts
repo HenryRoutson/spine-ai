@@ -131,6 +131,7 @@ export function materializeModelField(
     example: ctx.prevField?.example,
     // AI : preserve field-level deterministic flag — assistant edits must not reset probabilistic markers.
     deterministic: ctx.prevField?.deterministic,
+    testTolerance: ctx.prevField?.testTolerance,
   };
 
   if (f.typeExpr?.trim()) {

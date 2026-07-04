@@ -6,9 +6,9 @@ import remarkGfm from "remark-gfm"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { tryParseJson } from "@/lib/json-utils"
-import { isProbabilisticFieldPath, isProbabilisticReferenceValue } from "@/lib/testing-files"
+import { isProbabilisticFieldPath, isProbabilisticReferenceValue, toleranceForFieldPath } from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
-import type { DocId, JobLogLevel } from "@/lib/types"
+import type { DocId, JobLogLevel, TolerantFieldPath } from "@/lib/types"
 
 const JSON_TOKEN_RE =
   /("(?:\\.|[^"\\])*"(?:\s*:)?|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g
@@ -64,6 +64,10 @@ export function JsonFieldKindLegend() {
         probabilistic — LLM-checked
       </span>
       <span className="inline-flex items-center gap-1.5">
+        <span className="rounded-sm bg-output/20 px-1.5 py-0.5 text-output ring-1 ring-output/35">±</span>
+        tolerant — numeric ± compare
+      </span>
+      <span className="inline-flex items-center gap-1.5">
         <span className="rounded-sm border border-dashed border-muted-foreground/50 px-1.5 py-0.5 text-muted-foreground">
           −
         </span>
@@ -78,13 +82,17 @@ function JsonLeafValue({
   path,
   probabilisticPaths,
   probabilisticCheckedPaths,
+  tolerantPaths = [],
 }: {
   value: unknown
   path: field_path_string
   probabilisticPaths: field_path_string[]
   probabilisticCheckedPaths?: field_path_string[]
+  tolerantPaths?: TolerantFieldPath[]
 }) {
   const isProb = isProbabilisticFieldPath(path, probabilisticPaths)
+  const tolerance = toleranceForFieldPath(path, tolerantPaths)
+  const isTolerant = tolerance !== undefined
   const text = JSON.stringify(value)
   const llmChecked = isProb
     ? probabilisticCheckedPaths !== undefined
@@ -95,19 +103,25 @@ function JsonLeafValue({
     <span
       className={cn(
         "rounded-sm px-0.5",
-        !isProb && "bg-chart-2/10",
+        !isProb && !isTolerant && "bg-chart-2/10",
         llmChecked && "bg-chart-3/15",
         isProb && !llmChecked && "border border-dashed border-muted-foreground/40",
+        isTolerant && "bg-output/15 ring-1 ring-output/35",
       )}
       title={
-        !isProb
-          ? "deterministic — exact compare"
-          : llmChecked
-            ? "probabilistic — excluded from exact compare, LLM-checked"
-            : "probabilistic — not checked (no expected reference)"
+        isTolerant
+          ? `tolerant — ${text}±${tolerance} (±${tolerance} on int/float compare)`
+          : !isProb
+            ? "deterministic — exact compare"
+            : llmChecked
+              ? "probabilistic — excluded from exact compare, LLM-checked"
+              : "probabilistic — not checked (no expected reference)"
       }
     >
       <InlineJsonTokens text={text} />
+      {isTolerant && (
+        <span className="font-mono text-[9px] font-semibold text-output">±{tolerance}</span>
+      )}
     </span>
   )
 }
@@ -117,12 +131,14 @@ function JsonFieldKindNode({
   path,
   probabilisticPaths,
   probabilisticCheckedPaths,
+  tolerantPaths = [],
   depth,
 }: {
   value: unknown
   path: field_path_string
   probabilisticPaths: field_path_string[]
   probabilisticCheckedPaths?: field_path_string[]
+  tolerantPaths?: TolerantFieldPath[]
   depth: number
 }) {
   const pad = JSON_INDENT.repeat(depth)
@@ -135,6 +151,7 @@ function JsonFieldKindNode({
         path={path}
         probabilisticPaths={probabilisticPaths}
         probabilisticCheckedPaths={probabilisticCheckedPaths}
+        tolerantPaths={tolerantPaths}
       />
     )
   }
@@ -154,6 +171,7 @@ function JsonFieldKindNode({
                 path={childPath}
                 probabilisticPaths={probabilisticPaths}
                 probabilisticCheckedPaths={probabilisticCheckedPaths}
+                tolerantPaths={tolerantPaths}
                 depth={depth + 1}
               />
               {i < value.length - 1 ? "," : ""}
@@ -174,16 +192,18 @@ function JsonFieldKindNode({
       {"{\n"}
       {entries.map(([k, v], i) => {
         const childPath = path ? `${path}.${k}` : k
+        const tol = toleranceForFieldPath(childPath, tolerantPaths)
         return (
           <span key={k}>
             {inner}
-            <span className="text-chart-2">&quot;{k}&quot;</span>
+            <span className={cn(tol !== undefined ? "text-output" : "text-chart-2")}>&quot;{k}&quot;</span>
             {": "}
             <JsonFieldKindNode
               value={v}
               path={childPath}
               probabilisticPaths={probabilisticPaths}
               probabilisticCheckedPaths={probabilisticCheckedPaths}
+              tolerantPaths={tolerantPaths}
               depth={depth + 1}
             />
             {i < entries.length - 1 ? "," : ""}
@@ -202,10 +222,12 @@ export function JsonFieldKindHighlight({
   json,
   probabilisticPaths,
   probabilisticCheckedPaths,
+  tolerantPaths = [],
 }: {
   json: string
   probabilisticPaths: field_path_string[]
   probabilisticCheckedPaths?: field_path_string[]
+  tolerantPaths?: TolerantFieldPath[]
 }) {
   const parsed = tryParseJson(json, { trim: true })
   if (!parsed.ok) return <JsonHighlight json={json} />
@@ -217,6 +239,7 @@ export function JsonFieldKindHighlight({
           path=""
           probabilisticPaths={probabilisticPaths}
           probabilisticCheckedPaths={probabilisticCheckedPaths}
+          tolerantPaths={tolerantPaths}
           depth={0}
         />
       </code>

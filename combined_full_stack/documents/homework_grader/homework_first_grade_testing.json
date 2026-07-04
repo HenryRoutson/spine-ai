@@ -1,5 +1,5 @@
 {
-  "description": "Homework Grader — 1st grade worksheet smoke test. Scores and correct are exact; mistake_explanation is LLM-checked when present.",
+  "description": "Homework Grader — 1st grade worksheet smoke test. score compared ±2; mistake_explanation is LLM-checked when present.",
   "inputs": {
     "Marking Schema": "homework_marking_schema_first_grade.json",
     "Student Submissions": [

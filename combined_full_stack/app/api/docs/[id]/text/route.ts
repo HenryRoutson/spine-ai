@@ -5,7 +5,7 @@ import type { DocId } from "@/lib/server/types";
 
 // AI : parser text = docs.content / {id}.txt (built-in PDF.js). Vision OCR is a separate layer.
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const authCtx = await requireAuthStore();
+  const authCtx = await requireAuthStore("read");
   if (authCtx instanceof NextResponse) return authCtx;
   const { store } = authCtx;
 

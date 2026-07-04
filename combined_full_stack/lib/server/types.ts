@@ -55,13 +55,20 @@ export interface ModelField {
   // AI : (LLM prose like a summary or feedback) so tests ignore it. Missing/true = deterministic
   // AI : (a maths answer, an enum like answer_ABCD) → exact-compared.
   deterministic?: boolean;
+  // AI : ± allowed on int/float test compare — field-level (spec § Testing), not per test file.
+  testTolerance?: number;
 }
 
 // AI : meta-type — one field row inside a StructureDef (structure-of-structures)
 export type StructureFieldDef = Pick<
   ModelField,
-  "id" | "name" | "type" | "optional" | "description" | "ref" | "minItems" | "typeExpr" | "deterministic"
+  "id" | "name" | "type" | "optional" | "description" | "ref" | "minItems" | "typeExpr" | "deterministic" | "testTolerance"
 >;
+
+export type TolerantFieldPath = {
+  path: string;
+  tolerance: number;
+};
 
 // AI : meta-type — JSON-serializable shape used to define StructureModel entries in seeds / assistants
 export type StructureDef = {
@@ -372,6 +379,8 @@ export type RunTestStepResult = {
   skipReason?: string;
   // AI : probabilistic field paths (ModelField.deterministic === false) excluded from exact JSON compare.
   ignoredPaths?: string[];
+  // AI : int/float fields with ModelField.testTolerance — compared with ± instead of exact match.
+  tolerantPaths?: TolerantFieldPath[];
   // AI : LLM semantic check for probabilistic fields after deterministic JSON match (spec § Testing).
   probabilisticResults?: RunTestProbabilisticResult[];
   llmEvaluated?: boolean;

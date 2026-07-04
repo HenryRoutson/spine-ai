@@ -3,7 +3,7 @@
 import { X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { StructureFieldTypeEditor } from "@/components/structure-field-type-editor"
-import { JSON_FIELD_PREFER_STRUCTURE_MSG, type ModelField, type StructureModel } from "@/lib/types"
+import { JSON_FIELD_PREFER_STRUCTURE_MSG, FieldType, type ModelField, type StructureModel } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 export function StructureFieldRow({
@@ -24,6 +24,8 @@ export function StructureFieldRow({
   onRemove: () => void
 }) {
   const isLegacyJson = field.type === "json" && !field.typeExpr
+  const isNumeric = field.type === FieldType.Int || field.type === FieldType.Float
+  const toleranceEnabled = isNumeric && field.deterministic !== false
 
   return (
     <div>
@@ -56,7 +58,7 @@ export function StructureFieldRow({
           readOnly={locked}
           className="h-8 font-mono text-xs"
         />
-        <div className="flex h-8 w-20 items-center justify-center gap-1">
+        <div className="flex h-8 items-center justify-center gap-1">
           <button
             onClick={() => onUpdate({ optional: !field.optional })}
             disabled={locked}
@@ -87,6 +89,34 @@ export function StructureFieldRow({
           >
             {field.deterministic === false ? "≈" : "="}
           </button>
+          {toleranceEnabled ? (
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={field.testTolerance ?? ""}
+              placeholder="±"
+              disabled={locked}
+              title="test tolerance — ± on int/float compare (structure-level, not per test)"
+              onChange={(e) => {
+                const raw = e.target.value.trim()
+                if (!raw) {
+                  onUpdate({ testTolerance: undefined })
+                  return
+                }
+                const n = Number(raw)
+                onUpdate({ testTolerance: Number.isFinite(n) && n >= 0 ? n : undefined })
+              }}
+              className={cn(
+                "h-5 w-9 rounded border bg-background px-0.5 text-center font-mono text-[10px]",
+                field.testTolerance !== undefined
+                  ? "border-output/50 text-output"
+                  : "border-border text-muted-foreground",
+              )}
+            />
+          ) : (
+            <span className="h-5 w-9" aria-hidden />
+          )}
           <button
             onClick={onRemove}
             disabled={locked}

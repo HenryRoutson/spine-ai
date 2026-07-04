@@ -1,5 +1,5 @@
 {
-  "description": "Homework Grader — Algebra II classroom sample. Full step-by-step expected JSON; mistake_explanation is LLM-checked when present.",
+  "description": "Homework Grader — Algebra II classroom sample. score compared ±2 (structure testTolerance); mistake_explanation is LLM-checked when present.",
   "inputs": {
     "Marking Schema": "homework_marking_schema.json",
     "Student Submissions": [

@@ -3,7 +3,7 @@
 
 import { applySchemaDefaults, jsonSchemaToFormRoot } from "@/lib/schema-form"
 import { stepOutputJsonSchema } from "@/lib/step-json-schema"
-import { deepEqual, deepEqualDiffPath } from "@/lib/deep_equal"
+import { testValuesDiffPath, testValuesEqual, type TestCompareOpts } from "@/lib/deep_equal"
 import { jsonUnifiedDiff } from "@/lib/json-diff"
 import { resolveNamedRunInputs, type ResolvedNamedInputs } from "@/lib/inference-presets"
 import { validateNamedInputs, isInferenceSetupFileName } from "@/lib/inference-setup-files"
@@ -23,6 +23,7 @@ import type {
   StructureModel,
   TypeAlias,
   TypeExpr,
+  TolerantFieldPath,
 } from "@/lib/types"
 
 export const TESTING_FILE_SUFFIX = "_testing.json"
@@ -328,6 +329,7 @@ export function mergeInputDescriptionChecks(
         diffPath: existing?.diffPath,
         deterministicDiff: existing?.deterministicDiff,
         ignoredPaths: existing?.ignoredPaths,
+        tolerantPaths: existing?.tolerantPaths,
         probabilisticResults: existing?.probabilisticResults,
         llmEvaluated: existing?.llmEvaluated,
       })
@@ -365,6 +367,12 @@ type field_path_string = string
 
 // AI : static walk of a type — every field path whose structure definition says
 // AI : deterministic:false (probabilistic — LLM prose that varies per run), e.g. "[].mistake_explanation".
+function isNumericField(f: Pick<StructureModel["fields"][number], "type" | "ref" | "typeExpr" | "deterministic">): boolean {
+  if (f.deterministic === false) return false
+  const expr = fieldToTypeExpr(f)
+  return expr.kind === "prim" && (expr.name === "int" || expr.name === "float")
+}
+
 function collectProbabilisticPaths(
   expr: TypeExpr | undefined,
   models: StructureModel[],
@@ -403,6 +411,52 @@ function collectProbabilisticPaths(
   }
 }
 
+// AI : int/float fields with testTolerance — compared with ± in tests, not LLM-checked.
+function collectTolerantPaths(
+  expr: TypeExpr | undefined,
+  models: StructureModel[],
+  path: field_path_string,
+  seen: Set<string>,
+  out: Map<field_path_string, number>,
+): void {
+  if (!expr) return
+  switch (expr.kind) {
+    case "optional":
+      return collectTolerantPaths(expr.inner, models, path, seen, out)
+    case "list":
+    case "set":
+      return collectTolerantPaths(expr.item, models, `${path}[]`, seen, out)
+    case "ref": {
+      if (seen.has(expr.modelId)) return
+      const model = models.find((m) => m.id === expr.modelId)
+      if (!model) return
+      for (const f of model.fields) {
+        const childPath = path ? `${path}.${f.name}` : f.name
+        if (f.deterministic === false) continue
+        if (
+          isNumericField(f) &&
+          f.testTolerance !== undefined &&
+          Number.isFinite(f.testTolerance) &&
+          f.testTolerance >= 0
+        ) {
+          out.set(childPath, f.testTolerance)
+          continue
+        }
+        collectTolerantPaths(
+          fieldToTypeExpr(f),
+          models,
+          childPath,
+          new Set([...seen, expr.modelId]),
+          out,
+        )
+      }
+      return
+    }
+    default:
+      return
+  }
+}
+
 // AI : what a test would ignore for this step — drives the editor hint and the run report.
 export function probabilisticPathsForModule(
   m: PipelineModule,
@@ -411,6 +465,29 @@ export function probabilisticPathsForModule(
   const out = new Set<field_path_string>()
   collectProbabilisticPaths(stepSpineOutType(m), models, "", new Set(), out)
   return [...out].sort()
+}
+
+export function tolerantPathsForModule(
+  m: PipelineModule,
+  models: StructureModel[],
+): TolerantFieldPath[] {
+  const out = new Map<field_path_string, number>()
+  collectTolerantPaths(stepSpineOutType(m), models, "", new Set(), out)
+  return [...out.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([path, tolerance]) => ({ path, tolerance }))
+}
+
+export function toleranceForFieldPath(
+  path: field_path_string,
+  tolerantPaths: TolerantFieldPath[],
+): number | undefined {
+  const norm = normalizeFieldPath(path)
+  return tolerantPaths.find((t) => normalizeFieldPath(t.path) === norm)?.tolerance
+}
+
+export function isTolerantFieldPath(path: field_path_string, tolerantPaths: TolerantFieldPath[]): boolean {
+  return toleranceForFieldPath(path, tolerantPaths) !== undefined
 }
 
 // AI : concrete run paths use [0] indices — patterns use [] (same grammar as stripPaths).
@@ -594,18 +671,24 @@ export function compareRunToTest(
     }
     const probabilistic = probabilisticPathsForModule(m, project.models)
     const ignoredPaths = probabilistic.length ? probabilistic : undefined
+    const tolerant = tolerantPathsForModule(m, project.models)
+    const tolerantPaths = tolerant.length ? tolerant : undefined
     const pathSet = new Set(probabilistic)
     const expectedCore = stripPaths(expected, pathSet, "")
     const actualCore = stripPaths(actual, pathSet, "")
-    if (deepEqual(actualCore, expectedCore)) {
-      results.push({ label: m.label, status: RunTestStepStatus.Pass, ignoredPaths, expected, actual })
+    const compareOpts: TestCompareOpts = {
+      tolerantByPattern: tolerant.length ? new Map(tolerant.map((t) => [t.path, t.tolerance])) : undefined,
+    }
+    if (testValuesEqual(actualCore, expectedCore, compareOpts)) {
+      results.push({ label: m.label, status: RunTestStepStatus.Pass, ignoredPaths, tolerantPaths, expected, actual })
     } else {
       results.push({
         label: m.label,
         status: RunTestStepStatus.Fail,
-        diffPath: deepEqualDiffPath(actualCore, expectedCore),
+        diffPath: testValuesDiffPath(actualCore, expectedCore, compareOpts),
         deterministicDiff: jsonUnifiedDiff(expectedCore, actualCore),
         ignoredPaths,
+        tolerantPaths,
         expected,
         actual,
       })

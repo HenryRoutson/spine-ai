@@ -1,5 +1,5 @@
 {
-  "description": "Homework Grader — university real analysis (LaTeX). Full pipeline test; mistake_explanation is LLM-checked when present.",
+  "description": "Homework Grader — university real analysis (LaTeX). score compared ±2; mistake_explanation is LLM-checked when present.",
   "inputs": {
     "Marking Schema": "homework_marking_schema_university.json",
     "Student Submissions": [

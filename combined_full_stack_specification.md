@@ -202,6 +202,7 @@ testing isn't limited to whole runs and shouldn't need to cover all the steps. y
 
 you should describe if certain fields are deterministic like a maths answer, or probabilistic if they're something like a summary which will almost never be the same. if they are they can be tested, otherwise not.
 deterministic param is on a field level, it shouldnt be something per test. An answer_ACBD for q1 is either A,B,C or D. This doesn't change across examples, and often needs to be finer grain than just struct level.
+when testing probabilistic floats, you might also want to use a range of acceptabile answers like +- 2 instead of using a whole llm to check if it's appropritate. 
 
 for each test there is a button to run it
 

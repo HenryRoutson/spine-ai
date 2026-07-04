@@ -437,8 +437,8 @@ export function StructureBuilder() {
                           <span>Type</span>
                           <span>Description</span>
                           <span>Example</span>
-                          <span className="w-20 text-center" title="optional · deterministic (= exact-tested, ≈ probabilistic/ignored)">
-                            Opt · Det
+                          <span className="text-center" title="optional · deterministic (= exact, ≈ probabilistic) · ± tolerance on int/float">
+                            Opt · Det · ±
                           </span>
                         </div>
                         {selected.fields.map((f) => (

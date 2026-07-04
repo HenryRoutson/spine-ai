@@ -6,6 +6,97 @@ export type DeepEqualOpts = {
   ignoreKeys?: string[];
 };
 
+export type TestCompareOpts = {
+  // AI : path patterns use "[]" for array slots — e.g. "[].score" → ± compare at each index.
+  tolerantByPattern?: ReadonlyMap<string, number>;
+};
+
+function patternForPath(path: string): string {
+  return path.replace(/\[\d+\]/g, "[]");
+}
+
+function numbersWithinTolerance(a: number, b: number, tolerance: number): boolean {
+  return Math.abs(a - b) <= tolerance;
+}
+
+// AI : test compare — exact everywhere except int/float paths listed in tolerantByPattern.
+export function testValuesEqual(a: unknown, b: unknown, opts?: TestCompareOpts, path = ""): boolean {
+  const aE = expandEmbeddedJson(a);
+  const bE = expandEmbeddedJson(b);
+  const tolerance = opts?.tolerantByPattern?.get(patternForPath(path));
+  if (tolerance !== undefined && typeof aE === "number" && typeof bE === "number") {
+    return numbersWithinTolerance(aE, bE, tolerance);
+  }
+  if (aE === bE) return true;
+  if (typeof aE !== typeof bE) return false;
+  if (aE === null || bE === null) return aE === bE;
+  if (Array.isArray(aE) && Array.isArray(bE)) {
+    if (aE.length !== bE.length) return false;
+    for (let i = 0; i < aE.length; i++) {
+      const childPath = path ? `${path}[${i}]` : `[${i}]`;
+      if (!testValuesEqual(aE[i], bE[i], opts, childPath)) return false;
+    }
+    return true;
+  }
+  if (typeof aE === "object" && typeof bE === "object") {
+    const ao = aE as Record<string, unknown>;
+    const bo = bE as Record<string, unknown>;
+    const keys = new Set([...Object.keys(ao), ...Object.keys(bo)]);
+    for (const k of keys) {
+      if (!(k in ao) || !(k in bo)) return false;
+      const childPath = path ? `${path}.${k}` : k;
+      if (!testValuesEqual(ao[k], bo[k], opts, childPath)) return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+export function testValuesDiffPath(
+  a: unknown,
+  b: unknown,
+  opts?: TestCompareOpts,
+  path = "",
+): string | undefined {
+  const aE = expandEmbeddedJson(a);
+  const bE = expandEmbeddedJson(b);
+  const tolerance = opts?.tolerantByPattern?.get(patternForPath(path));
+  if (tolerance !== undefined && typeof aE === "number" && typeof bE === "number") {
+    return numbersWithinTolerance(aE, bE, tolerance) ? undefined : path || "(root)";
+  }
+  if (aE === bE) return undefined;
+  if (typeof aE !== typeof bE) return path || "(root)";
+  if (aE === null || bE === null) return path || "(root)";
+  if (Array.isArray(aE) && Array.isArray(bE)) {
+    if (aE.length !== bE.length) return `${path}.length`;
+    for (let i = 0; i < aE.length; i++) {
+      const childPath = path ? `${path}[${i}]` : `[${i}]`;
+      const d = testValuesDiffPath(aE[i], bE[i], opts, childPath);
+      if (d) return d;
+    }
+    return undefined;
+  }
+  if (typeof aE === "object" && typeof bE === "object") {
+    const ao = aE as Record<string, unknown>;
+    const bo = bE as Record<string, unknown>;
+    const keys = new Set([...Object.keys(ao), ...Object.keys(bo)]);
+    for (const k of [...keys].sort()) {
+      if (!(k in ao) || !(k in bo)) return path ? `${path}.${k}` : k;
+      const childPath = path ? `${path}.${k}` : k;
+      const d = testValuesDiffPath(ao[k], bo[k], opts, childPath);
+      if (d) return d;
+    }
+    return undefined;
+  }
+  if (typeof aE === "string" && typeof bE === "string") {
+    const expandedA = expandEmbeddedJson(aE);
+    const expandedB = expandEmbeddedJson(bE);
+    if (expandedA !== aE || expandedB !== bE) return testValuesDiffPath(expandedA, expandedB, opts, path);
+    return aE === bE ? undefined : path || "(root)";
+  }
+  return path || "(root)";
+}
+
 // AI : document.content often holds JSON.stringify output — expand object/array strings so key order does not fail tests.
 function expandEmbeddedJson(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(expandEmbeddedJson);

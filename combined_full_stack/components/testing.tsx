@@ -44,7 +44,7 @@ import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
 import { labelAsStateKey } from "@/lib/server/pipeline_state"
 import { docsForProject } from "@/lib/project-docs"
-import { awaitRun, isRunBillingError, mergeStepStates, startRunWithRetry, type StepUiState } from "@/lib/run-engine"
+import { awaitRun, isRunBillingError, mergeStepStates, pollIntervalForParallelJobs, startRunWithRetry, type StepUiState } from "@/lib/run-engine"
 import { isRunAbortedError, useCancellableRunRegistry } from "@/lib/use-cancellable-run"
 import { useStore } from "@/lib/store"
 import { formatCostCents, formatSecondsShort } from "@/lib/format"
@@ -224,10 +224,10 @@ export function Testing() {
   const [aiError, setAiError] = useState<string | null>(null)
   const [aiGenerated, setAiGenerated] = useState<GeneratedTestFile | null>(null)
 
-  const loadTestDoc = useCallback((docId: DocId) => {
+  const loadTestDoc = useCallback((docId: DocId, bustCache = false) => {
     if (loadingIds.current.has(docId)) return
     loadingIds.current.add(docId)
-    invalidateDocText(docId)
+    if (bustCache) invalidateDocText(docId)
     setLoadErrors((prev) => {
       const { [docId]: _gone, ...rest } = prev
       return rest
@@ -488,7 +488,7 @@ function staleLoadFailedContent(content: string): string | null {
     await runTest(target)
   }
 
-  async function runTest(state: TestDocState): Promise<RunTestOutcome> {
+  async function runTest(state: TestDocState, pollIntervalMs = 700): Promise<RunTestOutcome> {
     if (!state.test) return "error"
     const docName = state.doc.name
     const resolved = resolveTestRunInputs(state.test, modules, projectDocs)
@@ -532,7 +532,7 @@ function staleLoadFailedContent(content: string): string | null {
           }),
         // AI : tests are unattended — auto-approve human-review gates.
         onHumanReview: () => Promise.resolve("approved" as const),
-      })
+      }, pollIntervalMs)
       const report = await evaluateTestReport(run, state.test, project, model)
       refreshBilling().catch(console.error)
       const content = state.content ?? ""
@@ -576,9 +576,10 @@ function staleLoadFailedContent(content: string): string | null {
     setRunAllDone(0)
     let billingHit = false
     try {
+      const pollIntervalMs = pollIntervalForParallelJobs(staleTests.length)
       await Promise.all(
         staleTests.map(async (t) => {
-          const outcome = await runTest(t)
+          const outcome = await runTest(t, pollIntervalMs)
           setRunAllDone((d) => d + 1)
           if (outcome === "billing") billingHit = true
         }),
@@ -807,7 +808,7 @@ function staleLoadFailedContent(content: string): string | null {
                 onSaveEdit={(draft) => void saveEdit(selected, draft)}
                 onRun={(contentToSave) => void saveAndRun(selected, contentToSave)}
                 onStop={() => stopTest(selected.doc.name)}
-                onRetryLoad={() => loadTestDoc(selected.doc.id)}
+                onRetryLoad={() => loadTestDoc(selected.doc.id, true)}
                 onDirtyContentChange={onDirtyContentChange}
                 lastVerdict={resolveLastVerdict(selected.doc.name)}
                 runs={runs}

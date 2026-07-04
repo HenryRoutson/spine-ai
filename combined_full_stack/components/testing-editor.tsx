@@ -53,6 +53,7 @@ import {
   probabilisticReferencePaths,
   sanitizeTestFile,
   skipReasonForTestStep,
+  tolerantPathsForModule,
   type SpineTestFile,
   type TestStepTrackStatus,
 } from "@/lib/testing-files"
@@ -68,7 +69,7 @@ import {
   writeTestingPipelineWidth,
 } from "@/lib/testing-settings"
 import { cn } from "@/lib/utils"
-import { ModuleKind, type DocId, DocRef, ModuleId, PipelineModule, Project } from "@/lib/types"
+import { ModuleKind, type DocId, DocRef, ModuleId, PipelineModule, Project, type TolerantFieldPath } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 
 type step_label_string = string
@@ -435,6 +436,7 @@ export function TestFileEditor({
           row={rowFor(m.label)!}
           project={project}
           ignoredFields={probabilisticPathsForModule(m, project.models)}
+          tolerantFields={tolerantPathsForModule(m, project.models)}
           actual={actuals.get(labelAsStateKey(m.label))}
           onText={(text) => setRowText(m.label, text)}
           onRemove={() => removeRow(m.label)}
@@ -736,6 +738,7 @@ function ScoredStepCard({
   project,
   stale = false,
   ignoredFields,
+  tolerantFields = [],
   actual,
   onText,
   onRemove,
@@ -746,6 +749,7 @@ function ScoredStepCard({
   project: Project
   stale?: boolean
   ignoredFields: string[]
+  tolerantFields?: TolerantFieldPath[]
   actual?: unknown
   onText: (text: json_text_string) => void
   onRemove: () => void
@@ -853,6 +857,11 @@ function ScoredStepCard({
             <span>probabilistic fields on this step: {ignoredFields.join(", ")}</span>
           </p>
         )}
+        {tolerantFields.length > 0 && (
+          <p className="font-mono text-[10px] text-muted-foreground">
+            tolerant fields: {tolerantFields.map((t) => `${t.path} ±${t.tolerance}`).join(", ")}
+          </p>
+        )}
         {!stale && !editing && !isPlaceholder && <JsonFieldKindLegend />}
 
         {editing ? (
@@ -888,6 +897,7 @@ function ScoredStepCard({
                     json={row.text}
                     probabilisticPaths={ignoredFields}
                     probabilisticCheckedPaths={probabilisticCheckedPaths}
+                    tolerantPaths={tolerantFields}
                   />
                 </div>
               </div>
@@ -900,6 +910,7 @@ function ScoredStepCard({
                     json={actualJson}
                     probabilisticPaths={ignoredFields}
                     probabilisticCheckedPaths={probabilisticCheckedPaths}
+                    tolerantPaths={tolerantFields}
                   />
                 </div>
               </div>
@@ -913,6 +924,7 @@ function ScoredStepCard({
                 json={row.text}
                 probabilisticPaths={ignoredFields}
                 probabilisticCheckedPaths={probabilisticCheckedPaths}
+                tolerantPaths={tolerantFields}
               />
             </div>
           </div>

@@ -10,6 +10,7 @@ import {
 } from "@/lib/custom_code"
 import { readApiErrorBody, formatApiError, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
+import { RATE_LIMITS } from "@/lib/rate_limit_config"
 import type {
   DocId,
   JobLogEntry,
@@ -99,6 +100,20 @@ export function isRunBillingError(e: unknown): e is RunStartError {
 
 const MAX_PROGRESS_POLLS = 10
 const PROGRESS_POLL_BACKOFF_MS = 200
+const PROGRESS_429_RETRY_MAX = 60
+const DEFAULT_POLL_INTERVAL_MS = 700
+
+// AI : parallel job polls share one user rate-limit bucket — stretch interval so N jobs stay under poll tier max.
+export function pollIntervalForParallelJobs(parallelCount: number): number {
+  const maxPerMin = RATE_LIMITS.poll.max
+  const minGapMs = Math.ceil(60_000 / maxPerMin)
+  return Math.max(DEFAULT_POLL_INTERVAL_MS, minGapMs * Math.max(1, parallelCount))
+}
+
+function retryAfterMs(res: Response): number {
+  const sec = Number.parseInt(res.headers.get("Retry-After") ?? "2", 10)
+  return Math.max(500, (Number.isFinite(sec) ? sec : 2) * 1000)
+}
 
 function throwApiError(context: string, res: Response, body: Awaited<ReturnType<typeof readApiErrorBody>>): never {
   throw new RunStartError(formatApiError(context, res, body), res.status, body?.code)
@@ -151,12 +166,21 @@ export async function startRun(
 export async function runProgress(jobId: RunJobId): Promise<RunJob> {
   // AI : first polls can 404 when progress GET hits a cold bundle before the job file is visible.
   let lastDetail: string | undefined
-  for (let attempt = 0; attempt < MAX_PROGRESS_POLLS; attempt++) {
+  let notFoundAttempts = 0
+  let rateLimitRetries = 0
+  while (notFoundAttempts < MAX_PROGRESS_POLLS) {
     const res = await fetch(API_ROUTES.runProgress(jobId), FETCH_NO_STORE)
-    if (res.status === 404 && attempt < MAX_PROGRESS_POLLS - 1) {
+    if (res.status === 429 && rateLimitRetries < PROGRESS_429_RETRY_MAX) {
+      rateLimitRetries++
+      await readApiErrorBody(res)
+      await new Promise((r) => setTimeout(r, retryAfterMs(res)))
+      continue
+    }
+    if (res.status === 404 && notFoundAttempts < MAX_PROGRESS_POLLS - 1) {
       const body = await readApiErrorBody(res)
       lastDetail = [body?.error, body?.detail].filter(Boolean).join(" — ") || lastDetail
-      await new Promise((r) => setTimeout(r, PROGRESS_POLL_BACKOFF_MS * (attempt + 1)))
+      notFoundAttempts++
+      await new Promise((r) => setTimeout(r, PROGRESS_POLL_BACKOFF_MS * notFoundAttempts))
       continue
     }
     if (!res.ok) {
@@ -215,7 +239,7 @@ export async function awaitJobCompletion(
   poll: () => Promise<RunJob>,
   submitClientStep: (payload: ClientStepSubmitPayload) => Promise<void>,
   callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
-  intervalMs = 700,
+  intervalMs = DEFAULT_POLL_INTERVAL_MS,
 ): Promise<AwaitRunResult> {
   const { onStep, onLogs, onHumanReview, signal } =
     typeof callbacks === "function" ? { onStep: callbacks } : callbacks
@@ -409,7 +433,7 @@ async function submitClientStep(
 export async function awaitRun(
   jobId: RunJobId,
   callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
-  intervalMs = 700,
+  intervalMs = DEFAULT_POLL_INTERVAL_MS,
 ): Promise<AwaitRunResult> {
   return awaitJobCompletion(
     () => runProgress(jobId),

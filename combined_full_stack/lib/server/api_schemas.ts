@@ -205,6 +205,15 @@ const runTestStepResultSchema = z.object({
   diffPath: z.string().max(500).optional(),
   skipReason: z.string().max(2_000).optional(),
   ignoredPaths: z.array(z.string().max(500)).max(100).optional(),
+  tolerantPaths: z
+    .array(
+      z.object({
+        path: z.string().max(500),
+        tolerance: z.number().min(0),
+      }),
+    )
+    .max(100)
+    .optional(),
   probabilisticResults: z
     .array(
       z.object({

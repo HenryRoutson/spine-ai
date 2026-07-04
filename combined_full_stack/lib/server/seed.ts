@@ -60,6 +60,7 @@ const SeedFileSchema = z.object({
           minItems: z.number().int().min(1).optional(),
           typeExpr: TypeExprSchema.optional(),
           deterministic: z.boolean().optional(),
+          testTolerance: z.number().min(0).optional(),
         }),
       ),
     }),

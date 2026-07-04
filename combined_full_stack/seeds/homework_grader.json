@@ -222,7 +222,8 @@
           "name": "score",
           "type": "int",
           "optional": false,
-          "description": "Points awarded"
+          "description": "Points awarded",
+          "testTolerance": 2
         },
         {
           "id": "f_max",

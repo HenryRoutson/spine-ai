@@ -23,7 +23,7 @@ const field = (
   name: string,
   type: `${FieldType}`,
   description: string,
-  extra: { ref?: string; minItems?: number; deterministic?: boolean } = {},
+  extra: { ref?: string; minItems?: number; deterministic?: boolean; testTolerance?: number } = {},
 ): StructureFieldDef => ({
   id,
   name,
@@ -33,6 +33,7 @@ const field = (
   ...(extra.ref ? { ref: sid(extra.ref) } : {}),
   ...(extra.minItems !== undefined ? { minItems: extra.minItems } : {}),
   ...(extra.deterministic !== undefined ? { deterministic: extra.deterministic } : {}),
+  ...(extra.testTolerance !== undefined ? { testTolerance: extra.testTolerance } : {}),
 });
 
 const PARSE_TABLE = customCodeParseDocBodyToParsedTable();
@@ -626,7 +627,7 @@ const seeds: Record<string, unknown> = {
         fields: [
           field("f_student", "student_label", "text", "Student graded"),
           field("f_sid", "section_id", "text", "Matches section id"),
-          field("f_score", "score", "int", "Points awarded"),
+          field("f_score", "score", "int", "Points awarded", { testTolerance: 2 }),
           field("f_max", "max_score", "int", "Points possible"),
           field("f_correct", "correct", "bool", "True when the student earns full marks (score equals max_score)"),
           field(

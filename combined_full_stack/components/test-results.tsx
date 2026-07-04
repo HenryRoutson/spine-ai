@@ -145,6 +145,7 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
                     json={JSON.stringify(result.expected, null, 2)}
                     probabilisticPaths={result.ignoredPaths ?? []}
                     probabilisticCheckedPaths={probabilisticCheckedPaths}
+                    tolerantPaths={result.tolerantPaths ?? []}
                   />
                 </div>
               </div>
@@ -159,6 +160,7 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
                     json={JSON.stringify(result.actual, null, 2)}
                     probabilisticPaths={result.ignoredPaths ?? []}
                     probabilisticCheckedPaths={probabilisticCheckedPaths}
+                    tolerantPaths={result.tolerantPaths ?? []}
                   />
                 )}
               </div>

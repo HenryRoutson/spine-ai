@@ -1,5 +1,5 @@
 import { API_ROUTES } from "@/lib/api-routes"
-import { apiJson } from "@/lib/api-client"
+import { FETCH_CREDENTIALS, formatApiError, readApiErrorBody } from "@/lib/api-client"
 import { isDemoMode } from "@/lib/demo-mode"
 
 type doc_text_layer = "parser" | "vision"
@@ -27,27 +27,38 @@ export function docTextContent(data: doc_text_payload): string {
   return data.text ?? data.content ?? ""
 }
 
-function isRetryableDocTextError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err)
-  return /\(HTTP (500|502|503|504)\)/.test(msg)
+const DOC_TEXT_429_RETRY_MAX = 20
+
+function retryAfterMs(res: Response): number {
+  const sec = Number.parseInt(res.headers.get("Retry-After") ?? "2", 10)
+  return Math.max(500, (Number.isFinite(sec) ? sec : 2) * 1000)
 }
 
 async function fetchDocTextOnce(docId: string, layer: doc_text_layer): Promise<doc_text_payload> {
-  // AI : first fetch during a cold SupabaseStore init can 500 — one short retry before surfacing.
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      return await apiJson<doc_text_payload>(
-        isDemoMode() ? API_ROUTES.demoDocText(docId, layer) : API_ROUTES.docText(docId, layer),
-      )
-    } catch (err) {
-      if (attempt === 0 && isRetryableDocTextError(err)) {
-        await new Promise((r) => setTimeout(r, 450))
-        continue
-      }
-      throw err
+  const url = isDemoMode() ? API_ROUTES.demoDocText(docId, layer) : API_ROUTES.docText(docId, layer)
+  let serverErrorRetries = 0
+  let rateLimitRetries = 0
+
+  while (true) {
+    const res = await fetch(url, { credentials: FETCH_CREDENTIALS })
+    if (res.ok) return res.json() as Promise<doc_text_payload>
+
+    if (res.status === 429 && rateLimitRetries < DOC_TEXT_429_RETRY_MAX) {
+      rateLimitRetries++
+      await readApiErrorBody(res)
+      await new Promise((r) => setTimeout(r, retryAfterMs(res)))
+      continue
     }
+
+    if (serverErrorRetries < 1 && [500, 502, 503, 504].includes(res.status)) {
+      serverErrorRetries++
+      await readApiErrorBody(res)
+      await new Promise((r) => setTimeout(r, 450))
+      continue
+    }
+
+    throw new Error(formatApiError(url, res, await readApiErrorBody(res)))
   }
-  throw new Error("doc text fetch failed")
 }
 
 export function fetchDocText(docId: string, layer: doc_text_layer = "parser"): Promise<doc_text_payload> {

@@ -9,6 +9,7 @@ import type { ModelId, Project, DocRef } from "./types";
 import {
   isTestingFileName,
   probabilisticPathsForModule,
+  tolerantPathsForModule,
   TESTING_FILE_SUFFIX,
   validateTestFile,
   type SpineTestFile,
@@ -59,6 +60,12 @@ function buildPrompt(project: Project, projectDocs: DocRef[], instruction: strin
   const probabilistic = project.modules
     .map((m) => ({ step: m.label, ignoredFields: probabilisticPathsForModule(m, project.models) }))
     .filter((x) => x.ignoredFields.length);
+  const tolerant = project.modules
+    .map((m) => ({ step: m.label, tolerantFields: tolerantPathsForModule(m, project.models) }))
+    .filter((x) => x.tolerantFields.length);
+  const tolerantNote = tolerant.length
+    ? `Tolerant int/float fields per step (compared with ± from structure testTolerance):\n${JSON.stringify(tolerant, null, 2)}`
+    : "";
   const ignoredNote = probabilistic.length
     ? `Probabilistic fields per step (ignored when comparing — values only need to be plausible):\n${JSON.stringify(probabilistic, null, 2)}`
     : "";
@@ -77,7 +84,7 @@ Documents available in this project (use exact names in "inputs"):
 ${JSON.stringify(inputDocs, null, 2)}
 
 ${golden}
-${ignoredNote ? `\n${ignoredNote}\n` : ""}
+${ignoredNote ? `\n${ignoredNote}\n` : ""}${tolerantNote ? `\n${tolerantNote}\n` : ""}
 Rules:
 - "inputs" maps every input step label to an existing document name (or list of names). Include the input step immediately before each Combine Inputs step — that is where uploads for the combine are pinned.
 - Combine Inputs steps are not in expectedOutputs; their inputDescription guard is checked automatically when the test runs.
@@ -85,6 +92,7 @@ Rules:
 - Only use step labels that exist in the pipeline. Do not include input steps in expectedOutputs.
 - Tests are partial by design: cover only the steps the user asks about (a single step is fine). Only the listed steps are checked.
 - Structure fields marked deterministic:false (probabilistic — LLM prose like feedback) are excluded from exact JSON compare; include reference values in expectedOutputs and they are LLM-checked for semantic match after deterministic fields pass.
+- Structure int/float fields with testTolerance use ± compare (not LLM) — actual must be within tolerance of expected.
 - "fileName" is a short snake_case base name (the ${TESTING_FILE_SUFFIX} suffix is added automatically).
 
 User request:
