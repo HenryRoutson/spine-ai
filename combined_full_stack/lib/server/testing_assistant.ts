@@ -79,7 +79,8 @@ ${JSON.stringify(inputDocs, null, 2)}
 ${golden}
 ${ignoredNote ? `\n${ignoredNote}\n` : ""}
 Rules:
-- "inputs" maps every input step label to an existing document name (or list of names).
+- "inputs" maps every input step label to an existing document name (or list of names). Include the input step immediately before each Combine Inputs step — that is where uploads for the combine are pinned.
+- Combine Inputs steps are not in expectedOutputs; their inputDescription guard is checked automatically when the test runs.
 - "expectedOutputs" maps step labels to the exact expected JSON output of that step; every value must type-check against the pipeline-state shape above.
 - Only use step labels that exist in the pipeline. Do not include input steps in expectedOutputs.
 - Tests are partial by design: cover only the steps the user asks about (a single step is fine). Only the listed steps are checked.

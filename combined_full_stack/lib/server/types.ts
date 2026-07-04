@@ -366,6 +366,8 @@ export type RunTestStepResult = {
   label: string;
   status: RunTestStepStatus;
   diffPath?: string;
+  // AI : per-step input guard verdict from the run — combine + scored steps with inputDescription.
+  inputDescriptionCheck?: InputDescriptionCheckResult;
   // AI : why a skipped step was not scored — input/combine traces are refs or summaries, not full values.
   skipReason?: string;
   // AI : probabilistic field paths (ModelField.deterministic === false) excluded from exact JSON compare.

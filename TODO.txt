@@ -4,6 +4,16 @@ rename everything to spine
 name might already be taken https://www.getspine.ai/
 
 
+No Langfuse-style open SDK for arbitrary apps; observability is scoped to spine pipelines only.
+
+
+
+OCR
+
+
+
+
+add a split function 
 
 everytime i open the cache in the UI it has to load in again, please fix this. in general try to fix this and load all data for a project but just change it with streaming
 

@@ -10,6 +10,7 @@ import { SectionLabel } from "@/components/testing-editor"
 import { firstFailure } from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
 import { RunTestStepStatus, type RunTestProbabilisticResult, type RunTestStepResult } from "@/lib/types"
+import { StepInputDescription } from "@/components/step-input-description"
 
 export function TestResults({ results, action }: { results: RunTestStepResult[]; action?: ReactNode }) {
   const failure = firstFailure(results)
@@ -51,8 +52,11 @@ export function TestResults({ results, action }: { results: RunTestStepResult[];
 
 function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; isFirstFailure: boolean }) {
   const [open, setOpen] = useState(isFirstFailure)
+  const inputCheckFailed = result.inputDescriptionCheck?.matches === false
   const failed =
-    result.status === RunTestStepStatus.Fail || result.status === RunTestStepStatus.NotReached
+    result.status === RunTestStepStatus.Fail ||
+    result.status === RunTestStepStatus.NotReached ||
+    inputCheckFailed
   return (
     <li
       className={cn(
@@ -87,8 +91,11 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
         )}
         {result.status === RunTestStepStatus.Skipped && (
           <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-            {result.skipReason ?? "skipped"}
+            {inputCheckFailed ? "input check failed" : (result.skipReason ?? "skipped")}
           </span>
+        )}
+        {inputCheckFailed && result.status === RunTestStepStatus.Fail && (
+          <span className="shrink-0 font-mono text-[10px] text-destructive">input check failed</span>
         )}
         {result.llmEvaluated && !!result.probabilisticResults?.length && (
           <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
@@ -96,6 +103,11 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
           </span>
         )}
       </button>
+      {open && result.inputDescriptionCheck && (
+        <div className="border-t border-border px-2.5 py-2">
+          <StepInputDescription check={result.inputDescriptionCheck} forceVisible />
+        </div>
+      )}
       {open && result.deterministicDiff && (
         <div className="border-t border-border px-2.5 py-2">
           <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">deterministic diff</p>

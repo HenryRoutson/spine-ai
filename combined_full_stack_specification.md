@@ -223,7 +223,7 @@ please add a view to align each step in the testing UI with the actual pipeline 
 testing needs to easily adapt to the changes in the pipeline,
 you don't want to have to reconfigure your tests because you're changing your pipeline. because each step is typed, it's easy to see where test data can match into each step. You just need to make this easy to visualise and reorganise.
 
-
+please note that from a testing pespective, if you're checking the inputs are correct to each step, you need to make sure that you can check inputs for 'combine input' steps and also configure what files are being uploaded.
 
 # inference
 

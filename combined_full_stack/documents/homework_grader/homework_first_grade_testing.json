@@ -7,57 +7,6 @@
     ]
   },
   "expectedOutputs": {
-    "Marking Schema": {
-      "assignment_title": "1st Grade Maths — Worksheet 3",
-      "sections": [
-        {
-          "section_id": "A",
-          "title": "Section A — Counting and addition",
-          "max_score": 6,
-          "criteria": "Full marks for the correct number; 1 pt for a good try with counting shown",
-          "questions": [
-            {
-              "question_id": "Q1",
-              "prompt": "Maya has 2 red apples and 3 green apples. How many apples does she have altogether?",
-              "max_score": 2,
-              "marking_criteria": "2 pts for 5, 1 pt if counting is shown but the total is wrong"
-            },
-            {
-              "question_id": "Q2",
-              "prompt": "What is 3 + 4?",
-              "max_score": 2,
-              "marking_criteria": "2 pts for 7, 1 pt for a counting attempt with a near miss"
-            },
-            {
-              "question_id": "Q3",
-              "prompt": "What is 10 - 6?",
-              "max_score": 2,
-              "marking_criteria": "2 pts for 4, 1 pt for a counting-back attempt"
-            }
-          ]
-        },
-        {
-          "section_id": "B",
-          "title": "Section B — Shapes and comparing",
-          "max_score": 4,
-          "criteria": "Answer must match exactly",
-          "questions": [
-            {
-              "question_id": "Q4",
-              "prompt": "How many sides does a triangle have?",
-              "max_score": 2,
-              "marking_criteria": "2 pts for 3"
-            },
-            {
-              "question_id": "Q5",
-              "prompt": "Which number is bigger: 8 or 5?",
-              "max_score": 2,
-              "marking_criteria": "2 pts for 8"
-            }
-          ]
-        }
-      ]
-    },
     "Marking Questions List": [
       {
         "question_id": "Q1",
@@ -90,50 +39,6 @@
         "marking_criteria": "2 pts for 8"
       }
     ],
-    "Student Submissions": [
-      {
-        "filename": "homework_student_riley_first_grade.md",
-        "content": "# 1st Grade Maths — Worksheet 3 — Student: Riley Park\n\n## Section A — Counting and addition (6 pts)\n\n**Q1.** Maya has 2 red apples and 3 green apples. How many apples does she have altogether?  \nStudent work: 2 + 3 = 5 apples!\n\n**Q2.** What is 3 + 4?  \nStudent work: 7 (counted on fingers)\n\n**Q3.** What is 10 - 6?  \nStudent work: 5 (counted back 10, 9, 8, 7, 6, 5)\n\n## Section B — Shapes and comparing (4 pts)\n\n**Q4.** How many sides does a triangle have?  \nStudent work: 3 sides\n\n**Q5.** Which number is bigger: 8 or 5?  \nStudent work: 8\n"
-      }
-    ],
-    "Combine Inputs": {
-      "student_submission": {
-        "filename": "homework_student_riley_first_grade.md",
-        "content": "# 1st Grade Maths — Worksheet 3 — Student: Riley Park\n\n## Section A — Counting and addition (6 pts)\n\n**Q1.** Maya has 2 red apples and 3 green apples. How many apples does she have altogether?  \nStudent work: 2 + 3 = 5 apples!\n\n**Q2.** What is 3 + 4?  \nStudent work: 7 (counted on fingers)\n\n**Q3.** What is 10 - 6?  \nStudent work: 5 (counted back 10, 9, 8, 7, 6, 5)\n\n## Section B — Shapes and comparing (4 pts)\n\n**Q4.** How many sides does a triangle have?  \nStudent work: 3 sides\n\n**Q5.** Which number is bigger: 8 or 5?  \nStudent work: 8\n"
-      },
-      "marking_questions": [
-        {
-          "question_id": "Q1",
-          "prompt": "Maya has 2 red apples and 3 green apples. How many apples does she have altogether?",
-          "max_score": 2,
-          "marking_criteria": "2 pts for 5, 1 pt if counting is shown but the total is wrong"
-        },
-        {
-          "question_id": "Q2",
-          "prompt": "What is 3 + 4?",
-          "max_score": 2,
-          "marking_criteria": "2 pts for 7, 1 pt for a counting attempt with a near miss"
-        },
-        {
-          "question_id": "Q3",
-          "prompt": "What is 10 - 6?",
-          "max_score": 2,
-          "marking_criteria": "2 pts for 4, 1 pt for a counting-back attempt"
-        },
-        {
-          "question_id": "Q4",
-          "prompt": "How many sides does a triangle have?",
-          "max_score": 2,
-          "marking_criteria": "2 pts for 3"
-        },
-        {
-          "question_id": "Q5",
-          "prompt": "Which number is bigger: 8 or 5?",
-          "max_score": 2,
-          "marking_criteria": "2 pts for 8"
-        }
-      ]
-    },
     "Assemble Grader Work": {
       "marking_schema": {
         "filename": "marking_schema.json",

@@ -51,6 +51,17 @@ export function modulesInSegment(seg: PipelineSegment): PipelineModule[] {
   return [seg.module]
 }
 
+// AI : combine steps consume the input module immediately before them — pin uploads on that label.
+export function pairedCombineInputModule(
+  combine: PipelineModule,
+  modules: PipelineModule[],
+): PipelineModule | undefined {
+  const i = modules.findIndex((m) => m.id === combine.id)
+  if (combine.kind !== "combine" || i <= 0) return undefined
+  const prev = modules[i - 1]
+  return prev?.kind === "input" ? prev : undefined
+}
+
 // AI : don't offer an insert slot between a quote-emitting LLM and its locked Link Quotes step.
 export function blocksInsertBefore(modules: PipelineModule[], insertAt: number): boolean {
   if (insertAt <= 0 || insertAt >= modules.length) return false

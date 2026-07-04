@@ -14,6 +14,7 @@ import {
   userProjectsFrom,
   type SeedDocSpec,
 } from "./seed";
+import { isTestingFileName } from "../testing-files";
 import { computeInvalid, migrateProjectModules, syncAutoQuoteSteps } from "./validity";
 import { stripSharedModels } from "./builtin_models";
 import type {
@@ -374,7 +375,12 @@ async function ingestSeedDoc(store: Store, spec: SeedDocSpec, refreshStale = fal
     const placeholderFixed =
       content && isUnavailableSeedDoc(content, spec.name) && !isUnavailableSeedDoc(fresh, spec.name);
     const stale = refreshStale && content !== undefined && content !== fresh && !isUnavailableSeedDoc(fresh, spec.name);
-    if (placeholderFixed || stale) {
+    const bundledTestDrift =
+      isTestingFileName(spec.name) &&
+      content !== undefined &&
+      content !== fresh &&
+      !isUnavailableSeedDoc(fresh, spec.name);
+    if (placeholderFixed || stale || bundledTestDrift) {
       store.removeDoc(existingByName.id);
       store.addDoc(spec.name, spec.type, fresh, spec.label);
     }

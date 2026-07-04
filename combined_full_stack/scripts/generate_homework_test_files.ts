@@ -43,19 +43,6 @@ function readJson<T>(relativeFile: string): T {
   return JSON.parse(readFileSync(resolveSeedDocPath(relativeFile), "utf8")) as T;
 }
 
-function stripDocIds(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(stripDocIds);
-  if (value !== null && typeof value === "object") {
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      if (k === "doc_id") continue;
-      out[k] = stripDocIds(v);
-    }
-    return out;
-  }
-  return value;
-}
-
 function writeTest(relativeFile: string, body: Record<string, unknown>): void {
   const path = resolveSeedDocPath(relativeFile);
   writeFileSync(path, `${JSON.stringify(body, null, 2)}\n`);
@@ -69,21 +56,16 @@ function buildTest(opts: {
   grades: GradeRow[];
 }): Record<string, unknown> {
   const dir = opts.fixtureDir;
-  const markingSchema = readJson<unknown>(`${dir}/marking_schema.json`);
   const markingQuestions = readJson<unknown>(`${dir}/marking_questions_list.json`);
-  const studentSubmissions = stripDocIds(readJson<unknown>(`${dir}/student_submissions.json`));
-  const combineInputs = stripDocIds(readJson<unknown>(`${dir}/combine_inputs.json`));
   const assembleWork = readJson<unknown>(`${dir}/assemble_grader_work.json`);
   const flattenSections = readJson<unknown>(`${dir}/flatten_sections.json`);
 
   return {
     description: opts.description,
     inputs: opts.inputs,
+    // AI : input/combine steps are pinned under inputs — not scored in expectedOutputs
     expectedOutputs: {
-      "Marking Schema": markingSchema,
       "Marking Questions List": markingQuestions,
-      "Student Submissions": studentSubmissions,
-      "Combine Inputs": combineInputs,
       "Assemble Grader Work": assembleWork,
       "Flatten Sections": flattenSections,
       "Grade Each Section": opts.grades,

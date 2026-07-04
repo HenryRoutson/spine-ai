@@ -57,6 +57,7 @@ import {
   nextTestFileName,
   parseTestFile,
   resolveTestRunInputs,
+  sanitizeTestFile,
   testFileSkeleton,
   testContentSig,
   testContentStableSig,
@@ -264,7 +265,8 @@ function staleLoadFailedContent(content: string): string | null {
         if (staleLoad) return { doc, loadError: staleLoad, issues: [] }
         const parsed = parseTestFile(content)
         if (!parsed.ok) return { doc, content, parseError: parsed.error, issues: [] }
-        return { doc, content, test: parsed.test, issues: validateTestFile(parsed.test, project, projectDocs) }
+        const test = sanitizeTestFile(parsed.test, project)
+        return { doc, content, test, issues: validateTestFile(test, project, projectDocs) }
       }),
     [testDocs, contents, loadErrors, project, projectDocs],
   )
@@ -1061,6 +1063,17 @@ function TestDetail({
     return m
   }, [results])
 
+  // AI : persisted inputDescription checks — survives after stepStates clears post-run
+  const inputChecksByModuleId = useMemo(() => {
+    const m = new Map<ModuleId, NonNullable<TestStepResult["inputDescriptionCheck"]>>()
+    for (const r of results ?? []) {
+      if (!r.inputDescriptionCheck) continue
+      const mod = modules.find((x) => labelAsStateKey(x.label) === labelAsStateKey(r.label))
+      if (mod) m.set(mod.id, r.inputDescriptionCheck)
+    }
+    return m
+  }, [results, modules])
+
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -1170,6 +1183,8 @@ function TestDetail({
               project={project}
               projectDocs={projectDocs}
               actuals={actuals}
+              stepStates={stepStates}
+              inputChecksByModuleId={inputChecksByModuleId}
             />
           )}
 

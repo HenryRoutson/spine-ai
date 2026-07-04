@@ -34,7 +34,7 @@ type doc_name_string = string
 // AI : (ModelField.deterministic); probabilistic fields are exact-excluded then LLM-checked.
 export type SpineTestFile = {
   description?: string
-  // AI : input step label → doc name(s) so a test pins its own inputs
+  // AI : input step label → doc name(s) — every Input module, including the one paired with Combine Inputs
   inputs?: Record<step_label_string, doc_name_string | doc_name_string[]>
   // AI : step label → exact expected output; null = placeholder not yet filled in
   expectedOutputs: Record<step_label_string, unknown>
@@ -89,6 +89,34 @@ export function inputModulesOf(modules: PipelineModule[]): PipelineModule[] {
   return modules.filter((m) => m.kind === ModuleKind.Input)
 }
 
+// AI : input/combine steps are not scored — run log stores the full value (same shape as expected).
+export function isComparableStep(m: PipelineModule): boolean {
+  return m.kind !== ModuleKind.Input && m.kind !== ModuleKind.Combine
+}
+
+export function skipReasonForTestStep(m: PipelineModule): string | undefined {
+  if (m.kind === ModuleKind.Input) return "Input — no computation"
+  if (m.kind === ModuleKind.Combine) return "Combine — input checked, output not scored"
+  return undefined
+}
+
+// AI : input/combine steps pin uploads under inputs — legacy tests may still list them in expectedOutputs.
+export function sanitizeTestFile(test: SpineTestFile, project: Project): SpineTestFile {
+  const expectedOutputs: Record<step_label_string, unknown> = {}
+  for (const [label, value] of Object.entries(test.expectedOutputs)) {
+    const mod = moduleByLabel(project.modules, label)
+    if (!mod || !isComparableStep(mod)) continue
+    expectedOutputs[labelAsStateKey(label)] = value
+  }
+  const inputs: NonNullable<SpineTestFile["inputs"]> = { ...(test.inputs ?? {}) }
+  for (const m of inputModulesOf(project.modules)) {
+    const key = labelAsStateKey(m.label)
+    if (key in inputs) continue
+    inputs[key] = ""
+  }
+  return { ...test, inputs, expectedOutputs }
+}
+
 // AI : does this test still fit the current pipeline? Labels may be stale, values may mismatch types.
 export function validateTestFile(
   test: SpineTestFile,
@@ -97,6 +125,7 @@ export function validateTestFile(
 ): TestFileIssue[] {
   const issues: TestFileIssue[] = []
   const modules = project.modules
+  test = sanitizeTestFile(test, project)
 
   const expectedEntries = Object.entries(test.expectedOutputs)
   if (!expectedEntries.length) {
@@ -109,14 +138,6 @@ export function validateTestFile(
         level: "error",
         where: label,
         message: "step no longer exists in the pipeline — update this test",
-      })
-      continue
-    }
-    if (!isComparableStep(mod)) {
-      issues.push({
-        level: "warning",
-        where: label,
-        message: "input/combine steps are not scored — pin files under inputs instead and remove this expected output",
       })
       continue
     }
@@ -202,7 +223,11 @@ export function analyzeTestPipelineAlignment(
   test: Pick<SpineTestFile, "inputs" | "expectedOutputs">,
   project: Project,
 ): TestPipelineAlignment {
-  const tracked = trackedExpectedKeys(test.expectedOutputs)
+  const sanitized = sanitizeTestFile(
+    { expectedOutputs: test.expectedOutputs, inputs: test.inputs },
+    project,
+  )
+  const tracked = trackedExpectedKeys(sanitized.expectedOutputs)
   const stepRows = project.modules.map((module) => {
     const key = labelAsStateKey(module.label)
     let trackStatus: TestStepTrackStatus
@@ -216,16 +241,14 @@ export function analyzeTestPipelineAlignment(
   const orphanedExpected: OrphanedExpectedStep[] = []
   for (const [label, value] of Object.entries(test.expectedOutputs)) {
     const mod = moduleByLabel(project.modules, label)
-    if (mod && isComparableStep(mod)) continue
+    if (mod) continue
     orphanedExpected.push({
       label: labelAsStateKey(label),
-      remapCandidates: mod
-        ? []
-        : remapCandidatesForExpectedValue(value, test.expectedOutputs, project),
+      remapCandidates: remapCandidatesForExpectedValue(value, sanitized.expectedOutputs, project),
     })
   }
 
-  const orphanedInputs: OrphanedInputStep[] = Object.keys(test.inputs ?? {})
+  const orphanedInputs: OrphanedInputStep[] = Object.keys(sanitized.inputs ?? {})
     .filter((label) => !inputModulesOf(project.modules).some((m) => labelAsStateKey(m.label) === labelAsStateKey(label)))
     .map((label) => ({
       label: labelAsStateKey(label),
@@ -256,15 +279,72 @@ export function resolveTestRunInputs(
 export type TestStepResult = RunTestStepResult
 export type TestStepStatus = TestStepResult["status"]
 
-// AI : input/combine steps are not scored — run log now stores the full value (same shape as expected).
-export function isComparableStep(m: PipelineModule): boolean {
-  return m.kind !== ModuleKind.Input && m.kind !== ModuleKind.Combine
+// AI : per-step input guard — same rule as run engine (lib/server/input_description_check.ts).
+function stepChecksInputDescription(m: Pick<PipelineModule, "inputDescription" | "checkInputDescription">): boolean {
+  if (!m.inputDescription?.trim()) return false
+  return m.checkInputDescription !== false
 }
 
-export function skipReasonForTestStep(m: PipelineModule): string | undefined {
-  if (m.kind === ModuleKind.Input) return "Input — no computation"
-  if (m.kind === ModuleKind.Combine) return "Combine — not scored"
-  return undefined
+function orderTestResultsByPipeline(results: TestStepResult[], modules: PipelineModule[]): TestStepResult[] {
+  const byKey = new Map(results.map((r) => [labelAsStateKey(r.label), r]))
+  const ordered: TestStepResult[] = []
+  const seen = new Set<string>()
+  for (const m of modules) {
+    const key = labelAsStateKey(m.label)
+    const row = byKey.get(key)
+    if (!row) continue
+    ordered.push(row)
+    seen.add(key)
+  }
+  for (const r of results) {
+    const key = labelAsStateKey(r.label)
+    if (!seen.has(key)) ordered.push(r)
+  }
+  return ordered
+}
+
+// AI : fold run-time inputDescription checks into the test report — combine steps are scored here, not via expectedOutputs.
+export function mergeInputDescriptionChecks(
+  run: PipelineRun,
+  results: TestStepResult[],
+  project: Pick<Project, "modules">,
+): TestStepResult[] {
+  const byKey = new Map(results.map((r) => [labelAsStateKey(r.label), { ...r }]))
+  for (const m of project.modules) {
+    if (!stepChecksInputDescription(m)) continue
+    const key = labelAsStateKey(m.label)
+    const step = run.steps.find((s) => labelAsStateKey(s.label) === key)
+    const check = step?.inputDescriptionCheck
+    if (!check) continue
+    const existing = byKey.get(key)
+    if (check.matches === false) {
+      byKey.set(key, {
+        label: m.label,
+        status: RunTestStepStatus.Fail,
+        inputDescriptionCheck: check,
+        skipReason: existing?.skipReason ?? skipReasonForTestStep(m),
+        expected: existing?.expected,
+        actual: existing?.actual,
+        diffPath: existing?.diffPath,
+        deterministicDiff: existing?.deterministicDiff,
+        ignoredPaths: existing?.ignoredPaths,
+        probabilisticResults: existing?.probabilisticResults,
+        llmEvaluated: existing?.llmEvaluated,
+      })
+      continue
+    }
+    if (existing) {
+      byKey.set(key, { ...existing, inputDescriptionCheck: check })
+      continue
+    }
+    byKey.set(key, {
+      label: m.label,
+      status: RunTestStepStatus.Skipped,
+      skipReason: skipReasonForTestStep(m) ?? "input checked — not scored",
+      inputDescriptionCheck: check,
+    })
+  }
+  return orderTestResultsByPipeline([...byKey.values()], project.modules)
 }
 
 // AI : golden fixtures use seed doc_ids; runs use content hashes — drop for skipped-step display.
@@ -517,7 +597,10 @@ export function compareRunToTest(
 
 export function firstFailure(results: TestStepResult[]): TestStepResult | undefined {
   return results.find(
-    (r) => r.status === RunTestStepStatus.Fail || r.status === RunTestStepStatus.NotReached,
+    (r) =>
+      r.status === RunTestStepStatus.Fail ||
+      r.status === RunTestStepStatus.NotReached ||
+      r.inputDescriptionCheck?.matches === false,
   )
 }
 

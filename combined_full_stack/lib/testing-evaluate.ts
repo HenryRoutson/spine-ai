@@ -4,6 +4,7 @@ import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import {
   compareRunToTest,
+  mergeInputDescriptionChecks,
   mergeProbabilisticEvaluations,
   probabilisticEvalPayloads,
   type ProbabilisticEvalResult,
@@ -19,6 +20,7 @@ export async function evaluateTestReport(
   model: ModelId,
 ): Promise<TestStepResult[]> {
   let report = compareRunToTest(run, test, project)
+  report = mergeInputDescriptionChecks(run, report, project)
   const payloads = probabilisticEvalPayloads(run, test, report, project)
   if (!payloads.length) return report
   const { results: probabilisticResults } = await apiJson<{ results: ProbabilisticEvalResult[] }>(

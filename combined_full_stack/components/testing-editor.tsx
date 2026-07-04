@@ -34,7 +34,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { StepInputDescription, moduleInputDescription } from "@/components/step-input-description"
 import { isMultiDocInputModule, inputTypeLabel } from "@/lib/inference-input"
+import { pairedCombineInputModule } from "@/lib/pipeline-layout"
+import type { StepUiState } from "@/lib/run-engine"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { modelName } from "@/lib/validity"
 import { labelAsStateKey, validatePipelineStateEntry } from "@/lib/server/pipeline_state"
@@ -47,6 +50,7 @@ import {
   buildTestCoverageMap,
   isComparableStep,
   probabilisticPathsForModule,
+  sanitizeTestFile,
   skipReasonForTestStep,
   type SpineTestFile,
   type TestStepTrackStatus,
@@ -79,9 +83,10 @@ export type TestDraft = {
 }
 
 export function draftFromTest(test: SpineTestFile, project: Project): TestDraft {
+  const cleaned = sanitizeTestFile(test, project)
   const seen = new Set<step_label_string>()
   const expected: TestDraft["expected"] = []
-  for (const [label, v] of Object.entries(test.expectedOutputs)) {
+  for (const [label, v] of Object.entries(cleaned.expectedOutputs)) {
     const key = labelAsStateKey(label)
     if (seen.has(key)) continue
     seen.add(key)
@@ -92,9 +97,9 @@ export function draftFromTest(test: SpineTestFile, project: Project): TestDraft 
     expected.push({ label: key, text: JSON.stringify(value, null, 2) })
   }
   return {
-    description: test.description ?? "",
+    description: cleaned.description ?? "",
     inputs: Object.fromEntries(
-      Object.entries(test.inputs ?? {}).map(([label, v]) => [label, Array.isArray(v) ? v : [v]]),
+      Object.entries(cleaned.inputs ?? {}).map(([label, v]) => [label, Array.isArray(v) ? v : [v]]),
     ),
     expected,
   }
@@ -136,9 +141,11 @@ function sameStep(a: step_label_string, b: step_label_string): boolean {
 }
 
 // AI : draft → alignment input without requiring valid JSON for every row.
-function draftAlignmentInput(draft: TestDraft): Pick<SpineTestFile, "inputs" | "expectedOutputs"> {
+function draftAlignmentInput(draft: TestDraft, project: Project): Pick<SpineTestFile, "inputs" | "expectedOutputs"> {
   const expectedOutputs: Record<step_label_string, unknown> = {}
   for (const row of draft.expected) {
+    const mod = project.modules.find((m) => labelAsStateKey(m.label) === labelAsStateKey(row.label))
+    if (!mod || !isComparableStep(mod)) continue
     const parsed = tryParseJson(row.text, { trim: true })
     expectedOutputs[row.label] = parsed.ok ? parsed.value : null
   }
@@ -295,20 +302,23 @@ export function TestFileEditor({
   project,
   projectDocs,
   actuals,
+  stepStates,
+  inputChecksByModuleId,
 }: {
   draft: TestDraft
   setDraft: (d: TestDraft) => void
   project: Project
   projectDocs: DocRef[]
-  // AI : step key → actual output from the last test run, for one-click capture
   actuals: Map<step_label_string, unknown>
+  stepStates?: Map<ModuleId, StepUiState>
+  inputChecksByModuleId?: Map<ModuleId, NonNullable<StepUiState["inputDescriptionCheck"]>>
 }) {
   const [pickerModule, setPickerModule] = useState<PipelineModule | null>(null)
   const [popup, setPopup] = useState<PopupPayload | null>(null)
   const { open: openDoc } = useDocViewer()
 
   const alignment = useMemo(
-    () => analyzeTestPipelineAlignment(draftAlignmentInput(draft), project),
+    () => analyzeTestPipelineAlignment(draftAlignmentInput(draft, project), project),
     [draft, project],
   )
   const testCoverage = useMemo(() => buildTestCoverageMap(alignment), [alignment])
@@ -383,6 +393,9 @@ export function TestFileEditor({
     })
   }
 
+  const inputCheckFor = (m: PipelineModule) =>
+    stepStates?.get(m.id)?.inputDescriptionCheck ?? inputChecksByModuleId?.get(m.id)
+
   const renderTestStep = (m: PipelineModule, trackStatus: TestStepTrackStatus) => {
     if (trackStatus === "input") {
       return (
@@ -402,7 +415,17 @@ export function TestFileEditor({
       )
     }
     if (trackStatus === "passthrough") {
-      return <PassthroughStepCard module={m} project={project} />
+      const paired = m.kind === ModuleKind.Combine ? pairedCombineInputModule(m, project.modules) : undefined
+      return (
+        <PassthroughStepCard
+          module={m}
+          project={project}
+          pairedInput={paired}
+          pairedInputDocs={paired ? slotDocs(paired) : []}
+          inputDescriptionCheck={inputCheckFor(m)}
+          onConfigureUpload={paired ? () => setPickerModule(paired) : undefined}
+        />
+      )
     }
     if (trackStatus === "tracked") {
       return (
@@ -630,7 +653,23 @@ function InputStepCard({
   )
 }
 
-function PassthroughStepCard({ module, project }: { module: PipelineModule; project: Project }) {
+function PassthroughStepCard({
+  module,
+  project,
+  pairedInput,
+  pairedInputDocs,
+  inputDescriptionCheck,
+  onConfigureUpload,
+}: {
+  module: PipelineModule
+  project: Project
+  pairedInput?: PipelineModule
+  pairedInputDocs?: DocRef[]
+  inputDescriptionCheck?: StepUiState["inputDescriptionCheck"]
+  onConfigureUpload?: () => void
+}) {
+  const desc = moduleInputDescription(module)
+  const uploadNames = pairedInputDocs?.map((d) => d.name) ?? []
   return (
     <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-3 py-2.5">
       <div className="flex flex-wrap items-center gap-2">
@@ -641,6 +680,28 @@ function PassthroughStepCard({ module, project }: { module: PipelineModule; proj
         </span>
       </div>
       <StepTypeLine module={module} project={project} />
+      {pairedInput && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <p className="font-mono text-[10px] text-muted-foreground">
+            upload pinned on{" "}
+            <span className="text-foreground">&quot;{pairedInput.label}&quot;</span>
+            {uploadNames.length ? `: ${uploadNames.join(", ")}` : " — assign a document"}
+          </p>
+          {onConfigureUpload && (
+            <Button type="button" variant="outline" size="sm" className="h-6 px-2 font-mono text-[9px]" onClick={onConfigureUpload}>
+              change files
+            </Button>
+          )}
+        </div>
+      )}
+      {desc && (
+        <StepInputDescription
+          className="mt-2"
+          description={desc}
+          check={inputDescriptionCheck}
+          forceVisible={inputDescriptionCheck?.matches === false}
+        />
+      )}
     </div>
   )
 }
