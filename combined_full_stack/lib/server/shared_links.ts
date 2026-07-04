@@ -12,13 +12,14 @@ import { createAdminClient } from "./supabase_admin";
 import { hashContent, type Store } from "./store";
 import { migrateProjectModules } from "./validity";
 import { isMissingSchemaError } from "./supabase_store";
-import { LOCAL_DEV_USER_ID, type user_id_string } from "./require_auth";
+import { LOCAL_DEV_USER_ID, isLocalDevMode, type user_id_string } from "./require_auth";
 import { logger } from "./server_logger";
 import {
   SharedLinkFundingMode,
   type DocId,
   type ModelId,
   type ModuleId,
+  type PipelineModule,
   type Project,
   type ProjectId,
   type SharedLinkId,
@@ -342,7 +343,7 @@ export async function incrementSharedLinkRunCount(id: SharedLinkId): Promise<voi
 }
 
 export async function openStoreForUser(userId: user_id_string): Promise<Store> {
-  if (userId === LOCAL_DEV_USER_ID) {
+  if (userId === LOCAL_DEV_USER_ID && isLocalDevMode()) {
     const { openStore, ensureSeeded } = await import("./store");
     const store = await openStore();
     await ensureSeeded(store);
@@ -350,15 +351,18 @@ export async function openStoreForUser(userId: user_id_string): Promise<Store> {
   }
   const admin = await createAdminClient();
   if (!admin) {
-    const { openStore, ensureSeeded } = await import("./store");
-    const store = await openStore();
-    await ensureSeeded(store);
-    return store;
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY required for cross-user store access");
   }
   const { SupabaseStore } = await import("./supabase_store");
   const scoped = new SupabaseStore(admin, userId);
   await scoped.init();
   return scoped;
+}
+
+// AI : strip prompts and custom code — public viewers only need input/output metadata.
+function sanitizeModuleForPublic(m: PipelineModule): PipelineModule {
+  const { prompt: _p, code: _c, fallbackList: _f, ...safe } = m;
+  return safe;
 }
 
 export function publicLinkView(link: StoredSharedLink) {
@@ -370,7 +374,7 @@ export function publicLinkView(link: StoredSharedLink) {
     fundingMode: link.fundingMode,
     viewerNameRequired: link.viewerNameRequired,
     defaultDocs: link.defaultDocs.map((d) => ({ moduleId: d.moduleId, filename: d.filename })),
-    modules: link.snapshot.modules,
+    modules: link.snapshot.modules.map(sanitizeModuleForPublic),
     models: link.snapshot.models,
   };
 }

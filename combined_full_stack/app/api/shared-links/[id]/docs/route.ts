@@ -6,11 +6,13 @@ import { parseSharedLinkId } from "@/lib/server/api_schemas";
 import {
   inputTypeFromFilename,
   parseUploadedBytes,
+  validateUploadBytes,
   validateUploadFile,
 } from "@/lib/server/doc_upload_parse";
 import { orderedInputModules } from "@/lib/inference-input";
 import { getSharedLink, newSessionId } from "@/lib/server/shared_links";
 import { saveSessionUpload } from "@/lib/server/shared-link-session";
+import { secureSessionCookieOptions } from "@/lib/server/cookie_options";
 import type { ModuleId } from "@/lib/server/types";
 
 const SESSION_COOKIE = "shared_run_session";
@@ -36,6 +38,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   let sessionId = jar.get(SESSION_COOKIE)?.value ?? newSessionId();
   const type = inputTypeFromFilename(file.name);
   const bytes = new Uint8Array(await file.arrayBuffer());
+  const bytesErr = validateUploadBytes(bytes, file.name, type);
+  if (bytesErr) return apiError(bytesErr.message, bytesErr.status);
   let parsed;
   try {
     parsed = await parseUploadedBytes(bytes, file.name, type);
@@ -45,11 +49,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const doc = await saveSessionUpload(link.id, sessionId, moduleId, file, parsed.content, type, bytes);
   const res = NextResponse.json(doc);
-  res.cookies.set(SESSION_COOKIE, sessionId, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
+  res.cookies.set(SESSION_COOKIE, sessionId, secureSessionCookieOptions(60 * 60 * 24 * 30));
   return res;
 }

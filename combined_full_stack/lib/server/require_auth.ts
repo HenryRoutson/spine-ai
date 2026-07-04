@@ -24,6 +24,11 @@ export function isProductionDeploy(): boolean {
   return !!process.env.VERCEL || !!getSupabasePublicEnv();
 }
 
+// AI : local JsonStore + shared dev identity — never on Vercel or NODE_ENV=production.
+export function isLocalDevMode(): boolean {
+  return process.env.NODE_ENV === "development" && !process.env.VERCEL;
+}
+
 function emailFromClaims(claims: Record<string, unknown> | undefined): string | undefined {
   if (!claims) return undefined;
   const email = claims.email;
@@ -47,14 +52,21 @@ export async function requireAuth(): Promise<AuthSession | NextResponse> {
     return NextResponse.json({ error: MISCONFIGURED }, { status: 503 });
   }
 
-  if (!isProductionDeploy()) {
+  if (isLocalDevMode()) {
     try {
       const session = await sessionFromClaims();
       if (session) return session;
     } catch {
       /* local dev without Supabase */
     }
-    return { userId: LOCAL_DEV_USER_ID, email: undefined };
+    // AI : shared JsonStore only when Supabase is not configured — not when env is set but user is logged out.
+    if (!getSupabasePublicEnv()) {
+      return { userId: LOCAL_DEV_USER_ID, email: undefined };
+    }
+  }
+
+  if (!isProductionDeploy()) {
+    return NextResponse.json({ error: AUTH_SIGN_IN_REQUIRED }, { status: 401 });
   }
 
   try {

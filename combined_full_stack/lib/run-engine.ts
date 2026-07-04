@@ -176,6 +176,7 @@ export interface AwaitRunCallbacks {
   onLogs?: (logs: JobLogEntry[], newLines: JobLogEntry[]) => void
   // AI : human-review steps pause until the operator approves or rejects in Inference.
   onHumanReview?: (spec: ClientStepSpec) => Promise<"approved" | "rejected">
+  signal?: AbortSignal
 }
 
 export type AwaitRunResult = {
@@ -216,11 +217,13 @@ export async function awaitJobCompletion(
   callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
   intervalMs = 700,
 ): Promise<AwaitRunResult> {
-  const { onStep, onLogs, onHumanReview } = typeof callbacks === "function" ? { onStep: callbacks } : callbacks
+  const { onStep, onLogs, onHumanReview, signal } =
+    typeof callbacks === "function" ? { onStep: callbacks } : callbacks
   let seenLogs = 0
   let clientStepBusy = false
   let clientStepSubmittedFor: ModuleId | undefined
   for (;;) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
     const job = await poll()
     onStep?.(job.steps)
     const logs = job.logs ?? []
@@ -358,6 +361,32 @@ export async function awaitJobCompletion(
     }
     await new Promise((r) => setTimeout(r, intervalMs))
   }
+}
+
+const CONCURRENT_RETRY_MS = 800
+const CONCURRENT_RETRY_MAX = 90
+
+// AI : batch test runs share the server job pool — wait for a slot instead of failing on 429.
+export async function startRunWithRetry(...args: Parameters<typeof startRun>): Promise<StartRunResult> {
+  for (let attempt = 0; attempt < CONCURRENT_RETRY_MAX; attempt++) {
+    try {
+      return await startRun(...args)
+    } catch (e) {
+      if (e instanceof RunStartError && e.code === "concurrent_runs" && attempt < CONCURRENT_RETRY_MAX - 1) {
+        await new Promise((r) => setTimeout(r, CONCURRENT_RETRY_MS))
+        continue
+      }
+      throw e
+    }
+  }
+  throw new Error("Timed out waiting for a free run slot")
+}
+
+export async function cancelRun(jobId: RunJobId): Promise<void> {
+  const res = await fetch(API_ROUTES.run(jobId), { method: "DELETE", headers: JSON_HEADERS })
+  if (res.ok) return
+  if (res.status === 404) return
+  throwApiError(`Cancel run job ${jobId} failed`, res, await readApiErrorBody(res))
 }
 
 // AI : poll until the run finishes; callbacks stream progress + server logs to the UI / console.

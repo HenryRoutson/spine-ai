@@ -1,7 +1,7 @@
 // AI : one-shot — give every example seed a *_testing.json test file (spec § Testing).
 // AI : golden expectedOutputs are inlined where the seed ships them; otherwise output steps
 // AI : get null placeholders (partial tests are by design — only listed steps are checked).
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { buildDefaultInputDocs, orderedInputModules } from "../lib/inference-input";
 import { loadProjectSeed, SEEDS_DIR } from "../lib/server/seed";
@@ -35,6 +35,19 @@ function buildInputs(project: Project, docRefs: DocRef[]): Record<string, string
   return inputs;
 }
 
+function testFileHasSubstance(relativeFile: string): boolean {
+  const path = join(SEEDS_DIR, "..", "documents", relativeFile);
+  if (!existsSync(path)) return false;
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8")) as { expectedOutputs?: Record<string, unknown> };
+    const expected = parsed.expectedOutputs;
+    if (!expected || typeof expected !== "object") return false;
+    return Object.values(expected).some((v) => v !== null);
+  } catch {
+    return false;
+  }
+}
+
 function buildExpectedOutputs(project: Project): Record<string, unknown> {
   const golden = project.expectedOutputs ?? {};
   if (Object.keys(golden).length) {
@@ -66,6 +79,12 @@ for (const f of readdirSync(SEEDS_DIR).filter((x) => x.endsWith(".json")).sort()
   const sourceDocs = raw.docs.filter((d) => !d.name.endsWith("_testing.json"));
   const docRefs = seedDocRefs(seed.project, sourceDocs);
   const hasGolden = !!seed.project.expectedOutputs && Object.keys(seed.project.expectedOutputs).length > 0;
+  // AI : homework + other hand-authored tests keep full fixtures — don't clobber with scaffolds.
+  if (testFileHasSubstance(testRelFile)) {
+    console.log(`${testRelFile} — skipped (existing test has expected outputs)`);
+    continue;
+  }
+
   const test: SpineTestFile = {
     description: hasGolden
       ? `Step-by-step test for ${seed.project.name} — expected outputs from the bundled golden fixtures.`

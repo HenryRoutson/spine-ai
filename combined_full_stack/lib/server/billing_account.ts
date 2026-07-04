@@ -16,6 +16,7 @@ import { dataDir } from "./config";
 import { createAdminClient } from "./supabase_admin";
 import {
   isAuthSession,
+  isProductionDeploy,
   LOCAL_DEV_USER_ID,
   requireAuth,
   type user_id_string,
@@ -214,6 +215,14 @@ async function billingDb() {
   return createClient();
 }
 
+// AI : billing writes must use service role in production — user session is SELECT-only via RLS.
+async function billingDbWrite() {
+  const admin = await createAdminClient();
+  if (admin) return admin;
+  if (!isProductionDeploy()) return createClient();
+  throw new Error("SUPABASE_SERVICE_ROLE_KEY required for billing writes");
+}
+
 async function loadSupabaseAccount(userId: BillingUserKey): Promise<BillingAccount | null> {
   const db = await billingDb();
   const { data, error } = await db
@@ -256,7 +265,7 @@ async function loadSupabaseAccount(userId: BillingUserKey): Promise<BillingAccou
 }
 
 async function saveSupabaseAccount(userId: BillingUserKey, account: BillingAccount): Promise<void> {
-  const db = await billingDb();
+  const db = await billingDbWrite();
   const row = {
     user_id: userId,
     balance_cents: toExactCents(account.balanceCents),

@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { JsonHighlight, PromptText } from "@/components/highlight"
+import { PromptText } from "@/components/highlight"
+import { JsonViewerEmbed } from "@/components/json-viewer"
 import { LlmCallDistribution } from "@/components/llm-call-distribution"
 import { StepFailuresSection } from "@/components/step-failures-panel"
 import { StepProfiling } from "@/components/step-profiling"
@@ -470,7 +471,9 @@ export function Logging() {
                             }
                           >
                             {step.outputJson ? (
-                              <JsonHighlight json={step.outputJson} />
+                              <div className="-m-2 mt-0 h-[min(12rem,28vh)] overflow-hidden">
+                                <JsonViewerEmbed json={step.outputJson} className="h-full" />
+                              </div>
                             ) : step.status !== "error" ? (
                               step.outputPreview
                             ) : (

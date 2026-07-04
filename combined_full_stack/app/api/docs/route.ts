@@ -4,6 +4,7 @@ import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import {
   inputTypeFromFilename,
   parseUploadedBytes,
+  validateUploadBytes,
   validateUploadFile,
   writeParserCacheIfFresh,
   shouldSaveOriginalBytes,
@@ -42,6 +43,8 @@ export async function POST(req: NextRequest) {
   const { store } = ctx;
 
   const bytes = new Uint8Array(await uploadFile.arrayBuffer());
+  const bytesErr = validateUploadBytes(bytes, uploadFile.name, type);
+  if (bytesErr) return apiError(bytesErr.message, bytesErr.status);
   let parsed;
   try {
     parsed = await parseUploadedBytes(bytes, uploadFile.name, type, store);

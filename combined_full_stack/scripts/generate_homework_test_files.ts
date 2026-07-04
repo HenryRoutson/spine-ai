@@ -93,14 +93,68 @@ function buildTest(opts: {
   };
 }
 
-function readGradeRows(relativeFile: string): GradeRow[] {
-  const rows = readJson<{ expectedOutputs: { "Final Output": (GradeRow | LegacyGradeRow)[] } }>(
+function readGradeRows(relativeFile: string): GradeRow[] | undefined {
+  const rows = readJson<{ expectedOutputs: { "Final Output"?: (GradeRow | LegacyGradeRow)[] | null } }>(
     relativeFile,
   ).expectedOutputs["Final Output"];
+  if (!Array.isArray(rows)) return undefined;
   return rows.map((row) => ("feedback" in row ? fromLegacyFeedback(row) : row));
 }
 
-const algebraGrades: GradeRow[] = readGradeRows("homework_grader/homework_grader_testing.json");
+// AI : canonical algebra II grade rows — also read from an existing test file when present.
+const algebraGrades: GradeRow[] = readGradeRows("homework_grader/homework_grader_testing.json") ?? [
+  gradeRow({ student_label: "Sam Rivera", section_id: "A", score: 5, max_score: 5 }),
+  gradeRow({ student_label: "Sam Rivera", section_id: "A", score: 5, max_score: 5 }),
+  gradeRow({ student_label: "Sam Rivera", section_id: "B", score: 5, max_score: 5 }),
+  gradeRow({
+    student_label: "Sam Rivera",
+    section_id: "B",
+    score: 5,
+    max_score: 10,
+    mistake_explanation: "Only x = 3 given — missing the negative root x = −3.",
+  }),
+  gradeRow({
+    student_label: "Sam Rivera",
+    section_id: "C",
+    score: 0,
+    max_score: 15,
+    mistake_explanation: "Incorrect meeting time with no working or diagram shown.",
+  }),
+  gradeRow({ student_label: "Jordan Lee", section_id: "A", score: 5, max_score: 5 }),
+  gradeRow({
+    student_label: "Jordan Lee",
+    section_id: "A",
+    score: 2,
+    max_score: 5,
+    mistake_explanation: "Good method but final answer y = 8 is incorrect (should be 9).",
+  }),
+  gradeRow({ student_label: "Jordan Lee", section_id: "B", score: 5, max_score: 5 }),
+  gradeRow({ student_label: "Jordan Lee", section_id: "B", score: 10, max_score: 10 }),
+  gradeRow({ student_label: "Jordan Lee", section_id: "C", score: 15, max_score: 15 }),
+  gradeRow({
+    student_label: "Alex Kim",
+    section_id: "A",
+    score: 3,
+    max_score: 5,
+    mistake_explanation: "Correct answer x = 5 but no intermediate steps shown.",
+  }),
+  gradeRow({
+    student_label: "Alex Kim",
+    section_id: "A",
+    score: 3,
+    max_score: 5,
+    mistake_explanation: "Correct answer y = 9 but no working shown.",
+  }),
+  gradeRow({ student_label: "Alex Kim", section_id: "B", score: 5, max_score: 5 }),
+  gradeRow({ student_label: "Alex Kim", section_id: "B", score: 10, max_score: 10 }),
+  gradeRow({
+    student_label: "Alex Kim",
+    section_id: "C",
+    score: 8,
+    max_score: 15,
+    mistake_explanation: "Good diagram and equation setup but meeting time (~3:24pm) is incorrect.",
+  }),
+];
 
 writeTest(
   "homework_grader/homework_grader_testing.json",

@@ -1,7 +1,15 @@
 // AI : shared rate-limit tiers — safe for edge (proxy) and server route handlers.
 
 export type RateLimitBackend = "upstash" | "memory";
-export type RateLimitTier = "default" | "llm" | "public" | "feedback" | "poll" | "webhook" | "billing";
+export type RateLimitTier =
+  | "default"
+  | "llm"
+  | "public"
+  | "feedback"
+  | "poll"
+  | "webhook"
+  | "billing"
+  | "shared_run";
 export type RateLimitKey = string & { __brand: "RateLimitKey" };
 
 export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number }> = {
@@ -12,6 +20,8 @@ export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number 
   poll: { windowMs: 60_000, max: 120 },
   webhook: { windowMs: 60_000, max: 120 },
   billing: { windowMs: 60_000, max: 20 },
+  // AI : per-link + IP — limits anonymous credit drain on sharer_pays links.
+  shared_run: { windowMs: 600_000, max: 5 },
 };
 
 // AI : default production (Upstash); set RATE_LIMIT_BACKEND=memory for local dev without Redis.

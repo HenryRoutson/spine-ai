@@ -3,7 +3,7 @@
 // AI : Testing tab — *_testing.json files pin exact per-step outputs; a run pinpoints the
 // AI : first step that diverges. Static checks stay in Structure/Pipeline; this is for full runs.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react"
 import {
   Boxes,
   CheckSquare,
@@ -17,6 +17,7 @@ import {
   Plus,
   ScrollText,
   Sparkles,
+  Square,
   TriangleAlert,
 } from "lucide-react"
 import { JsonHighlight } from "@/components/highlight"
@@ -43,7 +44,7 @@ import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
 import { labelAsStateKey } from "@/lib/server/pipeline_state"
 import { docsForProject } from "@/lib/project-docs"
-import { awaitRun, isRunBillingError, mergeStepStates, startRun, type StepUiState } from "@/lib/run-engine"
+import { awaitRun, cancelRun, isRunBillingError, mergeStepStates, startRunWithRetry, type StepUiState } from "@/lib/run-engine"
 import { useStore } from "@/lib/store"
 import { formatCostCents, formatSecondsShort } from "@/lib/format"
 import { runBilledCents, runTotalMs } from "@/lib/run-metrics"
@@ -70,7 +71,7 @@ import {
 } from "@/lib/testing-files"
 import { cn } from "@/lib/utils"
 import { DocLabel, InputType, RunSource, type PipelineRun, type RunTestReport } from "@/lib/types"
-import type { DocId, DocRef, ModuleId, PipelineModule, Project } from "@/lib/types"
+import type { DocId, DocRef, ModuleId, PipelineModule, Project, RunJobId } from "@/lib/types"
 
 type doc_name_string = string
 
@@ -86,7 +87,46 @@ type TestDocState = {
 type GeneratedTestFile = { name: string; content: string; issues: TestFileIssue[] }
 
 type RunPhase = "idle" | "running" | "done"
-type RunTestOutcome = "ok" | "error" | "billing"
+type RunTestOutcome = "ok" | "error" | "billing" | "stopped"
+
+type TestRunUiState = {
+  phase: RunPhase
+  stepStates: Map<ModuleId, StepUiState>
+  results: TestStepResult[] | null
+  resultRunId: string | null
+  runError: string | null
+  jobId: RunJobId | null
+}
+
+const EMPTY_TEST_RUN: TestRunUiState = {
+  phase: "idle",
+  stepStates: new Map(),
+  results: null,
+  resultRunId: null,
+  runError: null,
+  jobId: null,
+}
+
+function RunStopButton({
+  onClick,
+  className,
+}: {
+  onClick: (e: MouseEvent<HTMLButtonElement>) => void
+  className?: string
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      className={cn("h-6 shrink-0 bg-transparent px-2", className)}
+      onClick={onClick}
+      title="Stop run"
+    >
+      <Square className="h-3 w-3 fill-current" />
+    </Button>
+  )
+}
 
 function testStatus(t: TestDocState): "loading" | "load_failed" | "broken" | "errors" | "warnings" | "ok" {
   if (t.loadError) return "load_failed"
@@ -166,15 +206,11 @@ export function Testing() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [creatingTest, setCreatingTest] = useState(false)
 
-  // run state (one test at a time)
-  const [runPhase, setRunPhase] = useState<RunPhase>("idle")
-  const [runningTestId, setRunningTestId] = useState<DocId | null>(null)
-  const [stepStates, setStepStates] = useState<Map<ModuleId, StepUiState>>(new Map())
-  const [results, setResults] = useState<TestStepResult[] | null>(null)
-  const [resultRunId, setResultRunId] = useState<string | null>(null)
-  const [runError, setRunError] = useState<string | null>(null)
+  // AI : per-test run state — stale batch runs many jobs in parallel, each with its own progress.
+  const [runByName, setRunByName] = useState<Map<doc_name_string, TestRunUiState>>(new Map())
+  const abortByName = useRef<Map<doc_name_string, AbortController>>(new Map())
   const [runAllActive, setRunAllActive] = useState(false)
-  const [runAllIndex, setRunAllIndex] = useState(0)
+  const [runAllDone, setRunAllDone] = useState(0)
   const [runAllTotal, setRunAllTotal] = useState(0)
   const [dirtyContentByName, setDirtyContentByName] = useState<Partial<Record<doc_name_string, string>>>({})
 
@@ -236,7 +272,23 @@ function staleLoadFailedContent(content: string): string | null {
     testStates.find((t) => t.doc.id === selectedId) ??
     (selectedName ? testStates.find((t) => t.doc.name === selectedName) : undefined) ??
     testStates[0]
-  const runBusy = runPhase === "running" || runAllActive
+  const selectedRun = selected ? (runByName.get(selected.doc.name) ?? EMPTY_TEST_RUN) : EMPTY_TEST_RUN
+  const anyTestRunning = useMemo(() => {
+    for (const s of runByName.values()) {
+      if (s.phase === "running") return true
+    }
+    return false
+  }, [runByName])
+  const runBusy = anyTestRunning || runAllActive
+
+  const patchRunState = useCallback((docName: doc_name_string, patch: Partial<TestRunUiState>) => {
+    setRunByName((prev) => {
+      const next = new Map(prev)
+      const cur = next.get(docName) ?? EMPTY_TEST_RUN
+      next.set(docName, { ...cur, ...patch })
+      return next
+    })
+  }, [])
 
   const pipelineSnapshot = useMemo(
     () => ({ modules, models, typeAliases }),
@@ -288,14 +340,19 @@ function staleLoadFailedContent(content: string): string | null {
     [testSigSets, runs],
   )
 
+  const staleTests = useMemo(
+    () => runnableTests.filter((t) => resolveLastVerdict(t.doc.name) === null),
+    [runnableTests, resolveLastVerdict],
+  )
+
   // AI : hide stale run results when test/pipeline no longer matches the persisted verdict.
   useEffect(() => {
-    if (!selected || !results || runningTestId !== selected.doc.id) return
+    if (!selected) return
+    const rs = runByName.get(selected.doc.name)
+    if (!rs?.results || rs.phase !== "done") return
     if (resolveLastVerdict(selected.doc.name) !== null) return
-    setResults(null)
-    setResultRunId(null)
-    setRunPhase("idle")
-  }, [selected, results, runningTestId, resolveLastVerdict, testSigSets, dirtyContentByName])
+    patchRunState(selected.doc.name, { results: null, resultRunId: null, phase: "idle" })
+  }, [selected, runByName, resolveLastVerdict, testSigSets, dirtyContentByName, patchRunState])
 
   const onDirtyContentChange = useCallback((docName: doc_name_string, content: string | null) => {
     setDirtyContentByName((prev) => {
@@ -310,10 +367,35 @@ function staleLoadFailedContent(content: string): string | null {
   const selectTest = useCallback((id: DocId, name?: doc_name_string) => {
     setSelectedId(id)
     if (name) setSelectedName(name)
-    setResults(null)
-    setResultRunId(null)
-    setRunError(null)
     setActionError(null)
+  }, [])
+
+  const stopTest = useCallback((docName: doc_name_string) => {
+    abortByName.current.get(docName)?.abort()
+    setRunByName((prev) => {
+      const jobId = prev.get(docName)?.jobId
+      if (jobId) void cancelRun(jobId).catch(console.error)
+      const next = new Map(prev)
+      const cur = next.get(docName) ?? EMPTY_TEST_RUN
+      next.set(docName, { ...cur, phase: "idle", runError: "Stopped" })
+      return next
+    })
+  }, [])
+
+  const stopAllRunningTests = useCallback(() => {
+    setRunByName((prev) => {
+      const next = new Map(prev)
+      for (const [docName, rs] of prev) {
+        if (rs.phase !== "running") continue
+        abortByName.current.get(docName)?.abort()
+        if (rs.jobId) void cancelRun(rs.jobId).catch(console.error)
+        next.set(docName, { ...rs, phase: "idle", runError: "Stopped" })
+      }
+      return next
+    })
+    setRunAllActive(false)
+    setRunAllDone(0)
+    setRunAllTotal(0)
   }, [])
 
   async function createBlankTest() {
@@ -388,20 +470,25 @@ function staleLoadFailedContent(content: string): string | null {
 
   async function runTest(state: TestDocState): Promise<RunTestOutcome> {
     if (!state.test) return "error"
+    const docName = state.doc.name
     const resolved = resolveTestRunInputs(state.test, modules, projectDocs)
     if (!resolved.ok) {
-      setRunError(resolved.error)
+      patchRunState(docName, { runError: resolved.error, phase: "idle" })
       return "error"
     }
-    setRunPhase("running")
-    setRunningTestId(state.doc.id)
-    setStepStates(new Map())
-    setResults(null)
-    setResultRunId(null)
-    setRunError(null)
+    const ac = new AbortController()
+    abortByName.current.set(docName, ac)
+    patchRunState(docName, {
+      phase: "running",
+      stepStates: new Map(),
+      results: null,
+      resultRunId: null,
+      runError: null,
+      jobId: null,
+    })
     try {
       await flushPendingSave()
-      const { jobId } = await startRun(
+      const { jobId } = await startRunWithRetry(
         project.id,
         resolved.primary,
         model,
@@ -412,9 +499,17 @@ function staleLoadFailedContent(content: string): string | null {
         true,
         RunSource.Testing, // AI : flags the run in Logging (spec § Testing)
       )
+      patchRunState(docName, { jobId })
       refreshBilling().catch(console.error)
       const { run } = await awaitRun(jobId, {
-        onStep: (steps) => setStepStates((prev) => mergeStepStates(prev, steps)),
+        signal: ac.signal,
+        onStep: (steps) =>
+          setRunByName((prev) => {
+            const next = new Map(prev)
+            const cur = next.get(docName) ?? EMPTY_TEST_RUN
+            next.set(docName, { ...cur, stepStates: mergeStepStates(cur.stepStates, steps) })
+            return next
+          }),
         // AI : tests are unattended — auto-approve human-review gates.
         onHumanReview: () => Promise.resolve("approved" as const),
       })
@@ -422,52 +517,58 @@ function staleLoadFailedContent(content: string): string | null {
       refreshBilling().catch(console.error)
       const content = state.content ?? ""
       const persistedTest: RunTestReport = {
-        testDocName: state.doc.name,
+        testDocName: docName,
         results: report,
         testContentSig: testContentSig(content),
         pipelineSig,
       }
       // AI : upsert locally with verdict immediately so run history updates before PATCH returns.
       addRun({ ...run, source: run.source ?? RunSource.Testing, test: persistedTest })
-      setResults(report)
-      setResultRunId(run.id)
-      setRunPhase("done")
+      patchRunState(docName, { results: report, resultRunId: run.id, phase: "done" })
       // AI : pin verdict + content/pipeline hashes onto the run row (Supabase via PATCH /api/runs).
       updateRunTest(run.id, persistedTest).catch(console.error)
       return "ok"
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        patchRunState(docName, { phase: "idle", runError: "Stopped" })
+        return "stopped"
+      }
       if (isRunBillingError(err)) {
         refreshBilling().catch(console.error)
-        setRunError((err as Error).message)
-        setRunPhase("idle")
+        patchRunState(docName, { runError: (err as Error).message, phase: "idle" })
         return "billing"
       }
-      setRunError((err as Error).message)
-      setRunPhase("idle")
+      patchRunState(docName, { runError: (err as Error).message, phase: "idle" })
       return "error"
+    } finally {
+      abortByName.current.delete(docName)
     }
   }
 
-  async function runAllTests() {
-    if (!runnableTests.length) {
-      setActionError("No runnable test files — wait for loads to finish or fix parse errors first.")
+  async function runAllStaleTests() {
+    if (!staleTests.length) {
+      setActionError("No stale tests — every runnable test already has a current pass/fail verdict.")
       return
     }
     setActionError(null)
     setRunAllActive(true)
-    setRunAllTotal(runnableTests.length)
+    setRunAllTotal(staleTests.length)
+    setRunAllDone(0)
+    let billingHit = false
     try {
-      for (let i = 0; i < runnableTests.length; i++) {
-        setRunAllIndex(i + 1)
-        selectTest(runnableTests[i].doc.id, runnableTests[i].doc.name)
-        const outcome = await runTest(runnableTests[i])
-        if (outcome === "billing") break
-      }
+      await Promise.all(
+        staleTests.map(async (t) => {
+          const outcome = await runTest(t)
+          setRunAllDone((d) => d + 1)
+          if (outcome === "billing") billingHit = true
+        }),
+      )
     } finally {
       setRunAllActive(false)
-      setRunAllIndex(0)
+      setRunAllDone(0)
       setRunAllTotal(0)
     }
+    if (billingHit) setActionError("Some tests stopped — insufficient billing balance.")
   }
 
   async function generateWithAi() {
@@ -523,29 +624,35 @@ function staleLoadFailedContent(content: string): string | null {
         description={`Pin exact per-step outputs in *_testing.json files, then run to pinpoint where ${project.name} goes wrong.`}
         actions={
           <>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 bg-transparent"
-              onClick={() => void runAllTests()}
-              disabled={runBlocked || runBusy || runnableTests.length === 0}
-              title={
-                runnableTests.length === 0
-                  ? "no runnable test files yet"
-                  : runBlocked
-                    ? typesInvalid
-                      ? "fix type errors first"
-                      : "fix pipeline errors first"
-                    : undefined
-              }
-            >
-              {runAllActive ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : (
+            {runAllActive ? (
+              <div className="flex items-center gap-1">
+                <Button size="sm" variant="outline" className="h-8 bg-transparent" disabled>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Running stale ({runAllDone}/{runAllTotal})…
+                </Button>
+                <RunStopButton className="h-8" onClick={() => stopAllRunningTests()} />
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 bg-transparent"
+                onClick={() => void runAllStaleTests()}
+                disabled={runBlocked || runBusy || staleTests.length === 0}
+                title={
+                  staleTests.length === 0
+                    ? "no stale tests — all runnable tests have a current verdict"
+                    : runBlocked
+                      ? typesInvalid
+                        ? "fix type errors first"
+                        : "fix pipeline errors first"
+                      : undefined
+                }
+              >
                 <ListChecks className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              {runAllActive ? `Running all (${runAllIndex}/${runAllTotal})…` : "Run all tests"}
-            </Button>
+                Run all stale
+              </Button>
+            )}
             <Button size="sm" variant="outline" className="h-8 bg-transparent" onClick={() => setAiOpen((v) => !v)}>
               <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Generate with AI
             </Button>
@@ -628,27 +735,43 @@ function staleLoadFailedContent(content: string): string | null {
                 const status = testStatus(t)
                 const isSelected = selected?.doc.id === t.doc.id
                 const lastVerdict = resolveLastVerdict(t.doc.name)
+                const testRun = runByName.get(t.doc.name) ?? EMPTY_TEST_RUN
+                const isRunning = testRun.phase === "running"
                 const badge = sidebarTestBadge(status, lastVerdict)
                 return (
                   <li key={t.doc.id}>
-                    <button
-                      type="button"
-                      onClick={() => selectTest(t.doc.id, t.doc.name)}
+                    <div
                       className={cn(
-                        "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent",
+                        "flex items-center gap-1 rounded-md px-1 py-1",
                         isSelected && "bg-secondary",
                       )}
                     >
-                      {lastVerdict === null ? (
-                        <CheckSquare className="h-4 w-4 shrink-0 text-primary" />
-                      ) : (
-                        <TestLastVerdictIcon passed={lastVerdict} />
+                      <button
+                        type="button"
+                        onClick={() => selectTest(t.doc.id, t.doc.name)}
+                        className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-accent"
+                      >
+                        {isRunning ? (
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                        ) : lastVerdict === null ? (
+                          <CheckSquare className="h-4 w-4 shrink-0 text-primary" />
+                        ) : (
+                          <TestLastVerdictIcon passed={lastVerdict} />
+                        )}
+                        <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{t.doc.name}</span>
+                        <Badge variant="outline" className={cn("shrink-0 font-mono text-[9px]", badge.className)}>
+                          {badge.label}
+                        </Badge>
+                      </button>
+                      {isRunning && (
+                        <RunStopButton
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            stopTest(t.doc.name)
+                          }}
+                        />
                       )}
-                      <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{t.doc.name}</span>
-                      <Badge variant="outline" className={cn("shrink-0 font-mono text-[9px]", badge.className)}>
-                        {badge.label}
-                      </Badge>
-                    </button>
+                    </div>
                   </li>
                 )
               })}
@@ -666,16 +789,17 @@ function staleLoadFailedContent(content: string): string | null {
               projectDocs={projectDocs}
               onSaveEdit={(draft) => void saveEdit(selected, draft)}
               onRun={(contentToSave) => void saveAndRun(selected, contentToSave)}
+              onStop={() => stopTest(selected.doc.name)}
               onRetryLoad={() => loadTestDoc(selected.doc.id)}
               onDirtyContentChange={onDirtyContentChange}
               lastVerdict={resolveLastVerdict(selected.doc.name)}
               runs={runs}
               runDisabled={runBlocked || runBusy}
-              runPhase={runningTestId === selected.doc.id ? runPhase : "idle"}
-              stepStates={stepStates}
-              results={runningTestId === selected.doc.id ? results : null}
-              resultRunId={runningTestId === selected.doc.id ? resultRunId : null}
-              runError={runningTestId === selected.doc.id ? runError : null}
+              runPhase={selectedRun.phase}
+              stepStates={selectedRun.stepStates}
+              results={selectedRun.results}
+              resultRunId={selectedRun.resultRunId}
+              runError={selectedRun.runError}
               modules={modules}
             />
           ) : (
@@ -840,6 +964,7 @@ function TestDetail({
   projectDocs,
   onSaveEdit,
   onRun,
+  onStop,
   onRetryLoad,
   onDirtyContentChange,
   lastVerdict,
@@ -857,6 +982,7 @@ function TestDetail({
   projectDocs: DocRef[]
   onSaveEdit: (draft: string) => void
   onRun: (contentToSave: string | null) => void
+  onStop: () => void
   onRetryLoad: () => void
   onDirtyContentChange: (docName: doc_name_string, content: string | null) => void
   lastVerdict: boolean | null
@@ -966,20 +1092,26 @@ function TestDetail({
             </>
           )}
           {!state.parseError && !state.loadError && (
-            <Button
-              size="sm"
-              className="h-8"
-              onClick={() => onRun(dirty ? serialized : null)}
-              disabled={runDisabled || draftBlocked}
-              title={runTitle}
-            >
-              {runPhase === "running" ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : (
+            runPhase === "running" ? (
+              <div className="flex items-center gap-1">
+                <Button size="sm" className="h-8" disabled>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Running…
+                </Button>
+                <RunStopButton className="h-8" onClick={onStop} />
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                className="h-8"
+                onClick={() => onRun(dirty ? serialized : null)}
+                disabled={runDisabled || draftBlocked}
+                title={runTitle}
+              >
                 <Play className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              {runPhase === "running" ? "Running…" : dirty ? "Save & run" : "Run test"}
-            </Button>
+                {dirty ? "Save & run" : "Run test"}
+              </Button>
+            )
           )}
         </div>
       </div>
@@ -1034,7 +1166,10 @@ function TestDetail({
 
           {runPhase === "running" && (
             <section>
-              <SectionLabel>run progress</SectionLabel>
+              <div className="flex items-center gap-2">
+                <SectionLabel>run progress</SectionLabel>
+                <RunStopButton onClick={onStop} />
+              </div>
               <ul className="mt-1.5 space-y-1">
                 {modules.map((m) => {
                   const s = stepStates.get(m.id)?.status ?? "idle"

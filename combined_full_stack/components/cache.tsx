@@ -14,32 +14,18 @@ import { QuoteLinks, quotesFromJson } from "@/components/quote-links"
 import { IoPager } from "@/components/logging/io-pager"
 import { API_ROUTES } from "@/lib/api-routes"
 import { cn } from "@/lib/utils"
+import {
+  cacheListKey,
+  readCachedCacheDetail,
+  readCachedCacheList,
+  writeCachedCacheDetail,
+  writeCachedCacheList,
+  type CacheEntryDetail,
+  type CacheEntryRow,
+} from "@/lib/cache-list-cache"
 import { timeAgo } from "@/lib/time-ago"
 import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
 import { Database, Maximize2, Search, X, Zap } from "lucide-react"
-import type { DocId, InputPreviewItem, ModelId, ModuleId, ProjectId } from "@/lib/types"
-
-type CacheEntryRow = {
-  key: string
-  projectId: ProjectId
-  projectName?: string
-  moduleId: ModuleId
-  moduleLabel?: string
-  model: ModelId
-  inputDocIds: DocId[]
-  hits: number
-  costCents?: number
-  lastHitAt?: number
-  createdAt?: number
-  inputPreview?: string
-  sizeBytes: number
-}
-
-type CacheEntryDetail = CacheEntryRow & {
-  outputJson: string
-  docId?: DocId
-  inputPreviewItems?: InputPreviewItem[]
-}
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
@@ -85,13 +71,21 @@ export function Cache() {
     output: false,
   })
   const [scope, setScope] = useState<"project" | "all">("project")
-  const [entries, setEntries] = useState<CacheEntryRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const listKey = cacheListKey({ projectId: project.id, scope, query, searchFields })
+  const [entries, setEntries] = useState<CacheEntryRow[]>(() => readCachedCacheList(listKey) ?? [])
+  const [loading, setLoading] = useState(() => !readCachedCacheList(listKey))
   const [detail, setDetail] = useState<CacheEntryDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
 
   const load = useCallback(async () => {
-    setLoading(true)
+    const key = cacheListKey({ projectId: project.id, scope, query, searchFields })
+    const cached = readCachedCacheList(key)
+    if (cached) {
+      setEntries(cached)
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
     try {
       const params = new URLSearchParams()
       if (query.trim()) params.set("q", query.trim())
@@ -102,13 +96,24 @@ export function Cache() {
       const res = await fetch(`${API_ROUTES.cache}?${params}`)
       if (!res.ok) throw new Error("cache fetch failed")
       const data = (await res.json()) as { entries: CacheEntryRow[] }
+      writeCachedCacheList(key, data.entries)
       setEntries(data.entries)
     } catch {
-      setEntries([])
+      if (!cached) setEntries([])
     } finally {
       setLoading(false)
     }
   }, [query, searchFields, scope, project.id])
+
+  useEffect(() => {
+    const cached = readCachedCacheList(listKey)
+    if (cached) {
+      setEntries(cached)
+      setLoading(false)
+    } else {
+      setLoading(true)
+    }
+  }, [listKey])
 
   useEffect(() => {
     const t = window.setTimeout(() => void load(), 200)
@@ -116,14 +121,21 @@ export function Cache() {
   }, [load])
 
   const openDetail = useCallback(async (key: string) => {
-    setDetailLoading(true)
+    const cached = readCachedCacheDetail(key)
+    if (cached) {
+      setDetail(cached)
+      setDetailLoading(false)
+    } else {
+      setDetailLoading(true)
+    }
     try {
       const res = await fetch(API_ROUTES.cacheEntry(key))
       if (!res.ok) throw new Error("cache detail fetch failed")
       const data = (await res.json()) as { entry: CacheEntryDetail }
+      writeCachedCacheDetail(key, data.entry)
       setDetail(data.entry)
     } catch {
-      setDetail(null)
+      if (!cached) setDetail(null)
     } finally {
       setDetailLoading(false)
     }

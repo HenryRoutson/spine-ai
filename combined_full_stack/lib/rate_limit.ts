@@ -28,10 +28,14 @@ function warnMissingUpstash(): void {
   else console.warn(msg);
 }
 
-function effectiveBackend(): RateLimitBackend {
+type EffectiveBackend = RateLimitBackend | "blocked";
+
+function effectiveBackend(): EffectiveBackend {
   if (resolveRateLimitBackend() === "memory") return "memory";
   if (!upstashConfigured()) {
     warnMissingUpstash();
+    // AI : Vercel serverless — in-memory limits are per-instance and trivially bypassed.
+    if (process.env.VERCEL) return "blocked";
     return "memory";
   }
   return "upstash";
@@ -74,7 +78,9 @@ async function upstashCheck(key: string, tier: RateLimitTier): Promise<RateLimit
 }
 
 export async function checkRateLimit(key: RateLimitKey, tier: RateLimitTier): Promise<RateLimitResult> {
-  if (effectiveBackend() === "memory") return memoryCheck(key, tier);
+  const backend = effectiveBackend();
+  if (backend === "blocked") return { ok: false, retryAfterSec: 60 };
+  if (backend === "memory") return memoryCheck(key, tier);
   return upstashCheck(key, tier);
 }
 

@@ -287,6 +287,8 @@ There should be a single button to click to copy the whole log of a run.
 visualise prompt failures in a grid which is n_prompts x (max_retries + 1) where 1 is the first prompt without a retry.
 Ensure all data from the run is included, including failures, and the whole log including the pipeline can be easily copied with a button.
 
+ensure there is a setting to change what is displayed for each step between excel or json or other.
+
 # documents
 
 the documents tab contains all documents and their size with the ability to view them. you can also view pdf documents markdown in raw text or as formatted or as the original pdf and the same for word and other more complex documents. 

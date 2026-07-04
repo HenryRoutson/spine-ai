@@ -385,7 +385,8 @@ export function isJobResuming(job: RunJob): boolean {
   return !job.paused && !job.clientStep && !job.run && !job.error;
 }
 
-export const MAX_CONCURRENT_RUNS_PER_USER = 2;
+// AI : raised for parallel test batches — each stale test gets its own job.
+export const MAX_CONCURRENT_RUNS_PER_USER = 12;
 
 export function countActiveJobs(ownerId: JobOwnerId): number {
   const prefix = `${ownerId}:`;
@@ -444,6 +445,11 @@ export async function finishJob(
   const job = await loadJob(ownerId, id, db);
   if (!job) {
     jobLog.warn(`finishJob — job not found`, { jobId: id, ownerId });
+    return;
+  }
+  // AI : user cancelled — don't let a late pipeline finish overwrite the terminal error.
+  if (job.error?.startsWith("Cancelled") && outcome.run) {
+    jobLog.info(`finishJob skipped — job was cancelled`, { jobId: id, ownerId, runId: outcome.run.id });
     return;
   }
   jobLog.info(`finishJob`, {
@@ -512,6 +518,16 @@ export async function getJobForProgress(
     jobLog.warn(`getJobForProgress remote merge failed`, { jobId: id, error: supabaseErrorMessage(err) });
   }
   return job;
+}
+
+// AI : mark an in-flight job terminal so progress polls stop; late pipeline finish is ignored (see finishJob).
+export async function cancelJob(ownerId: JobOwnerId, id: RunJobId, db: JobDb): Promise<boolean> {
+  const job = await loadJob(ownerId, id, db);
+  if (!job) return false;
+  if (job.run || job.error) return true;
+  await finishJob(ownerId, id, { error: "Cancelled by user" }, db);
+  jobLog.info(`cancelJob`, { jobId: id, ownerId });
+  return true;
 }
 
 // AI : extra context for progress 404s — helps distinguish cold-start races from lost jobs.

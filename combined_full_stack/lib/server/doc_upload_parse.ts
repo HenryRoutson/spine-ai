@@ -29,6 +29,39 @@ export function validateUploadFile(file: File | null): UploadValidationError | n
   return null
 }
 
+// AI : magic-byte sniff — reject extension spoofing (e.g. .html renamed .pdf).
+export function validateUploadBytes(
+  bytes: Uint8Array,
+  filename: string,
+  type: InputType,
+): UploadValidationError | null {
+  if (bytes.length < 4) return { message: "file too small", status: 400 }
+  const ext = filename.split(".").pop()?.toLowerCase() ?? ""
+  const head = Array.from(bytes.slice(0, 8))
+  const isPdf = head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46
+  const isPng = head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47
+  const isJpeg = head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff
+  const isZip = head[0] === 0x50 && head[1] === 0x4b && (head[2] === 0x03 || head[2] === 0x05 || head[2] === 0x07)
+  if (type === "pdf" && !isPdf) return { message: "file does not look like a PDF", status: 400 }
+  if (type === "image" && ext === "png" && !isPng) return { message: "file does not look like a PNG", status: 400 }
+  if (type === "image" && (ext === "jpg" || ext === "jpeg") && !isJpeg) {
+    return { message: "file does not look like a JPEG", status: 400 }
+  }
+  if (type === "word" && (ext === "docx" || ext === "doc") && ext === "docx" && !isZip) {
+    return { message: "file does not look like a Word document", status: 400 }
+  }
+  if (type === "excel" && (ext === "xlsx" || ext === "xls") && ext === "xlsx" && !isZip) {
+    return { message: "file does not look like an Excel workbook", status: 400 }
+  }
+  if (type === "json") {
+    const probe = new TextDecoder().decode(bytes.slice(0, 256)).trimStart()
+    if (!probe.startsWith("{") && !probe.startsWith("[")) {
+      return { message: "file does not look like JSON", status: 400 }
+    }
+  }
+  return null
+}
+
 export { inputTypeFromFilename }
 
 export function shouldSaveOriginalBytes(type: InputType): boolean {

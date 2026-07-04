@@ -1,6 +1,6 @@
 import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
 import { createClient } from "@/utils/supabase/server";
-import { isProductionDeploy, isVercelWithoutSupabase, type user_id_string } from "./require_auth";
+import { isProductionDeploy, isVercelWithoutSupabase, isLocalDevMode, type user_id_string } from "./require_auth";
 import {
   ensureSeeded,
   ensureSeedDocs,
@@ -74,5 +74,6 @@ export async function getStore(): Promise<Store> {
     storeLog.debug(`Supabase unavailable — local JsonStore`, { error: storeErrorMessage(err, "Store load failed") });
   }
   storeLog.debug(`using local JsonStore`);
+  if (!isLocalDevMode()) throw new Error(AUTH_SIGN_IN_REQUIRED);
   return getLocalStore();
 }

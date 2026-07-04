@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest, after } from "next/server";
 import { cookies } from "next/headers";
 import { apiError } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
+import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate_limit";
+import type { RateLimitKey } from "@/lib/rate_limit_config";
+import { secureSessionCookieOptions } from "@/lib/server/cookie_options";
 import { parseRequestJson, parseSharedLinkId, sharedLinkRunBodySchema } from "@/lib/server/api_schemas";
 import {
   assertCanStartRun,
@@ -115,6 +118,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { id } = await ctx.params;
   const linkId = parseSharedLinkId(id);
   if (!linkId) return apiError("link not found", 404);
+
+  const ip = clientIpFromHeaders(req.headers);
+  const runLimitKey = `shared-run:${linkId}:${ip}` as RateLimitKey;
+  const runLimited = await checkRateLimit(runLimitKey, "shared_run");
+  if (!runLimited.ok) {
+    return apiError("Too many runs on this link — try again later.", HTTP.TOO_MANY_REQUESTS, "rate_limited");
+  }
+
   const link = await getSharedLink(linkId);
   if (!link) return apiError("link not found", 404);
 
@@ -207,12 +218,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const progressToken = registerSharedProgressToken(link.id, link.ownerId, jobId);
 
   const res = NextResponse.json({ jobId, progressToken, sessionId });
-  res.cookies.set(SESSION_COOKIE, sessionId, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
+  res.cookies.set(SESSION_COOKIE, sessionId, secureSessionCookieOptions(60 * 60 * 24 * 30));
 
   after(async () => {
     await withJobLogging(link.ownerId, jobId, jobDb, async () => {
