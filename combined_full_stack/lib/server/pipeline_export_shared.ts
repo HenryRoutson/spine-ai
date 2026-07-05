@@ -268,9 +268,37 @@ const SECRET_VALUE_PATTERNS: RegExp[] = [
   /\beyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/,
 ];
 
+// AI : .env.example placeholders — empty assignment or public URL, not live secrets.
+const ENV_KEY_EMPTY_ASSIGNMENT = /^\s*=\s*(""|''|)\s*(?:#.*)?(?:\r?\n|$)/;
+const ENV_KEY_PUBLIC_URL_ASSIGNMENT = /^\s*=\s*"https?:\/\//;
+
+function isAllowedEnvKeyMention(source: string, matchIndex: number, matchLength: number): boolean {
+  const after = source.slice(matchIndex + matchLength);
+  if (!/^\s*=/.test(after)) return true;
+  return ENV_KEY_EMPTY_ASSIGNMENT.test(after) || ENV_KEY_PUBLIC_URL_ASSIGNMENT.test(after);
+}
+
+function envKeyNameLeaks(source: string): string[] {
+  const hits = new Set<string>();
+  for (const re of ENV_KEY_NAME_PATTERNS) {
+    const global = new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`);
+    let match: RegExpExecArray | null;
+    while ((match = global.exec(source)) !== null) {
+      if (isAllowedEnvKeyMention(source, match.index, match[0].length)) continue;
+      hits.add(re.source);
+      break;
+    }
+  }
+  return [...hits];
+}
+
 export function findEnvLeaksInExport(source: string): string[] {
   const hits = new Set<string>();
-  for (const re of [...ENV_ACCESS_PATTERNS, ...ENV_KEY_NAME_PATTERNS, ...SECRET_VALUE_PATTERNS]) {
+  for (const re of ENV_ACCESS_PATTERNS) {
+    if (re.test(source)) hits.add(re.source);
+  }
+  for (const leak of envKeyNameLeaks(source)) hits.add(leak);
+  for (const re of SECRET_VALUE_PATTERNS) {
     if (re.test(source)) hits.add(re.source);
   }
   return [...hits];

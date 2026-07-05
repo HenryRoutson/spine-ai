@@ -4,7 +4,7 @@ export type contact_email_string = string
 export const LEGAL = {
   productName: "Spine",
   controllerName: "Spine (Antler hackathon project)",
-  contactEmail: "privacy@usespine.com" as contact_email_string,
+  contactEmail: "spine-ai.dev@proton.me" as contact_email_string,
   policyVersion: "2026-06-01" as policy_version_string,
   lastUpdated: "28 June 2026",
   minAgeYears: 16,

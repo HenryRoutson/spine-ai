@@ -7,6 +7,12 @@ name might already be taken https://www.getspine.ai/
 add translations and new langauges by using constants
 
 
+use auto visualiser
+
+
+Allow people to make money with their own stripe.
+Or allow markups on their deployments and ppl pay stripe.
+
 please have claude code with a cheap model as a backup if the pipeline fails
 add the idea of fallback pipelines
 

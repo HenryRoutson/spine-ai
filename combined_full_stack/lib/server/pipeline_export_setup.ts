@@ -62,7 +62,7 @@ export function generateEnvExample(project: Project): string {
       "# LLM inference (OpenRouter-compatible API)",
       'OPENROUTER_API_KEY=""',
       'OPENROUTER_SITE_URL="http://localhost:3000"',
-      'OPENROUTER_APP_TITLE="my-pipeline"',
+      'OPENROUTER_APP_TITLE=""',
       "",
     );
   }
@@ -132,8 +132,8 @@ export function generateSetupReadme(project: Project, slug: string): string {
     lines.push(
       "## 2. LLM",
       "",
-      "Implement `llmStructured` / `llm_batch_structured` (Python) or wire `configurePipelineRuntime({ openRouterApiKey })` and replace the stubs.",
-      "Use the same model ids as in the Forge pipeline step settings.",
+      "Wire `configurePipelineRuntime({ openRouterApiKey })` (or Python equivalent) — `llmStructured` calls OpenRouter by default.",
+      "Override the model via `openRouterModel` in runtime config, or edit step bodies to pass a different slug.",
       "",
     );
   }
@@ -251,9 +251,145 @@ export function assertNoSecretValuesInExport(source: string): void {
 export function generateRequirementsTxt(needs: ExportRuntimeNeeds): string {
   const lines = ["# Python pipeline runner", "pydantic>=2", "python-dotenv>=1"];
   if (needs.llm || needs.llmBatch || needs.visionOcr) {
-    lines.push("httpx>=0.27  # optional — wire llm_structured to your provider");
+    lines.push("httpx>=0.27  # OpenRouter client for llm_structured");
   }
   return lines.join("\n") + "\n";
+}
+
+function openRouterHelpersTs(): string[] {
+  return [
+    'const OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions";',
+    'const DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-chat";',
+    "",
+    "function extractJsonReply(raw: string): string {",
+    "  const fenced = raw.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);",
+    "  const body = (fenced ? fenced[1] : raw).trim();",
+    '  const start = body.search(/[{[]/);',
+    '  const end = Math.max(body.lastIndexOf("}"), body.lastIndexOf("]"));',
+    "  return start !== -1 && end > start ? body.slice(start, end + 1) : body;",
+    "}",
+    "",
+    "async function openRouterChat(prompt: string, jsonMode: boolean): Promise<string> {",
+    '  if (!runtime.openRouterApiKey) throw new Error("configurePipelineRuntime({ openRouterApiKey }) first");',
+    "  const res = await fetch(OPENROUTER_CHAT_URL, {",
+    '    method: "POST",',
+    "    headers: {",
+    '      Authorization: `Bearer ${runtime.openRouterApiKey}`,',
+    '      "Content-Type": "application/json",',
+    '      "HTTP-Referer": runtime.openRouterSiteUrl ?? "http://localhost:3000",',
+    '      "X-Title": runtime.openRouterAppTitle ?? "forge-pipeline-export",',
+    "    },",
+    "    body: JSON.stringify({",
+    "      model: runtime.openRouterModel ?? DEFAULT_OPENROUTER_MODEL,",
+    '      messages: [{ role: "user", content: prompt }],',
+    "      temperature: 0,",
+    "      max_tokens: 8192,",
+    "      provider: { allow_fallbacks: false },",
+    '      ...(jsonMode ? { response_format: { type: "json_object" } } : {}),',
+    "    }),",
+    "  });",
+    "  if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${await res.text()}`);",
+    "  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };",
+    "  const content = data.choices?.[0]?.message?.content;",
+    '  if (!content) throw new Error("OpenRouter returned no message content");',
+    "  return content;",
+    "}",
+  ];
+}
+
+function llmStructuredStubTs(): string[] {
+  return [
+    "async function llmStructured<T>(prompt: string, schema: unknown): Promise<T> {",
+    '  if (!runtime.openRouterApiKey) throw new Error("configurePipelineRuntime({ openRouterApiKey }) first");',
+    "  const schemaJson = JSON.stringify(schema ?? {}, null, 2);",
+    '  const base = `${prompt}\\n\\nRespond with ONLY a JSON value that validates against this JSON Schema:\\n${schemaJson}`;',
+    '  let lastError = "";',
+    "  for (let attempt = 0; attempt < 2; attempt++) {",
+    "    const ask =",
+    "      attempt === 0",
+    '        ? base',
+    '        : `${base}\\n\\nYour previous reply failed validation:\\n${lastError}\\nReturn corrected JSON only.`;',
+    "    const raw = await openRouterChat(ask, true);",
+    "    const json = extractJsonReply(raw);",
+    "    try {",
+    "      return JSON.parse(json) as T;",
+    "    } catch (e) {",
+    "      lastError = (e as Error).message;",
+    '      if (attempt === 1) throw new Error(`structured response parse failed after retry: ${lastError}`);',
+    "    }",
+    "  }",
+    '  throw new Error("structured response failed");',
+    "}",
+  ];
+}
+
+function openRouterHelpersPy(): string[] {
+  return [
+    "import re",
+    "",
+    "import httpx",
+    "",
+    'OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"',
+    'DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-chat"',
+    "",
+    "def _extract_json_reply(raw: str) -> str:",
+    '    m = re.search(r"```(?:json)?\\s*([\\s\\S]*?)```", raw, re.I)',
+    "    body = (m.group(1) if m else raw).strip()",
+    '    starts = [body.find("{"), body.find("[")]',
+    "    start = min(x for x in starts if x >= 0) if any(x >= 0 for x in starts) else -1",
+    '    end = max(body.rfind("}"), body.rfind("]"))',
+    "    return body[start : end + 1] if start != -1 and end > start else body",
+    "",
+    "async def _open_router_chat(prompt: str, json_mode: bool) -> str:",
+    "    if not runtime.open_router_api_key:",
+    '        raise RuntimeError("configure_pipeline_runtime(open_router_api_key=...) first")',
+    "    headers = {",
+    '        "Authorization": f"Bearer {runtime.open_router_api_key}",',
+    '        "Content-Type": "application/json",',
+    '        "HTTP-Referer": runtime.open_router_site_url or "http://localhost:3000",',
+    '        "X-Title": runtime.open_router_app_title or "forge-pipeline-export",',
+    "    }",
+    "    payload: dict[str, object] = {",
+    '        "model": runtime.open_router_model or DEFAULT_OPENROUTER_MODEL,',
+    '        "messages": [{"role": "user", "content": prompt}],',
+    "        \"temperature\": 0,",
+    "        \"max_tokens\": 8192,",
+    '        "provider": {"allow_fallbacks": False},',
+    "    }",
+    "    if json_mode:",
+    '        payload["response_format"] = {"type": "json_object"}',
+    "    async with httpx.AsyncClient(timeout=120) as client:",
+    "        res = await client.post(OPENROUTER_CHAT_URL, headers=headers, json=payload)",
+    "    if res.status_code != 200:",
+    '        raise RuntimeError(f"OpenRouter {res.status_code}: {res.text}")',
+    "    data = res.json()",
+    '    content = (data.get("choices") or [{}])[0].get("message", {}).get("content")',
+    "    if not content:",
+    '        raise RuntimeError("OpenRouter returned no message content")',
+    "    return content",
+  ];
+}
+
+function llmStructuredStubPy(): string[] {
+  return [
+    "async def llm_structured(prompt: str, schema: Any) -> Any:",
+    "    if not runtime.open_router_api_key:",
+    '        raise RuntimeError("configure_pipeline_runtime(open_router_api_key=...) first")',
+    "    schema_json = json.dumps(schema or {}, indent=2)",
+    '    base = f"{prompt}\\n\\nRespond with ONLY a JSON value that validates against this JSON Schema:\\n{schema_json}"',
+    '    last_error = ""',
+    "    for attempt in range(2):",
+    "        ask = base if attempt == 0 else f\"{base}\\n\\nYour previous reply failed validation:\\n{last_error}\\nReturn corrected JSON only.\"",
+    "        raw = await _open_router_chat(ask, True)",
+    "        json_text = _extract_json_reply(raw)",
+    "        try:",
+    "            return json.loads(json_text)",
+    "        except json.JSONDecodeError as e:",
+    "            last_error = str(e)",
+    "            if attempt == 1:",
+    '                raise RuntimeError(f"structured response parse failed after retry: {last_error}") from e',
+    '    raise RuntimeError("structured response failed")',
+  ];
 }
 
 export function generatePipelineSetupFiles(project: Project): PipelineSetupFile[] {
@@ -279,7 +415,7 @@ export function generateRuntimeConfigSectionTs(needs: ExportRuntimeNeeds): strin
     "// === runtime config (load .env in your runner — pass values here, not in this file) ===",
     "export type PipelineRuntime = {",
     ...(needs.llm || needs.llmBatch || needs.visionOcr
-      ? ["  openRouterApiKey?: string;", "  openRouterSiteUrl?: string;", "  openRouterAppTitle?: string;"]
+      ? ["  openRouterApiKey?: string;", "  openRouterModel?: string;", "  openRouterSiteUrl?: string;", "  openRouterAppTitle?: string;"]
       : []),
     ...(needs.quote ? ["  sourceText?: string;", "  sourceDocId?: string;"] : []),
     ...(needs.humanReview ? ["  onHumanReview?: <T>(input: T) => Promise<void>;"] : []),
@@ -304,11 +440,9 @@ export function generateRuntimeStubsTs(needs: ExportRuntimeNeeds): string {
   if (needs.llm || needs.llmBatch || needs.visionOcr) {
     lines.push(
       "",
-      "async function llmStructured<T>(prompt: string, _schema: unknown): Promise<T> {",
-      '  if (!runtime.openRouterApiKey) throw new Error("configurePipelineRuntime({ openRouterApiKey }) first");',
-      "  // AI : TODO export — implement OpenRouter (or other) chat/completions fetch here",
-      '  throw new Error("wire llmStructured to your LLM client");',
-      "}",
+      ...openRouterHelpersTs(),
+      "",
+      ...llmStructuredStubTs(),
       "",
       "async function llmBatchStructured<T>(",
       "  items: unknown[],",
@@ -359,6 +493,7 @@ export function generateRuntimeConfigSectionPy(needs: ExportRuntimeNeeds): strin
   if (needs.llm || needs.llmBatch || needs.visionOcr) {
     lines.push(
       "    open_router_api_key: str | None = None",
+      "    open_router_model: str | None = None",
       "    open_router_site_url: str | None = None",
       "    open_router_app_title: str | None = None",
     );
@@ -379,11 +514,9 @@ export function generateRuntimeStubsPy(needs: ExportRuntimeNeeds): string {
   if (needs.llm || needs.llmBatch || needs.visionOcr) {
     lines.push(
       "",
-      "async def llm_structured(prompt: str, schema: Any) -> Any:",
-      '    if not runtime.open_router_api_key:',
-      '        raise RuntimeError("configure_pipeline_runtime(open_router_api_key=...) first")',
-      "    # AI : TODO export — implement OpenRouter (or other) chat/completions fetch here",
-      '    raise NotImplementedError("wire llm_structured to your LLM client")',
+      ...openRouterHelpersPy(),
+      "",
+      ...llmStructuredStubPy(),
       "",
       "async def llm_batch_structured(",
       "    items: list[Any],",

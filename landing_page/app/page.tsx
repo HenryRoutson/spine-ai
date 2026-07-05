@@ -37,7 +37,7 @@ const FAQS: FaqItem[] = [
   {
     num: "03",
     q: "Why can't I use Python instead?",
-    a: "You can! But why would you write all the boilerplate we've handled?",
+    a: "You can! But why would you write all the boilerplate we've handled? Not to mention you can export your spine project as Python or TypeScript at any time.",
   },
   {
     num: "04",
@@ -89,7 +89,7 @@ export default function Home() {
               className="inline-flex items-center gap-2.5 text-xs text-muted transition-colors hover:text-foreground"
             >
               <span>developed by engineers from</span>
-              <Image src="/kpmg-logo.png" alt="KPMG" width={50} height={20} className="grayscale opacity-90" />
+              <Image src="/kpmg-logo.svg" alt="KPMG" width={50} height={20} className="brightness-0 invert opacity-70" />
             </a>
             <a
               href="https://www.antler.co/"
