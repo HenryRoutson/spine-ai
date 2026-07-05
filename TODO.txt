@@ -7,6 +7,11 @@ name might already be taken https://www.getspine.ai/
 add translations and new langauges by using constants
 
 
+please have claude code with a cheap model as a backup if the pipeline fails
+add the idea of fallback pipelines
+
+how to export arbitrary file types? code runs on local broswer and saves?
+
 use learning_tips.txt under loading bar
 use new loading animation automic_code/loader
 

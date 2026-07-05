@@ -36,6 +36,8 @@ import {
 } from "@/components/ui/select"
 import { StepInputDescription, moduleInputDescription } from "@/components/step-input-description"
 import { isMultiDocInputModule, inputTypeLabel } from "@/lib/inference-input"
+import { validateNamedInputs } from "@/lib/inference-setup-files"
+import { validateInferenceDocAssignment } from "@/lib/inference-validity"
 import { pairedCombineInputModule } from "@/lib/pipeline-layout"
 import type { StepUiState } from "@/lib/run-engine"
 import { useDocViewer } from "@/lib/doc-viewer"
@@ -291,7 +293,13 @@ function expectedIssue(
 }
 
 // AI : error-level draft problems that should block Run (warnings like placeholders are runnable).
-export function draftHasErrors(draft: TestDraft, project: Project): boolean {
+export function draftHasErrors(draft: TestDraft, project: Project, projectDocs: DocRef[]): boolean {
+  const inputs: NonNullable<SpineTestFile["inputs"]> = {}
+  for (const [label, names] of Object.entries(draft.inputs)) {
+    const clean = names.filter((n) => n.trim())
+    inputs[label] = clean.length === 1 ? clean[0] : clean
+  }
+  if (validateNamedInputs(inputs, project, projectDocs).some((i) => i.level === "error")) return true
   return draft.expected.some((row) => {
     const mod = project.modules.find((m) => sameStep(m.label, row.label))
     if (!mod || !isComparableStep(mod)) return false
@@ -622,6 +630,17 @@ function InputStepCard({
   onRemoveMissing: (name: doc_name_string) => void
   project: Project
 }) {
+  const assignmentMessages = slotDocs.flatMap((doc) => {
+    const issue = validateInferenceDocAssignment(module, doc)
+    return issue ? [`${doc.name}: ${issue.message}`] : []
+  })
+  const slotIssue = [
+    missing.length ? `not found in this project: ${missing.join(", ")}` : "",
+    ...assignmentMessages,
+  ]
+    .filter(Boolean)
+    .join("; ")
+
   return (
     <div className="rounded-lg border border-sky-500/20 bg-sky-500/5">
       <div className="flex flex-wrap items-center gap-2 border-b border-sky-500/15 px-3 py-2">
@@ -637,7 +656,7 @@ function InputStepCard({
           inputModule={module}
           outModel={modelName(project.models, module.outStructureId)}
           docs={slotDocs}
-          issue={missing.length ? { message: `not found in this project: ${missing.join(", ")}` } : undefined}
+          issue={slotIssue ? { message: slotIssue } : undefined}
           onOpenPicker={onOpenPicker}
           onOpenDoc={onOpenDoc}
           onRemoveDoc={onRemoveDoc}

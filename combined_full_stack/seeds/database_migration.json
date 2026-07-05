@@ -290,10 +290,10 @@
       "file": "database_migration/data/database_legacy_users.json"
     },
     {
-      "name": "database_field_mapping.json",
-      "type": "json",
+      "name": "database_field_mapping.txt",
+      "type": "text",
       "label": "inference",
-      "file": "database_migration/data/database_field_mapping.json"
+      "file": "database_migration/data/database_field_mapping.txt"
     },
     {
       "name": "database_migration_testing.json",

@@ -1,0 +1,1909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Automatic JSON analysis</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0f172a;
+  --surface: #1e293b;
+  --surface2: #334155;
+  --border: #475569;
+  --text: #f1f5f9;
+  --muted: #94a3b8;
+  --accent: #3b82f6;
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --err: #ef4444;
+  --stat: #64748b;
+  --radius: 8px;
+  --mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+}
+
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+}
+
+header {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--surface2);
+  background: #0b1220;
+}
+
+header h1 { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; }
+header p { margin-top: 4px; font-size: 12px; color: var(--muted); max-width: 900px; line-height: 1.5; }
+
+main {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  overflow: hidden;
+}
+
+aside {
+  padding: 14px;
+  border-right: 1px solid var(--surface2);
+  overflow-y: auto;
+  background: #0b1220;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.control label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 180px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+
+.mode-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--surface);
+  padding: 3px;
+  border-radius: var(--radius);
+  border: 1px solid var(--surface2);
+}
+
+.mode-toggle button {
+  flex: 1;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.mode-toggle button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+button.primary {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button.primary:hover { filter: brightness(1.08); }
+
+button.secondary {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+button.secondary:hover { background: var(--surface2); }
+
+button.secondary.active {
+  background: color-mix(in srgb, var(--warn) 22%, var(--surface));
+  border-color: var(--warn);
+  color: #fcd34d;
+}
+
+input[type="file"] { display: none; }
+
+#parseStatus {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+  border: 1px solid transparent;
+}
+
+#parseStatus.ok {
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  color: #86efac;
+  border-color: color-mix(in srgb, var(--ok) 30%, transparent);
+}
+
+#parseStatus.warn {
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  color: #fcd34d;
+  border-color: color-mix(in srgb, var(--warn) 30%, transparent);
+}
+
+#parseStatus.err {
+  background: color-mix(in srgb, var(--err) 14%, transparent);
+  color: #fca5a5;
+  border-color: color-mix(in srgb, var(--err) 30%, transparent);
+}
+
+.hint {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.55;
+  font-family: var(--mono);
+}
+
+#panel {
+  padding: 18px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.section {
+  background: var(--surface);
+  border: 1px solid var(--surface2);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.section-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.section-sub {
+  font-size: 10px;
+  color: var(--stat);
+  margin-top: -8px;
+  margin-bottom: 12px;
+  font-family: var(--mono);
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.chart-grid.wide { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+
+.chart-card {
+  min-width: 0;
+  border: 1px solid var(--surface2);
+  border-radius: 6px;
+  background: #0b1220;
+  padding: 8px;
+}
+
+.chart-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--surface2);
+}
+
+.chart-card-header span:first-child {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.chart-card-header span:last-child {
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--muted);
+  text-align: right;
+}
+
+.chart-card svg { width: 100%; height: auto; display: block; }
+
+.chart-card-hot { border-color: color-mix(in srgb, var(--warn) 55%, var(--surface2)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--warn) 20%, transparent); }
+.chart-card-warm { border-color: color-mix(in srgb, var(--accent) 45%, var(--surface2)); }
+
+.surprise-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--warn) 25%, transparent);
+  color: #fcd34d;
+  vertical-align: middle;
+}
+
+.section-surprise .section-title { color: #fcd34d; }
+
+select.example-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  font-family: inherit;
+}
+
+.example-nav {
+  display: flex;
+  gap: 6px;
+}
+
+.example-nav button {
+  flex: 1;
+  padding: 7px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.example-nav button:hover { background: var(--surface2); }
+
+.results-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: var(--surface);
+  border: 1px solid var(--surface2);
+  border-radius: var(--radius);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.results-toolbar button {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.results-toolbar button.active {
+  background: color-mix(in srgb, var(--warn) 25%, var(--surface2));
+  border-color: var(--warn);
+  color: #fcd34d;
+}
+
+.results-toolbar .filter-hint {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.section.hidden-by-filter { display: none !important; }
+.chart-card.hidden-by-filter { display: none !important; }
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.stats-table th,
+.stats-table td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--surface2);
+}
+
+.stats-table th {
+  color: var(--muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.stats-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.empty-state code {
+  display: block;
+  margin-top: 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-align: left;
+  background: #0b1220;
+  padding: 12px;
+  border-radius: var(--radius);
+  color: var(--stat);
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  aside { max-height: 45vh; border-right: none; border-bottom: 1px solid var(--surface2); }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Automatic JSON analysis</h1>
+  <p>Paste JSON — a single array of records, one object, or before/after pairs. Charts are sorted by surprise (⚡ score): large mean shifts, category flips, and strong correlations float to the top.</p>
+</header>
+
+<main>
+  <aside>
+    <div class="control">
+      <label>Input mode</label>
+      <div class="mode-toggle">
+        <button type="button" id="modeSingle" class="active">Single dataset</button>
+        <button type="button" id="modePaired">Before / after</button>
+      </div>
+    </div>
+
+    <div class="control">
+      <label for="jsonInput">JSON data</label>
+      <textarea id="jsonInput" spellcheck="false"></textarea>
+    </div>
+
+    <button type="button" class="primary" id="analyzeBtn">Analyze</button>
+    <label class="secondary" style="display:block;text-align:center;cursor:pointer;">
+      Load file
+      <input type="file" id="fileInput" accept=".json,.jsonl,application/json" />
+    </label>
+    <div class="control">
+      <label for="exampleSelect">Examples</label>
+      <select id="exampleSelect" class="example-select"></select>
+      <div class="example-nav" style="margin-top:6px;">
+        <button type="button" id="examplePrev">← Prev</button>
+        <button type="button" id="exampleNext">Next →</button>
+      </div>
+    </div>
+
+    <div class="control">
+      <label>View</label>
+      <button type="button" class="secondary" id="surprisesOnlyBtn">⚡ Surprises only</button>
+    </div>
+
+    <div id="parseStatus" class="warn">Paste JSON and click Analyze</div>
+
+    <p class="hint">Supported shapes:<br>
+    • <code>[{...}, {...}]</code><br>
+    • <code>{ before: [...], after: [...] }</code><br>
+    • <code>[{ before: {...}, after: {...} }]</code><br>
+    Nested objects are flattened (<code>a.b.c</code>).</p>
+  </aside>
+
+  <div id="panel">
+    <div class="empty-state" id="emptyState">
+      No analysis yet.
+      <code id="sampleHint"></code>
+    </div>
+    <div id="results" hidden></div>
+  </div>
+</main>
+
+<script>
+/** @typedef {"number"|"category"} ColKind */
+/** @typedef {{ key: string, kind: ColKind }} ColumnMeta */
+
+/** @typedef {{ rows: Record<string, unknown>[], columns: ColumnMeta[] }} FlatDataset */
+/** @typedef {{ before: FlatDataset, after: FlatDataset, paired: boolean }} PairedDataset */
+
+/** @typedef {{ id: string, label: string, mode: "single"|"paired", blurb: string, data: unknown }} ExampleDef */
+
+// AI : mulberry32 — deterministic PRNG for reproducible sample datasets
+function mulberry32(seed) {
+  return function () {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function clamp(n, lo, hi) {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+/** @param {number} [n] @param {number} [seed] */
+function genLlmBatch(n = 45, seed = 42) {
+  const rng = mulberry32(seed);
+  return Array.from({ length: n }, (_, i) => {
+    const model = i % 3 === 0 ? "claude" : "gpt-4";
+    const base = model === "gpt-4" ? 0.64 : 0.72;
+    const score = clamp(base + (rng() - 0.48) * 0.38, 0.25, 0.97);
+    const latency_ms = Math.round(900 + rng() * 1800 + (1 - score) * 1400);
+    const tokens = Math.round(280 + rng() * 950);
+    return { id: i + 1, score: +score.toFixed(2), latency_ms, tokens, label: score >= 0.65 ? "pass" : "fail", model };
+  });
+}
+
+/** @param {number} [n] @param {number} [seed] */
+function genNestedMetrics(n = 40, seed = 7) {
+  const rng = mulberry32(seed);
+  return Array.from({ length: n }, (_, i) => {
+    const fail = rng() < 0.18;
+    const latency_ms = Math.round(fail ? 1400 + rng() * 1200 : 280 + rng() * 700);
+    const tin = Math.round(400 + rng() * 2000);
+    const tout = Math.round(tin * (0.15 + rng() * 0.25));
+    return {
+      run: i + 1,
+      metrics: { latency_ms, tokens: { in: tin, out: tout }, cost_usd: +(tin * 0.000012 + tout * 0.000018).toFixed(4) },
+      status: fail ? "fail" : "ok",
+    };
+  });
+}
+
+/** @param {number} [n] @param {number} [seed] */
+function genCorrelated(n = 50, seed = 99) {
+  const rng = mulberry32(seed);
+  return Array.from({ length: n }, (_, i) => {
+    const input_chars = Math.round(180 + rng() * 1400);
+    const noise = (rng() - 0.5) * 80;
+    const output_chars = Math.round(input_chars * 0.42 + noise + 40);
+    const latency_ms = Math.round(600 + input_chars * 0.9 + output_chars * 0.4 + rng() * 200);
+    return { id: i + 1, input_chars, output_chars, latency_ms };
+  });
+}
+
+/** @param {number} [n] @param {number} [seed] */
+function genClassifier(n = 48, seed = 13) {
+  const rng = mulberry32(seed);
+  const labels = ["cat", "dog", "bird"];
+  return Array.from({ length: n }, () => {
+    const actual = labels[Math.floor(rng() * 3)];
+    const correct = rng() < 0.72;
+    const predicted = correct ? actual : labels.filter((l) => l !== actual)[Math.floor(rng() * 2)];
+    const confidence = correct ? 0.72 + rng() * 0.26 : 0.42 + rng() * 0.22;
+    return { actual, predicted, confidence: +confidence.toFixed(2) };
+  });
+}
+
+/** @param {number} [n] @param {number} [seed] */
+function genModelUpgrade(n = 35, seed = 42) {
+  const rng = mulberry32(seed);
+  /** @type {Record<string, unknown>[]} */
+  const before = [];
+  /** @type {Record<string, unknown>[]} */
+  const after = [];
+  for (let i = 0; i < n; i++) {
+    const accB = clamp(0.5 + rng() * 0.35, 0.35, 0.9);
+    const latB = Math.round(90 + rng() * 220);
+    const verdictB = accB >= 0.62 ? "ok" : "bad";
+    before.push({ id: i + 1, accuracy: +accB.toFixed(2), latency: latB, verdict: verdictB });
+    const accA = clamp(accB + 0.08 + (rng() - 0.3) * 0.12, 0.4, 0.96);
+    const latA = Math.round(latB * (0.82 + rng() * 0.2));
+    const verdictA = accA >= 0.62 ? "ok" : "bad";
+    after.push({ id: i + 1, accuracy: +accA.toFixed(2), latency: latA, verdict: verdictA });
+  }
+  return { before, after };
+}
+
+/** @param {number} [n] @param {number} [seed] */
+function genLatencyRegression(n = 40, seed = 77) {
+  const rng = mulberry32(seed);
+  /** @type {Record<string, unknown>[]} */
+  const before = [];
+  /** @type {Record<string, unknown>[]} */
+  const after = [];
+  for (let i = 0; i < n; i++) {
+    const acc = clamp(0.84 + (rng() - 0.5) * 0.08, 0.75, 0.94);
+    const latB = Math.round(360 + rng() * 180);
+    const costB = +(0.015 + rng() * 0.01).toFixed(3);
+    before.push({ id: i + 1, accuracy: +acc.toFixed(2), latency_ms: latB, cost: costB });
+    const latA = Math.round(latB * (2.2 + rng() * 0.8));
+    const costA = +(costB * (2 + rng())).toFixed(3);
+    after.push({ id: i + 1, accuracy: +(acc + (rng() - 0.5) * 0.04).toFixed(2), latency_ms: latA, cost: costA });
+  }
+  return { before, after };
+}
+
+/** @param {number} [n] @param {number} [seed] */
+function genCategoryFlip(n = 36, seed = 55) {
+  const rng = mulberry32(seed);
+  const tiers = ["gold", "silver", "bronze"];
+  const risks = ["low", "med", "high"];
+  /** @type {Record<string, unknown>[]} */
+  const before = [];
+  /** @type {Record<string, unknown>[]} */
+  const after = [];
+  for (let i = 0; i < n; i++) {
+    const scoreB = Math.round(45 + rng() * 50);
+    const tierB = tiers[Math.floor(scoreB / 18) % 3];
+    const riskB = risks[Math.floor(scoreB / 18) % 3];
+    before.push({ id: i + 1, tier: tierB, risk: riskB, score: scoreB });
+    const flip = rng() < 0.55;
+    const scoreA = Math.round(scoreB + (rng() - 0.4) * 25);
+    const tierA = flip ? tiers[(tiers.indexOf(tierB) + 1 + Math.floor(rng() * 2)) % 3] : tierB;
+    const riskA = flip ? risks[(risks.indexOf(riskB) + 1) % 3] : riskB;
+    after.push({ id: i + 1, tier: tierA, risk: riskA, score: scoreA });
+  }
+  return { before, after };
+}
+
+/** @param {number} [n] @param {number} [seed] */
+function genDramaticShift(n = 38, seed = 88) {
+  const rng = mulberry32(seed);
+  /** @type {Record<string, unknown>[]} */
+  const before = [];
+  /** @type {Record<string, unknown>[]} */
+  const after = [];
+  for (let i = 0; i < n; i++) {
+    const errB = +(0.14 + rng() * 0.1).toFixed(3);
+    const tp = Math.round(1150 + rng() * 120);
+    const cache = +(0.66 + rng() * 0.1).toFixed(2);
+    before.push({ id: i + 1, error_rate: errB, throughput: tp, cache_hit: cache });
+    after.push({
+      id: i + 1,
+      error_rate: +(0.02 + rng() * 0.04).toFixed(3),
+      throughput: Math.round(tp * (0.98 + rng() * 0.04)),
+      cache_hit: +(cache + (rng() - 0.5) * 0.04).toFixed(2),
+    });
+  }
+  return { before, after };
+}
+
+/** @type {ExampleDef[]} */
+const EXAMPLES = [
+  { id: "llm_batch", label: "LLM batch scores", mode: "single", blurb: "45 prompts · latency vs score", data: genLlmBatch() },
+  { id: "nested_metrics", label: "Nested API metrics", mode: "single", blurb: "40 runs · flattened nested JSON", data: genNestedMetrics() },
+  { id: "strong_correlation", label: "Strong correlation", mode: "single", blurb: "50 points · input→output scatter", data: genCorrelated() },
+  { id: "classifier", label: "Classifier outcomes", mode: "single", blurb: "48 predictions · confusion material", data: genClassifier() },
+  { id: "model_upgrade", label: "Model upgrade (paired)", mode: "paired", blurb: "35 pairs · accuracy up · latency down", data: genModelUpgrade() },
+  { id: "latency_regression", label: "Latency regression (paired)", mode: "paired", blurb: "40 pairs · latency spikes · accuracy flat", data: genLatencyRegression() },
+  { id: "category_flip", label: "Category flips (paired)", mode: "paired", blurb: "36 pairs · tier/risk relabeling", data: genCategoryFlip() },
+  { id: "dramatic_shift", label: "Dramatic mean shift (paired)", mode: "paired", blurb: "38 pairs · error_rate collapse", data: genDramaticShift() },
+];
+
+/** @type {"single"|"paired"} */
+let inputMode = "single";
+/** @type {number} */
+let exampleIndex = 0;
+/** @type {boolean} */
+let surprisesOnly = false;
+
+const SURPRISE_THRESHOLD = 0.7;
+
+// ── parsing & flattening ────────────────────────────────────────
+
+/** @param {unknown} v */
+function isPlainObject(v) {
+  return v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof Date);
+}
+
+/** @param {Record<string, unknown>} obj @param {string} prefix */
+function flattenObject(obj, prefix = "") {
+  /** @type {Record<string, unknown>} */
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    const key = prefix ? `${prefix}.${k}` : k;
+    if (isPlainObject(v)) Object.assign(out, flattenObject(/** @type {Record<string, unknown>} */ (v), key));
+    else out[key] = v;
+  }
+  return out;
+}
+
+/** @param {unknown} raw */
+function coerceScalar(raw) {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "boolean") return raw;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (trimmed === "") return null;
+    const asNum = Number(trimmed);
+    if (trimmed !== "" && Number.isFinite(asNum)) return asNum;
+    return trimmed;
+  }
+  return String(raw);
+}
+
+/** @param {unknown[]} rows */
+function flattenRows(rows) {
+  return rows.map((row) => {
+    if (!isPlainObject(row)) return { value: coerceScalar(row) };
+    return flattenObject(/** @type {Record<string, unknown>} */ (row));
+  }).map((row) => {
+    /** @type {Record<string, unknown>} */
+    const coerced = {};
+    for (const [k, v] of Object.entries(row)) coerced[k] = coerceScalar(v);
+    return coerced;
+  });
+}
+
+/** @param {Record<string, unknown>[]} rows */
+function inferColumns(rows) {
+  const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  /** @type {ColumnMeta[]} */
+  const columns = [];
+  for (const key of keys) {
+    const values = rows.map((r) => r[key]).filter((v) => v !== null && v !== undefined);
+    if (values.length === 0) continue;
+    const numericCount = values.filter((v) => typeof v === "number").length;
+    const kind = numericCount / values.length >= 0.8 ? "number" : "category";
+    columns.push({ key, kind });
+  }
+  return columns.sort((a, b) => a.key.localeCompare(b.key));
+}
+
+/** @param {Record<string, unknown>[]} rows */
+function buildDataset(rows) {
+  const flat = flattenRows(rows);
+  return { rows: flat, columns: inferColumns(flat) };
+}
+
+/** @param {unknown} parsed @returns {{ ok: true, data: FlatDataset|PairedDataset, mode: "single"|"paired" } | { ok: false, error: string }} */
+function parseInput(parsed) {
+  if (Array.isArray(parsed)) {
+    if (parsed.length === 0) return { ok: false, error: "Empty array" };
+    const first = parsed[0];
+    if (isPlainObject(first) && ("before" in first || "after" in first)) {
+      const before = parsed.map((r) => /** @type {Record<string, unknown>} */ (/** @type {Record<string, unknown>} */ (r).before ?? {}));
+      const after = parsed.map((r) => /** @type {Record<string, unknown>} */ (/** @type {Record<string, unknown>} */ (r).after ?? {}));
+      return { ok: true, mode: "paired", data: { before: buildDataset(before), after: buildDataset(after), paired: true } };
+    }
+    return { ok: true, mode: "single", data: buildDataset(parsed) };
+  }
+  if (isPlainObject(parsed)) {
+    const obj = /** @type {Record<string, unknown>} */ (parsed);
+    if (Array.isArray(obj.before) && Array.isArray(obj.after)) {
+      return {
+        ok: true,
+        mode: "paired",
+        data: { before: buildDataset(obj.before), after: buildDataset(obj.after), paired: false },
+      };
+    }
+    return { ok: true, mode: "single", data: buildDataset([obj]) };
+  }
+  return { ok: false, error: "Expected array or object" };
+}
+
+// ── stats ───────────────────────────────────────────────────────
+
+/** @param {number[]} values */
+function distributionStats(values) {
+  const n = values.length;
+  if (n === 0) return { n: 0, mean: 0, std: 0, min: 0, max: 0, median: 0 };
+  const sorted = [...values].sort((a, b) => a - b);
+  const mean = values.reduce((a, v) => a + v, 0) / n;
+  const variance = n > 1 ? values.reduce((a, v) => a + (v - mean) ** 2, 0) / n : 0;
+  const mid = Math.floor(n / 2);
+  const median = n % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return { n, mean, std: Math.sqrt(variance), min: sorted[0], max: sorted[n - 1], median };
+}
+
+/** @param {number[]} xs @param {number[]} ys */
+function pearson(xs, ys) {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 2) return 0;
+  const mx = xs.slice(0, n).reduce((a, v) => a + v, 0) / n;
+  const my = ys.slice(0, n).reduce((a, v) => a + v, 0) / n;
+  let num = 0;
+  let dx = 0;
+  let dy = 0;
+  for (let i = 0; i < n; i++) {
+    const vx = xs[i] - mx;
+    const vy = ys[i] - my;
+    num += vx * vy;
+    dx += vx * vx;
+    dy += vy * vy;
+  }
+  const den = Math.sqrt(dx * dy);
+  return den === 0 ? 0 : num / den;
+}
+
+/** @param {Record<string, unknown>[]} rows @param {string} key */
+function numericValues(rows, key) {
+  return rows.map((r) => r[key]).filter((v) => typeof v === "number") /** @type {number[]} */;
+}
+
+/** @param {Record<string, unknown>[]} rows @param {string} key */
+function categoryValues(rows, key) {
+  return rows.map((r) => {
+    const v = r[key];
+    if (v === null || v === undefined) return "(null)";
+    return String(v);
+  });
+}
+
+/** @param {string[]} labels */
+function uniqueSorted(labels) {
+  return [...new Set(labels)].sort((a, b) => a.localeCompare(b));
+}
+
+// ── SVG helpers ─────────────────────────────────────────────────
+
+const CHART_W = 360;
+const HIST_H = 160;
+const SCATTER_H = 280;
+const PAD = { l: 44, r: 14, t: 16, b: 36 };
+const STRIP_H = 200;
+
+/** @param {number} min @param {number} max @param {number} v @param {number} w @param {{ l: number, r: number }} pad */
+function xScale(min, max, v, w, pad = PAD) {
+  const span = Math.max(1e-9, max - min);
+  return pad.l + ((v - min) / span) * (w - pad.l - pad.r);
+}
+
+/** @param {number} mean @param {number} std @param {number} min @param {number} max @param {number} peak @param {number} [points] */
+function normalCurvePoints(mean, std, min, max, peak, points = 40) {
+  if (std <= 0) return [{ x: mean, y: peak }];
+  const pad = std * 2.5;
+  const x0 = Math.max(min, mean - pad);
+  const x1 = Math.min(max, mean + pad);
+  const coeff = 1 / (std * Math.sqrt(2 * Math.PI));
+  const raw = [];
+  for (let i = 0; i <= points; i++) {
+    const x = x0 + ((x1 - x0) * i) / points;
+    raw.push(coeff * Math.exp(-0.5 * ((x - mean) / std) ** 2));
+  }
+  const pdfMax = Math.max(...raw, 1e-9);
+  return raw.map((y, i) => ({ x: x0 + ((x1 - x0) * i) / points, y: (y / pdfMax) * peak }));
+}
+
+/** @param {number} n @param {number} [digits] */
+function fmtNum(n, digits = 3) {
+  if (!Number.isFinite(n)) return "—";
+  if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (Math.abs(n) >= 1e4) return `${(n / 1e3).toFixed(1)}k`;
+  if (Math.abs(n) >= 100) return n.toFixed(1);
+  if (Math.abs(n) >= 1) return n.toFixed(2);
+  return n.toFixed(digits);
+}
+
+/** @param {string} title @param {string} subtitle @param {string} svgBody @param {number} [surprise] */
+function chartCard(title, subtitle, svgBody, surprise = 0) {
+  const badge = surprise >= 0.35 ? `<span class="surprise-badge" title="Surprise score">⚡${surprise.toFixed(2)}</span>` : "";
+  const hot = surprise >= 1.2 ? " chart-card-hot" : surprise >= 0.7 ? " chart-card-warm" : "";
+  return `
+    <div class="chart-card${hot}" data-surprise="${surprise.toFixed(3)}">
+      <div class="chart-card-header">
+        <span>${title}${badge}</span>
+        <span>${subtitle}</span>
+      </div>
+      ${svgBody}
+    </div>`;
+}
+
+/** @typedef {{ html: string, surprise: number }} ScoredChart */
+
+/** @param {ScoredChart[]} items */
+function sortBySurprise(items) {
+  return [...items].sort((a, b) => b.surprise - a.surprise);
+}
+
+/** @param {ScoredChart[]} items */
+function joinScored(items) {
+  return sortBySurprise(items).map((i) => i.html).join("");
+}
+
+// ── surprise scoring ────────────────────────────────────────────
+
+/** @param {number[]} before @param {number[]} after */
+function computeMeanShift(before, after) {
+  const statsB = distributionStats(before);
+  const statsA = distributionStats(after);
+  const delta = statsA.mean - statsB.mean;
+  const pooledStd = Math.sqrt((statsB.std ** 2 + statsA.std ** 2) / 2) || 1e-9;
+  const cohensD = Math.abs(delta) / pooledStd;
+  const n = Math.min(before.length, after.length);
+  let pairEffect = 0;
+  if (n >= 2) {
+    /** @type {number[]} */
+    const deltas = [];
+    for (let i = 0; i < n; i++) deltas.push(after[i] - before[i]);
+    const dStats = distributionStats(deltas);
+    pairEffect = dStats.std > 0 ? Math.abs(dStats.mean) / dStats.std : Math.abs(dStats.mean) * 2;
+  }
+  const pct = statsB.mean !== 0 ? Math.abs(delta / statsB.mean) : Math.abs(delta);
+  // AI : surprise blends effect size, paired consistency, and relative change
+  const surprise = Math.max(cohensD, pairEffect) * (1 + Math.min(pct, 2) * 0.25);
+  return { delta, statsB, statsA, cohensD, pairEffect, pct, surprise };
+}
+
+/** @param {string[]} before @param {string[]} after */
+function categoryChangeSurprise(before, after) {
+  const n = Math.min(before.length, after.length);
+  if (n === 0) return 0;
+  let changed = 0;
+  for (let i = 0; i < n; i++) if (before[i] !== after[i]) changed++;
+  const rate = changed / n;
+  const rowLabels = uniqueSorted(before.slice(0, n));
+  const colLabels = uniqueSorted(after.slice(0, n));
+  let agree = 0;
+  for (let i = 0; i < n; i++) {
+    const ri = rowLabels.indexOf(before[i]);
+    const ci = colLabels.indexOf(after[i]);
+    if (ri >= 0 && ci >= 0 && before[i] === after[i]) agree++;
+  }
+  const diag = agree / n;
+  return rate * 2 + (1 - diag);
+}
+
+/** @param {number} r */
+function correlationSurprise(r) {
+  return Math.abs(r) * 1.5 + (Math.abs(r) > 0.7 ? 0.5 : 0);
+}
+
+// ── histogram with μ ± σ ────────────────────────────────────────
+
+/** @param {string} label @param {number[]} values @param {string} [color] */
+function renderHistogram(label, values, color = "var(--accent)") {
+  if (values.length === 0) return chartCard(label, "no data", `<svg viewBox="0 0 ${CHART_W} ${HIST_H}"></svg>`);
+
+  const stats = distributionStats(values);
+  const bins = 12;
+  const span = Math.max(1e-9, stats.max - stats.min);
+  const binW = span / bins;
+  /** @type {number[]} */
+  const counts = Array(bins).fill(0);
+  for (const v of values) {
+    let idx = Math.floor((v - stats.min) / binW);
+    if (idx >= bins) idx = bins - 1;
+    counts[idx]++;
+  }
+  const maxCount = Math.max(...counts, 1);
+  const plotW = CHART_W - PAD.l - PAD.r;
+  const plotH = HIST_H - PAD.t - PAD.b;
+  const barW = plotW / bins;
+
+  let svg = `<svg viewBox="0 0 ${CHART_W} ${HIST_H}" aria-hidden>`;
+  svg += `<rect x="${PAD.l}" y="${PAD.t}" width="${plotW}" height="${plotH}" fill="rgba(51,65,85,0.35)" stroke="var(--stat)" rx="2"/>`;
+
+  for (let i = 0; i < bins; i++) {
+    const h = (counts[i] / maxCount) * plotH;
+    const x = PAD.l + i * barW + 1;
+    const y = PAD.t + plotH - h;
+    const lo = stats.min + i * binW;
+    const hi = lo + binW;
+    svg += `<rect x="${x}" y="${y}" width="${Math.max(1, barW - 2)}" height="${h}" fill="color-mix(in srgb, ${color} 70%, transparent)" stroke="${color}" stroke-width="0.5"><title>${fmtNum(lo)}–${fmtNum(hi)}: ${counts[i]}</title></rect>`;
+  }
+
+  const curveH = plotH * 0.85;
+  const curveBase = PAD.t + plotH - curveH;
+  const curve = normalCurvePoints(stats.mean, stats.std, stats.min, stats.max, 1);
+  if (curve.length > 1 && stats.std > 0) {
+    const d = curve.map((p, i) => {
+      const x = xScale(stats.min, stats.max, p.x, CHART_W);
+      const y = curveBase + curveH - p.y * curveH;
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+    svg += `<path d="${d}" fill="none" stroke="var(--stat)" stroke-width="1.5" opacity="0.9"/>`;
+  }
+
+  const meanX = xScale(stats.min, stats.max, stats.mean, CHART_W);
+  svg += `<line x1="${meanX}" x2="${meanX}" y1="${PAD.t}" y2="${PAD.t + plotH}" stroke="#fbbf24" stroke-width="1.5"/>`;
+  if (stats.std > 0) {
+    for (const off of [-stats.std, stats.std]) {
+      const sx = xScale(stats.min, stats.max, stats.mean + off, CHART_W);
+      svg += `<line x1="${sx}" x2="${sx}" y1="${PAD.t}" y2="${PAD.t + plotH}" stroke="var(--stat)" stroke-width="1" stroke-dasharray="4 3" opacity="0.7"/>`;
+    }
+  }
+
+  svg += `<text x="${PAD.l}" y="${HIST_H - 6}" fill="var(--stat)" font-size="7" font-family="var(--mono)">${fmtNum(stats.min)}</text>`;
+  svg += `<text x="${CHART_W - PAD.r}" y="${HIST_H - 6}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="end">${fmtNum(stats.max)}</text>`;
+  svg += `<text x="${CHART_W / 2}" y="${HIST_H - 6}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="middle">${label}</text>`;
+  svg += "</svg>";
+
+  return chartCard(
+    label,
+    `n=${stats.n} · μ=${fmtNum(stats.mean)} · σ=${fmtNum(stats.std)} · med=${fmtNum(stats.median)}`,
+    svg,
+    stats.std > 0 && stats.n >= 3 ? Math.min(stats.std / (Math.abs(stats.mean) || 1), 1.5) * 0.4 : 0,
+  );
+}
+
+// ── scatter plot ────────────────────────────────────────────────
+
+/** @param {number[]} xs @param {number[]} ys */
+function olsLine(xs, ys) {
+  const n = Math.min(xs.length, ys.length);
+  if (n < 2) return null;
+  const mx = xs.reduce((a, v) => a + v, 0) / n;
+  const my = ys.reduce((a, v) => a + v, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (xs[i] - mx) * (ys[i] - my);
+    den += (xs[i] - mx) ** 2;
+  }
+  if (den === 0) return null;
+  const slope = num / den;
+  return { slope, intercept: my - slope * mx };
+}
+
+/** @param {string} xLabel @param {string} yLabel @param {number[]} xs @param {number[]} ys @param {string[]} [colors] @param {number} [surpriseOverride] */
+function renderScatter(xLabel, yLabel, xs, ys, colors, surpriseOverride) {
+  const n = Math.min(xs.length, ys.length);
+  if (n === 0) return chartCard(`${xLabel} vs ${yLabel}`, "no data", `<svg viewBox="0 0 ${CHART_W} ${SCATTER_H}"></svg>`);
+
+  const xMin = Math.min(...xs);
+  const xMax = Math.max(...xs);
+  const yMin = Math.min(...ys);
+  const yMax = Math.max(...ys);
+  const r = pearson(xs, ys);
+  const plotW = CHART_W - PAD.l - PAD.r;
+  const plotH = SCATTER_H - PAD.t - PAD.b;
+  const dotR = clamp(6 - n / 12, 2.5, 5.5);
+
+  const sx = (v) => PAD.l + ((v - xMin) / Math.max(1e-9, xMax - xMin)) * plotW;
+  const sy = (v) => PAD.t + plotH - ((v - yMin) / Math.max(1e-9, yMax - yMin)) * plotH;
+
+  const xStats = distributionStats(xs);
+  const yStats = distributionStats(ys);
+  const ols = olsLine(xs, ys);
+
+  let svg = `<svg viewBox="0 0 ${CHART_W} ${SCATTER_H}" aria-hidden>`;
+  svg += `<rect x="${PAD.l}" y="${PAD.t}" width="${plotW}" height="${plotH}" fill="rgba(51,65,85,0.35)" stroke="var(--stat)" rx="3"/>`;
+
+  // AI : y = x reference when axes share semantics (before vs after)
+  if (xLabel.includes("before") && yLabel.includes("after")) {
+    const lo = Math.min(xMin, yMin);
+    const hi = Math.max(xMax, yMax);
+    svg += `<line x1="${sx(lo)}" y1="${sy(lo)}" x2="${sx(hi)}" y2="${sy(hi)}" stroke="var(--stat)" stroke-width="1" stroke-dasharray="5 4" opacity="0.45"/>`;
+    svg += `<text x="${sx(hi) - 4}" y="${sy(hi) + 10}" fill="var(--stat)" font-size="6.5" font-family="var(--mono)" text-anchor="end">y=x</text>`;
+  }
+
+  if (ols) {
+    const x0 = xMin;
+    const x1 = xMax;
+    const y0 = ols.slope * x0 + ols.intercept;
+    const y1 = ols.slope * x1 + ols.intercept;
+    svg += `<line x1="${sx(x0)}" y1="${sy(y0)}" x2="${sx(x1)}" y2="${sy(y1)}" stroke="#fbbf24" stroke-width="1.5" opacity="0.75"/>`;
+  }
+
+  svg += `<line x1="${sx(xStats.mean)}" x2="${sx(xStats.mean)}" y1="${PAD.t}" y2="${PAD.t + plotH}" stroke="var(--stat)" stroke-dasharray="3 3" opacity="0.35"/>`;
+  svg += `<line x1="${PAD.l}" x2="${PAD.l + plotW}" y1="${sy(yStats.mean)}" y2="${sy(yStats.mean)}" stroke="var(--stat)" stroke-dasharray="3 3" opacity="0.35"/>`;
+
+  for (let i = 0; i < n; i++) {
+    const fill = colors?.[i] ?? "var(--accent)";
+    svg += `<circle cx="${sx(xs[i])}" cy="${sy(ys[i])}" r="${dotR}" fill="${fill}" stroke="#0f172a" stroke-width="1" opacity="0.88"><title>${xLabel}=${fmtNum(xs[i])} · ${yLabel}=${fmtNum(ys[i])}</title></circle>`;
+  }
+
+  svg += `<text x="${PAD.l}" y="${SCATTER_H - 10}" fill="var(--stat)" font-size="8" font-family="var(--mono)">${fmtNum(xMin)}</text>`;
+  svg += `<text x="${CHART_W - PAD.r}" y="${SCATTER_H - 10}" fill="var(--stat)" font-size="8" font-family="var(--mono)" text-anchor="end">${fmtNum(xMax)}</text>`;
+  svg += `<text x="${CHART_W / 2}" y="${SCATTER_H - 2}" fill="var(--text)" font-size="8" font-family="var(--mono)" text-anchor="middle" font-weight="600">${xLabel}</text>`;
+  svg += `<text x="12" y="${PAD.t + plotH / 2}" fill="var(--text)" font-size="8" font-family="var(--mono)" transform="rotate(-90 12 ${PAD.t + plotH / 2})" text-anchor="middle" font-weight="600">${yLabel}</text>`;
+  svg += `<text x="${PAD.l - 6}" y="${PAD.t + 4}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="end">${fmtNum(yMax)}</text>`;
+  svg += `<text x="${PAD.l - 6}" y="${PAD.t + plotH}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="end">${fmtNum(yMin)}</text>`;
+  svg += "</svg>";
+
+  const rLabel = Math.abs(r) > 0.999 ? "r≈1" : `r=${r.toFixed(3)}`;
+  const surprise = surpriseOverride ?? correlationSurprise(r);
+  return chartCard(`${xLabel} × ${yLabel}`, `${rLabel} · n=${n} · each dot = 1 row`, svg, surprise);
+}
+
+/** @param {string} label @param {number[]} values @param {string} [color] */
+function renderStripScatter(label, values, color = "var(--accent)") {
+  if (values.length === 0) return chartCard(label, "no data", `<svg viewBox="0 0 ${CHART_W} ${STRIP_H}"></svg>`);
+
+  const stats = distributionStats(values);
+  const plotW = CHART_W - PAD.l - PAD.r;
+  const plotH = STRIP_H - PAD.t - PAD.b;
+  const padX = stats.std > 0 ? stats.std * 0.4 : (stats.max - stats.min) * 0.05;
+  const xMin = stats.min - padX;
+  const xMax = stats.max + padX;
+  const dotR = clamp(5 - values.length / 15, 2, 4.5);
+  const surprise = stats.std > 0 && stats.n >= 3 ? Math.min(stats.std / (Math.abs(stats.mean) || 1), 1.5) * 0.4 : 0;
+
+  let svg = `<svg viewBox="0 0 ${CHART_W} ${STRIP_H}" aria-hidden>`;
+  svg += `<rect x="${PAD.l}" y="${PAD.t}" width="${plotW}" height="${plotH}" fill="rgba(51,65,85,0.35)" stroke="var(--stat)" rx="3"/>`;
+
+  const meanX = xScale(xMin, xMax, stats.mean, CHART_W);
+  svg += `<line x1="${meanX}" x2="${meanX}" y1="${PAD.t}" y2="${PAD.t + plotH}" stroke="#fbbf24" stroke-width="2"/>`;
+  svg += `<text x="${meanX}" y="${PAD.t - 3}" fill="#fbbf24" font-size="7" font-family="var(--mono)" text-anchor="middle">μ</text>`;
+  if (stats.std > 0) {
+    for (const off of [-stats.std, stats.std]) {
+      const lx = xScale(xMin, xMax, stats.mean + off, CHART_W);
+      svg += `<line x1="${lx}" x2="${lx}" y1="${PAD.t}" y2="${PAD.t + plotH}" stroke="var(--stat)" stroke-width="1" stroke-dasharray="4 3" opacity="0.65"/>`;
+    }
+  }
+
+  values.forEach((v, i) => {
+    const cx = xScale(xMin, xMax, v, CHART_W);
+    const jitter = ((i * 17 + 5) % 100) / 100;
+    const cy = PAD.t + plotH * 0.2 + jitter * plotH * 0.6;
+    svg += `<circle cx="${cx}" cy="${cy}" r="${dotR}" fill="color-mix(in srgb, ${color} 80%, transparent)" stroke="${color}" stroke-width="1"><title>${label}=${fmtNum(v)}</title></circle>`;
+  });
+
+  svg += `<text x="${PAD.l}" y="${STRIP_H - 6}" fill="var(--stat)" font-size="8" font-family="var(--mono)">${fmtNum(xMin)}</text>`;
+  svg += `<text x="${CHART_W - PAD.r}" y="${STRIP_H - 6}" fill="var(--stat)" font-size="8" font-family="var(--mono)" text-anchor="end">${fmtNum(xMax)}</text>`;
+  svg += `<text x="${CHART_W / 2}" y="${STRIP_H - 2}" fill="var(--text)" font-size="8" font-family="var(--mono)" text-anchor="middle" font-weight="600">${label}</text>`;
+  svg += `<text x="10" y="${PAD.t + plotH / 2}" fill="var(--stat)" font-size="7" font-family="var(--mono)" transform="rotate(-90 10 ${PAD.t + plotH / 2})" text-anchor="middle">rows</text>`;
+  svg += "</svg>";
+
+  return chartCard(label, `n=${stats.n} · μ=${fmtNum(stats.mean)} · σ=${fmtNum(stats.std)} · 1 dot = 1 value`, svg, surprise);
+}
+
+/** @param {string} key @param {number[]} before @param {number[]} after @param {ReturnType<typeof computeMeanShift>} shift */
+function renderPairedIndexScatter(key, before, after, shift) {
+  const n = Math.min(before.length, after.length);
+  if (n === 0) return chartCard(key, "no data", `<svg viewBox="0 0 ${CHART_W} ${SCATTER_H}"></svg>`);
+
+  const all = [...before.slice(0, n), ...after.slice(0, n)];
+  const yMin = Math.min(...all);
+  const yMax = Math.max(...all);
+  const plotW = CHART_W - PAD.l - PAD.r;
+  const plotH = SCATTER_H - PAD.t - PAD.b;
+  const dotR = clamp(5 - n / 14, 2.5, 5);
+  const sy = (v) => PAD.t + plotH - ((v - yMin) / Math.max(1e-9, yMax - yMin)) * plotH;
+  const sx = (i) => PAD.l + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+
+  let svg = `<svg viewBox="0 0 ${CHART_W} ${SCATTER_H}" aria-hidden>`;
+  svg += `<rect x="${PAD.l}" y="${PAD.t}" width="${plotW}" height="${plotH}" fill="rgba(51,65,85,0.35)" stroke="var(--stat)" rx="3"/>`;
+  svg += `<line x1="${PAD.l}" x2="${PAD.l + plotW}" y1="${sy(shift.statsB.mean)}" y2="${sy(shift.statsB.mean)}" stroke="var(--warn)" stroke-dasharray="4 3" opacity="0.55"/>`;
+  svg += `<line x1="${PAD.l}" x2="${PAD.l + plotW}" y1="${sy(shift.statsA.mean)}" y2="${sy(shift.statsA.mean)}" stroke="var(--ok)" stroke-dasharray="4 3" opacity="0.55"/>`;
+
+  for (let i = 0; i < n; i++) {
+    const x = sx(i);
+    svg += `<line x1="${x}" y1="${sy(before[i])}" x2="${x}" y2="${sy(after[i])}" stroke="var(--stat)" stroke-width="1" opacity="0.35"/>`;
+    svg += `<circle cx="${x}" cy="${sy(before[i])}" r="${dotR}" fill="var(--warn)" stroke="#0f172a" stroke-width="1" opacity="0.9"><title>#${i + 1} before=${fmtNum(before[i])}</title></circle>`;
+    svg += `<circle cx="${x}" cy="${sy(after[i])}" r="${dotR}" fill="var(--ok)" stroke="#0f172a" stroke-width="1" opacity="0.9"><title>#${i + 1} after=${fmtNum(after[i])}</title></circle>`;
+  }
+
+  svg += `<text x="${PAD.l}" y="${SCATTER_H - 10}" fill="var(--stat)" font-size="7" font-family="var(--mono)">row 1</text>`;
+  svg += `<text x="${CHART_W - PAD.r}" y="${SCATTER_H - 10}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="end">row ${n}</text>`;
+  svg += `<text x="${CHART_W / 2}" y="${SCATTER_H - 2}" fill="var(--text)" font-size="8" font-family="var(--mono)" text-anchor="middle" font-weight="600">${key}</text>`;
+  svg += `<text x="12" y="${PAD.t + plotH / 2}" fill="var(--text)" font-size="8" font-family="var(--mono)" transform="rotate(-90 12 ${PAD.t + plotH / 2})" text-anchor="middle" font-weight="600">value</text>`;
+  svg += `<text x="${CHART_W - PAD.r}" y="${PAD.t + 8}" fill="var(--warn)" font-size="7" font-family="var(--mono)" text-anchor="end">● before μ=${fmtNum(shift.statsB.mean)}</text>`;
+  svg += `<text x="${CHART_W - PAD.r}" y="${PAD.t + 18}" fill="#86efac" font-size="7" font-family="var(--mono)" text-anchor="end">● after μ=${fmtNum(shift.statsA.mean)}</text>`;
+  svg += "</svg>";
+
+  return chartCard(
+    `${key} · row scatter`,
+    `Δμ=${fmtNum(shift.delta, 3)} · lines link each pair`,
+    svg,
+    shift.surprise,
+  );
+}
+
+// ── correlation heatmap ─────────────────────────────────────────
+
+/** @param {FlatDataset} dataset */
+function renderCorrelationMatrix(dataset) {
+  const numCols = dataset.columns.filter((c) => c.kind === "number");
+  if (numCols.length < 2) return "";
+
+  const keys = numCols.map((c) => c.key);
+  const n = keys.length;
+  const cell = 36;
+  const labelW = 90;
+  const matW = labelW + n * cell + 20;
+  const matH = labelW + n * cell + 20;
+
+  /** @type {number[][]} */
+  const matrix = [];
+  for (let i = 0; i < n; i++) {
+    matrix[i] = [];
+    const xi = numericValues(dataset.rows, keys[i]);
+    for (let j = 0; j < n; j++) {
+      const xj = numericValues(dataset.rows, keys[j]);
+      const len = Math.min(xi.length, xj.length);
+      matrix[i][j] = pearson(xi.slice(0, len), xj.slice(0, len));
+    }
+  }
+
+  /** @param {number} r */
+  const heatColor = (r) => {
+    const t = (r + 1) / 2;
+    const rC = Math.round(239 * (1 - t) + 34 * t);
+    const gC = Math.round(68 * (1 - t) + 197 * t);
+    const bC = Math.round(68 * (1 - t) + 94 * t);
+    return `rgb(${rC},${gC},${bC})`;
+  };
+
+  let svg = `<svg viewBox="0 0 ${matW} ${matH}" aria-hidden>`;
+  for (let i = 0; i < n; i++) {
+    const short = keys[i].length > 12 ? keys[i].slice(0, 11) + "…" : keys[i];
+    svg += `<text x="${labelW - 4}" y="${labelW + i * cell + cell / 2 + 3}" fill="var(--muted)" font-size="7" font-family="var(--mono)" text-anchor="end">${short}</text>`;
+    svg += `<text x="${labelW + i * cell + cell / 2}" y="${labelW - 6}" fill="var(--muted)" font-size="7" font-family="var(--mono)" text-anchor="middle" transform="rotate(-35 ${labelW + i * cell + cell / 2} ${labelW - 6})">${short}</text>`;
+    for (let j = 0; j < n; j++) {
+      const r = matrix[i][j];
+      const x = labelW + j * cell;
+      const y = labelW + i * cell;
+      svg += `<rect x="${x}" y="${y}" width="${cell - 2}" height="${cell - 2}" fill="${heatColor(r)}" rx="2"><title>${keys[i]} × ${keys[j]}: r=${r.toFixed(3)}</title></rect>`;
+      svg += `<text x="${x + (cell - 2) / 2}" y="${y + (cell - 2) / 2 + 3}" fill="${Math.abs(r) > 0.55 ? "#fff" : "#1e293b"}" font-size="7" font-family="var(--mono)" text-anchor="middle">${r.toFixed(2)}</text>`;
+    }
+  }
+  svg += "</svg>";
+
+  return `
+    <div class="section">
+      <div class="section-title">Correlation matrix (Pearson r)</div>
+      <div class="chart-grid wide">${chartCard("Numeric correlations", `${n}×${n} variables`, svg)}</div>
+    </div>`;
+}
+
+// ── confusion matrix ────────────────────────────────────────────
+
+/** @param {string} title @param {string[]} rowLabels @param {string[]} colLabels @param {number[][]} counts */
+function renderConfusionMatrix(title, rowLabels, colLabels, counts) {
+  const cell = Math.min(44, Math.max(28, 320 / Math.max(rowLabels.length, colLabels.length, 1)));
+  const labelW = 72;
+  const matW = labelW + colLabels.length * cell + 30;
+  const matH = labelW + rowLabels.length * cell + 40;
+  const maxCount = Math.max(...counts.flat(), 1);
+
+  let svg = `<svg viewBox="0 0 ${matW} ${matH}" aria-hidden>`;
+  svg += `<text x="${labelW + (colLabels.length * cell) / 2}" y="14" fill="var(--muted)" font-size="8" font-family="var(--mono)" text-anchor="middle">predicted / after</text>`;
+  svg += `<text x="12" y="${labelW + (rowLabels.length * cell) / 2}" fill="var(--muted)" font-size="8" font-family="var(--mono)" transform="rotate(-90 12 ${labelW + (rowLabels.length * cell) / 2})" text-anchor="middle">actual / before</text>`;
+
+  for (let j = 0; j < colLabels.length; j++) {
+    const short = colLabels[j].length > 8 ? colLabels[j].slice(0, 7) + "…" : colLabels[j];
+    svg += `<text x="${labelW + j * cell + cell / 2}" y="${labelW - 8}" fill="var(--muted)" font-size="7" font-family="var(--mono)" text-anchor="middle">${short}</text>`;
+  }
+  for (let i = 0; i < rowLabels.length; i++) {
+    const short = rowLabels[i].length > 8 ? rowLabels[i].slice(0, 7) + "…" : rowLabels[i];
+    svg += `<text x="${labelW - 4}" y="${labelW + i * cell + cell / 2 + 3}" fill="var(--muted)" font-size="7" font-family="var(--mono)" text-anchor="end">${short}</text>`;
+    for (let j = 0; j < colLabels.length; j++) {
+      const c = counts[i][j];
+      const intensity = c / maxCount;
+      const x = labelW + j * cell;
+      const y = labelW + i * cell;
+      const diag = rowLabels[i] === colLabels[j];
+      const fill = diag
+        ? `color-mix(in srgb, var(--ok) ${Math.round(30 + intensity * 70)}%, var(--surface2))`
+        : `color-mix(in srgb, var(--accent) ${Math.round(20 + intensity * 60)}%, var(--surface2))`;
+      svg += `<rect x="${x}" y="${y}" width="${cell - 2}" height="${cell - 2}" fill="${fill}" stroke="var(--surface2)" rx="2"><title>${rowLabels[i]} → ${colLabels[j]}: ${c}</title></rect>`;
+      svg += `<text x="${x + (cell - 2) / 2}" y="${y + (cell - 2) / 2 + 3}" fill="var(--text)" font-size="8" font-family="var(--mono)" text-anchor="middle">${c}</text>`;
+    }
+  }
+  svg += "</svg>";
+
+  const total = counts.flat().reduce((a, v) => a + v, 0);
+  let agree = 0;
+  for (let i = 0; i < rowLabels.length; i++) {
+    const j = colLabels.indexOf(rowLabels[i]);
+    if (j >= 0) agree += counts[i][j];
+  }
+  const acc = total ? ((agree / total) * 100).toFixed(1) : "—";
+
+  return chartCard(title, `n=${total} · diagonal=${acc}%`, svg);
+}
+
+/** @param {string} key @param {string[]} before @param {string[]} after */
+function buildConfusion(key, before, after) {
+  const rowLabels = uniqueSorted(before);
+  const colLabels = uniqueSorted(after);
+  /** @type {number[][]} */
+  const counts = rowLabels.map(() => colLabels.map(() => 0));
+  const n = Math.min(before.length, after.length);
+  for (let i = 0; i < n; i++) {
+    const ri = rowLabels.indexOf(before[i]);
+    const ci = colLabels.indexOf(after[i]);
+    if (ri >= 0 && ci >= 0) counts[ri][ci]++;
+  }
+  return renderConfusionMatrix(key, rowLabels, colLabels, counts);
+}
+
+// ── categorical bar chart ───────────────────────────────────────
+
+/** @param {string} key @param {string[]} values */
+function renderCategoryBars(key, values) {
+  const labels = uniqueSorted(values);
+  /** @type {Record<string, number>} */
+  const freq = {};
+  for (const l of labels) freq[l] = 0;
+  for (const v of values) freq[v] = (freq[v] ?? 0) + 1;
+  const maxF = Math.max(...Object.values(freq), 1);
+  const barH = 18;
+  const chartH = PAD.t + labels.length * (barH + 4) + PAD.b;
+  const plotW = CHART_W - PAD.l - PAD.r;
+
+  let svg = `<svg viewBox="0 0 ${CHART_W} ${chartH}" aria-hidden>`;
+  labels.forEach((label, i) => {
+    const count = freq[label];
+    const w = (count / maxF) * plotW;
+    const y = PAD.t + i * (barH + 4);
+    const short = label.length > 14 ? label.slice(0, 13) + "…" : label;
+    svg += `<text x="${PAD.l - 4}" y="${y + barH / 2 + 3}" fill="var(--muted)" font-size="7" font-family="var(--mono)" text-anchor="end">${short}</text>`;
+    svg += `<rect x="${PAD.l}" y="${y}" width="${Math.max(2, w)}" height="${barH}" fill="color-mix(in srgb, var(--accent) 75%, transparent)" stroke="var(--accent)" rx="2"><title>${label}: ${count}</title></rect>`;
+    svg += `<text x="${PAD.l + w + 4}" y="${y + barH / 2 + 3}" fill="var(--stat)" font-size="7" font-family="var(--mono)">${count}</text>`;
+  });
+  svg += "</svg>";
+
+  return chartCard(key, `${values.length} rows · ${labels.length} categories`, svg);
+}
+
+// ── summary table ───────────────────────────────────────────────
+
+/** @param {FlatDataset} dataset @param {string} [tag] */
+function renderSummaryTable(dataset, tag = "") {
+  const numCols = dataset.columns.filter((c) => c.kind === "number");
+  if (numCols.length === 0) return "";
+
+  let rows = "";
+  for (const col of numCols) {
+    const vals = numericValues(dataset.rows, col.key);
+    const s = distributionStats(vals);
+    rows += `<tr><td>${col.key}${tag ? ` ${tag}` : ""}</td><td class="num">${s.n}</td><td class="num">${fmtNum(s.mean)}</td><td class="num">${fmtNum(s.std)}</td><td class="num">${fmtNum(s.min)}</td><td class="num">${fmtNum(s.max)}</td><td class="num">${fmtNum(s.median)}</td></tr>`;
+  }
+
+  return `
+    <table class="stats-table">
+      <thead><tr><th>Column</th><th>n</th><th>μ</th><th>σ</th><th>min</th><th>max</th><th>median</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ── before/after overlays ───────────────────────────────────────
+
+/** @param {string} key @param {number[]} before @param {number[]} after @param {ReturnType<typeof computeMeanShift>} [shift] */
+function renderBeforeAfterHistogram(key, before, after, shift) {
+  const s = shift ?? computeMeanShift(before, after);
+  const all = [...before, ...after];
+  const statsB = distributionStats(before);
+  const statsA = distributionStats(after);
+  const globalMin = Math.min(...all);
+  const globalMax = Math.max(...all);
+  const bins = 10;
+  const span = Math.max(1e-9, globalMax - globalMin);
+  const binW = span / bins;
+
+  /** @param {number[]} vals @param {string} color */
+  const binCounts = (vals, color) => {
+    /** @type {number[]} */
+    const counts = Array(bins).fill(0);
+    for (const v of vals) {
+      let idx = Math.floor((v - globalMin) / binW);
+      if (idx >= bins) idx = bins - 1;
+      counts[idx]++;
+    }
+    return counts;
+  };
+
+  const countsB = binCounts(before, "var(--warn)");
+  const countsA = binCounts(after, "var(--ok)");
+  const maxCount = Math.max(...countsB, ...countsA, 1);
+  const plotW = CHART_W - PAD.l - PAD.r;
+  const plotH = HIST_H - PAD.t - PAD.b;
+  const groupW = plotW / bins;
+
+  let svg = `<svg viewBox="0 0 ${CHART_W} ${HIST_H}" aria-hidden>`;
+  svg += `<rect x="${PAD.l}" y="${PAD.t}" width="${plotW}" height="${plotH}" fill="rgba(51,65,85,0.35)" stroke="var(--stat)" rx="2"/>`;
+
+  for (let i = 0; i < bins; i++) {
+    const x0 = PAD.l + i * groupW;
+    const hB = (countsB[i] / maxCount) * plotH * 0.45;
+    const hA = (countsA[i] / maxCount) * plotH * 0.45;
+    svg += `<rect x="${x0 + 1}" y="${PAD.t + plotH - hB}" width="${groupW / 2 - 2}" height="${hB}" fill="color-mix(in srgb, var(--warn) 75%, transparent)" stroke="var(--warn)"><title>before bin ${i}: ${countsB[i]}</title></rect>`;
+    svg += `<rect x="${x0 + groupW / 2 + 1}" y="${PAD.t + plotH - hA}" width="${groupW / 2 - 2}" height="${hA}" fill="color-mix(in srgb, var(--ok) 75%, transparent)" stroke="var(--ok)"><title>after bin ${i}: ${countsA[i]}</title></rect>`;
+  }
+
+  const meanBx = xScale(globalMin, globalMax, statsB.mean, CHART_W);
+  const meanAx = xScale(globalMin, globalMax, statsA.mean, CHART_W);
+  svg += `<line x1="${meanBx}" x2="${meanBx}" y1="${PAD.t}" y2="${PAD.t + plotH}" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="4 2"/>`;
+  svg += `<line x1="${meanAx}" x2="${meanAx}" y1="${PAD.t}" y2="${PAD.t + plotH}" stroke="var(--ok)" stroke-width="1.5" stroke-dasharray="4 2"/>`;
+  svg += `<text x="${PAD.l}" y="${HIST_H - 6}" fill="var(--stat)" font-size="7" font-family="var(--mono)">${fmtNum(globalMin)}</text>`;
+  svg += `<text x="${CHART_W - PAD.r}" y="${HIST_H - 6}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="end">${fmtNum(globalMax)}</text>`;
+  svg += "</svg>";
+
+  const deltaMean = s.statsA.mean - s.statsB.mean;
+  return chartCard(
+    `${key} (before vs after)`,
+    `μ: ${fmtNum(s.statsB.mean)} → ${fmtNum(s.statsA.mean)} (Δ${fmtNum(deltaMean, 2)}) · σ: ${fmtNum(s.statsB.std)} → ${fmtNum(s.statsA.std)}`,
+    svg,
+    s.surprise,
+  );
+}
+
+/** @param {string} key @param {number[]} before @param {number[]} after */
+function renderDeltaHistogram(key, before, after) {
+  const n = Math.min(before.length, after.length);
+  /** @type {number[]} */
+  const deltas = [];
+  for (let i = 0; i < n; i++) deltas.push(after[i] - before[i]);
+  return renderHistogram(`Δ ${key}`, deltas, "var(--warn)");
+}
+
+/** @type {number} */
+let svgMarkerSeq = 0;
+
+/** @param {string} key @param {number[]} before @param {number[]} after @param {ReturnType<typeof computeMeanShift>} shift */
+function renderMeanShiftPlot(key, before, after, shift) {
+  const { statsB, statsA, delta, surprise } = shift;
+  const markerId = `arrow-${svgMarkerSeq++}`;
+  const plotW = CHART_W - PAD.l - PAD.r;
+  const plotH = HIST_H - PAD.t - PAD.b;
+  const yMax = Math.max(statsB.mean + statsB.std, statsA.mean + statsA.std, statsB.mean, statsA.mean) * 1.15;
+  const yMin = Math.min(statsB.mean - statsB.std, statsA.mean - statsA.std, statsB.mean, statsA.mean) * 0.85;
+  const yMinClamped = Math.min(yMin, yMax - 1e-9);
+  const sy = (v) => PAD.t + plotH - ((v - yMinClamped) / Math.max(1e-9, yMax - yMinClamped)) * plotH;
+  const barW = plotW * 0.22;
+  const xB = PAD.l + plotW * 0.28;
+  const xA = PAD.l + plotW * 0.62;
+  const up = delta >= 0;
+  const arrowColor = up ? "var(--ok)" : "var(--err)";
+
+  let svg = `<svg viewBox="0 0 ${CHART_W} ${HIST_H}" aria-hidden>`;
+  svg += `<rect x="${PAD.l}" y="${PAD.t}" width="${plotW}" height="${plotH}" fill="rgba(51,65,85,0.35)" stroke="var(--stat)" rx="2"/>`;
+
+  for (const [x, stats, color, label] of /** @type {const} */ ([[xB, statsB, "var(--warn)", "before"], [xA, statsA, "var(--ok)", "after"]])) {
+    const yBase = sy(0 >= yMinClamped && 0 <= yMax ? 0 : yMinClamped);
+    const yTop = sy(stats.mean);
+    const h = Math.abs(yBase - yTop);
+    const y = Math.min(yBase, yTop);
+    svg += `<rect x="${x - barW / 2}" y="${y}" width="${barW}" height="${Math.max(2, h)}" fill="color-mix(in srgb, ${color} 75%, transparent)" stroke="${color}" rx="2"><title>${label}: μ=${fmtNum(stats.mean)}</title></rect>`;
+    if (stats.std > 0) {
+      const yLo = sy(stats.mean - stats.std);
+      const yHi = sy(stats.mean + stats.std);
+      svg += `<line x1="${x}" x2="${x}" y1="${yLo}" y2="${yHi}" stroke="${color}" stroke-width="2"/>`;
+      svg += `<line x1="${x - barW * 0.35}" x2="${x + barW * 0.35}" y1="${yLo}" y2="${yLo}" stroke="${color}" stroke-width="1.5"/>`;
+      svg += `<line x1="${x - barW * 0.35}" x2="${x + barW * 0.35}" y1="${yHi}" y2="${yHi}" stroke="${color}" stroke-width="1.5"/>`;
+    }
+    svg += `<text x="${x}" y="${PAD.t + plotH + 14}" fill="${color}" font-size="7" font-family="var(--mono)" text-anchor="middle">${label}</text>`;
+    svg += `<text x="${x}" y="${sy(stats.mean) - 4}" fill="var(--text)" font-size="7" font-family="var(--mono)" text-anchor="middle">μ=${fmtNum(stats.mean)}</text>`;
+  }
+
+  const yMid = (sy(statsB.mean) + sy(statsA.mean)) / 2;
+  svg += `<line x1="${xB + barW / 2 + 4}" y1="${sy(statsB.mean)}" x2="${xA - barW / 2 - 4}" y2="${sy(statsA.mean)}" stroke="${arrowColor}" stroke-width="1.5" marker-end="url(#${markerId})"/>`;
+  svg += `<defs><marker id="${markerId}" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="${arrowColor}"/></marker></defs>`;
+  svg += `<text x="${(xB + xA) / 2}" y="${yMid - 6}" fill="${arrowColor}" font-size="8" font-family="var(--mono)" text-anchor="middle" font-weight="600">Δμ=${fmtNum(delta, 3)}</text>`;
+  svg += `<text x="8" y="${PAD.t + plotH / 2}" fill="var(--stat)" font-size="7" font-family="var(--mono)" transform="rotate(-90 8 ${PAD.t + plotH / 2})" text-anchor="middle">${key}</text>`;
+  svg += "</svg>";
+
+  return chartCard(
+    `μ shift · ${key}`,
+    `before ${fmtNum(statsB.mean)} → after ${fmtNum(statsA.mean)} · d=${shift.cohensD.toFixed(2)}`,
+    svg,
+    surprise,
+  );
+}
+
+/** @param {string} key @param {number[]} before @param {number[]} after */
+function renderBeforeAfterScatter(key, before, after) {
+  const n = Math.min(before.length, after.length);
+  const colors = [];
+  for (let i = 0; i < n; i++) colors.push(after[i] >= before[i] ? "var(--ok)" : "var(--err)");
+  return renderScatter(`before ${key}`, `after ${key}`, before.slice(0, n), after.slice(0, n), colors);
+}
+
+/** @param {{ key: string, shift: ReturnType<typeof computeMeanShift> }[]} shifts */
+function renderMeanShiftOverview(shifts) {
+  if (shifts.length === 0) return "";
+  const sorted = [...shifts].sort((a, b) => b.shift.surprise - a.shift.surprise);
+  const maxMag = Math.max(...sorted.map((s) => Math.abs(s.shift.delta)), 1e-9);
+  const chartH = Math.max(120, PAD.t + sorted.length * 22 + PAD.b);
+  const plotW = CHART_W - PAD.l - PAD.r;
+
+  let svg = `<svg viewBox="0 0 ${CHART_W} ${chartH}" aria-hidden>`;
+  svg += `<rect x="${PAD.l}" y="${PAD.t}" width="${plotW}" height="${chartH - PAD.t - PAD.b}" fill="rgba(51,65,85,0.35)" stroke="var(--stat)" rx="2"/>`;
+  const zeroX = PAD.l + plotW / 2;
+
+  sorted.forEach(({ key, shift }, i) => {
+    const y = PAD.t + 14 + i * 22;
+    const w = (Math.abs(shift.delta) / maxMag) * (plotW / 2 - 8);
+    const up = shift.delta >= 0;
+    const x = up ? zeroX : zeroX - w;
+    const color = up ? "var(--ok)" : "var(--err)";
+    const short = key.length > 16 ? key.slice(0, 15) + "…" : key;
+    svg += `<text x="${PAD.l - 4}" y="${y + 4}" fill="var(--muted)" font-size="7" font-family="var(--mono)" text-anchor="end">${short}</text>`;
+    svg += `<rect x="${x}" y="${y - 6}" width="${Math.max(2, w)}" height="12" fill="color-mix(in srgb, ${color} 80%, transparent)" stroke="${color}" rx="2"><title>${key}: Δμ=${fmtNum(shift.delta)} · surprise=${shift.surprise.toFixed(2)}</title></rect>`;
+    svg += `<text x="${up ? x + w + 4 : x - 4}" y="${y + 4}" fill="${color}" font-size="7" font-family="var(--mono)" text-anchor="${up ? "start" : "end"}">${shift.delta >= 0 ? "+" : ""}${fmtNum(shift.delta)}</text>`;
+  });
+
+  svg += `<line x1="${zeroX}" x2="${zeroX}" y1="${PAD.t}" y2="${chartH - PAD.b}" stroke="var(--stat)" stroke-width="1" stroke-dasharray="3 3"/>`;
+  svg += `<text x="${zeroX}" y="${chartH - 4}" fill="var(--stat)" font-size="7" font-family="var(--mono)" text-anchor="middle">Δμ = 0</text>`;
+  svg += "</svg>";
+
+  const topSurprise = sorted[0]?.shift.surprise ?? 0;
+  return chartCard("Mean shift overview", "sorted by surprise · bar = Δμ", svg, topSurprise);
+}
+
+/** @param {string} key @param {number[]} before @param {number[]} after */
+function scoredBeforeAfterHistogram(key, before, after) {
+  const shift = computeMeanShift(before, after);
+  return { surprise: shift.surprise, html: renderBeforeAfterHistogram(key, before, after, shift) };
+}
+
+/** @param {string} key @param {number[]} before @param {number[]} after */
+function scoredPairedIndexScatter(key, before, after) {
+  const shift = computeMeanShift(before, after);
+  return { surprise: shift.surprise, html: renderPairedIndexScatter(key, before, after, shift) };
+}
+
+/** @param {string} key @param {number[]} before @param {number[]} after */
+function scoredDeltaStrip(key, before, after) {
+  const shift = computeMeanShift(before, after);
+  const n = Math.min(before.length, after.length);
+  /** @type {number[]} */
+  const deltas = [];
+  for (let i = 0; i < n; i++) deltas.push(after[i] - before[i]);
+  const dStats = distributionStats(deltas);
+  const surprise = dStats.std > 0 ? Math.abs(dStats.mean) / dStats.std : shift.surprise;
+  return { surprise: Math.max(surprise, shift.surprise * 0.85), html: renderStripScatter(`Δ ${key}`, deltas, "var(--warn)") };
+}
+
+/** @param {string} key @param {number[]} before @param {number[]} after */
+function scoredBeforeAfterScatter(key, before, after) {
+  const shift = computeMeanShift(before, after);
+  return { surprise: shift.surprise * 0.9, html: renderBeforeAfterScatter(key, before, after) };
+}
+
+// ── main render ─────────────────────────────────────────────────
+
+/** @param {FlatDataset} dataset */
+function renderSingle(dataset) {
+  const numCols = dataset.columns.filter((c) => c.kind === "number");
+  const catCols = dataset.columns.filter((c) => c.kind === "category");
+
+  let html = `
+    <div class="section">
+      <div class="section-title">Summary statistics</div>
+      ${renderSummaryTable(dataset) || "<p class='hint'>No numeric columns detected.</p>"}
+    </div>`;
+
+  if (numCols.length > 0) {
+    /** @type {ScoredChart[]} */
+    const stripCharts = numCols.map((c) => {
+      const vals = numericValues(dataset.rows, c.key);
+      const s = distributionStats(vals);
+      const surprise = s.std > 0 && s.n >= 3 ? Math.min(s.std / (Math.abs(s.mean) || 1), 1.5) * 0.4 : 0;
+      return { surprise, html: renderStripScatter(c.key, vals) };
+    });
+    html += `
+      <div class="section">
+        <div class="section-title">Value scatter (1 dot = 1 row · μ gold · ±σ dashed)</div>
+        <div class="section-sub">Sorted by surprise</div>
+        <div class="chart-grid">${joinScored(stripCharts)}</div>
+      </div>`;
+  }
+
+  /** @type {ScoredChart[]} */
+  const scatterCharts = [];
+  for (let i = 0; i < numCols.length; i++) {
+    for (let j = i + 1; j < numCols.length; j++) {
+      const xk = numCols[i].key;
+      const yk = numCols[j].key;
+      const xs = numericValues(dataset.rows, xk);
+      const ys = numericValues(dataset.rows, yk);
+      const len = Math.min(xs.length, ys.length);
+      const r = pearson(xs.slice(0, len), ys.slice(0, len));
+      scatterCharts.push({ surprise: correlationSurprise(r), html: renderScatter(xk, yk, xs.slice(0, len), ys.slice(0, len)) });
+    }
+  }
+  if (scatterCharts.length > 0) {
+    const top = sortBySurprise(scatterCharts)[0]?.surprise ?? 0;
+    html += `
+      <div class="section${top >= 0.7 ? " section-surprise" : ""}">
+        <div class="section-title">Pair scatter plots (sorted by |r| · yellow = trend line)</div>
+        <div class="chart-grid">${joinScored(scatterCharts)}</div>
+      </div>`;
+  }
+
+  html += renderCorrelationMatrix(dataset);
+
+  if (catCols.length > 0) {
+    /** @type {ScoredChart[]} */
+    const catCharts = catCols.map((c) => {
+      const vals = categoryValues(dataset.rows, c.key);
+      const labels = uniqueSorted(vals);
+      const entropy = labels.length / Math.max(vals.length, 1);
+      return { surprise: entropy * 1.2, html: renderCategoryBars(c.key, vals) };
+    });
+    html += `
+      <div class="section">
+        <div class="section-title">Categorical frequencies</div>
+        <div class="chart-grid">${joinScored(catCharts)}</div>
+      </div>`;
+
+    /** @type {ScoredChart[]} */
+    const crossCharts = [];
+    for (let i = 0; i < catCols.length; i++) {
+      for (let j = i + 1; j < catCols.length; j++) {
+        const a = catCols[i].key;
+        const b = catCols[j].key;
+        const va = categoryValues(dataset.rows, a);
+        const vb = categoryValues(dataset.rows, b);
+        const rowLabels = uniqueSorted(va);
+        const colLabels = uniqueSorted(vb);
+        /** @type {number[][]} */
+        const counts = rowLabels.map(() => colLabels.map(() => 0));
+        const n = Math.min(va.length, vb.length);
+        let diag = 0;
+        for (let k = 0; k < n; k++) {
+          const ri = rowLabels.indexOf(va[k]);
+          const ci = colLabels.indexOf(vb[k]);
+          if (ri >= 0 && ci >= 0) {
+            counts[ri][ci]++;
+            if (va[k] === vb[k]) diag++;
+          }
+        }
+        crossCharts.push({
+          surprise: (1 - diag / Math.max(n, 1)) * 1.5 + 0.2,
+          html: renderConfusionMatrix(`${a} × ${b}`, rowLabels, colLabels, counts),
+        });
+      }
+    }
+    if (crossCharts.length > 0) {
+      html += `
+        <div class="section">
+          <div class="section-title">Categorical cross-tabs (sorted by disagreement)</div>
+          <div class="chart-grid wide">${joinScored(crossCharts)}</div>
+        </div>`;
+    }
+  }
+
+  return html;
+}
+
+/** @param {PairedDataset} paired */
+function renderPaired(paired) {
+  const keys = [...new Set([
+    ...paired.before.columns.map((c) => c.key),
+    ...paired.after.columns.map((c) => c.key),
+  ])].sort();
+
+  /** @type {ColumnMeta[]} */
+  const mergedCols = keys.map((key) => {
+    const b = paired.before.columns.find((c) => c.key === key);
+    const a = paired.after.columns.find((c) => c.key === key);
+    const kind = b?.kind === "number" || a?.kind === "number" ? "number" : "category";
+    return { key, kind };
+  });
+
+  const numKeys = mergedCols.filter((c) => c.kind === "number").map((c) => c.key);
+  const catKeys = mergedCols.filter((c) => c.kind === "category").map((c) => c.key);
+
+  /** @type {{ key: string, shift: ReturnType<typeof computeMeanShift> }[]} */
+  const meanShifts = numKeys.map((key) => ({
+    key,
+    shift: computeMeanShift(numericValues(paired.before.rows, key), numericValues(paired.after.rows, key)),
+  }));
+  const sortedShifts = [...meanShifts].sort((a, b) => b.shift.surprise - a.shift.surprise);
+
+  let meanShiftTable = "";
+  if (sortedShifts.length > 0) {
+    meanShiftTable = `<table class="stats-table"><thead><tr><th>Field</th><th>μ before</th><th>μ after</th><th>Δμ</th><th>Cohen's d</th><th>Surprise</th></tr></thead><tbody>`;
+    for (const { key, shift } of sortedShifts) {
+      const hot = shift.surprise >= 1.2 ? ' style="color:#fcd34d"' : shift.surprise >= 0.7 ? ' style="color:#93c5fd"' : "";
+      meanShiftTable += `<tr${hot}><td>${key}</td><td class="num">${fmtNum(shift.statsB.mean)}</td><td class="num">${fmtNum(shift.statsA.mean)}</td><td class="num">${shift.delta >= 0 ? "+" : ""}${fmtNum(shift.delta)}</td><td class="num">${shift.cohensD.toFixed(2)}</td><td class="num">⚡${shift.surprise.toFixed(2)}</td></tr>`;
+    }
+    meanShiftTable += "</tbody></table>";
+  }
+
+  let html = `
+    <div class="section">
+      <div class="section-title">Before / after summary</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div><div class="section-sub">Before (n=${paired.before.rows.length})</div>${renderSummaryTable(paired.before)}</div>
+        <div><div class="section-sub">After (n=${paired.after.rows.length})</div>${renderSummaryTable(paired.after)}</div>
+      </div>
+    </div>`;
+
+  if (numKeys.length > 0) {
+    /** @type {ScoredChart[]} */
+    const meanShiftCharts = sortedShifts.map(({ key, shift }) => ({
+      surprise: shift.surprise,
+      html: renderMeanShiftPlot(key, numericValues(paired.before.rows, key), numericValues(paired.after.rows, key), shift),
+    }));
+
+    html += `
+      <div class="section section-surprise">
+        <div class="section-title">Mean shifts (most surprising first)</div>
+        <div class="section-sub">Cohen's d + paired effect size · ⚡ badge = surprise score</div>
+        ${meanShiftTable}
+        <div class="chart-grid wide" style="margin-top:14px;">
+          ${renderMeanShiftOverview(meanShifts)}
+          ${joinScored(meanShiftCharts)}
+        </div>
+      </div>`;
+
+    html += `
+      <div class="section">
+        <div class="section-title">Before vs after · row scatter (orange=before, green=after)</div>
+        <div class="section-sub">Each x position is one row · vertical line links the pair</div>
+        <div class="chart-grid">${joinScored(numKeys.map((key) => {
+          const b = numericValues(paired.before.rows, key);
+          const a = numericValues(paired.after.rows, key);
+          return scoredPairedIndexScatter(key, b, a);
+        }))}</div>
+      </div>
+      <div class="section">
+        <div class="section-title">Before vs after · value scatter (x=before, y=after)</div>
+        <div class="chart-grid">${joinScored(numKeys.map((key) => {
+          const b = numericValues(paired.before.rows, key);
+          const a = numericValues(paired.after.rows, key);
+          return scoredBeforeAfterScatter(key, b, a);
+        }))}</div>
+      </div>
+      <div class="section">
+        <div class="section-title">Delta scatter (after − before, 1 dot = 1 row)</div>
+        <div class="chart-grid">${joinScored(numKeys.map((key) => {
+          const b = numericValues(paired.before.rows, key);
+          const a = numericValues(paired.after.rows, key);
+          return scoredDeltaStrip(key, b, a);
+        }))}</div>
+      </div>`;
+  }
+
+  if (catKeys.length > 0) {
+    /** @type {ScoredChart[]} */
+    const confusionCharts = catKeys.map((key) => {
+      const b = categoryValues(paired.before.rows, key);
+      const a = categoryValues(paired.after.rows, key);
+      return {
+        surprise: categoryChangeSurprise(b, a),
+        html: buildConfusion(key, b, a),
+      };
+    });
+    html += `
+      <div class="section${(sortBySurprise(confusionCharts)[0]?.surprise ?? 0) >= 0.8 ? " section-surprise" : ""}">
+        <div class="section-title">Change confusion matrices (sorted by flip rate)</div>
+        <div class="chart-grid wide">${joinScored(confusionCharts)}</div>
+      </div>
+      <div class="section">
+        <div class="section-title">Category frequencies</div>
+        <div class="chart-grid">${catKeys.flatMap((key) => [
+          { surprise: 0.2, html: renderCategoryBars(`${key} (before)`, categoryValues(paired.before.rows, key)) },
+          { surprise: 0.2, html: renderCategoryBars(`${key} (after)`, categoryValues(paired.after.rows, key)) },
+        ]).map((c) => c.html).join("")}</div>
+      </div>`;
+  }
+
+  html += renderCorrelationMatrix(paired.before).replace("Correlation matrix", "Before correlation matrix");
+  html += renderCorrelationMatrix(paired.after).replace("Correlation matrix", "After correlation matrix");
+
+  for (const [tag, ds] of /** @type {const} */ ([["Before", paired.before], ["After", paired.after]])) {
+    const nums = ds.columns.filter((c) => c.kind === "number");
+    /** @type {ScoredChart[]} */
+    const scatterCharts = [];
+    for (let i = 0; i < nums.length; i++) {
+      for (let j = i + 1; j < nums.length; j++) {
+        const xk = nums[i].key;
+        const yk = nums[j].key;
+        const xs = numericValues(ds.rows, xk);
+        const ys = numericValues(ds.rows, yk);
+        const len = Math.min(xs.length, ys.length);
+        const r = pearson(xs.slice(0, len), ys.slice(0, len));
+        scatterCharts.push({ surprise: correlationSurprise(r), html: renderScatter(xk, yk, xs.slice(0, len), ys.slice(0, len)) });
+      }
+    }
+    if (scatterCharts.length > 0) {
+      html += `
+        <div class="section">
+          <div class="section-title">${tag} scatter plots (sorted by |r|)</div>
+          <div class="chart-grid">${joinScored(scatterCharts)}</div>
+        </div>`;
+    }
+  }
+
+  return html;
+}
+
+function renderResultsToolbar() {
+  return `
+    <div class="results-toolbar">
+      <button type="button" id="surprisesFilterBtn" class="${surprisesOnly ? "active" : ""}">⚡ Surprises only</button>
+      <span class="filter-hint" id="filterHint">${surprisesOnly ? `Showing charts with ⚡ ≥ ${SURPRISE_THRESHOLD}` : "Showing all charts · toggle to hide boring ones"}</span>
+    </div>`;
+}
+
+function applySurpriseFilter() {
+  const results = document.getElementById("results");
+  if (!results) return;
+
+  document.getElementById("surprisesFilterBtn")?.classList.toggle("active", surprisesOnly);
+  const hint = document.getElementById("filterHint");
+  if (hint) hint.textContent = surprisesOnly ? `Showing charts with ⚡ ≥ ${SURPRISE_THRESHOLD}` : "Showing all charts · toggle to hide boring ones";
+
+  results.querySelectorAll(".section").forEach((section) => {
+    const cards = section.querySelectorAll(".chart-card");
+    let visibleCards = 0;
+    cards.forEach((card) => {
+      const s = parseFloat(/** @type {HTMLElement} */ (card).dataset.surprise || "0");
+      const show = !surprisesOnly || s >= SURPRISE_THRESHOLD;
+      card.classList.toggle("hidden-by-filter", !show);
+      if (show) visibleCards++;
+    });
+    const hasTable = section.querySelector(".stats-table");
+    const isMeanShift = section.classList.contains("section-surprise");
+    const showSection = !surprisesOnly || visibleCards > 0 || (isMeanShift && hasTable);
+    section.classList.toggle("hidden-by-filter", !showSection);
+  });
+
+  document.getElementById("surprisesOnlyBtn")?.classList.toggle("active", surprisesOnly);
+}
+
+function toggleSurprisesOnly() {
+  surprisesOnly = !surprisesOnly;
+  applySurpriseFilter();
+}
+
+function analyze() {
+  const statusEl = document.getElementById("parseStatus");
+  const resultsEl = document.getElementById("results");
+  const emptyEl = document.getElementById("emptyState");
+  const raw = document.getElementById("jsonInput").value.trim();
+
+  if (!raw) {
+    statusEl.className = "warn";
+    statusEl.textContent = "Paste JSON first";
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    statusEl.className = "err";
+    statusEl.textContent = `JSON parse error: ${/** @type {Error} */ (e).message}`;
+    return;
+  }
+
+  const result = parseInput(parsed);
+  if (!result.ok) {
+    statusEl.className = "err";
+    statusEl.textContent = result.error;
+    return;
+  }
+
+  const forcePaired = inputMode === "paired";
+  const isPaired = forcePaired || result.mode === "paired";
+
+  let html;
+  let summary;
+
+  if (isPaired && result.mode === "paired") {
+    html = renderPaired(/** @type {PairedDataset} */ (result.data));
+    const p = /** @type {PairedDataset} */ (result.data);
+    summary = `${p.before.rows.length} before · ${p.after.rows.length} after · ${p.before.columns.length + p.after.columns.length} columns`;
+  } else if (isPaired && result.mode === "single") {
+    statusEl.className = "warn";
+    statusEl.textContent = "Paired mode selected but data looks like a single dataset — showing single analysis";
+    const ds = /** @type {FlatDataset} */ (result.data);
+    html = renderSingle(ds);
+    summary = `${ds.rows.length} rows · ${ds.columns.length} columns · ${ds.columns.filter((c) => c.kind === "number").length} numeric · ${ds.columns.filter((c) => c.kind === "category").length} categorical`;
+  } else {
+    const ds = /** @type {FlatDataset} */ (result.data);
+    html = renderSingle(ds);
+    summary = `${ds.rows.length} rows · ${ds.columns.length} columns · ${ds.columns.filter((c) => c.kind === "number").length} numeric · ${ds.columns.filter((c) => c.kind === "category").length} categorical`;
+  }
+
+  statusEl.className = "ok";
+  statusEl.textContent = `Analyzed: ${summary}`;
+
+  emptyEl.hidden = true;
+  resultsEl.hidden = false;
+  svgMarkerSeq = 0;
+  resultsEl.innerHTML = renderResultsToolbar() + html;
+  document.getElementById("surprisesFilterBtn")?.addEventListener("click", toggleSurprisesOnly);
+  applySurpriseFilter();
+}
+
+function examplesForMode(mode) {
+  return EXAMPLES.filter((e) => e.mode === mode);
+}
+
+function syncExampleSelect() {
+  const select = document.getElementById("exampleSelect");
+  const list = examplesForMode(inputMode);
+  select.innerHTML = list.map((e, i) => `<option value="${i}">${e.label}</option>`).join("");
+  exampleIndex = Math.min(exampleIndex, Math.max(list.length - 1, 0));
+  select.value = String(exampleIndex);
+}
+
+function loadExampleAt(index) {
+  const list = examplesForMode(inputMode);
+  if (list.length === 0) return;
+  exampleIndex = ((index % list.length) + list.length) % list.length;
+  const ex = list[exampleIndex];
+  document.getElementById("jsonInput").value = JSON.stringify(ex.data, null, 2);
+  document.getElementById("exampleSelect").value = String(exampleIndex);
+  const statusEl = document.getElementById("parseStatus");
+  statusEl.className = "warn";
+  statusEl.textContent = `Example: ${ex.label} — ${ex.blurb}`;
+  analyze();
+}
+
+function setMode(mode) {
+  inputMode = mode;
+  exampleIndex = 0;
+  document.getElementById("modeSingle").classList.toggle("active", mode === "single");
+  document.getElementById("modePaired").classList.toggle("active", mode === "paired");
+  syncExampleSelect();
+  loadExampleAt(0);
+}
+
+document.getElementById("analyzeBtn").addEventListener("click", analyze);
+document.getElementById("exampleSelect").addEventListener("change", (e) => {
+  loadExampleAt(Number(/** @type {HTMLSelectElement} */ (e.target).value));
+});
+document.getElementById("examplePrev").addEventListener("click", () => loadExampleAt(exampleIndex - 1));
+document.getElementById("exampleNext").addEventListener("click", () => loadExampleAt(exampleIndex + 1));
+document.getElementById("modeSingle").addEventListener("click", () => setMode("single"));
+document.getElementById("modePaired").addEventListener("click", () => setMode("paired"));
+document.getElementById("surprisesOnlyBtn").addEventListener("click", toggleSurprisesOnly);
+
+document.getElementById("fileInput").addEventListener("change", (e) => {
+  const file = /** @type {HTMLInputElement} */ (e.target).files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    document.getElementById("jsonInput").value = String(reader.result);
+    analyze();
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById("sampleHint").textContent = "35–50 points per example · use ⚡ Surprises only to focus on shifts";
+
+syncExampleSelect();
+loadExampleAt(0);
+</script>
+</body>
+</html>

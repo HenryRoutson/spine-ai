@@ -2,6 +2,7 @@
 // AI : validated against the live pipeline since labels and doc names drift.
 
 import { namedInputDocNames, resolveNamedRunInputs, type NamedRunInputs, type ResolvedNamedInputs } from "@/lib/inference-presets"
+import { validateInferenceDocAssignment } from "@/lib/inference-validity"
 import { labelAsStateKey } from "@/lib/server/pipeline_state"
 import { tryParseJson } from "@/lib/json-utils"
 import { ModuleKind } from "@/lib/types"
@@ -86,8 +87,14 @@ export function validateNamedInputs(
       issues.push({ level: "warning", where: label, message: "no document name set for this input" })
     }
     for (const name of names) {
-      if (!projectDocs.some((d) => d.name === name)) {
+      const doc = projectDocs.find((d) => d.name === name)
+      if (!doc) {
         issues.push({ level: "error", where: label, message: `document "${name}" not found in this project` })
+        continue
+      }
+      const assignmentIssue = validateInferenceDocAssignment(mod, doc)
+      if (assignmentIssue) {
+        issues.push({ level: "error", where: label, message: `${name}: ${assignmentIssue.message}` })
       }
     }
   }

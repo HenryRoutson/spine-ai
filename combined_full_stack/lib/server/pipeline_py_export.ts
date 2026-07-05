@@ -1,10 +1,20 @@
 import { assertEntriesForModule, wrapAssertPython } from "@/lib/assert_steps";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { allModelsToPydantic } from "./pydantic";
-import { labelAsStateKey, pipelineStatePyTypedDict } from "./pipeline_state";
-import { labelToPyKey, stepSpineInType, stepSpineOutType, typeExprToPy } from "./type_expr";
+import {
+  assertNoEnvKeysInExport,
+  exportSpineInPy,
+  generateCombineStepBodyPy,
+  generateInputStepBodyPy,
+  generateOrchestratorPy,
+  modelName,
+  prepareExportProject,
+  pyCustomCodeCall,
+} from "./pipeline_export_shared";
+import { pipelineStatePyTypedDict } from "./pipeline_state";
+import { labelToPyKey, stepSpineOutType, typeExprToPy } from "./type_expr";
 import { MODULE_META } from "./types";
-import type { PipelineModule, Project, StructureModelId } from "./types";
+import type { PipelineModule, Project } from "./types";
 
 function stepFnName(m: PipelineModule, index: number): string {
   const key = labelToPyKey(m.label);
@@ -23,11 +33,6 @@ function pyStringLiteral(s: string): string {
   return JSON.stringify(s);
 }
 
-function modelName(project: Project, id: StructureModelId | undefined): string | undefined {
-  if (!id) return undefined;
-  return project.models.find((m) => m.id === id)?.name;
-}
-
 function pyPrimaryCustomCode(m: PipelineModule): { language: string; code: string } | null {
   const entries = customCodeEntriesForModule(m);
   const primary = entries[0];
@@ -35,11 +40,11 @@ function pyPrimaryCustomCode(m: PipelineModule): { language: string; code: strin
   return { language: primary.language, code: primary.code.trim() };
 }
 
-function inlinePythonCustomCode(code: string, outPy: string): string {
+function inlinePythonCustomCode(code: string): string {
   if (/^\s*def\s+\w+\s*\(/.test(code)) {
-    return [`${code}`, `return transform(input, state)  # type: ignore[name-defined]`].join("\n");
+    return [`${code}`, pyCustomCodeCall(code)].join("\n");
   }
-  return [`__fn = ${code}`, `return __fn(input, state)`].join("\n");
+  return [`__fn = ${code}`, pyCustomCodeCall(code)].join("\n");
 }
 
 function generateStepBody(m: PipelineModule, project: Project, outPy: string): string {
@@ -47,19 +52,8 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string): s
   const inName = modelName(project, m.inStructureId);
 
   switch (m.kind) {
-    case "input": {
-      const lines = [
-        "# Parse uploaded file — built-in parser or vision OCR when enabled",
-        ...(m.inputDescription
-          ? [`# Input guard: ${pyStringLiteral(m.inputDescription)}${m.checkInputDescription === false ? " (disabled)" : ""}`]
-          : []),
-        ...(m.inputNameContains ? [`# Filename must contain: ${pyStringLiteral(m.inputNameContains)}`] : []),
-        ...(m.useOcr ? ["# Vision OCR enabled for PDF/image uploads"] : []),
-        "doc = input",
-        'return {"content": doc["content"], "filename": doc["filename"]}',
-      ];
-      return lines.join("\n");
-    }
+    case "input":
+      return generateInputStepBodyPy(m);
     case "llm": {
       const prompt = m.prompt ?? "Process the input.";
       const model = m.model ?? "deepseek-v3";
@@ -86,21 +80,12 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string): s
         "# Match LLM quote strings against source document byte offsets (no LLM cost)",
         "return resolve_quotes(input, SOURCE_TEXT, SOURCE_DOC_ID)",
       ].join("\n");
-    case "combine": {
-      const out = project.models.find((x) => x.id === m.outStructureId);
-      const fieldNames = out?.fields.map((f) => f.name) ?? [];
-      return [
-        `# Merge new document input with upstream ${inName ?? "pipeline data"}`,
-        "new_doc = input[0] if isinstance(input, list) else input",
-        `pipeline_data = None  # upstream ${inName ?? "structure"}`,
-        `merged = {${fieldNames.map((n) => `"${n}": None  # from doc or pipeline`).join(", ")}}`,
-        "return merged",
-      ].join("\n");
-    }
+    case "combine":
+      return generateCombineStepBodyPy(m, project);
     case "transform": {
       const custom = pyPrimaryCustomCode(m);
       if (custom?.language === "python") {
-        return inlinePythonCustomCode(custom.code, outPy);
+        return inlinePythonCustomCode(custom.code);
       }
       if (custom?.language === "typescript") {
         return [
@@ -118,7 +103,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string): s
       const custom = pyPrimaryCustomCode(m);
       const fallbacks = customCodeEntriesForModule(m);
       if (custom?.language === "python") {
-        const lines = inlinePythonCustomCode(custom.code, outPy).split("\n");
+        const lines = inlinePythonCustomCode(custom.code).split("\n");
         if (fallbacks.length > 1) {
           lines.unshift(`# ${fallbacks.length} fallback implementations — first shown`);
         }
@@ -168,9 +153,8 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string): s
 
 function generateStepFn(m: PipelineModule, project: Project, index: number): string {
   const fn = stepFnName(m, index);
-  const inType = stepSpineInType(m);
+  const inPy = exportSpineInPy(m, project, index);
   const outType = stepSpineOutType(m);
-  const inPy = inType ? typeExprToPy(inType, project.models) : "Any";
   const outPy = outType ? typeExprToPy(outType, project.models) : "Any";
   const meta = MODULE_META[m.kind];
   const docLines = [
@@ -186,28 +170,6 @@ function generateStepFn(m: PipelineModule, project: Project, index: number): str
   ];
   const body = generateStepBody(m, project, outPy);
   return [...header, indentBlock(body, 4), "", ""].join("\n");
-}
-
-function generateRunPipeline(project: Project): string {
-  const lines = [
-    "async def run_pipeline(initial_input: Any) -> Any:",
-    "    state: PipelineState = {}",
-    "    spine = initial_input",
-    "",
-  ];
-
-  for (let i = 0; i < project.modules.length; i++) {
-    const m = project.modules[i]!;
-    const fn = stepFnName(m, i);
-    const label = labelAsStateKey(m.label);
-    lines.push(`    # ${i + 1}. ${m.label} (${MODULE_META[m.kind].label})`);
-    lines.push(`    spine = await ${fn}(spine, state)`);
-    if (label) lines.push(`    state[${pyStringLiteral(label)}] = spine`);
-    lines.push("");
-  }
-
-  lines.push("    return spine", "");
-  return lines.join("\n");
 }
 
 const RUNTIME_STUBS = `
@@ -234,14 +196,15 @@ async def wait_for_human_review(input: Any) -> None:
 
 // AI : single-file Python export — models + step bodies + orchestrator for LOC comparison.
 export function generatePipelineSourcePy(project: Project): string {
+  const prepared = prepareExportProject(project);
   const sections: string[] = [];
-  const stepFns = project.modules.map((m, i) => generateStepFn(m, project, i)).join("\n");
-  const orchestrator = generateRunPipeline(project);
+  const stepFns = prepared.modules.map((m, i) => generateStepFn(m, prepared, i)).join("\n");
+  const orchestrator = generateOrchestratorPy(prepared, stepFnName);
 
   sections.push(
     '"""Generated pipeline export — equivalent Python representation"""',
-    `# Project: ${project.name}`,
-    `# ${project.modules.length} steps · ${project.models.length} structures`,
+    `# Project: ${prepared.name}`,
+    `# ${prepared.modules.length} steps · ${prepared.models.length} structures`,
     "",
     "from __future__ import annotations",
     "",
@@ -249,10 +212,10 @@ export function generatePipelineSourcePy(project: Project): string {
     "from typing import Any",
     "",
     "# === structures ===",
-    allModelsToPydantic(project.models, project.typeAliases ?? []),
+    allModelsToPydantic(prepared.models, prepared.typeAliases ?? []),
     "",
     "# === pipeline state ===",
-    pipelineStatePyTypedDict(project),
+    pipelineStatePyTypedDict(prepared),
     "",
     RUNTIME_STUBS,
     "",
@@ -264,8 +227,12 @@ export function generatePipelineSourcePy(project: Project): string {
 
   const content = sections.join("\n");
   const lineCount = content.split("\n").length;
-  return content.replace(
-    `# ${project.modules.length} steps · ${project.models.length} structures`,
-    `# ${project.modules.length} steps · ${project.models.length} structures · ${lineCount} lines`,
+  const withMeta = content.replace(
+    `# ${prepared.modules.length} steps · ${prepared.models.length} structures`,
+    `# ${prepared.modules.length} steps · ${prepared.models.length} structures · ${lineCount} lines`,
   );
+  assertNoEnvKeysInExport(withMeta);
+  return withMeta;
 }
+
+export { assertNoEnvKeysInExport, findEnvLeaksInExport } from "./pipeline_export_shared";

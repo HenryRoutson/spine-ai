@@ -3,7 +3,7 @@
 // AI : get null placeholders (partial tests are by design — only listed steps are checked).
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { buildDefaultInputDocs, orderedInputModules } from "../lib/inference-input";
+import { buildDefaultInputDocs, docMatchesInputModule, orderedInputModules } from "../lib/inference-input";
 import { loadProjectSeed, SEEDS_DIR } from "../lib/server/seed";
 import { validateTestFile, type SpineTestFile } from "../lib/testing-files";
 import { DocLabel } from "../lib/server/types";
@@ -29,8 +29,13 @@ function buildInputs(project: Project, docRefs: DocRef[]): Record<string, string
     const v = assignment[m.id];
     if (Array.isArray(v)) inputs[m.label.trim()] = v.map((d) => d.name);
     else if (v) inputs[m.label.trim()] = v.name;
-    // AI : type-mismatch seeds (e.g. json doc on a text input) — fall back to the first inference doc.
-    else inputs[m.label.trim()] = docRefs.find((d) => d.label === DocLabel.Inference)?.name ?? "";
+    // AI : type-mismatch seeds — pick the first inference doc that matches this input slot.
+    else {
+      const matched = docRefs.find(
+        (d) => d.label === DocLabel.Inference && docMatchesInputModule(d, m),
+      )
+      inputs[m.label.trim()] = matched?.name ?? docRefs.find((d) => d.label === DocLabel.Inference)?.name ?? ""
+    }
   }
   return inputs;
 }

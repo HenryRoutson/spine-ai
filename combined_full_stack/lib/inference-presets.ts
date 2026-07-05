@@ -1,6 +1,7 @@
 // AI : named pre-selected runs — one resolver shared by inference presets AND *_testing.json tests,
 // AI : so "input step label → doc name(s)" only resolves to run docs in one place.
 
+import { validateInferenceDocAssignment } from "@/lib/inference-validity"
 import { labelAsStateKey } from "@/lib/server/pipeline_state"
 import { isMultiDocInputModule, orderedInputModules, type InputDocsAssignment } from "@/lib/inference-input-core"
 import type { DocId, DocRef, InferencePreset, ModuleId, PipelineModule } from "@/lib/types"
@@ -46,6 +47,10 @@ export function resolveNamedRunInputs(
     for (const name of names) {
       const doc = projectDocs.find((d) => d.name === name)
       if (!doc) return { ok: false, error: `document "${name}" not found for step "${m.label}"` }
+      const assignmentIssue = validateInferenceDocAssignment(m, doc)
+      if (assignmentIssue) {
+        return { ok: false, error: `${doc.name}: ${assignmentIssue.message} (step "${m.label}")` }
+      }
       refs.push(doc)
     }
     byModule[m.id] = refs.map((d) => d.id as DocId)

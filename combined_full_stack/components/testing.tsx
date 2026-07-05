@@ -1081,7 +1081,7 @@ function TestDetail({
 
   const dirty = draft !== null && JSON.stringify(draft) !== initialSig
   const serialized = draft ? draftToContent(draft, project) : null
-  const draftBlocked = draft === null || serialized === null || draftHasErrors(draft, project)
+  const draftBlocked = draft === null || serialized === null || draftHasErrors(draft, project, projectDocs)
 
   useEffect(() => {
     if (state.parseError) {
@@ -1097,7 +1097,7 @@ function TestDetail({
   const runTitle =
     serialized === null
       ? "fix invalid JSON values first"
-      : draft && draftHasErrors(draft, project)
+      : draft && draftHasErrors(draft, project, projectDocs)
         ? "fix the errors marked in red first"
         : undefined
 
