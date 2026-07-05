@@ -30,7 +30,22 @@ add export to Rust
 
 there should be a group by on the fields where you can see the mapping of what has been mapped to what with autmoatically generated confusion matricies.
 
+https://www.strix.ai/
 
+
+add this demo UI to allow time to schedule 
+https://cal.com/team/strix/strix-demo
+
+
+
+
+pitch to ppl instead of shopify you can sell AI auomations,
+be able to upmark the stripe billing on top of my cut
+
+
+
+
+https://github.com/usestrix/strix
 
 OCR
 
