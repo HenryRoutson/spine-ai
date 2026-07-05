@@ -11,10 +11,14 @@ import {
   prepareExportProject,
   tsCustomCodeCall,
 } from "./pipeline_export_shared";
+import { analyzeExportRuntimeNeeds, generateRuntimeStubsTs } from "./pipeline_export_setup";
 import { pipelineStateTsInterface } from "./pipeline_state";
 import { labelToPyKey, stepSpineOutType, typeExprToTs } from "./type_expr";
 import { MODULE_META } from "./types";
 import type { PipelineModule, Project } from "./types";
+
+// AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
+// AI : TODO export — emit only pipeline-referenced structures, not every project model.
 
 function stepFnName(m: PipelineModule, index: number): string {
   const key = labelToPyKey(m.label);
@@ -44,6 +48,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string): s
     case "input":
       return generateInputStepBodyTs(m, outTs);
     case "llm": {
+      // AI : TODO export — replace schema placeholder with generated JSON Schema from outStructureId.
       const prompt = m.prompt ?? "Process the input.";
       const model = m.model ?? "/* global default model */";
       return [
@@ -67,7 +72,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string): s
     case "quote":
       return [
         "// Match LLM quote strings against source document byte offsets (no LLM cost)",
-        `return resolveQuotes(input, SOURCE_TEXT, SOURCE_DOC_ID) as ${outTs};`,
+        `return resolveQuotes(input, "", "") as ${outTs};`,
       ].join("\n");
     case "combine":
       return generateCombineStepBodyTs(m, project, outTs);
@@ -153,35 +158,11 @@ function generateStepFn(m: PipelineModule, project: Project, index: number): str
   return [...header, indentBlock(body, 2), "}", ""].join("\n");
 }
 
-const RUNTIME_STUBS = `
-// --- runtime stubs (replace with your implementations) ---
-declare const SOURCE_TEXT: string;
-declare const SOURCE_DOC_ID: string;
-
-async function llmStructured<T>(prompt: string, _schema: unknown): Promise<T> {
-  throw new Error("wire llmStructured to your LLM client");
-}
-
-async function llmBatchStructured<T>(
-  items: unknown[],
-  promptFor: (item: unknown) => string,
-  schema: unknown,
-): Promise<T[]> {
-  return Promise.all(items.map((item) => llmStructured<T>(promptFor(item), schema)));
-}
-
-function resolveQuotes<T>(data: unknown, _sourceText: string, _docId: string): T {
-  throw new Error("wire resolveQuotes to your quote linker");
-}
-
-async function waitForHumanReview<T>(_input: T): Promise<void> {
-  throw new Error("wire waitForHumanReview to your review UI");
-}
-`.trim();
-
 // AI : single-file TS export — types + step bodies + orchestrator for LOC comparison.
 export function generatePipelineSourceTs(project: Project): string {
   const prepared = prepareExportProject(project);
+  const needs = analyzeExportRuntimeNeeds(prepared);
+  const runtimeStubs = generateRuntimeStubsTs(needs);
   const sections: string[] = [];
   const stepFns = prepared.modules.map((m, i) => generateStepFn(m, prepared, i)).join("\n");
   const orchestrator = generateOrchestratorTs(prepared, stepFnName);
@@ -190,6 +171,7 @@ export function generatePipelineSourceTs(project: Project): string {
     "// Generated pipeline export — equivalent TypeScript representation",
     `// Project: ${prepared.name}`,
     `// ${prepared.modules.length} steps · ${prepared.models.length} structures`,
+    "// Setup: export also includes .env.example and SETUP.md — copy .env.example → .env",
     "",
     "// === structures ===",
     generateModelsDts(prepared.models, prepared.typeAliases ?? []),
@@ -197,7 +179,7 @@ export function generatePipelineSourceTs(project: Project): string {
     "// === pipeline state ===",
     pipelineStateTsInterface(prepared),
     "",
-    RUNTIME_STUBS,
+    runtimeStubs,
     "",
     "// === steps ===",
     stepFns,

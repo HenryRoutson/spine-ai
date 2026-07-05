@@ -11,10 +11,13 @@ import {
   prepareExportProject,
   pyCustomCodeCall,
 } from "./pipeline_export_shared";
+import { analyzeExportRuntimeNeeds, generateRuntimeStubsPy } from "./pipeline_export_setup";
 import { pipelineStatePyTypedDict } from "./pipeline_state";
 import { labelToPyKey, stepSpineOutType, typeExprToPy } from "./type_expr";
 import { MODULE_META } from "./types";
 import type { PipelineModule, Project } from "./types";
+
+// AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
 
 function stepFnName(m: PipelineModule, index: number): string {
   const key = labelToPyKey(m.label);
@@ -55,6 +58,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string): s
     case "input":
       return generateInputStepBodyPy(m);
     case "llm": {
+      // AI : TODO export — replace schema placeholder with generated JSON Schema from outStructureId.
       const prompt = m.prompt ?? "Process the input.";
       const model = m.model ?? "deepseek-v3";
       return [
@@ -78,7 +82,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string): s
     case "quote":
       return [
         "# Match LLM quote strings against source document byte offsets (no LLM cost)",
-        "return resolve_quotes(input, SOURCE_TEXT, SOURCE_DOC_ID)",
+        "return resolve_quotes(input, '', '')",
       ].join("\n");
     case "combine":
       return generateCombineStepBodyPy(m, project);
@@ -172,31 +176,11 @@ function generateStepFn(m: PipelineModule, project: Project, index: number): str
   return [...header, indentBlock(body, 4), "", ""].join("\n");
 }
 
-const RUNTIME_STUBS = `
-# --- runtime stubs (replace with your implementations) ---
-SOURCE_TEXT: str = ""
-SOURCE_DOC_ID: str = ""
-
-async def llm_structured(prompt: str, schema: Any) -> Any:
-    raise NotImplementedError("wire llm_structured to your LLM client")
-
-async def llm_batch_structured(
-    items: list[Any],
-    prompt_for: Any,
-    schema: Any,
-) -> list[Any]:
-    return [await llm_structured(prompt_for(item), schema) for item in items]
-
-def resolve_quotes(data: Any, source_text: str, doc_id: str) -> Any:
-    raise NotImplementedError("wire resolve_quotes to your quote linker")
-
-async def wait_for_human_review(input: Any) -> None:
-    raise NotImplementedError("wire wait_for_human_review to your review UI")
-`.trim();
-
 // AI : single-file Python export — models + step bodies + orchestrator for LOC comparison.
 export function generatePipelineSourcePy(project: Project): string {
   const prepared = prepareExportProject(project);
+  const needs = analyzeExportRuntimeNeeds(prepared);
+  const runtimeStubs = generateRuntimeStubsPy(needs);
   const sections: string[] = [];
   const stepFns = prepared.modules.map((m, i) => generateStepFn(m, prepared, i)).join("\n");
   const orchestrator = generateOrchestratorPy(prepared, stepFnName);
@@ -205,6 +189,7 @@ export function generatePipelineSourcePy(project: Project): string {
     '"""Generated pipeline export — equivalent Python representation"""',
     `# Project: ${prepared.name}`,
     `# ${prepared.modules.length} steps · ${prepared.models.length} structures`,
+    "# Setup: export also includes .env.example and SETUP.md — copy .env.example → .env",
     "",
     "from __future__ import annotations",
     "",
@@ -217,7 +202,7 @@ export function generatePipelineSourcePy(project: Project): string {
     "# === pipeline state ===",
     pipelineStatePyTypedDict(prepared),
     "",
-    RUNTIME_STUBS,
+    runtimeStubs,
     "",
     "# === steps ===",
     stepFns,

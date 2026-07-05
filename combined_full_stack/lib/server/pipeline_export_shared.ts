@@ -67,6 +67,7 @@ function pyCustomCodeCall(code: string): string {
 }
 
 export function generateInputStepBodyTs(m: PipelineModule, outTs: string): string {
+  // AI : TODO export — emit input-description LLM guard when checkInputDescription is enabled.
   const lines = [
     "// Parse uploaded file — built-in parser or vision OCR when enabled",
     ...(m.inputDescription
@@ -238,6 +239,7 @@ export function generateOrchestratorPy(project: Project, stepFnName: (m: Pipelin
 export { tsCustomCodeCall, pyCustomCodeCall };
 
 // AI : block exports that reference runtime secrets or env wiring.
+// AI : TODO export — add generatePipelineSourceRust alongside TS/Py.
 const ENV_ACCESS_PATTERNS: RegExp[] = [
   /\bprocess\.env\b/,
   /\bprocess\[["']env["']\]/,
