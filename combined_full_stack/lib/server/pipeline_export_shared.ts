@@ -7,6 +7,12 @@ import { FieldType, ModuleKind } from "./types";
 import type { StepLabel } from "../run-types";
 import type { PipelineModule, Project, StructureModelId, TypeExpr } from "./types";
 
+export type PipelineSetupFile = {
+  filename: string;
+  content: string;
+  mime: string;
+};
+
 // AI : normalize project models before codegen so built-in Document resolves everywhere.
 export function prepareExportProject(project: Project): Project {
   return { ...project, models: withSharedModels(project.models) };
@@ -240,6 +246,8 @@ export { tsCustomCodeCall, pyCustomCodeCall };
 
 // AI : block exports that reference runtime secrets or env wiring.
 // AI : TODO export — add generatePipelineSourceRust alongside TS/Py.
+// AI : TODO export — optional Supabase hooks in orchestrator (persist run metadata + per-step spine snapshots).
+// AI : TODO export — emit cache lookup/store around LLM steps when module.cached or runtime.enableCache is set.
 const ENV_ACCESS_PATTERNS: RegExp[] = [
   /\bprocess\.env\b/,
   /\bprocess\[["']env["']\]/,

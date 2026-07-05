@@ -1,6 +1,7 @@
 "use client"
 
 // AI : TODO export UI — zip download (single archive) instead of sequential downloadBlob calls.
+// AI : TODO export UI — bundled Supabase SQL + Next.js inference shell alongside connector files.
 
 import { useEffect, useMemo, useState } from "react"
 import { AlertTriangle, Check, Code2, Download, FileText, Loader2, X } from "lucide-react"
@@ -12,7 +13,16 @@ import type { Project, StructureModel, TypeAlias } from "@/lib/types"
 import type { PipelineModule } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-type ExportTabId = "typescript" | "python" | "env" | "setup" | "requirements"
+type ExportTabId =
+  | "typescript"
+  | "python"
+  | "proto"
+  | "ui"
+  | "connector-ts"
+  | "connector-py"
+  | "env"
+  | "setup"
+  | "requirements"
 
 type ExportFile = {
   id: ExportTabId
@@ -33,7 +43,38 @@ function projectSlug(name: string): string {
   )
 }
 
-const TAB_ORDER: ExportTabId[] = ["typescript", "python", "env", "requirements", "setup"]
+const TAB_ORDER: ExportTabId[] = [
+  "typescript",
+  "python",
+  "proto",
+  "ui",
+  "connector-ts",
+  "connector-py",
+  "env",
+  "requirements",
+  "setup",
+]
+
+function setupFileTabMeta(filename: string): { id: ExportTabId; label: string; language?: ExportFile["language"] } {
+  switch (filename) {
+    case ".env.example":
+      return { id: "env", label: ".env.example", language: "plaintext" }
+    case "requirements.txt":
+      return { id: "requirements", label: "requirements.txt", language: "plaintext" }
+    case "SETUP.md":
+      return { id: "setup", label: "SETUP.md", language: "markdown" }
+    case "pipeline_connector.proto":
+      return { id: "proto", label: "connector.proto", language: "plaintext" }
+    case "inference_ui.html":
+      return { id: "ui", label: "inference UI", language: "plaintext" }
+    case "connector_server.ts":
+      return { id: "connector-ts", label: "connector (TS)", language: "typescript" }
+    case "connector_server.py":
+      return { id: "connector-py", label: "connector (Py)", language: "python" }
+    default:
+      return { id: "setup", label: filename, language: "plaintext" }
+  }
+}
 
 export function PipelineExportDialog({
   project,
@@ -67,9 +108,14 @@ export function PipelineExportDialog({
       try {
         const { generatePipelineSourceTs } = await import("@/lib/server/pipeline_ts_export")
         const { generatePipelineSourcePy } = await import("@/lib/server/pipeline_py_export")
-        const { generatePipelineSetupFiles } = await import("@/lib/server/pipeline_export_setup")
+        const { generatePipelineSetupFiles, assertNoSecretValuesInExport } = await import(
+          "@/lib/server/pipeline_export_setup"
+        )
+        const { generatePipelineConnectorFiles } = await import("@/lib/server/pipeline_export_connector")
         const slug = projectSlug(project.name)
         const setupFiles = generatePipelineSetupFiles(exportProject)
+        const connectorFiles = generatePipelineConnectorFiles(exportProject)
+        for (const f of connectorFiles) assertNoSecretValuesInExport(f.content)
         const next: ExportFile[] = [
           {
             id: "typescript",
@@ -88,25 +134,25 @@ export function PipelineExportDialog({
             language: "python",
           },
           ...setupFiles.map((f) => {
-            const id: ExportTabId =
-              f.filename === ".env.example"
-                ? "env"
-                : f.filename === "requirements.txt"
-                  ? "requirements"
-                  : "setup"
-            const label =
-              f.filename === ".env.example"
-                ? ".env.example"
-                : f.filename === "requirements.txt"
-                  ? "requirements.txt"
-                  : "SETUP.md"
+            const meta = setupFileTabMeta(f.filename)
             return {
-              id,
-              label,
+              id: meta.id,
+              label: meta.label,
               filename: f.filename,
               content: f.content,
               mime: f.mime,
-              language: (f.filename.endsWith(".md") ? "markdown" : "plaintext") as "plaintext" | "markdown",
+              language: meta.language,
+            }
+          }),
+          ...connectorFiles.map((f) => {
+            const meta = setupFileTabMeta(f.filename)
+            return {
+              id: meta.id,
+              label: meta.label,
+              filename: f.filename,
+              content: f.content,
+              mime: f.mime,
+              language: meta.language,
             }
           }),
         ]
@@ -162,7 +208,7 @@ export function PipelineExportDialog({
             <div>
               <p className="text-sm font-semibold">Pipeline export</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Pipeline code plus .env.example and SETUP.md. Pipeline files contain no secrets — wire env in your runner.
+                Pipeline code, gRPC connector, inference UI, and setup files. No secrets in generated code — wire env in your runner.
               </p>
             </div>
             <Button variant="ghost" size="icon-sm" onClick={() => setOpen(false)}>
@@ -208,7 +254,14 @@ export function PipelineExportDialog({
               </div>
 
               <div className="h-[min(28rem,50vh)] min-h-48">
-                {active && (
+                {active && tab === "ui" ? (
+                  <iframe
+                    title="Inference UI preview"
+                    srcDoc={active.content}
+                    className="h-full w-full border-0 bg-background"
+                    sandbox="allow-scripts"
+                  />
+                ) : active ? (
                   <ReadonlyCodeViewer
                     value={active.content}
                     language={previewLanguage}
@@ -216,13 +269,13 @@ export function PipelineExportDialog({
                     badge="read-only"
                     className="h-full"
                   />
-                )}
+                ) : null}
               </div>
 
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3">
                 <p className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
                   <FileText className="h-3 w-3" />
-                  {files.length} files · start with SETUP.md
+                  {files.length} files · start with SETUP.md · open inference_ui.html against connector
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button

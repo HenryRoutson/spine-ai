@@ -1,5 +1,6 @@
 import { orderedInputModules } from "@/lib/inference-input";
 import { labelAsStateKey } from "./pipeline_state";
+import type { PipelineSetupFile } from "./pipeline_export_shared";
 import { ModuleKind } from "./types";
 import type { PipelineModule, Project } from "./types";
 
@@ -12,11 +13,7 @@ export type ExportRuntimeNeeds = {
   inputModules: { label: string; filenameHint?: string; inputType?: string }[];
 };
 
-export type PipelineSetupFile = {
-  filename: string;
-  content: string;
-  mime: string;
-};
+export type { PipelineSetupFile } from "./pipeline_export_shared";
 
 export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds {
   const inputModules = orderedInputModules(project.modules).map((m) => ({
@@ -85,10 +82,17 @@ export function generateEnvExample(project: Project): string {
   }
 
   lines.push(
-    "# Optional — only if you persist runs/docs outside this export",
+    "# Connector — gRPC + HTTP JSON bridge (see connector_server.*)",
+    'PIPELINE_GRPC_PORT="50051"',
+    'PIPELINE_HTTP_PORT="8080"',
+    "",
+    "# Optional — Supabase persistence for exported app (TODO: migrations in export bundle)",
     '# NEXT_PUBLIC_SUPABASE_URL=""',
     '# NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=""',
     '# SUPABASE_SERVICE_ROLE_KEY=""',
+    "",
+    "# Optional — step cache store (TODO: wire Redis/Supabase in connector + orchestrator)",
+    '# PIPELINE_CACHE_URL=""',
     "",
     "# Optional — billing UI in the full Forge app (not required for pipeline-only runs)",
     '# NEXT_PUBLIC_STRIPE_ENABLED="false"',
@@ -110,6 +114,9 @@ export function generateSetupReadme(project: Project, slug: string): string {
     "",
     `- \`${slug}_pipeline.ts\` — TypeScript types, steps, orchestrator`,
     `- \`${slug}_pipeline.py\` — Python models, steps, orchestrator`,
+    "- `pipeline_connector.proto` — gRPC contract (same for TS and Python)",
+    "- `connector_server.ts` / `connector_server.py` — gRPC + HTTP JSON bridge",
+    "- `inference_ui.html` — standalone inference UI (open in browser, POST to connector)",
     "- `.env.example` — copy to `.env` and fill in (never commit real secrets)",
     "- `requirements.txt` — Python deps (`pip install -r requirements.txt`)",
     "- `SETUP.md` — this file",
@@ -185,6 +192,29 @@ export function generateSetupReadme(project: Project, slug: string): string {
       : "# configure_pipeline_runtime(...) if you extend runtime stubs";
 
   lines.push(
+    "## Connector + UI",
+    "",
+    "Both backends expose the same `PipelineConnector` service from `pipeline_connector.proto`:",
+    "",
+    "- **gRPC** — default port `50051` (`PIPELINE_GRPC_PORT`)",
+    "- **HTTP JSON** — `POST /v1/run` on port `8080` (`PIPELINE_HTTP_PORT`) for `inference_ui.html`",
+    "",
+    "TypeScript connector:",
+    "",
+    "```bash",
+    "npm install @grpc/grpc-js @grpc/proto-loader dotenv",
+    "npx tsx connector_server.ts",
+    "```",
+    "",
+    "Python connector:",
+    "",
+    "```bash",
+    "python -m grpc_tools.protoc -I. --python_out=. --grpc_python_out=. pipeline_connector.proto",
+    "python connector_server.py",
+    "```",
+    "",
+    "Open `inference_ui.html` in a browser (or serve statically). Point **Connector URL** at `http://localhost:8080/v1/run`.",
+    "",
     "## Run",
     "",
     multi
@@ -249,7 +279,13 @@ export function assertNoSecretValuesInExport(source: string): void {
 }
 
 export function generateRequirementsTxt(needs: ExportRuntimeNeeds): string {
-  const lines = ["# Python pipeline runner", "pydantic>=2", "python-dotenv>=1"];
+  const lines = [
+    "# Python pipeline runner",
+    "pydantic>=2",
+    "python-dotenv>=1",
+    "grpcio>=1.62",
+    "grpcio-tools>=1.62  # protoc for pipeline_connector.proto",
+  ];
   if (needs.llm || needs.llmBatch || needs.visionOcr) {
     lines.push("httpx>=0.27  # OpenRouter client for llm_structured");
   }
@@ -394,7 +430,8 @@ function llmStructuredStubPy(): string[] {
 
 export function generatePipelineSetupFiles(project: Project): PipelineSetupFile[] {
   // AI : TODO export — add run_example.ts / run_example.py that load .env and read input docs.
-  // AI : TODO export — full-stack bundle (Supabase SQL, Next.js inference UI) per spec.
+  // AI : TODO export — Supabase bundle: migrations SQL, RLS policies, runs/docs/cache tables for exported app persistence.
+  // AI : TODO export — step I/O caching (Redis or Supabase storage) keyed by content hash + step signature; wire into connector.
   const slug = projectSlug(project.name);
   const needs = analyzeExportRuntimeNeeds(project);
   const envExample = generateEnvExample(project);
@@ -419,6 +456,8 @@ export function generateRuntimeConfigSectionTs(needs: ExportRuntimeNeeds): strin
       : []),
     ...(needs.quote ? ["  sourceText?: string;", "  sourceDocId?: string;"] : []),
     ...(needs.humanReview ? ["  onHumanReview?: <T>(input: T) => Promise<void>;"] : []),
+    "  // AI : TODO export — Supabase persistence (supabaseUrl, supabaseServiceKey).",
+    "  // AI : TODO export — step cache (enableCache, cacheUrl / PIPELINE_CACHE_URL).",
     "};",
     "",
     "let runtime: PipelineRuntime = {};",
@@ -504,6 +543,10 @@ export function generateRuntimeConfigSectionPy(needs: ExportRuntimeNeeds): strin
   if (needs.humanReview) {
     lines.push("    on_human_review: Any = None  # async callable(input) -> None");
   }
+  lines.push(
+    "    # AI : TODO export — Supabase persistence (supabase_url, supabase_service_key).",
+    "    # AI : TODO export — step cache (enable_cache, cache_url / PIPELINE_CACHE_URL).",
+  );
   lines.push("", "runtime = PipelineRuntime()", "", "def configure_pipeline_runtime(**kwargs: Any) -> None:", "    global runtime", "    for k, v in kwargs.items():", "        if hasattr(runtime, k):", "            setattr(runtime, k, v)", "");
   return lines.join("\n");
 }
