@@ -46,6 +46,7 @@ export const API_ROUTES = {
   hostedApiInvoke: (id: string) => `/api/hosted-apis/${id}/invoke`,
   hostedApiProgress: (id: string) => `/api/hosted-apis/${id}/progress`,
   landingDemoBuild: "/api/landing-demo/build-pipeline",
+  landingDemoSignup: "/api/landing-demo/signup",
   demoState: "/api/demo/state",
   demoDocText: (id: string, layer: "parser" | "vision" = "parser") =>
     `/api/demo/docs/${id}/text${layer === "vision" ? "?layer=vision" : ""}`,
@@ -66,7 +67,7 @@ function isSharedLinkPublicApi(pathname: string): boolean {
 }
 
 function isLandingDemoPublicApi(pathname: string): boolean {
-  return pathname === API_ROUTES.landingDemoBuild;
+  return pathname === API_ROUTES.landingDemoBuild || pathname === API_ROUTES.landingDemoSignup;
 }
 
 function isDemoPublicApi(pathname: string): boolean {

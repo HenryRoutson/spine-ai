@@ -9,6 +9,7 @@ import {
 } from "@/lib/server/landing_proxy_auth";
 import { landingDemoCorsHeaders } from "@/lib/server/landing_demo_cors";
 import { LandingBudgetError } from "@/lib/server/landing_page_demo";
+import { hasLandingPageSignup } from "@/lib/server/landing_page_signups";
 import { buildLandingPipelineFromTask } from "@/lib/server/landing_pipeline_build";
 import { logger } from "@/lib/server/server_logger";
 
@@ -47,6 +48,11 @@ export async function POST(req: Request): Promise<NextResponse> {
   if ("validationError" in body) return jsonWithCors(req, { error: body.validationError }, HTTP.BAD_REQUEST);
 
   try {
+    const registered = await hasLandingPageSignup(body.email);
+    if (!registered) {
+      return jsonWithCors(req, { error: "Enter your email before generating a pipeline.", code: "email_required" }, HTTP.BAD_REQUEST);
+    }
+
     const ip = clientIpForLandingDemo(req.headers);
     const result = await buildLandingPipelineFromTask(body.task, ip);
     return jsonWithCors(req, result);

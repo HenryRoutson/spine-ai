@@ -14,6 +14,7 @@ export type RateLimitTier =
   | "shared_run"
   | "hosted_api"
   | "landing_demo_build"
+  | "landing_demo_signup"
   | "shared_upload";
 export type RateLimitKey = string & { __brand: "RateLimitKey" };
 
@@ -35,6 +36,8 @@ export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number 
   hosted_api: { windowMs: 600_000, max: 30 },
   // AI : landing pipeline builds — budget-gated; IP capped alongside budget.
   landing_demo_build: { windowMs: 600_000, max: 12 },
+  // AI : landing email signup — low volume gate before demo use.
+  landing_demo_signup: { windowMs: 600_000, max: 20 },
   // AI : per-link session uploads — caps storage exhaustion on public shared links.
   shared_upload: { windowMs: 600_000, max: 10 },
 };

@@ -3,6 +3,10 @@ Spine
 rename everything to spine
 name might already be taken https://www.getspine.ai/
 
+please add email collection as a prereq before allowing agent use
+landing page needs to be a form to gather data before anything
+need email from ppl to send out updates
+put emails in supabase
 
 make a monitoring dashboard if supabase isn't good enough
 

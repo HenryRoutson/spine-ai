@@ -450,6 +450,11 @@ export async function parseRequestJson<T>(
   return parsed.data;
 }
 
+export const landingSignupBodySchema = z.object({
+  email: z.string().trim().email().max(320),
+});
+
 export const landingBuildPipelineBodySchema = z.object({
+  email: z.string().trim().email().max(320),
   task: z.string().trim().min(1).max(2000),
 });

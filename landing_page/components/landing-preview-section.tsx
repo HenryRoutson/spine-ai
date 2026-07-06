@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { AppLivePreview } from "./app-live-preview";
+import { readDemoEmail, writeDemoEmail, type demo_email_string } from "@/lib/demo-email";
 import {
   LandingDemoConsentBanner,
   readDemoPrivacyConsent,
@@ -48,9 +49,13 @@ function apiReachabilityError(spineApiUrl: ApiUrl): string {
 }
 
 const BUILD_PIPELINE_PATH = "/api/landing-demo/build-pipeline";
+const SIGNUP_PATH = "/api/landing-demo/signup";
 // AI : TODO (spec) — landing build-pipeline demo reliability; task→pipeline often fails on complex prompts (see TODO.txt).
 
 type LandingBuildContextValue = {
+  demoEmail: demo_email_string | null;
+  emailRegistered: boolean;
+  registerEmail: (email: demo_email_string) => Promise<{ ok: true } | { ok: false; error: string }>;
   task: string;
   setTask: (task: string) => void;
   building: boolean;
@@ -78,6 +83,7 @@ export function LandingBuildProvider({
   children: ReactNode;
 }) {
   const [task, setTask] = useState("");
+  const [demoEmail, setDemoEmail] = useState<demo_email_string | null>(null);
   const [buildId, setBuildId] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,8 +92,11 @@ export function LandingBuildProvider({
   const [demoConsentNudge, setDemoConsentNudge] = useState(false);
 
   useEffect(() => {
+    setDemoEmail(readDemoEmail());
     setDemoPrivacyAccepted(readDemoPrivacyConsent());
   }, []);
+
+  const emailRegistered = demoEmail !== null;
 
   const previewBase = `${appUrl.replace(/\/$/, "")}/demo?embed=1&preview=1`;
   const iframeSrc = useMemo(
@@ -97,7 +106,7 @@ export function LandingBuildProvider({
 
   const buildPipeline = useCallback(async () => {
     const trimmed = task.trim();
-    if (!trimmed || building) return;
+    if (!trimmed || building || !demoEmail) return;
 
     setBuilding(true);
     setError(null);
@@ -107,7 +116,7 @@ export function LandingBuildProvider({
       const res = await fetch(BUILD_PIPELINE_PATH, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: trimmed }),
+        body: JSON.stringify({ task: trimmed, email: demoEmail }),
       });
       let data: (BuildResult & { error?: string }) | null = null;
       try {
@@ -133,7 +142,36 @@ export function LandingBuildProvider({
     } finally {
       setBuilding(false);
     }
-  }, [spineApiUrl, building, task]);
+  }, [spineApiUrl, building, demoEmail, task]);
+
+  const registerEmail = useCallback(async (email: demo_email_string): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const normalized = email.trim().toLowerCase();
+    if (!normalized) return { ok: false, error: "Enter your email to continue." };
+
+    try {
+      const res = await fetch(SIGNUP_PATH, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalized }),
+      });
+      let data: { error?: string } | null = null;
+      try {
+        data = (await res.json()) as { error?: string };
+      } catch {
+        if (!res.ok) {
+          return { ok: false, error: res.status === 502 ? apiReachabilityError(spineApiUrl) : "Could not save email — try again shortly." };
+        }
+      }
+      if (!res.ok) {
+        return { ok: false, error: data?.error ?? "Could not save email — try again shortly." };
+      }
+      writeDemoEmail(normalized);
+      setDemoEmail(normalized);
+      return { ok: true };
+    } catch {
+      return { ok: false, error: apiReachabilityError(spineApiUrl) };
+    }
+  }, [spineApiUrl]);
 
   const acceptDemoPrivacy = useCallback(() => {
     writeDemoPrivacyConsent();
@@ -142,19 +180,21 @@ export function LandingBuildProvider({
   }, []);
 
   const tryBuild = useCallback(() => {
-    if (!task.trim() || building) return;
+    if (!demoEmail || !task.trim() || building) return;
     if (!demoPrivacyAccepted) {
       setDemoConsentNudge(true);
       return;
     }
     void buildPipeline();
-  }, [building, buildPipeline, demoPrivacyAccepted, task]);
+  }, [building, buildPipeline, demoEmail, demoPrivacyAccepted, task]);
 
   return (
-    <LandingBuildContext.Provider value={{ task, setTask, building, error, buildMessage, tryBuild, iframeSrc }}>
+    <LandingBuildContext.Provider
+      value={{ demoEmail, emailRegistered, registerEmail, task, setTask, building, error, buildMessage, tryBuild, iframeSrc }}
+    >
       {children}
       <LandingDemoConsentBanner
-        visible={!demoPrivacyAccepted}
+        visible={emailRegistered && !demoPrivacyAccepted}
         nudge={demoConsentNudge}
         onAccept={acceptDemoPrivacy}
       />
@@ -162,21 +202,81 @@ export function LandingBuildProvider({
   );
 }
 
+export function LandingEmailGate() {
+  const { emailRegistered, registerEmail } = useLandingBuild();
+  const [email, setEmail] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (emailRegistered) return null;
+
+  const submit = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
+    const result = await registerEmail(email);
+    if (!result.ok) setError(result.error);
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="landing-task-panel flex h-full flex-col justify-center rounded-[10px] border border-line bg-panel p-5 sm:p-6 lg:min-h-[300px]">
+      <h2 className="landing-task-heading text-xl font-normal leading-snug tracking-tight sm:text-2xl">
+        Try the demo
+      </h2>
+      <p className="mt-3 text-sm leading-relaxed text-muted">
+        Enter your email to generate a pipeline and explore the preview. We&apos;ll send product updates occasionally.
+      </p>
+      <div className="mt-5 flex flex-col gap-3">
+        <input
+          id="landing-email"
+          type="email"
+          autoComplete="email"
+          value={email}
+          disabled={submitting}
+          placeholder="you@company.com"
+          className="w-full rounded-md border border-line bg-black px-4 py-3 text-base text-foreground placeholder:text-muted-dim focus:border-accent-dim focus:outline-none disabled:opacity-60 sm:text-lg"
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void submit();
+          }}
+        />
+        <button
+          type="button"
+          className="zeero-btn !text-base !px-6 !py-3 w-full disabled:opacity-50 sm:w-auto sm:self-start"
+          disabled={submitting || !email.trim()}
+          onClick={() => void submit()}
+        >
+          {submitting ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="demo-spinner border-primary-foreground border-t-transparent" aria-hidden />
+              Continuing...
+            </span>
+          ) : (
+            "Continue"
+          )}
+        </button>
+      </div>
+      {error ? <p className="mt-3 text-sm leading-relaxed text-red-400">{error}</p> : null}
+    </div>
+  );
+}
+
 export function LandingTaskPrompt() {
-  const { task, setTask, building, error, buildMessage, tryBuild } = useLandingBuild();
+  const { emailRegistered, task, setTask, building, error, buildMessage, tryBuild } = useLandingBuild();
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const [buildStatusIdx, setBuildStatusIdx] = useState(0);
 
   useEffect(() => {
-    if (task.trim() || building) return;
+    if (!emailRegistered || task.trim() || building) return;
     const id = setInterval(() => {
       setPlaceholderIdx((i) => (i + 1) % PLACEHOLDER_IDEAS.length);
     }, 3200);
     return () => clearInterval(id);
-  }, [task, building]);
+  }, [emailRegistered, task, building]);
 
   useEffect(() => {
-    if (!building) {
+    if (!emailRegistered || !building) {
       setBuildStatusIdx(0);
       return;
     }
@@ -184,7 +284,9 @@ export function LandingTaskPrompt() {
       setBuildStatusIdx((i) => (i + 1) % BUILD_STATUS.length);
     }, 1800);
     return () => clearInterval(id);
-  }, [building]);
+  }, [emailRegistered, building]);
+
+  if (!emailRegistered) return null;
 
   const placeholder = PLACEHOLDER_IDEAS[placeholderIdx]!;
 
@@ -243,6 +345,15 @@ export function LandingTaskPrompt() {
 }
 
 export function LandingAppPreview() {
-  const { iframeSrc } = useLandingBuild();
+  const { emailRegistered, iframeSrc } = useLandingBuild();
+  if (!emailRegistered) {
+    return (
+      <div className="flex min-h-[420px] items-center justify-center rounded-[10px] border border-line bg-panel px-6 py-16 text-center">
+        <p className="max-w-md text-sm leading-relaxed text-muted">
+          Enter your email above to unlock the live preview and generate a pipeline.
+        </p>
+      </div>
+    );
+  }
   return <AppLivePreview src={iframeSrc} />;
 }

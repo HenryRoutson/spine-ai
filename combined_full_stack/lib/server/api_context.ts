@@ -51,7 +51,7 @@ export async function enforceIpRateLimit(
   // AI : local dev + landing proxy share one IP — skip so hackathon demos aren't blocked mid-test.
   if (
     process.env.NODE_ENV === "development" &&
-    tier === "landing_demo_build"
+    (tier === "landing_demo_build" || tier === "landing_demo_signup")
   ) {
     return null;
   }

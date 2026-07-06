@@ -4,6 +4,7 @@ import { LandingNav } from "../components/landing-nav";
 import {
   LandingAppPreview,
   LandingBuildProvider,
+  LandingEmailGate,
   LandingTaskPrompt,
 } from "../components/landing-preview-section";
 import { LegalFooterLinks } from "@/lib/legal/chrome";
@@ -108,6 +109,7 @@ export default function Home() {
                 </a>
               </div>
             </div>
+            <LandingEmailGate />
             <LandingTaskPrompt />
           </div>
         </section>
