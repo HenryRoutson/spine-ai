@@ -1,6 +1,7 @@
 "use client"
 
 // AI : TODO refactor (spec) — remove combine segments when implicit multi-input merge ships (pipeline-layout.ts).
+// AI : TODO (spec) — execution-order view maximizing parallel llm-batch; dependency arrows from step() label refs.
 import {
   ArrowRight,
   ChevronRight,

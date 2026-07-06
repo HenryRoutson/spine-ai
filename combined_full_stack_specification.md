@@ -179,6 +179,7 @@ pleaes make an option in settings to make input descriptoins mandatory. make sur
 
 add an export to python button to export the whole pipeline to python, including the front end UI. this should include a lot of supabase info so maybe use sql, plus some derived errors like validation.
 there should be an assert to check no env keys are in the export
+export should have a readme file and instructions for how to setup a scalable API using the existing code.
 
 there should be an export pipeline to code,
 the pop up showns download buttons button to export to typescript and python.
@@ -197,6 +198,11 @@ Ensure the user doesn't have the think about, if this structure isn't json i nee
   Text - not json
   Web - not json
   Image - not json
+
+
+please have a dedicated button to click which goes back to document for input steps rather than having to find it. throw an error if nothing is selected as a model output
+
+please have a dedicated button to click which goes back to document for input steps rather than having to find it. throw an error if nothing is selected as a model output 
 
 
 # Testing 
@@ -288,6 +294,9 @@ inference contains a list of possible runs which have been pre selected, not jus
 The inference tab should be able to save multiple named setups like for the homework example '10th grade' and 'pre school' with specific input files associated. there should not be a single default setup to the inference tab. use the same backend logic that is used to save the input setup in the testing tab.
 
 please add the ability to put spending limits on shared links
+you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.
+you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.and you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.
+
 
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.

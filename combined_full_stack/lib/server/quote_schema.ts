@@ -2,6 +2,7 @@ import { expandNamedTypeExpr, fieldToTypeExpr, typeExprIsQuote, typeExprRefModel
 import type { TypeExpr } from "./type_expr";
 import type { DocId, ModelField, StructureModel, StructureModelId } from "./types";
 
+// AI : TODO (spec) — quote validation walks struct tree for quote fields only (no brute-force dict scan); partially via collectQuotesForModel.
 export type LinkedQuoteValue = {
   text: string;
   quote: { doc_id: DocId; start: number; end: number };

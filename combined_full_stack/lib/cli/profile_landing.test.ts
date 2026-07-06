@@ -7,10 +7,15 @@ import type { ModelId } from "@/lib/server/types"
 const model = "gpt-5-mini" as ModelId
 
 function call(partial: Partial<LandingDemoCallRow> & Pick<LandingDemoCallRow, "costCents" | "createdAt">): LandingDemoCallRow {
+  const promptText = partial.promptText ?? partial.promptPreview ?? "build a pipeline"
   return {
     id: partial.id ?? "c1",
-    promptPreview: partial.promptPreview ?? "build a pipeline",
+    promptText,
+    promptPreview: partial.promptPreview ?? promptText.slice(0, 120),
     outputPreview: partial.outputPreview ?? null,
+    tag: partial.tag ?? "build-pipeline",
+    buildId: partial.buildId ?? null,
+    projectName: partial.projectName ?? null,
     model: partial.model ?? model,
     promptTokens: partial.promptTokens ?? 100,
     completionTokens: partial.completionTokens ?? 50,
@@ -43,7 +48,7 @@ describe("landing usage profile", () => {
     const profile = buildLandingUsageProfile(
       5000,
       5,
-      [call({ costCents: 5, createdAt: "2026-07-06T11:00:00.000Z", promptPreview: "summarize receipts" })],
+      [call({ costCents: 5, createdAt: "2026-07-06T11:00:00.000Z", promptText: "summarize receipts" })],
       "local",
     )
     const text = formatLandingProfileHuman(profile, { days: 30, limit: 10, backfillLocal: false })

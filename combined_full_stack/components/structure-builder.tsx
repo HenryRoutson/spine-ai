@@ -1,5 +1,7 @@
 "use client"
 
+// AI : TODO (spec) — per-structure "Quick summarise" button: cheap LLM flags inconsistencies (e.g. document_summary:int).
+// AI : TODO (spec) — promote TypeBuilderPanel to its own tab; remove Playground view from Structure (spec § structure).
 import { useEffect, useMemo, useState } from "react"
 import { Plus, Trash2, Code2, LayoutGrid, FileSpreadsheet, Sparkles, AlertTriangle, Lock, Braces } from "lucide-react"
 import { StructureFieldRow } from "@/components/structure-field-row"

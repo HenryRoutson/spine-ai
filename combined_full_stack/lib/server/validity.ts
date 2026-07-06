@@ -1,5 +1,6 @@
 // AI : Pipeline I/O graph validation — core computation and pipeline utilities.
 // AI : Types + messages → validity-types.ts / validity-messages.ts / validity-inspect.ts.
+// AI : TODO (spec) — derive dependency graph from step() refs in custom code; flag unused/isolated steps (linear spine only today).
 import type {
   ModuleId,
   PipelineModule,

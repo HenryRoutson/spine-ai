@@ -2,6 +2,7 @@
 
 // AI : Testing tab — *_testing.json files pin exact per-step outputs; a run pinpoints the
 // AI : first step that diverges. Static checks stay in Structure/Pipeline; this is for full runs.
+// AI : TODO (spec) — whole-JSON LLM overview diff alongside per-field deterministic/probabilistic checks.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {

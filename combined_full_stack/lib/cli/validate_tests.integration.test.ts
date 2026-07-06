@@ -6,7 +6,7 @@ import { validateTestsCommand } from "@/lib/cli/validate_test"
 import { SEEDS_DIR } from "@/lib/server/seed"
 
 const seedFiles = readdirSync(SEEDS_DIR).filter((f) => f.endsWith(".json"))
-// AI : gps seed pins a json doc on a Text input — CLI should surface that until the fixture is fixed.
+// AI : TODO bug — fix gps_site_profiling: bundled test pins JSON catalog on Text input step.
 const KNOWN_TEST_VALIDATION_FAILURES = new Set(["gps_site_profiling.json"])
 
 describe("validate tests across seeds", () => {

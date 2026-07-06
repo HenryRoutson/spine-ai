@@ -7,11 +7,12 @@ import {
   LANDING_DEMO_MIN_BALANCE_CENTS,
   LANDING_DEMO_PREVIEW_CHARS,
   LANDING_PAGE_BUDGET_CENTS,
+  type landing_demo_tag,
 } from "@/lib/landing_demo_config";
 import { createAdminClient } from "@/lib/server/supabase_admin";
 import { dataDir } from "@/lib/server/config";
 import { logger } from "@/lib/server/server_logger";
-import type { ModelId } from "@/lib/server/types";
+import type { ModelId, ProjectId } from "@/lib/server/types";
 
 const demoLog = logger("landing-demo");
 
@@ -24,8 +25,12 @@ export class LandingBudgetError extends Error {
 
 export type LandingDemoCallRow = {
   id: string;
+  promptText: string;
   promptPreview: string;
   outputPreview: string | null;
+  tag: landing_demo_tag;
+  buildId: ProjectId | null;
+  projectName: string | null;
   model: ModelId;
   promptTokens: number;
   completionTokens: number;
@@ -57,13 +62,33 @@ function localBudgetFile(): string {
   return join(dataDir(), "landing_page_demo.json");
 }
 
+function normalizeLocalCall(raw: Partial<LandingDemoCallRow> & Pick<LandingDemoCallRow, "id" | "costCents" | "createdAt">): LandingDemoCallRow {
+  const promptText = raw.promptText ?? raw.promptPreview ?? "";
+  return {
+    id: raw.id,
+    promptText,
+    promptPreview: raw.promptPreview ?? previewText(promptText),
+    outputPreview: raw.outputPreview ?? null,
+    tag: raw.tag ?? "build-pipeline",
+    buildId: raw.buildId ?? null,
+    projectName: raw.projectName ?? null,
+    model: raw.model ?? ("gpt-5-mini" as ModelId),
+    promptTokens: raw.promptTokens ?? 0,
+    completionTokens: raw.completionTokens ?? 0,
+    costCents: raw.costCents,
+    latencyMs: raw.latencyMs ?? null,
+    createdAt: raw.createdAt,
+  };
+}
+
 function readLocalBudget(): LandingBudgetState {
   const file = localBudgetFile();
   if (!existsSync(file)) {
     return { budgetCents: LANDING_PAGE_BUDGET_CENTS, spentCents: 0, calls: [] };
   }
   try {
-    return JSON.parse(readFileSync(file, "utf8")) as LandingBudgetState;
+    const parsed = JSON.parse(readFileSync(file, "utf8")) as LandingBudgetState;
+    return { ...parsed, calls: parsed.calls.map((c) => normalizeLocalCall(c)) };
   } catch {
     return { budgetCents: LANDING_PAGE_BUDGET_CENTS, spentCents: 0, calls: [] };
   }
@@ -106,6 +131,9 @@ export async function assertLandingBudget(): Promise<void> {
 async function recordCall(params: {
   prompt: string;
   outputPreview?: string;
+  tag: landing_demo_tag;
+  buildId?: ProjectId;
+  projectName?: string;
   model: ModelId;
   promptTokens: number;
   completionTokens: number;
@@ -113,10 +141,15 @@ async function recordCall(params: {
   latencyMs: number;
   ip: string;
 }): Promise<LandingDemoCallRow> {
+  const promptText = params.prompt.trim();
   const row: LandingDemoCallRow = {
     id: randomUUID(),
-    promptPreview: previewText(params.prompt),
+    promptText,
+    promptPreview: previewText(promptText),
     outputPreview: params.outputPreview ?? null,
+    tag: params.tag,
+    buildId: params.buildId ?? null,
+    projectName: params.projectName ?? null,
     model: params.model,
     promptTokens: params.promptTokens,
     completionTokens: params.completionTokens,
@@ -129,8 +162,12 @@ async function recordCall(params: {
   if (admin) {
     const { error: insertError } = await admin.from("landing_page_calls").insert({
       id: row.id,
+      prompt_text: row.promptText,
       prompt_preview: row.promptPreview,
       output_preview: row.outputPreview,
+      tag: row.tag,
+      build_id: row.buildId,
+      project_name: row.projectName,
       model: row.model,
       prompt_tokens: row.promptTokens,
       completion_tokens: row.completionTokens,
@@ -163,6 +200,9 @@ async function recordCall(params: {
 export async function recordLandingUsage(params: {
   prompt: string;
   outputPreview: string;
+  tag: landing_demo_tag;
+  buildId?: ProjectId;
+  projectName?: string;
   model: ModelId;
   costCents: number;
   promptTokens: number;
@@ -173,6 +213,9 @@ export async function recordLandingUsage(params: {
   return recordCall({
     prompt: params.prompt,
     outputPreview: params.outputPreview,
+    tag: params.tag,
+    buildId: params.buildId,
+    projectName: params.projectName,
     model: params.model,
     promptTokens: params.promptTokens,
     completionTokens: params.completionTokens,
@@ -268,7 +311,7 @@ export async function fetchLandingUsageProfile(opts?: {
     const { data, error } = await admin
       .from("landing_page_calls")
       .select(
-        "id, prompt_preview, output_preview, model, prompt_tokens, completion_tokens, cost_cents, latency_ms, created_at",
+        "id, prompt_text, prompt_preview, output_preview, tag, build_id, project_name, model, prompt_tokens, completion_tokens, cost_cents, latency_ms, created_at",
       )
       .gte("created_at", since)
       .order("created_at", { ascending: false })
@@ -276,8 +319,12 @@ export async function fetchLandingUsageProfile(opts?: {
     if (!error && data) {
       const calls: LandingDemoCallRow[] = data.map((row) => ({
         id: row.id,
+        promptText: row.prompt_text ?? row.prompt_preview,
         promptPreview: row.prompt_preview,
         outputPreview: row.output_preview,
+        tag: (row.tag ?? "build-pipeline") as landing_demo_tag,
+        buildId: (row.build_id as ProjectId | null) ?? null,
+        projectName: row.project_name ?? null,
         model: row.model as ModelId,
         promptTokens: row.prompt_tokens,
         completionTokens: row.completion_tokens,
@@ -315,8 +362,12 @@ export async function backfillLocalLandingUsageToSupabase(): Promise<{
     }
     const { error } = await admin.from("landing_page_calls").insert({
       id: call.id,
+      prompt_text: call.promptText,
       prompt_preview: call.promptPreview,
       output_preview: call.outputPreview,
+      tag: call.tag,
+      build_id: call.buildId,
+      project_name: call.projectName,
       model: call.model,
       prompt_tokens: call.promptTokens,
       completion_tokens: call.completionTokens,

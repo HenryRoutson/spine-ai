@@ -21,6 +21,7 @@ const MAX_MODULE_PAYLOAD_CHARS = 120_000;
 const MAX_STRUCTURE_PAYLOAD_CHARS = 50_000;
 
 export const sharedLinkIdSchema = z.string().regex(/^pub_[a-z0-9]{10,14}$/i);
+export const hostedApiIdSchema = z.string().regex(/^api_[a-z0-9]{10,14}$/i);
 
 export const sharedProgressQuerySchema = z.object({
   jobId: z.string().trim().min(1).max(128),
@@ -36,6 +37,11 @@ export const sharedDownloadQuerySchema = sharedProgressQuerySchema.extend({
 export function parseSharedLinkId(raw: string): SharedLinkId | null {
   const parsed = sharedLinkIdSchema.safeParse(raw);
   return parsed.success ? (parsed.data as SharedLinkId) : null;
+}
+
+export function parseHostedApiId(raw: string): import("./types").HostedApiId | null {
+  const parsed = hostedApiIdSchema.safeParse(raw);
+  return parsed.success ? (parsed.data as import("./types").HostedApiId) : null;
 }
 
 const pipelineModulePatchSchema = z
@@ -316,6 +322,31 @@ export const sharedLinkRunBodySchema = z
     inputDocsByModule: inputDocsByModuleSchema,
     viewerName: z.string().max(200).optional(),
     sessionId: z.string().max(128).optional(),
+  })
+  .strict();
+
+const hostedApiInlineFileSchema = z
+  .object({
+    filename: z.string().trim().min(1).max(256),
+    content: z.string().max(MAX_DOC_CONTENT_CHARS),
+    type: z.nativeEnum(InputType).optional(),
+  })
+  .strict();
+
+export const createHostedApiBodySchema = z
+  .object({
+    projectId: projectIdSchema,
+    defaultModel: z.string().max(128).optional(),
+    spendLimitCents: z.number().min(0).optional(),
+    defaultDocsByModule: inputDocsByModuleSchema,
+  })
+  .strict();
+
+export const hostedApiInvokeBodySchema = z
+  .object({
+    inputsByModule: z
+      .record(z.string().max(128), z.array(hostedApiInlineFileSchema).max(20))
+      .optional(),
   })
   .strict();
 

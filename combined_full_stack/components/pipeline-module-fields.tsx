@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO (spec) — outputDescription + checkOutputDescription: cheap LLM rejects step output that mismatches declared shape.
 import { useState } from "react"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { Input } from "@/components/ui/input"

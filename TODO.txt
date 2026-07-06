@@ -20,6 +20,24 @@ Ensure the user doesn't have the think about, if this structure isn't json i nee
 
 
 
+fix 
+When input text/JSON is mapped into a structure, missing or wrong fields get silent defaults instead of failing validation. That matches the TODO about “text inputs being converted to pydantic objects” — pipelines can look valid in Structure but produce garbage at run time.
+
+
+
+fix 
+4. OCR is a placeholder
+useOcr on PDF/image inputs does not use real DeepSeek OCR; it falls back to PDF.js text extraction.
+
+
+fix 
+5. LLM “think first, then JSON” is not implemented
+Spec (and the cited paper) wants an optional non-JSON first response, auto-enabled on validation retry. Current behavior: both attempts use json_mode immediately; retry only appends “return corrected JSON.”
+
+fix 
+8. Billing arbitrage guard missing
+-10 account floor exists (MIN_ACCOUNT_BALANCE_CENTS = -1000), but profit-per-user tracking and arbitrage blocking from the spec are not implemented (billing_config.ts TODO).
+
 
 
 

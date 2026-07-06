@@ -1,6 +1,7 @@
 "use client"
 
 // AI : TODO — run list rows still use flat inputPreview; detail modal uses IoPager for multi-file inputs.
+// AI : TODO (spec) — keep cache list in store after first fetch; see store.tsx prefetch TODO.
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useStore } from "@/lib/store"
 import { WindowHeader } from "@/components/window-header"

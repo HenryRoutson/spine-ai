@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO (spec) — store prompts as JSON components; flatten only when sending to OpenRouter; profile context-length per component.
 import { useMemo } from "react"
 import { Link2 } from "lucide-react"
 import ReactMarkdown, { type Components } from "react-markdown"

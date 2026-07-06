@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO (spec) — git-like branching, merge, and revision history for project collaboration (spec § history).
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState } from "react"

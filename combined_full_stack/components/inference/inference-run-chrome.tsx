@@ -66,6 +66,7 @@ export function InferenceCollapsibleSection({
   title,
   phase,
   collapseOnRun = true,
+  // AI : TODO (spec) — default true: collapse non-output sections when inference run finishes.
   collapseOnDone = false,
   children,
 }: {

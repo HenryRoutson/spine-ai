@@ -54,9 +54,12 @@ export function formatLandingProfileHuman(profile: LandingUsageProfile, opts: Pr
     lines.push(`recent calls (up to ${opts.limit}):`);
     for (const call of profile.recentCalls) {
       const when = call.createdAt.replace("T", " ").slice(0, 19);
+      const ask = call.promptText || call.promptPreview;
       lines.push(
-        `  ${when} · ${call.model} · ${cents(call.costCents)} · ${call.latencyMs ?? "?"}ms · "${call.promptPreview.slice(0, 60)}"`,
+        `  ${when} · [${call.tag}] · ${call.model} · ${cents(call.costCents)} · ${call.latencyMs ?? "?"}ms`,
       );
+      lines.push(`    ask: ${ask.slice(0, 200)}${ask.length > 200 ? "…" : ""}`);
+      if (call.projectName) lines.push(`    built: ${call.projectName}${call.buildId ? ` (${call.buildId})` : ""}`);
     }
   } else {
     lines.push("no calls in window");

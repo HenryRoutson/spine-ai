@@ -5,6 +5,7 @@ import { UNNAMED_PROJECT_NAME } from "@/lib/project-assistant-types";
 import {
   LANDING_DEMO_MAX_PROMPT_CHARS,
   LANDING_DEMO_MODEL,
+  LANDING_DEMO_TAG_BUILD_PIPELINE,
 } from "@/lib/landing_demo_config";
 import { assertLandingBudget, recordLandingUsage } from "@/lib/server/landing_page_demo";
 import { proposePipelineChange } from "@/lib/server/pipeline_assistant";
@@ -58,6 +59,9 @@ export async function buildLandingPipelineFromTask(task: string, ip: string): Pr
   await recordLandingUsage({
     prompt: trimmed,
     outputPreview: result.message.slice(0, LANDING_DEMO_MAX_PROMPT_CHARS),
+    tag: LANDING_DEMO_TAG_BUILD_PIPELINE,
+    buildId,
+    projectName: project.name,
     model: LANDING_DEMO_MODEL,
     costCents: result.usageCents,
     promptTokens: result.promptTokens,

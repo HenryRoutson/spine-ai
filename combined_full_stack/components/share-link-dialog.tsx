@@ -24,10 +24,12 @@ export function ShareLinkDialog({
   project,
   docs,
   inferenceInputDocIds,
+  onCreated,
 }: {
   project: Project
   docs: DocRef[]
   inferenceInputDocIds: Partial<Record<ModuleId, DocId | DocId[]>>
+  onCreated?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -82,6 +84,7 @@ export function ShareLinkDialog({
       })
       const full = `${window.location.origin}${body.url}`
       setUrl(full)
+      onCreated?.()
     } catch (e) {
       setError((e as Error).message)
     } finally {

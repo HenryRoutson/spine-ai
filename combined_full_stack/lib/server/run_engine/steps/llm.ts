@@ -1,4 +1,5 @@
 import { llmStructured } from "../../llm";
+// AI : TODO (spec) — dynamicOutputSchema: LLM emits variable structure at runtime then validate (homework grader).
 import {
   hasQuoteField,
   llmSchema,

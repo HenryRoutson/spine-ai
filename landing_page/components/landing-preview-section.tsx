@@ -1,7 +1,20 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { AppLivePreview } from "./app-live-preview";
+import {
+  LandingDemoConsentBanner,
+  readDemoPrivacyConsent,
+  writeDemoPrivacyConsent,
+} from "@/lib/legal/demo-consent";
 
 type ApiUrl = string;
 type AppUrl = string;
@@ -35,6 +48,7 @@ function apiReachabilityError(spineApiUrl: ApiUrl): string {
 }
 
 const BUILD_PIPELINE_PATH = "/api/landing-demo/build-pipeline";
+// AI : TODO (spec) — landing build-pipeline demo reliability; task→pipeline often fails on complex prompts (see TODO.txt).
 
 type LandingBuildContextValue = {
   task: string;
@@ -42,7 +56,7 @@ type LandingBuildContextValue = {
   building: boolean;
   error: string | null;
   buildMessage: string | null;
-  buildPipeline: () => Promise<void>;
+  tryBuild: () => void;
   iframeSrc: string;
 };
 
@@ -68,6 +82,12 @@ export function LandingBuildProvider({
   const [building, setBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [buildMessage, setBuildMessage] = useState<string | null>(null);
+  const [demoPrivacyAccepted, setDemoPrivacyAccepted] = useState(false);
+  const [demoConsentNudge, setDemoConsentNudge] = useState(false);
+
+  useEffect(() => {
+    setDemoPrivacyAccepted(readDemoPrivacyConsent());
+  }, []);
 
   const previewBase = `${appUrl.replace(/\/$/, "")}/demo?embed=1&preview=1`;
   const iframeSrc = useMemo(
@@ -115,17 +135,35 @@ export function LandingBuildProvider({
     }
   }, [spineApiUrl, building, task]);
 
+  const acceptDemoPrivacy = useCallback(() => {
+    writeDemoPrivacyConsent();
+    setDemoPrivacyAccepted(true);
+    setDemoConsentNudge(false);
+  }, []);
+
+  const tryBuild = useCallback(() => {
+    if (!task.trim() || building) return;
+    if (!demoPrivacyAccepted) {
+      setDemoConsentNudge(true);
+      return;
+    }
+    void buildPipeline();
+  }, [building, buildPipeline, demoPrivacyAccepted, task]);
+
   return (
-    <LandingBuildContext.Provider
-      value={{ task, setTask, building, error, buildMessage, buildPipeline, iframeSrc }}
-    >
+    <LandingBuildContext.Provider value={{ task, setTask, building, error, buildMessage, tryBuild, iframeSrc }}>
       {children}
+      <LandingDemoConsentBanner
+        visible={!demoPrivacyAccepted}
+        nudge={demoConsentNudge}
+        onAccept={acceptDemoPrivacy}
+      />
     </LandingBuildContext.Provider>
   );
 }
 
 export function LandingTaskPrompt() {
-  const { task, setTask, building, error, buildMessage, buildPipeline } = useLandingBuild();
+  const { task, setTask, building, error, buildMessage, tryBuild } = useLandingBuild();
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const [buildStatusIdx, setBuildStatusIdx] = useState(0);
 
@@ -167,14 +205,14 @@ export function LandingTaskPrompt() {
           className="w-full rounded-md border border-line bg-black px-4 py-3 text-base text-foreground placeholder:text-muted-dim placeholder:transition-opacity focus:border-accent-dim focus:outline-none disabled:opacity-60 sm:text-lg"
           onChange={(e) => setTask(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter") void buildPipeline();
+            if (e.key === "Enter") tryBuild();
           }}
         />
         <button
           type="button"
           className="zeero-btn !text-base !px-6 !py-3 w-full disabled:opacity-50 sm:w-auto sm:self-start"
           disabled={building || !task.trim()}
-          onClick={() => void buildPipeline()}
+          onClick={tryBuild}
         >
           {building ? (
             <span className="inline-flex items-center gap-2">

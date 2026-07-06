@@ -134,6 +134,8 @@ export async function getVisionStringResponse(
   return visionChat(prompt, attachments, opts, false);
 }
 
+// AI : TODO (spec) — optional freeform first response (json_mode off) before structured pass;
+// AI : auto-enable on validation retry per arxiv:2604.03616; today both attempts use json_mode immediately.
 // AI : formatted response validated against a zod schema, with one self-correcting retry
 export async function getStructuredResponse<T>(
   prompt: string,

@@ -1,6 +1,7 @@
 "use client"
 
 // AI : TODO refactor — optional split: persistence, billing refresh, project CRUD into separate hooks.
+// AI : TODO (spec) — prefetch project-scoped cache entries on hydrate; Cache tab should not refetch from cold on every open.
 // AI : the client half of the bridge — hydrates from GET /api/state, applies mutations
 // AI : optimistically, and persists them through the thin API routes. Exposes the exact
 // AI : surface the v2 components were written against (useStore, uid, addDoc, addRun, …).

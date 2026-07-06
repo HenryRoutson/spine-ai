@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO (spec) — show count of duplicate runs skipped by fingerprint when allowDuplicateRuns is false.
 import { invariant } from "@/lib/assert"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {

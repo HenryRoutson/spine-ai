@@ -12,6 +12,7 @@ export type RateLimitTier =
   | "webhook"
   | "billing"
   | "shared_run"
+  | "hosted_api"
   | "landing_demo_build";
 export type RateLimitKey = string & { __brand: "RateLimitKey" };
 
@@ -29,6 +30,8 @@ export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number 
   billing: { windowMs: 60_000, max: 20 },
   // AI : per-link + IP — limits anonymous credit drain on sharer_pays links.
   shared_run: { windowMs: 600_000, max: 5 },
+  // AI : bearer-key pipeline invoke — per-api + IP cap.
+  hosted_api: { windowMs: 600_000, max: 30 },
   // AI : landing pipeline builds — budget-gated; IP capped alongside budget.
   landing_demo_build: { windowMs: 600_000, max: 12 },
 };
@@ -49,6 +52,10 @@ export function upstashConfigured(): boolean {
 export function publicApiTier(pathname: string): RateLimitTier | null {
   if (pathname === "/api/billing/webhook") return "webhook";
   if (pathname === "/api/supabase-env") return "public";
+  if (pathname.startsWith("/api/hosted-apis/")) {
+    if (/\/invoke$/.test(pathname)) return "hosted_api";
+    if (/\/progress$/.test(pathname)) return "poll";
+  }
   if (!pathname.startsWith("/api/shared-links/")) return null;
   if (/\/run$/.test(pathname)) return "llm";
   if (/\/progress$/.test(pathname)) return "poll";

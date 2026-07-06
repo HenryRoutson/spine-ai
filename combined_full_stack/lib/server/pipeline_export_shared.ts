@@ -74,6 +74,7 @@ function pyCustomCodeCall(code: string): string {
 
 export function generateInputStepBodyTs(m: PipelineModule, outTs: string): string {
   // AI : TODO export — emit input-description LLM guard when checkInputDescription is enabled.
+  // AI : TODO export — emit output-description LLM guard when checkOutputDescription ships (spec § pipeline).
   const lines = [
     "// Parse uploaded file — built-in parser or vision OCR when enabled",
     ...(m.inputDescription

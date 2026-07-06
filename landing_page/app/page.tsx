@@ -1,4 +1,5 @@
 import Image from "next/image";
+// AI : TODO (spec) — cal.com demo booking button (https://cal.com/) on landing page.
 import { LandingNav } from "../components/landing-nav";
 import {
   LandingAppPreview,

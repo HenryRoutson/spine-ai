@@ -311,6 +311,8 @@ export function materializeInputDocument(
     }
   }
 
+  // AI : TODO bug — non-JSON text/pdf must stay Document until locked Parse-to-structure LLM runs;
+  // AI : materializeToModel here coerces raw text into arbitrary struct fields (receipts pipeline).
   return materializeToModel(documentValueFrom({ content, filename: hints.docName ?? docId }, docHints, content), out, models, docHints);
 }
 
