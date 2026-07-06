@@ -50,6 +50,8 @@ add API abilty
 
 
 add ability to share link with custom billing changes.
+The user should be able to make money by marking up an llm pipeline they built, money should be payed directly into a seperate account than they pay llm tokens with where they can take out that money.
+idea is that instead of something like shopify to markup items, you can use this to markup ai automation pipelines to make money.
 
 
 
