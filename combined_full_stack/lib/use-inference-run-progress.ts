@@ -17,6 +17,7 @@ import {
   startRun,
   type StepUiState,
 } from "@/lib/run-engine"
+import { isPreviewOnly } from "@/lib/demo-mode"
 import { useRunNotesFlushOnLeave } from "@/lib/run-notes-flush"
 import type { DocId, JobLogEntry, ModuleId, PipelineModule, PipelineRun, ProjectId, RunJobId } from "@/lib/types"
 import type { ClientStepSpec } from "@/lib/run-types"
@@ -141,6 +142,7 @@ export function useInferenceRunProgress({
   }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function start() {
+    if (isPreviewOnly()) return
     if (!allInputsReady || inputsInvalid) return
     const jobGen = ++activeJobGenRef.current
     const orderedIds = flattenInputDocIds(inputModules, inputDocs)

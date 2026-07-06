@@ -48,6 +48,13 @@ export async function enforceIpRateLimit(
   req: Request,
   tier: RateLimitTier,
 ): Promise<NextResponse | null> {
+  // AI : local dev + landing proxy share one IP — skip so hackathon demos aren't blocked mid-test.
+  if (
+    process.env.NODE_ENV === "development" &&
+    tier === "landing_demo_build"
+  ) {
+    return null;
+  }
   const ip = clientIpFromHeaders(req.headers);
   const key = `ip:${ip}:${tier}` as RateLimitKey;
   const hit = await checkRateLimit(key, tier);

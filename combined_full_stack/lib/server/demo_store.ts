@@ -1,4 +1,7 @@
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { DEMO_DEFAULT_PROJECT_ID, DEMO_PROJECT_IDS } from "@/lib/demo-constants";
+import { dataDir } from "./config";
 import { getModelOptions, toPublicModelOptions } from "./openrouter_models";
 import { hashContent } from "./store";
 import { allProjectSeeds, readSeedDocContent } from "./seed";
@@ -14,7 +17,78 @@ type DemoSnapshot = {
   runs: PipelineRun[];
 };
 
+type LandingBuildCache = Map<ProjectId, Project>;
+
 let cached: DemoSnapshot | null = null;
+const LANDING_BUILD_CAP = 40;
+
+// AI : Turbopack can isolate module state per route — globalThis + disk keeps builds visible to /api/demo/state.
+function landingBuildCache(): LandingBuildCache {
+  const g = globalThis as typeof globalThis & { __landingBuilds?: LandingBuildCache };
+  if (!g.__landingBuilds) g.__landingBuilds = new Map();
+  return g.__landingBuilds;
+}
+
+function landingBuildsDir(): string {
+  return join(dataDir(), "landing_builds");
+}
+
+function landingBuildFile(id: ProjectId): string {
+  return join(landingBuildsDir(), `${id}.json`);
+}
+
+function trimLandingBuildFiles(): void {
+  const dir = landingBuildsDir();
+  if (!existsSync(dir)) return;
+  const files = readdirSync(dir)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => {
+      const path = join(dir, name);
+      return { name, path, mtime: statSync(path).mtimeMs };
+    })
+    .sort((a, b) => b.mtime - a.mtime);
+  for (const stale of files.slice(LANDING_BUILD_CAP)) {
+    unlinkSync(stale.path);
+    landingBuildCache().delete(stale.name.replace(/\.json$/, "") as ProjectId);
+  }
+}
+
+export function putLandingBuild(project: Project): void {
+  const migrated = migrateProjectModules(structuredClone(project));
+  landingBuildCache().set(project.id, migrated);
+
+  const dir = landingBuildsDir();
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(landingBuildFile(project.id), JSON.stringify(migrated));
+
+  const cache = landingBuildCache();
+  if (cache.size > LANDING_BUILD_CAP) {
+    const oldest = cache.keys().next().value;
+    if (oldest) {
+      cache.delete(oldest);
+      const staleFile = landingBuildFile(oldest);
+      if (existsSync(staleFile)) unlinkSync(staleFile);
+    }
+  }
+  trimLandingBuildFiles();
+}
+
+function resolveLandingBuild(buildId: string | null | undefined): Project | null {
+  if (!buildId) return null;
+  const id = buildId as ProjectId;
+  const cached = landingBuildCache().get(id);
+  if (cached) return cached;
+
+  const file = landingBuildFile(id);
+  if (!existsSync(file)) return null;
+  try {
+    const project = migrateProjectModules(JSON.parse(readFileSync(file, "utf8")) as Project);
+    landingBuildCache().set(id, project);
+    return project;
+  } catch {
+    return null;
+  }
+}
 
 function ingestDemoDoc(
   docs: DocRef[],
@@ -83,16 +157,26 @@ async function snapshot(): Promise<DemoSnapshot> {
   return cached;
 }
 
-export async function getDemoState(_projectId: ProjectId | null) {
+export async function getDemoState(projectId: ProjectId | null, buildId?: string | null) {
   const snap = await snapshot();
-  const projects = snap.projects.map(migrateProjectModules);
+  let projects = snap.projects.map(migrateProjectModules);
+  const built = resolveLandingBuild(buildId);
+  if (built) {
+    projects = [built, ...projects.filter((p) => p.id !== built.id)];
+    projectId = built.id;
+  }
   const modelOptions = toPublicModelOptions(await getModelOptions());
+  const activeCandidate = built?.id ?? projectId ?? DEMO_DEFAULT_PROJECT_ID;
+  const activeProjectId = projects.some((p) => p.id === activeCandidate)
+    ? activeCandidate
+    : DEMO_DEFAULT_PROJECT_ID;
   return {
     projects,
     docs: snap.docs,
     runs: [],
     allRuns: [],
     modelOptions,
+    activeProjectId,
   };
 }
 

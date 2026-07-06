@@ -11,7 +11,8 @@ export type RateLimitTier =
   | "write"
   | "webhook"
   | "billing"
-  | "shared_run";
+  | "shared_run"
+  | "landing_demo_build";
 export type RateLimitKey = string & { __brand: "RateLimitKey" };
 
 export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number }> = {
@@ -28,6 +29,8 @@ export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number 
   billing: { windowMs: 60_000, max: 20 },
   // AI : per-link + IP — limits anonymous credit drain on sharer_pays links.
   shared_run: { windowMs: 600_000, max: 5 },
+  // AI : landing pipeline builds — budget-gated; IP capped alongside budget.
+  landing_demo_build: { windowMs: 600_000, max: 12 },
 };
 
 // AI : default production (Upstash); set RATE_LIMIT_BACKEND=memory for local dev without Redis.

@@ -394,3 +394,18 @@ An integrated revision and branching system for colaboration, changes merging, a
 For true 3D software with built-in version control featuring Git-like branching and commit changes, your primary options are cloud-native platforms like Onshape or multi-user ecosystems like Autodesk Fusion.
 """
 
+
+
+# landing page
+
+be able to put a prompt in on the landing page website and it run. obv put rate limits and use cheap model, please put into the supabase set up as billed to landing page, and have a landing page budget and record the list of calls. need a more interactive and engaging live demo than a bunch of random tabs
+
+To get a clear idea of the app please have
+  1. A text box with an enter button for a task you would like to automate which when pressed builds a full pipline
+  2. A preview of the whole app with no run buttons working.
+
+
+have a live preview on the landing page 
+have a try now button which links to sign in 
+
+have a button to book a demo in calendar using https://cal.com/

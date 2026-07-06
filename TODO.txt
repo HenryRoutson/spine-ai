@@ -7,6 +7,16 @@ name might already be taken https://www.getspine.ai/
 add translations and new langauges by using constants
 
 
+there is an issue where text inputs are being converted to pydantic objects in the pipeline
+
+this doesn't work because input isn't a list : build me a pipeline to mark to convert hundreds of unstructured receipts into excel .
+need to make the landing page demo more reliable
+
+
+
+live preview isn't as good as being able to prompt something and getting a pipeline built.
+
+
 use auto visualiser
 
 

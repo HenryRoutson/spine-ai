@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { SpineNavIcon } from "@/components/spine-mark"
 import { useStore } from "@/lib/store"
+import { isPreviewOnly } from "@/lib/demo-mode"
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { formatUsdFromCents } from "@/lib/format"
 import { useAppShell } from "@/lib/app-shell"
@@ -131,6 +132,7 @@ export function Inference() {
   const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
   const insufficientCredit =
     billingAccount != null && billingAccount.balanceCents < minRunBalanceCents
+  const previewOnly = isPreviewOnly()
 
   const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
   const setupDocs = useMemo(() => projectDocs.filter((d) => isInferenceSetupFileName(d.name)), [projectDocs])
@@ -512,7 +514,14 @@ export function Inference() {
                   }
                 />
 
-                {insufficientCredit && run.phase !== "running" ? (
+                {previewOnly && run.phase !== "running" ? (
+                  <div className="rounded-lg border border-border bg-muted/20 px-4 py-5 text-center">
+                    <p className="text-sm font-medium">Preview mode</p>
+                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                      Explore the pipeline — sign in to run inference
+                    </p>
+                  </div>
+                ) : insufficientCredit && run.phase !== "running" ? (
                   <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-5 text-center">
                     <AlertTriangle className="mx-auto h-8 w-8 text-destructive" />
                     <p className="mt-3 text-sm font-medium text-destructive">
@@ -554,7 +563,8 @@ export function Inference() {
                         !run.allInputsReady ||
                         run.inputsInvalid ||
                         run.phase === "running" ||
-                        insufficientCredit
+                        insufficientCredit ||
+                        previewOnly
                       }
                       onClick={run.start}
                     >

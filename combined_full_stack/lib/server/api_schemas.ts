@@ -418,3 +418,7 @@ export async function parseRequestJson<T>(
   if (!parsed.success) return { validationError: formatZodError(parsed.error) };
   return parsed.data;
 }
+
+export const landingBuildPipelineBodySchema = z.object({
+  task: z.string().trim().min(1).max(2000),
+});

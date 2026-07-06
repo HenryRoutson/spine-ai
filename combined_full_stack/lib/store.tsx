@@ -244,14 +244,18 @@ export function StoreProvider({
   children: ReactNode
   mode?: StoreMode
 }) {
-  // AI : demo must not hydrate from auth-gated session snapshots — stale [] projects stuck "loading projects…".
-  const [state, setState] = useState<ServerState | null>(() =>
-    mode === "demo" ? null : readStateSnapshot(),
-  )
+  // AI : always null on first render — readStateSnapshot() uses sessionStorage and would mismatch SSR.
+  const [state, setState] = useState<ServerState | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [billingAccount, setBillingAccount] = useState<BillingAccountView | null>(null)
   const [activeProjectId, setActiveProjectId] = useState<string>(() => {
-    if (mode === "demo") return DEMO_DEFAULT_PROJECT_ID
+    if (mode === "demo") {
+      if (typeof window !== "undefined") {
+        const buildId = new URLSearchParams(window.location.search).get("buildId")
+        if (buildId) return buildId
+      }
+      return DEMO_DEFAULT_PROJECT_ID
+    }
     return mode === "workspace" ? (readActiveProjectSession() ?? "") : ""
   })
   const [model, setModel] = useState<string>(DEFAULT_MODEL)
@@ -292,7 +296,13 @@ export function StoreProvider({
   }, [mode])
 
   const fetchState = useCallback(async (projectId: string) => {
-    const q = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""
+    const params = new URLSearchParams()
+    if (projectId) params.set("projectId", projectId)
+    if (mode === "demo" && typeof window !== "undefined") {
+      const buildId = new URLSearchParams(window.location.search).get("buildId")
+      if (buildId) params.set("buildId", buildId)
+    }
+    const q = params.toString() ? `?${params}` : ""
     const route = mode === "demo" ? API_ROUTES.demoState : API_ROUTES.state
     return fetchStateOnce(`${route}${q}`)
   }, [mode])
@@ -356,6 +366,19 @@ export function StoreProvider({
       if (mode === "demo" && projectId && visibleProjects.some((p) => p.id === projectId)) {
         setActiveProjectId(projectId)
       }
+      if (mode === "demo") {
+        const fromApi =
+          "activeProjectId" in data && typeof data.activeProjectId === "string"
+            ? (data.activeProjectId as string)
+            : null
+        const resolved =
+          (projectId && visibleProjects.some((p) => p.id === projectId) ? projectId : null) ??
+          (fromApi && visibleProjects.some((p) => p.id === fromApi) ? fromApi : null) ??
+          (visibleProjects.some((p) => p.id === DEMO_DEFAULT_PROJECT_ID)
+            ? DEMO_DEFAULT_PROJECT_ID
+            : visibleProjects[0]?.id)
+        if (resolved) setActiveProjectId(resolved)
+      }
       refreshBilling().catch(console.error) // AI : billing failure must not block pipeline UI
     },
     [mode, refreshBilling],
@@ -394,6 +417,12 @@ export function StoreProvider({
   )
 
   useLayoutEffect(() => {
+    if (mode === "demo") return
+    const snapshot = readStateSnapshot()
+    if (snapshot) setState(snapshot)
+  }, [mode])
+
+  useLayoutEffect(() => {
     if (mode !== "demo") return
     setDemoMode(true)
     return () => setDemoMode(false)
@@ -401,7 +430,6 @@ export function StoreProvider({
 
   useEffect(() => {
     if (mode === "picker") clearActiveProjectSession()
-    if (mode === "demo") writeActiveProjectSession(DEMO_DEFAULT_PROJECT_ID)
   }, [mode])
 
   const refresh = useCallback(async (projectId = activeProjectId) => {
@@ -1106,20 +1134,6 @@ export function StoreProvider({
     )
   }
 
-  // AI : zero projects is valid — replace the whole app shell (no sub tabs) with an empty-state page.
-  if (mode !== "demo" && migratedProjects.length === 0 && (stateSyncing || state)) {
-    return (
-      <>
-        {saveErrorBanner}
-        <NoProjectsPage
-          syncing={stateSyncing}
-          onCreateBlank={addProject}
-          onCloneTemplate={cloneFromTemplate}
-        />
-      </>
-    )
-  }
-
   if (mode === "picker") {
     if (!state || !pickerValue) {
       return (
@@ -1132,6 +1146,20 @@ export function StoreProvider({
       <>
         {saveErrorBanner}
         <ProjectPickerContext.Provider value={pickerValue}>{children}</ProjectPickerContext.Provider>
+      </>
+    )
+  }
+
+  // AI : zero projects is valid — replace the whole app shell (no sub tabs) with an empty-state page.
+  if (mode !== "demo" && migratedProjects.length === 0 && (stateSyncing || state)) {
+    return (
+      <>
+        {saveErrorBanner}
+        <NoProjectsPage
+          syncing={stateSyncing}
+          onCreateBlank={addProject}
+          onCloneTemplate={cloneFromTemplate}
+        />
       </>
     )
   }

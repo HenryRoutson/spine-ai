@@ -1,0 +1,181 @@
+// AI : landing page demo — budget gate + Supabase call log for pipeline builds.
+
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  LANDING_DEMO_MIN_BALANCE_CENTS,
+  LANDING_DEMO_PREVIEW_CHARS,
+  LANDING_PAGE_BUDGET_CENTS,
+} from "@/lib/landing_demo_config";
+import { createAdminClient } from "@/lib/server/supabase_admin";
+import { dataDir } from "@/lib/server/config";
+import { logger } from "@/lib/server/server_logger";
+import type { ModelId } from "@/lib/server/types";
+
+const demoLog = logger("landing-demo");
+
+export class LandingBudgetError extends Error {
+  constructor(readonly code: "budget_exhausted" | "budget_unavailable") {
+    super(code === "budget_exhausted" ? "Landing demo budget exhausted — try again later." : "Landing demo unavailable.");
+    this.name = "LandingBudgetError";
+  }
+}
+
+export type LandingDemoCallRow = {
+  id: string;
+  promptPreview: string;
+  outputPreview: string | null;
+  model: ModelId;
+  promptTokens: number;
+  completionTokens: number;
+  costCents: number;
+  latencyMs: number | null;
+  createdAt: string;
+};
+
+type LandingBudgetState = {
+  budgetCents: number;
+  spentCents: number;
+  calls: LandingDemoCallRow[];
+};
+
+const LANDING_BUDGET_ID = "landing";
+
+function previewText(text: string, max = LANDING_DEMO_PREVIEW_CHARS): string {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) return trimmed;
+  return `${trimmed.slice(0, max - 1)}…`;
+}
+
+function hashIp(ip: string): string {
+  const salt = process.env.LANDING_DEMO_IP_SALT ?? "landing-demo";
+  return createHash("sha256").update(`${salt}:${ip}`).digest("hex").slice(0, 16);
+}
+
+function localBudgetFile(): string {
+  return join(dataDir(), "landing_page_demo.json");
+}
+
+function readLocalBudget(): LandingBudgetState {
+  const file = localBudgetFile();
+  if (!existsSync(file)) {
+    return { budgetCents: LANDING_PAGE_BUDGET_CENTS, spentCents: 0, calls: [] };
+  }
+  try {
+    return JSON.parse(readFileSync(file, "utf8")) as LandingBudgetState;
+  } catch {
+    return { budgetCents: LANDING_PAGE_BUDGET_CENTS, spentCents: 0, calls: [] };
+  }
+}
+
+function writeLocalBudget(state: LandingBudgetState): void {
+  const dir = dataDir();
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(localBudgetFile(), JSON.stringify(state, null, 2));
+}
+
+async function readBudget(): Promise<{ budgetCents: number; spentCents: number; source: "supabase" | "local" }> {
+  const admin = await createAdminClient();
+  if (admin) {
+    const { data, error } = await admin
+      .from("landing_page_budget")
+      .select("budget_cents, spent_cents")
+      .eq("id", LANDING_BUDGET_ID)
+      .maybeSingle();
+    if (!error && data) {
+      return {
+        budgetCents: Number(data.budget_cents),
+        spentCents: Number(data.spent_cents),
+        source: "supabase",
+      };
+    }
+    demoLog.warn("landing_page_budget read failed — falling back to local", { error: error?.message });
+  }
+  const local = readLocalBudget();
+  return { budgetCents: local.budgetCents, spentCents: local.spentCents, source: "local" };
+}
+
+export async function assertLandingBudget(): Promise<void> {
+  const { budgetCents, spentCents, source } = await readBudget();
+  const remaining = budgetCents - spentCents;
+  if (source === "supabase" && budgetCents <= 0) throw new LandingBudgetError("budget_unavailable");
+  if (remaining < LANDING_DEMO_MIN_BALANCE_CENTS) throw new LandingBudgetError("budget_exhausted");
+}
+
+async function recordCall(params: {
+  prompt: string;
+  outputPreview?: string;
+  model: ModelId;
+  promptTokens: number;
+  completionTokens: number;
+  costCents: number;
+  latencyMs: number;
+  ip: string;
+}): Promise<LandingDemoCallRow> {
+  const row: LandingDemoCallRow = {
+    id: randomUUID(),
+    promptPreview: previewText(params.prompt),
+    outputPreview: params.outputPreview ?? null,
+    model: params.model,
+    promptTokens: params.promptTokens,
+    completionTokens: params.completionTokens,
+    costCents: params.costCents,
+    latencyMs: params.latencyMs,
+    createdAt: new Date().toISOString(),
+  };
+
+  const admin = await createAdminClient();
+  if (admin) {
+    const { error: insertError } = await admin.from("landing_page_calls").insert({
+      id: row.id,
+      prompt_preview: row.promptPreview,
+      output_preview: row.outputPreview,
+      model: row.model,
+      prompt_tokens: row.promptTokens,
+      completion_tokens: row.completionTokens,
+      cost_cents: row.costCents,
+      latency_ms: row.latencyMs,
+      ip_hash: hashIp(params.ip),
+    });
+    if (insertError) demoLog.warn("landing_page_calls insert failed", { error: insertError.message });
+    else {
+      const budget = await readBudget();
+      await admin
+        .from("landing_page_budget")
+        .update({
+          spent_cents: budget.spentCents + params.costCents,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", LANDING_BUDGET_ID);
+      return row;
+    }
+  }
+
+  const local = readLocalBudget();
+  local.spentCents += params.costCents;
+  local.calls.unshift(row);
+  local.calls = local.calls.slice(0, 200);
+  writeLocalBudget(local);
+  return row;
+}
+
+export async function recordLandingUsage(params: {
+  prompt: string;
+  outputPreview: string;
+  model: ModelId;
+  costCents: number;
+  latencyMs: number;
+  ip: string;
+}): Promise<LandingDemoCallRow> {
+  return recordCall({
+    prompt: params.prompt,
+    outputPreview: params.outputPreview,
+    model: params.model,
+    promptTokens: 0,
+    completionTokens: 0,
+    costCents: params.costCents,
+    latencyMs: params.latencyMs,
+    ip: params.ip,
+  });
+}
