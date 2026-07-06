@@ -41,10 +41,23 @@ export const API_ROUTES = {
   sharedLinkDocs: (id: string) => `/api/shared-links/${id}/docs`,
   sharedLinkDownload: (id: string) => `/api/shared-links/${id}/download`,
   sharedLinkClientStep: (id: string) => `/api/shared-links/${id}/client-step`,
+  hostedApis: "/api/hosted-apis",
+  hostedApi: (id: string) => `/api/hosted-apis/${id}`,
+  hostedApiInvoke: (id: string) => `/api/hosted-apis/${id}/invoke`,
+  hostedApiProgress: (id: string) => `/api/hosted-apis/${id}/progress`,
+  landingDemoBuild: "/api/landing-demo/build-pipeline",
+  landingDemoSignup: "/api/landing-demo/signup",
   demoState: "/api/demo/state",
   demoDocText: (id: string, layer: "parser" | "vision" = "parser") =>
     `/api/demo/docs/${id}/text${layer === "vision" ? "?layer=vision" : ""}`,
 } as const
+
+function isHostedApiPublicApi(pathname: string): boolean {
+  return (
+    /^\/api\/hosted-apis\/[^/]+\/invoke$/.test(pathname) ||
+    /^\/api\/hosted-apis\/[^/]+\/progress$/.test(pathname)
+  );
+}
 
 function isSharedLinkPublicApi(pathname: string): boolean {
   return (
@@ -53,13 +66,19 @@ function isSharedLinkPublicApi(pathname: string): boolean {
   )
 }
 
+function isLandingDemoPublicApi(pathname: string): boolean {
+  return pathname === API_ROUTES.landingDemoBuild || pathname === API_ROUTES.landingDemoSignup;
+}
+
 function isDemoPublicApi(pathname: string): boolean {
   return pathname === API_ROUTES.demoState || /^\/api\/demo\/docs\/[^/]+\/text$/.test(pathname);
 }
 
 export function isPublicApiPath(pathname: string): boolean {
   if (PUBLIC_API_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return true
+  if (isLandingDemoPublicApi(pathname)) return true
   if (isDemoPublicApi(pathname)) return true
+  if (isHostedApiPublicApi(pathname)) return true
   return isSharedLinkPublicApi(pathname)
 }
 

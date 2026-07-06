@@ -37,7 +37,7 @@ export interface RunOptions {
   persist?: boolean;
   liveHtml?: boolean;
   projectOverride?: Project;
-  runMeta?: Pick<PipelineRun, "source" | "sharedLinkId" | "viewerName" | "viewerSessionId" | "notes">;
+  runMeta?: Pick<PipelineRun, "source" | "sharedLinkId" | "hostedApiId" | "viewerName" | "viewerSessionId" | "notes">;
 }
 
 export type ClientStepResume = { output?: unknown; error?: string };

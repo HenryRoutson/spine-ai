@@ -1,6 +1,7 @@
 // AI : structure field integrity — empty names, dangling refs, duplicate names within a model.
 import { fieldToTypeExpr, collectTypeExprRefModelIds, type TypeExpr } from "@/lib/server/type_expr";
 import { withSharedModels } from "@/lib/structure";
+import { isBuiltinTypeAliasName, stripBuiltinTypeAliases, withBuiltinTypeAliases } from "@/lib/server/builtin_types";
 import type { ModelField, StructureModel, StructureModelId, TypeAlias } from "@/lib/types";
 
 export type StructureIssueKind =
@@ -131,6 +132,9 @@ export function computeStructureIssues(
   models: StructureModel[],
   typeAliases: TypeAlias[] = [],
 ): StructureIssue[] {
+  // AI : persisted project.typeAliases omit shared builtins — merge for resolution + validation.
+  const mergedAliases = withBuiltinTypeAliases(typeAliases);
+  const userAliases = stripBuiltinTypeAliases(typeAliases);
   // AI : persisted project.models omit shared Document — include it for ref resolution only.
   const byId = new Set(withSharedModels(models).map((m) => m.id));
   const issues: StructureIssue[] = [];
@@ -170,7 +174,7 @@ export function computeStructureIssues(
       }
 
       const fieldExpr = fieldToTypeExpr(field);
-      for (const aliasName of unknownNamedTypes(fieldExpr, typeAliases)) {
+      for (const aliasName of unknownNamedTypes(fieldExpr, mergedAliases)) {
         issues.push({
           modelId: model.id,
           kind: "unknown-type-alias",
@@ -179,7 +183,7 @@ export function computeStructureIssues(
           aliasName,
         });
       }
-      if (typeExprHasUnsetOrAliasUnset(fieldExpr, typeAliases)) {
+      if (typeExprHasUnsetOrAliasUnset(fieldExpr, mergedAliases)) {
         issues.push({
           modelId: model.id,
           kind: "incomplete-type-expr",
@@ -191,13 +195,21 @@ export function computeStructureIssues(
   }
 
   const seenAliasNames = new Map<string, string>();
-  for (const alias of typeAliases) {
+  for (const alias of userAliases) {
     const name = alias.name.trim();
     if (!name) {
       issues.push({
         modelId: models[0]?.id ?? ("" as StructureModelId),
         kind: "empty-alias-name",
         aliasName: alias.name,
+      });
+      continue;
+    }
+    if (isBuiltinTypeAliasName(name)) {
+      issues.push({
+        modelId: models[0]?.id ?? ("" as StructureModelId),
+        kind: "duplicate-alias-name",
+        aliasName: name,
       });
       continue;
     }
@@ -213,7 +225,7 @@ export function computeStructureIssues(
     }
   }
 
-  for (const alias of typeAliases) {
+  for (const alias of userAliases) {
     for (const refId of collectTypeExprRefModelIds(alias.expr)) {
       if (!byId.has(refId)) {
         issues.push({
@@ -224,7 +236,7 @@ export function computeStructureIssues(
         });
       }
     }
-    for (const unknown of unknownNamedTypes(alias.expr, typeAliases)) {
+    for (const unknown of unknownNamedTypes(alias.expr, mergedAliases)) {
       if (unknown.toLowerCase() === alias.name.trim().toLowerCase()) continue;
       issues.push({
         modelId: models[0]?.id ?? ("" as StructureModelId),
@@ -234,7 +246,7 @@ export function computeStructureIssues(
     }
     const aliasKey = alias.name.trim().toLowerCase();
     const seenAliases = aliasKey ? new Set<string>([aliasKey]) : new Set<string>();
-    if (typeExprHasUnsetOrAliasUnset(alias.expr, typeAliases, seenAliases)) {
+    if (typeExprHasUnsetOrAliasUnset(alias.expr, mergedAliases, seenAliases)) {
       issues.push({
         modelId: models[0]?.id ?? ("" as StructureModelId),
         kind: "incomplete-type-expr",

@@ -13,7 +13,7 @@ async function loadPdfParse() {
 }
 
 // AI : prebuilt "document to text" — default JS PDF reader (demo only feeds PDFs).
-// AI : the pitch's DeepSeek OCR path is a TODO placeholder (see docToTextOcrPlaceholder).
+// AI : TODO bug (spec) — wire real DeepSeek OCR when input step useOcr is on; docToTextOcrPlaceholder is PDF.js text only.
 // AI : bytes variant added for the /api/docs upload route (no temp file needed).
 export async function pdfBytesToText(bytes: Uint8Array): Promise<PdfText> {
   const { PDFParse, CanvasFactory } = await loadPdfParse();

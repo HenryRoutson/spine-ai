@@ -1,7 +1,8 @@
-import { fieldToTypeExpr, typeExprIsQuote, typeExprRefModelId } from "./type_expr";
+import { expandNamedTypeExpr, fieldToTypeExpr, typeExprIsQuote, typeExprRefModelId } from "./type_expr";
 import type { TypeExpr } from "./type_expr";
 import type { DocId, ModelField, StructureModel, StructureModelId } from "./types";
 
+// AI : TODO (spec) — quote validation walks struct tree for quote fields only (no brute-force dict scan); partially via collectQuotesForModel.
 export type LinkedQuoteValue = {
   text: string;
   quote: { doc_id: DocId; start: number; end: number };
@@ -27,6 +28,7 @@ function exprHasQuoteFields(
   index: Map<StructureModelId, StructureModel>,
   seen: Set<StructureModelId>,
 ): boolean {
+  expr = expandNamedTypeExpr(expr);
   if (typeExprIsQuote(expr)) return true;
   const refId = typeExprRefModelId(expr);
   if (refId) {
@@ -52,6 +54,7 @@ function resolveQuoteExpr(
   link: QuoteLinker,
   seen: Set<StructureModelId>,
 ): unknown {
+  expr = expandNamedTypeExpr(expr);
   if (typeExprIsQuote(expr)) return linkQuoteField(raw, link);
   if (expr.kind === "list" && expr.item.kind === "text_quote") return linkQuoteList(raw, link);
   if (expr.kind === "list" && expr.item.kind === "ref" && Array.isArray(raw)) {
@@ -84,6 +87,7 @@ function collectQuoteExpr(
   out: LinkedQuoteValue[],
   seen: Set<StructureModelId>,
 ): void {
+  expr = expandNamedTypeExpr(expr);
   if (typeExprIsQuote(expr)) {
     pushLinkedQuote(raw, out);
     return;
@@ -122,6 +126,7 @@ function quotePathsForExpr(
   path: string,
   seen: Set<StructureModelId>,
 ): string[] {
+  expr = expandNamedTypeExpr(expr);
   if (typeExprIsQuote(expr)) return [path];
   const refId = typeExprRefModelId(expr);
   if (refId) {

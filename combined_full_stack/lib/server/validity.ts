@@ -1,5 +1,6 @@
 // AI : Pipeline I/O graph validation — core computation and pipeline utilities.
 // AI : Types + messages → validity-types.ts / validity-messages.ts / validity-inspect.ts.
+// AI : TODO (spec) — derive dependency graph from step() refs in custom code; flag unused/isolated steps (linear spine only today).
 import type {
   ModuleId,
   PipelineModule,
@@ -11,6 +12,7 @@ import type {
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
 import { usesPassthroughStructure, isLlmKind, stepRequiresNote } from "@/lib/module-kinds";
+import { inputModuleTypesAreAllJsonNative } from "@/lib/inference-input-core";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
 import {
   canAutoWrapListIntoOutputStructure,
@@ -33,9 +35,13 @@ import {
   stepEmits,
   stepEmitsList,
   isAutoQuoteStep,
+  isAutoStructureParseStep,
   skipDuplicateLabelCheck,
   AUTO_QUOTE_EXPLAINER,
+  AUTO_STRUCTURE_PARSE_EXPLAINER,
   syncAutoQuoteSteps,
+  syncAutoStructureParseSteps,
+  syncManagedPipelineSteps,
   syncAssertPlacement,
   migrateProjectModules,
 } from "./validity-sync";
@@ -71,8 +77,12 @@ export { stepEmitsList } from "./type_expr";
 export {
   stepEmits,
   isAutoQuoteStep,
+  isAutoStructureParseStep,
   AUTO_QUOTE_EXPLAINER,
+  AUTO_STRUCTURE_PARSE_EXPLAINER,
   syncAutoQuoteSteps,
+  syncAutoStructureParseSteps,
+  syncManagedPipelineSteps,
   syncAssertPlacement,
   migrateProjectModules,
 } from "./validity-sync";
@@ -254,7 +264,7 @@ function computeJsonInputMismatchInvalid(
 ): InvalidMap {
   const invalid: InvalidMap = new Map();
   for (const m of modules) {
-    if (m.kind !== "input" || !moduleInputTypes(m).includes("json")) continue;
+    if (m.kind !== "input" || !inputModuleTypesAreAllJsonNative(m)) continue;
     const out = models.find((x) => x.id === m.outStructureId);
     if (isBuiltinDocumentModel(out)) {
       pushInvalid(invalid, { moduleId: m.id, kind: "json-input-mismatch" });
@@ -415,7 +425,7 @@ function computeStructureFieldInvalid(
 function computeInputDescriptionInvalid(modules: PipelineModule[]): InvalidMap {
   const invalid: InvalidMap = new Map();
   for (const m of modules) {
-    if (isAutoQuoteStep(m)) continue;
+    if (isAutoQuoteStep(m) || isAutoStructureParseStep(m)) continue;
     if (m.inputDescription?.trim()) continue;
     pushInvalid(invalid, { moduleId: m.id, kind: "missing-input-description" });
   }

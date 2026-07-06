@@ -46,6 +46,16 @@ export class UsageLedger {
     return this.records.reduce((sum, r) => sum + costOf(r), 0);
   }
 
+  tokenTotals(): { promptTokens: number; completionTokens: number } {
+    return this.records.reduce(
+      (acc, r) => ({
+        promptTokens: acc.promptTokens + r.promptTokens,
+        completionTokens: acc.completionTokens + r.completionTokens,
+      }),
+      { promptTokens: 0, completionTokens: 0 },
+    );
+  }
+
   all(): readonly UsageRecord[] {
     return this.records;
   }

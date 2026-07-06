@@ -1,5 +1,6 @@
 import { fieldToTypeExpr } from "@/lib/server/type_expr"
 import type { PrimName, TypeExpr } from "@/lib/server/type_expr"
+import { BUILTIN_QUOTE_SPAN_ID } from "@/lib/server/builtin_models"
 import { FieldType } from "@/lib/types"
 import type { StructureModel, StructureModelId } from "@/lib/types"
 
@@ -44,8 +45,14 @@ function parseIdentifier(raw: string, models: StructureModel[]): TypeExpr {
   const prim = PRIM_ALIASES[id.toLowerCase()]
   if (prim) return { kind: "prim", name: prim }
   if (id === "Document") return { kind: "document" }
+  if (id === "quote_string_t") return { kind: "quote" }
+  if (id.toLowerCase() === "quote") return { kind: "quote" }
   if (id === "Quote") return { kind: "quote" }
+  if (id === "text_quote_t") return { kind: "text_quote" }
   if (id === "TextQuote") return { kind: "text_quote" }
+  if (id === "quote_span_t" || id === "QuoteSpan") {
+    return { kind: "ref", modelId: BUILTIN_QUOTE_SPAN_ID }
+  }
   if (id === "UNSET") return { kind: "unset" }
 
   const hit = modelByName(models, id)
@@ -147,9 +154,9 @@ export function formatTypeExprPy(expr: TypeExpr, models: StructureModel[] = []):
     case "document":
       return "Document"
     case "quote":
-      return "Quote"
+      return "quote_string_t"
     case "text_quote":
-      return "TextQuote"
+      return "text_quote_t"
     case "list":
       return `list[${formatTypeExprPy(expr.item, models)}]`
     case "ref": {

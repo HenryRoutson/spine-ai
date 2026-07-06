@@ -6,12 +6,12 @@ import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate_limit";
 import type { RateLimitKey } from "@/lib/rate_limit_config";
 import { secureSessionCookieOptions } from "@/lib/server/cookie_options";
 import { parseRequestJson, parseSharedLinkId, sharedLinkRunBodySchema } from "@/lib/server/api_schemas";
+import { assertCanStartRun, billRunUsage } from "@/lib/server/billing_account";
 import {
-  assertCanStartRun,
-  billRunUsage,
-  billingKeyForUser,
-} from "@/lib/server/billing_account";
-import { confidentialUploadWarning } from "@/lib/confidential-upload";
+  sharedLinkBillingKey,
+  viewerFundsSharedRun,
+} from "@/lib/server/shared_link_billing";
+import { PUBLIC_RUN_SPEND_RESERVE_CENTS } from "@/lib/billing_config";
 import {
   orderedInputModules,
   inputDocsByModuleFromAssignment,
@@ -39,6 +39,7 @@ import {
   withJobLogging,
 } from "@/lib/server/run_jobs";
 import {
+  adjustSharedLinkSpend,
   assertSharedLinkCanAcceptRun,
   getSharedLink,
   incrementSharedLinkRunCount,
@@ -46,6 +47,8 @@ import {
   openStoreForUser,
   recordSharedLinkSpend,
   registerSharedProgressToken,
+  reserveSharedLinkSpend,
+  revokeSharedLink,
   SharedLinkSpendLimitError,
 } from "@/lib/server/shared_links";
 import {
@@ -54,7 +57,7 @@ import {
   sessionDocContent,
   sessionDocsForModule,
 } from "@/lib/server/shared-link-session";
-import { isAuthSession, requireAuth } from "@/lib/server/require_auth";
+import { isAuthSession, requireAuth, type user_id_string } from "@/lib/server/require_auth";
 import { logger } from "@/lib/server/server_logger";
 import { DocLabel, RunSource } from "@/lib/server/types";
 import type { DocId, DocRef, ModuleId, SharedLinkId } from "@/lib/server/types";
@@ -63,6 +66,7 @@ export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 const SESSION_COOKIE = "shared_run_session";
+const runLog = logger("api:shared-links:run");
 import { MAX_UPLOAD_BYTES } from "@/lib/server/upload_constants";
 
 function defaultDocId(linkId: SharedLinkId, moduleId: ModuleId, filename: string): DocId {
@@ -143,11 +147,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return apiError("name required", 400);
   }
 
-  if (link.fundingMode === "viewer_signs_in") {
-    const auth = await requireAuth();
-    if (!isAuthSession(auth)) return apiError("sign in required", 401);
-  }
-
   const sharerStore = await openStoreForUser(link.ownerId);
   const overlay = overlayStoreForSharedRun(
     sharerStore,
@@ -189,12 +188,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     resolvedByModule,
   );
 
-  let billingKey = billingKeyForUser(link.ownerId);
-  if (link.fundingMode === "viewer_signs_in") {
+  let viewerUserId: user_id_string | undefined;
+  if (viewerFundsSharedRun(link.fundingMode)) {
     const auth = await requireAuth();
     if (!isAuthSession(auth)) return apiError("sign in required", 401);
-    billingKey = billingKeyForUser(auth.userId);
+    viewerUserId = auth.userId;
   }
+  const billingKey = sharedLinkBillingKey(link.ownerId, link.fundingMode, viewerUserId);
 
   try {
     assertSharedLinkCanAcceptRun(link);
@@ -214,6 +214,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       );
     }
     throw err;
+  }
+
+  const reserveCents = link.spendLimitCents != null ? PUBLIC_RUN_SPEND_RESERVE_CENTS : 0;
+  if (reserveCents > 0) {
+    const reserved = await reserveSharedLinkSpend(link.id, reserveCents);
+    if (!reserved) {
+      return apiError("This link has reached its spending limit.", 402, "spend_limit_reached");
+    }
   }
 
   if (countActiveJobs(link.ownerId) >= MAX_CONCURRENT_RUNS_PER_USER) {
@@ -250,17 +258,39 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           },
         });
         await sharerStore.flush();
-        if (run.billedCents > 0) {
+        const billed = run.billedCents;
+        if (billed > 0) {
           try {
-            await billRunUsage(billingKey, run.billedCents);
-            await recordSharedLinkSpend(link.id, run.billedCents);
-          } catch {
-            /* post-run billing */
+            await billRunUsage(billingKey, billed);
+          } catch (billErr) {
+            runLog.warn(`post-run billing failed — revoking link`, {
+              linkId: link.id,
+              jobId,
+              billed,
+              error: (billErr as Error).message,
+            });
+            await revokeSharedLink(link.ownerId, link.id);
           }
+        }
+        if (reserveCents > 0) {
+          const settled = await adjustSharedLinkSpend(link.id, billed - reserveCents);
+          if (!settled) {
+            runLog.warn(`spend limit exceeded after run — revoking link`, {
+              linkId: link.id,
+              billed,
+              reserveCents,
+            });
+            await revokeSharedLink(link.ownerId, link.id);
+          }
+        } else if (billed > 0) {
+          await recordSharedLinkSpend(link.id, billed);
         }
         await incrementSharedLinkRunCount(link.id);
         await finishJob(link.ownerId, jobId, { run }, jobDb);
       } catch (err) {
+        if (reserveCents > 0 && !(err instanceof PipelinePausedError)) {
+          await adjustSharedLinkSpend(link.id, -reserveCents).catch(() => {});
+        }
         if (err instanceof PipelinePausedError) {
           await pauseJob(link.ownerId, jobId, err.checkpoint, jobDb);
           return;

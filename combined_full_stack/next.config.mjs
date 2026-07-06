@@ -62,7 +62,7 @@ const nextConfig = {
     ]
     return [
       {
-        source: "/((?!demo$).*)",
+        source: "/((?!demo).*)",
         headers: [
           ...baseSecurityHeaders,
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
@@ -70,7 +70,7 @@ const nextConfig = {
         ],
       },
       {
-        source: "/demo",
+        source: "/demo/:path*",
         headers: [
           ...baseSecurityHeaders,
           { key: "Content-Security-Policy", value: `${csp}; ${demoFrameAncestors}` },

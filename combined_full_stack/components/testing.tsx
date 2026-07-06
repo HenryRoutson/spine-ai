@@ -2,6 +2,7 @@
 
 // AI : Testing tab — *_testing.json files pin exact per-step outputs; a run pinpoints the
 // AI : first step that diverges. Static checks stay in Structure/Pipeline; this is for full runs.
+// AI : TODO (spec) — whole-JSON LLM overview diff alongside per-field deterministic/probabilistic checks.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -82,6 +83,7 @@ import {
 } from "@/lib/testing-settings"
 import { cn } from "@/lib/utils"
 import { DocLabel, InputType, RunSource, type PipelineRun, type RunTestReport } from "@/lib/types"
+import { isPreviewOnly } from "@/lib/demo-mode"
 import type { DocId, DocRef, ModuleId, PipelineModule, Project, RunJobId } from "@/lib/types"
 
 type doc_name_string = string
@@ -504,6 +506,7 @@ function staleLoadFailedContent(content: string): string | null {
   }
 
   async function runTest(state: TestDocState, pollIntervalMs = 700): Promise<RunTestOutcome> {
+    if (isPreviewOnly()) return "error"
     if (!state.test) return "error"
     const docName = state.doc.name
     const resolved = resolveTestRunInputs(state.test, modules, projectDocs)
@@ -854,7 +857,7 @@ function staleLoadFailedContent(content: string): string | null {
                   resolveLastVerdict(selected.doc.name) === null
                 }
                 runs={runs}
-                runDisabled={runBlocked || runAllActive || selectedRun.phase === "running"}
+                runDisabled={runBlocked || runAllActive || selectedRun.phase === "running" || isPreviewOnly()}
                 runPhase={selectedRun.phase}
                 stepStates={selectedRun.stepStates}
                 results={selectedRun.results}

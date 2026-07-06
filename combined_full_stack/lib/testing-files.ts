@@ -1,5 +1,7 @@
 // AI : *_testing.json format — per-step expected outputs to pinpoint where a pipeline diverges.
 // AI : validated against the live pipeline (labels + spine output types) since pipelines drift.
+// AI : TODO (spec) — test verdict expiry (~7d) in Supabase keyed on testContentSig + pipelineSig; revert restores cached pass/fail.
+// AI : TODO (spec) — confusion matrices / field group-by mapping in test compare UI (spec § testing).
 
 import { applySchemaDefaults, jsonSchemaToFormRoot } from "@/lib/schema-form"
 import { stepOutputJsonSchema } from "@/lib/step-json-schema"

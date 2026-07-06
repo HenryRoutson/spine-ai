@@ -99,6 +99,8 @@ export interface TypeAlias {
   name: string;
   description: string;
   expr: TypeExpr;
+  shared?: boolean; // AI : injected into every project — not persisted per project
+  locked?: boolean; // AI : read-only in Structure UI
 }
 
 // AI : string values are the persisted wire/DB format — do not rename.
@@ -165,6 +167,8 @@ export interface PipelineModule {
   inputNameContains?: string; // AI : optional filename substring — only matching docs can fill this input slot
   inputDescription?: string; // AI : optional expected input — LLM guard rejects mismatches before the step runs
   checkInputDescription?: boolean; // AI : when false, skip the LLM guard even if inputDescription is set
+  // AI : TODO (spec) — outputDescription?: string + checkOutputDescription?: boolean (post-step LLM output guard).
+  // AI : TODO (spec) — dynamicOutputSchema?: boolean on llm steps for variable homework-style marking schemas.
   inputMinCount?: number; // AI : minimum documents for this input slot (default 1); pair with outIsList for N submissions
   prompt?: string;
   code?: string; // AI : transform steps with custom code only
@@ -342,10 +346,12 @@ export interface RunStep extends Omit<StepDescriptionFields, "outputPreview"> {
 
 export type RunFingerprint = string & { __brand: "RunFingerprint" };
 export type SharedLinkId = string & { __brand: "SharedLinkId" };
+export type HostedApiId = string & { __brand: "HostedApiId" };
 // AI : Testing — run started from the Testing tab; flagged in Logging (spec § Testing).
 export enum RunSource {
   App = "app",
   SharedLink = "shared_link",
+  HostedApi = "hosted_api",
   Assistant = "assistant",
   Testing = "testing",
 }
@@ -438,6 +444,7 @@ export interface PipelineRun {
   test?: RunTestReport; // AI : only on source "testing" runs — keeps the verdict in Logging
 
   sharedLinkId?: SharedLinkId;
+  hostedApiId?: HostedApiId;
   viewerName?: string;
   viewerSessionId?: string;
 }

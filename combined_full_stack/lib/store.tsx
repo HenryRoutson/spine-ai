@@ -1,6 +1,7 @@
 "use client"
 
 // AI : TODO refactor — optional split: persistence, billing refresh, project CRUD into separate hooks.
+// AI : TODO (spec) — prefetch project-scoped cache entries on hydrate; Cache tab should not refetch from cold on every open.
 // AI : the client half of the bridge — hydrates from GET /api/state, applies mutations
 // AI : optimistically, and persists them through the thin API routes. Exposes the exact
 // AI : surface the v2 components were written against (useStore, uid, addDoc, addRun, …).
@@ -39,8 +40,9 @@ import type {
 import { DEFAULT_MODEL } from "@/lib/types"
 import { apiJson, apiPut, formatApiError, JSON_HEADERS, readApiErrorBody } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
-import { migrateProjectModules, syncAutoQuoteSteps } from "@/lib/quote-steps"
-import { stripSharedModels, withSharedModels } from "@/lib/structure"
+import { migrateProjectModules } from "@/lib/quote-steps"
+import { syncManagedPipelineSteps } from "@/lib/structure-parse-steps"
+import { stripSharedModels, stripBuiltinTypeAliases, withBuiltinTypeAliases, withSharedModels } from "@/lib/structure"
 import { mergeInferredStructuresForDoc, modelsChanged } from "@/lib/sync-doc-structures"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
 import {
@@ -224,9 +226,10 @@ function computeDocStructureSync(
   )
   if (!modelsChanged(p.models, merged)) return { nextProjects: prev.projects, changed: false }
   const models = stripSharedModels(merged)
-  const modules = syncAutoQuoteSteps(
+  const modules = syncManagedPipelineSteps(
     migrateProjectModules(p).modules,
     withSharedModels(models),
+    DEFAULT_MODEL,
   )
   return {
     nextProjects: prev.projects.map((x) => (x.id === pid ? { ...p, models, modules } : x)),
@@ -244,14 +247,18 @@ export function StoreProvider({
   children: ReactNode
   mode?: StoreMode
 }) {
-  // AI : demo must not hydrate from auth-gated session snapshots — stale [] projects stuck "loading projects…".
-  const [state, setState] = useState<ServerState | null>(() =>
-    mode === "demo" ? null : readStateSnapshot(),
-  )
+  // AI : always null on first render — readStateSnapshot() uses sessionStorage and would mismatch SSR.
+  const [state, setState] = useState<ServerState | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [billingAccount, setBillingAccount] = useState<BillingAccountView | null>(null)
   const [activeProjectId, setActiveProjectId] = useState<string>(() => {
-    if (mode === "demo") return DEMO_DEFAULT_PROJECT_ID
+    if (mode === "demo") {
+      if (typeof window !== "undefined") {
+        const buildId = new URLSearchParams(window.location.search).get("buildId")
+        if (buildId) return buildId
+      }
+      return DEMO_DEFAULT_PROJECT_ID
+    }
     return mode === "workspace" ? (readActiveProjectSession() ?? "") : ""
   })
   const [model, setModel] = useState<string>(DEFAULT_MODEL)
@@ -292,7 +299,13 @@ export function StoreProvider({
   }, [mode])
 
   const fetchState = useCallback(async (projectId: string) => {
-    const q = projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""
+    const params = new URLSearchParams()
+    if (projectId) params.set("projectId", projectId)
+    if (mode === "demo" && typeof window !== "undefined") {
+      const buildId = new URLSearchParams(window.location.search).get("buildId")
+      if (buildId) params.set("buildId", buildId)
+    }
+    const q = params.toString() ? `?${params}` : ""
     const route = mode === "demo" ? API_ROUTES.demoState : API_ROUTES.state
     return fetchStateOnce(`${route}${q}`)
   }, [mode])
@@ -348,13 +361,31 @@ export function StoreProvider({
         })
         return { ...data, projects: mergedProjects, docs: dedupeDocsNewestByName(data.docs) }
       })
-      // AI : picker mode stays projectless; workspace only adopts an id the user already chose.
-      if (mode === "workspace" && projectId && visibleProjects.some((p) => p.id === projectId)) {
-        setActiveProjectId(projectId)
-        writeActiveProjectSession(projectId as ProjectId)
+      // AI : workspace — honor session project when valid; fall back when demo/build ids leaked into session.
+      if (mode === "workspace") {
+        const resolved =
+          (projectId && visibleProjects.some((p) => p.id === projectId) ? projectId : null) ??
+          mostRecentlyOpenedProject(visibleProjects)?.id ??
+          ""
+        setActiveProjectId(resolved)
+        if (resolved) writeActiveProjectSession(resolved as ProjectId)
+        else clearActiveProjectSession()
       }
       if (mode === "demo" && projectId && visibleProjects.some((p) => p.id === projectId)) {
         setActiveProjectId(projectId)
+      }
+      if (mode === "demo") {
+        const fromApi =
+          "activeProjectId" in data && typeof data.activeProjectId === "string"
+            ? (data.activeProjectId as string)
+            : null
+        const resolved =
+          (projectId && visibleProjects.some((p) => p.id === projectId) ? projectId : null) ??
+          (fromApi && visibleProjects.some((p) => p.id === fromApi) ? fromApi : null) ??
+          (visibleProjects.some((p) => p.id === DEMO_DEFAULT_PROJECT_ID)
+            ? DEMO_DEFAULT_PROJECT_ID
+            : visibleProjects[0]?.id)
+        if (resolved) setActiveProjectId(resolved)
       }
       refreshBilling().catch(console.error) // AI : billing failure must not block pipeline UI
     },
@@ -394,6 +425,12 @@ export function StoreProvider({
   )
 
   useLayoutEffect(() => {
+    if (mode === "demo") return
+    const snapshot = readStateSnapshot()
+    if (snapshot) setState(snapshot)
+  }, [mode])
+
+  useLayoutEffect(() => {
     if (mode !== "demo") return
     setDemoMode(true)
     return () => setDemoMode(false)
@@ -401,7 +438,6 @@ export function StoreProvider({
 
   useEffect(() => {
     if (mode === "picker") clearActiveProjectSession()
-    if (mode === "demo") writeActiveProjectSession(DEMO_DEFAULT_PROJECT_ID)
   }, [mode])
 
   const refresh = useCallback(async (projectId = activeProjectId) => {
@@ -879,17 +915,17 @@ export function StoreProvider({
       const nextModels = stripSharedModels(raw)
       patchProject({
         models: nextModels,
-        modules: syncAutoQuoteSteps(project.modules, withSharedModels(nextModels)),
+        modules: syncManagedPipelineSteps(project.modules, withSharedModels(nextModels), model),
       })
     },
-    [patchProject, project],
+    [patchProject, project, model],
   )
 
   const setTypeAliases = useCallback(
     (t: TypeAlias[] | ((prev: TypeAlias[]) => TypeAlias[])) => {
-      const prev = project?.typeAliases ?? []
-      const next = typeof t === "function" ? t(prev) : t
-      patchProject({ typeAliases: next })
+      const prev = stripBuiltinTypeAliases(project?.typeAliases ?? [])
+      const raw = typeof t === "function" ? t(withBuiltinTypeAliases(prev)) : t
+      patchProject({ typeAliases: stripBuiltinTypeAliases(raw) })
     },
     [patchProject, project],
   )
@@ -897,9 +933,9 @@ export function StoreProvider({
   const setModules = useCallback(
     (m: PipelineModule[]) => {
       if (!project) return
-      patchProject({ modules: syncAutoQuoteSteps(m, project.models) })
+      patchProject({ modules: syncManagedPipelineSteps(m, project.models, model) })
     },
-    [patchProject, project],
+    [patchProject, project, model],
   )
 
   const applyProjectChanges = useCallback(
@@ -913,18 +949,18 @@ export function StoreProvider({
       const nextModels = changes.models ? stripSharedModels(changes.models) : project.models
       const modelsForSync = withSharedModels(nextModels)
       const nextModules = changes.modules
-        ? syncAutoQuoteSteps(changes.modules, modelsForSync)
+        ? syncManagedPipelineSteps(changes.modules, modelsForSync, model)
         : changes.models
-          ? syncAutoQuoteSteps(project.modules, modelsForSync)
+          ? syncManagedPipelineSteps(project.modules, modelsForSync, model)
           : undefined
 
       patchProject({
         ...(changes.models ? { models: nextModels } : {}),
-        ...(changes.typeAliases ? { typeAliases: changes.typeAliases } : {}),
+        ...(changes.typeAliases ? { typeAliases: stripBuiltinTypeAliases(changes.typeAliases) } : {}),
         ...(nextModules !== undefined ? { modules: nextModules } : {}),
       })
     },
-    [patchProject, project],
+    [patchProject, project, model],
   )
 
   const setStrategies = useCallback(
@@ -962,9 +998,9 @@ export function StoreProvider({
       renameProject,
       deleteProject,
       project,
-      models: project.models,
+      models: withSharedModels(project.models),
       setModels,
-      typeAliases: project.typeAliases ?? [],
+      typeAliases: withBuiltinTypeAliases(project.typeAliases ?? []),
       setTypeAliases,
       modules,
       setModules,
@@ -1106,20 +1142,6 @@ export function StoreProvider({
     )
   }
 
-  // AI : zero projects is valid — replace the whole app shell (no sub tabs) with an empty-state page.
-  if (mode !== "demo" && migratedProjects.length === 0 && (stateSyncing || state)) {
-    return (
-      <>
-        {saveErrorBanner}
-        <NoProjectsPage
-          syncing={stateSyncing}
-          onCreateBlank={addProject}
-          onCloneTemplate={cloneFromTemplate}
-        />
-      </>
-    )
-  }
-
   if (mode === "picker") {
     if (!state || !pickerValue) {
       return (
@@ -1132,6 +1154,20 @@ export function StoreProvider({
       <>
         {saveErrorBanner}
         <ProjectPickerContext.Provider value={pickerValue}>{children}</ProjectPickerContext.Provider>
+      </>
+    )
+  }
+
+  // AI : zero projects is valid — replace the whole app shell (no sub tabs) with an empty-state page.
+  if (mode !== "demo" && migratedProjects.length === 0 && (stateSyncing || state)) {
+    return (
+      <>
+        {saveErrorBanner}
+        <NoProjectsPage
+          syncing={stateSyncing}
+          onCreateBlank={addProject}
+          onCloneTemplate={cloneFromTemplate}
+        />
       </>
     )
   }

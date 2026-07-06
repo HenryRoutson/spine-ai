@@ -1,0 +1,56 @@
+import { NextRequest, NextResponse } from "next/server";
+import { checkLandingProxyRateLimit, clientIpFromRequest } from "@/lib/rate_limit";
+
+type SpineApiUrl = string;
+
+const LANDING_PROXY_CLIENT_IP_HEADER = "x-spine-client-ip";
+const LANDING_PROXY_SECRET_HEADER = "x-spine-proxy-secret";
+
+function spineApiUrl(): SpineApiUrl {
+  return (
+    process.env.SPINE_API_URL ??
+    process.env.NEXT_PUBLIC_API_URL ??
+    (process.env.NODE_ENV === "development"
+      ? "http://localhost:3000"
+      : "https://www.spine-ai-app.dev")
+  ).replace(/\/$/, "");
+}
+
+function unreachableError(host: SpineApiUrl): string {
+  return `Couldn't reach the Spine app at ${host}. If the app runs elsewhere, set SPINE_API_URL on the landing page to match.`;
+}
+
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  const ip = clientIpFromRequest(req.headers);
+  const limited = checkLandingProxyRateLimit(ip);
+  if (!limited.ok) {
+    return NextResponse.json(
+      { error: "Too many requests — try again shortly.", code: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(limited.retryAfterSec) } },
+    );
+  }
+
+  const host = spineApiUrl();
+  const url = `${host}/api/landing-demo/signup`;
+  const proxySecret = process.env.LANDING_DEMO_PROXY_SECRET?.trim();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    [LANDING_PROXY_CLIENT_IP_HEADER]: ip,
+  };
+  if (proxySecret) headers[LANDING_PROXY_SECRET_HEADER] = proxySecret;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: await req.text(),
+    });
+    const body = await res.text();
+    return new NextResponse(body, {
+      status: res.status,
+      headers: { "Content-Type": res.headers.get("Content-Type") ?? "application/json" },
+    });
+  } catch {
+    return NextResponse.json({ error: unreachableError(host) }, { status: 502 });
+  }
+}

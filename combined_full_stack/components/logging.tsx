@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO (spec) — prompt context-length profiling grid per subcomponent (documents, JSON blocks, system text).
 import { useMemo, useState, useEffect } from "react"
 import { useStore } from "@/lib/store"
 import { WindowHeader } from "@/components/window-header"

@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO (spec) — git-like branching, merge, and revision history for project collaboration (spec § history).
 import dynamic from "next/dynamic"
 import { useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -57,6 +58,7 @@ import { useAnimatedRemoval } from "@/lib/use-animated-removal"
 import { SpineLogoBox, SpineNavIcon } from "@/components/spine-mark"
 import { clearActiveProjectSession } from "@/lib/active-project-session"
 import { LEGAL } from "@shared/legal/site"
+import { isPreviewOnly } from "@/lib/demo-mode"
 import type { Project } from "@/lib/types"
 
 // AI : marketing site lives on a separate deploy from the app
@@ -323,9 +325,15 @@ export function AppShellLayout({ variant = "default" }: { variant?: "default" | 
   const { width: navWidth, setWidth: setNavWidth, commitWidth: commitNavWidth } =
     usePersistedLeadingWidth(navSplit)
   const showNavLabels = navWidth > NAV_ICON_ONLY_MAX_WIDTH
+  const previewOnly = isPreviewOnly()
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
+      {previewOnly ? (
+        <p className="border-b border-border bg-muted/30 px-4 py-1.5 text-center font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          Preview — explore tabs freely · sign in to run pipelines
+        </p>
+      ) : null}
       <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
         <div className="flex items-center gap-3">
           {embed ? (

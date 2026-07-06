@@ -1,19 +1,27 @@
 import Image from "next/image";
+// AI : TODO (spec) — cal.com demo booking button (https://cal.com/) on landing page.
 import { LandingNav } from "../components/landing-nav";
-import { AppLivePreview } from "../components/app-live-preview";
+import {
+  LandingAppPreview,
+  LandingBuildProvider,
+  LandingEmailGate,
+  LandingTaskPrompt,
+} from "../components/landing-preview-section";
 import { LegalFooterLinks } from "@/lib/legal/chrome";
+import { LEGAL } from "@/lib/legal/site";
 
 type AppLoginUrl = string;
 type AppUrl = string;
-type AppPreviewUrl = string;
+type ApiUrl = string;
 
-const APP_URL: AppUrl = "https://www.spine-ai-app.dev/";
+const APP_URL: AppUrl =
+  process.env.NEXT_PUBLIC_APP_URL ??
+  (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "https://www.spine-ai-app.dev/");
 const APP_LOGIN_URL: AppLoginUrl = "https://app.usespine.com/login?next=%2F";
-const APP_PREVIEW_URL: AppPreviewUrl =
-  process.env.NEXT_PUBLIC_APP_PREVIEW_URL ??
-  (process.env.NODE_ENV === "development"
-    ? "http://localhost:3000/demo?embed=1"
-    : `${APP_URL.replace(/\/$/, "")}/demo?embed=1`);
+const SPINE_API_URL: ApiUrl =
+  process.env.SPINE_API_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  APP_URL.replace(/\/$/, "");
 
 type FaqItem = {
   num: string;
@@ -21,13 +29,16 @@ type FaqItem = {
   a: string;
 };
 
-const NAV_LINKS = [{ href: "#faq", label: "FAQs" }];
+const NAV_LINKS = [
+  { href: "#faq", label: "FAQs" },
+  { href: "#contact", label: "Contact" },
+];
 
 const FAQS: FaqItem[] = [
   {
     num: "01",
     q: "Who is this for?",
-    a: "Anyone developing high-throughput projects with strict quality requirements. Do you have 800 pages to sort through?",
+    a: "Anyone developing high-throughput projects with strict quality requirements. Do you have 800 pages to sort through? It's built to handle that.",
   },
   {
     num: "02",
@@ -61,55 +72,62 @@ export default function Home() {
     <main className="grain-bg flex-1" id="main-content">
       <LandingNav links={NAV_LINKS} loginUrl={APP_LOGIN_URL} />
 
-      {/* hero */}
-      <section className="mx-auto max-w-[1200px] border-x border-b border-line">
-        <div className="flex flex-col justify-center p-8 sm:p-12">
-          <div className="zeero-badge mb-8 w-fit">
-            <span className="zeero-badge-new">Validated AI</span>
+      <LandingBuildProvider spineApiUrl={SPINE_API_URL} appUrl={APP_URL}>
+        {/* hero — headline left, automate prompt right */}
+        <section className="mx-auto max-w-[1200px] border-x border-b border-line">
+          <div className="grid gap-10 p-8 lg:grid-cols-2 lg:items-center lg:gap-12 sm:p-12">
+            <div className="flex flex-col justify-center">
+              <h1 className="text-4xl font-normal leading-[1.08] tracking-tight sm:text-[52px]">
+                AI engineering is hard.
+                <br />
+                It shouldn&apos;t be.
+              </h1>
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <a href={APP_URL} className="zeero-btn !text-lg !px-8 !py-4">
+                  Try now
+                </a>
+              </div>
+              <div className="mt-10 flex flex-col gap-3">
+                <a
+                  href="https://home.kpmg/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2.5 text-xs text-muted transition-colors hover:text-foreground"
+                >
+                  <span>developed by engineers from</span>
+                  <Image src="/kpmg-logo.svg" alt="KPMG" width={50} height={20} className="brightness-0 invert opacity-70" />
+                </a>
+                <a
+                  href="https://www.antler.co/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2.5 text-xs text-muted transition-colors hover:text-foreground"
+                >
+                  <span>built at the</span>
+                  <Image src="/antler-logo.svg" alt="Antler" width={67} height={16} className="brightness-0 invert opacity-70" />
+                  <span>hackathon · independent, not funded</span>
+                </a>
+              </div>
+            </div>
+            <LandingEmailGate />
+            <LandingTaskPrompt />
           </div>
-          <h1 className="text-4xl font-normal leading-[1.08] tracking-tight sm:text-[52px]">
-            AI engineering is hard.
-            <br />
-            It shouldn&apos;t be.
-          </h1>
-          <p className="mt-5 max-w-md text-base leading-relaxed text-muted">
-            Spine turns LLM work into typed, cached, validated pipeline steps. Define structures, wire steps
-            together, and ship a drag-and-drop inference page — no deploy required.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
-            <a href={APP_URL} className="zeero-btn !text-lg !px-8 !py-4">
-              Try now
-            </a>
-          </div>
-          <div className="mt-10 flex flex-col gap-3">
-            <a
-              href="https://home.kpmg/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2.5 text-xs text-muted transition-colors hover:text-foreground"
-            >
-              <span>developed by engineers from</span>
-              <Image src="/kpmg-logo.svg" alt="KPMG" width={50} height={20} className="brightness-0 invert opacity-70" />
-            </a>
-            <a
-              href="https://www.antler.co/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2.5 text-xs text-muted transition-colors hover:text-foreground"
-            >
-              <span>built at the</span>
-              <Image src="/antler-logo.svg" alt="Antler" width={67} height={16} className="brightness-0 invert opacity-70" />
-              <span>hackathon · independent, not funded</span>
-            </a>
-          </div>
-        </div>
-      </section>
+        </section>
 
-      {/* live preview */}
-      <section className="mx-auto max-w-[1200px] border-x border-b border-line px-8 py-10 sm:px-12 sm:py-12">
-        <AppLivePreview src={APP_PREVIEW_URL} />
-        <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-muted-dim">
-          click around — no sign-in required
+        {/* live preview — full app, runs disabled */}
+        <section className="mx-auto max-w-[1200px] border-x border-b border-line px-8 py-10 sm:px-12 sm:py-12">
+          <LandingAppPreview />
+          <p className="mt-3 font-mono text-[10px] uppercase tracking-wider text-muted-dim">
+            explore structure, pipeline, and inference tabs · runs disabled in preview · sign in to execute
+          </p>
+        </section>
+      </LandingBuildProvider>
+
+      {/* product pitch — below live demo */}
+      <section className="mx-auto max-w-[1200px] border-x border-b border-line px-8 py-10 sm:px-12 sm:py-14">
+        <p className="max-w-2xl text-lg leading-relaxed text-muted sm:text-xl">
+          Spine turns LLM work into typed, cached, validated steps. Define structures, wire steps together,
+          and ship a drag-and-drop inference page in clicks.
         </p>
       </section>
 
@@ -134,6 +152,20 @@ export default function Home() {
             </details>
           ))}
         </div>
+      </section>
+
+      {/* contact */}
+      <section id="contact" className="mx-auto max-w-[1200px] scroll-mt-24 border-x border-b border-line px-8 py-10 sm:px-12 sm:py-14">
+        <h2 className="text-3xl font-normal tracking-tight sm:text-4xl">Get in touch</h2>
+        <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted sm:text-base">
+          Questions, feedback, or partnership inquiries — we&apos;d love to hear from you.
+        </p>
+        <a
+          href={`mailto:${LEGAL.contactEmail}`}
+          className="mt-8 inline-flex text-base text-foreground underline-offset-4 transition-colors hover:text-muted sm:text-lg"
+        >
+          {LEGAL.contactEmail}
+        </a>
       </section>
 
       {/* footer */}
@@ -164,8 +196,15 @@ export default function Home() {
             </div>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wider text-muted-dim">Information</p>
-            <p className="mt-4 text-sm text-muted">Spine — validated AI</p>
+            <p className="text-xs uppercase tracking-wider text-muted-dim">Contact</p>
+            <div className="mt-4 flex flex-col gap-2">
+              <a
+                href={`mailto:${LEGAL.contactEmail}`}
+                className="text-sm text-muted hover:text-foreground"
+              >
+                {LEGAL.contactEmail}
+              </a>
+            </div>
           </div>
         </div>
         <div className="px-8 py-6 sm:px-12">

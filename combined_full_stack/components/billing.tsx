@@ -1,5 +1,6 @@
 "use client"
 
+// AI : TODO (spec) — visualize duplicate runs caught by fingerprint dedup (count + billing saved).
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { API_ROUTES } from "@/lib/api-routes"
 import { JSON_HEADERS } from "@/lib/api-client"

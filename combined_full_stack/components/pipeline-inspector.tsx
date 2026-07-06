@@ -2,7 +2,8 @@
 
 import { MODULE_META, type PipelineModule, type StructureModel, type TypeAlias } from "@/lib/types"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
-import { AutoQuoteLock } from "@/lib/module-ui"
+import { isAutoStructureParseStep } from "@/lib/structure-parse-steps"
+import { AutoQuoteLock, AutoStructureParseLock } from "@/lib/module-ui"
 import { PipelineModuleFields } from "@/components/pipeline-module-fields"
 
 type PipelineInspectorProps = {
@@ -29,6 +30,7 @@ export function PipelineInspector({ module: selected, models, typeAliases = [], 
           {MODULE_META[selected.kind].label}
         </span>
         {isAutoQuoteStep(selected) && <AutoQuoteLock />}
+        {isAutoStructureParseStep(selected) && <AutoStructureParseLock />}
       </div>
       <PipelineModuleFields
         module={selected}

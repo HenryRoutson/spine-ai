@@ -1,4 +1,5 @@
 // AI : combined Structure → Pipeline → run-tab validity for sidebar nav + tab gates.
+// AI : TODO (spec) — billing waterfall: red-disable Pipeline/Inference/Testing when balance below floor; unblock after top-up.
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { typesInvalidForUi } from "@/lib/structure-validity-ui"
 import type { AppWindowId } from "@/lib/app-shell"

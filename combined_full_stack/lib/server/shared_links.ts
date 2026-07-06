@@ -4,6 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { PUBLIC_RUN_SPEND_RESERVE_CENTS } from "@/lib/billing_config";
 import { uid } from "@/lib/id";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { createClient } from "@/utils/supabase/server";
@@ -378,6 +379,62 @@ export async function incrementSharedLinkRunCount(id: SharedLinkId): Promise<voi
       await admin.from("shared_links").update({ run_count: (data.run_count ?? 0) + 1 }).eq("id", id);
     }
   }
+}
+
+export { PUBLIC_RUN_SPEND_RESERVE_CENTS as SHARED_LINK_RUN_RESERVE_CENTS };
+
+function reserveLocalSharedLinkSpend(id: SharedLinkId, cents: number): boolean {
+  const link = loadLocalLink(id);
+  if (!link || link.revoked) return false;
+  const next = toExactSpendCents((link.totalSpendCents ?? 0) + cents);
+  if (link.spendLimitCents != null && next > link.spendLimitCents) return false;
+  link.totalSpendCents = next;
+  saveLocalLink(link);
+  return true;
+}
+
+function adjustLocalSharedLinkSpend(id: SharedLinkId, deltaCents: number): boolean {
+  const link = loadLocalLink(id);
+  if (!link || link.revoked) return false;
+  const next = toExactSpendCents(Math.max(0, (link.totalSpendCents ?? 0) + deltaCents));
+  if (link.spendLimitCents != null && next > link.spendLimitCents) return false;
+  link.totalSpendCents = next;
+  saveLocalLink(link);
+  return true;
+}
+
+export async function reserveSharedLinkSpend(id: SharedLinkId, cents: number): Promise<boolean> {
+  const reserved = toExactSpendCents(cents);
+  if (reserved <= 0) return true;
+  if (reserveLocalSharedLinkSpend(id, reserved)) return true;
+  const admin = await createAdminClient();
+  if (!admin) return false;
+  const { data, error } = await admin.rpc("try_reserve_shared_link_spend", {
+    p_link_id: id,
+    p_cents: reserved,
+  });
+  if (error) {
+    linkLog.warn(`try_reserve_shared_link_spend failed`, { id, error: error.message });
+    return false;
+  }
+  return Boolean(data);
+}
+
+export async function adjustSharedLinkSpend(id: SharedLinkId, deltaCents: number): Promise<boolean> {
+  const delta = toExactSpendCents(deltaCents);
+  if (delta === 0) return true;
+  if (adjustLocalSharedLinkSpend(id, delta)) return true;
+  const admin = await createAdminClient();
+  if (!admin) return false;
+  const { data, error } = await admin.rpc("adjust_shared_link_spend", {
+    p_link_id: id,
+    p_delta_cents: delta,
+  });
+  if (error) {
+    linkLog.warn(`adjust_shared_link_spend failed`, { id, error: error.message });
+    return false;
+  }
+  return Boolean(data);
 }
 
 export async function recordSharedLinkSpend(id: SharedLinkId, cents: number): Promise<void> {

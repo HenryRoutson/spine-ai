@@ -30,8 +30,10 @@ import {
 import { modelName } from "@/lib/validity"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { PreviewBlockedDialog } from "@/components/preview-blocked-dialog"
 import { Input } from "@/components/ui/input"
 import { confidentialUploadWarning } from "@/lib/confidential-upload"
+import { isPreviewOnly } from "@/lib/demo-mode"
 import { cn } from "@/lib/utils"
 import { timeAgo } from "@/lib/time-ago"
 import { DocLabel } from "@/lib/types"
@@ -64,6 +66,7 @@ export function InferenceInputPickerPopup({
   const [query, setQuery] = useState("")
   const [uploading, setUploading] = useState(false)
   const [uploadWarning, setUploadWarning] = useState<string | null>(null)
+  const [previewBlockedOpen, setPreviewBlockedOpen] = useState(false)
 
   const passable = useMemo(
     () => passableDocsForInputModule(docs, project, inputModule),
@@ -92,6 +95,10 @@ export function InferenceInputPickerPopup({
 
   async function ingest(files: FileList | null) {
     if (!files?.length) return
+    if (isPreviewOnly()) {
+      setPreviewBlockedOpen(true)
+      return
+    }
     const blocked = confidentialUploadWarning(files[0].name)
     if (blocked) {
       setUploadWarning(blocked)
@@ -117,7 +124,9 @@ export function InferenceInputPickerPopup({
     }
   }
 
-  return createPortal(
+  return (
+    <>
+      {createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button
         aria-label="Close document picker"
@@ -326,5 +335,8 @@ export function InferenceInputPickerPopup({
       </div>
     </div>,
     document.body,
+      )}
+      {previewBlockedOpen ? <PreviewBlockedDialog onClose={() => setPreviewBlockedOpen(false)} /> : null}
+    </>
   )
 }

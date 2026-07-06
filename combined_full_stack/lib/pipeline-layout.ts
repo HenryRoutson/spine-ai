@@ -3,6 +3,7 @@ import { RunStepStatus } from "@/lib/types"
 import type { PipelineModule } from "@/lib/types"
 import { isLlmKind } from "@/lib/module-kinds"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
+import { isAutoStructureParseStep } from "@/lib/structure-parse-steps"
 
 export type PipelineSegment =
   | { kind: "step"; module: PipelineModule; index: number }
@@ -62,12 +63,32 @@ export function pairedCombineInputModule(
   return prev?.kind === "input" ? prev : undefined
 }
 
-// AI : don't offer an insert slot between a quote-emitting LLM and its locked Link Quotes step.
+// AI : don't offer an insert slot between managed auto-step pairs.
 export function blocksInsertBefore(modules: PipelineModule[], insertAt: number): boolean {
   if (insertAt <= 0 || insertAt >= modules.length) return false
   const prev = modules[insertAt - 1]
   const next = modules[insertAt]
-  return isLlmKind(prev.kind) && isAutoQuoteStep(next)
+  return (
+    (isLlmKind(prev.kind) && isAutoQuoteStep(next)) ||
+    (prev.kind === "input" && isAutoStructureParseStep(next))
+  )
+}
+
+// AI : input + auto structure LLM, or input + combine, move/remove as one block.
+export function managedPipelinePairIds(modules: PipelineModule[], id: string): string[] {
+  const i = modules.findIndex((m) => m.id === id)
+  if (i < 0) return [id]
+  const m = modules[i]
+  if (m.kind === "input") {
+    const next = modules[i + 1]
+    if (next && isAutoStructureParseStep(next)) return [m.id, next.id]
+    if (next?.kind === "combine") return [m.id, next.id]
+  }
+  if (isAutoStructureParseStep(m)) {
+    const prev = modules[i - 1]
+    if (prev?.kind === "input") return [prev.id, m.id]
+  }
+  return combinePairIds(modules, id)
 }
 
 type StepUiStatus = StepUiState["status"]

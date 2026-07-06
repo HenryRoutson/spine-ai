@@ -179,12 +179,30 @@ pleaes make an option in settings to make input descriptoins mandatory. make sur
 
 add an export to python button to export the whole pipeline to python, including the front end UI. this should include a lot of supabase info so maybe use sql, plus some derived errors like validation.
 there should be an assert to check no env keys are in the export
+export should have a readme file and instructions for how to setup a scalable API using the existing code.
 
 there should be an export pipeline to code,
 the pop up showns download buttons button to export to typescript and python.
 
 you should always have the ability to view the whole pipeline as code, 
 and if there are no errors in the pipeline there should be none in the code for any langauge.
+
+
+please segment types into JSON or not JSON.
+If and only if the type subset selected is all json can you parse to a pydantic struct inside this step. You will need to handle the if case of Using an llm if the format is not json, which should be a locked step which is added automatically for the inputs which are not automatically converted.
+Ensure the user doesn't have the think about, if this structure isn't json i need to run an llm to convert it and if it is i just want to load it directly. please just handle this logic and visualise it.
+  PDF - not json
+  Word - not json
+  Excel - json
+  JSON - json
+  Text - not json
+  Web - not json
+  Image - not json
+
+
+please have a dedicated button to click which goes back to document for input steps rather than having to find it. throw an error if nothing is selected as a model output
+
+please have a dedicated button to click which goes back to document for input steps rather than having to find it. throw an error if nothing is selected as a model output 
 
 
 # Testing 
@@ -276,6 +294,9 @@ inference contains a list of possible runs which have been pre selected, not jus
 The inference tab should be able to save multiple named setups like for the homework example '10th grade' and 'pre school' with specific input files associated. there should not be a single default setup to the inference tab. use the same backend logic that is used to save the input setup in the testing tab.
 
 please add the ability to put spending limits on shared links
+you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.
+you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.and you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.
+
 
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.
@@ -394,3 +415,18 @@ An integrated revision and branching system for colaboration, changes merging, a
 For true 3D software with built-in version control featuring Git-like branching and commit changes, your primary options are cloud-native platforms like Onshape or multi-user ecosystems like Autodesk Fusion.
 """
 
+
+
+# landing page
+
+be able to put a prompt in on the landing page website and it run. obv put rate limits and use cheap model, please put into the supabase set up as billed to landing page, and have a landing page budget and record the list of calls. need a more interactive and engaging live demo than a bunch of random tabs
+
+To get a clear idea of the app please have
+  1. A text box with an enter button for a task you would like to automate which when pressed builds a full pipline
+  2. A preview of the whole app with no run buttons working.
+
+
+have a live preview on the landing page 
+have a try now button which links to sign in 
+
+have a button to book a demo in calendar using https://cal.com/

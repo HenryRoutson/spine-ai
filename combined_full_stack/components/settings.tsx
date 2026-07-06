@@ -54,6 +54,8 @@ import {
 } from "@/lib/color-scheme"
 import { Switch } from "@/components/ui/switch"
 import { PrivacySettings } from "@/components/privacy-settings"
+import { isDemoMode } from "@/lib/demo-mode"
+import { DEMO_ACCOUNT_EMAIL } from "@/lib/demo-constants"
 
 // AI : vscode-style preview colors — mirror public/json-viewer.html theme "vscode"
 function VscodeSyntaxPreview({ json }: { json: string }) {
@@ -121,6 +123,10 @@ export function Settings() {
     usePersistedLeadingWidth(settingsNavSplit)
 
   useEffect(() => {
+    if (isDemoMode()) {
+      setEmail(DEMO_ACCOUNT_EMAIL)
+      return
+    }
     void createClient()
       .then((supabase) => supabase.auth.getUser())
       .then(({ data }) => setEmail(data.user?.email ?? null))
@@ -218,19 +224,25 @@ export function Settings() {
             </div>
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <span className="font-mono text-xs text-muted-foreground">{email ?? "…"}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  void createClient()
-                    .then((supabase) => supabase.auth.signOut())
-                    .then(() => (window.location.href = "/login"))
-                }}
-                className="gap-1.5 text-xs"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-                Sign out
-              </Button>
+              {isDemoMode() ? (
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Preview account
+                </span>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    void createClient()
+                      .then((supabase) => supabase.auth.signOut())
+                      .then(() => (window.location.href = "/login"))
+                  }}
+                  className="gap-1.5 text-xs"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Sign out
+                </Button>
+              )}
             </div>
           </section>
 

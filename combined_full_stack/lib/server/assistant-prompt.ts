@@ -11,6 +11,8 @@ import {
   type Project,
 } from "./types";
 import { formatTypeExprPy } from "@/lib/type-expr-parse";
+import { withBuiltinTypeAliases } from "./builtin_types";
+import { withSharedModels } from "./builtin_models";
 import { isUnnamedProjectName, UNNAMED_PROJECT_NAME } from "@/lib/project-assistant-types";
 import type { ChatTurn } from "./assistant-shared";
 import { fieldToTypeExpr } from "./type_expr";
@@ -55,7 +57,10 @@ export function buildFieldTypesPromptBlock(): string {
 }
 
 export function buildInputTypesPromptBlock(): string {
-  return INPUT_TYPES.map((t) => `- ${t.value}: ${t.label}`).join("\n");
+  return `${INPUT_TYPES.map((t) => `- ${t.value}: ${t.label}`).join("\n")}
+JSON-native (direct parse in input when ONLY these types are selected): excel, json
+Needs LLM conversion (auto locked "Parse to structure" step when structureOut is not Document): pdf, word, text, web, image
+Mixed selections (e.g. pdf + excel) always use Document on the input step plus the auto LLM convert step when a structure is selected.`;
 }
 
 export function buildModelOptionsPromptBlock(): string {
@@ -64,12 +69,14 @@ export function buildModelOptionsPromptBlock(): string {
 
 export function buildTypeAliasesRulesPromptBlock(): string {
   return `Reusable type aliases (typeAliases array):
+- Built-in types (always available — do NOT redefine in typeAliases): quote_string_t (LLM verbatim quote string), quote_span_t (linked QuoteSpan struct), text_quote_t (text + quote string pair). Prefer these over typeExpr tuple[text, quote].
+- Built-in structures (always available): Document (upload I/O), QuoteSpan (doc_id, start, end — linked span after Link Quotes).
 - Define standalone Python-style types when a field shape is reused or nested: list[list[int]], dict[str, str], Optional[T], tuple[Section, Meta].
 - Each alias: name, description, expr (Python type string — same syntax as the Structure → Types editor).
 - Reference an alias from a struct field by using the alias name as the field type (e.g. type: "quote_id_t").
 - Or set field typeExpr to a Python string for one-off expressions.
-- Quote-friendly presets stay on fields: tuple[text,quote], list[tuple[text,quote]] — do not redefine those as aliases unless wrapping a larger shape.
-- When changing aliases, return a FULL replacement typeAliases array (include untouched aliases) — not a patch.
+- Quote-friendly presets stay on fields: tuple[text,quote], list[tuple[text,quote]] — equivalent to text_quote_t / list[text_quote_t]; set field type to those presets; do NOT use typeExpr generic tuple[text, quote].
+- When changing aliases, return a FULL replacement typeAliases array (include untouched user aliases only — never include built-ins) — not a patch.
 - When answering without alias changes, set typeAliases to null.`;
 }
 
@@ -97,7 +104,8 @@ Spine notation (for reasoning only — never put this in structureIn/structureOu
 - List of objects: list[ChunkItem]
 
 What each step puts on the spine (emits):
-- input → single structureOut (e.g. Document)
+- input with outIsList false → single structureOut (e.g. Document)
+- input with outIsList true → list[structureOut] — required when one slot accepts many uploaded files ("Emit list output" in the UI)
 - llm / transform (no code) with outIsList false → single structureOut
 - llm / transform / custom-code with outIsList true → list[structureOut]
 - llm-batch → ALWAYS list[structureOut] (outIsList is implied true)
@@ -115,8 +123,32 @@ Common mistakes that fail validation:
 3. list → single object without a reshape — e.g. list[ExtractedRow] → SummaryRow needs custom-code, or a SummaryRow model with a list[model] field + transform, not a bare transform.
 4. Map-reduce on paper but linear types not wired — design the spine chain first: Document → list[Chunk] → list[Candidate] → list[Extracted] → Summary.
 5. LLM with outIsList: true followed by a bare transform — if the output structure has a list[model] field (ref = input structure or upstream list item type), bare transform auto-wraps list[T] → { field: T[] }. Otherwise use custom-code with explicit fold logic, or keep the list on the spine with outIsList: true on the transform.
+6. Input structureOut set to a parsed model — input only ever emits Document; parsing belongs in the next custom-code or llm step.
+7. structureIn/structureOut names not in models array — every referenced structure must be defined in models.
+8. custom-code without outIsList after a list-emitting step — downstream llm-batch then fails with "expects list[X], upstream emits X".
 
 Before returning modules, walk the chain: for each adjacent pair, confirm previous emits exactly what next expects. If the user prompt lists validation errors, fix every listed mismatch.`;
+}
+
+/** AI : map-reduce + multi-upload inputs — landing prompts like "hundreds of receipts → one excel" depend on this. */
+export function buildMultiDocumentWorkflowPromptBlock(): string {
+  return `Multi-document inputs and map-reduce:
+- One input step per kind of document (e.g. "Receipts"). Do NOT create hundreds of separate input steps.
+- Non-JSON input types (pdf, word, text, web, image) always structureOut Document on the input step — a locked "Parse to structure" LLM step is auto-inserted when you pick a target structure. Do NOT emit that LLM yourself.
+- Excel/json-only inputs may structureOut a typed model directly (JSON parse in the input step) — no auto LLM step.
+- When many files of the same kind upload into one slot, set outIsList: true on that input ("Emit list output"). Without it, inference only allows one file and the spine stays single Document.
+- Set inputMinCount: 2+ when the task implies batch uploads (hundreds, many, each, all).
+- Typical "many unstructured docs → one spreadsheet/report" spine:
+  1. Input (structureOut: Document, outIsList: true) → list[Document]
+  2. llm-batch (outIsList implied) OR custom-code (outIsList: true) → list[ExtractedRow]
+  3. custom-code fold → single Report/Table structure (or document field for file output)
+  4. output step
+- custom-code between list steps: if input is list[T] and output is still one row per input item, set outIsList: true. A custom-code step without outIsList emits a single object — that breaks llm-batch downstream.
+- custom-code code field: TypeScript arrow expression only, e.g. (docs) => docs.map(...). Never Python def/class syntax — it will not compile.
+- Every structureIn / structureOut name MUST appear in your models array — do not reference structures you forgot to define.
+- llm-batch requires list[structureIn] on the spine — the step before it must emit a list (often the input with outIsList: true, or custom-code with outIsList: true).
+- Two different document kinds (policy + expense report) = two input steps + combine — not the same as many receipts in one slot.
+- Reference: Batch LLM Example seed (Wrap → List → llm-batch → Unwrap); homework grader Student Submissions (outIsList: true).`;
 }
 
 export function buildPipelineRulesPromptBlock(globalModel: ModelId): string {
@@ -126,11 +158,14 @@ export function buildPipelineRulesPromptBlock(globalModel: ModelId): string {
 
 ${buildLinearIoPromptBlock()}
 
+${buildMultiDocumentWorkflowPromptBlock()}
+
 - Input steps: set inputType from supported types; optional inputNameContains so only matching filenames fill that slot (useful with multiple inputs).
 - Any step may set inputDescription — before the step runs, a guard LLM rejects input that doesn't match. inputDescription MUST describe what the step RECEIVES as input (the upstream data), not what it produces. For export/output steps (e.g. "Export CSV", "Generate Report"), describe the upstream structured data fields, not the output file format.
 - input, combine, and llm/llm-batch steps MUST set note (Annotation / purpose) — a short human-readable description of what the step does or what document/data it handles. Never leave note empty on those kinds.
 - combine steps merge pipeline state with a new document — emit ONLY the combine step; a Document Input is auto-inserted before it.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
+- Non-JSON inputs with a typed structureOut get a locked "Parse to structure" LLM step auto-inserted after the input — do NOT emit it yourself.
 - transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically, or use custom-code.
 - Add output steps wherever a named artifact snapshot is needed — pipelines may have several.
 - Use model ids from:\n${buildModelOptionsPromptBlock()}
@@ -174,6 +209,210 @@ export function buildDocumentRulesPromptBlock(): string {
 - When no test docs are needed, set docs to null.`;
 }
 
+/** AI : blank / placeholder-only projects — landing + first app message share greenfield user prompt. */
+export function isGreenfieldProject(project: Project, history: ChatTurn[] = []): boolean {
+  if (history.length > 0) return false;
+  if (project.kind !== "blank") return false;
+  if (project.models.length > 0) return false;
+  const mods = project.modules;
+  if (mods.length === 0) return true;
+  return mods.length === 2 && mods.every((m) => m.kind === "input" || m.kind === "output");
+}
+
+/** AI : one user-message shape for landing + in-app greenfield design — keep in sync with buildFewShotPromptBlock. */
+export function buildGreenfieldPipelineUserMessage(task: string): string {
+  const trimmed = task.trim();
+  return `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / llm-batch / transform / custom-code / combine as needed), and output step(s). Name structures clearly. Walk the linear spine chain before returning modules — adjacent steps must match single vs list types.
+
+Task: ${trimmed}`;
+}
+
+export function resolveAssistantUserMessage(
+  project: Project,
+  message: string,
+  history: ChatTurn[],
+  opts?: { fixValidationErrors?: string; forceFix?: boolean },
+): string {
+  const trimmed = message.trim();
+  if (opts?.fixValidationErrors?.trim() || opts?.forceFix) return trimmed;
+  if (isGreenfieldProject(project, history)) return buildGreenfieldPipelineUserMessage(trimmed);
+  return trimmed;
+}
+
+/** AI : few-shot response shapes — teach valid spine wiring; same block for landing + in-app system prompt. */
+export function buildFewShotPromptBlock(): string {
+  return `Few-shot examples (match this response JSON shape — structure names not ids; set modulePatch and typeAliases to null unless needed):
+
+Example 1 — many unstructured files → one spreadsheet (map-reduce)
+Task: "Convert hundreds of unstructured receipts into a single Excel file"
+Spine: list[Document] → list[ReceiptRow] → ReceiptSpreadsheet → output
+{
+  "projectNameUpdate": "Receipt to Spreadsheet",
+  "models": [
+    {
+      "name": "ReceiptRow",
+      "description": "Structured fields extracted from one receipt.",
+      "fields": [
+        { "name": "date", "type": "text", "optional": false, "description": "Receipt date" },
+        { "name": "vendor", "type": "text", "optional": false, "description": "Vendor name" },
+        { "name": "amount", "type": "float", "optional": false, "description": "Total amount" }
+      ]
+    },
+    {
+      "name": "ReceiptSpreadsheet",
+      "description": "Combined tabular export of all receipts.",
+      "fields": [
+        { "name": "content", "type": "text", "optional": false, "description": "CSV rows — one receipt per line" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "kind": "input",
+      "label": "Receipt Uploads",
+      "note": "Many receipt files uploaded into one slot.",
+      "structureOut": "Document",
+      "inputType": "text",
+      "inputNameContains": "receipt",
+      "inputMinCount": 2,
+      "outIsList": true,
+      "inputDescription": "Plain-text receipt files — one upload per receipt"
+    },
+    {
+      "kind": "llm-batch",
+      "label": "Extract Each Receipt",
+      "note": "One structured ReceiptRow per uploaded Document.",
+      "structureIn": "Document",
+      "structureOut": "ReceiptRow",
+      "prompt": "Extract date, vendor, and total amount from this receipt text.",
+      "inputDescription": "List of Document objects — one receipt file each"
+    },
+    {
+      "kind": "custom-code",
+      "label": "Combine Rows",
+      "note": "Fold list[ReceiptRow] into one CSV string.",
+      "structureIn": "ReceiptRow",
+      "structureOut": "ReceiptSpreadsheet",
+      "code": "(rows) => ({ content: ['date,vendor,amount', ...rows.map(r => [r.date, r.vendor, r.amount].join(','))].join('\\\\n') })",
+      "inputDescription": "List of ReceiptRow objects from batch extraction"
+    },
+    {
+      "kind": "output",
+      "label": "Spreadsheet Output",
+      "structureIn": "ReceiptSpreadsheet",
+      "structureOut": "ReceiptSpreadsheet",
+      "inputDescription": "ReceiptSpreadsheet with CSV content field"
+    }
+  ],
+  "typeAliases": null,
+  "docs": [
+    {
+      "name": "receipt_coffee.txt",
+      "type": "text",
+      "content": "COFFEE SHOP\\n2024-03-01\\nTotal: $4.50"
+    },
+    {
+      "name": "receipt_taxi.txt",
+      "type": "text",
+      "content": "CITY TAXI\\n2024-03-02\\nTotal: $18.00"
+    }
+  ],
+  "documentationUpdate": "# Receipt to Spreadsheet\\n\\nUpload many receipt .txt files; batch-extract rows; export CSV.",
+  "modulePatch": null,
+  "message": "Pipeline: multi-upload → batch extract → CSV fold → output."
+}
+
+Example 2 — single document → per-item batch → single report
+Task: "Summarize each line of a bullet checklist into one combined report"
+Spine: Document → list[TextChunk] → list[ChunkSummary] → CombinedReport → output
+{
+  "projectNameUpdate": "Checklist Summarizer",
+  "models": [
+    {
+      "name": "TextChunk",
+      "description": "One checklist line.",
+      "fields": [
+        { "name": "id", "type": "text", "optional": false, "description": "Stable id" },
+        { "name": "text", "type": "text", "optional": false, "description": "Line text" }
+      ]
+    },
+    {
+      "name": "ChunkSummary",
+      "description": "One-sentence summary per chunk.",
+      "fields": [
+        { "name": "id", "type": "text", "optional": false, "description": "Matches chunk id" },
+        { "name": "summary", "type": "text", "optional": false, "description": "One sentence" }
+      ]
+    },
+    {
+      "name": "CombinedReport",
+      "description": "Single joined report.",
+      "fields": [
+        { "name": "title", "type": "text", "optional": false, "description": "Report title" },
+        { "name": "body", "type": "text", "optional": false, "description": "Joined summaries" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "kind": "input",
+      "label": "Checklist",
+      "note": "Plain-text bullet list — one line per item.",
+      "structureOut": "Document",
+      "inputType": "text",
+      "inputDescription": "Plain-text bullet checklist"
+    },
+    {
+      "kind": "custom-code",
+      "label": "Split Lines",
+      "note": "Document → list[TextChunk] before llm-batch.",
+      "structureIn": "Document",
+      "structureOut": "TextChunk",
+      "outIsList": true,
+      "code": "(doc) => doc.content.split('\\\\n').filter(l => l.trim()).map((line, i) => ({ id: String(i + 1), text: line.trim() }))",
+      "inputDescription": "Single Document with newline-separated checklist lines"
+    },
+    {
+      "kind": "llm-batch",
+      "label": "Summarize Each Line",
+      "note": "list[TextChunk] → list[ChunkSummary].",
+      "structureIn": "TextChunk",
+      "structureOut": "ChunkSummary",
+      "prompt": "Summarize the checklist line in one sentence. Keep the same id.",
+      "inputDescription": "List of TextChunk objects"
+    },
+    {
+      "kind": "custom-code",
+      "label": "Join Report",
+      "note": "list[ChunkSummary] → single CombinedReport.",
+      "structureIn": "ChunkSummary",
+      "structureOut": "CombinedReport",
+      "code": "(rows) => ({ title: 'Summaries', body: rows.map(r => \`[\${r.id}] \${r.summary}\`).join('\\\\n') })",
+      "inputDescription": "List of ChunkSummary objects"
+    },
+    {
+      "kind": "output",
+      "label": "Report Output",
+      "structureIn": "CombinedReport",
+      "structureOut": "CombinedReport",
+      "inputDescription": "CombinedReport with title and body"
+    }
+  ],
+  "typeAliases": null,
+  "docs": null,
+  "documentationUpdate": "# Checklist Summarizer\\n\\nSplit lines → batch summarize → join report.",
+  "modulePatch": null,
+  "message": "Single doc split into chunks, batch summarized, folded into one report."
+}
+
+Key patterns both examples demonstrate:
+- Input structureOut is always Document (never a parsed model).
+- llm-batch follows a list-emitting step (input with outIsList: true, or custom-code with outIsList: true).
+- list → single object uses custom-code fold (not a bare transform).
+- custom-code code is TypeScript arrow syntax — never Python.
+- Every structureIn/structureOut name is defined in models.`;
+}
+
 export function buildProjectAssistantSystemPrompt(globalModel: ModelId, projectName: string): string {
   return `You are the Agent for "Spine" — a linear document-processing IDE with structure models, a step pipeline, and a document store for inference.
 
@@ -206,6 +445,8 @@ ${buildDocumentRulesPromptBlock()}
 
 ${buildProjectNameRulesPromptBlock(projectName)}
 
+${buildFewShotPromptBlock()}
+
 For large-document workflows (contracts, tickets, resumes): design section-aware chunking, then map (llm-batch per item) and reduce (custom-code or llm) — walk the linear spine chain first (see Linear spine I/O); do not assume the whole document fits one context window.
 
 The user prompt includes current pipeline JSON with spineExpects / spineEmits per step — use it to verify adjacent steps match.
@@ -221,7 +462,7 @@ export function buildProjectContextBlock(
   extras?: string,
 ): string {
   const typeAliasesJson = JSON.stringify(
-    (project.typeAliases ?? []).map((t) => ({
+    withBuiltinTypeAliases(project.typeAliases ?? []).map((t) => ({
       name: t.name,
       description: t.description,
       expr: formatTypeExprPy(t.expr, project.models),
@@ -230,7 +471,7 @@ export function buildProjectContextBlock(
     2,
   );
   const modelsJson = JSON.stringify(
-    project.models.map((m) => ({
+    withSharedModels(project.models).map((m) => ({
       id: m.id,
       name: m.name,
       description: m.description,
@@ -262,6 +503,7 @@ export function buildProjectContextBlock(
       code: m.code,
       model: m.model,
       outIsList: m.outIsList,
+      inputMinCount: m.inputMinCount,
     })),
     null,
     2,

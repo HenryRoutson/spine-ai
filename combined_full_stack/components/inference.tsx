@@ -1,6 +1,7 @@
 "use client"
 
 // AI : TODO — per-step cache toggles, run-from-step, and cache probe (see requirements/inference_tab_requirements.md).
+// AI : TODO (spec) — demo assert: when running seed example setups, compare final output to project.expectedOutputs.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertTriangle,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react"
 import { SpineNavIcon } from "@/components/spine-mark"
 import { useStore } from "@/lib/store"
+import { isPreviewOnly } from "@/lib/demo-mode"
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { formatUsdFromCents } from "@/lib/format"
 import { useAppShell } from "@/lib/app-shell"
@@ -57,6 +59,8 @@ import {
 import { InferenceStepTracePanel } from "@/components/inference/inference-step-trace-panel"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import { ShareLinkDialog } from "@/components/share-link-dialog"
+import { HostApiDialog } from "@/components/host-api-dialog"
+import { DeploymentsPanel } from "@/components/deployments-panel"
 import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 import { timeAgo } from "@/lib/time-ago"
 import { useRerenderOnEvent } from "@/lib/use-browser-pref-event"
@@ -131,6 +135,7 @@ export function Inference() {
   const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
   const insufficientCredit =
     billingAccount != null && billingAccount.balanceCents < minRunBalanceCents
+  const previewOnly = isPreviewOnly()
 
   const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
   const setupDocs = useMemo(() => projectDocs.filter((d) => isInferenceSetupFileName(d.name)), [projectDocs])
@@ -139,6 +144,7 @@ export function Inference() {
   const [selectedId, setSelectedId] = useState<DocId | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [creatingSetup, setCreatingSetup] = useState(false)
+  const [deployRefreshToken, setDeployRefreshToken] = useState(0)
   // AI : when inputs are loaded from a test preset, assert against that file after the run.
   const [linkedTest, setLinkedTest] = useState<PresetApplyMeta | null>(null)
   const { width: sidebarWidth, setWidth: setSidebarWidth, commitWidth: commitSidebarWidth } =
@@ -347,7 +353,15 @@ export function Inference() {
               project={project}
               docs={docs}
               inferenceInputDocIds={inferenceInputDocIds}
+              onCreated={() => setDeployRefreshToken((n) => n + 1)}
             />
+            <HostApiDialog
+              project={project}
+              docs={docs}
+              inferenceInputDocIds={inferenceInputDocIds}
+              onCreated={() => setDeployRefreshToken((n) => n + 1)}
+            />
+            <DeploymentsPanel refreshToken={deployRefreshToken} />
             {run.phase !== "idle" ? (
               <Button variant="outline" size="sm" className="bg-transparent" onClick={() => { setLinkedTest(null); run.reset() }} disabled={run.phase === "running"}>
                 <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
@@ -512,7 +526,14 @@ export function Inference() {
                   }
                 />
 
-                {insufficientCredit && run.phase !== "running" ? (
+                {previewOnly && run.phase !== "running" ? (
+                  <div className="rounded-lg border border-border bg-muted/20 px-4 py-5 text-center">
+                    <p className="text-sm font-medium">Preview mode</p>
+                    <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                      Explore the pipeline — sign in to run inference
+                    </p>
+                  </div>
+                ) : insufficientCredit && run.phase !== "running" ? (
                   <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-5 text-center">
                     <AlertTriangle className="mx-auto h-8 w-8 text-destructive" />
                     <p className="mt-3 text-sm font-medium text-destructive">
@@ -554,7 +575,8 @@ export function Inference() {
                         !run.allInputsReady ||
                         run.inputsInvalid ||
                         run.phase === "running" ||
-                        insufficientCredit
+                        insufficientCredit ||
+                        previewOnly
                       }
                       onClick={run.start}
                     >

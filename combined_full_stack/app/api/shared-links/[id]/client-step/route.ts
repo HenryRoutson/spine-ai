@@ -4,7 +4,12 @@ import { cookies } from "next/headers";
 import { apiError } from "@/lib/server/api_context";
 import { HTTP, unknownJob } from "@/lib/server/api-errors";
 import { parseRequestJson, parseSharedLinkId, sharedLinkClientStepBodySchema } from "@/lib/server/api_schemas";
-import { billRunUsage, billingKeyForUser } from "@/lib/server/billing_account";
+import { billRunUsage } from "@/lib/server/billing_account";
+import {
+  sharedLinkBillingKey,
+  viewerFundsSharedRun,
+} from "@/lib/server/shared_link_billing";
+import { isAuthSession, requireAuth, type user_id_string } from "@/lib/server/require_auth";
 import { orderedInputModules } from "@/lib/inference-input";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { resumeRunPipeline } from "@/lib/server/run_engine";
@@ -50,6 +55,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const link = await getSharedLink(linkId);
   if (!link) return apiError("link not found", 404);
+
+  let viewerUserId: user_id_string | undefined;
+  if (viewerFundsSharedRun(link.fundingMode)) {
+    const auth = await requireAuth();
+    if (!isAuthSession(auth)) return apiError("sign in required", 401);
+    viewerUserId = auth.userId;
+  }
+  const billingKey = sharedLinkBillingKey(link.ownerId, link.fundingMode, viewerUserId);
 
   const jar = await cookies();
   const sessionId = jar.get(SESSION_COOKIE)?.value;
@@ -100,9 +113,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           },
         );
         await sharerStore.flush();
-        if (run.billedCents > 0 && link.fundingMode === "sharer_pays") {
+        if (run.billedCents > 0) {
           try {
-            await billRunUsage(billingKeyForUser(link.ownerId), run.billedCents);
+            await billRunUsage(billingKey, run.billedCents);
             await recordSharedLinkSpend(link.id, run.billedCents);
           } catch (billErr) {
             apiLog.warn(`resume billing failed`, { jobId, error: (billErr as Error).message });

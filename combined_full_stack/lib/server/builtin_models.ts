@@ -2,6 +2,7 @@ import { FieldType } from "./types";
 import type { StructureModel, StructureModelId } from "./types";
 
 export const BUILTIN_DOCUMENT_ID = "m_builtin_document" as StructureModelId;
+export const BUILTIN_QUOTE_SPAN_ID = "m_builtin_quote_span" as StructureModelId;
 
 // AI : shared across every project — the canonical shape for field type `document`.
 export const BUILTIN_DOCUMENT_MODEL: StructureModel = {
@@ -30,10 +31,51 @@ export const BUILTIN_DOCUMENT_MODEL: StructureModel = {
   ],
 };
 
-export const SHARED_STRUCTURE_MODELS: StructureModel[] = [BUILTIN_DOCUMENT_MODEL];
+// AI : linked quote span — doc hash + byte range after Link Quotes resolves a quote_string_t.
+export const BUILTIN_QUOTE_SPAN_MODEL: StructureModel = {
+  id: BUILTIN_QUOTE_SPAN_ID,
+  name: "QuoteSpan",
+  description: "Source-linked span — document hash plus byte offsets (post Link Quotes).",
+  shared: true,
+  locked: true,
+  fields: [
+    {
+      id: "f_doc_id",
+      name: "doc_id",
+      type: FieldType.Text,
+      optional: false,
+      description: "Source document content hash",
+    },
+    {
+      id: "f_start",
+      name: "start",
+      type: FieldType.Int,
+      optional: false,
+      description: "Start byte offset in the source document",
+    },
+    {
+      id: "f_end",
+      name: "end",
+      type: FieldType.Int,
+      optional: false,
+      description: "End byte offset in the source document",
+    },
+  ],
+};
+
+export const SHARED_STRUCTURE_MODELS: StructureModel[] = [
+  BUILTIN_DOCUMENT_MODEL,
+  BUILTIN_QUOTE_SPAN_MODEL,
+];
 
 export function isSharedStructureModel(m: StructureModel): boolean {
-  return m.shared === true || m.id === BUILTIN_DOCUMENT_ID || m.name === "Document";
+  return (
+    m.shared === true ||
+    m.id === BUILTIN_DOCUMENT_ID ||
+    m.id === BUILTIN_QUOTE_SPAN_ID ||
+    m.name === "Document" ||
+    m.name === "QuoteSpan"
+  );
 }
 
 // AI : auto-generated structs (combine output, doc infer) are read-only per spec.

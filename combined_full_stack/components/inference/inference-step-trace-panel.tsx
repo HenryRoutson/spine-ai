@@ -54,6 +54,8 @@ export function InferenceStepTracePanel({
   const showStepIo = stepsExpanded && (phase === "running" || phase === "done")
   const ioCompact = phase === "running"
 
+  // AI : TODO (spec) — on phase done, auto-collapse non-output steps; keep output rows expanded.
+  // AI : InferenceCollapsibleSection.collapseOnDone exists but is unused; wire it or default stepsExpanded false after done.
   useEffect(() => {
     if (phase === "running" || phase === "done") setStepsExpanded(true)
   }, [phase])

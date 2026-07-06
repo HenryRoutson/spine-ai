@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
-import Script from 'next/script'
 import './globals.css'
 import { getSupabasePublicEnv } from '@/utils/supabase/env'
 import { SkipLink } from '@/lib/legal/chrome'
@@ -37,20 +36,18 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        {/* AI : next/script with beforeInteractive avoids the React 19 warning about raw <script> tags in components */}
+        {/* AI : native <script> in this Server Component — next/script hydrates on the client and triggers React 19's script-tag warning */}
         {supabasePublic ? (
-          <Script
+          <script
             id="supabase-public-config"
-            strategy="beforeInteractive"
             dangerouslySetInnerHTML={{
               __html: `window.__SUPABASE_PUBLIC__=${JSON.stringify(supabasePublic)}`,
             }}
           />
         ) : null}
         {/* AI : apply saved color scheme before first paint — mirrors writeColorScheme() in lib/color-scheme.ts */}
-        <Script
+        <script
           id="color-scheme-init"
-          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var s=localStorage.getItem('spine:color-scheme');if(s&&s!=='default')document.documentElement.dataset.colorScheme=s;}catch(e){}})()`,
           }}

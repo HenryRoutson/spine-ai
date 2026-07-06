@@ -2,6 +2,7 @@
 
 // AI : expected-vs-actual verdict list — shared by the Testing tab (live run) and
 // AI : Logging (persisted run.test report), so the rendering exists exactly once.
+// AI : TODO (spec) — confusion matrix / field group-by view for test failures (spec § testing).
 
 import { useEffect, useState, type ReactNode } from "react"
 import { ChevronDown, ChevronRight, CircleCheck, CircleX, MinusCircle } from "lucide-react"

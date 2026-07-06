@@ -1,4 +1,5 @@
 import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
+// AI : TODO (spec) — profit-per-user virtual table + arbitrage guard; block runs when balance breaches -$10 floor during billing.
 import {
   BILLING_CAP_CENTS,
   MIN_ACCOUNT_BALANCE_CENTS,

@@ -10,6 +10,7 @@ import type {
   StructureModelId,
   TypeAlias,
 } from "./types";
+import { withBuiltinTypeAliases } from "./builtin_types";
 
 // AI : canonical type IR — one definition for static checks, zod, pydantic, and codegen.
 // AI : TODO — per-step compile (pyright/tsc from generated stubs); list vs scalar on steps not enforced yet.
@@ -134,6 +135,7 @@ export function collectTypeExprRefModelIds(expr: TypeExpr): StructureModelId[] {
   return ids;
 }
 
+
 function resolveNamedTypeAlias(
   name: string,
   typeAliases: TypeAlias[],
@@ -141,10 +143,38 @@ function resolveNamedTypeAlias(
 ): TypeExpr | undefined {
   const key = name.trim().toLowerCase();
   if (!key || seenNames.has(key)) return undefined;
-  const alias = typeAliases.find((t) => t.name.trim().toLowerCase() === key);
+  const alias = withBuiltinTypeAliases(typeAliases).find((t) => t.name.trim().toLowerCase() === key);
   if (!alias) return undefined;
   seenNames.add(key);
   return alias.expr;
+}
+
+// AI : inline named aliases (built-ins + user) before quote detection and validation walks.
+export function expandNamedTypeExpr(expr: TypeExpr, typeAliases: TypeAlias[] = []): TypeExpr {
+  const aliases = withBuiltinTypeAliases(typeAliases);
+  const seen = new Set<string>();
+  function walk(e: TypeExpr): TypeExpr {
+    if (e.kind === "named") {
+      const resolved = resolveNamedTypeAlias(e.name, aliases, seen);
+      return resolved ? walk(resolved) : e;
+    }
+    switch (e.kind) {
+      case "list":
+      case "set":
+        return { ...e, item: walk(e.item) };
+      case "optional":
+        return { ...e, inner: walk(e.inner) };
+      case "map":
+        return { ...e, key: walk(e.key), value: walk(e.value) };
+      case "union":
+        return { ...e, variants: e.variants.map(walk) };
+      case "generic":
+        return { ...e, args: e.args.map(walk) };
+      default:
+        return e;
+    }
+  }
+  return walk(expr);
 }
 
 export function typeExprIsList(expr: TypeExpr): boolean {
@@ -289,9 +319,9 @@ export function formatTypeExpr(expr: TypeExpr, models: StructureModel[] = []): s
     case "document":
       return "Document";
     case "quote":
-      return "Quote";
+      return "quote_string_t";
     case "text_quote":
-      return "TextQuote";
+      return "text_quote_t";
     case "list":
       return `list[${formatTypeExpr(expr.item, models)}]`;
     case "ref": {
@@ -393,7 +423,7 @@ export function typeExprToZod(
     case "document":
       return DocumentSchema;
     case "quote":
-      return QuoteSchema;
+      return opts.llmQuotes ? z.string() : QuoteSchema;
     case "text_quote":
       return llmQuotes ? z.string() : TextQuoteSchema;
     case "list":
@@ -515,9 +545,9 @@ export function typeExprToPy(expr: TypeExpr, models: StructureModel[] = []): str
     case "document":
       return "Document";
     case "quote":
-      return "Quote";
+      return "quote_string_t";
     case "text_quote":
-      return "TextQuote";
+      return "text_quote_t";
     case "list":
       return `list[${typeExprToPy(expr.item, models)}]`;
     case "ref": {
@@ -584,9 +614,9 @@ export function typeExprToTs(expr: TypeExpr, models: StructureModel[] = []): str
     case "document":
       return "Document";
     case "quote":
-      return "Quote";
+      return "quote_string_t";
     case "text_quote":
-      return "TextQuote";
+      return "text_quote_t";
     case "list":
       return `${typeExprToTs(expr.item, models)}[]`;
     case "ref": {

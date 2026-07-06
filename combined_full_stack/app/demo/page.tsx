@@ -6,13 +6,14 @@ import { DocViewerProvider } from "@/lib/doc-viewer";
 import { AppShellProvider } from "@/lib/app-shell";
 import { ProjectAssistantProvider } from "@/lib/project-assistant-context";
 import { AppShellLayout } from "@/components/app-shell-layout";
-import { writeActiveProjectSession } from "@/lib/active-project-session";
-import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants";
+import { setPreviewOnly } from "@/lib/demo-mode";
 
-// AI : public preview route — always embed chrome; ?embed=1 only affects landing iframe sizing.
+// AI : public preview route — embed=1 sizing; preview=1 disables runs; buildId loads landing-built pipeline.
 export default function DemoPage() {
   useEffect(() => {
-    writeActiveProjectSession(DEMO_DEFAULT_PROJECT_ID);
+    const params = new URLSearchParams(window.location.search);
+    setPreviewOnly(params.get("preview") === "1");
+    return () => setPreviewOnly(false);
   }, []);
 
   return (

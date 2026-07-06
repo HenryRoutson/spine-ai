@@ -25,7 +25,8 @@
         {
           "id": "f_source",
           "name": "source",
-          "type": "tuple[text,quote]",
+          "type": "json",
+          "typeExpr": { "kind": "named", "name": "text_quote_t" },
           "optional": false,
           "description": "Rule text + originating quote"
         },
@@ -127,7 +128,7 @@
       "id": "mod_extract_rules",
       "kind": "llm",
       "label": "Extract Atomic Rules",
-      "note": "text → list[tuple[text, quote]]",
+      "note": "Document → list[text_quote_t]",
       "inputDescription": "Parsed legal contract Document with full body text ready for rule extraction",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_rule",

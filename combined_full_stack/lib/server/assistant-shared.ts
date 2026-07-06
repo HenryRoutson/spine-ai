@@ -2,6 +2,7 @@ import { z } from "zod";
 import { uid } from "@/lib/id";
 import { tryParseTypeExprString } from "@/lib/type-expr-parse";
 import { isLockedStructureModel } from "./builtin_models";
+import { withBuiltinTypeAliases } from "./builtin_types";
 import { FIELD_TYPES, FieldType, type ModelField, type StructureModel, type StructureModelId, type TypeAlias, type TypeAliasId } from "./types";
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
@@ -88,7 +89,7 @@ export function collectTypeAliasNames(
   existing: TypeAlias[],
   specs: TypeAliasSpec[] | null | undefined,
 ): Set<string> {
-  const names = new Set(existing.map((a) => a.name.toLowerCase()));
+  const names = new Set(withBuiltinTypeAliases(existing).map((a) => a.name.toLowerCase()));
   for (const spec of specs ?? []) {
     if (spec.name.trim()) names.add(spec.name.trim().toLowerCase());
   }

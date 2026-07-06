@@ -77,7 +77,7 @@ export function invalidStepMessage(
     return issue.compileError ?? "code does not compile";
   }
   if (issue.kind === "json-input-mismatch") {
-    return "JSON input must use a JSON structure, not the built-in Document model";
+    return "Excel/JSON-only inputs must use a structure — direct JSON parse is available for these types";
   }
   if (issue.kind === "structure-field") {
     return issue.structureMessage ?? "structure field error";
