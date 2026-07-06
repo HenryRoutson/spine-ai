@@ -14,6 +14,7 @@ export type ModuleFactoryOpts = {
   inputType?: PipelineModule["inputType"]
   inputNameContains?: string
   inputDescription?: string
+  inputMinCount?: number
   inStructureId?: StructureModelId
   outStructureId?: StructureModelId
   outIsList?: boolean
@@ -58,6 +59,7 @@ export function createPipelineModule(
     inputType: kind === ModuleKind.Input ? (opts.inputType ?? InputType.Pdf) : undefined,
     inputNameContains: kind === ModuleKind.Input ? opts.inputNameContains?.trim() || undefined : undefined,
     inputDescription: opts.inputDescription?.trim() || undefined,
+    inputMinCount: kind === ModuleKind.Input ? opts.inputMinCount : undefined,
     inStructureId: kind !== ModuleKind.Input ? opts.inStructureId ?? defaultModel : undefined,
     outStructureId:
       usesPassthroughStructure(kind)

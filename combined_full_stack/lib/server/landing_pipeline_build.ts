@@ -37,11 +37,7 @@ export async function buildLandingPipelineFromTask(task: string, ip: string): Pr
   const buildId = uid<ProjectId>("p_land_");
   let project = blankProject(buildId);
 
-  const prompt = `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / transform / combine as needed), and output step(s). Name structures clearly.
-
-Task: ${trimmed}`;
-
-  const result = await proposePipelineChange(project, prompt, [], LANDING_DEMO_MODEL);
+  const result = await proposePipelineChange(project, trimmed, [], LANDING_DEMO_MODEL);
   const proposal = result.proposal;
 
   if (proposal) {
@@ -64,6 +60,8 @@ Task: ${trimmed}`;
     outputPreview: result.message.slice(0, LANDING_DEMO_MAX_PROMPT_CHARS),
     model: LANDING_DEMO_MODEL,
     costCents: result.usageCents,
+    promptTokens: result.promptTokens,
+    completionTokens: result.completionTokens,
     latencyMs,
     ip,
   });

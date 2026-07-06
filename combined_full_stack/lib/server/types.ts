@@ -99,6 +99,8 @@ export interface TypeAlias {
   name: string;
   description: string;
   expr: TypeExpr;
+  shared?: boolean; // AI : injected into every project — not persisted per project
+  locked?: boolean; // AI : read-only in Structure UI
 }
 
 // AI : string values are the persisted wire/DB format — do not rename.

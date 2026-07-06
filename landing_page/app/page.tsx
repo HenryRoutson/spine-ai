@@ -6,6 +6,7 @@ import {
   LandingTaskPrompt,
 } from "../components/landing-preview-section";
 import { LegalFooterLinks } from "@/lib/legal/chrome";
+import { LEGAL } from "@/lib/legal/site";
 
 type AppLoginUrl = string;
 type AppUrl = string;
@@ -26,7 +27,10 @@ type FaqItem = {
   a: string;
 };
 
-const NAV_LINKS = [{ href: "#faq", label: "FAQs" }];
+const NAV_LINKS = [
+  { href: "#faq", label: "FAQs" },
+  { href: "#contact", label: "Contact" },
+];
 
 const FAQS: FaqItem[] = [
   {
@@ -147,6 +151,20 @@ export default function Home() {
         </div>
       </section>
 
+      {/* contact */}
+      <section id="contact" className="mx-auto max-w-[1200px] scroll-mt-24 border-x border-b border-line px-8 py-10 sm:px-12 sm:py-14">
+        <h2 className="text-3xl font-normal tracking-tight sm:text-4xl">Get in touch</h2>
+        <p className="mt-4 max-w-xl text-sm leading-relaxed text-muted sm:text-base">
+          Questions, feedback, or partnership inquiries — we&apos;d love to hear from you.
+        </p>
+        <a
+          href={`mailto:${LEGAL.contactEmail}`}
+          className="mt-8 inline-flex text-base text-foreground underline-offset-4 transition-colors hover:text-muted sm:text-lg"
+        >
+          {LEGAL.contactEmail}
+        </a>
+      </section>
+
       {/* footer */}
       <footer className="mx-auto max-w-[1200px] border-x border-line">
         <div className="grid gap-8 border-b border-line px-8 py-12 sm:grid-cols-2 lg:grid-cols-4 sm:px-12">
@@ -175,8 +193,15 @@ export default function Home() {
             </div>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wider text-muted-dim">Information</p>
-            <p className="mt-4 text-sm text-muted">Spine — validated AI</p>
+            <p className="text-xs uppercase tracking-wider text-muted-dim">Contact</p>
+            <div className="mt-4 flex flex-col gap-2">
+              <a
+                href={`mailto:${LEGAL.contactEmail}`}
+                className="text-sm text-muted hover:text-foreground"
+              >
+                {LEGAL.contactEmail}
+              </a>
+            </div>
           </div>
         </div>
         <div className="px-8 py-6 sm:px-12">

@@ -40,7 +40,7 @@ import { DEFAULT_MODEL } from "@/lib/types"
 import { apiJson, apiPut, formatApiError, JSON_HEADERS, readApiErrorBody } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { migrateProjectModules, syncAutoQuoteSteps } from "@/lib/quote-steps"
-import { stripSharedModels, withSharedModels } from "@/lib/structure"
+import { stripSharedModels, stripBuiltinTypeAliases, withBuiltinTypeAliases, withSharedModels } from "@/lib/structure"
 import { mergeInferredStructuresForDoc, modelsChanged } from "@/lib/sync-doc-structures"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
 import {
@@ -358,10 +358,15 @@ export function StoreProvider({
         })
         return { ...data, projects: mergedProjects, docs: dedupeDocsNewestByName(data.docs) }
       })
-      // AI : picker mode stays projectless; workspace only adopts an id the user already chose.
-      if (mode === "workspace" && projectId && visibleProjects.some((p) => p.id === projectId)) {
-        setActiveProjectId(projectId)
-        writeActiveProjectSession(projectId as ProjectId)
+      // AI : workspace — honor session project when valid; fall back when demo/build ids leaked into session.
+      if (mode === "workspace") {
+        const resolved =
+          (projectId && visibleProjects.some((p) => p.id === projectId) ? projectId : null) ??
+          mostRecentlyOpenedProject(visibleProjects)?.id ??
+          ""
+        setActiveProjectId(resolved)
+        if (resolved) writeActiveProjectSession(resolved as ProjectId)
+        else clearActiveProjectSession()
       }
       if (mode === "demo" && projectId && visibleProjects.some((p) => p.id === projectId)) {
         setActiveProjectId(projectId)
@@ -915,9 +920,9 @@ export function StoreProvider({
 
   const setTypeAliases = useCallback(
     (t: TypeAlias[] | ((prev: TypeAlias[]) => TypeAlias[])) => {
-      const prev = project?.typeAliases ?? []
-      const next = typeof t === "function" ? t(prev) : t
-      patchProject({ typeAliases: next })
+      const prev = stripBuiltinTypeAliases(project?.typeAliases ?? [])
+      const raw = typeof t === "function" ? t(withBuiltinTypeAliases(prev)) : t
+      patchProject({ typeAliases: stripBuiltinTypeAliases(raw) })
     },
     [patchProject, project],
   )
@@ -948,7 +953,7 @@ export function StoreProvider({
 
       patchProject({
         ...(changes.models ? { models: nextModels } : {}),
-        ...(changes.typeAliases ? { typeAliases: changes.typeAliases } : {}),
+        ...(changes.typeAliases ? { typeAliases: stripBuiltinTypeAliases(changes.typeAliases) } : {}),
         ...(nextModules !== undefined ? { modules: nextModules } : {}),
       })
     },
@@ -990,9 +995,9 @@ export function StoreProvider({
       renameProject,
       deleteProject,
       project,
-      models: project.models,
+      models: withSharedModels(project.models),
       setModels,
-      typeAliases: project.typeAliases ?? [],
+      typeAliases: withBuiltinTypeAliases(project.typeAliases ?? []),
       setTypeAliases,
       modules,
       setModules,

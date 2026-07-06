@@ -16,6 +16,7 @@
     "sync-pricing": "node scripts/sync_openrouter_pricing.mjs",
     "db:push": "supabase db push",
     "spine": "tsx scripts/spine-cli.ts",
+    "profile-landing": "tsx scripts/spine-cli.ts profile landing",
     "test": "vitest run",
     "test:watch": "vitest"
   },

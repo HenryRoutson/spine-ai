@@ -9,6 +9,7 @@ import {
   parseTestCommand,
 } from "@/lib/cli/validate_test"
 import { loadContextAndValidateSetup } from "@/lib/cli/validate_setup"
+import { profileLandingCommand } from "@/lib/cli/profile_landing"
 import type { CliCommandResult } from "@/lib/cli/types"
 
 export const SPINE_CLI_HELP = `spine — validate Spine projects and test files without React
@@ -19,10 +20,14 @@ Usage:
   npx tsx scripts/spine-cli.ts validate tests --project <seed.json> [--json]
   npx tsx scripts/spine-cli.ts validate setup --project <seed.json> --file <setup.json> [--json]
   npx tsx scripts/spine-cli.ts parse test --file <test.json> [--json]
+  npx tsx scripts/spine-cli.ts profile landing [--days 30] [--limit 50] [--backfill-local] [--json]
 
 Flags:
   --json    machine-readable output (for agents)
   --help    show this help
+  --days    landing profile window (default 30)
+  --limit   max recent calls in landing profile (default 50)
+  --backfill-local  sync data/landing_page_demo.json into Supabase before profiling
 
 Exit codes:
   0  success / no validation errors
@@ -75,7 +80,14 @@ function flagString(flags: Record<string, string | boolean>, key: string): strin
   return typeof v === "string" ? v : undefined
 }
 
-export function runSpineCli(argv: string[]): CliCommandResult {
+function flagNumber(flags: Record<string, string | boolean>, key: string, fallback: number): number {
+  const raw = flagString(flags, key)
+  if (raw == null) return fallback
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0 ? n : fallback
+}
+
+export async function runSpineCli(argv: string[]): Promise<CliCommandResult> {
   const { json: _json, help, positional, flags } = parseArgs(argv)
   if (help || !positional.length) {
     return { ok: true, command: "help", issues: [], data: { help: SPINE_CLI_HELP } }
@@ -123,6 +135,14 @@ export function runSpineCli(argv: string[]): CliCommandResult {
       }
       return loadContextAndValidateSetup(resolve(seedPath), resolve(setupPath))
     }
+  }
+
+  if (cmd === "profile" && sub === "landing") {
+    return profileLandingCommand({
+      days: flagNumber(flags, "days", 30),
+      limit: flagNumber(flags, "limit", 50),
+      backfillLocal: flags["backfill-local"] === true,
+    })
   }
 
   return usageError(`unknown command: ${positional.join(" ")}`)

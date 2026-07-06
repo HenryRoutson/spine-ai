@@ -15,7 +15,9 @@ import {
 import {
   buildProjectAssistantSystemPrompt,
   buildProjectContextBlock,
+  resolveAssistantUserMessage,
 } from "./assistant-prompt";
+import { stripBuiltinTypeAliases } from "./builtin_types";
 import {
   computeInvalid,
   formatPipelineValidationErrors,
@@ -62,6 +64,7 @@ const moduleSpecSchema = z
     code: z.string().optional(),
     model: z.string().optional(),
     outIsList: z.boolean().optional(),
+    inputMinCount: z.number().int().min(1).optional(),
   })
   .superRefine((spec, ctx) => {
     if (stepRequiresNote(spec.kind) && !spec.note?.trim()) {
@@ -88,6 +91,7 @@ const modulePatchEntrySchema = z.object({
   code: z.string().optional(),
   model: z.string().optional(),
   outIsList: z.boolean().optional(),
+  inputMinCount: z.number().int().min(1).optional(),
 });
 
 const modelSpecSchema = structureModelSpecSchema;
@@ -144,6 +148,8 @@ export type PipelineAssistantResult = {
   validationErrors: string | null;
   retryCount: number;
   usageCents: number;
+  promptTokens: number;
+  completionTokens: number;
 };
 
 export type PipelineAssistantOpts = {
@@ -193,6 +199,7 @@ function makeModuleFromSpec(
       inputType: spec.kind === ModuleKind.Input ? (spec.inputType as PipelineModule["inputType"]) ?? InputType.Pdf : undefined,
       inputNameContains: spec.inputNameContains,
       inputDescription: spec.inputDescription,
+      inputMinCount: spec.inputMinCount,
       inStructureId: spec.kind !== "input" ? inId ?? defaultOutForKind(spec.kind, models) : undefined,
       outStructureId: outId,
       outIsList,
@@ -270,6 +277,7 @@ function applyModulePatch(
     ...(patch.code !== undefined ? { code: patch.code } : {}),
     ...(modelId !== undefined ? { model: modelId } : {}),
     ...(patch.outIsList !== undefined ? { outIsList: patch.outIsList } : {}),
+    ...(patch.inputMinCount !== undefined ? { inputMinCount: patch.inputMinCount } : {}),
   };
 }
 
@@ -302,7 +310,7 @@ function buildThinkingSystemPrompt(hasValidationErrors: boolean): string {
 
 ${hasValidationErrors
     ? "The live project has pipeline validation errors — focus on diagnosing and fixing those I/O mismatches. Do not propose a greenfield architecture."
-    : "Reason step-by-step: required structures, linear data flow, chunking/map-reduce if inputs may exceed context, which test documents to synthesize, and edge cases."}
+    : "Reason step-by-step: required structures, linear data flow, chunking/map-reduce if inputs may exceed context or the user mentions many/hundreds of files, whether input steps need outIsList (Emit list output), which test documents to synthesize, and edge cases."}
 Plain text only — no JSON, no markdown headings. Be concise (roughly 150–300 words).`;
 }
 
@@ -342,7 +350,7 @@ ${modelsBlock}
 Current pipeline (${project.modules.length} steps):
 ${stepsBlock}
 
-User request: ${message}`;
+User request: ${resolveAssistantUserMessage(project, message, history)}`;
 }
 
 function buildSystemPrompt(globalModel: ModelId, projectName: string): string {
@@ -359,6 +367,10 @@ function buildUserPrompt(
   liveValidation?: string,
   forceFix?: boolean,
 ): string {
+  const userMessage = resolveAssistantUserMessage(project, message, history, {
+    fixValidationErrors: opts?.fixValidationErrors,
+    forceFix,
+  });
   const currentValidation =
     liveValidation ??
       formatPipelineValidationErrors(project.modules, project.models, project.typeAliases ?? []);
@@ -377,7 +389,7 @@ function buildUserPrompt(
     ? `\nYour prior reasoning (use this; do not repeat it in message):\n${thinking.trim()}\n`
     : "";
   return `${buildProjectContextBlock(project, globalModel, history, `${currentValidationBlock}${thinkingBlock}${fixBlock}${forceFixBlock}`)}
-User request: ${message}`;
+User request: ${userMessage}`;
 }
 
 function materializeProposal(
@@ -413,7 +425,7 @@ function materializeProposal(
   const models = materializeModels(raw.models, project.models, aliasNames);
   const typeAliases =
     raw.typeAliases !== null
-      ? materializeTypeAliases(raw.typeAliases, project.typeAliases ?? [], models)
+      ? stripBuiltinTypeAliases(materializeTypeAliases(raw.typeAliases, project.typeAliases ?? [], models))
       : (project.typeAliases ?? []);
   let modules: PipelineModule[];
   if (hasPipelineRewrite) {
@@ -590,20 +602,28 @@ export async function proposePipelineChange(
       fixErrors = validationErrors;
       opts?.onValidationFailed?.(retryCount, validationErrors);
       opts?.onPhase?.("retrying");
-    raw = await llmStructured(
-      buildUserPrompt(
-        project,
-        message,
-        history,
-        globalModel,
-        {
-          fixValidationErrors: fixErrors,
-          fixAttempt,
-        },
-        thinking,
-        liveValidation,
-        forceFix,
-      ),
+      // AI : retry must show the failed proposal in context — blank landing projects stay empty otherwise.
+      const retryProject: Project = {
+        ...project,
+        modules: proposal.modules,
+        models: proposal.models,
+        typeAliases: proposal.typeAliases ?? [],
+        documentation: proposal.documentation,
+      };
+      raw = await llmStructured(
+        buildUserPrompt(
+          retryProject,
+          message,
+          history,
+          globalModel,
+          {
+            fixValidationErrors: fixErrors,
+            fixAttempt,
+          },
+          thinking,
+          liveValidation,
+          forceFix,
+        ),
         assistantResponseSchema,
         {
           model: globalModel,
@@ -621,7 +641,7 @@ export async function proposePipelineChange(
       );
       llmAttempt += 1;
       opts?.onLlmResponse?.(`retry-${retryCount}`, raw);
-      proposal = materializeProposal(raw, project, globalModel);
+      proposal = materializeProposal(raw, retryProject, globalModel);
     }
 
     const invalidCount = proposal
@@ -636,6 +656,7 @@ export async function proposePipelineChange(
           )
         : null;
 
+    const tokens = ledger.tokenTotals();
     return {
       message: raw.message,
       proposal,
@@ -643,6 +664,8 @@ export async function proposePipelineChange(
       validationErrors,
       retryCount,
       usageCents: ledger.totalCents(),
+      promptTokens: tokens.promptTokens,
+      completionTokens: tokens.completionTokens,
     };
   } catch (err) {
     attachAssistantUsage(err, ledger.totalCents());

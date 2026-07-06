@@ -165,6 +165,8 @@ export async function recordLandingUsage(params: {
   outputPreview: string;
   model: ModelId;
   costCents: number;
+  promptTokens: number;
+  completionTokens: number;
   latencyMs: number;
   ip: string;
 }): Promise<LandingDemoCallRow> {
@@ -172,10 +174,169 @@ export async function recordLandingUsage(params: {
     prompt: params.prompt,
     outputPreview: params.outputPreview,
     model: params.model,
-    promptTokens: 0,
-    completionTokens: 0,
+    promptTokens: params.promptTokens,
+    completionTokens: params.completionTokens,
     costCents: params.costCents,
     latencyMs: params.latencyMs,
     ip: params.ip,
   });
+}
+
+export type LandingUsageProfile = {
+  source: "supabase" | "local";
+  budgetCents: number;
+  spentCents: number;
+  remainingCents: number;
+  callCount: number;
+  totalCostCents: number;
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+  avgCostPerCallCents: number;
+  avgLatencyMs: number | null;
+  byModel: Record<
+    string,
+    { calls: number; costCents: number; promptTokens: number; completionTokens: number }
+  >;
+  byDay: Array<{ day: string; calls: number; costCents: number }>;
+  recentCalls: LandingDemoCallRow[];
+};
+
+function dayLabel(iso: string): string {
+  return iso.slice(0, 10);
+}
+
+export function buildLandingUsageProfile(
+  budgetCents: number,
+  spentCents: number,
+  calls: LandingDemoCallRow[],
+  source: "supabase" | "local",
+): LandingUsageProfile {
+  const totalCostCents = calls.reduce((sum, c) => sum + c.costCents, 0);
+  const totalPromptTokens = calls.reduce((sum, c) => sum + c.promptTokens, 0);
+  const totalCompletionTokens = calls.reduce((sum, c) => sum + c.completionTokens, 0);
+  const latencies = calls.map((c) => c.latencyMs).filter((ms): ms is number => ms != null);
+  const byModel: LandingUsageProfile["byModel"] = {};
+  const byDayMap = new Map<string, { calls: number; costCents: number }>();
+
+  for (const call of calls) {
+    const model = call.model;
+    const bucket = byModel[model] ?? { calls: 0, costCents: 0, promptTokens: 0, completionTokens: 0 };
+    bucket.calls += 1;
+    bucket.costCents += call.costCents;
+    bucket.promptTokens += call.promptTokens;
+    bucket.completionTokens += call.completionTokens;
+    byModel[model] = bucket;
+
+    const day = dayLabel(call.createdAt);
+    const dayBucket = byDayMap.get(day) ?? { calls: 0, costCents: 0 };
+    dayBucket.calls += 1;
+    dayBucket.costCents += call.costCents;
+    byDayMap.set(day, dayBucket);
+  }
+
+  const callCount = calls.length;
+  return {
+    source,
+    budgetCents,
+    spentCents,
+    remainingCents: budgetCents - spentCents,
+    callCount,
+    totalCostCents,
+    totalPromptTokens,
+    totalCompletionTokens,
+    avgCostPerCallCents: callCount > 0 ? totalCostCents / callCount : 0,
+    avgLatencyMs: latencies.length > 0 ? latencies.reduce((a, b) => a + b, 0) / latencies.length : null,
+    byModel,
+    byDay: [...byDayMap.entries()]
+      .map(([day, stats]) => ({ day, ...stats }))
+      .sort((a, b) => a.day.localeCompare(b.day)),
+    recentCalls: calls,
+  };
+}
+
+export async function fetchLandingUsageProfile(opts?: {
+  days?: number;
+  limit?: number;
+}): Promise<LandingUsageProfile> {
+  const days = opts?.days ?? 30;
+  const limit = opts?.limit ?? 50;
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+
+  const admin = await createAdminClient();
+  if (admin) {
+    const budget = await readBudget();
+    const { data, error } = await admin
+      .from("landing_page_calls")
+      .select(
+        "id, prompt_preview, output_preview, model, prompt_tokens, completion_tokens, cost_cents, latency_ms, created_at",
+      )
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (!error && data) {
+      const calls: LandingDemoCallRow[] = data.map((row) => ({
+        id: row.id,
+        promptPreview: row.prompt_preview,
+        outputPreview: row.output_preview,
+        model: row.model as ModelId,
+        promptTokens: row.prompt_tokens,
+        completionTokens: row.completion_tokens,
+        costCents: Number(row.cost_cents),
+        latencyMs: row.latency_ms,
+        createdAt: row.created_at,
+      }));
+      return buildLandingUsageProfile(budget.budgetCents, budget.spentCents, calls, "supabase");
+    }
+    demoLog.warn("landing_page_calls read failed — falling back to local", { error: error?.message });
+  }
+
+  const local = readLocalBudget();
+  const calls = local.calls.filter((c) => c.createdAt >= since).slice(0, limit);
+  return buildLandingUsageProfile(local.budgetCents, local.spentCents, calls, "local");
+}
+
+export async function backfillLocalLandingUsageToSupabase(): Promise<{
+  inserted: number;
+  skipped: number;
+  spentCents: number;
+}> {
+  const admin = await createAdminClient();
+  if (!admin) throw new Error("Supabase admin client unavailable — set SUPABASE_SERVICE_ROLE_KEY");
+
+  const local = readLocalBudget();
+  let inserted = 0;
+  let skipped = 0;
+
+  for (const call of local.calls) {
+    const { data: existing } = await admin.from("landing_page_calls").select("id").eq("id", call.id).maybeSingle();
+    if (existing) {
+      skipped += 1;
+      continue;
+    }
+    const { error } = await admin.from("landing_page_calls").insert({
+      id: call.id,
+      prompt_preview: call.promptPreview,
+      output_preview: call.outputPreview,
+      model: call.model,
+      prompt_tokens: call.promptTokens,
+      completion_tokens: call.completionTokens,
+      cost_cents: call.costCents,
+      latency_ms: call.latencyMs,
+      created_at: call.createdAt,
+    });
+    if (error) throw new Error(error.message);
+    inserted += 1;
+  }
+
+  const { error: budgetError } = await admin
+    .from("landing_page_budget")
+    .update({
+      budget_cents: local.budgetCents,
+      spent_cents: local.spentCents,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", LANDING_BUDGET_ID);
+  if (budgetError) throw new Error(budgetError.message);
+
+  return { inserted, skipped, spentCents: local.spentCents };
 }

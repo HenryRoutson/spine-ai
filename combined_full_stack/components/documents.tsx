@@ -30,7 +30,9 @@ import {
 import { isTestingFileName } from "@/lib/testing-files"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
+import { PreviewBlockedDialog } from "@/components/preview-blocked-dialog"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
+import { isPreviewOnly } from "@/lib/demo-mode"
 import { DocLabel } from "@/lib/types"
 import type { DocRef, InputType } from "@/lib/types"
 
@@ -54,6 +56,7 @@ export function Documents() {
   const [dragOver, setDragOver] = useState(false)
   const [lastDedup, setLastDedup] = useState<string | null>(null)
   const [uploadWarning, setUploadWarning] = useState<string | null>(null)
+  const [previewBlockedOpen, setPreviewBlockedOpen] = useState(false)
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<DocRef>()
 
   // AI : scroll to and highlight a doc when opened from Inference / Logging links.
@@ -73,6 +76,10 @@ export function Documents() {
   // AI : dedup when the returned content hash already exists in the store.
   async function ingest(files: FileList | null, label: DocLabel) {
     if (!files) return
+    if (isPreviewOnly()) {
+      setPreviewBlockedOpen(true)
+      return
+    }
     for (const f of Array.from(files)) {
       const blocked = confidentialUploadWarning(f.name)
       if (blocked) {
@@ -264,6 +271,7 @@ export function Documents() {
           })}
         </ul>
       </ScrollArea>
+      {previewBlockedOpen ? <PreviewBlockedDialog onClose={() => setPreviewBlockedOpen(false)} /> : null}
     </div>
   )
 }

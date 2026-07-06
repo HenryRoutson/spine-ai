@@ -187,6 +187,18 @@ you should always have the ability to view the whole pipeline as code,
 and if there are no errors in the pipeline there should be none in the code for any langauge.
 
 
+please segment types into JSON or not JSON.
+If and only if the type subset selected is all json can you parse to a pydantic struct inside this step. You will need to handle the if case of Using an llm if the format is not json, which should be a locked step which is added automatically for the inputs which are not automatically converted.
+Ensure the user doesn't have the think about, if this structure isn't json i need to run an llm to convert it and if it is i just want to load it directly. please just handle this logic and visualise it.
+  PDF - not json
+  Word - not json
+  Excel - json
+  JSON - json
+  Text - not json
+  Web - not json
+  Image - not json
+
+
 # Testing 
 
 please create a testing tab, where you can describe the exact output at each step to precisely pinpoint where a pipeline goes wrong

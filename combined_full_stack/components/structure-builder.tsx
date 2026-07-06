@@ -23,7 +23,7 @@ import {
   useStructureSidebarWidth,
   writeStructureSidebarWidth,
 } from "@/lib/editor-split-settings"
-import { isLockedStructureModel, lockedStructureBanner } from "@/lib/structure"
+import { isLockedStructureModel, isLockedTypeAlias, lockedStructureBanner, lockedTypeAliasBanner } from "@/lib/structure"
 import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-validity"
 import { UNSET_TYPE_EXPR } from "@/lib/server/type_expr"
 import { FieldType, type ModelField, type StructureModel, type TypeAlias } from "@/lib/types"
@@ -104,6 +104,8 @@ export function StructureBuilder() {
   }
 
   function deleteType(id: string) {
+    const target = typeAliases.find((t) => t.id === id)
+    if (target && isLockedTypeAlias(target)) return
     const next = typeAliases.filter((t) => t.id !== id)
     setTypeAliases(next)
     if (selectedTypeId === id) {
@@ -328,6 +330,7 @@ export function StructureBuilder() {
                           <p className="truncate font-mono text-xs text-foreground">{t.name}</p>
                           <p className="truncate font-mono text-[10px] text-muted-foreground">type alias</p>
                         </div>
+                        {isLockedTypeAlias(t) && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
                       </button>
                     ))}
                   </div>
@@ -341,6 +344,14 @@ export function StructureBuilder() {
                 ) : view === "ui" && target.kind === "type" && selectedType ? (
                   <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
                     <div className="mx-auto max-w-3xl px-5 py-5">
+                      {isLockedTypeAlias(selectedType) && lockedTypeAliasBanner(selectedType) && (
+                        <div className="mb-4 flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-2">
+                          <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                          <p className="font-mono text-[11px] text-muted-foreground">
+                            {lockedTypeAliasBanner(selectedType)}
+                          </p>
+                        </div>
+                      )}
                       {selectedTypeIssues.length > 0 && (
                         <div className="mb-4 space-y-1 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2">
                           {selectedTypeIssues.map((issue, i) => (
@@ -354,7 +365,7 @@ export function StructureBuilder() {
                         alias={selectedType}
                         models={models}
                         typeAliases={typeAliases}
-                        locked={false}
+                        locked={isLockedTypeAlias(selectedType)}
                         onUpdate={(patch) => updateTypeAlias(selectedType.id, patch)}
                         onDelete={() => deleteType(selectedType.id)}
                       />
@@ -362,7 +373,7 @@ export function StructureBuilder() {
                         <TypeAliasTextSync
                           alias={selectedType}
                           models={models}
-                          locked={false}
+                          locked={isLockedTypeAlias(selectedType)}
                           onUpdate={(patch) => updateTypeAlias(selectedType.id, patch)}
                         />
                       </div>

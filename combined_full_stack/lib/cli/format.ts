@@ -12,6 +12,9 @@ export function exitCodeForResult(result: CliCommandResult): 0 | 1 | 2 {
 }
 
 export function formatHuman(result: CliCommandResult): string {
+  if (result.data?.human && typeof result.data.human === "string") {
+    return result.data.human
+  }
   const lines: string[] = []
   if (result.data?.projectName) lines.push(`project: ${result.data.projectName}`)
   if (result.data?.testFile) lines.push(`test: ${result.data.testFile}`)

@@ -6,6 +6,7 @@ import { createClient } from "@/utils/supabase/client"
 import { LEGAL, LEGAL_ROUTES } from "@shared/legal/site"
 import { LegalFooterLinks } from "@/lib/legal/chrome"
 import { Switch } from "@/components/ui/switch"
+import { isDemoMode } from "@/lib/demo-mode"
 
 export function PrivacySettings() {
   const [marketingOptIn, setMarketingOptIn] = useState(false)
@@ -13,6 +14,10 @@ export function PrivacySettings() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    if (isDemoMode()) {
+      setLoading(false)
+      return
+    }
     void createClient()
       .then((supabase) => supabase.auth.getUser())
       .then(({ data }) => {
@@ -22,6 +27,7 @@ export function PrivacySettings() {
   }, [])
 
   async function toggleMarketing(checked: boolean) {
+    if (isDemoMode()) return
     setSaving(true)
     try {
       const supabase = await createClient()
@@ -47,7 +53,7 @@ export function PrivacySettings() {
         <label className="flex cursor-pointer items-start gap-3">
           <Switch
             checked={marketingOptIn}
-            disabled={loading || saving}
+            disabled={loading || saving || isDemoMode()}
             onCheckedChange={(checked) => void toggleMarketing(!!checked)}
             className="mt-0.5"
           />

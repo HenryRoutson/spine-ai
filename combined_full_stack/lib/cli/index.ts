@@ -11,4 +11,5 @@ export {
 } from "@/lib/cli/validate_test"
 export { validateSetupCommand } from "@/lib/cli/validate_setup"
 export { runSpineCli, SPINE_CLI_HELP } from "@/lib/cli/run"
+export { profileLandingCommand, formatLandingProfileHuman } from "@/lib/cli/profile_landing"
 export { formatHuman, formatJson, printResult, exitCodeForResult } from "@/lib/cli/format"
