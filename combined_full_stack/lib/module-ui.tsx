@@ -116,3 +116,17 @@ export function AutoQuoteLock({ className }: { className?: string }) {
     </span>
   )
 }
+
+export function AutoStructureParseLock({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 rounded-md border border-chart-3/40 bg-chart-3/10 px-1.5 py-0.5 text-chart-3",
+        className,
+      )}
+    >
+      <Lock className="h-3 w-3" />
+      <span className="font-mono text-[9px]">auto</span>
+    </span>
+  )
+}

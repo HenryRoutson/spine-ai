@@ -116,9 +116,22 @@ export function syncLegacyFromSpineTypes(m: PipelineModule): PipelineModule {
 }
 
 export function migrateModuleSpineTypes(m: PipelineModule): PipelineModule {
-  const outType = m.outType ?? deriveOutType(m);
+  const derived = deriveOutType(m);
+  const outType = reconcileSpineOutType(m, derived);
   const inType = m.inType ?? deriveInType(m);
   return syncLegacyFromSpineTypes({ ...m, ...(outType ? { outType } : {}), ...(inType ? { inType } : {}) });
+}
+
+// AI : sync may change outStructureId while outType still references the old target — prefer derived.
+function reconcileSpineOutType(m: PipelineModule, derived: TypeExpr | undefined): TypeExpr | undefined {
+  if (!derived) return m.outType;
+  if (!m.outType) return derived;
+  if (!m.outStructureId) return m.outType;
+  const persistedRef = refFromType(m.outType);
+  if (persistedRef === m.outStructureId) return m.outType;
+  const derivedRef = refFromType(derived);
+  if (derivedRef === m.outStructureId) return derived;
+  return m.outType;
 }
 
 export function migrateModulesSpineTypes(modules: PipelineModule[]): PipelineModule[] {

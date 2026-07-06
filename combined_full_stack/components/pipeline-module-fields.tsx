@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
+import { AUTO_STRUCTURE_PARSE_EXPLAINER, isAutoStructureParseStep } from "@/lib/structure-parse-steps"
 import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds"
 import { formatModuleSpineIn, formatModuleSpineOut } from "@/lib/spine-type"
 import { MODULE_META } from "@/lib/types"
@@ -102,6 +103,31 @@ export function PipelineModuleFields({
             </StaticValue>
           )}
         </PipelineField>
+      </>
+    )
+  }
+
+  if (isAutoStructureParseStep(selected)) {
+    return (
+      <>
+        <p className="mb-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
+          {AUTO_STRUCTURE_PARSE_EXPLAINER}
+        </p>
+        <PipelineField label="Structure">
+          <StaticValue mono>
+            <StructureLink models={models} structureId={selected.inStructureId} />
+            <span className="text-muted-foreground"> → </span>
+            <StructureLink models={models} structureId={selected.outStructureId} />
+          </StaticValue>
+        </PipelineField>
+        <LlmModuleFields
+          selected={selected}
+          models={models}
+          edit={false}
+          globalModel={globalModel}
+          hasNoPromptWarning={!!hasNoPromptWarning}
+          llmSchemaPreview={llmSchemaPreview}
+        />
       </>
     )
   }

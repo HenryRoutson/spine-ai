@@ -46,7 +46,7 @@ describe("landing usage profile", () => {
       [call({ costCents: 5, createdAt: "2026-07-06T11:00:00.000Z", promptPreview: "summarize receipts" })],
       "local",
     )
-    const text = formatLandingProfileHuman(profile, { days: 30, limit: 10 })
+    const text = formatLandingProfileHuman(profile, { days: 30, limit: 10, backfillLocal: false })
     expect(text).toContain("budget:")
     expect(text).toContain("summarize receipts")
     expect(text).toContain("source: local")

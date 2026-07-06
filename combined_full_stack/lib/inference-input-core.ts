@@ -25,6 +25,21 @@ export function inputTypesForModule(inputModule: PipelineModule): InputType[] {
   return Array.isArray(inputModule.inputType) ? inputModule.inputType : [inputModule.inputType]
 }
 
+// AI : Excel + JSON parse to structured data in the input step; everything else needs an LLM convert step.
+export const JSON_NATIVE_INPUT_TYPES: readonly InputType[] = [InputType.Excel, InputType.Json]
+
+export function isJsonNativeInputType(type: InputType): boolean {
+  return JSON_NATIVE_INPUT_TYPES.includes(type)
+}
+
+export function inputTypesAreAllJsonNative(types: InputType[]): boolean {
+  return types.length > 0 && types.every(isJsonNativeInputType)
+}
+
+export function inputModuleTypesAreAllJsonNative(inputModule: PipelineModule): boolean {
+  return inputModule.kind === "input" && inputTypesAreAllJsonNative(inputTypesForModule(inputModule))
+}
+
 export function inputTypesNeedOcr(types: InputType[]): boolean {
   return types.includes(InputType.Pdf) || types.includes(InputType.Image)
 }

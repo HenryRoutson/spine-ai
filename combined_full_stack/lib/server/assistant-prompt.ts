@@ -57,7 +57,10 @@ export function buildFieldTypesPromptBlock(): string {
 }
 
 export function buildInputTypesPromptBlock(): string {
-  return INPUT_TYPES.map((t) => `- ${t.value}: ${t.label}`).join("\n");
+  return `${INPUT_TYPES.map((t) => `- ${t.value}: ${t.label}`).join("\n")}
+JSON-native (direct parse in input when ONLY these types are selected): excel, json
+Needs LLM conversion (auto locked "Parse to structure" step when structureOut is not Document): pdf, word, text, web, image
+Mixed selections (e.g. pdf + excel) always use Document on the input step plus the auto LLM convert step when a structure is selected.`;
 }
 
 export function buildModelOptionsPromptBlock(): string {
@@ -131,7 +134,8 @@ Before returning modules, walk the chain: for each adjacent pair, confirm previo
 export function buildMultiDocumentWorkflowPromptBlock(): string {
   return `Multi-document inputs and map-reduce:
 - One input step per kind of document (e.g. "Receipts"). Do NOT create hundreds of separate input steps.
-- Input steps ALWAYS structureOut Document — raw uploads only. Never set structureOut to a parsed/extracted model on input.
+- Non-JSON input types (pdf, word, text, web, image) always structureOut Document on the input step — a locked "Parse to structure" LLM step is auto-inserted when you pick a target structure. Do NOT emit that LLM yourself.
+- Excel/json-only inputs may structureOut a typed model directly (JSON parse in the input step) — no auto LLM step.
 - When many files of the same kind upload into one slot, set outIsList: true on that input ("Emit list output"). Without it, inference only allows one file and the spine stays single Document.
 - Set inputMinCount: 2+ when the task implies batch uploads (hundreds, many, each, all).
 - Typical "many unstructured docs → one spreadsheet/report" spine:
@@ -161,6 +165,7 @@ ${buildMultiDocumentWorkflowPromptBlock()}
 - input, combine, and llm/llm-batch steps MUST set note (Annotation / purpose) — a short human-readable description of what the step does or what document/data it handles. Never leave note empty on those kinds.
 - combine steps merge pipeline state with a new document — emit ONLY the combine step; a Document Input is auto-inserted before it.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
+- Non-JSON inputs with a typed structureOut get a locked "Parse to structure" LLM step auto-inserted after the input — do NOT emit it yourself.
 - transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically, or use custom-code.
 - Add output steps wherever a named artifact snapshot is needed — pipelines may have several.
 - Use model ids from:\n${buildModelOptionsPromptBlock()}

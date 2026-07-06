@@ -15,10 +15,11 @@ import {
   type SeedDocSpec,
 } from "./seed";
 import { isTestingFileName } from "../testing-files";
-import { computeInvalid, migrateProjectModules, syncAutoQuoteSteps } from "./validity";
+import { computeInvalid, migrateProjectModules, syncManagedPipelineSteps } from "./validity";
 import { stripSharedModels } from "./builtin_models";
 import type {
   DocId,
+  DocLabel,
   DocRef,
   InputType,
   PipelineModule,
@@ -197,7 +198,7 @@ function mergeSeedPipelineIntoProject(existing: Project, seed: Project): Project
       note: em.note ?? sm.note,
     };
   });
-  modules = syncAutoQuoteSteps(modules, models);
+  modules = syncManagedPipelineSteps(modules, models);
   return migrateProjectModules({ ...existing, seedDocNames, expectedOutputs, inferencePresets, models, modules });
 }
 
@@ -219,7 +220,7 @@ export function syncProjectFromSeed(existing: Project, seed: Project): Project {
       if (!sm || (m.label === sm.label && m.note === sm.note)) return m;
       return { ...m, label: sm.label, note: sm.note };
     });
-    modules = syncAutoQuoteSteps(modules, next.models);
+    modules = syncManagedPipelineSteps(modules, next.models);
     const invalid = computeInvalid(modules, next.models, { typeAliases: next.typeAliases ?? [] });
     if (invalid.size > 0) {
       const seedIds = new Set(seed.modules.map((m) => m.id));

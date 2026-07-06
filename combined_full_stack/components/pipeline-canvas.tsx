@@ -15,8 +15,10 @@ import {
   type PipelineSegment,
 } from "@/lib/pipeline-layout"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
+import { inputTargetStructureId, isAutoStructureParseStep } from "@/lib/structure-parse-steps"
 import {
   AutoQuoteLock,
+  AutoStructureParseLock,
   KindIcon,
   PipelineConnector,
   PipelineNode,
@@ -245,7 +247,9 @@ function SegmentRow({
   const isInvalid = !!stepIssue && stepIssue.kind !== "io-mismatch" && stepIssue.kind !== "cardinality-mismatch"
   const ioLinked = stepIoMismatchLinked(m.id, modules, invalid)
   const stepWarnings = warnings?.get(m.id)
-  const locked = isAutoQuoteStep(m)
+  const autoQuote = isAutoQuoteStep(m)
+  const autoStruct = isAutoStructureParseStep(m)
+  const locked = autoQuote || autoStruct
   const status = stepStatus?.get(m.id)
   const coverage = testCoverage?.get(m.id)
 
@@ -318,7 +322,7 @@ function SegmentRow({
         onClick={() => onSelect?.(m.id)}
         className={cn(
           "group relative flex w-full items-start gap-3 rounded-lg border bg-card px-3.5 py-3 text-left transition-colors",
-          locked && "border-dashed border-chart-2/50 bg-chart-2/5",
+          locked && (autoStruct ? "border-dashed border-chart-3/50 bg-chart-3/5" : "border-dashed border-chart-2/50 bg-chart-2/5"),
           isInvalid
             ? "border-destructive/70"
             : ioLinked
@@ -338,14 +342,20 @@ function SegmentRow({
           detail={
             m.kind === "input" ? (
               <>
-                <StructureLink models={models} structureId={m.outStructureId} />
+                <StructureLink models={models} structureId={inputTargetStructureId(m, modules)} />
                 <span className="text-muted-foreground/60"> · </span>
                 {inputTypeLabel(m.inputType)}
               </>
-            ) : locked ? (
+            ) : autoQuote ? (
               <>
                 <StructureLink models={models} structureId={m.inStructureId} />
                 <span className="text-muted-foreground/60"> · same model in/out</span>
+              </>
+            ) : autoStruct ? (
+              <>
+                <StructureLink models={models} structureId={m.inStructureId} />
+                <span className="text-muted-foreground/60"> → </span>
+                <StructureLink models={models} structureId={m.outStructureId} />
               </>
             ) : (
               <>
@@ -356,7 +366,8 @@ function SegmentRow({
             )
           }
         />
-        {locked && <AutoQuoteLock />}
+        {autoQuote && <AutoQuoteLock />}
+        {autoStruct && <AutoStructureParseLock />}
         {m.kind === "llm" && m.model && (
           editMode ? (
             <Badge variant="outline" className="shrink-0 font-mono text-[9px]">

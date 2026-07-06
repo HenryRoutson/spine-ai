@@ -39,7 +39,8 @@ import type {
 import { DEFAULT_MODEL } from "@/lib/types"
 import { apiJson, apiPut, formatApiError, JSON_HEADERS, readApiErrorBody } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
-import { migrateProjectModules, syncAutoQuoteSteps } from "@/lib/quote-steps"
+import { migrateProjectModules } from "@/lib/quote-steps"
+import { syncManagedPipelineSteps } from "@/lib/structure-parse-steps"
 import { stripSharedModels, stripBuiltinTypeAliases, withBuiltinTypeAliases, withSharedModels } from "@/lib/structure"
 import { mergeInferredStructuresForDoc, modelsChanged } from "@/lib/sync-doc-structures"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
@@ -224,9 +225,10 @@ function computeDocStructureSync(
   )
   if (!modelsChanged(p.models, merged)) return { nextProjects: prev.projects, changed: false }
   const models = stripSharedModels(merged)
-  const modules = syncAutoQuoteSteps(
+  const modules = syncManagedPipelineSteps(
     migrateProjectModules(p).modules,
     withSharedModels(models),
+    DEFAULT_MODEL,
   )
   return {
     nextProjects: prev.projects.map((x) => (x.id === pid ? { ...p, models, modules } : x)),
@@ -912,10 +914,10 @@ export function StoreProvider({
       const nextModels = stripSharedModels(raw)
       patchProject({
         models: nextModels,
-        modules: syncAutoQuoteSteps(project.modules, withSharedModels(nextModels)),
+        modules: syncManagedPipelineSteps(project.modules, withSharedModels(nextModels), model),
       })
     },
-    [patchProject, project],
+    [patchProject, project, model],
   )
 
   const setTypeAliases = useCallback(
@@ -930,9 +932,9 @@ export function StoreProvider({
   const setModules = useCallback(
     (m: PipelineModule[]) => {
       if (!project) return
-      patchProject({ modules: syncAutoQuoteSteps(m, project.models) })
+      patchProject({ modules: syncManagedPipelineSteps(m, project.models, model) })
     },
-    [patchProject, project],
+    [patchProject, project, model],
   )
 
   const applyProjectChanges = useCallback(
@@ -946,9 +948,9 @@ export function StoreProvider({
       const nextModels = changes.models ? stripSharedModels(changes.models) : project.models
       const modelsForSync = withSharedModels(nextModels)
       const nextModules = changes.modules
-        ? syncAutoQuoteSteps(changes.modules, modelsForSync)
+        ? syncManagedPipelineSteps(changes.modules, modelsForSync, model)
         : changes.models
-          ? syncAutoQuoteSteps(project.modules, modelsForSync)
+          ? syncManagedPipelineSteps(project.modules, modelsForSync, model)
           : undefined
 
       patchProject({
@@ -957,7 +959,7 @@ export function StoreProvider({
         ...(nextModules !== undefined ? { modules: nextModules } : {}),
       })
     },
-    [patchProject, project],
+    [patchProject, project, model],
   )
 
   const setStrategies = useCallback(

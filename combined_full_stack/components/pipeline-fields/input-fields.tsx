@@ -6,6 +6,7 @@ import {
   INPUT_TYPES,
   DOC_PARSE_MODES,
   docParseModeForModule,
+  type InputType,
   type PipelineModule,
   type StructureModel,
 } from "@/lib/types"
@@ -15,7 +16,14 @@ import {
   inputTypesForModule,
   inputTypesNeedOcr,
   inputModuleNeedsOcr,
+  inputModuleTypesAreAllJsonNative,
+  isJsonNativeInputType,
 } from "@/lib/inference-input"
+import {
+  autoStructureParseStepForInput,
+  inputTargetStructureId,
+} from "@/lib/structure-parse-steps"
+import { isBuiltinDocumentModel, withSharedModels } from "@/lib/structure"
 import {
   warningStepMessages,
   type InvalidStep,
@@ -63,49 +71,89 @@ export function InputModuleFields({
   onFixIoMismatch,
 }: InputModuleFieldsProps) {
   const inputOcrAvailable = inputModuleNeedsOcr(selected)
+  const allJsonNative = inputModuleTypesAreAllJsonNative(selected)
+  const mergedModels = withSharedModels(models)
+  const targetStructureId = inputTargetStructureId(selected, modules)
+  const targetStructure = mergedModels.find((m) => m.id === targetStructureId)
+  const autoParse = autoStructureParseStepForInput(modules, selected.id)
+  const jsonNativeTypes = INPUT_TYPES.filter((t) => isJsonNativeInputType(t.value))
+  const convertTypes = INPUT_TYPES.filter((t) => !isJsonNativeInputType(t.value))
 
   return (
     <>
       <PipelineField
         label="Input types"
-        hint={edit ? "enable PDF and/or Image to unlock Use OCR below" : undefined}
+        hint={edit ? "JSON-native types parse directly; others use a locked LLM convert step when a structure is selected" : undefined}
       >
         {edit ? (
-          <div className="flex flex-wrap gap-1.5">
-            {INPUT_TYPES.map((t) => {
-              const active = inputTypesForModule(selected).includes(t.value)
-              return (
-                <button
-                  key={t.value}
-                  type="button"
-                  onClick={() => {
-                    const current = inputTypesForModule(selected)
-                    const next = active ? current.filter((v) => v !== t.value) : [...current, t.value]
-                    if (!next.length) return
-                    const spec = next.length === 1 ? next[0]! : next
-                    const ocrOk = inputTypesNeedOcr(next)
-                    onUpdate!({
-                      inputType: spec,
-                      useOcr: ocrOk ? selected.useOcr : undefined,
-                      model: ocrOk && selected.useOcr ? selected.model : undefined,
-                      prompt: ocrOk && selected.useOcr ? selected.prompt : undefined,
-                    })
-                  }}
-                  className={cn(
-                    "rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
-                    active
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground hover:border-muted-foreground/40",
-                  )}
-                >
-                  {t.label}
-                </button>
-              )
-            })}
+          <div className="space-y-2">
+            <div>
+              <p className="mb-1 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
+                JSON-native · direct parse
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {jsonNativeTypes.map((t) => {
+                  const active = inputTypesForModule(selected).includes(t.value)
+                  return (
+                    <TypeChip
+                      key={t.value}
+                      label={t.label}
+                      active={active}
+                      tone="json"
+                      onClick={() => toggleInputType(t.value, active, selected, onUpdate!)}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+            <div>
+              <p className="mb-1 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
+                Needs LLM conversion
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {convertTypes.map((t) => {
+                  const active = inputTypesForModule(selected).includes(t.value)
+                  return (
+                    <TypeChip
+                      key={t.value}
+                      label={t.label}
+                      active={active}
+                      tone="convert"
+                      onClick={() => toggleInputType(t.value, active, selected, onUpdate!)}
+                    />
+                  )
+                })}
+              </div>
+            </div>
           </div>
         ) : (
           <StaticValue>{inputTypeLabel(selected.inputType)}</StaticValue>
         )}
+      </PipelineField>
+      <PipelineField label="Structure loading">
+        <div className="space-y-1 rounded-md border border-dashed border-border bg-secondary/20 px-3 py-2.5">
+          {allJsonNative ? (
+            <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
+              Upload → JSON parse →{" "}
+              <span className="text-foreground">{targetStructure?.name ?? "structure"}</span>
+            </p>
+          ) : targetStructure && !isBuiltinDocumentModel(targetStructure) ? (
+            <>
+              <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
+                Upload → Document →{" "}
+                <span className="text-primary">{autoParse?.label ?? "Parse to structure"}</span> →{" "}
+                <span className="text-foreground">{targetStructure.name}</span>
+              </p>
+              <p className="font-mono text-[9px] leading-relaxed text-muted-foreground/80">
+                Locked LLM step is inserted automatically — you only pick the target structure below.
+              </p>
+            </>
+          ) : (
+            <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
+              Upload → Document (raw text + filename)
+            </p>
+          )}
+        </div>
       </PipelineField>
       {inputOcrAvailable && (
         <PipelineField
@@ -248,13 +296,13 @@ export function InputModuleFields({
         {edit ? (
           <StructureModelSelect
             models={models}
-            value={selected.outStructureId}
+            value={targetStructureId}
             onValueChange={(v) => onUpdate!({ outStructureId: v })}
             invalid={invalid?.kind === "no-output"}
           />
         ) : (
           <StaticValue mono>
-            <StructureLink models={models} structureId={selected.outStructureId} />
+            <StructureLink models={models} structureId={targetStructureId} />
           </StaticValue>
         )}
         <IoMismatchFieldFix
@@ -264,5 +312,53 @@ export function InputModuleFields({
         />
       </PipelineField>
     </>
+  )
+}
+
+function toggleInputType(
+  value: InputType,
+  active: boolean,
+  selected: PipelineModule,
+  onUpdate: (patch: Partial<PipelineModule>) => void,
+) {
+  const current = inputTypesForModule(selected)
+  const next = active ? current.filter((v) => v !== value) : [...current, value]
+  if (!next.length) return
+  const spec = next.length === 1 ? next[0]! : next
+  const ocrOk = inputTypesNeedOcr(next)
+  onUpdate({
+    inputType: spec,
+    useOcr: ocrOk ? selected.useOcr : undefined,
+    model: ocrOk && selected.useOcr ? selected.model : undefined,
+    prompt: ocrOk && selected.useOcr ? selected.prompt : undefined,
+  })
+}
+
+function TypeChip({
+  label,
+  active,
+  tone,
+  onClick,
+}: {
+  label: string
+  active: boolean
+  tone: "json" | "convert"
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
+        active
+          ? tone === "json"
+            ? "border-chart-1 bg-chart-1/10 text-chart-1"
+            : "border-chart-3 bg-chart-3/10 text-chart-3"
+          : "border-border text-muted-foreground hover:border-muted-foreground/40",
+      )}
+    >
+      {label}
+    </button>
   )
 }

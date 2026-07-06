@@ -21,8 +21,13 @@ import { computeWarnings, formatInvalidMapErrors, ioMismatchInspectorFix, invali
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import { useRerenderOnEvent } from "@/lib/use-browser-pref-event"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
+import {
+  AUTO_STRUCTURE_PARSE_EXPLAINER,
+  isAutoStructureParseStep,
+  patchInputTargetStructure,
+} from "@/lib/structure-parse-steps"
 import { moduleMetrics } from "@/lib/billing"
-import { combinePairIds } from "@/lib/pipeline-layout"
+import { managedPipelinePairIds } from "@/lib/pipeline-layout"
 import { KIND_COLOR, KIND_ICON } from "@/lib/module-ui"
 import { makeModule } from "@/lib/pipeline-module-factory"
 import { MODULE_META, ModuleKind, type PipelineModule, type ModuleId } from "@/lib/types"
@@ -100,16 +105,21 @@ export function PipelineBuilder() {
   }
 
   function update(id: string, patch: Partial<PipelineModule>) {
-    setModules(
-      modules.map((m) => {
-        if (m.id !== id) return m
-        const next = { ...m, ...patch }
-        if (next.kind === "output" && patch.inStructureId) {
-          next.outStructureId = patch.inStructureId
-        }
-        return next
-      }),
-    )
+    let next = modules.map((m) => {
+      if (m.id !== id) return m
+      const updated = { ...m, ...patch }
+      if (updated.kind === "output" && patch.inStructureId) {
+        updated.outStructureId = patch.inStructureId
+      }
+      return updated
+    })
+    if (patch.outStructureId !== undefined) {
+      const step = modules.find((x) => x.id === id)
+      if (step?.kind === "input") {
+        next = patchInputTargetStructure(next, id as ModuleId, patch.outStructureId)
+      }
+    }
+    setModules(next)
   }
 
   function fixIoMismatch(moduleId: string, kind: IoMismatchFixKind) {
@@ -130,8 +140,8 @@ export function PipelineBuilder() {
 
   function remove(id: string) {
     const m = modules.find((x) => x.id === id)
-    if (m && isAutoQuoteStep(m)) return
-    const drop = new Set(combinePairIds(modules, id))
+    if (m && (isAutoQuoteStep(m) || isAutoStructureParseStep(m))) return
+    const drop = new Set(managedPipelinePairIds(modules, id))
     const next = modules.filter((m) => !drop.has(m.id))
     setModules(next)
     if (drop.has(selectedId)) setSelectedId(next[0]?.id ?? "")
@@ -139,8 +149,8 @@ export function PipelineBuilder() {
 
   function move(id: string, dir: -1 | 1) {
     const m = modules.find((x) => x.id === id)
-    if (m && isAutoQuoteStep(m)) return
-    const ids = combinePairIds(modules, id)
+    if (m && (isAutoQuoteStep(m) || isAutoStructureParseStep(m))) return
+    const ids = managedPipelinePairIds(modules, id)
     const block = ids.map((x) => modules.find((m) => m.id === x)!)
     const rest = modules.filter((m) => !ids.includes(m.id))
     const at = modules.findIndex((m) => m.id === ids[0])
@@ -283,6 +293,8 @@ export function PipelineBuilder() {
                     </span>
                     {isAutoQuoteStep(selected) ? (
                       <AutoQuoteLockTooltip />
+                    ) : isAutoStructureParseStep(selected) ? (
+                      <AutoStructureParseLockTooltip />
                     ) : editingBlocked ? null : (
                       <div className="flex items-center gap-1">
                         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, -1)}>
@@ -318,7 +330,7 @@ export function PipelineBuilder() {
                       editingBlocked ? undefined : (mismatchModuleId, kind) => fixIoMismatch(mismatchModuleId, kind)
                     }
                   />
-                  {!isAutoQuoteStep(selected) && (
+                  {!isAutoQuoteStep(selected) && !isAutoStructureParseStep(selected) && (
                     <div className="mt-4 grid grid-cols-2 gap-2">
                       <Stat
                         label="avg latency"
@@ -365,6 +377,24 @@ function AutoQuoteLockTooltip() {
       </TooltipTrigger>
       <TooltipContent side="left" className="max-w-xs text-left leading-relaxed">
         {AUTO_QUOTE_EXPLAINER}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+function AutoStructureParseLockTooltip() {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<span />}
+        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-chart-3/40 bg-chart-3/10 px-1.5 py-0.5 text-chart-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Lock className="h-3 w-3" />
+        <span className="font-mono text-[9px]">auto</span>
+      </TooltipTrigger>
+      <TooltipContent side="left" className="max-w-xs text-left leading-relaxed">
+        {AUTO_STRUCTURE_PARSE_EXPLAINER}
       </TooltipContent>
     </Tooltip>
   )

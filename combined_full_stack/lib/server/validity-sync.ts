@@ -1,20 +1,24 @@
 // AI : Pipeline step sync & migration helpers — standalone, no dependency on validity.ts I/O graph.
 import type {
+  ModelId,
   ModuleId,
   PipelineModule,
   Project,
   StructureModel,
   StructureModelId,
 } from "./types";
-import { MODULE_META, ModuleKind } from "./types";
+import { DEFAULT_MODEL, MODULE_META, ModuleKind } from "./types";
+import {
+  inputModuleTypesAreAllJsonNative,
+} from "@/lib/inference-input-core";
+import { BUILTIN_DOCUMENT_ID, isBuiltinDocumentModel, stripSharedModels, withSharedModels } from "./builtin_models";
 import { migrateCustomCodeModule } from "@/lib/custom_code_entries";
 import { resolveModuleNote } from "@/lib/pipeline-module-factory";
 import { usesPassthroughStructure, isLlmKind } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
 import { hasQuoteField, listFieldsForWrap } from "./structure";
-import { stripSharedModels, withSharedModels } from "./builtin_models";
 import { stepSpineOutType, stepEmitsList } from "./type_expr";
-import { migrateModulesSpineTypes } from "./spine_types";
+import { migrateModulesSpineTypes, patchSpineOutList, refFromType } from "./spine_types";
 import { dedupeInferredModelsByShape } from "@/lib/structure-shape";
 import { repairOrphanModelRefs } from "@/lib/structure-ref";
 import { uid } from "../id";
@@ -33,6 +37,161 @@ export function stepEmits(m: PipelineModule | undefined): StructureModelId | und
 export const AUTO_QUOTE_EXPLAINER =
   "Auto-inserted when an LLM output includes quote fields. Same model in and out (e.g. AtomicRule): the LLM returns verbatim strings; this step links them to document spans. If rules look wrong, inspect the LLM step; if quotes won't click, inspect this step.";
 
+export const AUTO_STRUCTURE_PARSE_EXPLAINER =
+  "Auto-inserted when this input accepts non-JSON file types (PDF, Word, text, web, image). Upload → Document, then this LLM maps content into your chosen structure. Excel and JSON-only inputs parse directly in the input step — no LLM needed.";
+
+export function isAutoStructureParseStep(m: PipelineModule): boolean {
+  return (
+    m.kind === ModuleKind.Llm &&
+    (m.auto === true || m.id.startsWith("mod_struct_"))
+  );
+}
+
+export function autoStructureParseStepForInput(
+  modules: PipelineModule[],
+  inputId: ModuleId,
+): PipelineModule | undefined {
+  const i = modules.findIndex((m) => m.id === inputId);
+  if (i < 0) return undefined;
+  const next = modules[i + 1];
+  if (next && isAutoStructureParseStep(next)) return next;
+  return modules.find((m) => m.id === (`mod_struct_${inputId}` as ModuleId));
+}
+
+export function inputTargetStructureId(
+  input: PipelineModule,
+  modules: PipelineModule[],
+): StructureModelId | undefined {
+  return resolveInputTargetId(input, modules);
+}
+
+export function patchInputTargetStructure(
+  modules: PipelineModule[],
+  inputId: ModuleId,
+  structureId: StructureModelId | undefined,
+): PipelineModule[] {
+  const auto = autoStructureParseStepForInput(modules, inputId);
+  if (auto) {
+    return modules.map((m) => (m.id === auto.id ? { ...m, outStructureId: structureId } : m));
+  }
+  return modules.map((m) => (m.id === inputId ? { ...m, outStructureId: structureId } : m));
+}
+
+function existingStructLlmForInput(modules: PipelineModule[], inputId: ModuleId): PipelineModule | undefined {
+  return autoStructureParseStepForInput(modules, inputId);
+}
+
+function resolveInputTargetId(m: PipelineModule, modules: PipelineModule[]): StructureModelId | undefined {
+  const existing = existingStructLlmForInput(modules, m.id);
+  if (existing?.outStructureId) return existing.outStructureId;
+  if (m.outStructureId && m.outStructureId !== BUILTIN_DOCUMENT_ID) return m.outStructureId;
+  const fromOutType = m.outType ? refFromType(m.outType) : undefined;
+  if (fromOutType && fromOutType !== BUILTIN_DOCUMENT_ID) return fromOutType;
+  return undefined;
+}
+
+function autoStructureParseStepLabel(input: PipelineModule, taken: Set<string>): string {
+  return uniqueStepLabel("Parse to structure", taken, input.label.trim() || input.id);
+}
+
+function documentInputPatch(m: PipelineModule): PipelineModule {
+  return {
+    ...m,
+    outStructureId: BUILTIN_DOCUMENT_ID,
+    ...patchSpineOutList({ ...m, outStructureId: BUILTIN_DOCUMENT_ID }, !!m.outIsList),
+  };
+}
+
+function structureSpineType(modelId: StructureModelId, isList: boolean) {
+  const base = { kind: "ref" as const, modelId };
+  return isList ? { kind: "list" as const, item: base } : base;
+}
+
+function targetInputPatch(m: PipelineModule, targetId: StructureModelId): PipelineModule {
+  return {
+    ...m,
+    outStructureId: targetId,
+    ...patchSpineOutList({ ...m, outStructureId: targetId }, !!m.outIsList),
+  };
+}
+
+// AI : non-JSON inputs emit Document; locked LLM step maps Document → user's target structure.
+export function syncAutoStructureParseSteps(
+  modules: PipelineModule[],
+  models: StructureModel[],
+  globalModel: ModelId = DEFAULT_MODEL,
+): PipelineModule[] {
+  const merged = withSharedModels(models);
+  const stripped = modules.filter((m) => !isAutoStructureParseStep(m));
+  const taken = new Set(stripped.map((m) => m.label.trim()).filter(Boolean));
+  const out: PipelineModule[] = [];
+
+  for (const m of stripped) {
+    if (m.kind !== ModuleKind.Input) {
+      out.push(m);
+      continue;
+    }
+
+    const existing = existingStructLlmForInput(modules, m.id);
+    const allJsonNative = inputModuleTypesAreAllJsonNative(m);
+
+    if (allJsonNative) {
+      const targetId = resolveInputTargetId(m, modules);
+      out.push(targetId ? targetInputPatch(m, targetId) : m);
+      continue;
+    }
+
+    const targetId = resolveInputTargetId(m, modules);
+    const target = targetId ? merged.find((x) => x.id === targetId) : undefined;
+    const wantsDocument = !target || isBuiltinDocumentModel(target);
+
+    if (!wantsDocument && target) {
+      out.push(documentInputPatch(m));
+      const preferred = existing?.label.trim();
+      const label =
+        preferred && !taken.has(preferred)
+          ? preferred
+          : autoStructureParseStepLabel(m, taken);
+      taken.add(label);
+      const listOut = !!m.outIsList;
+      out.push({
+        id: (existing?.id ?? (`mod_struct_${m.id}` as ModuleId)) as ModuleId,
+        kind: ModuleKind.Llm,
+        auto: true,
+        label,
+        note: `Auto · Document → ${target.name} · LLM maps uploaded content into your structure.`,
+        inStructureId: BUILTIN_DOCUMENT_ID,
+        outStructureId: target.id,
+        outIsList: listOut || undefined,
+        inType: structureSpineType(BUILTIN_DOCUMENT_ID, listOut),
+        outType: structureSpineType(target.id, listOut),
+        prompt:
+          existing?.prompt?.trim() ||
+          `Extract structured data from the uploaded document into the ${target.name} schema. Use only content from the document.`,
+        model: existing?.model ?? globalModel,
+        cached: true,
+        avgMs: existing?.avgMs ?? 0,
+        avgCostCents: existing?.avgCostCents ?? 0,
+      });
+      continue;
+    }
+
+    out.push(documentInputPatch(m));
+  }
+
+  return modulesEqual(modules, out) ? modules : out;
+}
+
+export function syncManagedPipelineSteps(
+  modules: PipelineModule[],
+  models: StructureModel[],
+  globalModel: ModelId = DEFAULT_MODEL,
+): PipelineModule[] {
+  return migrateModulesSpineTypes(
+    syncAutoQuoteSteps(syncAutoStructureParseSteps(modules, models, globalModel), models),
+  );
+}
+
 export function isAutoQuoteStep(m: PipelineModule): boolean {
   return (
     m.kind === "quote" &&
@@ -46,7 +205,10 @@ export function isKindDefaultLabel(m: PipelineModule): boolean {
 }
 
 export function skipDuplicateLabelCheck(m: PipelineModule): boolean {
-  return isAutoQuoteStep(m) && isKindDefaultLabel(m);
+  return (
+    (isAutoQuoteStep(m) && isKindDefaultLabel(m)) ||
+    (isAutoStructureParseStep(m) && isKindDefaultLabel(m))
+  );
 }
 
 export function uniqueStepLabel(base: string, taken: Set<string>, disambiguator?: string): string {
@@ -216,7 +378,7 @@ export function migrateProjectModules(project: Project): Project {
   );
   models = withSharedModels(models);
   const folded = foldDocToTextSteps(project.modules);
-  const quoted = syncAutoQuoteSteps(folded, models);
+  const quoted = syncManagedPipelineSteps(folded, models);
   const placed = syncAssertPlacement(quoted);
   const migrated = placed.map(migrateCustomCodeModule);
   // AI : cache is always on — normalize legacy projects that disabled it per step.

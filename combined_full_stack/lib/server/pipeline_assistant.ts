@@ -21,7 +21,7 @@ import { stripBuiltinTypeAliases } from "./builtin_types";
 import {
   computeInvalid,
   formatPipelineValidationErrors,
-  syncAutoQuoteSteps,
+  syncManagedPipelineSteps,
 } from "./validity";
 import { UsageLedger } from "./usage";
 import { createPipelineModule } from "@/lib/pipeline-module-factory";
@@ -429,9 +429,9 @@ function materializeProposal(
       : (project.typeAliases ?? []);
   let modules: PipelineModule[];
   if (hasPipelineRewrite) {
-    modules = syncAutoQuoteSteps(expandModuleSpecs(raw.modules ?? [], models, globalModel), models) ?? [];
+    modules = syncManagedPipelineSteps(expandModuleSpecs(raw.modules ?? [], models, globalModel), models, globalModel) ?? [];
   } else if (hasPipelinePatch) {
-    modules = syncAutoQuoteSteps(applyModulePatches(project.modules, raw.modulePatch!, models), models) ?? project.modules;
+    modules = syncManagedPipelineSteps(applyModulePatches(project.modules, raw.modulePatch!, models), models, globalModel) ?? project.modules;
   } else {
     modules = project.modules;
   }

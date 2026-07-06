@@ -14,7 +14,8 @@ import {
   withFieldMeta,
   zodFromModel as zodFromModelExpr,
 } from "./type_expr";
-import { InputType, type FieldType, type ModelField, type PipelineModule, type StructureModel, type StructureModelId, type TypeAlias } from "./types";
+import { inputModuleTypesAreAllJsonNative } from "@/lib/inference-input-core";
+import { type FieldType, type ModelField, type PipelineModule, type StructureModel, type StructureModelId, type TypeAlias } from "./types";
 
 export { QuoteSchema, isListFieldType } from "./type_expr";
 export type { TypeExpr } from "./type_expr";
@@ -276,7 +277,7 @@ function coerceFieldValue(
 /** @deprecated use isBuiltinDocumentModel from builtin_models */
 export const isSourceDocumentModel = isBuiltinDocumentModel;
 
-// AI : input step — parse JSON file content into the declared I/O structure when possible.
+// AI : input step — parse JSON file content into the declared I/O structure when all types are JSON-native.
 export function materializeInputDocument(
   content: string,
   docId: string,
@@ -287,10 +288,9 @@ export function materializeInputDocument(
   const out = models.find((x) => x.id === m.outStructureId);
   if (!out) return documentValueFrom(undefined, { docId, docName: hints.docName }, content);
 
-  const inputTypes = !m.inputType ? [] : Array.isArray(m.inputType) ? m.inputType : [m.inputType];
   const docHints = { ...hints, docId, sourceText: content };
 
-  if (inputTypes.includes(InputType.Json)) {
+  if (inputModuleTypesAreAllJsonNative(m)) {
     let parsed: unknown;
     try {
       parsed = JSON.parse(content);

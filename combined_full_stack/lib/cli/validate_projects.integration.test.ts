@@ -33,9 +33,9 @@ describe("bundled task examples — Structure / Pipeline UI gates", () => {
     expect(result.ok, formatValidationFailure(file, result)).toBe(true)
   })
 
-  it.each(seedFiles)("spine cli validate project passes for %s", (file) => {
+  it.each(seedFiles)("spine cli validate project passes for %s", async (file) => {
     const seedPath = resolve(SEEDS_DIR, file)
-    const result = runSpineCli(["validate", "project", seedPath])
+    const result = await runSpineCli(["validate", "project", seedPath])
     expect(result.command).toBe("validate project")
     expect(result.ok, formatValidationFailure(file, result)).toBe(true)
   })
