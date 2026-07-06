@@ -42,6 +42,8 @@ export async function POST(req: NextRequest) {
       fundingMode: body.fundingMode as SharedLinkFundingMode | undefined,
       viewerNameRequired: body.viewerNameRequired,
       spendLimitCents: body.spendLimitCents,
+      billingMultiple: body.billingMultiple,
+      flatFeeCents: body.flatFeeCents,
       defaultDocsByModule: (body.defaultDocsByModule ?? {}) as Partial<Record<ModuleId, DocId[]>>,
       store: ctx.store,
     });

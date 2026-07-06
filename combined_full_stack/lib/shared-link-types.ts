@@ -21,6 +21,8 @@ export type SharedLinkRecord = {
   defaultDocs: SharedLinkDefaultDoc[];
   spendLimitCents?: number;
   totalSpendCents: number;
+  billingMultiple: number;
+  flatFeeCents: number;
   runCount: number;
   createdAt: number;
   revoked: boolean;
@@ -35,6 +37,8 @@ export type SharedLinkPublicView = Pick<
   | "fundingMode"
   | "viewerNameRequired"
   | "defaultDocs"
+  | "billingMultiple"
+  | "flatFeeCents"
 > & {
   modules: Project["modules"];
   models: Project["models"];

@@ -4,11 +4,14 @@ import { HTTP } from "@/lib/server/api-errors";
 import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate_limit";
 import type { RateLimitKey } from "@/lib/rate_limit_config";
 import { hostedApiInvokeBodySchema, parseHostedApiId, parseRequestJson } from "@/lib/server/api_schemas";
+import { assertCanStartRun } from "@/lib/server/billing_account";
 import {
-  assertCanStartRun,
-  billRunUsage,
-  billingKeyForUser,
-} from "@/lib/server/billing_account";
+  billHostedApiRun,
+  callerFundsHostedApi,
+  hostedApiBillingKey,
+  SPINE_API_KEY_HEADER,
+  SPINE_BILLING_KEY_HEADER,
+} from "@/lib/server/hosted_api_billing";
 import {
   orderedInputModules,
   inputDocsByModuleFromAssignment,
@@ -50,7 +53,9 @@ import {
 } from "@/lib/server/hosted_apis";
 import { registerSharedProgressToken } from "@/lib/server/shared_links";
 import { logger } from "@/lib/server/server_logger";
-import { RunSource, type DocId, type HostedApiId, type ModuleId } from "@/lib/server/types";
+import { UserBillingKeyError, verifyUserBillingKey } from "@/lib/server/user_billing_keys";
+import { HostedApiFundingMode, RunSource, type DocId, type HostedApiId, type ModuleId } from "@/lib/server/types";
+import type { user_id_string } from "@/lib/server/require_auth";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -63,20 +68,40 @@ function bearerToken(req: NextRequest): string | null {
   return auth.slice(7).trim();
 }
 
+function deployApiKey(req: NextRequest): string | null {
+  return req.headers.get(SPINE_API_KEY_HEADER)?.trim() || bearerToken(req);
+}
+
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const apiId = parseHostedApiId(id);
   if (!apiId) return apiError("api not found", 404);
 
-  const key = bearerToken(req);
-  if (!key) return apiError("Authorization: Bearer <api_key> required", 401);
+  const deployKey = deployApiKey(req);
+  if (!deployKey) {
+    return apiError("Authorization: Bearer <api_key> or X-Spine-Api-Key required", 401);
+  }
 
   let api;
   try {
-    api = await verifyHostedApiKey(apiId, key);
+    api = await verifyHostedApiKey(apiId, deployKey);
   } catch (err) {
     if (err instanceof HostedApiAuthError) return apiError(err.message, 401);
     throw err;
+  }
+
+  let callerUserId: user_id_string | undefined;
+  if (callerFundsHostedApi(api.fundingMode)) {
+    const billingKeyRaw = req.headers.get(SPINE_BILLING_KEY_HEADER)?.trim();
+    if (!billingKeyRaw) {
+      return apiError("X-Spine-Billing-Key required for caller-paid APIs", 401);
+    }
+    try {
+      callerUserId = await verifyUserBillingKey(billingKeyRaw);
+    } catch (err) {
+      if (err instanceof UserBillingKeyError) return apiError(err.message, 401);
+      throw err;
+    }
   }
 
   const ip = clientIpFromHeaders(req.headers);
@@ -124,7 +149,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     resolvedByModule,
   );
 
-  const billingKey = billingKeyForUser(api.ownerId);
+  const billingKey = hostedApiBillingKey(api.ownerId, api.fundingMode, callerUserId);
   const reserveCents = api.spendLimitCents != null ? PUBLIC_RUN_SPEND_RESERVE_CENTS : 0;
   try {
     assertHostedApiCanAcceptRun(api);
@@ -135,7 +160,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     }
     const code = (err as { code?: string }).code;
     if (code === "insufficient_funds") {
-      return apiError("API owner has insufficient credit", 402, code);
+      return apiError(
+        api.fundingMode === HostedApiFundingMode.OwnerPays
+          ? "API owner has insufficient credit"
+          : "Not enough credit — top up in Billing",
+        402,
+        code,
+      );
     }
     throw err;
   }
@@ -178,7 +209,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         const billed = run.billedCents;
         if (billed > 0) {
           try {
-            await billRunUsage(billingKey, billed);
+            const bill = await billHostedApiRun(billingKey, api.ownerId, api, billed);
+            if (reserveCents > 0) {
+              const settled = await adjustHostedApiSpend(apiId, bill.totalCents - reserveCents);
+              if (!settled) {
+                invokeLog.warn(`spend limit exceeded after run — revoking api`, {
+                  apiId,
+                  billed: bill.totalCents,
+                  reserveCents,
+                });
+                await revokeHostedApi(api.ownerId, apiId);
+              }
+            } else {
+              await recordHostedApiSpend(apiId, bill.totalCents);
+            }
           } catch (billErr) {
             invokeLog.warn(`post-run billing failed — revoking api`, {
               apiId,
@@ -188,15 +232,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
             });
             await revokeHostedApi(api.ownerId, apiId);
           }
-        }
-        if (reserveCents > 0) {
-          const settled = await adjustHostedApiSpend(apiId, billed - reserveCents);
-          if (!settled) {
-            invokeLog.warn(`spend limit exceeded after run — revoking api`, { apiId, billed, reserveCents });
-            await revokeHostedApi(api.ownerId, apiId);
-          }
-        } else if (billed > 0) {
-          await recordHostedApiSpend(apiId, billed);
+        } else if (reserveCents > 0) {
+          await adjustHostedApiSpend(apiId, -reserveCents).catch(() => {});
         }
         await incrementHostedApiRequestCount(apiId);
         await finishJob(api.ownerId, jobId, { run }, jobDb);

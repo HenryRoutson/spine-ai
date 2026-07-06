@@ -1,15 +1,19 @@
 "use client"
 
 import { useCallback, useState } from "react"
+import { useRouter } from "next/navigation"
 import {
+  ArrowLeft,
   Copy,
   FolderKanban,
   Loader2,
   Pencil,
+  Play,
   Plus,
   RefreshCw,
 } from "lucide-react"
 import { useStorePicker } from "@/lib/store"
+import { clearActiveProjectSession } from "@/lib/active-project-session"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,6 +31,7 @@ import type { Project, ProjectId } from "@/lib/types"
 const LANDING_PAGE_URL = "https://www.spine-ai.dev/"
 
 export function ProjectPickerPage() {
+  const router = useRouter()
   const {
     projects,
     addProject,
@@ -103,7 +108,19 @@ export function ProjectPickerPage() {
           </div>
         </a>
         <div className="mx-1 h-6 w-px bg-border" />
-        <span className="font-mono text-[11px] text-muted-foreground">select a project</span>
+        <span className="font-mono text-[11px] text-muted-foreground">build pipelines</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto h-8 gap-1.5 font-mono text-[11px]"
+          onClick={() => {
+            clearActiveProjectSession()
+            router.push("/")
+          }}
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to run
+        </Button>
         {syncing && (
           <span className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -114,9 +131,9 @@ export function ProjectPickerPage() {
 
       <div className="flex min-h-0 flex-1 flex-col">
         <WindowHeader
-          step="Projects"
+          step="Build"
           title="Your pipelines"
-          description="Choose a project to open, or create one from a blank pipeline or example template."
+          description="Create and edit automation pipelines. To run someone else's shared link without building, go back to Run."
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -146,6 +163,28 @@ export function ProjectPickerPage() {
         />
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          <section className="mb-8 rounded-lg border border-primary/30 bg-primary/5 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium">Just want to run a shared pipeline?</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  No project needed — paste a shared link, top up in Billing, and run.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  clearActiveProjectSession()
+                  router.push("/")
+                }}
+              >
+                <Play className="h-3.5 w-3.5" />
+                Run shared links
+              </Button>
+            </div>
+          </section>
+
           {resyncMsg && (
             <p className="mb-4 rounded-md border border-border bg-secondary/30 px-3 py-2 font-mono text-[11px] text-muted-foreground">
               {resyncMsg}

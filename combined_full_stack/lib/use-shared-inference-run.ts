@@ -23,7 +23,21 @@ import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 
 export type SharedInferencePhase = "idle" | "running" | "done"
 
-export function useSharedInferenceRun(link: SharedLinkPublicView, linkId: string) {
+type SharedRunAuth = {
+  isAuthenticated: boolean
+  onAuthRequired?: () => void
+}
+
+function viewerMustSignIn(mode: SharedLinkPublicView["fundingMode"]): boolean {
+  return mode === "viewer_signs_in" || mode === "viewer_pays"
+}
+
+export function useSharedInferenceRun(
+  link: SharedLinkPublicView,
+  linkId: string,
+  auth?: SharedRunAuth,
+  onRunComplete?: () => void,
+) {
   const modules = link.modules
   const inputModules = useMemo(() => orderedInputModules(modules), [modules])
   const [inputDocs, setInputDocs] = useState<InputDocsAssignment>({})
@@ -106,7 +120,11 @@ export function useSharedInferenceRun(link: SharedLinkPublicView, linkId: string
       setError("Please enter your name")
       return
     }
-    if (link.fundingMode === "viewer_signs_in" || link.fundingMode === "viewer_pays") {
+    if (viewerMustSignIn(link.fundingMode) && !auth?.isAuthenticated) {
+      if (auth?.onAuthRequired) {
+        auth.onAuthRequired()
+        return
+      }
       window.location.href = `/login?next=${encodeURIComponent(`/run/${linkId}`)}`
       return
     }
@@ -150,6 +168,7 @@ export function useSharedInferenceRun(link: SharedLinkPublicView, linkId: string
       if (jobGen !== activeJobGenRef.current) return
       setRun(finished)
       setPhase("done")
+      onRunComplete?.()
     } catch (e) {
       if (jobGen !== activeJobGenRef.current) return
       setError((e as Error).message)

@@ -4,11 +4,7 @@ import { cookies } from "next/headers";
 import { apiError } from "@/lib/server/api_context";
 import { HTTP, unknownJob } from "@/lib/server/api-errors";
 import { parseRequestJson, parseSharedLinkId, sharedLinkClientStepBodySchema } from "@/lib/server/api_schemas";
-import { billRunUsage } from "@/lib/server/billing_account";
-import {
-  sharedLinkBillingKey,
-  viewerFundsSharedRun,
-} from "@/lib/server/shared_link_billing";
+import { billSharedLinkRun, sharedLinkBillingKey, viewerFundsSharedRun } from "@/lib/server/shared_link_billing";
 import { isAuthSession, requireAuth, type user_id_string } from "@/lib/server/require_auth";
 import { orderedInputModules } from "@/lib/inference-input";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
@@ -115,8 +111,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         await sharerStore.flush();
         if (run.billedCents > 0) {
           try {
-            await billRunUsage(billingKey, run.billedCents);
-            await recordSharedLinkSpend(link.id, run.billedCents);
+            const bill = await billSharedLinkRun(billingKey, link.ownerId, link, run.billedCents);
+            await recordSharedLinkSpend(link.id, bill.totalCents);
           } catch (billErr) {
             apiLog.warn(`resume billing failed`, { jobId, error: (billErr as Error).message });
           }

@@ -421,6 +421,11 @@ export enum SharedLinkFundingMode {
   ViewerSignsIn = "viewer_signs_in",
 }
 
+export enum HostedApiFundingMode {
+  OwnerPays = "owner_pays",
+  CallerPays = "caller_pays",
+}
+
 export enum RunStatus {
   Ok = "ok",
   Error = "error",

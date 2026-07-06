@@ -54,7 +54,6 @@ import {
 import { mostRecentlyOpenedProject } from "@/lib/project-active"
 import { dedupeDocsNewestByName } from "@/lib/project-docs"
 import { readStateSnapshot, writeStateSnapshot } from "@/lib/state-snapshot-cache"
-import { NoProjectsPage } from "@/components/no-projects-page"
 import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
 import { setDemoMode } from "@/lib/demo-mode"
 
@@ -94,6 +93,9 @@ export type BillingAccountView = {
   subCentsPerMonth: number
   billingCapCents: number
   creditHistory: BillingCreditHistoryEntry[]
+  earningsBalanceCents: number
+  earningsTotalCents: number
+  earningsWithdrawnCents: number
 }
 
 const DEMO_BILLING: BillingAccountView = {
@@ -107,6 +109,9 @@ const DEMO_BILLING: BillingAccountView = {
   subCentsPerMonth: 2900,
   billingCapCents: 50_000,
   creditHistory: [],
+  earningsBalanceCents: 0,
+  earningsTotalCents: 0,
+  earningsWithdrawnCents: 0,
 }
 
 async function fetchStateOnce(route: string): Promise<ServerState> {
@@ -204,6 +209,23 @@ export interface ProjectPickerStoreState {
   syncing: boolean
 }
 
+// AI : run shared links + billing without opening a builder project first.
+export interface ConsumerStoreState {
+  projects: Project[]
+  billingRuns: PipelineRun[]
+  billingAccount: BillingAccountView | null
+  refreshBilling: () => Promise<void>
+  model: string
+  setModel: (m: string) => void
+  modelOptions: ModelOptionPublic[]
+  openProject: (id: ProjectId) => void
+  addProject: () => void
+  cloneFromTemplate: (templateId: string) => Promise<Project>
+  saveError: string | null
+  clearSaveError: () => void
+  stateSyncing: boolean
+}
+
 type PrefetchEntry = {
   promise: Promise<ServerState>
   data?: ServerState
@@ -238,6 +260,7 @@ function computeDocStructureSync(
 }
 
 const StoreContext = createContext<StoreState | null>(null)
+const ConsumerStoreContext = createContext<ConsumerStoreState | null>(null)
 const ProjectPickerContext = createContext<ProjectPickerStoreState | null>(null)
 
 export function StoreProvider({
@@ -295,7 +318,13 @@ export function StoreProvider({
       return
     }
     const data = await apiJson<BillingAccountView>(API_ROUTES.billing)
-    setBillingAccount({ ...data, creditHistory: data.creditHistory ?? [] })
+    setBillingAccount({
+      ...data,
+      creditHistory: data.creditHistory ?? [],
+      earningsBalanceCents: data.earningsBalanceCents ?? 0,
+      earningsTotalCents: data.earningsTotalCents ?? 0,
+      earningsWithdrawnCents: data.earningsWithdrawnCents ?? 0,
+    })
   }, [mode])
 
   const fetchState = useCallback(async (projectId: string) => {
@@ -361,12 +390,10 @@ export function StoreProvider({
         })
         return { ...data, projects: mergedProjects, docs: dedupeDocsNewestByName(data.docs) }
       })
-      // AI : workspace — honor session project when valid; fall back when demo/build ids leaked into session.
+      // AI : workspace — only auto-open a project when sessionStorage says so (returning builders).
       if (mode === "workspace") {
         const resolved =
-          (projectId && visibleProjects.some((p) => p.id === projectId) ? projectId : null) ??
-          mostRecentlyOpenedProject(visibleProjects)?.id ??
-          ""
+          projectId && visibleProjects.some((p) => p.id === projectId) ? projectId : ""
         setActiveProjectId(resolved)
         if (resolved) writeActiveProjectSession(resolved as ProjectId)
         else clearActiveProjectSession()
@@ -661,7 +688,6 @@ export function StoreProvider({
           else if (emptied) {
             setActiveProjectId("")
             clearActiveProjectSession()
-            if (mode === "workspace") window.location.assign("/projects")
           }
         })
         .catch((err) => {
@@ -1073,6 +1099,39 @@ export function StoreProvider({
     selectActiveProject,
   ])
 
+  const consumerValue = useMemo<ConsumerStoreState | null>(() => {
+    if (!state) return null
+    return {
+      projects: migratedProjects,
+      billingRuns,
+      billingAccount,
+      refreshBilling,
+      model,
+      setModel,
+      modelOptions: state.modelOptions,
+      openProject,
+      addProject,
+      cloneFromTemplate,
+      saveError,
+      clearSaveError,
+      stateSyncing,
+    }
+  }, [
+    state,
+    migratedProjects,
+    billingRuns,
+    billingAccount,
+    refreshBilling,
+    model,
+    setModel,
+    addProject,
+    cloneFromTemplate,
+    openProject,
+    saveError,
+    clearSaveError,
+    stateSyncing,
+  ])
+
   const pickerValue = useMemo<ProjectPickerStoreState | null>(() => {
     if (!state) return null
     return {
@@ -1158,16 +1217,12 @@ export function StoreProvider({
     )
   }
 
-  // AI : zero projects is valid — replace the whole app shell (no sub tabs) with an empty-state page.
-  if (mode !== "demo" && migratedProjects.length === 0 && (stateSyncing || state)) {
+  // AI : no active project — consumer shell (shared links + billing); builder tabs need openProject().
+  if (mode === "workspace" && state && !project && consumerValue) {
     return (
       <>
         {saveErrorBanner}
-        <NoProjectsPage
-          syncing={stateSyncing}
-          onCreateBlank={addProject}
-          onCloneTemplate={cloneFromTemplate}
-        />
+        <ConsumerStoreContext.Provider value={consumerValue}>{children}</ConsumerStoreContext.Provider>
       </>
     )
   }
@@ -1190,6 +1245,16 @@ export function StoreProvider({
 
 export function useOptionalStore() {
   return useContext(StoreContext)
+}
+
+export function useOptionalConsumerStore() {
+  return useContext(ConsumerStoreContext)
+}
+
+export function useConsumerStore() {
+  const ctx = useContext(ConsumerStoreContext)
+  if (!ctx) throw new Error("useConsumerStore must be used within consumer StoreProvider")
+  return ctx
 }
 
 export function useStore() {

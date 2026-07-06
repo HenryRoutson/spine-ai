@@ -7,6 +7,7 @@ projects
 structure 
 pipeline 
 inference 
+share
 logging
 documents 
 billing 
@@ -297,6 +298,16 @@ please add the ability to put spending limits on shared links
 you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.
 you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.and you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.
 
+
+# Share 
+you should be able to share links and APIs, see what shared instances currently exist.
+links should have the inference UI to the current pipeline.
+you should be able to determine the pricing of these APIs,
+and make money off of this into a seperate account than your credits.
+
+you need to able to put in a billing multiple, which is how much the llm costs are, and an option for a flat fee for each call.
+
+when you share a link with someone, they get a shared with me view, which lists off 
 
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.

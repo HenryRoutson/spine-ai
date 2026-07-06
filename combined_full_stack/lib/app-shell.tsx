@@ -10,6 +10,7 @@ export type AppWindowId =
   | "pipeline"
   | "testing"
   | "inference"
+  | "share"
   | "logging"
   | "cache"
   | "documents"
@@ -29,6 +30,9 @@ interface AppShellState {
   focusStructureId: StructureModelId | null
   openStructure: (structureId?: StructureModelId) => void
   clearFocusStructure: () => void
+  activeSharedLinkId: string | null
+  openSharedRun: (linkId: string) => void
+  clearSharedRun: () => void
 }
 
 const AppShellContext = createContext<AppShellState | null>(null)
@@ -38,6 +42,14 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   const [focusDocId, setFocusDocId] = useState<DocId | null>(null)
   const [focusRunId, setFocusRunId] = useState<string | null>(null)
   const [focusStructureId, setFocusStructureId] = useState<StructureModelId | null>(null)
+  const [activeSharedLinkId, setActiveSharedLinkId] = useState<string | null>(null)
+
+  const openSharedRun = useCallback((linkId: string) => {
+    setActiveSharedLinkId(linkId)
+    setActiveWindow("share")
+  }, [])
+
+  const clearSharedRun = useCallback(() => setActiveSharedLinkId(null), [])
 
   const openDocuments = useCallback((docId?: DocId) => {
     setFocusDocId(docId ?? null)
@@ -74,6 +86,9 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         focusStructureId,
         openStructure,
         clearFocusStructure,
+        activeSharedLinkId,
+        openSharedRun,
+        clearSharedRun,
       }}
     >
       {children}

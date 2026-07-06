@@ -117,7 +117,7 @@ export function Logging() {
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="05 / Logging"
+        step="06 / Logging"
         title="Run History"
         description="Every inference run is recorded with a full per-step trace, token counts, and cost."
       />

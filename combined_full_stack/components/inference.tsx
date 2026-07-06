@@ -58,9 +58,6 @@ import {
 } from "@/components/inference/inference-run-chrome"
 import { InferenceStepTracePanel } from "@/components/inference/inference-step-trace-panel"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
-import { ShareLinkDialog } from "@/components/share-link-dialog"
-import { HostApiDialog } from "@/components/host-api-dialog"
-import { DeploymentsPanel } from "@/components/deployments-panel"
 import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 import { timeAgo } from "@/lib/time-ago"
 import { useRerenderOnEvent } from "@/lib/use-browser-pref-event"
@@ -144,7 +141,6 @@ export function Inference() {
   const [selectedId, setSelectedId] = useState<DocId | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [creatingSetup, setCreatingSetup] = useState(false)
-  const [deployRefreshToken, setDeployRefreshToken] = useState(0)
   // AI : when inputs are loaded from a test preset, assert against that file after the run.
   const [linkedTest, setLinkedTest] = useState<PresetApplyMeta | null>(null)
   const { width: sidebarWidth, setWidth: setSidebarWidth, commitWidth: commitSidebarWidth } =
@@ -349,19 +345,6 @@ export function Inference() {
               )}
               New setup
             </Button>
-            <ShareLinkDialog
-              project={project}
-              docs={docs}
-              inferenceInputDocIds={inferenceInputDocIds}
-              onCreated={() => setDeployRefreshToken((n) => n + 1)}
-            />
-            <HostApiDialog
-              project={project}
-              docs={docs}
-              inferenceInputDocIds={inferenceInputDocIds}
-              onCreated={() => setDeployRefreshToken((n) => n + 1)}
-            />
-            <DeploymentsPanel refreshToken={deployRefreshToken} />
             {run.phase !== "idle" ? (
               <Button variant="outline" size="sm" className="bg-transparent" onClick={() => { setLinkedTest(null); run.reset() }} disabled={run.phase === "running"}>
                 <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset

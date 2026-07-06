@@ -6,8 +6,9 @@ import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate_limit";
 import type { RateLimitKey } from "@/lib/rate_limit_config";
 import { secureSessionCookieOptions } from "@/lib/server/cookie_options";
 import { parseRequestJson, parseSharedLinkId, sharedLinkRunBodySchema } from "@/lib/server/api_schemas";
-import { assertCanStartRun, billRunUsage } from "@/lib/server/billing_account";
+import { assertCanStartRun } from "@/lib/server/billing_account";
 import {
+  billSharedLinkRun,
   sharedLinkBillingKey,
   viewerFundsSharedRun,
 } from "@/lib/server/shared_link_billing";
@@ -261,7 +262,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         const billed = run.billedCents;
         if (billed > 0) {
           try {
-            await billRunUsage(billingKey, billed);
+            const bill = await billSharedLinkRun(billingKey, link.ownerId, link, billed);
+            if (reserveCents > 0) {
+              const settled = await adjustSharedLinkSpend(link.id, bill.totalCents - reserveCents);
+              if (!settled) {
+                runLog.warn(`spend limit exceeded after run — revoking link`, {
+                  linkId: link.id,
+                  billed: bill.totalCents,
+                  reserveCents,
+                });
+                await revokeSharedLink(link.ownerId, link.id);
+              }
+            } else {
+              await recordSharedLinkSpend(link.id, bill.totalCents);
+            }
           } catch (billErr) {
             runLog.warn(`post-run billing failed — revoking link`, {
               linkId: link.id,
@@ -271,19 +285,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
             });
             await revokeSharedLink(link.ownerId, link.id);
           }
-        }
-        if (reserveCents > 0) {
-          const settled = await adjustSharedLinkSpend(link.id, billed - reserveCents);
-          if (!settled) {
-            runLog.warn(`spend limit exceeded after run — revoking link`, {
-              linkId: link.id,
-              billed,
-              reserveCents,
-            });
-            await revokeSharedLink(link.ownerId, link.id);
-          }
-        } else if (billed > 0) {
-          await recordSharedLinkSpend(link.id, billed);
+        } else if (reserveCents > 0) {
+          await adjustSharedLinkSpend(link.id, -reserveCents).catch(() => {});
         }
         await incrementSharedLinkRunCount(link.id);
         await finishJob(link.ownerId, jobId, { run }, jobDb);

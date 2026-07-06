@@ -313,6 +313,8 @@ export const createSharedLinkBodySchema = z
     fundingMode: z.enum(["sharer_pays", "viewer_pays", "viewer_signs_in"]).optional(),
     viewerNameRequired: z.boolean().optional(),
     spendLimitCents: z.number().min(0).optional(),
+    billingMultiple: z.number().min(1).max(100).optional(),
+    flatFeeCents: z.number().min(0).max(100_000).optional(),
     defaultDocsByModule: inputDocsByModuleSchema,
   })
   .strict();
@@ -337,6 +339,9 @@ export const createHostedApiBodySchema = z
   .object({
     projectId: projectIdSchema,
     defaultModel: z.string().max(128).optional(),
+    fundingMode: z.enum(["owner_pays", "caller_pays"]).optional(),
+    billingMultiple: z.number().min(1).max(100).optional(),
+    flatFeeCents: z.number().min(0).max(100_000).optional(),
     spendLimitCents: z.number().min(0).optional(),
     defaultDocsByModule: inputDocsByModuleSchema,
   })

@@ -14,7 +14,12 @@ import { hashContent, type Store } from "./store";
 import { migrateProjectModules } from "./validity";
 import { isMissingSchemaError } from "./supabase_store";
 import { LOCAL_DEV_USER_ID, isLocalDevMode, type user_id_string } from "./require_auth";
-import { logger } from "./server_logger";
+import {
+  assertValidSharedLinkPricing,
+  billingMultipleFromLegacyMarkupBps,
+  normalizeBillingMultiple,
+  normalizeFlatFeeCents,
+} from "@/lib/server/billable_pricing";
 import {
   SharedLinkFundingMode,
   type DocId,
@@ -25,6 +30,7 @@ import {
   type ProjectId,
   type SharedLinkId,
 } from "./types";
+import { logger } from "./server_logger";
 import type { SharedLinkDefaultDoc, SharedLinkRecord } from "@/lib/shared-link-types";
 
 export type { SharedLinkDefaultDoc, SharedLinkRecord };
@@ -146,8 +152,19 @@ export function newSessionId(): string {
 function loadLocalLink(id: SharedLinkId): StoredSharedLink | null {
   const path = linkFile(id);
   if (!existsSync(path)) return null;
-  const row = JSON.parse(readFileSync(path, "utf8")) as StoredSharedLink;
-  return { ...row, totalSpendCents: row.totalSpendCents ?? 0 };
+  const row = JSON.parse(readFileSync(path, "utf8")) as StoredSharedLink & {
+    markupBps?: number;
+    markupFixedCents?: number;
+  };
+  return {
+    ...row,
+    totalSpendCents: row.totalSpendCents ?? 0,
+    billingMultiple: normalizeBillingMultiple(
+      row.billingMultiple ??
+        billingMultipleFromLegacyMarkupBps(row.markupBps),
+    ),
+    flatFeeCents: normalizeFlatFeeCents(row.flatFeeCents ?? row.markupFixedCents ?? 0),
+  };
 }
 
 function saveLocalLink(row: StoredSharedLink): void {
@@ -183,6 +200,14 @@ async function loadSupabaseLink(id: SharedLinkId): Promise<StoredSharedLink | nu
     spendLimitCents:
       data.spend_limit_cents != null ? Number(data.spend_limit_cents) : undefined,
     totalSpendCents: Number(data.total_spend_cents ?? 0),
+    billingMultiple: normalizeBillingMultiple(
+      data.billing_multiple != null
+        ? Number(data.billing_multiple)
+        : billingMultipleFromLegacyMarkupBps(Number(data.markup_bps ?? 0)),
+    ),
+    flatFeeCents: normalizeFlatFeeCents(
+      Number(data.markup_fixed_cents ?? 0),
+    ),
     runCount: data.run_count ?? 0,
     createdAt: data.created_at,
     revoked: data.revoked,
@@ -229,6 +254,12 @@ export async function listSharedLinksForOwner(ownerId: user_id_string): Promise<
       spendLimitCents:
         row.spend_limit_cents != null ? Number(row.spend_limit_cents) : undefined,
       totalSpendCents: Number(row.total_spend_cents ?? 0),
+      billingMultiple: normalizeBillingMultiple(
+        row.billing_multiple != null
+          ? Number(row.billing_multiple)
+          : billingMultipleFromLegacyMarkupBps(Number(row.markup_bps ?? 0)),
+      ),
+      flatFeeCents: normalizeFlatFeeCents(Number(row.markup_fixed_cents ?? 0)),
       runCount: row.run_count ?? 0,
       createdAt: row.created_at,
       revoked: row.revoked,
@@ -248,6 +279,8 @@ function toPublicRecord(row: StoredSharedLink): SharedLinkRecord {
     defaultDocs: row.defaultDocs,
     spendLimitCents: row.spendLimitCents,
     totalSpendCents: row.totalSpendCents,
+    billingMultiple: row.billingMultiple,
+    flatFeeCents: row.flatFeeCents,
     runCount: row.runCount,
     createdAt: row.createdAt,
     revoked: row.revoked,
@@ -261,12 +294,19 @@ export type PublishSharedLinkInput = {
   fundingMode?: SharedLinkFundingMode;
   viewerNameRequired?: boolean;
   spendLimitCents?: number;
+  billingMultiple?: number;
+  flatFeeCents?: number;
   defaultDocsByModule: Partial<Record<ModuleId, DocId[]>>;
   store: Store;
 };
 
 export async function publishSharedLink(input: PublishSharedLinkInput): Promise<SharedLinkRecord> {
   const id = newSharedLinkId();
+  const fundingMode = input.fundingMode ?? SharedLinkFundingMode.SharerPays;
+  const billingMultiple = normalizeBillingMultiple(input.billingMultiple);
+  const flatFeeCents = normalizeFlatFeeCents(input.flatFeeCents);
+  assertValidSharedLinkPricing(fundingMode, billingMultiple, flatFeeCents);
+
   const snapshot = migrateProjectModules(structuredClone(input.project));
   const defaultDocs: SharedLinkDefaultDoc[] = [];
   mkdirSync(defaultDocsDir(id), { recursive: true });
@@ -309,11 +349,13 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     description: undefined,
     snapshot,
     defaultModel: input.defaultModel,
-    fundingMode: input.fundingMode ?? SharedLinkFundingMode.SharerPays,
+    fundingMode,
     viewerNameRequired: input.viewerNameRequired ?? false,
     spendLimitCents:
       input.spendLimitCents != null ? toExactSpendCents(input.spendLimitCents) : undefined,
     totalSpendCents: 0,
+    billingMultiple,
+    flatFeeCents,
     defaultDocs,
     runCount: 0,
     createdAt: Date.now(),
@@ -340,6 +382,9 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     viewer_name_required: row.viewerNameRequired,
     spend_limit_cents: row.spendLimitCents ?? null,
     total_spend_cents: row.totalSpendCents,
+    billing_multiple: row.billingMultiple,
+    markup_fixed_cents: row.flatFeeCents,
+    markup_bps: 0,
     revoked: false,
     run_count: 0,
     created_at: row.createdAt,
@@ -492,6 +537,8 @@ export function publicLinkView(link: StoredSharedLink) {
     defaultModel: link.defaultModel,
     fundingMode: link.fundingMode,
     viewerNameRequired: link.viewerNameRequired,
+    billingMultiple: link.billingMultiple,
+    flatFeeCents: link.flatFeeCents,
     defaultDocs: link.defaultDocs.map((d) => ({ moduleId: d.moduleId, filename: d.filename })),
     modules: link.snapshot.modules.map(sanitizeModuleForPublic),
     models: link.snapshot.models,

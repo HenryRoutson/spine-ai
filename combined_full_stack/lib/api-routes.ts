@@ -5,6 +5,8 @@ export const API_ROUTES = {
   billing: "/api/billing",
   billingConfirm: "/api/billing/confirm",
   billingCheckout: "/api/billing/checkout",
+  billingEarningsWithdraw: "/api/billing/earnings/withdraw",
+  billingKeys: "/api/billing/keys",
   billingWebhook: "/api/billing/webhook",
   projects: "/api/projects",
   project: (id: string) => `/api/projects/${id}`,
