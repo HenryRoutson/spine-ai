@@ -19,6 +19,7 @@ import {
   collectInferenceInputIssues,
   inferenceInputIssueMessage,
 } from "@/lib/inference-validity";
+import { PUBLIC_RUN_SPEND_RESERVE_CENTS } from "@/lib/billing_config";
 import { hostedApiRunNotes } from "@/lib/hosted-api-types";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
@@ -34,6 +35,7 @@ import {
   withJobLogging,
 } from "@/lib/server/run_jobs";
 import {
+  adjustHostedApiSpend,
   assertHostedApiCanAcceptRun,
   HostedApiAuthError,
   HostedApiSpendLimitError,
@@ -41,14 +43,19 @@ import {
   openStoreForUser,
   overlayStoreForHostedRun,
   recordHostedApiSpend,
+  reserveHostedApiSpend,
   resolveHostedApiAssignment,
+  revokeHostedApi,
   verifyHostedApiKey,
 } from "@/lib/server/hosted_apis";
 import { registerSharedProgressToken } from "@/lib/server/shared_links";
+import { logger } from "@/lib/server/server_logger";
 import { RunSource, type DocId, type HostedApiId, type ModuleId } from "@/lib/server/types";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
+
+const invokeLog = logger("api:hosted-apis:invoke");
 
 function bearerToken(req: NextRequest): string | null {
   const auth = req.headers.get("authorization");
@@ -118,6 +125,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   );
 
   const billingKey = billingKeyForUser(api.ownerId);
+  const reserveCents = api.spendLimitCents != null ? PUBLIC_RUN_SPEND_RESERVE_CENTS : 0;
   try {
     assertHostedApiCanAcceptRun(api);
     await assertCanStartRun(billingKey);
@@ -130,6 +138,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return apiError("API owner has insufficient credit", 402, code);
     }
     throw err;
+  }
+  if (reserveCents > 0) {
+    const reserved = await reserveHostedApiSpend(apiId, reserveCents);
+    if (!reserved) {
+      return apiError("This API has reached its spending limit.", 402, "spend_limit_reached");
+    }
   }
 
   if (countActiveJobs(api.ownerId) >= MAX_CONCURRENT_RUNS_PER_USER) {
@@ -161,17 +175,35 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           },
         });
         await ownerStore.flush();
-        if (run.billedCents > 0) {
+        const billed = run.billedCents;
+        if (billed > 0) {
           try {
-            await billRunUsage(billingKey, run.billedCents);
-            await recordHostedApiSpend(apiId, run.billedCents);
-          } catch {
-            /* post-run billing */
+            await billRunUsage(billingKey, billed);
+          } catch (billErr) {
+            invokeLog.warn(`post-run billing failed — revoking api`, {
+              apiId,
+              jobId,
+              billed,
+              error: (billErr as Error).message,
+            });
+            await revokeHostedApi(api.ownerId, apiId);
           }
+        }
+        if (reserveCents > 0) {
+          const settled = await adjustHostedApiSpend(apiId, billed - reserveCents);
+          if (!settled) {
+            invokeLog.warn(`spend limit exceeded after run — revoking api`, { apiId, billed, reserveCents });
+            await revokeHostedApi(api.ownerId, apiId);
+          }
+        } else if (billed > 0) {
+          await recordHostedApiSpend(apiId, billed);
         }
         await incrementHostedApiRequestCount(apiId);
         await finishJob(api.ownerId, jobId, { run }, jobDb);
       } catch (err) {
+        if (reserveCents > 0 && !(err instanceof PipelinePausedError)) {
+          await adjustHostedApiSpend(apiId, -reserveCents).catch(() => {});
+        }
         if (err instanceof PipelinePausedError) {
           await pauseJob(api.ownerId, jobId, err.checkpoint, jobDb);
           return;

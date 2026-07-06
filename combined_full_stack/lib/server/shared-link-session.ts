@@ -9,6 +9,10 @@ import { DocLabel } from "./types";
 import { InputType, type DocId, type DocRef, type ModuleId, type SharedLinkId } from "./types";
 import type { SharedLinkDefaultDoc } from "@/lib/shared-link-types";
 
+// AI : per-session caps — limits storage exhaustion on public shared-link uploads.
+export const MAX_SHARED_SESSION_DOCS = 30;
+export const MAX_SHARED_SESSION_BYTES = 100 * 1024 * 1024;
+
 function linksDir(): string {
   return join(dataDir(), "shared_links");
 }
@@ -42,6 +46,21 @@ function readSessionDocs(linkId: SharedLinkId, sessionId: string): SessionDocMet
 function writeSessionDocs(linkId: SharedLinkId, sessionId: string, docs: SessionDocMeta[]): void {
   mkdirSync(sessionDocsDir(linkId, sessionId), { recursive: true });
   writeFileSync(sessionMetaPath(linkId, sessionId), JSON.stringify(docs, null, 2));
+}
+
+export function sessionUploadCount(linkId: SharedLinkId, sessionId: string): number {
+  return readSessionDocs(linkId, sessionId).length;
+}
+
+export function sessionUploadBytes(linkId: SharedLinkId, sessionId: string): number {
+  const dir = sessionDocsDir(linkId, sessionId);
+  if (!existsSync(dir)) return 0;
+  let total = 0;
+  for (const meta of readSessionDocs(linkId, sessionId)) {
+    const textPath = join(dir, `${meta.id}.txt`);
+    if (existsSync(textPath)) total += readFileSync(textPath).byteLength;
+  }
+  return total;
 }
 
 export function loadDefaultDocContent(

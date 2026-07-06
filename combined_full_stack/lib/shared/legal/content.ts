@@ -218,6 +218,9 @@ export const COOKIE_SECTIONS: LegalSection[] = [
       "Some features — including the landing page demo and rate limiting — process IP addresses and request metadata on our servers without storing them in browser cookies.",
       "See our Privacy Policy for details and your rights.",
     ],
+  },
+  {
+    id: "analytics",
     title: "Analytics (optional)",
     body: [
       "We do not currently load third-party analytics scripts.",

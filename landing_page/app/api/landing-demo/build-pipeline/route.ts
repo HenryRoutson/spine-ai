@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkLandingProxyRateLimit, clientIpFromRequest } from "@/lib/rate_limit";
 
 type SpineApiUrl = string;
+
+const LANDING_PROXY_CLIENT_IP_HEADER = "x-spine-client-ip";
+const LANDING_PROXY_SECRET_HEADER = "x-spine-proxy-secret";
 
 function spineApiUrl(): SpineApiUrl {
   return (
@@ -16,26 +20,29 @@ function unreachableError(host: SpineApiUrl): string {
   return `Couldn't reach the Spine app at ${host}. The landing page calls that server to build your pipeline — start it from combined_full_stack (npm run dev, usually port 3000). If the app runs elsewhere, set SPINE_API_URL on the landing page to match.`;
 }
 
-function clientIp(req: NextRequest): string {
-  const forwarded = req.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  return req.headers.get("x-real-ip")?.trim() ?? "127.0.0.1";
-}
-
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  const ip = clientIpFromRequest(req.headers);
+  const limited = checkLandingProxyRateLimit(ip);
+  if (!limited.ok) {
+    return NextResponse.json(
+      { error: "Too many requests — try again shortly.", code: "rate_limited" },
+      { status: 429, headers: { "Retry-After": String(limited.retryAfterSec) } },
+    );
+  }
+
   const host = spineApiUrl();
   const url = `${host}/api/landing-demo/build-pipeline`;
+  const proxySecret = process.env.LANDING_DEMO_PROXY_SECRET?.trim();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    [LANDING_PROXY_CLIENT_IP_HEADER]: ip,
+  };
+  if (proxySecret) headers[LANDING_PROXY_SECRET_HEADER] = proxySecret;
 
   try {
     const res = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Forwarded-For": clientIp(req),
-      },
+      headers,
       body: await req.text(),
     });
     const body = await res.text();

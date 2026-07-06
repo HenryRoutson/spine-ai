@@ -13,7 +13,8 @@ export type RateLimitTier =
   | "billing"
   | "shared_run"
   | "hosted_api"
-  | "landing_demo_build";
+  | "landing_demo_build"
+  | "shared_upload";
 export type RateLimitKey = string & { __brand: "RateLimitKey" };
 
 export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number }> = {
@@ -34,6 +35,8 @@ export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number 
   hosted_api: { windowMs: 600_000, max: 30 },
   // AI : landing pipeline builds — budget-gated; IP capped alongside budget.
   landing_demo_build: { windowMs: 600_000, max: 12 },
+  // AI : per-link session uploads — caps storage exhaustion on public shared links.
+  shared_upload: { windowMs: 600_000, max: 10 },
 };
 
 // AI : default production (Upstash); set RATE_LIMIT_BACKEND=memory for local dev without Redis.
@@ -60,5 +63,6 @@ export function publicApiTier(pathname: string): RateLimitTier | null {
   if (/\/run$/.test(pathname)) return "llm";
   if (/\/progress$/.test(pathname)) return "poll";
   if (/\/client-step$/.test(pathname)) return "default";
+  if (/\/docs$/.test(pathname)) return "shared_upload";
   return "public";
 }

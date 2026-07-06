@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { PUBLIC_RUN_SPEND_RESERVE_CENTS } from "@/lib/billing_config";
 import { uid } from "@/lib/id";
 import type { HostedApiRecord } from "@/lib/hosted-api-types";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
@@ -327,6 +328,62 @@ export async function incrementHostedApiRequestCount(id: HostedApiId): Promise<v
     .from("hosted_apis")
     .update({ request_count: (data.request_count ?? 0) + 1 })
     .eq("id", id);
+}
+
+export { PUBLIC_RUN_SPEND_RESERVE_CENTS as HOSTED_API_RUN_RESERVE_CENTS };
+
+function reserveLocalHostedApiSpend(id: HostedApiId, cents: number): boolean {
+  const api = loadLocalApi(id);
+  if (!api || api.revoked) return false;
+  const next = toExactSpendCents((api.totalSpendCents ?? 0) + cents);
+  if (api.spendLimitCents != null && next > api.spendLimitCents) return false;
+  api.totalSpendCents = next;
+  saveLocalApi(api);
+  return true;
+}
+
+function adjustLocalHostedApiSpend(id: HostedApiId, deltaCents: number): boolean {
+  const api = loadLocalApi(id);
+  if (!api || api.revoked) return false;
+  const next = toExactSpendCents(Math.max(0, (api.totalSpendCents ?? 0) + deltaCents));
+  if (api.spendLimitCents != null && next > api.spendLimitCents) return false;
+  api.totalSpendCents = next;
+  saveLocalApi(api);
+  return true;
+}
+
+export async function reserveHostedApiSpend(id: HostedApiId, cents: number): Promise<boolean> {
+  const reserved = toExactSpendCents(cents);
+  if (reserved <= 0) return true;
+  if (reserveLocalHostedApiSpend(id, reserved)) return true;
+  const admin = await createAdminClient();
+  if (!admin) return false;
+  const { data, error } = await admin.rpc("try_reserve_hosted_api_spend", {
+    p_api_id: id,
+    p_cents: reserved,
+  });
+  if (error) {
+    apiLog.warn(`try_reserve_hosted_api_spend failed`, { id, error: error.message });
+    return false;
+  }
+  return Boolean(data);
+}
+
+export async function adjustHostedApiSpend(id: HostedApiId, deltaCents: number): Promise<boolean> {
+  const delta = toExactSpendCents(deltaCents);
+  if (delta === 0) return true;
+  if (adjustLocalHostedApiSpend(id, delta)) return true;
+  const admin = await createAdminClient();
+  if (!admin) return false;
+  const { data, error } = await admin.rpc("adjust_hosted_api_spend", {
+    p_api_id: id,
+    p_delta_cents: delta,
+  });
+  if (error) {
+    apiLog.warn(`adjust_hosted_api_spend failed`, { id, error: error.message });
+    return false;
+  }
+  return Boolean(data);
 }
 
 export async function recordHostedApiSpend(id: HostedApiId, cents: number): Promise<void> {

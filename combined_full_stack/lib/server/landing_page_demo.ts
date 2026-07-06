@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   LANDING_DEMO_MIN_BALANCE_CENTS,
   LANDING_DEMO_PREVIEW_CHARS,
+  LANDING_DEMO_RESERVE_CENTS,
   LANDING_PAGE_BUDGET_CENTS,
   type landing_demo_tag,
 } from "@/lib/landing_demo_config";
@@ -54,8 +55,11 @@ function previewText(text: string, max = LANDING_DEMO_PREVIEW_CHARS): string {
 }
 
 function hashIp(ip: string): string {
-  const salt = process.env.LANDING_DEMO_IP_SALT ?? "landing-demo";
-  return createHash("sha256").update(`${salt}:${ip}`).digest("hex").slice(0, 16);
+  const salt = process.env.LANDING_DEMO_IP_SALT;
+  if (process.env.VERCEL && !salt) {
+    throw new Error("LANDING_DEMO_IP_SALT required on Vercel");
+  }
+  return createHash("sha256").update(`${salt ?? "landing-demo"}:${ip}`).digest("hex").slice(0, 16);
 }
 
 function localBudgetFile(): string {
@@ -121,6 +125,59 @@ async function readBudget(): Promise<{ budgetCents: number; spentCents: number; 
   return { budgetCents: local.budgetCents, spentCents: local.spentCents, source: "local" };
 }
 
+export { LANDING_DEMO_RESERVE_CENTS };
+
+function reserveLocalLandingBudget(reserveCents: number): boolean {
+  const state = readLocalBudget();
+  if (state.spentCents + reserveCents > state.budgetCents) return false;
+  state.spentCents += reserveCents;
+  writeLocalBudget(state);
+  return true;
+}
+
+function adjustLocalLandingBudget(deltaCents: number): void {
+  const state = readLocalBudget();
+  state.spentCents = Math.max(0, state.spentCents + deltaCents);
+  writeLocalBudget(state);
+}
+
+async function adjustLandingBudgetSpent(deltaCents: number): Promise<void> {
+  adjustLocalLandingBudget(deltaCents);
+  const admin = await createAdminClient();
+  if (!admin) return;
+  const { error } = await admin.rpc("adjust_landing_budget_spent", { p_delta_cents: deltaCents });
+  if (error) demoLog.warn("adjust_landing_budget_spent failed", { error: error.message });
+}
+
+export async function reserveLandingBudget(
+  reserveCents = LANDING_DEMO_RESERVE_CENTS,
+): Promise<void> {
+  const reserve = +Math.max(0, reserveCents).toFixed(4);
+  if (reserve <= 0) {
+    await assertLandingBudget();
+    return;
+  }
+  if (reserveLocalLandingBudget(reserve)) return;
+  const admin = await createAdminClient();
+  if (admin) {
+    const { data, error } = await admin.rpc("try_reserve_landing_budget", { p_reserve_cents: reserve });
+    if (!error && data) return;
+    if (error) demoLog.warn("try_reserve_landing_budget failed", { error: error.message });
+  }
+  const { budgetCents, spentCents, source } = await readBudget();
+  if (source === "supabase" && budgetCents <= 0) throw new LandingBudgetError("budget_unavailable");
+  if (budgetCents - spentCents < LANDING_DEMO_MIN_BALANCE_CENTS) throw new LandingBudgetError("budget_exhausted");
+  throw new LandingBudgetError("budget_exhausted");
+}
+
+export async function releaseLandingBudgetReservation(
+  reserveCents = LANDING_DEMO_RESERVE_CENTS,
+): Promise<void> {
+  const reserve = +Math.max(0, reserveCents).toFixed(4);
+  if (reserve <= 0) return;
+  await adjustLandingBudgetSpent(-reserve);
+}
+
 export async function assertLandingBudget(): Promise<void> {
   const { budgetCents, spentCents, source } = await readBudget();
   const remaining = budgetCents - spentCents;
@@ -140,6 +197,7 @@ async function recordCall(params: {
   costCents: number;
   latencyMs: number;
   ip: string;
+  budgetReserveCents?: number;
 }): Promise<LandingDemoCallRow> {
   const promptText = params.prompt.trim();
   const row: LandingDemoCallRow = {
@@ -177,20 +235,23 @@ async function recordCall(params: {
     });
     if (insertError) demoLog.warn("landing_page_calls insert failed", { error: insertError.message });
     else {
-      const budget = await readBudget();
-      await admin
-        .from("landing_page_budget")
-        .update({
-          spent_cents: budget.spentCents + params.costCents,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", LANDING_BUDGET_ID);
+      const reserve = params.budgetReserveCents ?? 0;
+      if (reserve > 0) {
+        await adjustLandingBudgetSpent(params.costCents - reserve);
+      } else {
+        await adjustLandingBudgetSpent(params.costCents);
+      }
       return row;
     }
   }
 
   const local = readLocalBudget();
-  local.spentCents += params.costCents;
+  const reserve = params.budgetReserveCents ?? 0;
+  if (reserve > 0) {
+    local.spentCents = Math.max(0, local.spentCents + params.costCents - reserve);
+  } else {
+    local.spentCents += params.costCents;
+  }
   local.calls.unshift(row);
   local.calls = local.calls.slice(0, 200);
   writeLocalBudget(local);
@@ -209,6 +270,7 @@ export async function recordLandingUsage(params: {
   completionTokens: number;
   latencyMs: number;
   ip: string;
+  budgetReserveCents?: number;
 }): Promise<LandingDemoCallRow> {
   return recordCall({
     prompt: params.prompt,
@@ -222,6 +284,7 @@ export async function recordLandingUsage(params: {
     costCents: params.costCents,
     latencyMs: params.latencyMs,
     ip: params.ip,
+    budgetReserveCents: params.budgetReserveCents,
   });
 }
 

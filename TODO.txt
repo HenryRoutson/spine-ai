@@ -4,7 +4,7 @@ rename everything to spine
 name might already be taken https://www.getspine.ai/
 
 
-
+make a monitoring dashboard if supabase isn't good enough
 
 please segment types into JSON or not JSON.
 If and only if the type subset selected is all json can you parse to a pydantic struct inside this step. You will need to handle the if case of Using an llm if the format is not json, which should be a locked step which is added automatically for the inputs which are not automatically converted.

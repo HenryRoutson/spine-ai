@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { enforceIpRateLimit } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
 import { landingBuildPipelineBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
-import { clientIpFromHeaders } from "@/lib/rate_limit";
+import {
+  LandingProxyAuthError,
+  assertLandingProxyAllowed,
+  clientIpForLandingDemo,
+} from "@/lib/server/landing_proxy_auth";
 import { landingDemoCorsHeaders } from "@/lib/server/landing_demo_cors";
 import { LandingBudgetError } from "@/lib/server/landing_page_demo";
 import { buildLandingPipelineFromTask } from "@/lib/server/landing_pipeline_build";
@@ -22,6 +26,15 @@ export async function OPTIONS(req: Request): Promise<NextResponse> {
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
+  try {
+    assertLandingProxyAllowed(req.headers);
+  } catch (err) {
+    if (err instanceof LandingProxyAuthError) {
+      return jsonWithCors(req, { error: "unauthorized" }, HTTP.UNAUTHORIZED);
+    }
+    throw err;
+  }
+
   const limited = await enforceIpRateLimit(req, "landing_demo_build");
   if (limited) {
     return NextResponse.json(await limited.json(), {
@@ -34,7 +47,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   if ("validationError" in body) return jsonWithCors(req, { error: body.validationError }, HTTP.BAD_REQUEST);
 
   try {
-    const ip = clientIpFromHeaders(req.headers);
+    const ip = clientIpForLandingDemo(req.headers);
     const result = await buildLandingPipelineFromTask(body.task, ip);
     return jsonWithCors(req, result);
   } catch (err) {

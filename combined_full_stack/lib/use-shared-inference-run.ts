@@ -106,7 +106,7 @@ export function useSharedInferenceRun(link: SharedLinkPublicView, linkId: string
       setError("Please enter your name")
       return
     }
-    if (link.fundingMode === "viewer_signs_in") {
+    if (link.fundingMode === "viewer_signs_in" || link.fundingMode === "viewer_pays") {
       window.location.href = `/login?next=${encodeURIComponent(`/run/${linkId}`)}`
       return
     }
