@@ -108,7 +108,7 @@ export function InputModuleFields({
             </div>
             <div>
               <p className="mb-1 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
-                Needs LLM conversion
+                Needs LLM conversion if not Document I/O model.
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {convertTypes.map((t) => {
