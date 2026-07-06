@@ -1,7 +1,6 @@
 "use client"
 
 // AI : TODO (spec) — per-structure "Quick summarise" button: cheap LLM flags inconsistencies (e.g. document_summary:int).
-// AI : TODO (spec) — promote TypeBuilderPanel to its own tab; remove Playground view from Structure (spec § structure).
 import { useEffect, useMemo, useState } from "react"
 import { Plus, Trash2, Code2, LayoutGrid, FileSpreadsheet, Sparkles, AlertTriangle, Lock, Braces } from "lucide-react"
 import { StructureFieldRow } from "@/components/structure-field-row"
@@ -16,7 +15,6 @@ import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { useAppShell } from "@/lib/app-shell"
 import { useStore, uid } from "@/lib/store"
 import { StructureTypesCodeSection } from "@/components/structure-types-code-section"
-import { TypeBuilderPanel } from "@/components/type-builder-panel"
 import { ResizableSplit } from "@/components/resizable-split"
 import {
   readStructureSidebarWidth,
@@ -41,7 +39,7 @@ export function StructureBuilder() {
   const [target, setTarget] = useState<EditorTarget>(() =>
     models[0]?.id ? { kind: "struct", id: models[0].id } : { kind: "struct", id: "" },
   )
-  const [view, setView] = useState<"ui" | "excel" | "code" | "playground">("ui")
+  const [view, setView] = useState<"ui" | "excel" | "code">("ui")
   const savedSidebarWidth = useStructureSidebarWidth()
   const [sidebarWidth, setSidebarWidth] = useState(readStructureSidebarWidth)
   useEffect(() => setSidebarWidth(savedSidebarWidth), [savedSidebarWidth])
@@ -216,26 +214,12 @@ export function StructureBuilder() {
             >
               <Code2 className="h-3.5 w-3.5" /> Code
             </button>
-            <button
-              onClick={() => setView("playground")}
-              className={cn(
-                "flex items-center gap-1.5 rounded px-2 py-1 text-xs",
-                view === "playground"
-                  ? "bg-secondary text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Braces className="h-3.5 w-3.5" /> Playground
-            </button>
           </div>
         }
       />
 
       <div className="flex min-h-0 flex-1">
-        {view === "playground" ? (
-          <TypeBuilderPanel />
-        ) : (
-          <ResizableSplit
+        <ResizableSplit
             className="min-h-0 flex-1"
             leadingWidth={sidebarWidth}
             onLeadingWidthChange={setSidebarWidth}
@@ -494,7 +478,6 @@ export function StructureBuilder() {
               </>
             }
           />
-        )}
       </div>
     </div>
   )

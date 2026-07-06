@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
       "connect-src 'self' https://www.spine-ai-app.dev https://spine-ai-app.dev http://localhost:* https://localhost:*",
-      "frame-src 'self'",
+      "frame-src 'self' https://www.spine-ai-app.dev https://spine-ai-app.dev http://localhost:* https://localhost:*",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
