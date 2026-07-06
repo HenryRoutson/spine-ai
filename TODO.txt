@@ -4,6 +4,19 @@ rename everything to spine
 name might already be taken https://www.getspine.ai/
 
 
+
+
+
+Please create a CLI that the UI wraps so that testing can be done without react, and this tool is able to be used by agents. 
+please write a bunch of tests 
+
+
+
+
+
+please create a testing suite for the AI agent in spine. it's not that good at the moment. please as cursor create a tonne of examples, and test them before asking the agent to create them in a single prompt without the whole context of the repo. ensure the agent and yourself have acess to the tools to see all the validation errors from json, and create a prompt that contiains all the info needed to create the single response pipeline, all beign contained in the pydantic / zod struct for modularity.
+
+
 add translations and new langauges by using constants
 
 

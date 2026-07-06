@@ -14,7 +14,10 @@
     "sync-seeds": "npx tsx scripts/sync_seeds_to_supabase.ts",
     "generate-expected-outputs": "npx tsx scripts/generate_expected_outputs.ts",
     "sync-pricing": "node scripts/sync_openrouter_pricing.mjs",
-    "db:push": "supabase db push"
+    "db:push": "supabase db push",
+    "spine": "tsx scripts/spine-cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -58,6 +61,7 @@
     "postcss": "^8.5",
     "tailwindcss": "^4.2.0",
     "tsx": "^4.20.5",
-    "typescript": "5.7.3"
+    "typescript": "5.7.3",
+    "vitest": "^3.2.4"
   }
 }
