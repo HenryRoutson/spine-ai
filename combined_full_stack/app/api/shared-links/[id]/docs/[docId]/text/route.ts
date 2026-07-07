@@ -6,8 +6,7 @@ import { apiError } from "@/lib/server/api_context";
 import { HTTP, unknownDoc } from "@/lib/server/api-errors";
 import { parseSharedLinkId } from "@/lib/server/api_schemas";
 import { getSharedLink } from "@/lib/server/shared_links";
-import { resolveSharedDocParserText } from "@/lib/server/shared-link-session";
-import type { DocId } from "@/lib/server/types";
+import { resolveSharedDocParserText, parseSharedDocId, parseSharedSessionId } from "@/lib/server/shared-link-session";
 
 const SESSION_COOKIE = "shared_run_session";
 
@@ -33,8 +32,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string;
   }
 
   const jar = await cookies();
-  const sessionId = jar.get(SESSION_COOKIE)?.value;
-  const docId = rawDocId as DocId;
+  const sessionId = parseSharedSessionId(jar.get(SESSION_COOKIE)?.value);
+  const docId = parseSharedDocId(rawDocId);
+  if (!docId) return apiError(unknownDoc(rawDocId), HTTP.NOT_FOUND);
   const text = resolveSharedDocParserText(linkId, docId, sessionId, link.defaultDocs);
   if (text === undefined) return apiError(unknownDoc(rawDocId), HTTP.NOT_FOUND);
 

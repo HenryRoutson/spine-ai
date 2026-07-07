@@ -44,7 +44,7 @@ function mergeStepDescriptionFields(
 > {
   const stepDone = next.status !== "running"
   return {
-    outputPreview: next.outputPreview ?? (stepDone ? cur?.outputPreview : cur?.outputPreview),
+    outputPreview: next.outputPreview ?? (stepDone ? cur?.outputPreview : undefined),
     inputDescriptionCheck: next.inputDescriptionCheck ?? cur?.inputDescriptionCheck,
     descriptionCheckLlmCalls: next.descriptionCheckLlmCalls ?? cur?.descriptionCheckLlmCalls,
     descriptionCheckCostCents: next.descriptionCheckCostCents ?? cur?.descriptionCheckCostCents,
@@ -163,13 +163,13 @@ export async function startRun(
   return body
 }
 
-export async function runProgress(jobId: RunJobId): Promise<RunJob> {
+export async function pollJobProgress(url: string, context: string): Promise<RunJob> {
   // AI : first polls can 404 when progress GET hits a cold bundle before the job file is visible.
   let lastDetail: string | undefined
   let notFoundAttempts = 0
   let rateLimitRetries = 0
   while (notFoundAttempts < MAX_PROGRESS_POLLS) {
-    const res = await fetch(API_ROUTES.runProgress(jobId), FETCH_NO_STORE)
+    const res = await fetch(url, FETCH_NO_STORE)
     if (res.status === 429 && rateLimitRetries < PROGRESS_429_RETRY_MAX) {
       rateLimitRetries++
       await readApiErrorBody(res)
@@ -184,15 +184,19 @@ export async function runProgress(jobId: RunJobId): Promise<RunJob> {
       continue
     }
     if (!res.ok) {
-      throwApiError(`Progress poll for job ${jobId} failed`, res, await readApiErrorBody(res))
+      throwApiError(`${context} failed`, res, await readApiErrorBody(res))
     }
     return res.json() as Promise<RunJob>
   }
   throw new Error(
-    `Progress poll for job ${jobId} failed after ${MAX_PROGRESS_POLLS} attempts (404)` +
+    `${context} failed after ${MAX_PROGRESS_POLLS} attempts (404)` +
       (lastDetail ? `: ${lastDetail}` : ": server has no record of this run") +
       ". The job may not have been created, or the server restarted and dropped in-progress runs. Try Run pipeline again.",
   )
+}
+
+export async function runProgress(jobId: RunJobId): Promise<RunJob> {
+  return pollJobProgress(API_ROUTES.runProgress(jobId), `Progress poll for job ${jobId}`)
 }
 
 export interface AwaitRunCallbacks {

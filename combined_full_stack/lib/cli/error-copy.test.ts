@@ -6,7 +6,7 @@ import {
   inferenceInputIssueMessage,
   validateInferenceDocContent,
 } from "@/lib/inference-validity"
-import { InputType, type DocRef, type PipelineModule } from "@/lib/types"
+import { InputType, type DocRef, type ModuleId, type PipelineModule } from "@/lib/types"
 
 describe("error-copy", () => {
   it("includes UI location, context, and stack in clipboard payload", () => {
@@ -53,7 +53,7 @@ describe("inference JSON validation errors", () => {
       [schemaModule],
       {},
       { doc_1: "" },
-      { mod_in_schema: doc },
+      { [schemaModule.id]: doc },
     )
     const clip = inferenceInputIssueClipboard(
       issues,

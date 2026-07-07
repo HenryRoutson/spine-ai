@@ -57,6 +57,7 @@ import {
 import {
   loadDefaultDocContent,
   overlayStoreForSharedRun,
+  parseSharedSessionId,
   sessionDocContent,
   sessionDocsForModule,
 } from "@/lib/server/shared-link-session";
@@ -100,23 +101,22 @@ async function resolveAssignment(
         contentByDocId[docId] = content;
       }
     } else {
-      const def = link.defaultDocs.find((d) => d.moduleId === m.id);
-      if (def) {
+      const defs = link.defaultDocs.filter((d) => d.moduleId === m.id);
+      for (const def of defs) {
         const loaded = loadDefaultDocContent(linkId, m.id, def.filename, link.defaultDocs);
-        if (loaded) {
-          const id = defaultDocId(linkId, m.id, def.filename);
-          const doc: DocRef = {
-            id,
-            name: loaded.name,
-            type: loaded.type,
-            label: DocLabel.Inference,
-            sizeKb: Math.max(1, Math.round(loaded.content.length / 1024)),
-            uploadedAt: Date.now(),
-            preview: loaded.content.slice(0, 180),
-          };
-          docs.push(doc);
-          contentByDocId[id] = loaded.content;
-        }
+        if (!loaded) continue;
+        const id = defaultDocId(linkId, m.id, def.filename);
+        const doc: DocRef = {
+          id,
+          name: loaded.name,
+          type: loaded.type,
+          label: DocLabel.Inference,
+          sizeKb: Math.max(1, Math.round(loaded.content.length / 1024)),
+          uploadedAt: Date.now(),
+          preview: loaded.content.slice(0, 180),
+        };
+        docs.push(doc);
+        contentByDocId[id] = loaded.content;
       }
     }
     if (docs.length) assignment[m.id] = docs;
@@ -140,8 +140,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!link) return apiError("link not found", 404);
 
   const jar = await cookies();
-  let sessionId = jar.get(SESSION_COOKIE)?.value;
-  if (!sessionId) sessionId = newSessionId();
+  let sessionId = parseSharedSessionId(jar.get(SESSION_COOKIE)?.value) ?? newSessionId();
 
   const parsed = await parseRequestJson(req, sharedLinkRunBodySchema, {});
   if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);

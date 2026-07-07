@@ -4,7 +4,14 @@ import { JobLogLevel } from "@/lib/run-types";
 import { z } from "zod";
 import { ASSISTANT_HISTORY_LIMIT } from "@/lib/assistant-chat-types";
 import { TOPUP_OPTIONS_CENTS } from "@/lib/billing_config";
-import { DocLabel, InputType, ModuleKind, StrategyKind, type SharedLinkId } from "@/lib/server/types";
+import {
+  DocLabel,
+  InputType,
+  ModuleKind,
+  StrategyKind,
+  type ProjectId,
+  type SharedLinkId,
+} from "@/lib/server/types";
 import { MAX_ASSISTANT_MESSAGE_CHARS } from "./assistant-route";
 
 export const MAX_FEEDBACK_MESSAGE_CHARS = 8_000;
@@ -22,6 +29,12 @@ const MAX_STRUCTURE_PAYLOAD_CHARS = 50_000;
 
 export const sharedLinkIdSchema = z.string().regex(/^pub_[a-z0-9]{10,14}$/i);
 export const hostedApiIdSchema = z.string().regex(/^api_[a-z0-9]{10,14}$/i);
+export const userBillingKeyIdSchema = z.string().trim().min(1).max(128);
+
+export function parseProjectId(raw: string): ProjectId | null {
+  const parsed = projectIdSchema.safeParse(raw);
+  return parsed.success ? (parsed.data as ProjectId) : null;
+}
 
 export const sharedProgressQuerySchema = z.object({
   jobId: z.string().trim().min(1).max(128),

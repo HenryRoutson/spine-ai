@@ -4,6 +4,7 @@
 import { useCallback, useMemo, useRef, useState } from "react"
 import {
   docsForInputModule,
+  isMultiDocInputModule,
   moduleInputReady,
   orderedInputModules,
   type InputDocsAssignment,
@@ -77,8 +78,8 @@ export function useSharedInferenceRun(
         void fetchSharedRunDocText(linkId, doc.id).catch(() => {})
         setInputDocs((prev) => {
           const cur = docsForInputModule(prev, moduleId)
-          const multi = inputModules.find((m) => m.id === moduleId)?.inputMinCount ?? 1
-          const next = multi > 1 ? [...cur, doc] : [doc]
+          const mod = inputModules.find((m) => m.id === moduleId)
+          const next = mod && isMultiDocInputModule(mod) ? [...cur, doc] : [doc]
           return { ...prev, [moduleId]: next }
         })
       } catch (e) {

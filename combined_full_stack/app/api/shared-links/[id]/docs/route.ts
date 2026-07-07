@@ -11,11 +11,12 @@ import {
   validateUploadBytes,
   validateUploadFile,
 } from "@/lib/server/doc_upload_parse";
-import { orderedInputModules } from "@/lib/inference-input";
+import { isMultiDocInputModule, orderedInputModules } from "@/lib/inference-input";
 import { getSharedLink, newSessionId } from "@/lib/server/shared_links";
 import {
   MAX_SHARED_SESSION_BYTES,
   MAX_SHARED_SESSION_DOCS,
+  parseSharedSessionId,
   saveSessionUpload,
   sessionUploadBytes,
   sessionUploadCount,
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (uploadErr) return apiError(uploadErr.message, uploadErr.status);
 
   const jar = await cookies();
-  let sessionId = jar.get(SESSION_COOKIE)?.value ?? newSessionId();
+  let sessionId = parseSharedSessionId(jar.get(SESSION_COOKIE)?.value) ?? newSessionId();
   if (sessionUploadCount(link.id, sessionId) >= MAX_SHARED_SESSION_DOCS) {
     return apiError(`session upload limit reached (max ${MAX_SHARED_SESSION_DOCS} files)`, HTTP.BAD_REQUEST);
   }
@@ -69,7 +70,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return apiError(`could not parse ${file.name}: ${(err as Error).message}`, 422);
   }
 
-  const doc = await saveSessionUpload(link.id, sessionId, moduleId, file, parsed.content, type, bytes);
+  const inputModule = orderedInputModules(link.snapshot.modules).find((m) => m.id === moduleId);
+  const doc = await saveSessionUpload(
+    link.id,
+    sessionId,
+    moduleId,
+    file,
+    parsed.content,
+    type,
+    bytes,
+    inputModule ? isMultiDocInputModule(inputModule) : false,
+  );
   const res = NextResponse.json(doc);
   res.cookies.set(SESSION_COOKIE, sessionId, secureSessionCookieOptions(60 * 60 * 24 * 30));
   return res;

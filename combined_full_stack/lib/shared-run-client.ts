@@ -3,6 +3,7 @@ import { API_ROUTES } from "@/lib/api-routes"
 import {
   awaitJobCompletion,
   mergeStepStates,
+  pollJobProgress,
   type ClientStepSubmitPayload,
 } from "@/lib/run-engine"
 import type {
@@ -23,6 +24,7 @@ export async function fetchSharedLink(id: string): Promise<SharedLinkPublicView>
     res,
     "load shared link",
   )
+  if (!body.link) throw new Error("load shared link: missing link in response")
   return body.link
 }
 
@@ -57,8 +59,7 @@ export async function pollSharedProgress(
   token: string,
 ): Promise<RunJob> {
   const url = `${API_ROUTES.sharedLinkProgress(linkId)}?jobId=${encodeURIComponent(jobId)}&token=${encodeURIComponent(token)}`
-  const res = await fetch(url, FETCH_NO_STORE)
-  return parseFetchJson<RunJob>(res, "shared run progress")
+  return pollJobProgress(url, "shared run progress")
 }
 
 async function submitSharedClientStep(

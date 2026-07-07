@@ -13,6 +13,7 @@ import { fetchSharedLink } from "@/lib/shared-run-client"
 import { useSupabaseSession } from "@/lib/use-supabase-session"
 import { openSharedLinkInWorkspace } from "@/lib/open-shared-in-workspace"
 import { addSharedWithMe } from "@/lib/shared-with-me"
+import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
 
 export function SharedRunViewer({ linkId }: { linkId: string }) {
@@ -108,7 +109,7 @@ function SharedRunContent({ link, linkId }: { link: SharedLinkPublicView; linkId
       </header>
 
       <main className="mx-auto w-full max-w-4xl flex-1 overflow-y-auto p-5">
-        {isAuthenticated ? (
+        {isAuthenticated && viewerFundsSharedRun(link.fundingMode) ? (
           <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
             <p className="font-medium">Run this in your workspace for Billing access</p>
             <p className="mt-1 text-xs text-muted-foreground">

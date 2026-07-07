@@ -140,16 +140,57 @@ export async function withdrawCreatorEarningsToCredit(
 ): Promise<{ earnings: CreatorEarnings; creditBalanceCents: number }> {
   const amount = toExactCents(cents);
   if (amount <= 0) throw new CreatorEarningsError("insufficient_earnings");
+
+  if (isLocalJsonUser(userId)) {
+    return withdrawCreatorEarningsToCreditFallback(userId, amount);
+  }
+
+  const admin = await createAdminClient();
+  if (admin) {
+    const { data, error } = await admin.rpc("withdraw_creator_earnings_to_credit", {
+      p_user_id: userId,
+      p_amount: amount,
+    });
+    if (error) {
+      if ((error.message ?? "").includes("insufficient_earnings")) {
+        throw new CreatorEarningsError("insufficient_earnings");
+      }
+      if (isMissingSchemaError(error)) {
+        earnLog.warn(`withdraw RPC missing — falling back to non-atomic path`, { userId });
+      } else {
+        throw error;
+      }
+    } else if (data && typeof data === "object") {
+      const row = data as {
+        balanceCents?: number;
+        totalEarnedCents?: number;
+        totalWithdrawnCents?: number;
+        creditBalanceCents?: number;
+      };
+      const earnings: CreatorEarnings = {
+        balanceCents: Number(row.balanceCents ?? 0),
+        totalEarnedCents: Number(row.totalEarnedCents ?? 0),
+        totalWithdrawnCents: Number(row.totalWithdrawnCents ?? 0),
+      };
+      earnLog.info(`withdrawCreatorEarningsToCredit`, {
+        userId,
+        amount,
+        creditBalanceAfter: row.creditBalanceCents,
+        earningsBalanceAfter: earnings.balanceCents,
+      });
+      return { earnings, creditBalanceCents: Number(row.creditBalanceCents ?? 0) };
+    }
+  }
+
+  return withdrawCreatorEarningsToCreditFallback(userId, amount);
+}
+
+async function withdrawCreatorEarningsToCreditFallback(
+  userId: user_id_string,
+  amount: number,
+): Promise<{ earnings: CreatorEarnings; creditBalanceCents: number }> {
   const current = await loadCreatorEarnings(userId);
   if (current.balanceCents < amount) throw new CreatorEarningsError("insufficient_earnings");
-
-  const key = billingKeyForUser(userId) as BillingUserKey;
-  const account = await loadBillingAccount(key);
-  const nextAccount = {
-    ...account,
-    balanceCents: toExactCents(account.balanceCents + amount),
-  };
-  await saveBillingAccount(key, nextAccount);
 
   const nextEarnings: CreatorEarnings = {
     balanceCents: toExactCents(current.balanceCents - amount),
@@ -157,11 +198,31 @@ export async function withdrawCreatorEarningsToCredit(
     totalWithdrawnCents: toExactCents(current.totalWithdrawnCents + amount),
   };
   await persistCreatorEarnings(userId, nextEarnings);
-  earnLog.info(`withdrawCreatorEarningsToCredit`, {
-    userId,
-    amount,
-    creditBalanceAfter: nextAccount.balanceCents,
-    earningsBalanceAfter: nextEarnings.balanceCents,
-  });
-  return { earnings: nextEarnings, creditBalanceCents: nextAccount.balanceCents };
+
+  const key = billingKeyForUser(userId) as BillingUserKey;
+  try {
+    const account = await loadBillingAccount(key);
+    const nextAccount = {
+      ...account,
+      balanceCents: toExactCents(account.balanceCents + amount),
+    };
+    await saveBillingAccount(key, nextAccount);
+    earnLog.info(`withdrawCreatorEarningsToCredit`, {
+      userId,
+      amount,
+      creditBalanceAfter: nextAccount.balanceCents,
+      earningsBalanceAfter: nextEarnings.balanceCents,
+    });
+    return { earnings: nextEarnings, creditBalanceCents: nextAccount.balanceCents };
+  } catch (err) {
+    // AI : rollback earnings deduction if billing credit fails
+    await persistCreatorEarnings(userId, current).catch((rollbackErr) => {
+      earnLog.error(`withdraw rollback failed`, {
+        userId,
+        amount,
+        error: (rollbackErr as Error).message,
+      });
+    });
+    throw err;
+  }
 }

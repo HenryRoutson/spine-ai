@@ -5,7 +5,7 @@ import { orderedInputModules } from "@/lib/inference-input"
 import { collectInferenceInputIssues } from "@/lib/inference-validity"
 import { shareDefaultDocsByModule } from "@/lib/share-default-docs"
 import { SEEDS_DIR } from "@/lib/server/seed"
-import type { DocId } from "@/lib/types"
+import type { DocId, ModuleId } from "@/lib/types"
 
 describe("shareDefaultDocsByModule", () => {
   it("picks module-aware defaults for homework grader instead of reusing one inference file", () => {
@@ -38,14 +38,19 @@ describe("shareDefaultDocsByModule", () => {
 
   it("keeps saved inference assignments and only defaults missing slots", () => {
     const ctx = loadProjectContext(resolve(SEEDS_DIR, "homework_grader.json"))
+    const inputModules = orderedInputModules(ctx.project.modules)
+    const schemaMod = inputModules.find((m) => m.label === "Marking Schema")
+    const subsMod = inputModules.find((m) => m.label === "Student Submissions")
     const schemaDoc = ctx.docRefs.find((d) => d.name === "homework_marking_schema_first_grade.json")
+    expect(schemaMod).toBeTruthy()
+    expect(subsMod).toBeTruthy()
     expect(schemaDoc).toBeTruthy()
 
     const byModule = shareDefaultDocsByModule(ctx.project, ctx.docRefs, {
-      mod_in_schema: schemaDoc!.id as DocId,
+      [schemaMod!.id]: schemaDoc!.id as DocId,
     })
-    expect(byModule.mod_in_schema).toEqual([schemaDoc!.id])
-    expect(byModule.mod_in_students?.[0]).toBeTruthy()
-    expect(byModule.mod_in_students?.[0]).not.toBe(schemaDoc!.id)
+    expect(byModule[schemaMod!.id]).toEqual([schemaDoc!.id])
+    expect(byModule[subsMod!.id]?.[0]).toBeTruthy()
+    expect(byModule[subsMod!.id]?.[0]).not.toBe(schemaDoc!.id)
   })
 })

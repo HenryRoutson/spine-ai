@@ -66,12 +66,13 @@ function isHostedApiPublicApi(pathname: string): boolean {
   );
 }
 
-function isSharedLinkPublicApi(pathname: string): boolean {
+function isSharedLinkPublicApi(pathname: string, method: string): boolean {
+  // AI : only GET on link metadata is public — DELETE/PUT must go through auth middleware.
+  if (/^\/api\/shared-links\/[^/]+$/.test(pathname)) return method === "GET";
   return (
-    /^\/api\/shared-links\/[^/]+$/.test(pathname) ||
     /^\/api\/shared-links\/[^/]+\/(run|progress|docs|download|client-step)$/.test(pathname) ||
     /^\/api\/shared-links\/[^/]+\/docs\/[^/]+\/(text|file)$/.test(pathname)
-  )
+  );
 }
 
 function isLandingDemoPublicApi(pathname: string): boolean {
@@ -82,12 +83,12 @@ function isDemoPublicApi(pathname: string): boolean {
   return pathname === API_ROUTES.demoState || /^\/api\/demo\/docs\/[^/]+\/text$/.test(pathname);
 }
 
-export function isPublicApiPath(pathname: string): boolean {
+export function isPublicApiPath(pathname: string, method = "GET"): boolean {
   if (PUBLIC_API_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return true
   if (isLandingDemoPublicApi(pathname)) return true
   if (isDemoPublicApi(pathname)) return true
   if (isHostedApiPublicApi(pathname)) return true
-  return isSharedLinkPublicApi(pathname)
+  return isSharedLinkPublicApi(pathname, method)
 }
 
 export const PUBLIC_API_PATHS = [API_ROUTES.supabaseEnv, API_ROUTES.billingWebhook] as const

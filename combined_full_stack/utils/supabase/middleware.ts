@@ -24,8 +24,8 @@ function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-function isPublicApiPathLocal(pathname: string): boolean {
-  return isPublicApiPath(pathname);
+function isPublicApiPathLocal(pathname: string, method: string): boolean {
+  return isPublicApiPath(pathname, method);
 }
 
 function copySessionCookies(from: NextResponse, to: NextResponse): void {
@@ -64,7 +64,7 @@ export async function updateSession(request: NextRequest) {
   const isApiRoute = pathname.startsWith("/api/");
   const isPublic = isPublicPath(pathname);
 
-  if (isApiRoute && isPublicApiPathLocal(pathname)) {
+  if (isApiRoute && isPublicApiPathLocal(pathname, request.method)) {
     const limited = await publicApiRateLimit(request, pathname);
     if (limited) return limited;
   }
@@ -72,7 +72,7 @@ export async function updateSession(request: NextRequest) {
   const supabaseEnv = getSupabasePublicEnv();
   if (!supabaseEnv) {
     // AI : missing Vercel env vars must not crash proxy — gate pages, block protected APIs.
-    if (isApiRoute && !isPublicApiPathLocal(pathname)) {
+    if (isApiRoute && !isPublicApiPathLocal(pathname, request.method)) {
       return NextResponse.json(
         { error: "Supabase env missing — set NEXT_PUBLIC_SUPABASE_URL and key on Vercel" },
         { status: 503 },
@@ -108,7 +108,7 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
-  if (!user && isApiRoute && !isPublicApiPathLocal(pathname)) {
+  if (!user && isApiRoute && !isPublicApiPathLocal(pathname, request.method)) {
     return NextResponse.json({ error: AUTH_SIGN_IN_REQUIRED }, { status: 401 });
   }
 

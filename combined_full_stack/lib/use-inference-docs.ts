@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
-  buildDefaultInputDocs,
   docsForInputModule,
+  buildDefaultInputDocs,
   isMultiDocInputModule,
   orderedInputModules,
   resolveInputDocs,
@@ -12,8 +12,10 @@ import {
 } from "@/lib/inference-input"
 import {
   collectInferenceInputIssues,
+  inferenceDocNeedsFullContent,
   type InferenceInputIssue,
 } from "@/lib/inference-validity"
+import { docTextContent, fetchDocText } from "@/lib/doc-text-cache"
 import type { DocId, DocRef, ModuleId, PipelineModule, Project, ProjectId } from "@/lib/types"
 
 function inputDocsIdsKey(assignment: InputDocsAssignment, inputModules: PipelineModule[]): string {
@@ -70,8 +72,28 @@ export function useInferenceDocs({
       setInputIssues((prev) => (prev.length === 0 ? prev : []))
       return
     }
-    const next = collectInferenceInputIssues(inputModules, {}, {}, inputDocs)
-    setInputIssues((prev) => (inferenceIssuesEqual(prev, next) ? prev : next))
+    let cancelled = false
+    ;(async () => {
+      const contentByDocId: Record<string, string> = {}
+      const loads: Promise<void>[] = []
+      for (const m of inputModules) {
+        for (const doc of docsForInputModule(inputDocs, m.id)) {
+          if (!inferenceDocNeedsFullContent(m, doc)) continue
+          loads.push(
+            fetchDocText(doc.id).then((data) => {
+              contentByDocId[doc.id] = docTextContent(data)
+            }),
+          )
+        }
+      }
+      await Promise.all(loads)
+      if (cancelled) return
+      const next = collectInferenceInputIssues(inputModules, {}, contentByDocId, inputDocs)
+      setInputIssues((prev) => (inferenceIssuesEqual(prev, next) ? prev : next))
+    })().catch(() => {})
+    return () => {
+      cancelled = true
+    }
   }, [allInputsReady, inputModules, inputDocIdsKey, inputDocs])
 
   useEffect(() => {

@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { apiError } from "@/lib/server/api_context";
 import { HTTP, unknownJob } from "@/lib/server/api-errors";
 import { parseRequestJson, parseSharedLinkId, sharedLinkClientStepBodySchema } from "@/lib/server/api_schemas";
+import { PUBLIC_RUN_SPEND_RESERVE_CENTS } from "@/lib/billing_config";
 import { billSharedLinkRun, sharedLinkBillingKey, viewerFundsSharedRun } from "@/lib/server/shared_link_billing";
 import { sharedLinkRequiresSignIn } from "@/lib/shared-link-funding";
 import { isAuthSession, requireAuth, type user_id_string } from "@/lib/server/require_auth";
@@ -23,12 +24,14 @@ import {
   type RunJobId,
 } from "@/lib/server/run_jobs";
 import {
+  adjustSharedLinkSpend,
   getSharedLink,
   openStoreForUser,
   recordSharedLinkSpend,
+  revokeSharedLink,
   verifySharedProgressToken,
 } from "@/lib/server/shared_links";
-import { overlayStoreForSharedRun } from "@/lib/server/shared-link-session";
+import { overlayStoreForSharedRun, parseSharedSessionId } from "@/lib/server/shared-link-session";
 import { logger } from "@/lib/server/server_logger";
 import type { JobLogEntry } from "@/lib/run-types";
 
@@ -60,9 +63,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     if (viewerFundsSharedRun(link.fundingMode)) viewerUserId = auth.userId;
   }
   const billingKey = sharedLinkBillingKey(link.ownerId, link.fundingMode, viewerUserId);
+  const reserveCents = link.spendLimitCents != null ? PUBLIC_RUN_SPEND_RESERVE_CENTS : 0;
 
   const jar = await cookies();
-  const sessionId = jar.get(SESSION_COOKIE)?.value;
+  const sessionId = parseSharedSessionId(jar.get(SESSION_COOKIE)?.value);
   if (!sessionId) return apiError("session required", 400);
 
   const jobId = body.jobId as RunJobId;
@@ -113,10 +117,30 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         if (run.billedCents > 0) {
           try {
             const bill = await billSharedLinkRun(billingKey, link.ownerId, link, run.billedCents);
-            await recordSharedLinkSpend(link.id, bill.totalCents);
+            if (reserveCents > 0) {
+              const settled = await adjustSharedLinkSpend(link.id, bill.totalCents - reserveCents);
+              if (!settled) {
+                apiLog.warn(`spend limit exceeded after resume — revoking link`, {
+                  linkId: link.id,
+                  billed: bill.totalCents,
+                  reserveCents,
+                });
+                await revokeSharedLink(link.ownerId, link.id);
+              }
+            } else {
+              await recordSharedLinkSpend(link.id, bill.totalCents);
+            }
           } catch (billErr) {
-            apiLog.warn(`resume billing failed`, { jobId, error: (billErr as Error).message });
+            apiLog.warn(`resume billing failed — revoking link`, {
+              linkId: link.id,
+              jobId,
+              billed: run.billedCents,
+              error: (billErr as Error).message,
+            });
+            await revokeSharedLink(link.ownerId, link.id);
           }
+        } else if (reserveCents > 0) {
+          await adjustSharedLinkSpend(link.id, -reserveCents).catch(() => {});
         }
         await finishJob(entry.ownerId, jobId, { run }, jobDb);
         apiLog.info(`resume finished`, { jobId, runId: run.id, status: run.status });

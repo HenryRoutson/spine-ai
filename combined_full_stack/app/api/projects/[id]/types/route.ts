@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, unknownProject } from "@/lib/server/api-errors";
+import { parseProjectId } from "@/lib/server/api_schemas";
 import { logger } from "@/lib/server/server_logger";
 import { generatePipelineTypes } from "@/lib/server/type_codegen";
 import { migrateProjectModules } from "@/lib/server/validity";
-import type { ProjectId } from "@/lib/server/types";
 import type { ProjectTypesResponse } from "@/lib/project-types";
 
 const apiLog = logger("api:project-types");
@@ -17,11 +17,16 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string
   if (authCtx instanceof NextResponse) return authCtx;
   const { store } = authCtx;
 
-  const { id } = await ctx.params;
-  const raw = store.project(id as ProjectId);
+  const { id: rawId } = await ctx.params;
+  const projectId = parseProjectId(rawId);
+  if (!projectId) {
+    apiLog.warn(`GET /api/projects/:id/types — invalid id`, { projectId: rawId });
+    return apiError(unknownProject(rawId), HTTP.NOT_FOUND);
+  }
+  const raw = store.project(projectId);
   if (!raw) {
-    apiLog.warn(`GET /api/projects/:id/types — unknown`, { projectId: id });
-    return apiError(unknownProject(id), HTTP.NOT_FOUND);
+    apiLog.warn(`GET /api/projects/:id/types — unknown`, { projectId });
+    return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
   }
 
   const project = migrateProjectModules(raw);

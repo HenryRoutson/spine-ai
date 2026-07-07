@@ -34,15 +34,6 @@ export function useDocViewerData({
   const [visionIndex, setVisionIndex] = useState(0)
   const [view, setView] = useState<DocViewMode>("parser")
 
-  // AI : TODO refactor (prod) — PDF tab depends on /file bytes; fix when Supabase Storage ships (store.ts).
-  useEffect(() => {
-    if (!docId) return
-    setHasPdf(false)
-    fetch(linkId ? sharedRunDocFileUrl(linkId, docId) : API_ROUTES.docFile(docId), { method: "HEAD" })
-      .then((r) => setHasPdf(r.ok))
-      .catch(() => setHasPdf(false))
-  }, [docId, linkId])
-
   useEffect(() => {
     if (!docId) return
     setParserText(null)
@@ -50,6 +41,8 @@ export function useDocViewerData({
     setVisionEntries([])
     setVisionIndex(0)
     const hasSpan = spanStart !== spanEnd
+    let cancelled = false
+    const fileUrl = linkId ? sharedRunDocFileUrl(linkId, docId) : API_ROUTES.docFile(docId)
     Promise.all([
       fetchDocText(docId, "parser", docTextOpts).then((parser) =>
         parser.text !== undefined || parser.content !== undefined
@@ -61,22 +54,32 @@ export function useDocViewerData({
         : fetch(API_ROUTES.docText(docId, "vision")).then((r) =>
             r.ok ? r.json() : { entries: [] as VisionEntry[] },
           ),
+      fetch(fileUrl, { method: "HEAD" })
+        .then((r) => r.ok)
+        .catch(() => false),
     ])
-      .then(([parser, vision]) => {
+      .then(([parser, vision, pdfAvailable]) => {
+        if (cancelled) return
         const visionRows: VisionEntry[] = vision.entries ?? []
+        setHasPdf(pdfAvailable)
         setParserText(docTextContent(parser))
         setParserMeta({ parser: parser.parser, fromCache: parser.fromCache })
         setVisionEntries(visionRows)
         setView(
-          defaultDocViewMode(docRef, hasPdf, {
+          defaultDocViewMode(docRef, pdfAvailable, {
             hasSpan,
             requested: requestedMode ?? undefined,
             hasVisionText: visionRows.length > 0,
           }),
         )
       })
-      .catch(() => setParserText("⚠ failed to load source document"))
-  }, [docId, requestedMode, spanStart, spanEnd, hasPdf, docRef?.name, docRef?.type, docTextOpts, linkId])
+      .catch(() => {
+        if (!cancelled) setParserText("⚠ failed to load source document")
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [docId, requestedMode, spanStart, spanEnd, docRef?.name, docRef?.type, docTextOpts, linkId])
 
   return {
     hasPdf,
