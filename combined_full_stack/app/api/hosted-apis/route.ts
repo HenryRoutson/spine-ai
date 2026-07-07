@@ -11,7 +11,7 @@ import {
 } from "@/lib/server/hosted_apis";
 import { migrateProjectModules } from "@/lib/server/validity";
 import { logger } from "@/lib/server/server_logger";
-import type { DocId, ModelId, ModuleId, ProjectId } from "@/lib/server/types";
+import type { DocId, HostedApiFundingMode, ModelId, ModuleId, ProjectId } from "@/lib/server/types";
 
 const apiLog = logger("api:hosted-apis");
 
@@ -44,6 +44,9 @@ export async function POST(req: NextRequest) {
       ownerId: ctx.auth.userId,
       project: migrateProjectModules(project),
       defaultModel,
+      fundingMode: body.fundingMode as HostedApiFundingMode | undefined,
+      billingMultiple: body.billingMultiple,
+      flatFeeCents: body.flatFeeCents,
       spendLimitCents: body.spendLimitCents,
       defaultDocsByModule: (body.defaultDocsByModule ?? {}) as Partial<Record<ModuleId, DocId[]>>,
       store: ctx.store,

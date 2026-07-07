@@ -9,6 +9,7 @@ import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { formatCostCents, formatSecondsShort } from "@/lib/format"
 import { runBilledCents, runTotalMs } from "@/lib/run-metrics"
 import { isSharedRun } from "@/lib/shared-link-types"
+import { deploymentRunCallerLabel, isHostedApiRun } from "@/lib/deployment-runs"
 import { timeAgo } from "@/lib/time-ago"
 import { cn } from "@/lib/utils"
 import { compactPreview, PREVIEW_RUN_NOTES_CHARS } from "@/lib/text-preview"
@@ -29,6 +30,12 @@ export function filterRuns(runs: PipelineRun[], query: string): PipelineRun[] {
       r.id.toLowerCase().includes(q) ||
       (r.notes?.toLowerCase().includes(q) ?? false) ||
       (r.source?.toLowerCase().includes(q) ?? false) ||
+      (r.sharedLinkId?.toLowerCase().includes(q) ?? false) ||
+      (r.hostedApiId?.toLowerCase().includes(q) ?? false) ||
+      (r.triggerUserEmail?.toLowerCase().includes(q) ?? false) ||
+      (r.triggerUserId?.toLowerCase().includes(q) ?? false) ||
+      (r.viewerName?.toLowerCase().includes(q) ?? false) ||
+      (r.viewerSessionId?.toLowerCase().includes(q) ?? false) ||
       r.steps.some((s) => s.label.toLowerCase().includes(q)),
   )
 }
@@ -109,6 +116,11 @@ export function RunPickerColumn({
                           shared run
                         </Badge>
                       )}
+                      {isHostedApiRun(run) && (
+                        <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
+                          api call
+                        </Badge>
+                      )}
                       {isTestingRun(run) && (
                         <Badge variant="outline" className="shrink-0 border-chart-3/40 font-mono text-[9px] text-chart-3">
                           test
@@ -137,6 +149,11 @@ export function RunPickerColumn({
                   <span className="font-mono text-[10px] text-muted-foreground">
                     {new Date(run.startedAt).toLocaleString()} · {timeAgo(run.startedAt)} · {run.id}
                   </span>
+                  {(isSharedRun(run) || isHostedApiRun(run)) && (
+                    <span className="font-mono text-[10px] text-muted-foreground/90">
+                      {deploymentRunCallerLabel(run)}
+                    </span>
+                  )}
                   {run.notes && <RunNotesPreview notes={run.notes} />}
                 </div>
               </li>

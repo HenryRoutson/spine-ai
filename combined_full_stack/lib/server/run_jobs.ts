@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "./supabase_admin";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { dataDir } from "./config";
 import { installJobLogSink, type JobLogEntry } from "./job_log_sink";
@@ -150,6 +151,13 @@ function useSupabaseJobs(): boolean {
 export async function openJobDb(): Promise<JobDb> {
   if (!useSupabaseJobs()) return null;
   return createClient();
+}
+
+// AI : shared links + hosted APIs bill/run under the owner's user_id — caller may be anonymous or another user.
+export async function openCrossUserJobDb(): Promise<JobDb> {
+  if (!useSupabaseJobs()) return null;
+  const admin = await createAdminClient();
+  return admin ?? createClient();
 }
 
 function supabaseErrorMessage(err: unknown): string {

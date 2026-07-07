@@ -14,7 +14,13 @@ import { hashContent, type Store } from "./store";
 import { migrateProjectModules } from "./validity";
 import { isMissingSchemaError } from "./supabase_store";
 import { isLocalDevMode, LOCAL_DEV_USER_ID, type user_id_string } from "./require_auth";
-import { logger } from "./server_logger";
+import {
+  assertValidBillablePricing,
+  billingMultipleFromLegacyMarkupBps,
+  normalizeBillingMultiple,
+  normalizeFlatFeeCents,
+} from "@/lib/server/billable_pricing";
+import { callerFundsHostedApi } from "@/lib/server/hosted_api_billing";
 import {
   DocLabel,
   InputType,
@@ -26,7 +32,9 @@ import {
   type PipelineModule,
   type Project,
   type ProjectId,
+  HostedApiFundingMode,
 } from "./types";
+import { logger } from "./server_logger";
 import type { SharedLinkDefaultDoc } from "@/lib/shared-link-types";
 import type { InputDocsAssignment } from "@/lib/inference-input";
 import { docsForInputModule } from "@/lib/inference-input";
@@ -36,6 +44,20 @@ export type { HostedApiRecord };
 export class HostedApiSpendLimitError extends Error {
   constructor() {
     super("This API has reached its spending limit.");
+  }
+}
+
+export class HostedApiSpendLimitTooLowError extends Error {
+  constructor(spentCents: number) {
+    super(
+      `Spending limit must be at least $${(spentCents / 100).toFixed(2)} — already spent on this API.`,
+    );
+  }
+}
+
+export class HostedApiDisabledError extends Error {
+  constructor() {
+    super("This API is temporarily disabled.");
   }
 }
 
@@ -53,9 +75,16 @@ export function hostedApiSpendLimitReached(
 }
 
 export function assertHostedApiCanAcceptRun(
-  api: Pick<HostedApiRecord, "spendLimitCents" | "totalSpendCents">,
+  api: Pick<HostedApiRecord, "spendLimitCents" | "totalSpendCents" | "enabled">,
 ): void {
+  assertHostedApiEnabled(api);
   if (hostedApiSpendLimitReached(api)) throw new HostedApiSpendLimitError();
+}
+
+export function assertHostedApiEnabled(
+  api: Pick<HostedApiRecord, "enabled">,
+): void {
+  if (api.enabled === false) throw new HostedApiDisabledError();
 }
 
 function toExactSpendCents(cents: number): number {
@@ -112,7 +141,22 @@ function loadLocalApi(id: HostedApiId): StoredHostedApi | null {
   const path = apiFile(id);
   if (!existsSync(path)) return null;
   const row = JSON.parse(readFileSync(path, "utf8")) as StoredHostedApi;
-  return { ...row, totalSpendCents: row.totalSpendCents ?? 0, requestCount: row.requestCount ?? 0 };
+  return {
+    ...row,
+    totalSpendCents: row.totalSpendCents ?? 0,
+    requestCount: row.requestCount ?? 0,
+    fundingMode: (row.fundingMode as HostedApiFundingMode) ?? HostedApiFundingMode.OwnerPays,
+    billingMultiple: normalizeBillingMultiple(
+      row.billingMultiple ??
+        billingMultipleFromLegacyMarkupBps(
+          (row as { markupBps?: number }).markupBps,
+        ),
+    ),
+    flatFeeCents: normalizeFlatFeeCents(
+      row.flatFeeCents ?? (row as { markupFixedCents?: number }).markupFixedCents ?? 0,
+    ),
+    enabled: row.enabled !== false,
+  };
 }
 
 function saveLocalApi(row: StoredHostedApi): void {
@@ -147,10 +191,18 @@ function rowFromDb(data: Record<string, unknown>): StoredHostedApi {
     defaultDocs: (data.default_docs ?? []) as SharedLinkDefaultDoc[],
     apiKeyHash: data.api_key_hash as string,
     apiKeyPrefix: data.api_key_prefix as string,
+    fundingMode: (data.funding_mode as HostedApiFundingMode) ?? HostedApiFundingMode.OwnerPays,
+    billingMultiple: normalizeBillingMultiple(
+      data.billing_multiple != null
+        ? Number(data.billing_multiple)
+        : billingMultipleFromLegacyMarkupBps(Number(data.markup_bps ?? 0)),
+    ),
+    flatFeeCents: normalizeFlatFeeCents(Number(data.markup_fixed_cents ?? 0)),
     spendLimitCents: data.spend_limit_cents != null ? Number(data.spend_limit_cents) : undefined,
     totalSpendCents: Number(data.total_spend_cents ?? 0),
     requestCount: Number(data.request_count ?? 0),
     createdAt: Number(data.created_at),
+    enabled: data.enabled !== false,
     revoked: Boolean(data.revoked),
   };
 }
@@ -174,7 +226,7 @@ function listLocalApisForOwner(ownerId: user_id_string): HostedApiRecord[] {
   return readdirSync(apisDir())
     .filter((f) => f.endsWith(".json"))
     .map((f) => loadLocalApi(f.replace(".json", "") as HostedApiId))
-    .filter((r): r is StoredHostedApi => r != null && r.ownerId === ownerId)
+    .filter((r): r is StoredHostedApi => r != null && r.ownerId === ownerId && !r.revoked)
     .map(toPublicRecord);
 }
 
@@ -197,10 +249,14 @@ function toPublicRecord(row: StoredHostedApi): HostedApiRecord {
     defaultModel: row.defaultModel,
     defaultDocs: row.defaultDocs,
     apiKeyPrefix: row.apiKeyPrefix,
+    fundingMode: row.fundingMode,
+    billingMultiple: row.billingMultiple,
+    flatFeeCents: row.flatFeeCents,
     spendLimitCents: row.spendLimitCents,
     totalSpendCents: row.totalSpendCents,
     requestCount: row.requestCount,
     createdAt: row.createdAt,
+    enabled: row.enabled !== false,
     revoked: row.revoked,
   };
 }
@@ -209,6 +265,9 @@ export type PublishHostedApiInput = {
   ownerId: user_id_string;
   project: Project;
   defaultModel?: ModelId;
+  fundingMode?: HostedApiFundingMode;
+  billingMultiple?: number;
+  flatFeeCents?: number;
   spendLimitCents?: number;
   defaultDocsByModule: Partial<Record<ModuleId, DocId[]>>;
   store: Store;
@@ -218,6 +277,11 @@ export type PublishHostedApiResult = HostedApiRecord & { apiKey: string };
 
 export async function publishHostedApi(input: PublishHostedApiInput): Promise<PublishHostedApiResult> {
   const id = newHostedApiId();
+  const fundingMode = input.fundingMode ?? HostedApiFundingMode.OwnerPays;
+  const billingMultiple = normalizeBillingMultiple(input.billingMultiple);
+  const flatFeeCents = normalizeFlatFeeCents(input.flatFeeCents);
+  assertValidBillablePricing(callerFundsHostedApi(fundingMode), billingMultiple, flatFeeCents, "API pricing");
+
   const { key, prefix, hash } = generateHostedApiKey();
   const snapshot = migrateProjectModules(structuredClone(input.project));
   const defaultDocs: SharedLinkDefaultDoc[] = [];
@@ -262,11 +326,15 @@ export async function publishHostedApi(input: PublishHostedApiInput): Promise<Pu
     defaultDocs,
     apiKeyHash: hash,
     apiKeyPrefix: prefix,
+    fundingMode,
+    billingMultiple,
+    flatFeeCents,
     spendLimitCents:
       input.spendLimitCents != null ? toExactSpendCents(input.spendLimitCents) : undefined,
     totalSpendCents: 0,
     requestCount: 0,
     createdAt: Date.now(),
+    enabled: true,
     revoked: false,
   };
 
@@ -286,9 +354,14 @@ export async function publishHostedApi(input: PublishHostedApiInput): Promise<Pu
     default_model: row.defaultModel ?? null,
     api_key_hash: row.apiKeyHash,
     api_key_prefix: row.apiKeyPrefix,
+    funding_mode: row.fundingMode,
+    billing_multiple: row.billingMultiple,
+    markup_fixed_cents: row.flatFeeCents,
+    markup_bps: 0,
     spend_limit_cents: row.spendLimitCents ?? null,
     total_spend_cents: row.totalSpendCents,
     request_count: 0,
+    enabled: true,
     revoked: false,
     created_at: row.createdAt,
   });
@@ -312,6 +385,52 @@ export async function revokeHostedApi(ownerId: user_id_string, id: HostedApiId):
     await db.from("hosted_apis").update({ revoked: true }).eq("id", id).eq("owner_id", ownerId);
   }
   return true;
+}
+
+export async function setHostedApiEnabled(
+  ownerId: user_id_string,
+  id: HostedApiId,
+  enabled: boolean,
+): Promise<HostedApiRecord | null> {
+  const api = await getHostedApi(id);
+  if (!api || api.ownerId !== ownerId) return null;
+
+  api.enabled = enabled;
+  saveLocalApi(api);
+
+  const db = await supabaseForHostedApis();
+  if (db) {
+    await db.from("hosted_apis").update({ enabled }).eq("id", id).eq("owner_id", ownerId);
+  }
+  return toPublicRecord(api);
+}
+
+export async function updateHostedApiSpendLimit(
+  ownerId: user_id_string,
+  id: HostedApiId,
+  spendLimitCents: number | null,
+): Promise<HostedApiRecord | null> {
+  const api = await getHostedApi(id);
+  if (!api || api.ownerId !== ownerId) return null;
+
+  const normalized =
+    spendLimitCents == null ? undefined : toExactSpendCents(spendLimitCents);
+  if (normalized != null && normalized < api.totalSpendCents) {
+    throw new HostedApiSpendLimitTooLowError(api.totalSpendCents);
+  }
+
+  api.spendLimitCents = normalized;
+  saveLocalApi(api);
+
+  const db = await supabaseForHostedApis();
+  if (db) {
+    await db
+      .from("hosted_apis")
+      .update({ spend_limit_cents: normalized ?? null })
+      .eq("id", id)
+      .eq("owner_id", ownerId);
+  }
+  return toPublicRecord(api);
 }
 
 export async function incrementHostedApiRequestCount(id: HostedApiId): Promise<void> {

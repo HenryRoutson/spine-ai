@@ -1,4 +1,5 @@
 import type { PipelineRun } from "@/lib/types"
+import { formatErrorForClipboard } from "@/lib/error-copy"
 import {
   describeInputDescriptionFailure,
   inputRejectedReasonFromMessage,
@@ -121,6 +122,16 @@ function friendlyStepError(stepLabel: string, raw: string): RunErrorDisplay {
     }
   }
 
+  if (/unexpected end of json input|json\.parse|invalid json/i.test(raw)) {
+    return {
+      title: `"${stepLabel}" could not read JSON`,
+      message:
+        "A step tried to parse JSON from an input or document, but the text was empty or truncated. Check the assigned files in Inference.",
+      detail: raw,
+      stepLabel,
+    }
+  }
+
   if (/validation/i.test(raw) || /schema/i.test(raw)) {
     return {
       title: `"${stepLabel}" failed validation`,
@@ -166,4 +177,17 @@ export function formatRunErrorForDisplay(run: PipelineRun): RunErrorDisplay | nu
 
   const prefixed = raw.startsWith(`${step.label}:`) ? raw.slice(step.label.length + 1).trim() : raw
   return friendlyStepError(step.label, prefixed)
+}
+
+export function formatRunErrorForClipboard(
+  display: RunErrorDisplay,
+  technical?: string | null,
+  uiLocation = "Inference → Last run → error summary",
+): string {
+  return formatErrorForClipboard({
+    uiLocation,
+    summary: display.message,
+    detail: technical ?? display.detail,
+    context: display.stepLabel ? { "Pipeline step": display.stepLabel } : undefined,
+  })
 }

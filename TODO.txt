@@ -3,6 +3,20 @@ Spine
 rename everything to spine
 name might already be taken https://www.getspine.ai/
 
+
+LANDING_DEMO_IP_SALT required on Vercel
+
+use testing flag to see which users are real.
+
+https://elu.dev
+
+
+need to add a marketplace
+
+
+please mark files as public before sharing them as examples
+
+
 please add email collection as a prereq before allowing agent use
 landing page needs to be a form to gather data before anything
 need email from ppl to send out updates
@@ -22,6 +36,8 @@ Ensure the user doesn't have the think about, if this structure isn't json i nee
   Image - not json
 
 
+
+export excel with metadata
 
 
 fix 
@@ -50,6 +66,8 @@ add API abilty
 
 
 add ability to share link with custom billing changes.
+The user should be able to make money by marking up an llm pipeline they built, money should be payed directly into a seperate account than they pay llm tokens with where they can take out that money.
+idea is that instead of something like shopify to markup items, you can use this to markup ai automation pipelines to make money.
 
 
 

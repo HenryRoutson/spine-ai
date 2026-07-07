@@ -5,6 +5,7 @@ import { useMemo } from "react"
 import { Link2 } from "lucide-react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
+import rehypeSanitize from "rehype-sanitize"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { normalizeTestJson, stablePrettyJson } from "@/lib/deep_equal"
@@ -457,6 +458,13 @@ function isSafeMarkdownHref(href: string | undefined): href is string {
   return /^(https?:|mailto:)/i.test(trimmed)
 }
 
+function isSafeImageSrc(src: string | undefined): src is string {
+  if (!src) return false
+  const trimmed = src.trim()
+  if (trimmed.startsWith("data:image/")) return /^data:image\/(?:png|jpe?g|gif|webp|svg\+xml);/i.test(trimmed)
+  return /^https?:/i.test(trimmed)
+}
+
 const markdownComponents: Components = {
   h1: ({ children }) => <h1 className="mb-2 text-base font-semibold text-foreground">{children}</h1>,
   h2: ({ children }) => <h2 className="mb-1.5 mt-4 text-sm font-semibold text-foreground">{children}</h2>,
@@ -473,12 +481,19 @@ const markdownComponents: Components = {
   hr: () => <hr className="my-4 border-border" />,
   a: ({ href, children }) =>
     isSafeMarkdownHref(href) ? (
-      <a href={href} className="text-primary underline-offset-2 hover:underline" target="_blank" rel="noreferrer">
+      <a href={href} className="text-primary underline-offset-2 hover:underline" target="_blank" rel="noreferrer noopener">
         {children}
       </a>
     ) : (
       <span className="text-muted-foreground">{children}</span>
     ),
+  img: ({ src, alt }) => {
+    const srcStr = typeof src === "string" ? src : undefined
+    return isSafeImageSrc(srcStr) ? (
+      // eslint-disable-next-line @next/next/no-img-element -- markdown user content; src allowlisted above
+      <img src={srcStr} alt={alt ?? ""} className="my-2 max-w-full rounded border border-border" loading="lazy" />
+    ) : null
+  },
   code: ({ className, children }) =>
     className ? (
       <code className="font-mono text-[11px] text-primary">{children}</code>
@@ -505,7 +520,7 @@ const markdownComponents: Components = {
 export function MarkdownView({ md }: { md: string }) {
   return (
     <div className="text-xs leading-relaxed text-foreground">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]} components={markdownComponents}>
         {md}
       </ReactMarkdown>
     </div>

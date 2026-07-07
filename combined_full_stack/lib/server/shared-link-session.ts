@@ -1,7 +1,7 @@
 // AI : Session-scoped document management for shared-link public runs.
 // AI : Per-session uploads + default doc overlay for runPipeline; storage is local FS + Supabase blob.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import { dataDir } from "./config";
 import { hashContent, saveOriginalDocBytes, type Store } from "./store";
 import { shouldSaveOriginalBytes } from "./doc_upload_parse";
@@ -13,12 +13,39 @@ import type { SharedLinkDefaultDoc } from "@/lib/shared-link-types";
 export const MAX_SHARED_SESSION_DOCS = 30;
 export const MAX_SHARED_SESSION_BYTES = 100 * 1024 * 1024;
 
+export const SHARED_SESSION_ID_RE = /^[a-f0-9]{32}$/;
+export const SHARED_DOC_ID_RE = /^sha_[a-f0-9]{16}$/;
+
+export function parseSharedSessionId(raw: string | undefined | null): string | undefined {
+  if (!raw || !SHARED_SESSION_ID_RE.test(raw)) return undefined;
+  return raw;
+}
+
+export function parseSharedDocId(raw: string): DocId | null {
+  if (!SHARED_DOC_ID_RE.test(raw)) return null;
+  return raw as DocId;
+}
+
+function pathWithinRoot(root: string, target: string): boolean {
+  const rel = relative(resolve(root), resolve(target));
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function safeJoinUnder(root: string, ...segments: string[]): string | null {
+  const joined = resolve(root, ...segments);
+  return pathWithinRoot(root, joined) ? joined : null;
+}
+
 function linksDir(): string {
   return join(dataDir(), "shared_links");
 }
 
 function sessionDocsDir(linkId: SharedLinkId, sessionId: string): string {
-  return join(linksDir(), "docs", linkId, "sessions", sessionId);
+  if (!parseSharedSessionId(sessionId)) throw new Error("invalid shared session id");
+  const root = join(linksDir(), "docs", linkId, "sessions");
+  const dir = safeJoinUnder(root, sessionId);
+  if (!dir) throw new Error("invalid shared session path");
+  return dir;
 }
 
 function defaultDocsDir(linkId: SharedLinkId): string {
@@ -95,7 +122,9 @@ export async function saveSessionUpload(
   content: string,
   type: InputType,
   bytes?: Uint8Array,
+  append = false,
 ): Promise<DocRef> {
+  if (!parseSharedSessionId(sessionId)) throw new Error("invalid shared session id");
   const id = hashContent(`${linkId}:${sessionId}:${file.name}:${content.slice(0, 64)}`);
   const doc: DocRef = {
     id,
@@ -120,9 +149,13 @@ export async function saveSessionUpload(
     writeFileSync(join(dir, `${id}.${ext}`), fileBytes);
     saveOriginalDocBytes(id, fileBytes, ext);
   }
-  const existing = readSessionDocs(linkId, sessionId).filter((d) => d.moduleId !== moduleId);
-  existing.push({ id, name: doc.name, type, label: DocLabel.Inference, moduleId });
-  writeSessionDocs(linkId, sessionId, existing);
+  const sessionDocs = readSessionDocs(linkId, sessionId);
+  const forModule = sessionDocs.filter((d) => d.moduleId === moduleId);
+  const otherModules = sessionDocs.filter((d) => d.moduleId !== moduleId);
+  const nextForModule = append
+    ? [...forModule, { id, name: doc.name, type, label: DocLabel.Inference, moduleId }]
+    : [{ id, name: doc.name, type, label: DocLabel.Inference, moduleId }];
+  writeSessionDocs(linkId, sessionId, [...otherModules, ...nextForModule]);
   return doc;
 }
 
@@ -145,9 +178,88 @@ export function sessionDocsForModule(
 }
 
 export function sessionDocContent(linkId: SharedLinkId, sessionId: string, docId: DocId): string | undefined {
-  const path = join(sessionDocsDir(linkId, sessionId), `${docId}.txt`);
-  if (!existsSync(path)) return undefined;
+  if (!parseSharedDocId(docId)) return undefined;
+  const root = sessionDocsDir(linkId, sessionId);
+  const path = safeJoinUnder(root, `${docId}.txt`);
+  if (!path || !existsSync(path)) return undefined;
   return readFileSync(path, "utf8");
+}
+
+export function defaultDocIdForLink(
+  linkId: SharedLinkId,
+  moduleId: ModuleId,
+  filename: string,
+): DocId {
+  return hashContent(`shared_default:${linkId}:${moduleId}:${filename}`);
+}
+
+export function resolveSharedDocParserText(
+  linkId: SharedLinkId,
+  docId: DocId,
+  sessionId: string | undefined,
+  defaultDocs: SharedLinkDefaultDoc[],
+): string | undefined {
+  if (!parseSharedDocId(docId)) return undefined;
+  const safeSessionId = parseSharedSessionId(sessionId);
+  if (safeSessionId) {
+    try {
+      const sessionText = sessionDocContent(linkId, safeSessionId, docId);
+      if (sessionText !== undefined) return sessionText;
+    } catch {
+      return undefined;
+    }
+  }
+  for (const def of defaultDocs) {
+    if (defaultDocIdForLink(linkId, def.moduleId, def.filename) !== docId) continue;
+    return loadDefaultDocContent(linkId, def.moduleId, def.filename, defaultDocs)?.content;
+  }
+  return undefined;
+}
+
+const SHARED_ORIGINAL_EXTS = ["pdf", "png", "jpg", "jpeg", "webp"] as const;
+const SHARED_ORIGINAL_MIME: Record<(typeof SHARED_ORIGINAL_EXTS)[number], string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+};
+
+export type SharedOriginalDocFile = { path: string; mime: string };
+
+function sharedOriginalInDir(dir: string, baseName: string): SharedOriginalDocFile | null {
+  if (!parseSharedDocId(baseName)) return null;
+  for (const ext of SHARED_ORIGINAL_EXTS) {
+    const path = safeJoinUnder(dir, `${baseName}.${ext}`);
+    if (!path || !existsSync(path)) continue;
+    return { path, mime: SHARED_ORIGINAL_MIME[ext] };
+  }
+  return null;
+}
+
+export function resolveSharedDocOriginalFile(
+  linkId: SharedLinkId,
+  docId: DocId,
+  sessionId: string | undefined,
+  defaultDocs: SharedLinkDefaultDoc[],
+): SharedOriginalDocFile | null {
+  if (!parseSharedDocId(docId)) return null;
+  const safeSessionId = parseSharedSessionId(sessionId);
+  if (safeSessionId) {
+    try {
+      const sessionFile = sharedOriginalInDir(sessionDocsDir(linkId, safeSessionId), docId);
+      if (sessionFile) return sessionFile;
+    } catch {
+      return null;
+    }
+  }
+  for (const def of defaultDocs) {
+    if (defaultDocIdForLink(linkId, def.moduleId, def.filename) !== docId) continue;
+    const storageKey = `${def.moduleId}_${def.filename}`;
+    const defaultFile = sharedOriginalInDir(defaultDocsDir(linkId), storageKey);
+    if (defaultFile) return defaultFile;
+  }
+  return null;
 }
 
 // AI : overlay session + default docs onto the sharer's store for runPipeline.
@@ -158,6 +270,7 @@ export function overlayStoreForSharedRun(
   defaultDocs: SharedLinkDefaultDoc[],
   inputModules: { id: ModuleId }[],
 ): Store {
+  if (!parseSharedSessionId(sessionId)) throw new Error("invalid shared session id");
   const extraDocs = new Map<DocId, DocRef>();
   const extraContent = new Map<DocId, string>();
 

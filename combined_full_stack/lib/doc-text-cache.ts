@@ -1,10 +1,11 @@
 import { API_ROUTES } from "@/lib/api-routes"
 import { FETCH_CREDENTIALS, formatApiError, readApiErrorBody } from "@/lib/api-client"
 import { isDemoMode } from "@/lib/demo-mode"
+import { fetchSharedRunDocText } from "@/lib/shared-run-doc-cache"
 
 type doc_text_layer = "parser" | "vision"
 
-type doc_text_payload = { text?: string; content?: string; parser?: string; fromCache?: boolean }
+export type doc_text_payload = { text?: string; content?: string; parser?: string; fromCache?: boolean }
 
 const cache = new Map<string, Promise<unknown>>()
 
@@ -61,8 +62,18 @@ async function fetchDocTextOnce(docId: string, layer: doc_text_layer): Promise<d
   }
 }
 
-export function fetchDocText(docId: string, layer: doc_text_layer = "parser"): Promise<doc_text_payload> {
-  return cached(cacheKey(docId, layer), () => fetchDocTextOnce(docId, layer))
+export function fetchDocText(
+  docId: string,
+  layer: doc_text_layer = "parser",
+  opts?: { linkId?: string; sessionId?: string },
+): Promise<doc_text_payload> {
+  const key = opts?.linkId
+    ? `${cacheKey(docId, layer)}:shared:${opts.linkId}:${opts.sessionId ?? ""}`
+    : cacheKey(docId, layer)
+  return cached(key, () => {
+    if (opts?.linkId) return fetchSharedRunDocText(opts.linkId, docId, layer, opts.sessionId)
+    return fetchDocTextOnce(docId, layer)
+  })
 }
 
 export function invalidateDocText(docId: string): void {

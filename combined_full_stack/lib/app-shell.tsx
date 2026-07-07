@@ -3,6 +3,7 @@
 // AI : shell navigation — lets Inference/Logging jump to Documents and focus a stored hash.
 
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react"
+import type { SharedRunDocScope } from "@/lib/shared-run-doc-scope"
 import type { DocId, StructureModelId } from "@/lib/types"
 
 export type AppWindowId =
@@ -10,6 +11,8 @@ export type AppWindowId =
   | "pipeline"
   | "testing"
   | "inference"
+  | "share"
+  | "earnings"
   | "logging"
   | "cache"
   | "documents"
@@ -29,6 +32,11 @@ interface AppShellState {
   focusStructureId: StructureModelId | null
   openStructure: (structureId?: StructureModelId) => void
   clearFocusStructure: () => void
+  activeSharedLinkId: string | null
+  openSharedRun: (linkId: string) => void
+  clearSharedRun: () => void
+  sharedRunDocScope: SharedRunDocScope | null
+  setSharedRunDocScope: (scope: SharedRunDocScope | null) => void
 }
 
 const AppShellContext = createContext<AppShellState | null>(null)
@@ -38,6 +46,15 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   const [focusDocId, setFocusDocId] = useState<DocId | null>(null)
   const [focusRunId, setFocusRunId] = useState<string | null>(null)
   const [focusStructureId, setFocusStructureId] = useState<StructureModelId | null>(null)
+  const [activeSharedLinkId, setActiveSharedLinkId] = useState<string | null>(null)
+  const [sharedRunDocScope, setSharedRunDocScope] = useState<SharedRunDocScope | null>(null)
+
+  const openSharedRun = useCallback((linkId: string) => {
+    setActiveSharedLinkId(linkId)
+    setActiveWindow("share")
+  }, [])
+
+  const clearSharedRun = useCallback(() => setActiveSharedLinkId(null), [])
 
   const openDocuments = useCallback((docId?: DocId) => {
     setFocusDocId(docId ?? null)
@@ -74,6 +91,11 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         focusStructureId,
         openStructure,
         clearFocusStructure,
+        activeSharedLinkId,
+        openSharedRun,
+        clearSharedRun,
+        sharedRunDocScope,
+        setSharedRunDocScope,
       }}
     >
       {children}

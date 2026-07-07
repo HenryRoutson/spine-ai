@@ -30,7 +30,7 @@ export function computeWorkspaceValidity(
   }
 }
 
-const INVALID_NAV_TABS = new Set<AppWindowId>(["pipeline", "inference", "testing"])
+const INVALID_NAV_TABS = new Set<AppWindowId>(["pipeline", "inference", "testing", "share"])
 
 export function workspaceNavTabIssue(
   tabId: AppWindowId,
@@ -43,7 +43,7 @@ export function workspaceNavTabIssue(
 }
 
 export function workspaceNavTabDisabled(tabId: AppWindowId, validity: WorkspaceValidity): boolean {
-  return (tabId === "inference" || tabId === "testing") && validity.runTabsBlocked
+  return (tabId === "inference" || tabId === "testing" || tabId === "share") && validity.runTabsBlocked
 }
 
 export function workspaceNavTabTitle(

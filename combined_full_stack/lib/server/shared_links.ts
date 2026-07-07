@@ -14,7 +14,12 @@ import { hashContent, type Store } from "./store";
 import { migrateProjectModules } from "./validity";
 import { isMissingSchemaError } from "./supabase_store";
 import { LOCAL_DEV_USER_ID, isLocalDevMode, type user_id_string } from "./require_auth";
-import { logger } from "./server_logger";
+import {
+  assertValidSharedLinkPricing,
+  billingMultipleFromLegacyMarkupBps,
+  normalizeBillingMultiple,
+  normalizeFlatFeeCents,
+} from "@/lib/server/billable_pricing";
 import {
   SharedLinkFundingMode,
   type DocId,
@@ -25,6 +30,7 @@ import {
   type ProjectId,
   type SharedLinkId,
 } from "./types";
+import { logger } from "./server_logger";
 import type { SharedLinkDefaultDoc, SharedLinkRecord } from "@/lib/shared-link-types";
 
 export type { SharedLinkDefaultDoc, SharedLinkRecord };
@@ -32,6 +38,20 @@ export type { SharedLinkDefaultDoc, SharedLinkRecord };
 export class SharedLinkSpendLimitError extends Error {
   constructor() {
     super("This link has reached its spending limit.");
+  }
+}
+
+export class SharedLinkSpendLimitTooLowError extends Error {
+  constructor(spentCents: number) {
+    super(
+      `Spending limit must be at least $${(spentCents / 100).toFixed(2)} — already spent on this link.`,
+    );
+  }
+}
+
+export class SharedLinkDisabledError extends Error {
+  constructor() {
+    super("This link is temporarily disabled.");
   }
 }
 
@@ -43,9 +63,16 @@ export function sharedLinkSpendLimitReached(
 }
 
 export function assertSharedLinkCanAcceptRun(
-  link: Pick<SharedLinkRecord, "spendLimitCents" | "totalSpendCents">,
+  link: Pick<SharedLinkRecord, "spendLimitCents" | "totalSpendCents" | "enabled">,
 ): void {
+  assertSharedLinkEnabled(link);
   if (sharedLinkSpendLimitReached(link)) throw new SharedLinkSpendLimitError();
+}
+
+export function assertSharedLinkEnabled(
+  link: Pick<SharedLinkRecord, "enabled">,
+): void {
+  if (link.enabled === false) throw new SharedLinkDisabledError();
 }
 
 function toExactSpendCents(cents: number): number {
@@ -146,8 +173,20 @@ export function newSessionId(): string {
 function loadLocalLink(id: SharedLinkId): StoredSharedLink | null {
   const path = linkFile(id);
   if (!existsSync(path)) return null;
-  const row = JSON.parse(readFileSync(path, "utf8")) as StoredSharedLink;
-  return { ...row, totalSpendCents: row.totalSpendCents ?? 0 };
+  const row = JSON.parse(readFileSync(path, "utf8")) as StoredSharedLink & {
+    markupBps?: number;
+    markupFixedCents?: number;
+  };
+  return {
+    ...row,
+    totalSpendCents: row.totalSpendCents ?? 0,
+    billingMultiple: normalizeBillingMultiple(
+      row.billingMultiple ??
+        billingMultipleFromLegacyMarkupBps(row.markupBps),
+    ),
+    flatFeeCents: normalizeFlatFeeCents(row.flatFeeCents ?? row.markupFixedCents ?? 0),
+    enabled: row.enabled !== false,
+  };
 }
 
 function saveLocalLink(row: StoredSharedLink): void {
@@ -183,8 +222,17 @@ async function loadSupabaseLink(id: SharedLinkId): Promise<StoredSharedLink | nu
     spendLimitCents:
       data.spend_limit_cents != null ? Number(data.spend_limit_cents) : undefined,
     totalSpendCents: Number(data.total_spend_cents ?? 0),
+    billingMultiple: normalizeBillingMultiple(
+      data.billing_multiple != null
+        ? Number(data.billing_multiple)
+        : billingMultipleFromLegacyMarkupBps(Number(data.markup_bps ?? 0)),
+    ),
+    flatFeeCents: normalizeFlatFeeCents(
+      Number(data.markup_fixed_cents ?? 0),
+    ),
     runCount: data.run_count ?? 0,
     createdAt: data.created_at,
+    enabled: data.enabled !== false,
     revoked: data.revoked,
   };
 }
@@ -229,8 +277,15 @@ export async function listSharedLinksForOwner(ownerId: user_id_string): Promise<
       spendLimitCents:
         row.spend_limit_cents != null ? Number(row.spend_limit_cents) : undefined,
       totalSpendCents: Number(row.total_spend_cents ?? 0),
+      billingMultiple: normalizeBillingMultiple(
+        row.billing_multiple != null
+          ? Number(row.billing_multiple)
+          : billingMultipleFromLegacyMarkupBps(Number(row.markup_bps ?? 0)),
+      ),
+      flatFeeCents: normalizeFlatFeeCents(Number(row.markup_fixed_cents ?? 0)),
       runCount: row.run_count ?? 0,
       createdAt: row.created_at,
+      enabled: row.enabled !== false,
       revoked: row.revoked,
     }),
   );
@@ -248,8 +303,11 @@ function toPublicRecord(row: StoredSharedLink): SharedLinkRecord {
     defaultDocs: row.defaultDocs,
     spendLimitCents: row.spendLimitCents,
     totalSpendCents: row.totalSpendCents,
+    billingMultiple: row.billingMultiple,
+    flatFeeCents: row.flatFeeCents,
     runCount: row.runCount,
     createdAt: row.createdAt,
+    enabled: row.enabled !== false,
     revoked: row.revoked,
   };
 }
@@ -261,12 +319,19 @@ export type PublishSharedLinkInput = {
   fundingMode?: SharedLinkFundingMode;
   viewerNameRequired?: boolean;
   spendLimitCents?: number;
+  billingMultiple?: number;
+  flatFeeCents?: number;
   defaultDocsByModule: Partial<Record<ModuleId, DocId[]>>;
   store: Store;
 };
 
 export async function publishSharedLink(input: PublishSharedLinkInput): Promise<SharedLinkRecord> {
   const id = newSharedLinkId();
+  const fundingMode = input.fundingMode ?? SharedLinkFundingMode.SharerPays;
+  const billingMultiple = normalizeBillingMultiple(input.billingMultiple);
+  const flatFeeCents = normalizeFlatFeeCents(input.flatFeeCents);
+  assertValidSharedLinkPricing(fundingMode, billingMultiple, flatFeeCents);
+
   const snapshot = migrateProjectModules(structuredClone(input.project));
   const defaultDocs: SharedLinkDefaultDoc[] = [];
   mkdirSync(defaultDocsDir(id), { recursive: true });
@@ -309,14 +374,17 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     description: undefined,
     snapshot,
     defaultModel: input.defaultModel,
-    fundingMode: input.fundingMode ?? SharedLinkFundingMode.SharerPays,
+    fundingMode,
     viewerNameRequired: input.viewerNameRequired ?? false,
     spendLimitCents:
       input.spendLimitCents != null ? toExactSpendCents(input.spendLimitCents) : undefined,
     totalSpendCents: 0,
+    billingMultiple,
+    flatFeeCents,
     defaultDocs,
     runCount: 0,
     createdAt: Date.now(),
+    enabled: true,
     revoked: false,
   };
 
@@ -340,6 +408,10 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     viewer_name_required: row.viewerNameRequired,
     spend_limit_cents: row.spendLimitCents ?? null,
     total_spend_cents: row.totalSpendCents,
+    billing_multiple: row.billingMultiple,
+    markup_fixed_cents: row.flatFeeCents,
+    markup_bps: 0,
+    enabled: true,
     revoked: false,
     run_count: 0,
     created_at: row.createdAt,
@@ -364,6 +436,52 @@ export async function revokeSharedLink(ownerId: user_id_string, id: SharedLinkId
     await db.from("shared_links").update({ revoked: true }).eq("id", id).eq("owner_id", ownerId);
   }
   return true;
+}
+
+export async function setSharedLinkEnabled(
+  ownerId: user_id_string,
+  id: SharedLinkId,
+  enabled: boolean,
+): Promise<SharedLinkRecord | null> {
+  const link = await getSharedLink(id);
+  if (!link || link.ownerId !== ownerId) return null;
+
+  link.enabled = enabled;
+  saveLocalLink(link);
+
+  const db = await supabaseForSharedLinks();
+  if (db) {
+    await db.from("shared_links").update({ enabled }).eq("id", id).eq("owner_id", ownerId);
+  }
+  return toPublicRecord(link);
+}
+
+export async function updateSharedLinkSpendLimit(
+  ownerId: user_id_string,
+  id: SharedLinkId,
+  spendLimitCents: number | null,
+): Promise<SharedLinkRecord | null> {
+  const link = await getSharedLink(id);
+  if (!link || link.ownerId !== ownerId) return null;
+
+  const normalized =
+    spendLimitCents == null ? undefined : toExactSpendCents(spendLimitCents);
+  if (normalized != null && normalized < link.totalSpendCents) {
+    throw new SharedLinkSpendLimitTooLowError(link.totalSpendCents);
+  }
+
+  link.spendLimitCents = normalized;
+  saveLocalLink(link);
+
+  const db = await supabaseForSharedLinks();
+  if (db) {
+    await db
+      .from("shared_links")
+      .update({ spend_limit_cents: normalized ?? null })
+      .eq("id", id)
+      .eq("owner_id", ownerId);
+  }
+  return toPublicRecord(link);
 }
 
 export async function incrementSharedLinkRunCount(id: SharedLinkId): Promise<void> {
@@ -492,10 +610,13 @@ export function publicLinkView(link: StoredSharedLink) {
     defaultModel: link.defaultModel,
     fundingMode: link.fundingMode,
     viewerNameRequired: link.viewerNameRequired,
+    billingMultiple: link.billingMultiple,
+    flatFeeCents: link.flatFeeCents,
     defaultDocs: link.defaultDocs.map((d) => ({ moduleId: d.moduleId, filename: d.filename })),
     modules: link.snapshot.modules.map(sanitizeModuleForPublic),
     models: link.snapshot.models,
     spendLimitReached: sharedLinkSpendLimitReached(link),
+    disabled: link.enabled === false,
   };
 }
 

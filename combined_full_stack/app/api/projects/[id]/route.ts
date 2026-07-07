@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
-import { parseRequestJson, projectPatchSchema } from "@/lib/server/api_schemas";
+import { parseProjectId, parseRequestJson, projectPatchSchema } from "@/lib/server/api_schemas";
 import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { logger } from "@/lib/server/server_logger";
 import { sanitizeModuleModels } from "@/lib/server/model_catalog";
 import { mergeStrategyConfigPatch } from "@/lib/server/strategies";
-import type { Project, ProjectId } from "@/lib/server/types";
+import type { Project } from "@/lib/server/types";
 
 const apiLog = logger("api:projects");
 
@@ -16,11 +16,13 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (authCtx instanceof NextResponse) return authCtx;
   const { store } = authCtx;
 
-  const { id } = await ctx.params;
-  const project = store.project(id as ProjectId);
+  const { id: rawId } = await ctx.params;
+  const projectId = parseProjectId(rawId);
+  if (!projectId) return apiError(unknownProject(rawId), HTTP.NOT_FOUND);
+  const project = store.project(projectId);
   if (!project) {
-    apiLog.warn(`PUT /api/projects — unknown`, { projectId: id });
-    return apiError(unknownProject(id), HTTP.NOT_FOUND);
+    apiLog.warn(`PUT /api/projects — unknown`, { projectId });
+    return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
   }
   const patchBody = await parseRequestJson(req, projectPatchSchema);
   if ("validationError" in patchBody) return apiError(patchBody.validationError, HTTP.BAD_REQUEST);
@@ -33,7 +35,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       : {}),
   };
   apiLog.info(`PUT /api/projects`, {
-    projectId: id,
+    projectId,
     patchKeys: Object.keys(sanitized),
     moduleCount: sanitized.modules?.length ?? project.modules.length,
     modelCount: sanitized.models?.length ?? project.models.length,
@@ -48,13 +50,15 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   if (authCtx instanceof NextResponse) return authCtx;
   const { store } = authCtx;
 
-  const { id } = await ctx.params;
-  if (!store.project(id as ProjectId)) {
-    apiLog.warn(`DELETE /api/projects — unknown`, { projectId: id });
-    return apiError(unknownProject(id), HTTP.NOT_FOUND);
+  const { id: rawId } = await ctx.params;
+  const projectId = parseProjectId(rawId);
+  if (!projectId) return apiError(unknownProject(rawId), HTTP.NOT_FOUND);
+  if (!store.project(projectId)) {
+    apiLog.warn(`DELETE /api/projects — unknown`, { projectId });
+    return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
   }
-  store.deleteProject(id as ProjectId);
-  apiLog.info(`DELETE /api/projects`, { projectId: id });
+  store.deleteProject(projectId);
+  apiLog.info(`DELETE /api/projects`, { projectId });
   await store.flush();
   return NextResponse.json({ ok: true });
 }

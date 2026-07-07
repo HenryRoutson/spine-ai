@@ -3,11 +3,12 @@
 // AI : TODO (spec) — visualize duplicate runs caught by fingerprint dedup (count + billing saved).
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { API_ROUTES } from "@/lib/api-routes"
-import { JSON_HEADERS } from "@/lib/api-client"
+import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { formatCents } from "@/lib/format"
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect, useCallback } from "react"
 import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts"
-import { useStore, type BillingAccountView } from "@/lib/store"
+import { useWorkspaceBilling } from "@/lib/use-workspace-billing"
+import type { BillingAccountView } from "@/lib/store"
 import { billingSeries, totalSaved, totalUsageFromRuns } from "@/lib/billing"
 import { redirectToCheckout } from "@/lib/stripe-client"
 import { STRIPE_ENABLED } from "@/lib/stripe-enabled"
@@ -23,7 +24,7 @@ import {
 } from "@/components/ui/chart"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { CreditCard, Loader2, TrendingDown, TrendingUp } from "lucide-react"
+import { CreditCard, KeyRound, Loader2, TrendingDown, TrendingUp } from "lucide-react"
 
 // AI : de-mocked — series keys come from the real billing aggregation (one line per model
 // AI : + the doc-parse service), so new models show up without touching this file.
@@ -48,14 +49,19 @@ function formatCreditWhen(iso: string): string {
 }
 
 export function Billing() {
-  const { runs, billingRuns, project, billingAccount, refreshBilling } = useStore()
-  const [scope, setScope] = useState<BillingScope>("all")
+  const { runs, billingRuns, project, billingAccount, refreshBilling } = useWorkspaceBilling()
+  const [scope, setScope] = useState<BillingScope>(project ? "all" : "all")
   const [checkoutKey, setCheckoutKey] = useState<string | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
+  const [billingKeys, setBillingKeys] = useState<
+    { id: string; label: string; keyPrefix: string; createdAt: number }[]
+  >([])
+  const [billingKeysBusy, setBillingKeysBusy] = useState(false)
+  const [newBillingKey, setNewBillingKey] = useState<string | null>(null)
 
   const scopedRuns = scope === "all" ? billingRuns : runs
   const billing = useMemo(() => billingSeries(scopedRuns), [scopedRuns])
-  const scopeLabel = scope === "all" ? "All projects" : project.name
+  const scopeLabel = scope === "all" || !project ? "All projects" : project.name
 
   async function startCheckout(mode: "payment" | "subscription", amountCents?: number) {
     const key = mode === "subscription" ? "subscription" : `topup:${amountCents}`
@@ -74,6 +80,40 @@ export function Billing() {
     } catch (e) {
       setBanner((e as Error).message)
       setCheckoutKey(null)
+    }
+  }
+
+  const loadBillingKeys = useCallback(async () => {
+    setBillingKeysBusy(true)
+    try {
+      const data = await apiJson<{ keys: typeof billingKeys }>(API_ROUTES.billingKeys)
+      setBillingKeys(data.keys)
+    } catch {
+      setBillingKeys([])
+    } finally {
+      setBillingKeysBusy(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadBillingKeys()
+  }, [loadBillingKeys])
+
+  async function createBillingKey() {
+    setBillingKeysBusy(true)
+    setNewBillingKey(null)
+    try {
+      const data = await apiJson<{ key: { key: string } }>(API_ROUTES.billingKeys, {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ label: "default" }),
+      })
+      setNewBillingKey(data.key.key)
+      await loadBillingKeys()
+    } catch (e) {
+      setBanner((e as Error).message)
+    } finally {
+      setBillingKeysBusy(false)
     }
   }
 
@@ -130,9 +170,9 @@ export function Billing() {
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="07 / Billing"
-        title="Spend & Inference Cost"
-        description={`Credit-based billing — subscribe for monthly credit, top up when you run out. Actual run cost depends on models and pipeline length; you need at least ${formatCents(minRunBalanceCents)} credit to start a run.`}
+        step="11 / Billing"
+        title="LLM credit & spend"
+        description={`Credit for pipeline runs — subscribe or top up here. Share/API earnings live in the separate Earnings tab. You need at least ${formatCents(minRunBalanceCents)} credit to start a run.`}
       />
 
       {billingAccount && (
@@ -243,6 +283,7 @@ export function Billing() {
                 >
                   All projects
                 </Button>
+                {project ? (
                 <Button
                   type="button"
                   variant={scope === "project" ? "secondary" : "ghost"}
@@ -253,6 +294,7 @@ export function Billing() {
                 >
                   This project
                 </Button>
+                ) : null}
               </div>
               {hasRuns && (
                 <Badge variant="outline" className="gap-1 font-mono text-[10px] text-primary">
@@ -356,6 +398,47 @@ export function Billing() {
           ) : (
             <p className="px-4 py-6 font-mono text-xs text-muted-foreground">
               {hasRuns ? "All recent runs were cache hits — no billed spend yet." : "No cost data yet."}
+            </p>
+          )}
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5">
+            <div>
+              <h3 className="text-sm font-medium">Billing API keys</h3>
+              <p className="font-mono text-[10px] text-muted-foreground">
+                For caller-paid hosted APIs — pass as X-Spine-Billing-Key
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={billingKeysBusy}
+              onClick={() => void createBillingKey()}
+            >
+              {billingKeysBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
+              Create key
+            </Button>
+          </div>
+          {newBillingKey && (
+            <div className="border-b border-border bg-amber-500/10 px-4 py-3">
+              <p className="mb-1 text-xs text-amber-900 dark:text-amber-100">Copy now — shown once</p>
+              <code className="block truncate font-mono text-[10px]">{newBillingKey}</code>
+            </div>
+          )}
+          {billingKeys.length ? (
+            <ul className="divide-y divide-border">
+              {billingKeys.map((k) => (
+                <li key={k.id} className="flex items-center gap-3 px-4 py-2.5 font-mono text-xs">
+                  <span className="min-w-0 flex-1 truncate">{k.label}</span>
+                  <span className="text-[10px] text-muted-foreground">{k.keyPrefix}…</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="px-4 py-6 font-mono text-xs text-muted-foreground">
+              No billing keys — create one to call billable APIs programmatically.
             </p>
           )}
         </div>

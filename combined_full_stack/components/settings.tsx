@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Check, LogOut } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
-import { useStore } from "@/lib/store"
+import { useWorkspaceModel } from "@/lib/use-workspace-model"
 import { ModelSelector } from "@/components/model-selector"
 import { Button } from "@/components/ui/button"
 import { WindowHeader } from "@/components/window-header"
@@ -109,7 +109,7 @@ const SETTINGS_SECTIONS = [
 ] as const
 
 export function Settings() {
-  const { model, setModel } = useStore()
+  const { model, setModel } = useWorkspaceModel()
   const [email, setEmail] = useState<string | null>(null)
   const [defaultView, setDefaultView] = useState<JsonViewerHumanViewId>(DEFAULT_JSON_VIEWER_HUMAN_VIEW)
   const [syntaxTheme, setSyntaxTheme] = useState<JsonViewerSyntaxThemeId>(DEFAULT_JSON_VIEWER_SYNTAX_THEME)
@@ -187,7 +187,7 @@ export function Settings() {
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="07 / Settings"
+        step="11 / Settings"
         title="Settings"
         description="App preferences — stored locally in your browser."
       />

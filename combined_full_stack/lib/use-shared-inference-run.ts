@@ -4,6 +4,7 @@
 import { useCallback, useMemo, useRef, useState } from "react"
 import {
   docsForInputModule,
+  isMultiDocInputModule,
   moduleInputReady,
   orderedInputModules,
   type InputDocsAssignment,
@@ -19,11 +20,24 @@ import {
   startSharedRun,
   uploadSharedDoc,
 } from "@/lib/shared-run-client"
+import { cacheUploadFileText, fetchSharedRunDocText } from "@/lib/shared-run-doc-cache"
 import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 
 export type SharedInferencePhase = "idle" | "running" | "done"
 
-export function useSharedInferenceRun(link: SharedLinkPublicView, linkId: string) {
+type SharedRunAuth = {
+  isAuthenticated: boolean
+  onAuthRequired?: () => void
+}
+
+import { sharedLinkRequiresSignIn } from "@/lib/shared-link-funding"
+
+export function useSharedInferenceRun(
+  link: SharedLinkPublicView,
+  linkId: string,
+  auth?: SharedRunAuth,
+  onRunComplete?: () => void,
+) {
   const modules = link.modules
   const inputModules = useMemo(() => orderedInputModules(modules), [modules])
   const [inputDocs, setInputDocs] = useState<InputDocsAssignment>({})
@@ -60,10 +74,12 @@ export function useSharedInferenceRun(link: SharedLinkPublicView, linkId: string
       setUploadingModule(moduleId)
       try {
         const doc = await uploadSharedDoc(linkId, moduleId, file)
+        void cacheUploadFileText(linkId, doc.id, file)
+        void fetchSharedRunDocText(linkId, doc.id).catch(() => {})
         setInputDocs((prev) => {
           const cur = docsForInputModule(prev, moduleId)
-          const multi = inputModules.find((m) => m.id === moduleId)?.inputMinCount ?? 1
-          const next = multi > 1 ? [...cur, doc] : [doc]
+          const mod = inputModules.find((m) => m.id === moduleId)
+          const next = mod && isMultiDocInputModule(mod) ? [...cur, doc] : [doc]
           return { ...prev, [moduleId]: next }
         })
       } catch (e) {
@@ -106,7 +122,11 @@ export function useSharedInferenceRun(link: SharedLinkPublicView, linkId: string
       setError("Please enter your name")
       return
     }
-    if (link.fundingMode === "viewer_signs_in" || link.fundingMode === "viewer_pays") {
+    if (sharedLinkRequiresSignIn(link.fundingMode) && !auth?.isAuthenticated) {
+      if (auth?.onAuthRequired) {
+        auth.onAuthRequired()
+        return
+      }
       window.location.href = `/login?next=${encodeURIComponent(`/run/${linkId}`)}`
       return
     }
@@ -150,6 +170,7 @@ export function useSharedInferenceRun(link: SharedLinkPublicView, linkId: string
       if (jobGen !== activeJobGenRef.current) return
       setRun(finished)
       setPhase("done")
+      onRunComplete?.()
     } catch (e) {
       if (jobGen !== activeJobGenRef.current) return
       setError((e as Error).message)

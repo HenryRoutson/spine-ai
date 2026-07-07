@@ -127,7 +127,7 @@ export function Documents() {
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="06 / Documents"
+        step="08 / Documents"
         title="Document Store"
         description={`Content-addressed storage for ${project.name}. Uploads default to this pipeline — share to others from each row.`}
       />

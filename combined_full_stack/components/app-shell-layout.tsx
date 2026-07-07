@@ -20,12 +20,16 @@ import {
   ChevronDown,
   BookOpen,
   SquareCheck,
+  Share2,
+  SquareArrowUp,
+  Users,
+  Wallet,
 } from "lucide-react"
 import { ResizableSplit } from "@/components/resizable-split"
 import { navSplit, NAV_ICON_ONLY_MAX_WIDTH } from "@/lib/layout-split-settings"
 import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
-import { useStore } from "@/lib/store"
+import { useConsumerStore, useOptionalConsumerStore, useOptionalStore, useStore } from "@/lib/store"
 import {
   computeWorkspaceValidity,
   workspaceNavTabButtonClass,
@@ -38,6 +42,7 @@ import { createClient } from "@/utils/supabase/client"
 import { useAppShell, type AppWindowId } from "@/lib/app-shell"
 import { useSyncProjectDocStructures } from "@/lib/use-sync-project-doc-structures"
 import { LazyDocViewer } from "@/components/lazy-doc-viewer"
+import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
 import { PanelLoading } from "@/components/panel-loading"
 import { FeedbackButton } from "@/components/feedback-button"
 import { ProjectAssistantDock } from "@/components/project-assistant-dock"
@@ -79,6 +84,9 @@ const Testing = dynamic(() => import("@/components/testing").then((m) => ({ defa
 const Inference = dynamic(() => import("@/components/inference").then((m) => ({ default: m.Inference })), {
   loading: () => <PanelLoading label="loading inference…" />,
 })
+const Share = dynamic(() => import("@/components/share/share-page").then((m) => ({ default: m.SharePage })), {
+  loading: () => <PanelLoading label="loading share…" />,
+})
 const Logging = dynamic(() => import("@/components/logging").then((m) => ({ default: m.Logging })), {
   loading: () => <PanelLoading label="loading logging…" />,
 })
@@ -87,6 +95,9 @@ const Cache = dynamic(() => import("@/components/cache").then((m) => ({ default:
 })
 const Documents = dynamic(() => import("@/components/documents").then((m) => ({ default: m.Documents })), {
   loading: () => <PanelLoading label="loading documents…" />,
+})
+const Earnings = dynamic(() => import("@/components/earnings").then((m) => ({ default: m.Earnings })), {
+  loading: () => <PanelLoading label="loading earnings…" />,
 })
 const Billing = dynamic(() => import("@/components/billing").then((m) => ({ default: m.Billing })), {
   loading: () => <PanelLoading label="loading billing…" />,
@@ -109,12 +120,20 @@ const WINDOWS: { id: WindowId; label: string; hint: string; icon: NavIcon }[] = 
   // AI : Testing sits before Inference — tests run before demoing (spec § Testing).
   { id: "testing", label: "Testing", hint: "03", icon: SquareCheck },
   { id: "inference", label: "Inference", hint: "04", icon: Play },
-  { id: "logging", label: "Logging", hint: "05", icon: ScrollText },
-  { id: "cache", label: "Cache", hint: "06", icon: Database },
-  { id: "documents", label: "Documents", hint: "07", icon: Files },
-  { id: "docs", label: "Docs", hint: "08", icon: BookOpen },
-  { id: "billing", label: "Billing", hint: "09", icon: CreditCard },
-  { id: "settings", label: "Settings", hint: "10", icon: Settings },
+  { id: "share", label: "Share", hint: "05", icon: SquareArrowUp },
+  { id: "earnings", label: "Earnings", hint: "06", icon: Wallet },
+  { id: "logging", label: "Logging", hint: "07", icon: ScrollText },
+  { id: "cache", label: "Cache", hint: "08", icon: Database },
+  { id: "documents", label: "Documents", hint: "09", icon: Files },
+  { id: "docs", label: "Docs", hint: "10", icon: BookOpen },
+  { id: "billing", label: "Billing", hint: "11", icon: CreditCard },
+  { id: "settings", label: "Settings", hint: "12", icon: Settings },
+]
+
+const CONSUMER_WINDOWS: { id: WindowId; label: string; hint: string; icon: NavIcon }[] = [
+  { id: "share", label: "Shared with me", hint: "01", icon: Users },
+  { id: "billing", label: "Billing", hint: "02", icon: CreditCard },
+  { id: "settings", label: "Settings", hint: "03", icon: Settings },
 ]
 
 function ProjectRenameInput({
@@ -277,6 +296,16 @@ function ProjectSelector({ embed = false }: { embed?: boolean }) {
         <DropdownMenuItem
           onClick={() => {
             clearActiveProjectSession()
+            router.push("/")
+          }}
+          className="gap-2 py-2.5 font-medium"
+        >
+          <Share2 className="h-4 w-4" />
+          Run shared links…
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => {
+            clearActiveProjectSession()
             router.push("/projects")
           }}
           className="gap-2 py-2.5 font-medium"
@@ -308,8 +337,137 @@ function ProjectSwitchOverlay({ projectName }: { projectName: string }) {
 }
 
 export function AppShellLayout({ variant = "default" }: { variant?: "default" | "embed" }) {
+  const builder = useOptionalStore()
+  const consumer = useOptionalConsumerStore()
+  if (!builder && consumer) return <ConsumerShellLayout variant={variant} />
+  if (builder) return <BuilderShellLayout variant={variant} />
+  return (
+    <div className="flex h-dvh items-center justify-center bg-background">
+      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+    </div>
+  )
+}
+
+function ConsumerShellLayout({ variant = "default" }: { variant?: "default" | "embed" }) {
   const embed = variant === "embed"
+  const router = useRouter()
   const { activeWindow, setActiveWindow } = useAppShell()
+  const { stateSyncing } = useConsumerStore()
+  const consumerTabs = useMemo(() => new Set<WindowId>(["share", "billing", "settings"]), [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.has("session_id") || params.has("canceled")) setActiveWindow("billing")
+    else if (!consumerTabs.has(activeWindow)) setActiveWindow("share")
+  }, [activeWindow, consumerTabs, setActiveWindow])
+
+  const { width: navWidth, setWidth: setNavWidth, commitWidth: commitNavWidth } =
+    usePersistedLeadingWidth(navSplit)
+  const showNavLabels = navWidth > NAV_ICON_ONLY_MAX_WIDTH
+
+  return (
+    <div className="flex h-dvh flex-col bg-background text-foreground">
+      <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+        <div className="flex items-center gap-3">
+          <a
+            href={LANDING_PAGE_URL}
+            title="Back to landing page"
+            className="flex items-center gap-2.5 rounded-md transition-opacity hover:opacity-80"
+          >
+            <SpineLogoBox />
+            <div className="hidden leading-tight sm:block">
+              <h1 className="text-sm font-semibold tracking-tight">{LEGAL.productName}</h1>
+            </div>
+          </a>
+          <div className="mx-1 h-6 w-px bg-border" />
+          <span className="font-mono text-[11px] text-muted-foreground">run shared pipelines</span>
+        </div>
+        {!embed ? <FeedbackButton /> : null}
+      </header>
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <ResizableSplit
+          className="min-h-0 flex-1"
+          leadingWidth={navWidth}
+          onLeadingWidthChange={setNavWidth}
+          onLeadingWidthCommit={commitNavWidth}
+          minLeading={navSplit.min}
+          maxLeading={navSplit.max}
+          leading={
+            <nav
+              className={cn(
+                "flex h-full flex-col gap-1 overflow-x-hidden overflow-y-auto py-3",
+                showNavLabels ? "items-stretch px-2" : "items-center px-0.5",
+              )}
+            >
+              {CONSUMER_WINDOWS.map((w) => {
+                const Icon = w.icon
+                const isActive = activeWindow === w.id
+                return (
+                  <button
+                    key={w.id}
+                    type="button"
+                    onClick={() => setActiveWindow(w.id)}
+                    title={w.label}
+                    className={cn(
+                      "group flex items-center rounded-md text-sm transition-colors",
+                      showNavLabels
+                        ? "min-h-0 justify-start gap-3 px-2.5 py-2"
+                        : "h-10 w-10 shrink-0 justify-center p-0",
+                      workspaceNavTabButtonClass(isActive, null, false),
+                    )}
+                  >
+                    <Icon className={cn("h-4 w-4 shrink-0", workspaceNavTabIconClass(isActive, null))} />
+                    {showNavLabels ? (
+                      <>
+                        <span className="min-w-0 flex-1 break-words text-left">{w.label}</span>
+                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{w.hint}</span>
+                      </>
+                    ) : null}
+                  </button>
+                )
+              })}
+              <div className="mt-auto border-t border-border pt-2">
+                <button
+                  type="button"
+                  onClick={() => router.push("/projects")}
+                  title="Build your own pipelines"
+                  className={cn(
+                    "group flex w-full items-center rounded-md text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                    showNavLabels ? "gap-3 px-2.5 py-2" : "h-10 justify-center p-0",
+                  )}
+                >
+                  <LayoutGrid className="h-4 w-4 shrink-0" />
+                  {showNavLabels ? <span className="text-left">Build pipelines…</span> : null}
+                </button>
+              </div>
+            </nav>
+          }
+          trailing={
+            <main className="relative min-w-0 flex-1 overflow-hidden" id="main-content">
+              {stateSyncing ? (
+                <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center bg-background/40 pt-16 backdrop-blur-[1px]">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : null}
+              {activeWindow === "share" && <Share />}
+              {activeWindow === "billing" && <Billing />}
+              {activeWindow === "settings" && <SettingsPanel />}
+            </main>
+          }
+        />
+      </div>
+    </div>
+  )
+}
+
+function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "embed" }) {
+  const embed = variant === "embed"
+  const { activeWindow, setActiveWindow, activeSharedLinkId, sharedRunDocScope } = useAppShell()
+  const sharedRunDocScopeForViewer = useMemo(
+    () => sharedRunDocScope ?? (activeSharedLinkId ? { linkId: activeSharedLinkId } : null),
+    [sharedRunDocScope, activeSharedLinkId],
+  )
   const { modules, models, project, projectLoading, typeAliases } = useStore()
   useSyncProjectDocStructures()
   const validity = useMemo(
@@ -428,6 +586,8 @@ export function AppShellLayout({ variant = "default" }: { variant?: "default" | 
               {activeWindow === "pipeline" && <PipelineBuilder />}
               {activeWindow === "testing" && <Testing />}
               {activeWindow === "inference" && <Inference />}
+              {activeWindow === "share" && <Share />}
+              {activeWindow === "earnings" && <Earnings />}
               {activeWindow === "logging" && <Logging />}
               {activeWindow === "cache" && <Cache />}
               {activeWindow === "documents" && <Documents />}
@@ -439,7 +599,9 @@ export function AppShellLayout({ variant = "default" }: { variant?: "default" | 
         />
       </div>
 
-      <LazyDocViewer />
+      <SharedRunDocScopeProvider scope={sharedRunDocScopeForViewer}>
+        <LazyDocViewer />
+      </SharedRunDocScopeProvider>
     </div>
   )
 }

@@ -67,5 +67,6 @@ export function publicApiTier(pathname: string): RateLimitTier | null {
   if (/\/progress$/.test(pathname)) return "poll";
   if (/\/client-step$/.test(pathname)) return "default";
   if (/\/docs$/.test(pathname)) return "shared_upload";
+  if (/\/docs\/[^/]+\/(text|file)$/.test(pathname)) return "read";
   return "public";
 }

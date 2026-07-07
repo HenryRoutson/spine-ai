@@ -55,8 +55,8 @@ import { LlmRetryGridSection } from "@/components/logging/llm-retry-grid"
 
 export function Logging() {
   const palette = useStatusPalette()
-  const { runs, docs, modules, models, project, typeAliases } = useStore()
-  const { focusRunId, clearFocusRun } = useAppShell()
+  const { runs, billingRuns, docs, modules, models, project, typeAliases } = useStore()
+  const { focusRunId, clearFocusRun, setSharedRunDocScope } = useAppShell()
   const [query, setQuery] = useState("")
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
   const [popup, setPopup] = useState<PopupPayload | null>(null)
@@ -84,7 +84,19 @@ export function Logging() {
 
   const filtered = useMemo(() => filterRuns(runs, query), [runs, query])
 
-  const active = runs.find((r) => r.id === selectedRun) ?? null
+  const active = runs.find((r) => r.id === selectedRun) ?? billingRuns.find((r) => r.id === selectedRun) ?? null
+
+  useEffect(() => {
+    if (active && isSharedRun(active) && active.sharedLinkId) {
+      setSharedRunDocScope({
+        linkId: active.sharedLinkId,
+        sessionId: active.viewerSessionId,
+      })
+      return () => setSharedRunDocScope(null)
+    }
+    setSharedRunDocScope(null)
+  }, [active?.id, active?.sharedLinkId, active?.viewerSessionId, setSharedRunDocScope])
+
   const activeSourceDocs = useMemo(() => {
     if (!active) return []
     return runInputDocIds(active)
@@ -117,7 +129,7 @@ export function Logging() {
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="05 / Logging"
+        step="06 / Logging"
         title="Run History"
         description="Every inference run is recorded with a full per-step trace, token counts, and cost."
       />

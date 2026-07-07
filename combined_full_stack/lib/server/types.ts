@@ -418,7 +418,13 @@ export type RunTestReport = {
 export enum SharedLinkFundingMode {
   SharerPays = "sharer_pays",
   ViewerPays = "viewer_pays",
+  // AI : owner pays — viewer must sign in but is not billed.
   ViewerSignsIn = "viewer_signs_in",
+}
+
+export enum HostedApiFundingMode {
+  OwnerPays = "owner_pays",
+  CallerPays = "caller_pays",
 }
 
 export enum RunStatus {
@@ -447,6 +453,8 @@ export interface PipelineRun {
   hostedApiId?: HostedApiId;
   viewerName?: string;
   viewerSessionId?: string;
+  triggerUserId?: string;
+  triggerUserEmail?: string;
 }
 
 export interface BillingPoint {

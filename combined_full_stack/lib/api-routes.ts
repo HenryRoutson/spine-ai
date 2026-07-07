@@ -3,8 +3,12 @@
 export const API_ROUTES = {
   state: "/api/state",
   billing: "/api/billing",
+  earnings: "/api/earnings",
+  earningsWithdraw: "/api/earnings/withdraw",
   billingConfirm: "/api/billing/confirm",
   billingCheckout: "/api/billing/checkout",
+  billingEarningsWithdraw: "/api/earnings/withdraw",
+  billingKeys: "/api/billing/keys",
   billingWebhook: "/api/billing/webhook",
   projects: "/api/projects",
   project: (id: string) => `/api/projects/${id}`,
@@ -39,6 +43,21 @@ export const API_ROUTES = {
   sharedLinkRun: (id: string) => `/api/shared-links/${id}/run`,
   sharedLinkProgress: (id: string) => `/api/shared-links/${id}/progress`,
   sharedLinkDocs: (id: string) => `/api/shared-links/${id}/docs`,
+  sharedLinkDocText: (
+    linkId: string,
+    docId: string,
+    opts?: { layer?: "parser" | "vision"; sessionId?: string },
+  ) => {
+    const params = new URLSearchParams()
+    if (opts?.layer === "vision") params.set("layer", "vision")
+    if (opts?.sessionId) params.set("sessionId", opts.sessionId)
+    const q = params.toString()
+    return `/api/shared-links/${linkId}/docs/${docId}/text${q ? `?${q}` : ""}`
+  },
+  sharedLinkDocFile: (linkId: string, docId: string, sessionId?: string) => {
+    const q = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ""
+    return `/api/shared-links/${linkId}/docs/${docId}/file${q}`
+  },
   sharedLinkDownload: (id: string) => `/api/shared-links/${id}/download`,
   sharedLinkClientStep: (id: string) => `/api/shared-links/${id}/client-step`,
   hostedApis: "/api/hosted-apis",
@@ -59,11 +78,13 @@ function isHostedApiPublicApi(pathname: string): boolean {
   );
 }
 
-function isSharedLinkPublicApi(pathname: string): boolean {
+function isSharedLinkPublicApi(pathname: string, method: string): boolean {
+  // AI : only GET on link metadata is public — DELETE/PUT must go through auth middleware.
+  if (/^\/api\/shared-links\/[^/]+$/.test(pathname)) return method === "GET";
   return (
-    /^\/api\/shared-links\/[^/]+$/.test(pathname) ||
-    /^\/api\/shared-links\/[^/]+\/(run|progress|docs|download|client-step)$/.test(pathname)
-  )
+    /^\/api\/shared-links\/[^/]+\/(run|progress|docs|download|client-step)$/.test(pathname) ||
+    /^\/api\/shared-links\/[^/]+\/docs\/[^/]+\/(text|file)$/.test(pathname)
+  );
 }
 
 function isLandingDemoPublicApi(pathname: string): boolean {
@@ -74,12 +95,12 @@ function isDemoPublicApi(pathname: string): boolean {
   return pathname === API_ROUTES.demoState || /^\/api\/demo\/docs\/[^/]+\/text$/.test(pathname);
 }
 
-export function isPublicApiPath(pathname: string): boolean {
+export function isPublicApiPath(pathname: string, method = "GET"): boolean {
   if (PUBLIC_API_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return true
   if (isLandingDemoPublicApi(pathname)) return true
   if (isDemoPublicApi(pathname)) return true
   if (isHostedApiPublicApi(pathname)) return true
-  return isSharedLinkPublicApi(pathname)
+  return isSharedLinkPublicApi(pathname, method)
 }
 
 export const PUBLIC_API_PATHS = [API_ROUTES.supabaseEnv, API_ROUTES.billingWebhook] as const

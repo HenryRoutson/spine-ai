@@ -294,10 +294,14 @@ export function materializeInputDocument(
     let parsed: unknown;
     try {
       parsed = JSON.parse(content);
-    } catch {
-      parsed = undefined;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "invalid JSON";
+      throw new Error(`input "${m.label}" JSON parse failed: ${msg}`);
     }
     if (parsed !== undefined) {
+      if (isBuiltinDocumentModel(out)) {
+        return documentValueFrom(undefined, { docId, docName: hints.docName }, content);
+      }
       if (Array.isArray(parsed)) {
         const items = parsed.map((item) => materializeToModel(item, out, models, docHints));
         if (m.outIsList) return items;
@@ -311,9 +315,8 @@ export function materializeInputDocument(
     }
   }
 
-  // AI : TODO bug — non-JSON text/pdf must stay Document until locked Parse-to-structure LLM runs;
-  // AI : materializeToModel here coerces raw text into arbitrary struct fields (receipts pipeline).
-  return materializeToModel(documentValueFrom({ content, filename: hints.docName ?? docId }, docHints, content), out, models, docHints);
+  // AI : non-JSON inputs emit Document only — locked Parse-to-structure LLM runs downstream.
+  return documentValueFrom(undefined, { docId, docName: hints.docName }, content);
 }
 
 // AI : map loose runtime values (file text, doc_id) into every field of a pydantic/zod StructureModel.
