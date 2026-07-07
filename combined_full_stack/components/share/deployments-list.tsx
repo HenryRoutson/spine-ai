@@ -7,6 +7,7 @@ import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson } from "@/lib/api-client"
 import type { HostedApiRecord } from "@/lib/hosted-api-types"
 import { formatCents } from "@/lib/format"
+import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { SharedLinkRecord } from "@/lib/shared-link-types"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { copyTextToClipboard } from "@/lib/clipboard"
@@ -38,10 +39,11 @@ function pricingLabel(multiple: number, flatFeeCents: number): string {
 }
 
 function linkFundingLabel(row: SharedLinkRecord): string {
-  if (row.fundingMode === "viewer_pays" || row.fundingMode === "viewer_signs_in") {
+  if (viewerFundsSharedRun(row.fundingMode)) {
     return `viewer pays · ${pricingLabel(row.billingMultiple, row.flatFeeCents)}`
   }
-  return "you pay"
+  if (row.fundingMode === "viewer_signs_in") return "you pay · sign in required"
+  return "you pay · no sign in"
 }
 
 export function DeploymentsList({ refreshToken = 0 }: { refreshToken?: number }) {

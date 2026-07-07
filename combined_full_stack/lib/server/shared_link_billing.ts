@@ -4,14 +4,12 @@ import { computeBillableCharge, customPricingAppliesToLink } from "@/lib/server/
 import { SharedLinkFundingMode } from "@/lib/server/types";
 import type { user_id_string } from "@/lib/server/require_auth";
 import type { SharedLinkRecord } from "@/lib/shared-link-types";
+import { viewerFundsSharedRun } from "@/lib/shared-link-funding";
 import { logger } from "@/lib/server/server_logger";
 
-const billLog = logger("shared-link-billing");
+export { viewerFundsSharedRun } from "@/lib/shared-link-funding";
 
-// AI : viewer-funded modes bill the signed-in viewer, not the link owner.
-export function viewerFundsSharedRun(mode: SharedLinkFundingMode): boolean {
-  return mode === SharedLinkFundingMode.ViewerSignsIn || mode === SharedLinkFundingMode.ViewerPays;
-}
+const billLog = logger("shared-link-billing");
 
 export function sharedLinkBillingKey(
   ownerId: user_id_string,

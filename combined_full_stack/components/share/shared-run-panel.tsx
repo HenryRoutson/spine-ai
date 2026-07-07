@@ -23,6 +23,7 @@ import { InferenceStepTracePanel } from "@/components/inference/inference-step-t
 import { downloadBlob } from "@/lib/download-blob"
 import { fetchSharedDownload } from "@/lib/shared-run-client"
 import { useSharedInferenceRun } from "@/lib/use-shared-inference-run"
+import { sharedLinkRequiresSignIn, viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
 
 type SharedRunPanelProps = {
@@ -33,10 +34,6 @@ type SharedRunPanelProps = {
   onRunComplete?: () => void
   insufficientCredit?: boolean
   onOpenBilling?: () => void
-}
-
-function viewerPays(mode: SharedLinkPublicView["fundingMode"]): boolean {
-  return mode === "viewer_pays" || mode === "viewer_signs_in"
 }
 
 export function SharedRunPanel({
@@ -76,7 +73,8 @@ export function SharedRunPanel({
     }
   }
 
-  const needsSignIn = viewerPays(link.fundingMode) && !isAuthenticated
+  const needsSignIn = sharedLinkRequiresSignIn(link.fundingMode) && !isAuthenticated
+  const viewerFunds = viewerFundsSharedRun(link.fundingMode)
   const runBlocked =
     !run.allInputsReady ||
     run.phase === "running" ||
@@ -120,7 +118,7 @@ export function SharedRunPanel({
         ))}
       </div>
 
-      {(link.billingMultiple > 1 || link.flatFeeCents > 0) && viewerPays(link.fundingMode) && (
+      {(link.billingMultiple > 1 || link.flatFeeCents > 0) && viewerFunds && (
         <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
           Pricing:
           {link.billingMultiple > 1 ? ` ${link.billingMultiple}× measured LLM cost` : ""}
@@ -132,7 +130,9 @@ export function SharedRunPanel({
 
       {needsSignIn && run.phase !== "running" && (
         <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          Sign in to run — viewer-funded links bill your account.
+          {viewerFunds
+            ? "Sign in to run — this link bills your account."
+            : "Sign in to run — the link owner pays, not you."}
         </p>
       )}
 

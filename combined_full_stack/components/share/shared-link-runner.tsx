@@ -11,6 +11,7 @@ import { fetchSharedLink } from "@/lib/shared-run-client"
 import { useAppShell } from "@/lib/app-shell"
 import { useWorkspaceBilling } from "@/lib/use-workspace-billing"
 import { useSupabaseSession } from "@/lib/use-supabase-session"
+import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import { addSharedWithMe, updateSharedWithMeName } from "@/lib/shared-with-me"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
 
@@ -35,8 +36,7 @@ export function SharedLinkRunner({ linkId }: { linkId: string }) {
   }, [refreshBilling])
 
   const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
-  const viewerPays =
-    link?.fundingMode === "viewer_pays" || link?.fundingMode === "viewer_signs_in"
+  const viewerPays = link != null && viewerFundsSharedRun(link.fundingMode)
   const insufficientCredit =
     viewerPays &&
     isAuthenticated &&

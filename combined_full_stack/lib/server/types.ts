@@ -418,6 +418,7 @@ export type RunTestReport = {
 export enum SharedLinkFundingMode {
   SharerPays = "sharer_pays",
   ViewerPays = "viewer_pays",
+  // AI : owner pays — viewer must sign in but is not billed.
   ViewerSignsIn = "viewer_signs_in",
 }
 

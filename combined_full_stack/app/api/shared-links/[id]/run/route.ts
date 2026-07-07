@@ -12,6 +12,7 @@ import {
   sharedLinkBillingKey,
   viewerFundsSharedRun,
 } from "@/lib/server/shared_link_billing";
+import { sharedLinkRequiresSignIn } from "@/lib/shared-link-funding";
 import { PUBLIC_RUN_SPEND_RESERVE_CENTS } from "@/lib/billing_config";
 import {
   orderedInputModules,
@@ -190,10 +191,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   );
 
   let viewerUserId: user_id_string | undefined;
-  if (viewerFundsSharedRun(link.fundingMode)) {
+  if (sharedLinkRequiresSignIn(link.fundingMode)) {
     const auth = await requireAuth();
     if (!isAuthSession(auth)) return apiError("sign in required", 401);
-    viewerUserId = auth.userId;
+    if (viewerFundsSharedRun(link.fundingMode)) viewerUserId = auth.userId;
   }
   const billingKey = sharedLinkBillingKey(link.ownerId, link.fundingMode, viewerUserId);
 
@@ -207,9 +208,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const code = (err as { code?: string }).code;
     if (code === "insufficient_funds") {
       return apiError(
-        link.fundingMode === "sharer_pays"
-          ? "Link owner has insufficient credit"
-          : "Not enough credit — subscribe or top up",
+        viewerFundsSharedRun(link.fundingMode)
+          ? "Not enough credit — subscribe or top up"
+          : "Link owner has insufficient credit",
         402,
         code,
       );

@@ -317,6 +317,16 @@ $ sender $ -> reciever
 OR
 sender -> $ reciever $
 
+if 
+$ sender $ -> reciever
+is set so that you pay as the creator of the pipeline.
+you can have either
+You pay (sign in required)
+You pay (no sign in required)
+
+the final option is
+Reciever pays (sign in required)
+which requires sign in so they can setup billing.
 
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.

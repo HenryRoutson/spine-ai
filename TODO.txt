@@ -23,6 +23,8 @@ Ensure the user doesn't have the think about, if this structure isn't json i nee
 
 
 
+export excel with metadata
+
 
 fix 
 When input text/JSON is mapped into a structure, missing or wrong fields get silent defaults instead of failing validation. That matches the TODO about “text inputs being converted to pydantic objects” — pipelines can look valid in Structure but produce garbage at run time.

@@ -11,6 +11,7 @@ import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { shareDefaultDocsByModule } from "@/lib/share-default-docs"
 import { SharedLinkFundingMode } from "@/lib/types"
+import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
 import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { copyTextToClipboard } from "@/lib/clipboard"
@@ -18,14 +19,22 @@ import { copyTextToClipboard } from "@/lib/clipboard"
 const LINK_FUNDING_OPTIONS = [
   {
     value: SharedLinkFundingMode.SharerPays,
-    label: "You pay (default)",
+    label: "You pay (no sign in required)",
     senderPays: true,
-    description: "Runs bill your workspace credits.",
+    description: "Anyone with the link can run — billed to your credits.",
+  },
+  {
+    value: SharedLinkFundingMode.ViewerSignsIn,
+    label: "You pay (sign in required)",
+    senderPays: true,
+    receiverSignInRequired: true,
+    description: "Viewer signs in to run — still billed to your credits, not theirs.",
   },
   {
     value: SharedLinkFundingMode.ViewerPays,
     label: "Viewer pays (sign in required)",
     senderPays: false,
+    receiverSignInRequired: true,
     description: "Viewer signs in, tops up in Billing, and funds each run.",
   },
 ] as const
@@ -53,7 +62,7 @@ export function ShareLinkForm({
   const [flatFeeEnabled, setFlatFeeEnabled] = useState(false)
   const [flatFeeUsd, setFlatFeeUsd] = useState("0.50")
 
-  const viewerFunds = fundingMode === "viewer_pays" || fundingMode === "viewer_signs_in"
+  const viewerFunds = viewerFundsSharedRun(fundingMode)
   const defaultDocsByModule = useMemo(
     () => shareDefaultDocsByModule(project, docs, inferenceInputDocIds),
     [project, docs, inferenceInputDocIds],

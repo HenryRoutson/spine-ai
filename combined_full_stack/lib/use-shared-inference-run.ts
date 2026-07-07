@@ -28,9 +28,7 @@ type SharedRunAuth = {
   onAuthRequired?: () => void
 }
 
-function viewerMustSignIn(mode: SharedLinkPublicView["fundingMode"]): boolean {
-  return mode === "viewer_signs_in" || mode === "viewer_pays"
-}
+import { sharedLinkRequiresSignIn } from "@/lib/shared-link-funding"
 
 export function useSharedInferenceRun(
   link: SharedLinkPublicView,
@@ -120,7 +118,7 @@ export function useSharedInferenceRun(
       setError("Please enter your name")
       return
     }
-    if (viewerMustSignIn(link.fundingMode) && !auth?.isAuthenticated) {
+    if (sharedLinkRequiresSignIn(link.fundingMode) && !auth?.isAuthenticated) {
       if (auth?.onAuthRequired) {
         auth.onAuthRequired()
         return
