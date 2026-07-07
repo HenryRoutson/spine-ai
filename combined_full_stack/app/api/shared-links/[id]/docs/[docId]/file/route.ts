@@ -7,6 +7,7 @@ import { apiError } from "@/lib/server/api_context";
 import { HTTP, unknownDoc } from "@/lib/server/api-errors";
 import { parseSharedLinkId } from "@/lib/server/api_schemas";
 import { getSharedLink } from "@/lib/server/shared_links";
+import { resolveSharedDocSessionForRequest } from "@/lib/server/shared-link-doc-session";
 import { resolveSharedDocOriginalFile, parseSharedDocId, parseSharedSessionId } from "@/lib/server/shared-link-session";
 
 const SESSION_COOKIE = "shared_run_session";
@@ -27,7 +28,12 @@ async function sharedDocFileResponse(req: NextRequest, ctx: { params: Promise<{ 
   if (!link) return apiError("link not found", 404);
 
   const jar = await cookies();
-  const sessionId = parseSharedSessionId(jar.get(SESSION_COOKIE)?.value);
+  const cookieSessionId = parseSharedSessionId(jar.get(SESSION_COOKIE)?.value);
+  const sessionId = await resolveSharedDocSessionForRequest(
+    link,
+    new URL(req.url).searchParams.get("sessionId"),
+    cookieSessionId,
+  );
   const docId = parseSharedDocId(rawDocId);
   if (!docId) return apiError(unknownDoc(rawDocId), HTTP.NOT_FOUND);
   const file = resolveSharedDocOriginalFile(linkId, docId, sessionId, link.defaultDocs);

@@ -453,6 +453,8 @@ export interface PipelineRun {
   hostedApiId?: HostedApiId;
   viewerName?: string;
   viewerSessionId?: string;
+  triggerUserId?: string;
+  triggerUserEmail?: string;
 }
 
 export interface BillingPoint {

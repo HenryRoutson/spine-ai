@@ -65,11 +65,13 @@ async function fetchDocTextOnce(docId: string, layer: doc_text_layer): Promise<d
 export function fetchDocText(
   docId: string,
   layer: doc_text_layer = "parser",
-  opts?: { linkId?: string },
+  opts?: { linkId?: string; sessionId?: string },
 ): Promise<doc_text_payload> {
-  const key = opts?.linkId ? `${cacheKey(docId, layer)}:shared:${opts.linkId}` : cacheKey(docId, layer)
+  const key = opts?.linkId
+    ? `${cacheKey(docId, layer)}:shared:${opts.linkId}:${opts.sessionId ?? ""}`
+    : cacheKey(docId, layer)
   return cached(key, () => {
-    if (opts?.linkId) return fetchSharedRunDocText(opts.linkId, docId, layer)
+    if (opts?.linkId) return fetchSharedRunDocText(opts.linkId, docId, layer, opts.sessionId)
     return fetchDocTextOnce(docId, layer)
   })
 }

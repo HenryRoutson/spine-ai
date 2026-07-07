@@ -463,7 +463,11 @@ function ConsumerShellLayout({ variant = "default" }: { variant?: "default" | "e
 
 function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "embed" }) {
   const embed = variant === "embed"
-  const { activeWindow, setActiveWindow, activeSharedLinkId } = useAppShell()
+  const { activeWindow, setActiveWindow, activeSharedLinkId, sharedRunDocScope } = useAppShell()
+  const sharedRunDocScopeForViewer = useMemo(
+    () => sharedRunDocScope ?? (activeSharedLinkId ? { linkId: activeSharedLinkId } : null),
+    [sharedRunDocScope, activeSharedLinkId],
+  )
   const { modules, models, project, projectLoading, typeAliases } = useStore()
   useSyncProjectDocStructures()
   const validity = useMemo(
@@ -595,7 +599,7 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
         />
       </div>
 
-      <SharedRunDocScopeProvider linkId={activeSharedLinkId}>
+      <SharedRunDocScopeProvider scope={sharedRunDocScopeForViewer}>
         <LazyDocViewer />
       </SharedRunDocScopeProvider>
     </div>

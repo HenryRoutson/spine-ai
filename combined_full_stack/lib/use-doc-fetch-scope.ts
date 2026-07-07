@@ -5,13 +5,22 @@ import { API_ROUTES } from "@/lib/api-routes"
 import { useSharedRunDocScope } from "@/lib/shared-run-doc-scope"
 import { sharedRunDocFileUrl } from "@/lib/shared-run-doc-cache"
 
-// AI : route doc preview/file fetches through shared-link public APIs when on /run/[id].
+export type SharedRunDocFetchOpts = {
+  linkId: string
+  sessionId?: string
+}
+
+// AI : route doc preview/file fetches through shared-link public APIs when on /run/[id] or logging shared runs.
 export function useDocFetchScope() {
-  const linkId = useSharedRunDocScope()
-  const docTextOpts = useMemo(() => (linkId ? ({ linkId } as const) : undefined), [linkId])
-  const docFileUrl = useMemo(
-    () => (docId: string) => (linkId ? sharedRunDocFileUrl(linkId, docId) : API_ROUTES.docFile(docId)),
-    [linkId],
+  const scope = useSharedRunDocScope()
+  const docTextOpts = useMemo(
+    () => (scope ? ({ linkId: scope.linkId, sessionId: scope.sessionId } as const) : undefined),
+    [scope],
   )
-  return { linkId, docTextOpts, docFileUrl }
+  const docFileUrl = useMemo(
+    () => (docId: string) =>
+      scope ? sharedRunDocFileUrl(scope.linkId, docId, scope.sessionId) : API_ROUTES.docFile(docId),
+    [scope],
+  )
+  return { linkId: scope?.linkId ?? null, docTextOpts, docFileUrl }
 }

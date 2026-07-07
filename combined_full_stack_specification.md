@@ -328,6 +328,37 @@ the final option is
 Reciever pays (sign in required)
 which requires sign in so they can setup billing.
 
+Some links are liabilities and some are assets,
+some shared pipelines make you money and some cost you depending on what you're using the app for.
+
+you should be able to edit the credit limit for liabilities after creating the link.
+you should be able to monitor all the logs and calls that are being made for APIs and links.
+
+
+There should be share options to 
+
+  Share the code - open source or just send to specific people 
+  Share the link - people are able to run inference on a UI
+  Share the API - people are able to run inference on an API 
+
+  The link and API can have upmarked billing so you can make money on this.
+  You can also put the link or API on a market place where ppl can search to find this, rather than you sending the link to someone directly.
+  for the link and API there should be an option to disable or enable if you can view the data that people are uploading or if it's hidden to you.
+
+  sharing the code should have an ownership icon clearly transition to reciever, and for the link and API the ownership icon should stay with the sender.
+  Where @ is ownership ;
+  FOR CODE
+  sender -> @ reciever @
+  FOR LINK AND API
+  @ sender @ -> reciever
+
+there should be another page for looking at runs, should include data about how is signed in and the files they uploaded and the pipeline run.
+
+
+live deployment buttons should have a toggle power button for temp disable or a pipeline and also a trash button
+
+note that billing information shouldn't be lost when a deployment is deleted.
+
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.
 you can search for runs, based on descriptions provided and editable when selecting the run.

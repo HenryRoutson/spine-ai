@@ -332,6 +332,22 @@ export const createSharedLinkBodySchema = z
   })
   .strict();
 
+export const updateDeploymentSpendLimitBodySchema = z
+  .object({
+    spendLimitCents: z.number().min(0).nullable(),
+  })
+  .strict();
+
+export const updateDeploymentBodySchema = z
+  .object({
+    spendLimitCents: z.number().min(0).nullable().optional(),
+    enabled: z.boolean().optional(),
+  })
+  .strict()
+  .refine((data) => data.spendLimitCents !== undefined || data.enabled !== undefined, {
+    message: "Provide spendLimitCents and/or enabled",
+  });
+
 export const sharedLinkRunBodySchema = z
   .object({
     inputDocsByModule: inputDocsByModuleSchema,

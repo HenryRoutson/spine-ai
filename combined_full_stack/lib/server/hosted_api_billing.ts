@@ -1,6 +1,7 @@
 import { billingKeyForUser, billRunUsage, type BillingUserKey } from "@/lib/server/billing_account";
 import { creditCreatorEarnings } from "@/lib/server/creator_earnings";
 import { computeBillableCharge, hasCustomBillablePricing } from "@/lib/server/billable_pricing";
+import { callerFundsHostedApi } from "@/lib/hosted-api-funding";
 import { HostedApiFundingMode } from "@/lib/server/types";
 import type { user_id_string } from "@/lib/server/require_auth";
 import type { HostedApiRecord } from "@/lib/hosted-api-types";
@@ -11,9 +12,7 @@ const billLog = logger("hosted-api-billing");
 export const SPINE_API_KEY_HEADER = "x-spine-api-key";
 export const SPINE_BILLING_KEY_HEADER = "x-spine-billing-key";
 
-export function callerFundsHostedApi(mode: HostedApiFundingMode): boolean {
-  return mode === HostedApiFundingMode.CallerPays;
-}
+export { callerFundsHostedApi } from "@/lib/hosted-api-funding";
 
 export type HostedApiBillResult = {
   usageCents: number;

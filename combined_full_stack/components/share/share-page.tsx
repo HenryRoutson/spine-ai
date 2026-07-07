@@ -1,7 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlertTriangle, Boxes, Globe, Users, Zap } from "lucide-react"
+import { AlertTriangle, Boxes, Globe, ScrollText, Users, Zap } from "lucide-react"
+import {
+  DeploymentActivityPage,
+  type ActivityFilter,
+} from "@/components/share/deployment-activity-page"
 import { DeploymentsList } from "@/components/share/deployments-list"
 import { HostApiForm } from "@/components/share/host-api-form"
 import { ShareLinkForm } from "@/components/share/share-link-form"
@@ -15,7 +19,7 @@ import { useAppShell } from "@/lib/app-shell"
 import { consumePendingSharedRun } from "@/lib/pending-shared-run"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 
-type ShareSection = "publish" | "shared"
+type ShareSection = "publish" | "shared" | "activity"
 
 type PublishTab = "link" | "api"
 
@@ -29,6 +33,7 @@ export function SharePage() {
   const [section, setSection] = useState<ShareSection>(isConsumer ? "shared" : "publish")
   const [tab, setTab] = useState<PublishTab>("link")
   const [refreshToken, setRefreshToken] = useState(0)
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>(null)
 
   useEffect(() => {
     const pending = consumePendingSharedRun()
@@ -97,11 +102,29 @@ export function SharePage() {
             <Users className="h-3.5 w-3.5" />
             Shared with me
           </button>
+          <button
+            type="button"
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              section === "activity"
+                ? "bg-secondary text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => {
+              setActivityFilter(null)
+              setSection("activity")
+            }}
+          >
+            <ScrollText className="h-3.5 w-3.5" />
+            Activity
+          </button>
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        {section === "shared" ? (
+        {section === "activity" ? (
+          <DeploymentActivityPage projectId={builder.project.id} initialFilter={activityFilter} />
+        ) : section === "shared" ? (
           <div className="mx-auto max-w-2xl">
             <SharedWithMePanel onRun={openSharedRun} />
           </div>
@@ -182,7 +205,14 @@ export function SharePage() {
               </section>
 
               <section className="rounded-lg border border-border bg-card p-4">
-                <DeploymentsList refreshToken={refreshToken} />
+                <DeploymentsList
+                  projectId={builder.project.id}
+                  refreshToken={refreshToken}
+                  onViewActivity={(filter) => {
+                    setActivityFilter(filter)
+                    setSection("activity")
+                  }}
+                />
               </section>
             </div>
 

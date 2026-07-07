@@ -81,11 +81,12 @@ export function SharedRunPanel({
     !run.allInputsReady ||
     run.phase === "running" ||
     link.spendLimitReached ||
+    link.disabled ||
     needsSignIn ||
     insufficientCredit
 
   return (
-    <SharedRunDocScopeProvider linkId={linkId}>
+    <SharedRunDocScopeProvider scope={{ linkId }}>
     <div className="space-y-4">
       {link.viewerNameRequired && (
         <div>
@@ -160,6 +161,12 @@ export function SharedRunPanel({
       {link.spendLimitReached && run.phase !== "running" && (
         <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
           This link has reached its spending limit and cannot accept new runs.
+        </p>
+      )}
+
+      {link.disabled && run.phase !== "running" && (
+        <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          This link is temporarily disabled by its owner.
         </p>
       )}
 

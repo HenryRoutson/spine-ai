@@ -46,6 +46,17 @@ async function sessionFromClaims(): Promise<AuthSession | null> {
   };
 }
 
+// AI : optional session for shared-link runs — record who was signed in without requiring auth.
+export async function optionalAuthSession(): Promise<AuthSession | null> {
+  if (isVercelWithoutSupabase()) return null;
+  // AI : never fabricate local-dev identity here — anonymous viewers must stay anonymous.
+  try {
+    return await sessionFromClaims();
+  } catch {
+    return null;
+  }
+}
+
 // AI : production + Supabase-configured deploys require a signed-in session — no shared anon store.
 export async function requireAuth(): Promise<AuthSession | NextResponse> {
   if (isVercelWithoutSupabase()) {

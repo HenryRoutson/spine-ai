@@ -25,6 +25,7 @@ export type SharedLinkRecord = {
   flatFeeCents: number;
   runCount: number;
   createdAt: number;
+  enabled: boolean;
   revoked: boolean;
 };
 
@@ -43,6 +44,7 @@ export type SharedLinkPublicView = Pick<
   modules: Project["modules"];
   models: Project["models"];
   spendLimitReached: boolean;
+  disabled: boolean;
 };
 
 export const SHARED_LINK_SPEND_KEY = "shared link";

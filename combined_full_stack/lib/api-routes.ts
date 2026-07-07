@@ -43,9 +43,21 @@ export const API_ROUTES = {
   sharedLinkRun: (id: string) => `/api/shared-links/${id}/run`,
   sharedLinkProgress: (id: string) => `/api/shared-links/${id}/progress`,
   sharedLinkDocs: (id: string) => `/api/shared-links/${id}/docs`,
-  sharedLinkDocText: (linkId: string, docId: string, layer: "parser" | "vision" = "parser") =>
-    `/api/shared-links/${linkId}/docs/${docId}/text${layer === "vision" ? "?layer=vision" : ""}`,
-  sharedLinkDocFile: (linkId: string, docId: string) => `/api/shared-links/${linkId}/docs/${docId}/file`,
+  sharedLinkDocText: (
+    linkId: string,
+    docId: string,
+    opts?: { layer?: "parser" | "vision"; sessionId?: string },
+  ) => {
+    const params = new URLSearchParams()
+    if (opts?.layer === "vision") params.set("layer", "vision")
+    if (opts?.sessionId) params.set("sessionId", opts.sessionId)
+    const q = params.toString()
+    return `/api/shared-links/${linkId}/docs/${docId}/text${q ? `?${q}` : ""}`
+  },
+  sharedLinkDocFile: (linkId: string, docId: string, sessionId?: string) => {
+    const q = sessionId ? `?sessionId=${encodeURIComponent(sessionId)}` : ""
+    return `/api/shared-links/${linkId}/docs/${docId}/file${q}`
+  },
   sharedLinkDownload: (id: string) => `/api/shared-links/${id}/download`,
   sharedLinkClientStep: (id: string) => `/api/shared-links/${id}/client-step`,
   hostedApis: "/api/hosted-apis",

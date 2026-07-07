@@ -18,6 +18,7 @@ export type HostedApiRecord = {
   totalSpendCents: number;
   requestCount: number;
   createdAt: number;
+  enabled: boolean;
   revoked: boolean;
 };
 

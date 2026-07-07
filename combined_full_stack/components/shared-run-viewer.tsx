@@ -53,7 +53,7 @@ function SharedRunContent({ link, linkId }: { link: SharedLinkPublicView; linkId
 
   return (
     <DocViewerProvider>
-    <SharedRunDocScopeProvider linkId={linkId}>
+    <SharedRunDocScopeProvider scope={{ linkId }}>
     <div className="flex min-h-dvh flex-col bg-background text-foreground">
       <header className="border-b border-border px-4 py-3">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-2">

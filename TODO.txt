@@ -4,6 +4,11 @@ rename everything to spine
 name might already be taken https://www.getspine.ai/
 
 
+LANDING_DEMO_IP_SALT required on Vercel
+
+https://elu.dev
+
+
 need to add a marketplace
 
 

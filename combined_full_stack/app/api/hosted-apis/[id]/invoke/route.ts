@@ -41,6 +41,7 @@ import {
   adjustHostedApiSpend,
   assertHostedApiCanAcceptRun,
   HostedApiAuthError,
+  HostedApiDisabledError,
   HostedApiSpendLimitError,
   incrementHostedApiRequestCount,
   openStoreForUser,
@@ -155,6 +156,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     assertHostedApiCanAcceptRun(api);
     await assertCanStartRun(billingKey);
   } catch (err) {
+    if (err instanceof HostedApiDisabledError) {
+      return apiError(err.message, 403, "deployment_disabled");
+    }
     if (err instanceof HostedApiSpendLimitError) {
       return apiError(err.message, 402, "spend_limit_reached");
     }
@@ -199,6 +203,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           runMeta: {
             source: RunSource.HostedApi,
             hostedApiId: apiId,
+            triggerUserId: callerUserId,
             notes: hostedApiRunNotes(),
           },
           onStep: (p) => {

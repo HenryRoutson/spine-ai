@@ -47,6 +47,20 @@ export class HostedApiSpendLimitError extends Error {
   }
 }
 
+export class HostedApiSpendLimitTooLowError extends Error {
+  constructor(spentCents: number) {
+    super(
+      `Spending limit must be at least $${(spentCents / 100).toFixed(2)} — already spent on this API.`,
+    );
+  }
+}
+
+export class HostedApiDisabledError extends Error {
+  constructor() {
+    super("This API is temporarily disabled.");
+  }
+}
+
 export class HostedApiAuthError extends Error {
   constructor() {
     super("Invalid API key.");
@@ -61,9 +75,16 @@ export function hostedApiSpendLimitReached(
 }
 
 export function assertHostedApiCanAcceptRun(
-  api: Pick<HostedApiRecord, "spendLimitCents" | "totalSpendCents">,
+  api: Pick<HostedApiRecord, "spendLimitCents" | "totalSpendCents" | "enabled">,
 ): void {
+  assertHostedApiEnabled(api);
   if (hostedApiSpendLimitReached(api)) throw new HostedApiSpendLimitError();
+}
+
+export function assertHostedApiEnabled(
+  api: Pick<HostedApiRecord, "enabled">,
+): void {
+  if (api.enabled === false) throw new HostedApiDisabledError();
 }
 
 function toExactSpendCents(cents: number): number {
@@ -134,6 +155,7 @@ function loadLocalApi(id: HostedApiId): StoredHostedApi | null {
     flatFeeCents: normalizeFlatFeeCents(
       row.flatFeeCents ?? (row as { markupFixedCents?: number }).markupFixedCents ?? 0,
     ),
+    enabled: row.enabled !== false,
   };
 }
 
@@ -180,6 +202,7 @@ function rowFromDb(data: Record<string, unknown>): StoredHostedApi {
     totalSpendCents: Number(data.total_spend_cents ?? 0),
     requestCount: Number(data.request_count ?? 0),
     createdAt: Number(data.created_at),
+    enabled: data.enabled !== false,
     revoked: Boolean(data.revoked),
   };
 }
@@ -203,7 +226,7 @@ function listLocalApisForOwner(ownerId: user_id_string): HostedApiRecord[] {
   return readdirSync(apisDir())
     .filter((f) => f.endsWith(".json"))
     .map((f) => loadLocalApi(f.replace(".json", "") as HostedApiId))
-    .filter((r): r is StoredHostedApi => r != null && r.ownerId === ownerId)
+    .filter((r): r is StoredHostedApi => r != null && r.ownerId === ownerId && !r.revoked)
     .map(toPublicRecord);
 }
 
@@ -233,6 +256,7 @@ function toPublicRecord(row: StoredHostedApi): HostedApiRecord {
     totalSpendCents: row.totalSpendCents,
     requestCount: row.requestCount,
     createdAt: row.createdAt,
+    enabled: row.enabled !== false,
     revoked: row.revoked,
   };
 }
@@ -310,6 +334,7 @@ export async function publishHostedApi(input: PublishHostedApiInput): Promise<Pu
     totalSpendCents: 0,
     requestCount: 0,
     createdAt: Date.now(),
+    enabled: true,
     revoked: false,
   };
 
@@ -336,6 +361,7 @@ export async function publishHostedApi(input: PublishHostedApiInput): Promise<Pu
     spend_limit_cents: row.spendLimitCents ?? null,
     total_spend_cents: row.totalSpendCents,
     request_count: 0,
+    enabled: true,
     revoked: false,
     created_at: row.createdAt,
   });
@@ -359,6 +385,52 @@ export async function revokeHostedApi(ownerId: user_id_string, id: HostedApiId):
     await db.from("hosted_apis").update({ revoked: true }).eq("id", id).eq("owner_id", ownerId);
   }
   return true;
+}
+
+export async function setHostedApiEnabled(
+  ownerId: user_id_string,
+  id: HostedApiId,
+  enabled: boolean,
+): Promise<HostedApiRecord | null> {
+  const api = await getHostedApi(id);
+  if (!api || api.ownerId !== ownerId) return null;
+
+  api.enabled = enabled;
+  saveLocalApi(api);
+
+  const db = await supabaseForHostedApis();
+  if (db) {
+    await db.from("hosted_apis").update({ enabled }).eq("id", id).eq("owner_id", ownerId);
+  }
+  return toPublicRecord(api);
+}
+
+export async function updateHostedApiSpendLimit(
+  ownerId: user_id_string,
+  id: HostedApiId,
+  spendLimitCents: number | null,
+): Promise<HostedApiRecord | null> {
+  const api = await getHostedApi(id);
+  if (!api || api.ownerId !== ownerId) return null;
+
+  const normalized =
+    spendLimitCents == null ? undefined : toExactSpendCents(spendLimitCents);
+  if (normalized != null && normalized < api.totalSpendCents) {
+    throw new HostedApiSpendLimitTooLowError(api.totalSpendCents);
+  }
+
+  api.spendLimitCents = normalized;
+  saveLocalApi(api);
+
+  const db = await supabaseForHostedApis();
+  if (db) {
+    await db
+      .from("hosted_apis")
+      .update({ spend_limit_cents: normalized ?? null })
+      .eq("id", id)
+      .eq("owner_id", ownerId);
+  }
+  return toPublicRecord(api);
 }
 
 export async function incrementHostedApiRequestCount(id: HostedApiId): Promise<void> {

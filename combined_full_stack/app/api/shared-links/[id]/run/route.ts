@@ -52,6 +52,7 @@ import {
   registerSharedProgressToken,
   reserveSharedLinkSpend,
   revokeSharedLink,
+  SharedLinkDisabledError,
   SharedLinkSpendLimitError,
 } from "@/lib/server/shared_links";
 import {
@@ -61,7 +62,7 @@ import {
   sessionDocContent,
   sessionDocsForModule,
 } from "@/lib/server/shared-link-session";
-import { isAuthSession, requireAuth, type user_id_string } from "@/lib/server/require_auth";
+import { optionalAuthSession, type user_id_string } from "@/lib/server/require_auth";
 import { logger } from "@/lib/server/server_logger";
 import { DocLabel, RunSource } from "@/lib/server/types";
 import type { DocId, DocRef, ModuleId, SharedLinkId } from "@/lib/server/types";
@@ -191,10 +192,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   );
 
   let viewerUserId: user_id_string | undefined;
+  let triggerUserId: user_id_string | undefined;
+  let triggerUserEmail: string | undefined;
+  const optionalAuth = await optionalAuthSession();
+  if (optionalAuth) {
+    triggerUserId = optionalAuth.userId;
+    triggerUserEmail = optionalAuth.email;
+    if (viewerFundsSharedRun(link.fundingMode)) viewerUserId = optionalAuth.userId;
+  }
   if (sharedLinkRequiresSignIn(link.fundingMode)) {
-    const auth = await requireAuth();
-    if (!isAuthSession(auth)) return apiError("sign in required", 401);
-    if (viewerFundsSharedRun(link.fundingMode)) viewerUserId = auth.userId;
+    if (!triggerUserId) return apiError("sign in required", 401);
+    if (viewerFundsSharedRun(link.fundingMode)) viewerUserId = triggerUserId;
   }
   const billingKey = sharedLinkBillingKey(link.ownerId, link.fundingMode, viewerUserId);
 
@@ -202,6 +210,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     assertSharedLinkCanAcceptRun(link);
     await assertCanStartRun(billingKey);
   } catch (err) {
+    if (err instanceof SharedLinkDisabledError) {
+      return apiError(err.message, 403, "deployment_disabled");
+    }
     if (err instanceof SharedLinkSpendLimitError) {
       return apiError(err.message, 402, "spend_limit_reached");
     }
@@ -263,6 +274,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
             sharedLinkId: link.id,
             viewerName: body.viewerName?.trim(),
             viewerSessionId: sessionId,
+            triggerUserId,
+            triggerUserEmail,
             notes: sharedRunNotes(body.viewerName),
           },
           onStep: (p) => {
