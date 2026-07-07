@@ -309,6 +309,15 @@ you need to able to put in a billing multiple, which is how much the llm costs a
 
 when you share a link with someone, they get a shared with me view, which lists off 
 
+when sharing there should be selection options for who is paying, 
+and you should be able to clearly see a diagram of 
+sender -> reciever
+with the spend icon on either side
+$ sender $ -> reciever
+OR
+sender -> $ reciever $
+
+
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.
 you can search for runs, based on descriptions provided and editable when selecting the run.

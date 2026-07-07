@@ -21,6 +21,7 @@ import {
   BookOpen,
   SquareCheck,
   Share2,
+  SquareArrowUp,
   Users,
 } from "lucide-react"
 import { ResizableSplit } from "@/components/resizable-split"
@@ -114,7 +115,7 @@ const WINDOWS: { id: WindowId; label: string; hint: string; icon: NavIcon }[] = 
   // AI : Testing sits before Inference — tests run before demoing (spec § Testing).
   { id: "testing", label: "Testing", hint: "03", icon: SquareCheck },
   { id: "inference", label: "Inference", hint: "04", icon: Play },
-  { id: "share", label: "Share", hint: "05", icon: Share2 },
+  { id: "share", label: "Share", hint: "05", icon: SquareArrowUp },
   { id: "logging", label: "Logging", hint: "06", icon: ScrollText },
   { id: "cache", label: "Cache", hint: "07", icon: Database },
   { id: "documents", label: "Documents", hint: "08", icon: Files },

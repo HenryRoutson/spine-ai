@@ -222,7 +222,7 @@ export function LandingEmailGate() {
   return (
     <div className="landing-task-panel flex h-full flex-col justify-center rounded-[10px] border border-line bg-panel p-5 sm:p-6 lg:min-h-[300px]">
       <h2 className="landing-task-heading text-xl font-normal leading-snug tracking-tight sm:text-2xl">
-        Try the demo
+        Try the demo below
       </h2>
       <p className="mt-3 text-sm leading-relaxed text-muted">
         Enter your email to generate a pipeline and explore the preview. We&apos;ll send product updates occasionally.

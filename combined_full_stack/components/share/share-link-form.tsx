@@ -4,15 +4,8 @@ import { useMemo, useState } from "react"
 import { Copy, Link2, Loader2, Share2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { ShareDefaultFiles } from "@/components/share/share-default-files"
+import { ShareFundingPicker } from "@/components/share/share-funding-flow"
 import { parseSharePricing, SharePricingFields } from "@/components/share/share-pricing-fields"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
@@ -21,6 +14,21 @@ import { SharedLinkFundingMode } from "@/lib/types"
 import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { copyTextToClipboard } from "@/lib/clipboard"
+
+const LINK_FUNDING_OPTIONS = [
+  {
+    value: SharedLinkFundingMode.SharerPays,
+    label: "You pay (default)",
+    senderPays: true,
+    description: "Runs bill your workspace credits.",
+  },
+  {
+    value: SharedLinkFundingMode.ViewerPays,
+    label: "Viewer pays (sign in required)",
+    senderPays: false,
+    description: "Viewer signs in, tops up in Billing, and funds each run.",
+  },
+] as const
 
 export function ShareLinkForm({
   project,
@@ -111,22 +119,13 @@ export function ShareLinkForm({
         </p>
       </div>
 
-      <div className="space-y-2">
-        <Label className="font-mono text-[10px] uppercase tracking-wider">Who pays</Label>
-        <Select
-          value={fundingMode}
-          onValueChange={(v) => setFundingMode(v as SharedLinkFundingMode)}
-        >
-          <SelectTrigger className="h-auto min-h-9 w-full py-2 text-left text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false}>
-            <SelectItem value="sharer_pays">You pay (default)</SelectItem>
-            <SelectItem value="viewer_signs_in">Viewer signs in & pays</SelectItem>
-            <SelectItem value="viewer_pays">Viewer pays (sign in required)</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <ShareFundingPicker
+        value={fundingMode}
+        onChange={(v) => setFundingMode(v as SharedLinkFundingMode)}
+        senderLabel="You"
+        receiverLabel="Viewer"
+        options={[...LINK_FUNDING_OPTIONS]}
+      />
 
       {viewerFunds && (
         <SharePricingFields

@@ -5,14 +5,8 @@ import { Copy, KeyRound, Loader2, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { ShareDefaultFiles } from "@/components/share/share-default-files"
+import { ShareFundingPicker } from "@/components/share/share-funding-flow"
 import { parseSharePricing, SharePricingFields } from "@/components/share/share-pricing-fields"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
@@ -21,6 +15,21 @@ import { HostedApiFundingMode } from "@/lib/types"
 import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { copyTextToClipboard } from "@/lib/clipboard"
+
+const API_FUNDING_OPTIONS = [
+  {
+    value: HostedApiFundingMode.OwnerPays,
+    label: "You pay (default)",
+    senderPays: true,
+    description: "Calls bill your workspace credits.",
+  },
+  {
+    value: HostedApiFundingMode.CallerPays,
+    label: "Caller pays (billable API)",
+    senderPays: false,
+    description: "Callers pass X-Spine-Billing-Key — you earn markup above LLM cost.",
+  },
+] as const
 
 type CreatedHostedApi = {
   apiKey: string
@@ -136,21 +145,13 @@ export function HostApiForm({
         </p>
       </div>
 
-      <div className="space-y-2">
-        <Label className="font-mono text-[10px] uppercase tracking-wider">Who pays</Label>
-        <Select
-          value={fundingMode}
-          onValueChange={(v) => setFundingMode(v as HostedApiFundingMode)}
-        >
-          <SelectTrigger className="h-auto min-h-9 w-full py-2 text-left text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent alignItemWithTrigger={false}>
-            <SelectItem value="owner_pays">You pay (default)</SelectItem>
-            <SelectItem value="caller_pays">Caller pays (billable API)</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <ShareFundingPicker
+        value={fundingMode}
+        onChange={(v) => setFundingMode(v as HostedApiFundingMode)}
+        senderLabel="You"
+        receiverLabel="Caller"
+        options={[...API_FUNDING_OPTIONS]}
+      />
 
       {callerPays && (
         <SharePricingFields
