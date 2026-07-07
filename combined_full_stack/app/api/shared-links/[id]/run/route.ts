@@ -36,9 +36,10 @@ import {
   createJob,
   finishJob,
   jobProgress,
-  openJobDb,
+  openCrossUserJobDb,
   pauseJob,
   withJobLogging,
+  type RunJobId,
 } from "@/lib/server/run_jobs";
 import {
   adjustSharedLinkSpend,
@@ -173,7 +174,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     }
   }
   const inputIssues = collectInferenceInputIssues(inputModules, {}, contentByDocId, assignment);
-  if (inputIssues.length) return apiError(inferenceInputIssueMessage(inputIssues), 400);
+  if (inputIssues.length) return apiError(inferenceInputIssueMessage(inputIssues, inputModules), 400);
 
   const resolvedByModule = inputDocsByModuleFromAssignment(inputModules, assignment);
   const flatIds = inputModules.flatMap((m) => (resolvedByModule[m.id] ?? []).map((d) => d as DocId));
@@ -230,8 +231,18 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return apiError("Too many runs in progress — wait for one to finish.", HTTP.TOO_MANY_REQUESTS, "concurrent_runs");
   }
 
-  const jobDb = await openJobDb();
-  const jobId = await createJob(link.ownerId, jobDb);
+  const jobDb = await openCrossUserJobDb();
+  let jobId: RunJobId;
+  try {
+    jobId = await createJob(link.ownerId, jobDb);
+  } catch (err) {
+    runLog.error(`createJob failed for shared link`, {
+      linkId: link.id,
+      ownerId: link.ownerId,
+      error: (err as Error).message,
+    });
+    return apiError("Could not start run — job setup failed. Try again in a moment.", 503, "job_create_failed");
+  }
   const progressToken = registerSharedProgressToken(link.id, link.ownerId, jobId);
 
   const res = NextResponse.json({ jobId, progressToken, sessionId });

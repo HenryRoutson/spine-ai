@@ -5,7 +5,7 @@ import { formatZodError, parseHostedApiId, sharedProgressQuerySchema } from "@/l
 import {
   getJobForProgress,
   jobMissingDetail,
-  openJobDb,
+  openCrossUserJobDb,
   toProgressResponse,
   type RunJobId,
 } from "@/lib/server/run_jobs";
@@ -33,7 +33,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const entry = verifySharedProgressToken(apiId as unknown as SharedLinkId, jobId, token);
   if (!entry) return apiError("invalid progress token", 403);
 
-  const jobDb = await openJobDb();
+  const jobDb = await openCrossUserJobDb();
   const job = await getJobForProgress(entry.ownerId, jobId as RunJobId, jobDb);
   if (!job) {
     const detail = await jobMissingDetail(entry.ownerId, jobId as RunJobId, jobDb);

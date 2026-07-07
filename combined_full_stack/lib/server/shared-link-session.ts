@@ -150,6 +150,70 @@ export function sessionDocContent(linkId: SharedLinkId, sessionId: string, docId
   return readFileSync(path, "utf8");
 }
 
+export function defaultDocIdForLink(
+  linkId: SharedLinkId,
+  moduleId: ModuleId,
+  filename: string,
+): DocId {
+  return hashContent(`shared_default:${linkId}:${moduleId}:${filename}`);
+}
+
+export function resolveSharedDocParserText(
+  linkId: SharedLinkId,
+  docId: DocId,
+  sessionId: string | undefined,
+  defaultDocs: SharedLinkDefaultDoc[],
+): string | undefined {
+  if (sessionId) {
+    const sessionText = sessionDocContent(linkId, sessionId, docId);
+    if (sessionText !== undefined) return sessionText;
+  }
+  for (const def of defaultDocs) {
+    if (defaultDocIdForLink(linkId, def.moduleId, def.filename) !== docId) continue;
+    return loadDefaultDocContent(linkId, def.moduleId, def.filename, defaultDocs)?.content;
+  }
+  return undefined;
+}
+
+const SHARED_ORIGINAL_EXTS = ["pdf", "png", "jpg", "jpeg", "webp"] as const;
+const SHARED_ORIGINAL_MIME: Record<(typeof SHARED_ORIGINAL_EXTS)[number], string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+};
+
+export type SharedOriginalDocFile = { path: string; mime: string };
+
+function sharedOriginalInDir(dir: string, baseName: string): SharedOriginalDocFile | null {
+  for (const ext of SHARED_ORIGINAL_EXTS) {
+    const path = join(dir, `${baseName}.${ext}`);
+    if (!existsSync(path)) continue;
+    return { path, mime: SHARED_ORIGINAL_MIME[ext] };
+  }
+  return null;
+}
+
+export function resolveSharedDocOriginalFile(
+  linkId: SharedLinkId,
+  docId: DocId,
+  sessionId: string | undefined,
+  defaultDocs: SharedLinkDefaultDoc[],
+): SharedOriginalDocFile | null {
+  if (sessionId) {
+    const sessionFile = sharedOriginalInDir(sessionDocsDir(linkId, sessionId), docId);
+    if (sessionFile) return sessionFile;
+  }
+  for (const def of defaultDocs) {
+    if (defaultDocIdForLink(linkId, def.moduleId, def.filename) !== docId) continue;
+    const storageKey = `${def.moduleId}_${def.filename}`;
+    const defaultFile = sharedOriginalInDir(defaultDocsDir(linkId), storageKey);
+    if (defaultFile) return defaultFile;
+  }
+  return null;
+}
+
 // AI : overlay session + default docs onto the sharer's store for runPipeline.
 export function overlayStoreForSharedRun(
   base: Store,

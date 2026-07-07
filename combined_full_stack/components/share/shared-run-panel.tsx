@@ -21,9 +21,11 @@ import {
 } from "@/components/inference/inference-run-chrome"
 import { InferenceStepTracePanel } from "@/components/inference/inference-step-trace-panel"
 import { downloadBlob } from "@/lib/download-blob"
+import { formatErrorForClipboard } from "@/lib/error-copy"
 import { fetchSharedDownload } from "@/lib/shared-run-client"
 import { useSharedInferenceRun } from "@/lib/use-shared-inference-run"
 import { sharedLinkRequiresSignIn, viewerFundsSharedRun } from "@/lib/shared-link-funding"
+import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
 
 type SharedRunPanelProps = {
@@ -83,6 +85,7 @@ export function SharedRunPanel({
     insufficientCredit
 
   return (
+    <SharedRunDocScopeProvider linkId={linkId}>
     <div className="space-y-4">
       {link.viewerNameRequired && (
         <div>
@@ -180,7 +183,16 @@ export function SharedRunPanel({
         />
       )}
 
-      {run.error && run.phase !== "done" && <ErrorBanner text={run.error} />}
+      {run.error && run.phase !== "done" && (
+        <ErrorBanner
+          text={run.error.split("\n")[0] ?? run.error}
+          copyText={formatErrorForClipboard({
+            uiLocation: "Shared link → Run → start run",
+            summary: run.error,
+          })}
+          uiLocation="Shared link → Run → start run"
+        />
+      )}
 
       {(run.phase === "running" || run.phase === "done") && (
         <>
@@ -191,7 +203,11 @@ export function SharedRunPanel({
           {run.phase === "done" && run.run && run.run.status !== "ok" && (
             <div className="rounded-lg border border-border bg-card px-6 py-6">
               {run.runErrorDisplay ? (
-                <RunErrorSummary display={run.runErrorDisplay} technical={run.runErr} />
+                <RunErrorSummary
+                  display={run.runErrorDisplay}
+                  technical={run.runErr}
+                  uiLocation="Shared link → Run → last run error"
+                />
               ) : (
                 <div className="text-center">
                   <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
@@ -205,10 +221,22 @@ export function SharedRunPanel({
           )}
 
           {run.phase === "done" && run.run && run.error && !run.runErrorDisplay && (
-            <ErrorBanner text={run.error} />
+            <ErrorBanner
+              text={run.error.split("\n")[0] ?? run.error}
+              copyText={formatErrorForClipboard({
+                uiLocation: "Shared link → Run → run error",
+                summary: run.error,
+              })}
+              uiLocation="Shared link → Run → run error"
+            />
           )}
 
-          {downloadError && <ErrorBanner text={downloadError} />}
+          {downloadError && (
+            <ErrorBanner
+              text={downloadError}
+              uiLocation="Shared link → Run → download error"
+            />
+          )}
 
           <InferenceStepTracePanel
             modules={run.modules}
@@ -253,5 +281,6 @@ export function SharedRunPanel({
         </Button>
       ) : null}
     </div>
+    </SharedRunDocScopeProvider>
   )
 }

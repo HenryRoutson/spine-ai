@@ -19,6 +19,7 @@ import {
   startSharedRun,
   uploadSharedDoc,
 } from "@/lib/shared-run-client"
+import { cacheUploadFileText, fetchSharedRunDocText } from "@/lib/shared-run-doc-cache"
 import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 
 export type SharedInferencePhase = "idle" | "running" | "done"
@@ -72,6 +73,8 @@ export function useSharedInferenceRun(
       setUploadingModule(moduleId)
       try {
         const doc = await uploadSharedDoc(linkId, moduleId, file)
+        void cacheUploadFileText(linkId, doc.id, file)
+        void fetchSharedRunDocText(linkId, doc.id).catch(() => {})
         setInputDocs((prev) => {
           const cur = docsForInputModule(prev, moduleId)
           const multi = inputModules.find((m) => m.id === moduleId)?.inputMinCount ?? 1

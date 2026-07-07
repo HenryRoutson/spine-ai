@@ -3,9 +3,11 @@
 export const API_ROUTES = {
   state: "/api/state",
   billing: "/api/billing",
+  earnings: "/api/earnings",
+  earningsWithdraw: "/api/earnings/withdraw",
   billingConfirm: "/api/billing/confirm",
   billingCheckout: "/api/billing/checkout",
-  billingEarningsWithdraw: "/api/billing/earnings/withdraw",
+  billingEarningsWithdraw: "/api/earnings/withdraw",
   billingKeys: "/api/billing/keys",
   billingWebhook: "/api/billing/webhook",
   projects: "/api/projects",
@@ -41,6 +43,9 @@ export const API_ROUTES = {
   sharedLinkRun: (id: string) => `/api/shared-links/${id}/run`,
   sharedLinkProgress: (id: string) => `/api/shared-links/${id}/progress`,
   sharedLinkDocs: (id: string) => `/api/shared-links/${id}/docs`,
+  sharedLinkDocText: (linkId: string, docId: string, layer: "parser" | "vision" = "parser") =>
+    `/api/shared-links/${linkId}/docs/${docId}/text${layer === "vision" ? "?layer=vision" : ""}`,
+  sharedLinkDocFile: (linkId: string, docId: string) => `/api/shared-links/${linkId}/docs/${docId}/file`,
   sharedLinkDownload: (id: string) => `/api/shared-links/${id}/download`,
   sharedLinkClientStep: (id: string) => `/api/shared-links/${id}/client-step`,
   hostedApis: "/api/hosted-apis",
@@ -64,7 +69,8 @@ function isHostedApiPublicApi(pathname: string): boolean {
 function isSharedLinkPublicApi(pathname: string): boolean {
   return (
     /^\/api\/shared-links\/[^/]+$/.test(pathname) ||
-    /^\/api\/shared-links\/[^/]+\/(run|progress|docs|download|client-step)$/.test(pathname)
+    /^\/api\/shared-links\/[^/]+\/(run|progress|docs|download|client-step)$/.test(pathname) ||
+    /^\/api\/shared-links\/[^/]+\/docs\/[^/]+\/(text|file)$/.test(pathname)
   )
 }
 

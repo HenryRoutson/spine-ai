@@ -62,13 +62,17 @@ export function numberedCodeBlock(code: string): string {
 
 export function formatCustomCodeFailureLog(f: CustomCodeAttemptFailure, tag = "custom-code"): string {
   const inputJson = JSON.stringify(f.input, null, 2);
-  return [
+  const parts = [
     `${tag} attempt ${f.attemptIndex + 1} (${f.language}) failed: ${f.error}`,
     "--- code ---",
     numberedCodeBlock(f.code),
     "--- input (reproduce) ---",
     inputJson,
-  ].join("\n");
+  ];
+  if (f.stack?.trim()) {
+    parts.push("--- stack ---", f.stack.trim());
+  }
+  return parts.join("\n");
 }
 
 export function compileCustomFn(code: string): CustomFn {

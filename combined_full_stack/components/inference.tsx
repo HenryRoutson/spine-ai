@@ -34,7 +34,8 @@ import {
   isMultiDocInputModule,
   type InputDocsAssignment,
 } from "@/lib/inference-input"
-import { inferenceInputIssueMessage } from "@/lib/inference-validity"
+import { inferenceInputIssueClipboard, inferenceInputIssueMessage } from "@/lib/inference-validity"
+import { formatErrorForClipboard } from "@/lib/error-copy"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
 import { InferenceRunPresetMenu, type PresetApplyMeta } from "@/components/inference/inference-run-preset-menu"
 import {
@@ -583,10 +584,27 @@ export function Inference() {
                 )}
 
                 {run.inputsInvalid && (
-                  <ErrorBanner text={inferenceInputIssueMessage(run.inputIssues)} />
+                  <ErrorBanner
+                    text={inferenceInputIssueMessage(run.inputIssues, run.inputModules)}
+                    copyText={inferenceInputIssueClipboard(
+                      run.inputIssues,
+                      "Inference → Run Pipeline → input validation",
+                      run.inputModules,
+                    )}
+                    uiLocation="Inference → Run Pipeline → input validation"
+                  />
                 )}
 
-                {run.error && run.phase !== "done" && <ErrorBanner text={run.error} />}
+                {run.error && run.phase !== "done" && (
+                  <ErrorBanner
+                    text={run.error.split("\n")[0] ?? run.error}
+                    copyText={formatErrorForClipboard({
+                      uiLocation: "Inference → Run Pipeline → start run",
+                      summary: run.error,
+                    })}
+                    uiLocation="Inference → Run Pipeline → start run"
+                  />
+                )}
 
                 {run.deduped && run.phase === "done" && (
                   <div className="rounded-lg border border-chart-3/40 bg-chart-3/5 px-4 py-3 text-sm text-foreground">
@@ -645,7 +663,11 @@ export function Inference() {
                     {run.run.status !== "ok" && (
                       <div className="rounded-lg border border-border bg-card px-6 py-6">
                         {run.runErrorDisplay ? (
-                          <RunErrorSummary display={run.runErrorDisplay} technical={run.runErr} />
+                          <RunErrorSummary
+                            display={run.runErrorDisplay}
+                            technical={run.runErr}
+                            uiLocation="Inference → Last run → error summary"
+                          />
                         ) : (
                           <div className="text-center">
                             <AlertTriangle className="mx-auto h-10 w-10 text-destructive" />
@@ -658,7 +680,16 @@ export function Inference() {
                       </div>
                     )}
 
-                    {run.error && <ErrorBanner text={run.error} />}
+                    {run.error && (
+                      <ErrorBanner
+                        text={run.error.split("\n")[0] ?? run.error}
+                        copyText={formatErrorForClipboard({
+                          uiLocation: "Inference → Last run → run error",
+                          summary: run.error,
+                        })}
+                        uiLocation="Inference → Last run → run error"
+                      />
+                    )}
 
                     <InferenceStepTracePanel
                       modules={modules}

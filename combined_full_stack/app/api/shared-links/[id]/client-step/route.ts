@@ -17,7 +17,7 @@ import {
   getJobForProgress,
   isJobResuming,
   jobProgress,
-  openJobDb,
+  openCrossUserJobDb,
   pauseJob,
   withJobLogging,
   type RunJobId,
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!sessionId) return apiError("session required", 400);
 
   const jobId = body.jobId as RunJobId;
-  const jobDb = await openJobDb();
+  const jobDb = await openCrossUserJobDb();
   const checkpoint = await claimJobResume(entry.ownerId, jobId, jobDb);
   if (!checkpoint) {
     const job = await getJobForProgress(entry.ownerId, jobId, jobDb);

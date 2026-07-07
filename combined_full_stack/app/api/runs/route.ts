@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
   }
   const inputIssues = collectInferenceInputIssues(inputModules, {}, contentByDocId, assignment);
   if (inputIssues.length) {
-    return apiError(inferenceInputIssueMessage(inputIssues), 400);
+    return apiError(inferenceInputIssueMessage(inputIssues, inputModules), 400);
   }
 
   const resolvedByModule = inputDocsByModuleFromAssignment(inputModules, assignment);

@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/chart"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { CreditCard, KeyRound, Loader2, TrendingDown, TrendingUp, Wallet } from "lucide-react"
+import { CreditCard, KeyRound, Loader2, TrendingDown, TrendingUp } from "lucide-react"
 
 // AI : de-mocked — series keys come from the real billing aggregation (one line per model
 // AI : + the doc-parse service), so new models show up without touching this file.
@@ -53,7 +53,6 @@ export function Billing() {
   const [scope, setScope] = useState<BillingScope>(project ? "all" : "all")
   const [checkoutKey, setCheckoutKey] = useState<string | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
-  const [withdrawing, setWithdrawing] = useState(false)
   const [billingKeys, setBillingKeys] = useState<
     { id: string; label: string; keyPrefix: string; createdAt: number }[]
   >([])
@@ -81,26 +80,6 @@ export function Billing() {
     } catch (e) {
       setBanner((e as Error).message)
       setCheckoutKey(null)
-    }
-  }
-
-  async function withdrawAllEarnings() {
-    if (!billingAccount || billingAccount.earningsBalanceCents <= 0) return
-    setWithdrawing(true)
-    setBanner(null)
-    try {
-      const res = await fetch(API_ROUTES.billingEarningsWithdraw, {
-        method: "POST",
-        headers: JSON_HEADERS,
-        body: JSON.stringify({ cents: billingAccount.earningsBalanceCents }),
-      })
-      const body = await res.json()
-      if (!res.ok) throw new Error(body.error ?? "Withdraw failed")
-      await refreshBilling()
-    } catch (e) {
-      setBanner((e as Error).message)
-    } finally {
-      setWithdrawing(false)
     }
   }
 
@@ -191,9 +170,9 @@ export function Billing() {
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="10 / Billing"
-        title="Spend & Inference Cost"
-        description={`Credit-based billing — subscribe for monthly credit, top up when you run out. Actual run cost depends on models and pipeline length; you need at least ${formatCents(minRunBalanceCents)} credit to start a run.`}
+        step="11 / Billing"
+        title="LLM credit & spend"
+        description={`Credit for pipeline runs — subscribe or top up here. Share/API earnings live in the separate Earnings tab. You need at least ${formatCents(minRunBalanceCents)} credit to start a run.`}
       />
 
       {billingAccount && (
@@ -275,38 +254,6 @@ export function Billing() {
             <p className="mt-3 font-mono text-[10px] text-amber-600 dark:text-amber-400">
               Not enough credit to run a pipeline — subscribe or top up.
             </p>
-          )}
-          {(billingAccount.earningsBalanceCents > 0 || billingAccount.earningsTotalCents > 0) && (
-            <div className="mt-4 rounded-md border border-primary/30 bg-primary/5 px-4 py-3">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase text-muted-foreground">
-                    <Wallet className="h-3 w-3" />
-                    Pipeline earnings
-                  </p>
-                  <p className="font-mono text-2xl font-semibold text-primary">
-                    {formatCents(billingAccount.earningsBalanceCents)}
-                  </p>
-                  <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                    {formatCents(billingAccount.earningsTotalCents)} earned ·{" "}
-                    {formatCents(billingAccount.earningsWithdrawnCents)} withdrawn to credit
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={withdrawing || billingAccount.earningsBalanceCents <= 0}
-                  onClick={() => withdrawAllEarnings().catch(console.error)}
-                >
-                  {withdrawing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-                  Move to credit balance
-                </Button>
-              </div>
-              <p className="mt-2 font-mono text-[10px] text-muted-foreground">
-                Markup from viewer-funded shared links — separate from inference credit.
-              </p>
-            </div>
           )}
         </div>
       )}

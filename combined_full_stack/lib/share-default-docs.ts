@@ -1,5 +1,10 @@
-import { orderedInputModules } from "@/lib/inference-input"
-import { DocLabel, type DocId, type DocRef, type ModuleId, type Project } from "@/lib/types"
+import {
+  buildDefaultInputDocs,
+  inputDocsByModuleFromAssignment,
+  orderedInputModules,
+  resolveInputDocs,
+} from "@/lib/inference-input"
+import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
 
 // AI : default input docs for shared links / hosted APIs — mirrors inference assignment.
 export function shareDefaultDocsByModule(
@@ -8,15 +13,20 @@ export function shareDefaultDocsByModule(
   inferenceInputDocIds: Partial<Record<ModuleId, DocId | DocId[]>>,
 ): Partial<Record<ModuleId, DocId[]>> {
   const inputModules = orderedInputModules(project.modules)
+  const savedByModule = inputDocsByModuleFromAssignment(
+    inputModules,
+    resolveInputDocs(docs, project, inputModules, inferenceInputDocIds),
+  )
+  const missingModules = inputModules.filter((m) => !savedByModule[m.id]?.length)
+  const defaultByModule = inputDocsByModuleFromAssignment(
+    missingModules,
+    missingModules.length ? buildDefaultInputDocs(docs, project, missingModules) : {},
+  )
+
   const out: Partial<Record<ModuleId, DocId[]>> = {}
   for (const m of inputModules) {
-    const raw = inferenceInputDocIds[m.id]
-    if (raw) {
-      out[m.id] = Array.isArray(raw) ? raw : [raw]
-      continue
-    }
-    const seeded = docs.filter((d) => d.label === DocLabel.Inference).slice(0, 1)
-    if (seeded.length) out[m.id] = [seeded[0].id]
+    const ids = savedByModule[m.id]?.length ? savedByModule[m.id]! : defaultByModule[m.id]
+    if (ids?.length) out[m.id] = ids
   }
   return out
 }

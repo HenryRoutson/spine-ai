@@ -11,6 +11,7 @@ export type AppWindowId =
   | "testing"
   | "inference"
   | "share"
+  | "earnings"
   | "logging"
   | "cache"
   | "documents"

@@ -2,7 +2,7 @@
 
 import { Files } from "lucide-react"
 import { useOptionalStore } from "@/lib/store"
-import { useAppShell } from "@/lib/app-shell"
+import { useOptionalAppShell } from "@/lib/app-shell"
 import { cn } from "@/lib/utils"
 import type { DocId } from "@/lib/types"
 
@@ -20,7 +20,8 @@ export function OpenInDocumentsLink({
   variant?: "inline" | "source"
 }) {
   const store = useOptionalStore()
-  const { openDocuments } = useAppShell()
+  const shell = useOptionalAppShell()
+  if (!shell) return null
 
   const resolvedLabel =
     variant === "source" && docId
@@ -32,7 +33,7 @@ export function OpenInDocumentsLink({
       type="button"
       onClick={(e) => {
         if (stopPropagation) e.stopPropagation()
-        openDocuments(docId)
+        shell.openDocuments(docId)
       }}
       className={cn(
         variant === "source"

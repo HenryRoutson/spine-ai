@@ -1,3 +1,4 @@
+import { captureThrownError, formatErrorForClipboard } from "./error-copy";
 import { InputType } from "./types";
 import type { DocRef, ModuleId, PipelineModule } from "./types";
 import { isUnavailableSeedDoc, looksLikeUnavailableSeedDoc } from "./seed-doc";
@@ -13,6 +14,9 @@ export interface InferenceInputIssue {
   moduleId: ModuleId;
   docName: string;
   message: string;
+  inputLabel?: string;
+  stack?: string;
+  contentLength?: number;
 }
 
 function assignmentIssueMessage(
@@ -35,6 +39,7 @@ export function validateInferenceDocAssignment(
   return {
     moduleId: inputModule.id,
     docName: doc.name,
+    inputLabel: inputModule.label,
     message: assignmentIssueMessage(reason, inputModule),
   };
 }
@@ -49,6 +54,7 @@ export function validateInferenceDocContent(
     return {
       moduleId: inputModule.id,
       docName: doc.name,
+      inputLabel: inputModule.label,
       message: `seed doc missing on deploy — run sync-seeds or upload ${doc.name}`,
     };
   }
@@ -56,10 +62,15 @@ export function validateInferenceDocContent(
     try {
       JSON.parse(content);
     } catch (err) {
+      const { message, stack } = captureThrownError(err);
+      const emptyHint = content.trim() ? "" : " (document is empty)";
       return {
         moduleId: inputModule.id,
         docName: doc.name,
-        message: (err as Error).message,
+        inputLabel: inputModule.label,
+        contentLength: content.length,
+        message: `invalid JSON${emptyHint}: ${message}`,
+        stack,
       };
     }
   }
@@ -74,6 +85,7 @@ export function validateInferenceDocPreview(
     return {
       moduleId: inputModule.id,
       docName: doc.name,
+      inputLabel: inputModule.label,
       message: `seed doc missing on deploy — run sync-seeds or upload ${doc.name}`,
     };
   }
@@ -110,17 +122,51 @@ export function collectInferenceInputIssues(
         continue;
       }
       const content = contentByDocId[doc.id];
-      const issue = content
-        ? validateInferenceDocContent(m, doc, content)
-        : validateInferenceDocPreview(m, doc);
+      const issue =
+        content !== undefined
+          ? validateInferenceDocContent(m, doc, content)
+          : validateInferenceDocPreview(m, doc);
       if (issue) issues.push(issue);
     }
   }
   return issues;
 }
 
-export function inferenceInputIssueMessage(issues: InferenceInputIssue[]): string {
+function issueWhereLabel(issue: InferenceInputIssue, inputModules?: PipelineModule[]): string {
+  const label = issue.inputLabel ?? inputModules?.find((m) => m.id === issue.moduleId)?.label;
+  return label ? `${label} · ${issue.docName}` : issue.docName;
+}
+
+export function inferenceInputIssueMessage(
+  issues: InferenceInputIssue[],
+  inputModules?: PipelineModule[],
+): string {
   if (!issues.length) return "";
-  const first = issues[0];
-  return `${first.docName}: ${first.message}`;
+  const first = issues[0]!;
+  return `${issueWhereLabel(first, inputModules)}: ${first.message}`;
+}
+
+export function inferenceInputIssueClipboard(
+  issues: InferenceInputIssue[],
+  uiLocation: string,
+  inputModules?: PipelineModule[],
+): string {
+  if (!issues.length) return "";
+  return issues
+    .map((issue, i) =>
+      formatErrorForClipboard({
+        uiLocation:
+          issues.length > 1 ? `${uiLocation} (issue ${i + 1}/${issues.length})` : uiLocation,
+        summary: issue.message,
+        context: {
+          ...(issue.inputLabel ? { "Input step": issue.inputLabel } : {}),
+          Document: issue.docName,
+          ...(issue.contentLength !== undefined
+            ? { "Content length (bytes)": String(issue.contentLength) }
+            : {}),
+        },
+        stack: issue.stack,
+      }),
+    )
+    .join("\n\n---\n\n");
 }

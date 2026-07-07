@@ -5,7 +5,10 @@ import { LayoutGrid, Loader2, LogIn, LogOut, Share2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { SharedRunPanel } from "@/components/share/shared-run-panel"
+import { LazyDocViewer } from "@/components/lazy-doc-viewer"
 import { ErrorBanner } from "@/components/inference/inference-run-chrome"
+import { DocViewerProvider } from "@/lib/doc-viewer"
+import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
 import { fetchSharedLink } from "@/lib/shared-run-client"
 import { useSupabaseSession } from "@/lib/use-supabase-session"
 import { openSharedLinkInWorkspace } from "@/lib/open-shared-in-workspace"
@@ -48,6 +51,8 @@ function SharedRunContent({ link, linkId }: { link: SharedLinkPublicView; linkId
   const { email, isAuthenticated, ready, signOut } = useSupabaseSession()
 
   return (
+    <DocViewerProvider>
+    <SharedRunDocScopeProvider linkId={linkId}>
     <div className="flex min-h-dvh flex-col bg-background text-foreground">
       <header className="border-b border-border px-4 py-3">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-2">
@@ -130,5 +135,8 @@ function SharedRunContent({ link, linkId }: { link: SharedLinkPublicView; linkId
         />
       </main>
     </div>
+    <LazyDocViewer />
+    </SharedRunDocScopeProvider>
+    </DocViewerProvider>
   )
 }

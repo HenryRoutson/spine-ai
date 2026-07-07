@@ -8,7 +8,17 @@ import { HTTP } from "@/lib/server/api-errors";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { sanitizeRedirectPath } from "@/utils/sanitize_redirect";
 
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/run", "/demo", "/privacy", "/terms", "/cookies", "/accessibility"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/auth/callback",
+  "/run",
+  "/demo",
+  "/privacy",
+  "/terms",
+  "/cookies",
+  "/accessibility",
+  "/json-viewer.html",
+];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

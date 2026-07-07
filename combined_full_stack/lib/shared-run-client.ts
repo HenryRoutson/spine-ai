@@ -1,4 +1,4 @@
-import { readApiErrorBody, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
+import { parseFetchJson, readApiErrorBody, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import {
   awaitJobCompletion,
@@ -19,9 +19,11 @@ import type { ClientStepSpec } from "@/lib/run-types"
 
 export async function fetchSharedLink(id: string): Promise<SharedLinkPublicView> {
   const res = await fetch(API_ROUTES.sharedLink(id), FETCH_NO_STORE)
-  const body = await res.json()
-  if (!res.ok) throw new Error(body.error ?? "Failed to load link")
-  return body.link as SharedLinkPublicView
+  const body = await parseFetchJson<{ link: SharedLinkPublicView; error?: string }>(
+    res,
+    "load shared link",
+  )
+  return body.link
 }
 
 export async function uploadSharedDoc(
@@ -33,9 +35,7 @@ export async function uploadSharedDoc(
   form.set("file", file)
   form.set("moduleId", moduleId)
   const res = await fetch(API_ROUTES.sharedLinkDocs(linkId), { method: "POST", body: form })
-  const body = await res.json()
-  if (!res.ok) throw new Error(body.error ?? "Upload failed")
-  return body as DocRef
+  return parseFetchJson<DocRef>(res, "upload shared doc")
 }
 
 export async function startSharedRun(
@@ -48,9 +48,7 @@ export async function startSharedRun(
     headers: JSON_HEADERS,
     body: JSON.stringify({ inputDocsByModule, viewerName }),
   })
-  const body = await res.json()
-  if (!res.ok) throw new Error(body.error ?? "Run failed")
-  return { jobId: body.jobId, progressToken: body.progressToken }
+  return parseFetchJson<{ jobId: RunJobId; progressToken: string }>(res, "start shared run")
 }
 
 export async function pollSharedProgress(
@@ -60,9 +58,7 @@ export async function pollSharedProgress(
 ): Promise<RunJob> {
   const url = `${API_ROUTES.sharedLinkProgress(linkId)}?jobId=${encodeURIComponent(jobId)}&token=${encodeURIComponent(token)}`
   const res = await fetch(url, FETCH_NO_STORE)
-  const body = await res.json()
-  if (!res.ok) throw new Error(body.error ?? "Progress poll failed")
-  return body as RunJob
+  return parseFetchJson<RunJob>(res, "shared run progress")
 }
 
 async function submitSharedClientStep(
@@ -108,14 +104,12 @@ export async function fetchSharedDownload(
 ) {
   const url = `${API_ROUTES.sharedLinkDownload(linkId)}?runId=${encodeURIComponent(runId)}&jobId=${encodeURIComponent(jobId)}&token=${encodeURIComponent(token)}`
   const res = await fetch(url, FETCH_NO_STORE)
-  const body = await res.json()
-  if (!res.ok) throw new Error(body.error ?? "Download failed")
-  return body as {
+  return parseFetchJson<{
     runId: string
     status: string
     outputs: { label: string; kind: string; status: string; json?: string; preview: string }[]
     markdown: string
-  }
+  }>(res, "shared run download")
 }
 
 export { mergeStepStates }

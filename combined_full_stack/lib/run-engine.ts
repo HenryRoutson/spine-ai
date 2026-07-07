@@ -225,13 +225,32 @@ function clientStepFailureLogLevel(tag: string): JobLogEntry["level"] {
   return tag === "assert" || tag === "custom-code" ? JobLogLevel.Warn : JobLogLevel.Error
 }
 
-function clientStepSubmitError(kind: string, err: unknown): string {
+function clientStepSubmitError(kind: string, err: unknown, stepLabel?: string): string {
+  const uiLocation = `Inference → Run Pipeline → ${kind} step${stepLabel ? ` (${stepLabel})` : ""}`;
   if (err instanceof CustomCodeExhaustedError) {
-    const last = err.failures[err.failures.length - 1]
-    if (kind === "assert" && last?.error) return last.error
-    return err.message
+    const last = err.failures[err.failures.length - 1];
+    if (kind === "assert" && last?.error) {
+      return [
+        last.error,
+        `UI location: ${uiLocation}`,
+        formatCustomCodeFailureLog(last, "assert"),
+      ].join("\n");
+    }
+    if (last) {
+      return [
+        err.message,
+        `UI location: ${uiLocation}`,
+        formatCustomCodeFailureLog(last, kind === "assert" ? "assert" : "custom-code"),
+      ].join("\n");
+    }
+    return err.message;
   }
-  return (err as Error).message
+  const { message, stack } = err instanceof Error ? err : { message: String(err), stack: undefined };
+  return [
+    message,
+    `UI location: ${uiLocation}`,
+    ...(stack?.trim() ? ["Stack trace:", stack.trim()] : []),
+  ].join("\n");
 }
 
 // AI : shared poll loop for dev runs and shared-link runs — handles browser client steps + human review.
@@ -291,7 +310,7 @@ export async function awaitJobCompletion(
       !clientStepBusy &&
       clientStepSubmittedFor !== job.clientStep.moduleId
     ) {
-      const { moduleId, entries, input, pipelineState, kind, expectedOutputs } = job.clientStep
+      const { moduleId, label, entries, input, pipelineState, kind, expectedOutputs } = job.clientStep
       if (!entries?.length) {
         await submitClientStep({ error: `${kind} step has no code configured` })
         clientStepSubmittedFor = moduleId
@@ -364,7 +383,7 @@ export async function awaitJobCompletion(
           moduleId,
         })
         await submitClientStep({
-          error: clientStepSubmitError(kind, err),
+          error: clientStepSubmitError(kind, err, label),
           clientLogs,
         })
         clientStepSubmittedFor = moduleId

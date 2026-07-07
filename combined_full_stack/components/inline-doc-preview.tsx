@@ -13,6 +13,8 @@ import {
 import type { DocViewMode } from "@/lib/doc-viewer"
 import { API_ROUTES } from "@/lib/api-routes"
 import { docTextContent, fetchDocText } from "@/lib/doc-text-cache"
+import { useDocFetchScope } from "@/lib/use-doc-fetch-scope"
+import { sharedRunDocFileUrl } from "@/lib/shared-run-doc-cache"
 import { cn } from "@/lib/utils"
 import { isTabularDocType } from "@/lib/doc-structure-infer"
 import type { DocId, DocRef, StructureModel } from "@/lib/types"
@@ -32,6 +34,7 @@ export function InlineDocPreview({
   className,
   maxHeightClass = "max-h-72",
 }: InlineDocPreviewProps) {
+  const { linkId, docTextOpts } = useDocFetchScope()
   const [hasPdf, setHasPdf] = useState(false)
   const [parserText, setParserText] = useState<string | null>(null)
   const [view, setView] = useState<DocViewMode>("parser")
@@ -39,19 +42,22 @@ export function InlineDocPreview({
   useEffect(() => {
     const ctrl = new AbortController()
     setHasPdf(false)
-    fetch(API_ROUTES.docFile(docId), { method: "HEAD", signal: ctrl.signal })
+    fetch(linkId ? sharedRunDocFileUrl(linkId, docId) : API_ROUTES.docFile(docId), {
+      method: "HEAD",
+      signal: ctrl.signal,
+    })
       .then((r) => setHasPdf(r.ok))
       .catch(() => {
         if (!ctrl.signal.aborted) setHasPdf(false)
       })
     return () => ctrl.abort()
-  }, [docId])
+  }, [docId, linkId])
 
   useEffect(() => {
     const ctrl = new AbortController()
     let cancelled = false
     setParserText(null)
-    fetchDocText(docId, "parser")
+    fetchDocText(docId, "parser", docTextOpts)
       .then((parser) => {
         if (cancelled) return
         const text =
@@ -68,7 +74,7 @@ export function InlineDocPreview({
       cancelled = true
       ctrl.abort()
     }
-  }, [docId, doc?.name, doc?.type, hasPdf])
+  }, [docId, doc?.name, doc?.type, hasPdf, docTextOpts, linkId])
 
   const tabs = inlineDocViewTabs(doc, hasPdf)
   const showPdf = isPdfDoc(doc, hasPdf)

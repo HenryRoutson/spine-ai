@@ -23,6 +23,7 @@ import {
   Share2,
   SquareArrowUp,
   Users,
+  Wallet,
 } from "lucide-react"
 import { ResizableSplit } from "@/components/resizable-split"
 import { navSplit, NAV_ICON_ONLY_MAX_WIDTH } from "@/lib/layout-split-settings"
@@ -41,6 +42,7 @@ import { createClient } from "@/utils/supabase/client"
 import { useAppShell, type AppWindowId } from "@/lib/app-shell"
 import { useSyncProjectDocStructures } from "@/lib/use-sync-project-doc-structures"
 import { LazyDocViewer } from "@/components/lazy-doc-viewer"
+import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
 import { PanelLoading } from "@/components/panel-loading"
 import { FeedbackButton } from "@/components/feedback-button"
 import { ProjectAssistantDock } from "@/components/project-assistant-dock"
@@ -94,6 +96,9 @@ const Cache = dynamic(() => import("@/components/cache").then((m) => ({ default:
 const Documents = dynamic(() => import("@/components/documents").then((m) => ({ default: m.Documents })), {
   loading: () => <PanelLoading label="loading documents…" />,
 })
+const Earnings = dynamic(() => import("@/components/earnings").then((m) => ({ default: m.Earnings })), {
+  loading: () => <PanelLoading label="loading earnings…" />,
+})
 const Billing = dynamic(() => import("@/components/billing").then((m) => ({ default: m.Billing })), {
   loading: () => <PanelLoading label="loading billing…" />,
 })
@@ -116,12 +121,13 @@ const WINDOWS: { id: WindowId; label: string; hint: string; icon: NavIcon }[] = 
   { id: "testing", label: "Testing", hint: "03", icon: SquareCheck },
   { id: "inference", label: "Inference", hint: "04", icon: Play },
   { id: "share", label: "Share", hint: "05", icon: SquareArrowUp },
-  { id: "logging", label: "Logging", hint: "06", icon: ScrollText },
-  { id: "cache", label: "Cache", hint: "07", icon: Database },
-  { id: "documents", label: "Documents", hint: "08", icon: Files },
-  { id: "docs", label: "Docs", hint: "09", icon: BookOpen },
-  { id: "billing", label: "Billing", hint: "10", icon: CreditCard },
-  { id: "settings", label: "Settings", hint: "11", icon: Settings },
+  { id: "earnings", label: "Earnings", hint: "06", icon: Wallet },
+  { id: "logging", label: "Logging", hint: "07", icon: ScrollText },
+  { id: "cache", label: "Cache", hint: "08", icon: Database },
+  { id: "documents", label: "Documents", hint: "09", icon: Files },
+  { id: "docs", label: "Docs", hint: "10", icon: BookOpen },
+  { id: "billing", label: "Billing", hint: "11", icon: CreditCard },
+  { id: "settings", label: "Settings", hint: "12", icon: Settings },
 ]
 
 const CONSUMER_WINDOWS: { id: WindowId; label: string; hint: string; icon: NavIcon }[] = [
@@ -457,7 +463,7 @@ function ConsumerShellLayout({ variant = "default" }: { variant?: "default" | "e
 
 function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "embed" }) {
   const embed = variant === "embed"
-  const { activeWindow, setActiveWindow } = useAppShell()
+  const { activeWindow, setActiveWindow, activeSharedLinkId } = useAppShell()
   const { modules, models, project, projectLoading, typeAliases } = useStore()
   useSyncProjectDocStructures()
   const validity = useMemo(
@@ -577,6 +583,7 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
               {activeWindow === "testing" && <Testing />}
               {activeWindow === "inference" && <Inference />}
               {activeWindow === "share" && <Share />}
+              {activeWindow === "earnings" && <Earnings />}
               {activeWindow === "logging" && <Logging />}
               {activeWindow === "cache" && <Cache />}
               {activeWindow === "documents" && <Documents />}
@@ -588,7 +595,9 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
         />
       </div>
 
-      <LazyDocViewer />
+      <SharedRunDocScopeProvider linkId={activeSharedLinkId}>
+        <LazyDocViewer />
+      </SharedRunDocScopeProvider>
     </div>
   )
 }

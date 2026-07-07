@@ -23,6 +23,20 @@ export function formatApiError(context: string, res: Response, body: ApiErrorBod
   return `${context} (HTTP ${res.status})${code}${suffix}`;
 }
 
+export async function parseFetchJson<T>(res: Response, context: string): Promise<T> {
+  if (!res.ok) {
+    const body = await readApiErrorBody(res);
+    throw new Error(formatApiError(context, res, body));
+  }
+  const raw = await res.text();
+  if (!raw.trim()) throw new Error(`${context}: empty response (HTTP ${res.status})`);
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    throw new Error(`${context}: invalid JSON response (HTTP ${res.status})`);
+  }
+}
+
 export async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { credentials: FETCH_CREDENTIALS, ...init });
   if (!res.ok) {

@@ -16,6 +16,7 @@ import { JsonHighlight } from "@/components/highlight"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { copyTextToClipboard } from "@/lib/clipboard"
+import { formatErrorForClipboard } from "@/lib/error-copy"
 import type { RunErrorDisplay } from "@/lib/run-errors"
 import type { ClientStepSpec } from "@/lib/run-types"
 import type { PipelineModule } from "@/lib/types"
@@ -133,14 +134,23 @@ export function CyclingWaitPhrase({ phrase, className }: { phrase: string; class
 export function RunErrorSummary({
   display,
   technical,
+  uiLocation = "Inference → Last run → error summary",
   className,
 }: {
   display: RunErrorDisplay
   technical?: string | null
+  uiLocation?: string
   className?: string
 }) {
   const [showTechnical, setShowTechnical] = useState(false)
-  const copyText = technical ?? display.detail ?? display.message
+  const copyText =
+    technical ??
+    formatErrorForClipboard({
+      uiLocation,
+      summary: display.message,
+      detail: display.detail,
+      context: display.stepLabel ? { "Pipeline step": display.stepLabel } : undefined,
+    })
 
   return (
     <div className={cn("mx-auto max-w-md space-y-3", className)}>
@@ -162,7 +172,7 @@ export function RunErrorSummary({
             {showTechnical ? "Hide technical details" : "Show technical details"}
           </Button>
           {showTechnical && (
-            <ErrorBanner text={copyText} />
+            <ErrorBanner text={copyText} copyText={copyText} uiLocation={uiLocation} />
           )}
         </div>
       )}
@@ -170,7 +180,15 @@ export function RunErrorSummary({
   )
 }
 
-export function ErrorBanner({ text }: { text: string }) {
+export function ErrorBanner({
+  text,
+  copyText,
+  uiLocation = "Error banner",
+}: {
+  text: string
+  copyText?: string
+  uiLocation?: string
+}) {
   const [copied, setCopied] = useState(false)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -181,7 +199,13 @@ export function ErrorBanner({ text }: { text: string }) {
   }, [])
 
   async function copyError() {
-    await copyTextToClipboard(text)
+    const payload =
+      copyText ??
+      formatErrorForClipboard({
+        uiLocation,
+        summary: text,
+      })
+    await copyTextToClipboard(payload)
     setCopied(true)
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
     copyTimerRef.current = setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)

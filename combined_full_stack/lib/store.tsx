@@ -93,9 +93,12 @@ export type BillingAccountView = {
   subCentsPerMonth: number
   billingCapCents: number
   creditHistory: BillingCreditHistoryEntry[]
-  earningsBalanceCents: number
-  earningsTotalCents: number
-  earningsWithdrawnCents: number
+}
+
+export type EarningsAccountView = {
+  balanceCents: number
+  totalEarnedCents: number
+  totalWithdrawnCents: number
 }
 
 const DEMO_BILLING: BillingAccountView = {
@@ -109,9 +112,12 @@ const DEMO_BILLING: BillingAccountView = {
   subCentsPerMonth: 2900,
   billingCapCents: 50_000,
   creditHistory: [],
-  earningsBalanceCents: 0,
-  earningsTotalCents: 0,
-  earningsWithdrawnCents: 0,
+}
+
+const DEMO_EARNINGS: EarningsAccountView = {
+  balanceCents: 0,
+  totalEarnedCents: 0,
+  totalWithdrawnCents: 0,
 }
 
 async function fetchStateOnce(route: string): Promise<ServerState> {
@@ -186,6 +192,8 @@ interface StoreState {
   billingRuns: PipelineRun[]
   billingAccount: BillingAccountView | null
   refreshBilling: () => Promise<void>
+  earningsAccount: EarningsAccountView | null
+  refreshEarnings: () => Promise<void>
   refresh: () => Promise<void>
   prefetchProject: (id: string) => void
   projectLoading: boolean
@@ -215,6 +223,8 @@ export interface ConsumerStoreState {
   billingRuns: PipelineRun[]
   billingAccount: BillingAccountView | null
   refreshBilling: () => Promise<void>
+  earningsAccount: EarningsAccountView | null
+  refreshEarnings: () => Promise<void>
   model: string
   setModel: (m: string) => void
   modelOptions: ModelOptionPublic[]
@@ -274,6 +284,7 @@ export function StoreProvider({
   const [state, setState] = useState<ServerState | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [billingAccount, setBillingAccount] = useState<BillingAccountView | null>(null)
+  const [earningsAccount, setEarningsAccount] = useState<EarningsAccountView | null>(null)
   const [activeProjectId, setActiveProjectId] = useState<string>(() => {
     if (mode === "demo") {
       if (typeof window !== "undefined") {
@@ -321,9 +332,19 @@ export function StoreProvider({
     setBillingAccount({
       ...data,
       creditHistory: data.creditHistory ?? [],
-      earningsBalanceCents: data.earningsBalanceCents ?? 0,
-      earningsTotalCents: data.earningsTotalCents ?? 0,
-      earningsWithdrawnCents: data.earningsWithdrawnCents ?? 0,
+    })
+  }, [mode])
+
+  const refreshEarnings = useCallback(async () => {
+    if (mode === "demo") {
+      setEarningsAccount(DEMO_EARNINGS)
+      return
+    }
+    const data = await apiJson<EarningsAccountView>(API_ROUTES.earnings)
+    setEarningsAccount({
+      balanceCents: data.balanceCents ?? 0,
+      totalEarnedCents: data.totalEarnedCents ?? 0,
+      totalWithdrawnCents: data.totalWithdrawnCents ?? 0,
     })
   }, [mode])
 
@@ -415,8 +436,9 @@ export function StoreProvider({
         if (resolved) setActiveProjectId(resolved)
       }
       refreshBilling().catch(console.error) // AI : billing failure must not block pipeline UI
+      refreshEarnings().catch(console.error)
     },
-    [mode, refreshBilling],
+    [mode, refreshBilling, refreshEarnings],
   )
 
   const stampProjectOpened = useCallback(
@@ -1052,6 +1074,8 @@ export function StoreProvider({
       billingRuns,
       billingAccount,
       refreshBilling,
+      earningsAccount,
+      refreshEarnings,
       refresh,
       prefetchProject,
       projectLoading,
@@ -1084,6 +1108,8 @@ export function StoreProvider({
     billingRuns,
     billingAccount,
     refreshBilling,
+    earningsAccount,
+    refreshEarnings,
     refresh,
     prefetchProject,
     projectLoading,
@@ -1106,6 +1132,8 @@ export function StoreProvider({
       billingRuns,
       billingAccount,
       refreshBilling,
+      earningsAccount,
+      refreshEarnings,
       model,
       setModel,
       modelOptions: state.modelOptions,
@@ -1122,6 +1150,8 @@ export function StoreProvider({
     billingRuns,
     billingAccount,
     refreshBilling,
+    earningsAccount,
+    refreshEarnings,
     model,
     setModel,
     addProject,

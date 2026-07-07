@@ -5,6 +5,8 @@ import { defaultDocViewMode } from "@/lib/doc-content"
 import type { DocViewMode } from "@/lib/doc-viewer"
 import { API_ROUTES } from "@/lib/api-routes"
 import { docTextContent, fetchDocText } from "@/lib/doc-text-cache"
+import { useDocFetchScope } from "@/lib/use-doc-fetch-scope"
+import { sharedRunDocFileUrl } from "@/lib/shared-run-doc-cache"
 import type { DocId, DocRef } from "@/lib/types"
 
 export type VisionEntry = { key: string; model: string; text: string; createdAt: number }
@@ -24,6 +26,7 @@ export function useDocViewerData({
   spanStart,
   spanEnd,
 }: UseDocViewerDataArgs) {
+  const { linkId, docTextOpts } = useDocFetchScope()
   const [hasPdf, setHasPdf] = useState(false)
   const [parserText, setParserText] = useState<string | null>(null)
   const [parserMeta, setParserMeta] = useState<{ parser?: string; fromCache?: boolean }>({})
@@ -35,10 +38,10 @@ export function useDocViewerData({
   useEffect(() => {
     if (!docId) return
     setHasPdf(false)
-    fetch(API_ROUTES.docFile(docId), { method: "HEAD" })
+    fetch(linkId ? sharedRunDocFileUrl(linkId, docId) : API_ROUTES.docFile(docId), { method: "HEAD" })
       .then((r) => setHasPdf(r.ok))
       .catch(() => setHasPdf(false))
-  }, [docId])
+  }, [docId, linkId])
 
   useEffect(() => {
     if (!docId) return
@@ -48,14 +51,16 @@ export function useDocViewerData({
     setVisionIndex(0)
     const hasSpan = spanStart !== spanEnd
     Promise.all([
-      fetchDocText(docId, "parser").then((parser) =>
+      fetchDocText(docId, "parser", docTextOpts).then((parser) =>
         parser.text !== undefined || parser.content !== undefined
           ? parser
           : { text: `⚠ source not found for ${docId}` },
       ),
-      fetch(API_ROUTES.docText(docId, "vision")).then((r) =>
-        r.ok ? r.json() : { entries: [] as VisionEntry[] },
-      ),
+      docTextOpts?.linkId
+        ? Promise.resolve({ entries: [] as VisionEntry[] })
+        : fetch(API_ROUTES.docText(docId, "vision")).then((r) =>
+            r.ok ? r.json() : { entries: [] as VisionEntry[] },
+          ),
     ])
       .then(([parser, vision]) => {
         const visionRows: VisionEntry[] = vision.entries ?? []
@@ -71,7 +76,7 @@ export function useDocViewerData({
         )
       })
       .catch(() => setParserText("⚠ failed to load source document"))
-  }, [docId, requestedMode, spanStart, spanEnd, hasPdf, docRef?.name, docRef?.type])
+  }, [docId, requestedMode, spanStart, spanEnd, hasPdf, docRef?.name, docRef?.type, docTextOpts, linkId])
 
   return {
     hasPdf,

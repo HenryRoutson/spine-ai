@@ -65,7 +65,7 @@ export function SharePricingFields({
         )}
       </div>
       <p className="text-[10px] text-muted-foreground">
-        You earn everything above raw LLM cost — credited to Pipeline earnings in Billing.
+        You earn everything above raw LLM cost — credited to your Earnings account (separate from LLM billing).
       </p>
     </div>
   )

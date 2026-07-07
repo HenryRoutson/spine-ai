@@ -3,9 +3,10 @@
 import { useEffect, useRef } from "react"
 import { X, FileText } from "lucide-react"
 import { useDocViewer, type DocViewMode } from "@/lib/doc-viewer"
-import { useStore } from "@/lib/store"
+import { useOptionalStore } from "@/lib/store"
 import { resolveSpan } from "@/lib/doc-span"
 import { useDocViewerData } from "@/lib/use-doc-viewer-data"
+import { useDocFetchScope } from "@/lib/use-doc-fetch-scope"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { DocViewerLoading } from "@/components/doc-viewer-loading"
 import { cn } from "@/lib/utils"
@@ -15,7 +16,6 @@ import { MarkdownView } from "@/components/highlight"
 import { docViewerTabs, docViewTabLabel, isPdfDoc } from "@/lib/doc-content"
 import { isTabularDocType } from "@/lib/doc-structure-infer"
 import { isDownloadableJson } from "@/lib/json-utils"
-import { API_ROUTES } from "@/lib/api-routes"
 import type { DocId, DocRef } from "@/lib/types"
 
 const TAB_LABEL: Record<DocViewMode, string> = {
@@ -32,7 +32,9 @@ function tabLabel(mode: DocViewMode, doc: Pick<DocRef, "name" | "type"> | undefi
 
 export function DocViewer() {
   const { target, close } = useDocViewer()
-  const { docs, models } = useStore()
+  const store = useOptionalStore()
+  const docs = store?.docs ?? []
+  const models = store?.models ?? []
   const markRef = useRef<HTMLSpanElement>(null)
 
   const docId = target?.docId ?? null
@@ -54,6 +56,7 @@ export function DocViewer() {
     spanStart: target?.start ?? 0,
     spanEnd: target?.end ?? 0,
   })
+  const { docFileUrl } = useDocFetchScope()
 
   const hasVisionText = visionEntries.length > 0
   const tabs = docViewerTabs(docRef, hasPdf, hasVisionText)
@@ -136,7 +139,7 @@ export function DocViewer() {
         </div>
         {view === "pdf" ? (
           <iframe
-            src={API_ROUTES.docFile(target.docId)}
+            src={docFileUrl(target.docId)}
             title={`PDF ${target.docId}`}
             className="min-h-0 flex-1 bg-white"
           />
