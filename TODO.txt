@@ -6,6 +6,8 @@ name might already be taken https://www.getspine.ai/
 
 LANDING_DEMO_IP_SALT required on Vercel
 
+use testing flag to see which users are real.
+
 https://elu.dev
 
 

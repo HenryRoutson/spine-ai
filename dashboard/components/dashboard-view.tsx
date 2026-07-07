@@ -105,9 +105,13 @@ export function DashboardView() {
   }, []);
 
   useEffect(() => {
-    void refresh();
+    // AI : defer initial fetch so refresh()'s setState isn't synchronous in the effect body.
+    const boot = setTimeout(() => void refresh(), 0);
     const id = setInterval(() => void refresh(), 30_000);
-    return () => clearInterval(id);
+    return () => {
+      clearTimeout(boot);
+      clearInterval(id);
+    };
   }, [refresh]);
 
   const landingPct =
