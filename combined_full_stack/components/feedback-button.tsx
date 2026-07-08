@@ -62,19 +62,27 @@ export function FeedbackButton() {
         <p className="mb-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           send feedback
         </p>
-        <Textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="Bugs, ideas, what’s confusing…"
-          className="min-h-24 resize-y font-mono text-xs"
-          disabled={busy}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-              e.preventDefault()
-              void submit()
-            }
-          }}
-        />
+        <div
+          // AI : menu items steal focus / typeahead on pointer + keyboard — block both.
+          onPointerDown={(e) => e.preventDefault()}
+          onKeyDownCapture={(e) => e.stopPropagation()}
+          onKeyUpCapture={(e) => e.stopPropagation()}
+        >
+          <Textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Bugs, ideas, what’s confusing…"
+            className="min-h-24 resize-y font-mono text-xs"
+            disabled={busy}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault()
+                void submit()
+              }
+            }}
+          />
+        </div>
         {error && (
           <p className="mt-2 font-mono text-[10px] text-destructive">{error}</p>
         )}
