@@ -20,6 +20,7 @@ import {
   normalizeBillingMultiple,
   normalizeFlatFeeCents,
 } from "@/lib/server/billable_pricing";
+import { defaultDocStorageKey } from "./shared-link-session";
 import {
   SharedLinkFundingMode,
   type DocId,
@@ -124,6 +125,8 @@ function defaultDocsDir(linkId: SharedLinkId): string {
   return join(linkDocsDir(linkId), "defaults");
 }
 
+// AI : TODO security — progress tokens live in local progress_tokens.json; on serverless they are not
+// AI : shared across instances/regions. Move to Redis/Supabase with TTL before multi-region deploy.
 function progressTokensFile(): string {
   return join(linksDir(), "progress_tokens.json");
 }
@@ -341,7 +344,7 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
       const doc = input.store.docs().find((d) => d.id === docId);
       const content = input.store.docContent(docId);
       if (!doc || content === undefined) continue;
-      const storageKey = `${moduleId}_${doc.name}`;
+      const storageKey = defaultDocStorageKey(moduleId, doc.name);
       const dest = join(defaultDocsDir(id), storageKey);
       writeFileSync(dest, content, "utf8");
       const metaPath = `${dest}.meta.json`;
@@ -390,6 +393,8 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
 
   if (!isServerless()) saveLocalLink(row);
   const db = await supabaseForSharedLinks();
+  // AI : TODO security — deploy table writes need service role after RLS hardening; drop user-session
+  // AI : upsert fallback and require SUPABASE_SERVICE_ROLE_KEY for publish/update/revoke mutations.
   if (!db) {
     if (isServerless()) {
       throw new Error("Supabase env required to publish shared links in production");

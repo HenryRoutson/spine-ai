@@ -41,8 +41,10 @@ export function useRunProgressUi({
       if (seg.kind === "combine") {
         const combineUi = stepStates.get(seg.combine.id)
         const inputUi = stepStates.get(seg.input.id)
+        const parseUi = seg.parse ? stepStates.get(seg.parse.id) : undefined
         if (combineUi?.status === "running") hints.push(combineUi.sub?.label ?? seg.combine.label)
         if (inputUi?.status === "running") hints.push(inputUi.sub?.label ?? seg.input.label)
+        if (seg.parse && parseUi?.status === "running") hints.push(parseUi.sub?.label ?? seg.parse.label)
         continue
       }
       const moduleUi = stepStates.get(seg.module.id)

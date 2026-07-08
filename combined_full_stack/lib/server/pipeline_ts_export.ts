@@ -1,15 +1,15 @@
-import { assertEntriesForModule, wrapAssertTypeScript } from "@/lib/assert_steps";
+import { assertEntriesForModule, wrapAssertTypeScriptForExport } from "@/lib/assert_steps";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { generateModelsDts } from "./type_codegen";
 import {
   assertNoEnvKeysInExport,
   exportSpineInTs,
   generateCombineStepBodyTs,
+  generateCustomCodeStepBodyTs,
   generateInputStepBodyTs,
   generateOrchestratorTs,
   modelName,
   prepareExportProject,
-  tsCustomCodeCall,
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsTs } from "./pipeline_export_setup";
 import { pipelineStateTsInterface } from "./pipeline_state";
@@ -40,7 +40,7 @@ function tsPrimaryCustomCode(m: PipelineModule): { language: string; code: strin
   return { language: primary.language, code: primary.code.trim() };
 }
 
-function generateStepBody(m: PipelineModule, project: Project, outTs: string): string {
+function generateStepBody(m: PipelineModule, project: Project, outTs: string, inTs: string): string {
   const outName = modelName(project, m.outStructureId);
   const inName = modelName(project, m.inStructureId);
 
@@ -53,7 +53,8 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string): s
       const model = m.model ?? "/* global default model */";
       return [
         `// Structured LLM call → ${outName ?? outTs}${m.outIsList ? "[]" : ""}`,
-        `const model = ${typeof model === "string" && model.startsWith("/*") ? `"deepseek-v3"` : JSON.stringify(model)};`,
+        `const _model = ${typeof model === "string" && model.startsWith("/*") ? `"deepseek-v3"` : JSON.stringify(model)};`,
+        `void _model;`,
         `const userPrompt = ${JSON.stringify(prompt)} + "\\n\\nINPUT DATA:\\n" + JSON.stringify(input, null, 2);`,
         `const schema = /* JSON schema for ${outName ?? "output"} */ {};`,
         `return await llmStructured<${outTs}>(userPrompt, schema);`,
@@ -61,39 +62,40 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string): s
     }
     case "llm-batch": {
       const prompt = m.prompt ?? "Process the item.";
+      const itemTs = outTs.endsWith("[]") ? outTs.slice(0, -2) : outTs;
       return [
-        `// One structured LLM call per list item → ${outName ?? outTs}[]`,
+        `// One structured LLM call per list item → ${outName ?? outTs}`,
         "const items = Array.isArray(input) ? input : [input];",
         `const promptFor = (item: unknown) => ${JSON.stringify(prompt)} + "\\n\\nITEM:\\n" + JSON.stringify(item, null, 2);`,
         `const schema = /* JSON schema for ${outName ?? "output"} */ {};`,
-        `return await llmBatchStructured<${outTs}>(items, promptFor, schema);`,
+        `return await llmBatchStructured<${itemTs}>(items, promptFor, schema);`,
       ].join("\n");
     }
     case "quote":
       return [
         "// Match LLM quote strings against source document byte offsets (no LLM cost)",
-        `return resolveQuotes(input, "", "") as ${outTs};`,
+        `return resolveQuotes(input, "", "") as unknown as ${outTs};`,
       ].join("\n");
     case "combine":
       return generateCombineStepBodyTs(m, project, outTs);
     case "transform": {
       const custom = tsPrimaryCustomCode(m);
       if (custom?.language === "typescript") {
-        return [`const __fn = ${custom.code};`, tsCustomCodeCall(custom.code, outTs)].join("\n");
+        return generateCustomCodeStepBodyTs(custom.code, inTs, outTs);
       }
       if (custom?.language === "python") {
-        return [`// Python transform (not inlined):`, `// ${custom.code.split("\n").join("\n// ")}`, `return input as ${outTs};`].join("\n");
+        return [`// Python transform (not inlined):`, `// ${custom.code.split("\n").join("\n// ")}`, `return input as unknown as ${outTs};`].join("\n");
       }
       return [
         `// Reshape ${inName ?? "input"} → ${outName ?? outTs}${m.outIsList ? " (list)" : ""}`,
-        `return input as ${outTs};`,
+        `return input as unknown as ${outTs};`,
       ].join("\n");
     }
     case "custom-code": {
       const custom = tsPrimaryCustomCode(m);
       const fallbacks = customCodeEntriesForModule(m);
       if (custom?.language === "typescript") {
-        const lines = [`const __fn = ${custom.code};`, tsCustomCodeCall(custom.code, outTs)];
+        const lines = [generateCustomCodeStepBodyTs(custom.code, inTs, outTs)];
         if (fallbacks.length > 1) {
           lines.unshift(`// ${fallbacks.length} fallback implementations — first shown`);
         }
@@ -103,39 +105,43 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string): s
         return [
           `// Python custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
           `// ${custom.code.split("\n").join("\n// ")}`,
-          `return input as ${outTs};`,
+          `return input as unknown as ${outTs};`,
         ].join("\n");
       }
-      return [`// Passthrough — no custom code configured`, `return input as ${outTs};`].join("\n");
+      return [`// Passthrough — no custom code configured`, `return input as unknown as ${outTs};`].join("\n");
     }
     case "assert": {
       const entries = assertEntriesForModule(m);
       const expectations = project.expectedOutputs ?? {};
       if (entries[0]?.language === "typescript") {
-        const wrapped = wrapAssertTypeScript(entries[0].code, expectations);
+        const wrapped = wrapAssertTypeScriptForExport(entries[0].code, expectations);
         return [
           "// Validate pipeline state — passthrough on success",
           `const __assert = ${wrapped};`,
           "__assert(input, state);",
-          `return input as ${outTs};`,
+          `return input as unknown as ${outTs};`,
         ].join("\n");
       }
-      return [`// Assert passthrough`, `return input as ${outTs};`].join("\n");
+      return [`// Assert passthrough`, `return input as unknown as ${outTs};`].join("\n");
     }
     case "human-review":
       return [
         "// Pause for operator approval in Inference tab",
         "await waitForHumanReview(input);",
-        `return input as ${outTs};`,
+        `return input as unknown as ${outTs};`,
       ].join("\n");
     case "output":
       return [
         `// Snapshot ${outName ?? inName ?? "pipeline output"}`,
-        `return input as ${outTs};`,
+        `return input as unknown as ${outTs};`,
       ].join("\n");
     default:
-      return `return input as ${outTs};`;
+      return `return input as unknown as ${outTs};`;
   }
+}
+
+function stepBodyUsesPipelineState(body: string): boolean {
+  return /\bstate\s*\[|__assert\(input,\s*state\)|__compiled\.length >= 2/.test(body);
 }
 
 function generateStepFn(m: PipelineModule, project: Project, index: number): string {
@@ -144,6 +150,8 @@ function generateStepFn(m: PipelineModule, project: Project, index: number): str
   const outType = stepSpineOutType(m);
   const outTs = outType ? typeExprToTs(outType, project.models) : "unknown";
   const meta = MODULE_META[m.kind];
+  const body = generateStepBody(m, project, outTs, inTs);
+  const stateParam = stepBodyUsesPipelineState(body) ? "state" : "_state";
   const header = [
     `/**`,
     ` * ${m.label.replace(/\*\//g, "*\\/")}`,
@@ -152,9 +160,8 @@ function generateStepFn(m: PipelineModule, project: Project, index: number): str
     ...(m.model ? [` * @model ${m.model}`] : []),
     ...(m.cached ? [` * @cached true`] : []),
     ` */`,
-    `async function ${fn}(input: ${inTs}, state: PipelineState): Promise<${outTs}> {`,
+    `async function ${fn}(input: ${inTs}, ${stateParam}: PipelineState): Promise<${outTs}> {`,
   ];
-  const body = generateStepBody(m, project, outTs);
   return [...header, indentBlock(body, 2), "}", ""].join("\n");
 }
 

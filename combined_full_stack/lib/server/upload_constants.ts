@@ -2,6 +2,7 @@ import { InputType } from "@/lib/server/types"
 
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
+// AI : TODO security — html/htm → InputType.Web but validateUploadBytes has no web sniff; align policy.
 export const EXT_TYPE: Record<string, InputType> = {
   pdf: InputType.Pdf,
   doc: InputType.Word,

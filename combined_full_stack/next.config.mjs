@@ -39,6 +39,7 @@ const nextConfig = {
     unoptimized: true,
   },
   // AI : baseline security headers — CSP allows Next.js inline bootstrap + Supabase/Stripe/OpenRouter.
+  // AI : TODO security — tighten script-src: drop global unsafe-eval; scope Pyodide/custom-code routes only.
   async headers() {
     const csp = [
       "default-src 'self'",

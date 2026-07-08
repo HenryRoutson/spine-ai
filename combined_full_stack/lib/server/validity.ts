@@ -1,6 +1,8 @@
 // AI : Pipeline I/O graph validation — core computation and pipeline utilities.
 // AI : Types + messages → validity-types.ts / validity-messages.ts / validity-inspect.ts.
 // AI : TODO (spec) — derive dependency graph from step() refs in custom code; flag unused/isolated steps (linear spine only today).
+// AI : TODO security — runs.data is user-writable via RLS; billedCents in JSON can be forged for display.
+// AI : Split billing fields to server-only columns or restrict data updates with a trigger.
 import type {
   ModuleId,
   PipelineModule,
@@ -34,6 +36,8 @@ import {
 import {
   stepEmits,
   stepEmitsList,
+  inputFeedsCombine,
+  isCombineSideParseStep,
   isAutoQuoteStep,
   isAutoStructureParseStep,
   skipDuplicateLabelCheck,
@@ -480,7 +484,7 @@ export function computeInvalid(
     const prev = i > 0 ? modules[i - 1] : undefined;
 
     if (m.kind === "input") {
-      if (modules[i + 1]?.kind === "combine") continue;
+      if (inputFeedsCombine(modules, i)) continue;
       const outType = stepSpineOutType(m);
       if (m.outStructureId) {
         flowId = m.outStructureId;
@@ -509,6 +513,10 @@ export function computeInvalid(
       }
       continue;
     }
+
+    // AI : combine-side parse llm converts the side input's document — it feeds the combine's
+    // AI : newDocument, not the spine, so skip flow/byModel updates (in/out are sync-managed).
+    if (isCombineSideParseStep(modules, i)) continue;
 
     if (usesPassthroughStructure(m.kind)) {
       if (invalidIssuesForModule(invalid, m.id).some((x) => x.kind === "no-output")) continue;
@@ -614,6 +622,8 @@ function computeUnusedOutputInvalid(modules: PipelineModule[]): InvalidMap {
     const m = modules[i]!;
     const emitted = stepEmits(m);
     if (!emitted || m.kind === "input" || usesPassthroughStructure(m.kind)) continue;
+    // AI : a combine consumes the previous step's output as its newDocument regardless of inStructureId.
+    if (modules[i + 1]?.kind === "combine") continue;
     const used = modules.slice(i + 1).some((down) => down.inStructureId === emitted);
     if (!used) pushInvalid(invalid, { moduleId: m.id, kind: "unused-output", expects: emitted });
   }
@@ -628,8 +638,7 @@ function computeDuplicateIoStructInvalid(modules: PipelineModule[]): InvalidMap 
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i];
     if (m.kind === "input" && m.outStructureId) {
-      const beforeCombine = modules[i + 1]?.kind === "combine";
-      if (beforeCombine) continue;
+      if (inputFeedsCombine(modules, i)) continue;
       if (spineInputStructs.has(m.outStructureId)) {
         pushInvalid(invalid, { moduleId: m.id, kind: "duplicate-input-struct", expects: m.outStructureId });
       } else {

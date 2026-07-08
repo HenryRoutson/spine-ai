@@ -1,4 +1,6 @@
 // AI : generate golden expected/*.json fixtures for seed pipelines — run after changing deterministic steps.
+// AI : TODO security — runTs uses compileCustomFn (executes user code) on the server; trusted seeds only
+// AI : today — switch to assertCustomFnSyntax or run this script in an isolated CI container.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { compileCustomFn } from "../lib/custom_code";

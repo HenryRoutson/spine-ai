@@ -25,7 +25,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const file = await resolveOriginalDocFile(store, id as DocId);
   if (!file) return apiError(`no original file for ${id}`, 404);
   return new NextResponse(new Uint8Array(readFileSync(file.path)), {
-    headers: { "Content-Type": file.mime, "Content-Disposition": "inline" },
+    headers: {
+      "Content-Type": file.mime,
+      "Content-Disposition": "inline",
+      // AI : SECURITY — stop the browser guessing a script/html type from bytes when serving uploads.
+      "X-Content-Type-Options": "nosniff",
+      // AI : TODO security — serve PDFs as attachment or sandboxed viewer to limit embedded JS in uploads.
+    },
   });
 }
 
@@ -41,6 +47,10 @@ export async function HEAD(_req: Request, ctx: { params: Promise<{ id: string }>
   const file = await resolveOriginalDocFile(store, id as DocId);
   if (!file) return apiError(`no original file for ${id}`, 404);
   return new NextResponse(null, {
-    headers: { "Content-Type": file.mime, "Content-Disposition": "inline" },
+    headers: {
+      "Content-Type": file.mime,
+      "Content-Disposition": "inline",
+      "X-Content-Type-Options": "nosniff",
+    },
   });
 }

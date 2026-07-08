@@ -30,6 +30,7 @@ export function validateUploadFile(file: File | null): UploadValidationError | n
 }
 
 // AI : magic-byte sniff — reject extension spoofing (e.g. .html renamed .pdf).
+// AI : TODO security — .html/.htm map to InputType.Web with no content sniff; reject or quarantine.
 export function validateUploadBytes(
   bytes: Uint8Array,
   filename: string,

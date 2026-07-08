@@ -118,10 +118,14 @@ export function InferenceStepTracePanel({
           if (seg.kind === "combine") {
             const combineUi = stepStates.get(seg.combine.id)
             const inputUi = stepStates.get(seg.input.id)
+            const parseUi = seg.parse ? stepStates.get(seg.parse.id) : undefined
             const inputState = inputUi?.status ?? "idle"
-            const state = mergeCombineSegmentStatus(combineUi?.status ?? "idle", inputState)
+            const parseState = parseUi?.status ?? "idle"
+            const sideState = seg.parse ? mergeCombineSegmentStatus(parseState, inputState) : inputState
+            const state = mergeCombineSegmentStatus(combineUi?.status ?? "idle", sideState)
             const combineDesc = stepDescriptionMeta(seg.combine.id, run, combineUi)
             const inputDesc = stepDescriptionMeta(seg.input.id, run, inputUi)
+            const parseDesc = seg.parse ? stepDescriptionMeta(seg.parse.id, run, parseUi) : undefined
             return (
               <div key={seg.combine.id} className="space-y-1">
                 <InferenceStepRow
@@ -159,6 +163,24 @@ export function InferenceStepTracePanel({
                   serverLogs={logsByModule?.get(seg.input.id) ?? []}
                   forceCollapsedLogs={collapseLogs}
                 />
+                {seg.parse && (
+                  <InferenceStepRow
+                    label={seg.parse.label}
+                    state={parseState}
+                    sub={parseUi?.sub}
+                    nested
+                    showStepIo={showStepIo}
+                    ioCompact={ioCompact}
+                    outputPreview={parseUi?.outputPreview}
+                    runStep={run?.steps.find((s) => s.moduleId === seg.parse!.id)}
+                    inputDescription={moduleInputDescription(seg.parse)}
+                    inputDescriptionCheck={parseDesc?.check}
+                    descriptionCheckLlmCalls={parseDesc?.descriptionCheckLlmCalls}
+                    descriptionCheckCostCents={parseDesc?.descriptionCheckCostCents}
+                    serverLogs={logsByModule?.get(seg.parse.id) ?? []}
+                    forceCollapsedLogs={collapseLogs}
+                  />
+                )}
               </div>
             )
           }

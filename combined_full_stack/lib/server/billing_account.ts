@@ -217,6 +217,8 @@ async function billingDb() {
 }
 
 // AI : billing writes must use service role in production — user session is SELECT-only via RLS.
+// AI : TODO security — dev fallback to user session still writes if old FOR ALL billing RLS is active;
+// AI : always require service role for billing writes (no createClient() fallback).
 async function billingDbWrite() {
   const admin = await createAdminClient();
   if (admin) return admin;

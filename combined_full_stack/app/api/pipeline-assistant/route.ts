@@ -17,6 +17,7 @@ const apiLog = logger("api:pipeline-assistant");
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
+  // AI : TODO security — requireAuthStore before parseRequestJson (defense-in-depth; same on other *-assistant routes).
   const parsed = await parseRequestJson(req, assistantRequestBodySchema);
   if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
   const { projectId, message, history = [], stream = false } = parsed;

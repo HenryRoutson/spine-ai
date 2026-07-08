@@ -26,6 +26,8 @@ import type { ModuleId } from "@/lib/server/types";
 
 const SESSION_COOKIE = "shared_run_session";
 
+// AI : TODO security — uploads are session-cookie only (no sign-in); tighten caps, add CAPTCHA, or require
+// AI : auth for high-volume links to reduce storage-DoS on public shared deployments.
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
   const linkId = parseSharedLinkId(id);

@@ -23,9 +23,11 @@ export function clientIpForLandingDemo(headers: Headers): string {
 }
 
 export function assertLandingProxyAllowed(headers: Headers): void {
-  const secret = landingProxySecret();
-  if (!process.env.VERCEL || !secret) return;
-  if (!isValidLandingProxyRequest(headers)) {
+  // AI : off Vercel (local dev) the landing demo is called directly — no proxy secret to check.
+  if (!process.env.VERCEL) return;
+  // AI : SECURITY — fail closed on Vercel. Without a configured secret the public LLM demo endpoint
+  // AI : would otherwise be open to anyone; refuse rather than silently no-op the auth check.
+  if (!landingProxySecret() || !isValidLandingProxyRequest(headers)) {
     throw new LandingProxyAuthError();
   }
 }

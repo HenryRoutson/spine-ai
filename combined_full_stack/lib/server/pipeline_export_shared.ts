@@ -1,4 +1,5 @@
 import { orderedInputModules } from "@/lib/inference-input";
+import { buildCustomFnSource } from "@/lib/custom_code";
 import { usesPassthroughStructure } from "@/lib/module-kinds";
 import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
@@ -59,9 +60,38 @@ function inputOutputsDocument(m: PipelineModule): boolean {
   return m.outStructureId === BUILTIN_DOCUMENT_ID;
 }
 
+function tsCustomCodeParamCount(code: string): number {
+  const trimmed = code.trim();
+  const parenArrow = trimmed.match(/^\(\s*([^)]*)\s*\)\s*=>/);
+  if (parenArrow) {
+    const params = parenArrow[1]!.trim();
+    if (!params) return 0;
+    return params.split(",").filter((p) => p.trim()).length;
+  }
+  if (/^[\w$]+\s*=>/.test(trimmed)) return 1;
+  return 1;
+}
+
+function generateCustomCodeStepBodyTs(code: string, inTs: string, outTs: string): string {
+  const fnSrc = buildCustomFnSource(code);
+  return [
+    `const __compiled = new Function("return " + ${JSON.stringify(fnSrc)})() as (input: ${inTs}, state?: PipelineState) => ${outTs};`,
+    `return (__compiled.length >= 2 ? __compiled(input, state) : __compiled(input)) as ${outTs};`,
+  ].join("\n");
+}
+
 function tsCustomCodeCall(code: string, outTs: string): string {
-  const unary = /^\(\s*input\s*\)\s*=>/.test(code) || /^\s*input\s*=>/.test(code);
-  return unary ? `return __fn(input) as ${outTs};` : `return __fn(input, state) as ${outTs};`;
+  return tsCustomCodeParamCount(code) <= 1
+    ? `return __fn(input) as ${outTs};`
+    : `return __fn(input, state) as ${outTs};`;
+}
+
+function tsCustomCodeFnDecl(code: string, inTs: string, outTs: string): string {
+  const fnType =
+    tsCustomCodeParamCount(code) <= 1
+      ? `(input: ${inTs}) => ${outTs}`
+      : `(input: ${inTs}, state: PipelineState) => ${outTs}`;
+  return `const __fn: ${fnType} = ${code};`;
 }
 
 function pyCustomCodeCall(code: string): string {
@@ -87,7 +117,8 @@ export function generateInputStepBodyTs(m: PipelineModule, outTs: string): strin
     "const doc = input as Document;",
   ];
   if (inputOutputsDocument(m)) {
-    lines.push("return { content: doc.content, filename: doc.filename };");
+    const docObj = "{ content: doc.content, filename: doc.filename }";
+    lines.push(m.outIsList ? `return [${docObj}];` : `return ${docObj};`);
     return lines.join("\n");
   }
   if (m.outIsList) {
@@ -112,7 +143,11 @@ export function generateInputStepBodyPy(m: PipelineModule): string {
     "doc = input",
   ];
   if (inputOutputsDocument(m)) {
-    lines.push('return {"content": doc["content"], "filename": doc["filename"]}');
+    lines.push(
+      m.outIsList
+        ? 'return [{"content": doc["content"], "filename": doc["filename"]}]'
+        : 'return {"content": doc["content"], "filename": doc["filename"]}',
+    );
     return lines.join("\n");
   }
   if (m.outIsList) {
@@ -124,14 +159,24 @@ export function generateInputStepBodyPy(m: PipelineModule): string {
   return lines.join("\n");
 }
 
+// AI : the side input (or its auto parse llm) directly precedes the combine — its emitted
+// AI : structure lands in matching ref fields, mirroring execCombineStep.
+function combineSideStructId(m: PipelineModule, project: Project): StructureModelId | undefined {
+  const i = project.modules.findIndex((x) => x.id === m.id);
+  const id = i > 0 ? project.modules[i - 1]?.outStructureId : undefined;
+  return id && id !== BUILTIN_DOCUMENT_ID && id !== m.inStructureId ? id : undefined;
+}
+
 export function generateCombineStepBodyTs(m: PipelineModule, project: Project, outTs: string): string {
   const out = project.models.find((x) => x.id === m.outStructureId);
   const inName = modelName(project, m.inStructureId);
+  const sideId = combineSideStructId(m, project);
   const upstreamLabel = upstreamLabelForCombine(m, project);
   const upstreamKey = upstreamLabel ? JSON.stringify(upstreamLabel) : "/* upstream label */";
   const fieldExprs =
     out?.fields.map((f) => {
       if (f.type === FieldType.Document) return `${f.name}: newDoc as Document`;
+      if (sideId && f.ref === sideId) return `${f.name}: newDoc as ${modelName(project, sideId)}`;
       return `${f.name}: state[${upstreamKey}]`;
     }) ?? [];
   return [
@@ -145,11 +190,13 @@ export function generateCombineStepBodyTs(m: PipelineModule, project: Project, o
 export function generateCombineStepBodyPy(m: PipelineModule, project: Project): string {
   const out = project.models.find((x) => x.id === m.outStructureId);
   const inName = modelName(project, m.inStructureId);
+  const sideId = combineSideStructId(m, project);
   const upstreamLabel = upstreamLabelForCombine(m, project);
   const upstreamKey = upstreamLabel ? JSON.stringify(upstreamLabel) : '"upstream"';
   const fieldExprs =
     out?.fields.map((f) => {
       if (f.type === FieldType.Document) return `"${f.name}": new_doc`;
+      if (sideId && f.ref === sideId) return `"${f.name}": new_doc`;
       return `"${f.name}": state[${upstreamKey}]`;
     }) ?? [];
   return [
@@ -170,10 +217,13 @@ function orchestratorInvokeLine(
   fn: string,
   lang: OrchestratorLang,
   singleInput: boolean,
+  inTs: string,
 ): string {
   const label = labelAsStateKey(m.label);
   if (m.kind !== ModuleKind.Input) {
-    return lang === "ts" ? `  spine = await ${fn}(spine!, state);` : `    spine = await ${fn}(spine, state)`;
+    return lang === "ts"
+      ? `  spine = await ${fn}(spine as ${inTs}, state);`
+      : `    spine = await ${fn}(spine, state)`;
   }
   if (singleInput) {
     return lang === "ts" ? `  spine = await ${fn}(initialInput, state);` : `    spine = await ${fn}(initial_input, state)`;
@@ -200,15 +250,18 @@ export function generateOrchestratorTs(project: Project, stepFnName: (m: Pipelin
     lines.push("export async function runPipeline(initialInput: Document): Promise<unknown> {");
   }
 
-  lines.push("  const state: PipelineState = {};", "  let spine: unknown;", "");
+  lines.push("  const state = {} as PipelineState;", "  let spine: unknown;", "");
 
   for (let i = 0; i < project.modules.length; i++) {
     const m = project.modules[i]!;
     const fn = stepFnName(m, i);
     const label = labelAsStateKey(m.label);
+    const outType = stepSpineOutType(m);
+    const outTs = outType ? typeExprToTs(outType, project.models) : "unknown";
+    const inTs = exportSpineInTs(m, project, i);
     lines.push(`  // ${i + 1}. ${m.label}`);
-    lines.push(orchestratorInvokeLine(m, fn, "ts", !multi));
-    if (label) lines.push(`  state[${JSON.stringify(label)}] = spine;`);
+    lines.push(orchestratorInvokeLine(m, fn, "ts", !multi, inTs));
+    if (label) lines.push(`  state[${JSON.stringify(label)}] = spine as ${outTs};`);
     lines.push("");
   }
 
@@ -233,8 +286,9 @@ export function generateOrchestratorPy(project: Project, stepFnName: (m: Pipelin
     const m = project.modules[i]!;
     const fn = stepFnName(m, i);
     const label = labelAsStateKey(m.label);
+    const inTs = exportSpineInPy(m, project, i);
     lines.push(`    # ${i + 1}. ${m.label}`);
-    lines.push(orchestratorInvokeLine(m, fn, "py", !multi));
+    lines.push(orchestratorInvokeLine(m, fn, "py", !multi, inTs));
     if (label) lines.push(`    state[${JSON.stringify(label)}] = spine`);
     lines.push("");
   }
@@ -243,7 +297,7 @@ export function generateOrchestratorPy(project: Project, stepFnName: (m: Pipelin
   return lines.join("\n");
 }
 
-export { tsCustomCodeCall, pyCustomCodeCall };
+export { generateCustomCodeStepBodyTs, tsCustomCodeCall, tsCustomCodeFnDecl, pyCustomCodeCall };
 
 // AI : block exports that reference runtime secrets or env wiring.
 // AI : TODO export — add generatePipelineSourceRust alongside TS/Py.

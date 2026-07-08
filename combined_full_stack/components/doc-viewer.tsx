@@ -138,6 +138,7 @@ export function DocViewer() {
           </div>
         </div>
         {view === "pdf" ? (
+          // AI : TODO security — same-origin inline PDF iframe; sandbox viewer or attachment disposition.
           <iframe
             src={docFileUrl(target.docId)}
             title={`PDF ${target.docId}`}

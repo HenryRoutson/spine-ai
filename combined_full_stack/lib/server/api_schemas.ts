@@ -57,6 +57,8 @@ export function parseHostedApiId(raw: string): import("./types").HostedApiId | n
   return parsed.success ? (parsed.data as import("./types").HostedApiId) : null;
 }
 
+// AI : TODO security — .passthrough() lets clients persist extra module keys (size-bounded). Tighten to
+// AI : .strict() or a per-ModuleKind allowlist so pipeline snapshots cannot carry unexpected fields.
 const pipelineModulePatchSchema = z
   .object({
     id: z.string().max(128),

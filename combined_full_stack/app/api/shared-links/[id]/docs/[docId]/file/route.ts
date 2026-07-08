@@ -47,7 +47,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string;
   if (resolved instanceof NextResponse) return resolved;
   const { file } = resolved;
   return new NextResponse(new Uint8Array(readFileSync(file.path)), {
-    headers: { "Content-Type": file.mime, "Content-Disposition": "inline" },
+    headers: {
+      "Content-Type": file.mime,
+      "Content-Disposition": "inline",
+      // AI : SECURITY — anonymous shared-link uploads; block MIME sniffing to script/html.
+      "X-Content-Type-Options": "nosniff",
+    },
   });
 }
 
@@ -56,6 +61,10 @@ export async function HEAD(req: NextRequest, ctx: { params: Promise<{ id: string
   if (resolved instanceof NextResponse) return resolved;
   const { file } = resolved;
   return new NextResponse(null, {
-    headers: { "Content-Type": file.mime, "Content-Disposition": "inline" },
+    headers: {
+      "Content-Type": file.mime,
+      "Content-Disposition": "inline",
+      "X-Content-Type-Options": "nosniff",
+    },
   });
 }

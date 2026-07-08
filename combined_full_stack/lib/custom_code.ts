@@ -28,6 +28,7 @@ export type CustomFn = (input: unknown, state?: PipelineState) => unknown | Prom
 
 const CUSTOM_CODE_TIMEOUT_MS = 15_000;
 const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
+// AI : TODO security — Pyodide loads from CDN; pin SRI or self-host to reduce supply-chain risk.
 
 export type CustomCodeAttemptFailure = {
   attemptIndex: number;
@@ -75,33 +76,47 @@ export function formatCustomCodeFailureLog(f: CustomCodeAttemptFailure, tag = "c
   return parts.join("\n");
 }
 
-export function compileCustomFn(code: string): CustomFn {
+// AI : wrap raw user code into a self-invoking `(input, state) => output` source string.
+// AI : pure string transform — does NOT evaluate. Both compile (browser) and syntax-check (server) share it.
+export function buildCustomFnSource(code: string): string {
   const trimmed = code.trim();
   const isExpression = /^\s*(\(|function\b|async\b)/.test(trimmed);
-  let src: string;
-  if (isExpression) {
-    src = `(${trimmed})`;
-  } else {
-    // AI : seed steps prefix helper consts then a trailing `(arg)=>…` — invoke it with input.
-    const mainArrow =
-      trimmed.match(/;\s*(\([^)]*\)\s*=>[\s\S]+)$/) ?? trimmed.match(/\n\s*(\([^)]*\)\s*=>[\s\S]+)$/);
-    if (mainArrow) {
-      const arrowStart = trimmed.lastIndexOf(mainArrow[1]!);
-      const preamble = trimmed.slice(0, arrowStart).replace(/[;\s]*$/, "");
-      const arrow = trimmed.slice(arrowStart);
-      src = preamble
-        ? `((input) => { ${preamble}; return (${arrow})(input); })`
-        : `((input) => { return (${arrow})(input); })`;
-    } else {
-      src = `((input) => { ${trimmed} })`;
-    }
+  if (isExpression) return `(${trimmed})`;
+  // AI : seed steps prefix helper consts then a trailing `(arg)=>…` — invoke it with input.
+  const mainArrow =
+    trimmed.match(/;\s*(\([^)]*\)\s*=>[\s\S]+)$/) ?? trimmed.match(/\n\s*(\([^)]*\)\s*=>[\s\S]+)$/);
+  if (mainArrow) {
+    const arrowStart = trimmed.lastIndexOf(mainArrow[1]!);
+    const preamble = trimmed.slice(0, arrowStart).replace(/[;\s]*$/, "");
+    const arrow = trimmed.slice(arrowStart);
+    return preamble
+      ? `((input) => { ${preamble}; return (${arrow})(input); })`
+      : `((input) => { return (${arrow})(input); })`;
   }
+  return `((input) => { ${trimmed} })`;
+}
+
+// AI : SECURITY — only call in the browser during inference. `new Function(...)()` EXECUTES the
+// AI : user source (expression-form code runs its comma/IIFE side effects immediately), so this must
+// AI : never run on the server. Server-side validation uses assertCustomFnSyntax (parse only).
+export function compileCustomFn(code: string): CustomFn {
+  const src = buildCustomFnSource(code);
   const fn = new Function(`return ${src}`)();
   invariant(typeof fn === "function", "custom code must evaluate to a function (input) => output");
   return fn as CustomFn;
 }
 
-// AI : static pipeline validation — TS via new Function; Python skipped (needs Pyodide).
+// AI : SECURITY — syntax-only validation. Constructing a Function parses the body and throws on
+// AI : SyntaxError, but never executes it. Safe to run on the server (no RCE from user pipelines).
+// AI : TODO security — expression-form code can still pass syntax while doing harm in the browser at
+// AI : inference time; consider AST allowlist if pipelines become multi-tenant hostile.
+export function assertCustomFnSyntax(code: string): void {
+  const src = buildCustomFnSource(code);
+  // eslint-disable-next-line no-new-func -- parse-only; body is never invoked, so user code cannot run.
+  new Function(`return ${src}`);
+}
+
+// AI : static pipeline validation — TS parsed (never executed); Python skipped (needs Pyodide).
 export function tryCompileCustomCodeEntry(
   entry: ParsedCustomCodeEntry,
   opts?: { assert?: boolean; expectedOutputs?: import("@/lib/assert_steps").ExpectedOutputsMap },
@@ -111,7 +126,7 @@ export function tryCompileCustomCodeEntry(
   if (entry.language === "python") return undefined; // AI : TODO bug — Pyodide compile check before inference (same as TS tryCompileCustomCodeEntry).
   const code = opts?.assert ? wrapAssertCode(raw, entry.language, opts.expectedOutputs ?? {}) : raw;
   try {
-    compileCustomFn(code);
+    assertCustomFnSyntax(code);
     return undefined;
   } catch (err) {
     return err instanceof Error ? err.message : "code does not compile";
