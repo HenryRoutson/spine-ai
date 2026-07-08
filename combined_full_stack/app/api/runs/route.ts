@@ -3,6 +3,7 @@ import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_co
 import { HTTP, unknownDoc, unknownProject } from "@/lib/server/api-errors";
 import { parseRequestJson, runBodySchema } from "@/lib/server/api_schemas";
 import { assertCanStartRun, billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
+import { recordActivityEvent } from "@/lib/server/user_activity";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
 import { computeRunFingerprintForRequest, findMatchingRun } from "@/lib/server/run_fingerprint";
@@ -155,6 +156,13 @@ export async function POST(req: NextRequest) {
 
   const jobId = await createJob(auth.userId, jobDb);
   apiLog.info(`job created — scheduling pipeline`, { jobId, ownerId: auth.userId });
+  void recordActivityEvent({
+    userId: auth.userId,
+    category: "run_start",
+    action: `Started pipeline run`,
+    projectId: pid,
+    detail: { jobId, model: resolvedModel, inputDocId },
+  });
 
   after(async () => {
     await withJobLogging(auth.userId, jobId, jobDb, async () => {
@@ -187,10 +195,32 @@ export async function POST(req: NextRequest) {
         await store.flush(); // AI : SupabaseStore queues addRun — persist before the job reports done
         if (run.billedCents > 0) {
           try {
-            await billRunUsage(billingKey, run.billedCents);
+            await billRunUsage(billingKey, run.billedCents, {
+              flowType: "usage_run",
+              refId: run.id,
+              detail: { jobId, projectId: pid, model: resolvedModel },
+            });
           } catch (billErr) {
             apiLog.warn(`post-run billing failed`, { jobId, runId: run.id, error: (billErr as Error).message });
           }
+        }
+        void recordActivityEvent({
+          userId: auth.userId,
+          category: "run_complete",
+          action: `Pipeline run ${run.status}`,
+          projectId: pid,
+          costCents: run.billedCents,
+          detail: { jobId, runId: run.id, status: run.status, stepCount: run.steps.length },
+        });
+        if (run.billedCents > 0) {
+          void recordActivityEvent({
+            userId: auth.userId,
+            category: "llm_call",
+            action: `Pipeline inference billed`,
+            projectId: pid,
+            costCents: run.billedCents,
+            detail: { jobId, runId: run.id, model: resolvedModel },
+          });
         }
         await finishJob(auth.userId, jobId, { run }, jobDb);
         apiLog.info(`job finished ok`, { jobId, runId: run.id });
@@ -201,6 +231,13 @@ export async function POST(req: NextRequest) {
           return;
         }
         apiLog.error(`pipeline threw`, { jobId, error: (err as Error).message, stack: (err as Error).stack });
+        void recordActivityEvent({
+          userId: auth.userId,
+          category: "error",
+          action: "Pipeline run failed",
+          projectId: pid,
+          detail: { jobId, error: (err as Error).message },
+        });
         await finishJob(auth.userId, jobId, { error: (err as Error).message }, jobDb);
       }
     });

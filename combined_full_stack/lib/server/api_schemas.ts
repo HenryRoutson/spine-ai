@@ -494,3 +494,32 @@ export const landingBuildPipelineBodySchema = z.object({
   email: z.string().trim().email().max(320),
   task: z.string().trim().min(1).max(2000),
 });
+
+const activityCategorySchema = z.enum([
+  "ui_click",
+  "ui_input",
+  "ui_navigate",
+  "error",
+  "llm_call",
+  "step_create",
+  "step_delete",
+  "step_modify",
+  "log_view",
+  "run_start",
+  "run_complete",
+]);
+
+export const activityBatchBodySchema = z.object({
+  events: z
+    .array(
+      z.object({
+        category: activityCategorySchema,
+        action: z.string().trim().min(1).max(500),
+        detail: z.record(z.string(), z.unknown()).optional(),
+        projectId: z.string().trim().max(128).optional(),
+        costCents: z.number().finite().nonnegative().optional(),
+      }),
+    )
+    .min(1)
+    .max(50),
+});

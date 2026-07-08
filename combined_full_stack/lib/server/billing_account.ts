@@ -22,6 +22,7 @@ import {
   requireAuth,
   type user_id_string,
 } from "./require_auth";
+import { recordBillingFlow, recordSignupCredit, type billing_flow_type } from "./billing_flow";
 import { logger } from "./server_logger";
 import { getStripe } from "./stripe_client";
 
@@ -185,6 +186,14 @@ async function claimBillingCredit(
     creditedSessions: [...account.creditedSessions, creditKey],
   };
   await saveBillingAccount(key, next);
+  void recordBillingFlow({
+    userId: key,
+    flowType: source === "checkout" ? "checkout_credit" : "invoice_credit",
+    amountCents: credit,
+    balanceAfterCents: next.balanceCents,
+    refId: creditKey,
+    detail: { source, subscribed: next.subscribed },
+  });
   billLog.info(`claimBillingCredit ok`, { key, creditKey, credit, source });
   return { claimed: true, account: next };
 }
@@ -205,6 +214,7 @@ async function seedSupabaseBillingAccount(key: BillingUserKey): Promise<BillingA
     if (!isMissingBillingTable(error)) throw error;
     return { ...EMPTY };
   }
+  if (!error) void recordSignupCredit(key);
   const loaded = await loadSupabaseAccount(key);
   return loaded ?? { ...EMPTY };
 }
@@ -367,8 +377,18 @@ export async function assertCanStartRun(key: BillingUserKey): Promise<BillingAcc
 /** @deprecated use assertCanStartRun — kept for call-site clarity during migration */
 export const chargeForRun = assertCanStartRun;
 
+export type BillRunUsageOpts = {
+  flowType?: billing_flow_type;
+  refId?: string;
+  detail?: Record<string, unknown>;
+};
+
 // AI : deduct measured LLM / service cost after a run completes (skipped when billedCents is 0).
-export async function billRunUsage(key: BillingUserKey, cents: number): Promise<BillingAccount> {
+export async function billRunUsage(
+  key: BillingUserKey,
+  cents: number,
+  opts?: BillRunUsageOpts,
+): Promise<BillingAccount> {
   const billed = toExactCents(cents);
   if (billed <= 0) return loadBillingAccount(key);
   const account = await loadBillingAccount(key);
@@ -383,6 +403,14 @@ export async function billRunUsage(key: BillingUserKey, cents: number): Promise<
     totalUsageCents: toExactCents((account.totalUsageCents ?? 0) + billed),
   };
   await saveBillingAccount(key, next);
+  void recordBillingFlow({
+    userId: key,
+    flowType: opts?.flowType ?? "usage_run",
+    amountCents: -billed,
+    balanceAfterCents: balanceAfter,
+    refId: opts?.refId,
+    detail: opts?.detail ?? {},
+  });
   billLog.info(`billRunUsage ok`, { key, billed, balanceAfter, rawCents: cents });
   return next;
 }

@@ -26,6 +26,7 @@ import { loggingPipelineCanvasSplit, loggingSidebarSplit } from "@/lib/layout-sp
 import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
 import { useAppShell } from "@/lib/app-shell"
+import { API_ROUTES } from "@/lib/api-routes"
 import { stepDocId, stepDocLinkLabels, stepSourceDocId, isDocReferenceOutputJson } from "@/lib/step-doc"
 import { descriptionCheckLlmCallsFromStep, llmCallsFromStep } from "@/lib/llm-distribution"
 import { enrichRunModules, modulesFromRunSteps } from "@/lib/pipeline-run-diff"
@@ -78,6 +79,24 @@ export function Logging() {
     setSelectedPipelineModuleId(undefined)
     clearFocusRun()
   }, [focusRunId, clearFocusRun])
+
+  useEffect(() => {
+    if (!selectedRun) return
+    void fetch(API_ROUTES.activity, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        events: [
+          {
+            category: "log_view",
+            action: "Viewed run logs",
+            projectId: project.id,
+            detail: { runId: selectedRun },
+          },
+        ],
+      }),
+    }).catch(() => {})
+  }, [selectedRun, project.id])
 
   const runInputDocIds = (run: PipelineRun) => resolveRunInputDocIds(docs, project, run)
   const runInputLabel = (run: PipelineRun) => runInputDocsSummary(docs, project, run)

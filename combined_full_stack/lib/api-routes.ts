@@ -37,6 +37,7 @@ export const API_ROUTES = {
   testingEvaluate: "/api/testing-evaluate",
   docsContent: "/api/docs/content",
   feedback: "/api/feedback",
+  activity: "/api/activity",
   supabaseEnv: "/api/supabase-env",
   sharedLinks: "/api/shared-links",
   sharedLink: (id: string) => `/api/shared-links/${id}`,

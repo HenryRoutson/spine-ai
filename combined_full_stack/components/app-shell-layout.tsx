@@ -64,6 +64,7 @@ import { SpineLogoBox, SpineNavIcon } from "@/components/spine-mark"
 import { clearActiveProjectSession } from "@/lib/active-project-session"
 import { LEGAL } from "@shared/legal/site"
 import { isPreviewOnly } from "@/lib/demo-mode"
+import { ActivityTracker } from "@/components/activity-tracker"
 import type { Project } from "@/lib/types"
 
 // AI : marketing site lives on a separate deploy from the app
@@ -602,6 +603,7 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
       <SharedRunDocScopeProvider scope={sharedRunDocScopeForViewer}>
         <LazyDocViewer />
       </SharedRunDocScopeProvider>
+      {!previewOnly ? <ActivityTracker /> : null}
     </div>
   )
 }

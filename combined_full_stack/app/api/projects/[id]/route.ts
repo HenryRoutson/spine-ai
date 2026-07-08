@@ -5,16 +5,66 @@ import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { logger } from "@/lib/server/server_logger";
 import { sanitizeModuleModels } from "@/lib/server/model_catalog";
 import { mergeStrategyConfigPatch } from "@/lib/server/strategies";
-import type { Project } from "@/lib/server/types";
+import { recordActivityEvents } from "@/lib/server/user_activity";
+import type { user_id_string } from "@/lib/server/require_auth";
+import type { PipelineModule, Project } from "@/lib/server/types";
 
 const apiLog = logger("api:projects");
+
+function moduleStepEvents(
+  userId: string,
+  projectId: string,
+  before: PipelineModule[],
+  after: PipelineModule[],
+) {
+  const beforeIds = new Set(before.map((m) => m.id));
+  const afterIds = new Set(after.map((m) => m.id));
+  const events = [];
+
+  for (const m of after) {
+    if (!beforeIds.has(m.id)) {
+      events.push({
+        userId: userId as user_id_string,
+        category: "step_create" as const,
+        action: `Created step "${m.label}"`,
+        projectId,
+        detail: { moduleId: m.id, kind: m.kind, label: m.label },
+      });
+    }
+  }
+  for (const m of before) {
+    if (!afterIds.has(m.id)) {
+      events.push({
+        userId: userId as user_id_string,
+        category: "step_delete" as const,
+        action: `Deleted step "${m.label}"`,
+        projectId,
+        detail: { moduleId: m.id, kind: m.kind, label: m.label },
+      });
+    }
+  }
+  for (const m of after) {
+    const prev = before.find((x) => x.id === m.id);
+    if (!prev) continue;
+    if (JSON.stringify(prev) !== JSON.stringify(m)) {
+      events.push({
+        userId: userId as user_id_string,
+        category: "step_modify" as const,
+        action: `Modified step "${m.label}"`,
+        projectId,
+        detail: { moduleId: m.id, kind: m.kind, label: m.label },
+      });
+    }
+  }
+  return events;
+}
 
 // AI : persistence for the structure / pipeline / A/B builders — the client sends a
 // AI : partial {models | modules | strategies | name} and the store flushes to disk.
 export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const authCtx = await requireAuthStore("write");
   if (authCtx instanceof NextResponse) return authCtx;
-  const { store } = authCtx;
+  const { store, auth } = authCtx;
 
   const { id: rawId } = await ctx.params;
   const projectId = parseProjectId(rawId);
@@ -41,6 +91,11 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     modelCount: sanitized.models?.length ?? project.models.length,
   });
   store.saveProject({ ...project, ...sanitized, id: project.id });
+  if (sanitized.modules) {
+    void recordActivityEvents(
+      moduleStepEvents(auth.userId, projectId, project.modules, sanitized.modules),
+    );
+  }
   await store.flush();
   return NextResponse.json({ ok: true });
 }

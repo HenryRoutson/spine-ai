@@ -25,6 +25,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     body: [
       "Account data: email address and authentication credentials (hashed by our auth provider).",
       "Product data: pipelines, documents you upload, inference runs, logs, billing metadata, and feedback you submit.",
+      "Early-access diagnostics: while the product is in early access we may log signed-in usage events to help us fix bugs — including buttons you click, text you type into form fields (up to 2,000 characters per field), tab navigation, pipeline step changes, log views, LLM call metadata, and error messages shown in the app. This is disclosed here and in our Terms; we use it only to operate and improve reliability, not for advertising.",
       "Technical data: essential session cookies, IP address, and request logs needed to operate and secure the service.",
       "Landing page demo (no account required): the full text of the automation task you submit, a short preview of the generated pipeline message, model and token-usage metadata, build identifiers, and a one-way hash of your IP address for abuse prevention.",
     ],
@@ -46,6 +47,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       "Send service emails such as confirmations and security notices (contract / legitimate interests).",
       "Send marketing only if you opt in (consent — withdraw any time in Settings or by emailing us).",
       "Improve reliability, understand common demo use cases, and debug issues using aggregated diagnostics (legitimate interests).",
+      "During early access, record per-user activity timelines and billing flow for operator debugging when you use a signed-in account (legitimate interests — see What we collect).",
     ],
   },
   {
@@ -94,6 +96,7 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       "We keep account and project data while your account is active.",
       "After account deletion we remove or anonymise personal data within 30 days, except where law requires longer retention (e.g. billing records).",
       "Landing demo logs are kept for up to 12 months, then deleted or aggregated for statistics. You may request earlier deletion by email.",
+      "Early-access usage event logs are kept for up to 12 months, then deleted or aggregated. You may request deletion by emailing us from your account email.",
       "Cached inference results may be deleted sooner via cache controls in the product.",
     ],
   },

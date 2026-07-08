@@ -81,7 +81,10 @@ export async function recordAssistantBilling(
   if (usageCents <= 0) return 0;
 
   try {
-    await billRunUsage(billingKey, usageCents);
+    await billRunUsage(billingKey, usageCents, {
+      flowType: "usage_assistant",
+      detail: { projectId: input.projectId, chartKey: input.chartKey ?? ASSISTANT_BILLING_CHART_KEY },
+    });
   } catch (err) {
     billLog.warn(`assistant billRunUsage failed`, {
       projectId: input.projectId,

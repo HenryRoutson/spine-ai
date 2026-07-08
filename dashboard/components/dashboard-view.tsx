@@ -1,10 +1,34 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Activity, AlertTriangle, Bug, Database, RefreshCw, Wallet } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
+  Activity,
+  AlertTriangle,
+  Bug,
+  Clock,
+  Database,
+  RefreshCw,
+  TrendingDown,
+  TrendingUp,
+  User,
+  Wallet,
+  ShieldAlert,
+} from "lucide-react";
 import { formatCents } from "@/lib/format";
 import type { dashboard_stats } from "@/lib/dashboard_stats";
+import type { dashboard_timeline_event } from "@/lib/dashboard_timeline";
 
 function KpiCard({
   title,
@@ -80,16 +104,58 @@ function ChartCard({
   );
 }
 
+function categoryColor(category: string): string {
+  if (category === "error") return "var(--destructive)";
+  if (category.startsWith("usage_") || category === "llm_call") return "var(--chart-1)";
+  if (category.includes("credit") || category === "signup_credit") return "var(--chart-3)";
+  if (category.startsWith("step_")) return "var(--chart-2)";
+  return "var(--muted)";
+}
+
+function TimelineRow({ row }: { row: dashboard_timeline_event }) {
+  return (
+    <div className="rounded-lg border border-line p-3 text-sm">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="badge" style={{ color: categoryColor(row.category) }}>
+            {row.category}
+          </span>
+          <span>{row.userEmail ?? row.userId.slice(0, 8)}</span>
+          {row.projectId ? <span className="font-mono">{row.projectId}</span> : null}
+        </div>
+        <span>{formatWhen(row.createdAt)}</span>
+      </div>
+      <p>{row.action}</p>
+      {row.amountCents != null && row.amountCents !== 0 ? (
+        <p className="mt-1 tabular-nums text-xs" style={{ color: row.amountCents < 0 ? "var(--destructive)" : "var(--accent)" }}>
+          {row.amountCents < 0 ? "−" : "+"}
+          {formatCents(Math.abs(row.amountCents))}
+        </p>
+      ) : null}
+      {row.category === "error" && row.detail.message ? (
+        <p className="mt-1 text-destructive">{String(row.detail.message)}</p>
+      ) : null}
+      {row.category === "ui_input" && row.detail.value ? (
+        <p className="mt-1 whitespace-pre-wrap font-mono text-xs text-muted">
+          {String(row.detail.value).slice(0, 300)}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function DashboardView() {
   const [stats, setStats] = useState<dashboard_stats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
 
   const refresh = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/dashboard");
+      const qs = selectedUserId ? `?userId=${encodeURIComponent(selectedUserId)}` : "";
+      const res = await fetch(`/api/dashboard${qs}`);
       const body = (await res.json()) as dashboard_stats | { error?: string };
       if (!res.ok) {
         throw new Error(
@@ -102,7 +168,7 @@ export function DashboardView() {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [selectedUserId]);
 
   useEffect(() => {
     // AI : defer initial fetch so refresh()'s setState isn't synchronous in the effect body.
@@ -114,6 +180,12 @@ export function DashboardView() {
     };
   }, [refresh]);
 
+  const timeline = stats?.timeline;
+  const errorEvents = useMemo(
+    () => timeline?.events.filter((e) => e.category === "error") ?? [],
+    [timeline?.events],
+  );
+
   const landingPct =
     stats && stats.landing.budgetCents > 0
       ? Math.round((stats.landing.spentCents / stats.landing.budgetCents) * 100)
@@ -124,9 +196,9 @@ export function DashboardView() {
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Supabase ops</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Ops dashboard</h1>
             <p className="text-sm text-muted">
-              Standalone localhost console — auto-refreshes every 30s
+              User timelines, billing flow, and errors — auto-refreshes every 30s
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -159,6 +231,340 @@ export function DashboardView() {
                 icon={Wallet}
               />
               <KpiCard
+                title="Net position (14d)"
+                value={timeline ? formatCents(timeline.totals.netProfitCents) : "—"}
+                hint={
+                  timeline
+                    ? timeline.totals.inTheGreen
+                      ? "In the green (credits vs charged usage)"
+                      : "In the red — usage exceeds credits"
+                    : undefined
+                }
+                icon={timeline?.totals.inTheGreen ? TrendingUp : TrendingDown}
+              />
+              <KpiCard
+                title="Worst-case buffer"
+                value={timeline ? formatCents(timeline.totals.worstCaseNetCents) : "—"}
+                hint={
+                  timeline
+                    ? `If all ${formatCents(timeline.totals.freeCreditExposureCents)} unused balance hits LLM at provider rate`
+                    : undefined
+                }
+                icon={timeline?.totals.worstCaseInTheRed ? ShieldAlert : TrendingUp}
+              />
+              <KpiCard
+                title="Platform markup"
+                value={timeline ? `${timeline.totals.currentMarkupPct}%` : "—"}
+                hint={
+                  timeline?.exposure
+                    ? `${timeline.exposure.currentMarkupMultiple}× on LLM cost · margin ${formatCents(timeline.exposure.totalPlatformMarginCents)}`
+                    : "Dated schedule — no per-call rows"
+                }
+                icon={Activity}
+              />
+              <KpiCard
+                title="LLM provider cost"
+                value={
+                  timeline?.exposure
+                    ? formatCents(timeline.exposure.totalLlmProviderCostCents)
+                    : "—"
+                }
+                hint={
+                  timeline?.exposure
+                    ? `Charged ${formatCents(timeline.exposure.totalChargedCents)} to users`
+                    : undefined
+                }
+                icon={Wallet}
+              />
+              <KpiCard
+                title="Errors & abusers"
+                value={
+                  timeline
+                    ? `${timeline.totals.errorCount} / ${timeline.totals.abuserCount}`
+                    : String(stats.failedJobs.length)
+                }
+                hint="Errors in window · free-credit abusers"
+                icon={timeline && timeline.totals.errorCount > 0 ? AlertTriangle : Bug}
+              />
+            </div>
+
+            {timeline ? (
+              <>
+                {timeline.exposure ? (
+                  <div
+                    className={`panel p-4 ${timeline.totals.worstCaseInTheRed ? "border-destructive/40" : "border-accent/30"}`}
+                  >
+                    <div className="mb-3 flex items-center gap-2">
+                      <ShieldAlert className="h-4 w-4" />
+                      <h2 className="font-medium">Free-credit liability buffer</h2>
+                      {timeline.totals.worstCaseInTheRed ? (
+                        <span className="badge text-destructive">Worst-case red</span>
+                      ) : (
+                        <span className="badge text-accent">Worst-case green</span>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted">
+                      Models straight LLM provider cost using the dated markup schedule — not what users were charged.
+                      Worst case assumes every unused balance is spent instantly at provider rates.
+                    </p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+                      <div>
+                        <p className="text-muted">Paid credits collected</p>
+                        <p className="text-lg font-semibold tabular-nums">
+                          {formatCents(timeline.exposure.totalPaidCreditsCents)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted">LLM provider cost (actual)</p>
+                        <p className="text-lg font-semibold tabular-nums">
+                          {formatCents(timeline.exposure.totalLlmProviderCostCents)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted">Unused balance buffer</p>
+                        <p className="text-lg font-semibold tabular-nums">
+                          {formatCents(timeline.exposure.totalUnusedBalanceCents)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted">Provider exposure if all spent</p>
+                        <p className="text-lg font-semibold tabular-nums text-destructive">
+                          {formatCents(timeline.exposure.totalFreeCreditExposureCents)}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-sm">
+                      Current P&amp;L (paid − LLM cost):{" "}
+                      <span
+                        className={
+                          timeline.exposure.currentNetPaidVsLlmCents >= 0 ? "text-accent" : "text-destructive"
+                        }
+                      >
+                        {formatCents(timeline.exposure.currentNetPaidVsLlmCents)}
+                      </span>
+                      {" · "}
+                      Worst-case (minus exposure):{" "}
+                      <span
+                        className={
+                          timeline.exposure.worstCaseNetCents >= 0 ? "text-accent" : "text-destructive"
+                        }
+                      >
+                        {formatCents(timeline.exposure.worstCaseNetCents)}
+                      </span>
+                    </p>
+                  </div>
+                ) : null}
+
+                {timeline.markupSchedule.length > 0 ? (
+                  <div className="panel p-4">
+                    <h2 className="font-medium">Markup schedule</h2>
+                    <p className="mt-1 text-sm text-muted">
+                      Change markup here in Supabase — each row applies from its effective date (no per-LLM-call rows).
+                    </p>
+                    <div className="mt-3 overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-line text-left text-muted">
+                            <th className="pb-2 font-medium">Markup</th>
+                            <th className="pb-2 font-medium">From</th>
+                            <th className="pb-2 font-medium">Until</th>
+                            <th className="pb-2 font-medium">Note</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {timeline.markupSchedule.map((row) => (
+                            <tr key={row.id} className="border-b border-line/60">
+                              <td className="py-2 tabular-nums">
+                                {row.markupPct}% ({row.markupMultiple}×)
+                              </td>
+                              <td className="py-2">{formatWhen(row.effectiveFrom)}</td>
+                              <td className="py-2">
+                                {row.effectiveUntil ? formatWhen(row.effectiveUntil) : "current"}
+                              </td>
+                              <td className="py-2 text-muted">{row.note ?? "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="panel p-4">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      <h2 className="font-medium">Users</h2>
+                    </div>
+                    <select
+                      className="rounded-md border border-line bg-background px-3 py-1.5 text-sm"
+                      value={selectedUserId}
+                      onChange={(e) => setSelectedUserId(e.target.value)}
+                    >
+                      <option value="">All users</option>
+                      {timeline.users.map((u) => (
+                        <option key={u.userId} value={u.userId}>
+                          {u.userEmail ?? u.userId.slice(0, 8)} · {u.eventCount} events
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-line text-left text-muted">
+                          <th className="pb-2 font-medium">User</th>
+                          <th className="pb-2 text-right font-medium">Balance</th>
+                          <th className="pb-2 text-right font-medium">LLM cost</th>
+                          <th className="pb-2 text-right font-medium">Exposure</th>
+                          <th className="pb-2 text-right font-medium">Worst-case</th>
+                          <th className="pb-2 text-right font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {timeline.users.map((u) => (
+                          <tr
+                            key={u.userId}
+                            className="cursor-pointer border-b border-line/60 hover:bg-background/40"
+                            onClick={() => setSelectedUserId(u.userId)}
+                          >
+                            <td className="py-2">
+                              <p>{u.userEmail ?? "—"}</p>
+                              <p className="font-mono text-xs text-muted">{u.userId.slice(0, 12)}…</p>
+                            </td>
+                            <td className="py-2 text-right tabular-nums">{formatCents(u.balanceCents)}</td>
+                            <td className="py-2 text-right tabular-nums">
+                              {formatCents(u.totalLlmProviderCostCents)}
+                            </td>
+                            <td className="py-2 text-right tabular-nums text-destructive">
+                              {formatCents(u.freeCreditLlmExposureCents)}
+                            </td>
+                            <td
+                              className={`py-2 text-right tabular-nums ${u.worstCaseInTheRed ? "text-destructive" : "text-accent"}`}
+                            >
+                              {formatCents(u.worstCaseNetCents)}
+                            </td>
+                            <td className="py-2 text-right">
+                              {u.worstCaseInTheRed ? (
+                                <span className="text-destructive">Buffer breach</span>
+                              ) : u.isAbusingFreeCredit ? (
+                                <span className="text-destructive">Abusing free credit</span>
+                              ) : u.netProfitCents >= 0 ? (
+                                <span className="text-accent">Green</span>
+                              ) : (
+                                <span className="text-muted">Subsidized</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="panel p-4">
+                  <h2 className="font-medium">Money flow (14d)</h2>
+                  <p className="mt-1 text-sm text-muted">
+                    Cumulative credits in vs usage out — starting balance, top-ups, and LLM spend
+                  </p>
+                  <div className="mt-4 h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={timeline.moneyFlow}>
+                        <CartesianGrid vertical={false} stroke="var(--line)" />
+                        <XAxis
+                          dataKey="day"
+                          tickFormatter={(v: string) => v.slice(5)}
+                          tickLine={false}
+                          axisLine={false}
+                          stroke="var(--muted)"
+                          fontSize={11}
+                        />
+                        <YAxis
+                          tickLine={false}
+                          axisLine={false}
+                          width={48}
+                          stroke="var(--muted)"
+                          fontSize={11}
+                          tickFormatter={(v: number) => formatCents(v)}
+                        />
+                        <Tooltip
+                          formatter={(v) => formatCents(Number(v ?? 0))}
+                          contentStyle={{
+                            background: "var(--panel)",
+                            border: "1px solid var(--line)",
+                            borderRadius: "0.5rem",
+                          }}
+                        />
+                        <Legend />
+                        <Line
+                          type="monotone"
+                          dataKey="cumulativeInCents"
+                          name="Credits in"
+                          stroke="var(--chart-3)"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="cumulativeOutCents"
+                          name="Usage out"
+                          stroke="var(--destructive)"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="netCents"
+                          name="Net"
+                          stroke="var(--accent)"
+                          strokeWidth={2}
+                          strokeDasharray="4 4"
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                <div className="panel p-4">
+                  <div className="mb-4 flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    <h2 className="font-medium">Activity timeline</h2>
+                    {selectedUserId ? (
+                      <span className="badge">Filtered</span>
+                    ) : null}
+                  </div>
+                  {timeline.events.length === 0 ? (
+                    <p className="text-sm text-muted">No events yet — activity is recorded once users interact with the app.</p>
+                  ) : (
+                    <div className="max-h-[32rem] space-y-3 overflow-y-auto">
+                      {timeline.events.map((row) => (
+                        <TimelineRow key={`${row.kind}-${row.id}`} row={row} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="panel p-4">
+                  <div className="mb-4 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-destructive" />
+                    <h2 className="font-medium">User errors</h2>
+                  </div>
+                  {errorEvents.length === 0 ? (
+                    <p className="text-sm text-muted">No user-facing errors in the recent window</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {errorEvents.map((row) => (
+                        <TimelineRow key={row.id} row={row} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : null}
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <KpiCard
                 title="Total usage"
                 value={formatCents(stats.billing.totalUsageCents)}
                 hint={`Billed ${formatCents(stats.billing.totalBilledCents)}`}
@@ -171,10 +577,16 @@ export function DashboardView() {
                 icon={Activity}
               />
               <KpiCard
-                title="Issues"
-                value={String(stats.failedJobs.length + stats.recentFeedback.length)}
-                hint={`${stats.failedJobs.length} failed jobs · ${stats.recentFeedback.length} feedback`}
+                title="Failed jobs"
+                value={String(stats.failedJobs.length)}
+                hint={`${stats.recentFeedback.length} feedback items`}
                 icon={stats.failedJobs.length > 0 ? AlertTriangle : Bug}
+              />
+              <KpiCard
+                title="Shared links"
+                value={String(stats.sharedLinks.count)}
+                hint={`${stats.sharedLinks.totalRuns} runs`}
+                icon={Database}
               />
             </div>
 
