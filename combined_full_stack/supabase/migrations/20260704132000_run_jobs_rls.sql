@@ -1,4 +1,5 @@
 -- AI : run job progress rows must be scoped per user — prevents cross-tenant job reads/writes.
+-- AI : TODO security — full user CRUD on data jsonb allows tampering with pause/resume state; narrow to SELECT + service writes.
 
 create table if not exists public.run_jobs (
   id text primary key,

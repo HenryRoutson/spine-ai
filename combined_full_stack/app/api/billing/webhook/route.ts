@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 const apiLog = logger("api:billing:webhook");
 
 // AI : Stripe sends invoice.paid on subscription renewals — signature-verified, idempotent credit grant.
+// AI : TODO security — when STRIPE_ENABLED=false return 503 in prod so webhook misconfig is visible.
 export async function POST(req: Request) {
   if (!STRIPE_ENABLED) return NextResponse.json({ received: true });
 

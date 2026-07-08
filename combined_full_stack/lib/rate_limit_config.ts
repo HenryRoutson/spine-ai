@@ -11,6 +11,7 @@ export type RateLimitTier =
   | "write"
   | "webhook"
   | "billing"
+  | "upload"
   | "shared_run"
   | "hosted_api"
   | "landing_demo_build"
@@ -30,6 +31,8 @@ export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number 
   write: { windowMs: 60_000, max: 180 },
   webhook: { windowMs: 60_000, max: 120 },
   billing: { windowMs: 60_000, max: 20 },
+  // AI : authenticated doc upload — parse/OCR/storage is expensive; cap well below the default bucket.
+  upload: { windowMs: 60_000, max: 30 },
   // AI : per-link + IP — limits anonymous credit drain on sharer_pays links.
   shared_run: { windowMs: 600_000, max: 5 },
   // AI : bearer-key pipeline invoke — per-api + IP cap.
@@ -56,6 +59,7 @@ export function upstashConfigured(): boolean {
 }
 
 export function publicApiTier(pathname: string): RateLimitTier | null {
+  // AI : TODO security — /api/demo/* has no middleware tier today; add public/read cap on demo/state.
   if (pathname === "/api/billing/webhook") return "webhook";
   if (pathname === "/api/supabase-env") return "public";
   if (pathname.startsWith("/api/hosted-apis/")) {

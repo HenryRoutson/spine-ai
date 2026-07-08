@@ -1,5 +1,7 @@
 import { fieldToPy, fieldToTypeExpr, typeExprToPy, typeExprToTs } from "./type_expr";
+import { stripBuiltinTypeAliases } from "./builtin_types";
 import { stripSharedModels } from "./builtin_models";
+import type { TypeExpr } from "./types";
 import { modelExportIdentifier, modelsForPydanticExport } from "../structure-shape";
 import type { StructureModel, TypeAlias } from "./types";
 
@@ -21,9 +23,21 @@ export function typeAliasesToPydantic(aliases: TypeAlias[], models: StructureMod
   return `${header}\n${body}\n`;
 }
 
+// AI : alias bodies must not self-reference quote/text_quote names — those resolve to concrete TS types.
+function typeExprToAliasDefinitionTs(expr: TypeExpr, models: StructureModel[]): string {
+  switch (expr.kind) {
+    case "quote":
+      return "string";
+    case "text_quote":
+      return "{ text: string; quote: string }";
+    default:
+      return typeExprToTs(expr, models);
+  }
+}
+
 export function typeAliasToDts(alias: TypeAlias, models: StructureModel[]): string {
   const id = typeAliasExportName(alias.name);
-  const body = typeExprToTs(alias.expr, models);
+  const body = typeExprToAliasDefinitionTs(alias.expr, models);
   const note = alias.description?.trim();
   return note ? `/** ${note} */\nexport type ${id} = ${body};` : `export type ${id} = ${body};`;
 }
@@ -105,11 +119,14 @@ export function allModelsToDts(
     "export type TextQuote = { text: string; quote: QuoteSpan };",
     "export type Document = { content: string; filename: string };",
     "export type FileInput = Document;",
+    "export type quote_string_t = string;",
+    "export type quote_span_t = QuoteSpan;",
+    "export type text_quote_t = { text: string; quote: string };",
     "",
   ].join("\n");
   const userModels = stripSharedModels(models);
   const exportModels = modelsForPydanticExport(userModels);
-  const aliasesBlock = typeAliasesToDts(typeAliases, exportModels);
+  const aliasesBlock = typeAliasesToDts(stripBuiltinTypeAliases(typeAliases), exportModels);
   const aliasGap = aliasesBlock ? `${aliasesBlock}\n` : "";
   const user = exportModels.map((m) => modelToDts(m, exportModels)).join("\n\n");
   return `${header}${aliasGap}${user}\n`;

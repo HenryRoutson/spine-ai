@@ -104,6 +104,12 @@ each step has input and output types.
 input is different because it accepts pdfs for example, but everything else is validated json against pydantic models / zod defined in the structures.
 if the input to one step doesn't match the output of the step previously, an error is raised.
 
+For the input step, 
+there are to types of inputs 
+1. JSON-native · direct parse
+2. Needs LLM conversion if not Document I/O model.
+You should visualise an llm step after the input step (including if there is a combine input step), to show that some inputs might need an llm step to convert into a format if they need to map to a certain structure.
+
 
 all llm steps include the option to enable a first response, not in json, to allow the model to think about it's response without thinking about formatting. https://arxiv.org/pdf/2604.03616, that's based on this paper.
 it should be automatically enabled on a step that fails validation and a retry is attempted.
@@ -185,6 +191,7 @@ export should have a readme file and instructions for how to setup a scalable AP
 there should be an export pipeline to code,
 the pop up showns download buttons button to export to typescript and python.
 
+
 you should always have the ability to view the whole pipeline as code, 
 and if there are no errors in the pipeline there should be none in the code for any langauge.
 
@@ -205,6 +212,9 @@ please have a dedicated button to click which goes back to document for input st
 
 please have a dedicated button to click which goes back to document for input steps rather than having to find it. throw an error if nothing is selected as a model output 
 
+There should be a button to copy the json of the whole pipeline, 
+but also the pipeline json, all code that it exports to and lints of that code.
+You should run automated tests to assert that generated code from a valid pipeline has no lint errors before prod, and in prod any lint errors in export should be recoded in the supabase database to be fixed.
 
 # Testing 
 

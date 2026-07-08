@@ -21,6 +21,7 @@ import {
   normalizeFlatFeeCents,
 } from "@/lib/server/billable_pricing";
 import { callerFundsHostedApi } from "@/lib/server/hosted_api_billing";
+import { defaultDocStorageKey } from "./shared-link-session";
 import {
   DocLabel,
   InputType,
@@ -292,7 +293,7 @@ export async function publishHostedApi(input: PublishHostedApiInput): Promise<Pu
       const doc = input.store.docs().find((d) => d.id === docId);
       const content = input.store.docContent(docId);
       if (!doc || content === undefined) continue;
-      const storageKey = `${moduleId}_${doc.name}`;
+      const storageKey = defaultDocStorageKey(moduleId, doc.name);
       const dest = join(defaultDocsDir(id), storageKey);
       writeFileSync(dest, content, "utf8");
       writeFileSync(
@@ -340,6 +341,7 @@ export async function publishHostedApi(input: PublishHostedApiInput): Promise<Pu
 
   if (!isServerless()) saveLocalApi(row);
   const db = await supabaseForHostedApis();
+  // AI : TODO security — deploy writes need service role after RLS hardening (same as shared_links.ts).
   if (!db) {
     if (isServerless()) throw new Error("Supabase env required to publish hosted APIs in production");
     saveLocalApi(row);
@@ -543,7 +545,7 @@ function loadHostedDefaultDocContent(
       name: filename,
     };
   }
-  const storageKey = `${moduleId}_${filename}`;
+  const storageKey = defaultDocStorageKey(moduleId, filename);
   const path = join(defaultDocsDir(apiId), storageKey);
   if (!existsSync(path)) return null;
   const metaPath = `${path}.meta.json`;

@@ -146,7 +146,7 @@ function SegmentRow({
   const connectionInvalid = ioMismatchAtModuleIndex(modules, invalid, insertAt)
 
   if (seg.kind === "combine") {
-    const { combine, input, index } = seg
+    const { combine, input, parse, index } = seg
     const combineIssue = invalidForModule(invalid ?? new Map(), combine.id)
     const combineInvalid = combineIssue && combineIssue.kind !== "io-mismatch" && combineIssue.kind !== "cardinality-mismatch"
     const combineIoLinked = stepIoMismatchLinked(combine.id, modules, invalid)
@@ -156,9 +156,10 @@ function SegmentRow({
         : undefined
     const combineStatus = stepStatus?.get(combine.id)
     const inputStatus = stepStatus?.get(input.id)
+    const parseStatus = parse ? stepStatus?.get(parse.id) : undefined
     const combineCoverage = testCoverage?.get(combine.id)
     const inputCoverage = testCoverage?.get(input.id)
-    const groupSelected = selectedId === combine.id || selectedId === input.id
+    const groupSelected = selectedId === combine.id || selectedId === input.id || selectedId === parse?.id
     return (
       <div className="mx-auto flex w-full flex-col items-center">
         <div
@@ -183,7 +184,11 @@ function SegmentRow({
                 <>
                   <StructureLink models={models} structureId={combine.inStructureId} fallback="pipeline" />
                   <span className="text-muted-foreground/60"> + </span>
-                  document
+                  {parse ? (
+                    <StructureLink models={models} structureId={parse.outStructureId} />
+                  ) : (
+                    "document"
+                  )}
                   <span className="text-muted-foreground/60"> → </span>
                   <StructureLink models={models} structureId={combine.outStructureId} />
                 </>
@@ -226,6 +231,33 @@ function SegmentRow({
             {inputCoverage && <TestCoverageBadge status={inputCoverage} />}
             {!editMode && <RunStatusIcon status={inputStatus} />}
           </StepButton>
+          {/* AI : spec §input — llm convert step is visualised inside the combine group when the side input maps to a non-Document structure */}
+          {parse && (
+            <StepButton
+              onClick={() => onSelect?.(parse.id)}
+              className={cn(
+                "mt-2 flex w-full items-start gap-3 rounded-md border border-dashed border-chart-3/50 bg-chart-3/5 px-3 py-2.5 text-left transition-colors",
+                selectedId === parse.id
+                  ? "border-primary"
+                  : statusBorder(parseStatus) ?? "hover:border-chart-3",
+              )}
+            >
+              <KindIcon kind={ModuleKind.Llm} size="sm" />
+              <StepBody
+                label={parse.label}
+                labelClass="text-xs"
+                detail={
+                  <>
+                    <StructureLink models={models} structureId={parse.inStructureId} />
+                    <span className="text-muted-foreground/60"> → </span>
+                    <StructureLink models={models} structureId={parse.outStructureId} />
+                  </>
+                }
+              />
+              <AutoStructureParseLock />
+              {!editMode && <RunStatusIcon status={parseStatus} />}
+            </StepButton>
+          )}
         </div>
         <InvalidMessage
           show={!!combineInvalid || !!combineIoMsg}

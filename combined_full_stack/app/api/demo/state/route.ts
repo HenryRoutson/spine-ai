@@ -4,6 +4,7 @@ import { getDemoState } from "@/lib/server/demo_store";
 import type { ProjectId } from "@/lib/server/types";
 
 // AI : unauthenticated read-only state for the marketing-site live preview iframe.
+// AI : TODO security — add middleware publicApiTier for /api/demo/* (IP rate cap).
 export async function GET(req: NextRequest) {
   const buildId = req.nextUrl.searchParams.get("buildId");
   const projectId =

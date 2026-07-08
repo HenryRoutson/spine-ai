@@ -33,6 +33,14 @@ function landingBuildsDir(): string {
   return join(dataDir(), "landing_builds");
 }
 
+// AI : SECURITY — buildIds are `uid("p_land_")` (prefix + alphanumerics). Reject anything else so a
+// AI : query param like `../../secret` can never traverse out of landing_builds/ on disk read.
+const LANDING_BUILD_ID_RE = /^p_land_[a-z0-9]+$/i;
+
+function isValidLandingBuildId(id: string): boolean {
+  return LANDING_BUILD_ID_RE.test(id);
+}
+
 function landingBuildFile(id: ProjectId): string {
   return join(landingBuildsDir(), `${id}.json`);
 }
@@ -74,7 +82,7 @@ export function putLandingBuild(project: Project): void {
 }
 
 function resolveLandingBuild(buildId: string | null | undefined): Project | null {
-  if (!buildId) return null;
+  if (!buildId || !isValidLandingBuildId(buildId)) return null;
   const id = buildId as ProjectId;
   const cached = landingBuildCache().get(id);
   if (cached) return cached;

@@ -482,21 +482,25 @@ export function generateRuntimeStubsTs(needs: ExportRuntimeNeeds): string {
       ...openRouterHelpersTs(),
       "",
       ...llmStructuredStubTs(),
-      "",
-      "async function llmBatchStructured<T>(",
-      "  items: unknown[],",
-      "  promptFor: (item: unknown) => string,",
-      "  schema: unknown,",
-      "): Promise<T[]> {",
-      "  return Promise.all(items.map((item) => llmStructured<T>(promptFor(item), schema)));",
-      "}",
     );
+    if (needs.llmBatch) {
+      lines.push(
+        "",
+        "async function llmBatchStructured<T>(",
+        "  items: unknown[],",
+        "  promptFor: (item: unknown) => string,",
+        "  schema: unknown,",
+        "): Promise<T[]> {",
+        "  return Promise.all(items.map((item) => llmStructured<T>(promptFor(item), schema)));",
+        "}",
+      );
+    }
   }
 
   if (needs.quote) {
     lines.push(
       "",
-      "function resolveQuotes<T>(data: unknown, _sourceText: string, _docId: string): T {",
+      "function resolveQuotes<T>(_data: unknown, _sourceText: string, _docId: string): T {",
       '  const text = runtime.sourceText ?? _sourceText;',
       '  const docId = runtime.sourceDocId ?? _docId;',
       '  if (!text || !docId) throw new Error("configurePipelineRuntime({ sourceText, sourceDocId }) for quote steps");',

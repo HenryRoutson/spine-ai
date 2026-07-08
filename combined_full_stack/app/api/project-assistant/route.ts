@@ -17,6 +17,7 @@ const apiLog = logger("api:project-assistant");
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
+  // AI : TODO security — requireAuthStore before parseRequestJson (see pipeline-assistant/route.ts).
   const parsed = await parseRequestJson(req, assistantRequestBodySchema);
   if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
   const { projectId, message, history = [], stream = false } = parsed;

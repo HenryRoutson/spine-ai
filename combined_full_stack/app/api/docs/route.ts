@@ -18,6 +18,12 @@ import type { ProjectId } from "@/lib/server/types";
 const apiLog = logger("api:docs");
 
 export async function POST(req: NextRequest) {
+  // AI : authenticate + rate-limit (upload tier) BEFORE reading/parsing the multipart body so
+  // AI : anonymous or over-quota callers can't force expensive parse/OCR work.
+  const ctx = await requireAuthStore("upload");
+  if (ctx instanceof NextResponse) return ctx;
+  const { store } = ctx;
+
   const form = await req.formData();
   const file = form.get("file");
   const uploadErr = validateUploadFile(file instanceof File ? file : null);
@@ -46,10 +52,6 @@ export async function POST(req: NextRequest) {
     label,
     sizeKb: Math.round(uploadFile.size / 1024),
   });
-
-  const ctx = await requireAuthStore();
-  if (ctx instanceof NextResponse) return ctx;
-  const { store } = ctx;
 
   if (projectId && !store.project(projectId)) {
     return apiError(unknownProject(projectId), HTTP.NOT_FOUND);

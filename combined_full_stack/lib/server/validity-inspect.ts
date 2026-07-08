@@ -12,6 +12,7 @@ import {
   prevModuleId,
 } from "./validity-types";
 import { invalidStepMessage } from "./validity-messages";
+import { inputFeedsCombine, isCombineSideParseStep } from "./validity-sync";
 
 export type { IoMismatchFixKind, IoMismatchFixHint, IoMismatchInspectorFix };
 export { prevModuleId };
@@ -43,8 +44,9 @@ export function ioMismatchAtModuleIndex(
 ): boolean {
   if (!invalid || moduleIndex < 0 || moduleIndex >= modules.length) return false;
   const m = modules[moduleIndex]!;
-  if (m.kind === "input" && modules[moduleIndex + 1]?.kind === "combine") {
-    const issue = invalidForModule(invalid, modules[moduleIndex + 1]!.id);
+  if (m.kind === "input" && inputFeedsCombine(modules, moduleIndex)) {
+    const combineAt = modules[moduleIndex + 1]?.kind === "combine" ? moduleIndex + 1 : moduleIndex + 2;
+    const issue = invalidForModule(invalid, modules[combineAt]!.id);
     return !!issue && isSpineMismatchKind(issue.kind);
   }
   const issue = invalidForModule(invalid, m.id);
@@ -63,8 +65,10 @@ export function ioMismatchUpstreamOf(
       if (prevModuleId(modules, downId) === moduleId) return true;
       const downIdx = modules.findIndex((m) => m.id === downId);
       const down = modules[downIdx];
-      if (down?.kind === "combine" && downIdx >= 2 && modules[downIdx - 1]?.kind === "input") {
-        if (modules[downIdx - 2]?.id === moduleId) return true;
+      if (down?.kind === "combine") {
+        // AI : hop over the side group [input, autoParseLlm?] to the combine's spine upstream.
+        const inputIdx = isCombineSideParseStep(modules, downIdx - 1) ? downIdx - 2 : downIdx - 1;
+        if (modules[inputIdx]?.kind === "input" && modules[inputIdx - 1]?.id === moduleId) return true;
       }
     }
   }

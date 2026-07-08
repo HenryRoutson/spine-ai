@@ -47,6 +47,24 @@ export function isAutoStructureParseStep(m: PipelineModule): boolean {
   );
 }
 
+// AI : side-input group before a combine is [input, autoParseLlm?] — it feeds the combine's
+// AI : newDocument and must not be treated as a spine input.
+export function inputFeedsCombine(modules: PipelineModule[], i: number): boolean {
+  const next = modules[i + 1];
+  if (next?.kind === ModuleKind.Combine) return true;
+  return !!next && isAutoStructureParseStep(next) && modules[i + 2]?.kind === ModuleKind.Combine;
+}
+
+export function isCombineSideParseStep(modules: PipelineModule[], i: number): boolean {
+  const m = modules[i];
+  return (
+    !!m &&
+    isAutoStructureParseStep(m) &&
+    modules[i - 1]?.kind === ModuleKind.Input &&
+    modules[i + 1]?.kind === ModuleKind.Combine
+  );
+}
+
 export function autoStructureParseStepForInput(
   modules: PipelineModule[],
   inputId: ModuleId,

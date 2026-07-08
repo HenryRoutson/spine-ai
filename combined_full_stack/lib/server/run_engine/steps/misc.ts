@@ -5,6 +5,8 @@ import { ClientStepPendingError, HumanReviewPendingError } from "../../run_check
 import { wrapListForOutputStructure } from "../../structure";
 import { documentContentFrom, documentDocIdFrom, documentFilenameFrom, documentValueFrom } from "../../document_value";
 import { collectQuotes, resolveQuotesValue } from "../../quotation";
+import { stepEmits } from "../../validity";
+import { FieldType } from "../../types";
 import type { PipelineModule, StructureModelId } from "../../types";
 import { resolveOutIsList } from "../../spine_types";
 import { materializeHints, materializeStepOutput, modelById, prevModuleFor, sourceDocumentBlock } from "../helpers";
@@ -19,15 +21,23 @@ export async function execCombineStep(m: PipelineModule, ctx: RunCtx, _log: RunL
   const rawInput = ctx.prevModuleId ? ctx.outputs.get(ctx.prevModuleId) : undefined;
   const newInput = Array.isArray(rawInput) ? rawInput[0] : rawInput;
   const pipelineData = ctx.byModel.get(m.inStructureId as StructureModelId);
+  const prev = prevModuleFor(project.modules, ctx.prevModuleId);
+  // AI : side input parsed by the auto llm step emits a structure — route it into matching ref fields.
+  const sideStructId = stepEmits(prev);
   const value: Record<string, unknown> = {};
   const newDocHints = { docId: documentDocIdFrom(newInput), docName: documentFilenameFrom(newInput) };
   for (const f of out.fields) {
-    const isDoc = f.type === "document";
-    value[f.name] = isDoc
-      ? documentValueFrom(newInput, newDocHints, documentContentFrom(newInput))
-      : pipelineData ?? [];
+    if (f.type === FieldType.Document) {
+      value[f.name] = documentValueFrom(newInput, newDocHints, documentContentFrom(newInput));
+      continue;
+    }
+    if (sideStructId && sideStructId !== m.inStructureId && f.ref === sideStructId) {
+      value[f.name] =
+        f.type === FieldType.ListModel ? (Array.isArray(rawInput) ? rawInput : [newInput]) : newInput;
+      continue;
+    }
+    value[f.name] = pipelineData ?? [];
   }
-  const prev = prevModuleFor(project.modules, ctx.prevModuleId);
   const merged = materializeStepOutput(
     m,
     project,

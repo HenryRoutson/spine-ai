@@ -36,6 +36,14 @@ function safeJoinUnder(root: string, ...segments: string[]): string | null {
   return pathWithinRoot(root, joined) ? joined : null;
 }
 
+// AI : SECURITY — default-doc filenames come from user uploads (doc.name). Strip path separators and
+// AI : parent refs so `${moduleId}_${filename}` can never escape defaultDocsDir. Write and read must
+// AI : call this identically so the on-disk key stays consistent.
+export function defaultDocStorageKey(moduleId: string, filename: string): string {
+  const safe = (s: string) => s.replace(/[\\/]/g, "_").replace(/\.{2,}/g, "_").replace(/^\.+/, "_");
+  return `${safe(moduleId)}_${safe(filename)}`;
+}
+
 function linksDir(): string {
   return join(dataDir(), "shared_links");
 }
@@ -104,7 +112,7 @@ export function loadDefaultDocContent(
       name: filename,
     };
   }
-  const storageKey = `${moduleId}_${filename}`;
+  const storageKey = defaultDocStorageKey(moduleId, filename);
   const textPath = join(defaultDocsDir(linkId), storageKey);
   if (!existsSync(textPath)) return null;
   const metaPath = `${textPath}.meta.json`;

@@ -255,6 +255,8 @@ export function PipelineExportDialog({
 
               <div className="h-[min(28rem,50vh)] min-h-48">
                 {active && tab === "ui" ? (
+                  // AI : TODO security — sandbox allow-scripts runs export HTML in-browser; downloaded
+                  // AI : inference_ui.html executes arbitrary JS when opened locally — document risk.
                   <iframe
                     title="Inference UI preview"
                     srcDoc={active.content}

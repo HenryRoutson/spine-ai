@@ -20,6 +20,7 @@ const apiLog = logger("api:testing-assistant");
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
+  // AI : TODO security — requireAuthStore before parseRequestJson (see pipeline-assistant/route.ts).
   const body = await parseRequestJson(req, testingAssistantBodySchema);
   if ("validationError" in body) return apiError(body.validationError, HTTP.BAD_REQUEST);
 
