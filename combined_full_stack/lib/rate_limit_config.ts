@@ -35,6 +35,7 @@ export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number 
   // AI : authenticated doc upload — parse/OCR/storage is expensive; cap well below the default bucket.
   upload: { windowMs: 60_000, max: 30 },
   // AI : per-link + IP — limits anonymous credit drain on sharer_pays links.
+  // AI : TODO security — IP rotation still drains owner credits; pair with CAPTCHA / spend caps.
   shared_run: { windowMs: 600_000, max: 5 },
   // AI : bearer-key pipeline invoke — per-api + IP cap.
   hosted_api: { windowMs: 600_000, max: 30 },
@@ -64,9 +65,9 @@ export function upstashConfigured(): boolean {
 export function publicApiTier(pathname: string): RateLimitTier | null {
   if (pathname === "/api/billing/webhook") return "webhook";
   if (pathname === "/api/supabase-env") return "public";
-  // AI : SECURITY — public demo preview reads; cap by IP in middleware.
-  if (pathname === "/api/demo/state") return "read";
-  if (/^\/api\/demo\/docs\/[^/]+\/text$/.test(pathname)) return "read";
+  // AI : SECURITY — public demo preview reads; tighter than authenticated read tier.
+  if (pathname === "/api/demo/state") return "public";
+  if (/^\/api\/demo\/docs\/[^/]+\/text$/.test(pathname)) return "public";
   if (pathname.startsWith("/api/hosted-apis/")) {
     if (/\/invoke$/.test(pathname)) return "hosted_api";
     if (/\/progress$/.test(pathname)) return "poll";
@@ -74,7 +75,8 @@ export function publicApiTier(pathname: string): RateLimitTier | null {
   if (!pathname.startsWith("/api/shared-links/")) return null;
   if (/\/run$/.test(pathname)) return "llm";
   if (/\/progress$/.test(pathname)) return "poll";
-  if (/\/client-step$/.test(pathname)) return "default";
+  // AI : SECURITY — resume is as expensive as a run; share the shared_run bucket.
+  if (/\/client-step$/.test(pathname)) return "shared_run";
   if (/\/docs$/.test(pathname)) return "shared_upload";
   if (/\/docs\/[^/]+\/(text|file)$/.test(pathname)) return "read";
   return "public";

@@ -65,6 +65,8 @@ export type LandingRunTrace = {
 
 export type LandingBuildResult = {
   buildId: string
+  // AI : SECURITY — signed token for /api/demo/state?buildId=… (required when present).
+  accessToken?: string
   message: string
   projectName: string
   moduleCount: number

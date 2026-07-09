@@ -50,6 +50,9 @@ function fieldForFingerprint(f: ModelField) {
     minItems: f.minItems ?? null,
     // AI : canonical type — typeExpr wins over legacy type/ref so cache keys track schema edits.
     expr: fieldToTypeExpr(f),
+    // AI : description/example feed LLM JSON Schema via withFieldMeta — must invalidate cache/logs.
+    description: f.description?.trim() || null,
+    example: f.example?.trim() || null,
   }
 }
 
@@ -176,7 +179,8 @@ export function hashStableJson(value: unknown): TestSigHash {
 
 export function buildRunConfigPayload(project: Project, model: ModelId | undefined) {
   return {
-    v: 4 as const,
+    // AI : v5 — field description/example in fingerprint (stale cache when only schema hints change).
+    v: 5 as const,
     model: resolveRunModel(project, model),
     models: [...project.models].sort((a, b) => a.id.localeCompare(b.id)).map(modelForFingerprint),
     typeAliases: [...(project.typeAliases ?? [])]
@@ -226,7 +230,7 @@ export async function computeRunFingerprintClient(
   return `runfp_${hex.slice(0, 24)}` as RunFingerprint
 }
 
-// AI : browser-side prior-run match — mirrors server findMatchingRun (stored fp + legacy recompute).
+// AI : browser-side prior-run match — stored fingerprint only (mirrors server findMatchingRun).
 export async function findMatchingRunClient(
   runs: PipelineRun[],
   project: Project,
@@ -234,16 +238,5 @@ export async function findMatchingRunClient(
   inputDocIds: DocId[],
 ): Promise<PipelineRun | null> {
   const fingerprint = await computeRunFingerprintClient(project, model, inputDocIds)
-  const byColumn = runs.find((r) => r.status === "ok" && r.fingerprint === fingerprint)
-  if (byColumn) return byColumn
-
-  const resolvedModel = resolveRunModel(project, model)
-  for (const r of runs) {
-    if (r.status !== "ok") continue
-    const ids = r.inputDocIds?.length ? r.inputDocIds : []
-    if (!ids.length) continue
-    if ((await computeRunFingerprintClient(project, resolvedModel, ids)) === fingerprint) return r
-    if (r.model && (await computeRunFingerprintClient(project, r.model, ids)) === fingerprint) return r
-  }
-  return null
+  return runs.find((r) => r.status === "ok" && r.fingerprint === fingerprint) ?? null
 }

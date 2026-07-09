@@ -130,6 +130,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const linkId = parseSharedLinkId(id);
   if (!linkId) return apiError("link not found", 404);
 
+  // AI : TODO security — sharer_pays credit drain: IP-bucketed shared_run (5/10m) is rotatable;
+  // AI : add CAPTCHA / viewer auth / mandatory spend caps / anomaly kill-switch on publish.
   const ip = clientIpFromHeaders(req.headers);
   const runLimitKey = `shared-run:${linkId}:${ip}` as RateLimitKey;
   const runLimited = await checkRateLimit(runLimitKey, "shared_run");

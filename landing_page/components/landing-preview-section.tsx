@@ -93,6 +93,7 @@ export function LandingBuildProvider({
   const [task, setTask] = useState("");
   const [demoEmail, setDemoEmail] = useState<demo_email_string | null>(null);
   const [buildId, setBuildId] = useState<string | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [building, setBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [buildMessage, setBuildMessage] = useState<string | null>(null);
@@ -112,10 +113,13 @@ export function LandingBuildProvider({
   const emailRegistered = demoEmail !== null;
 
   const previewBase = `${appUrl.replace(/\/$/, "")}/demo?embed=1&preview=1`;
-  const iframeSrc = useMemo(
-    () => (buildId ? `${previewBase}&buildId=${encodeURIComponent(buildId)}` : previewBase),
-    [buildId, previewBase],
-  );
+  const iframeSrc = useMemo(() => {
+    if (!buildId) return previewBase;
+    const params = new URLSearchParams({ buildId });
+    // AI : SECURITY — pass HMAC access token so /api/demo/state can authorize the build.
+    if (accessToken) params.set("accessToken", accessToken);
+    return `${previewBase}&${params.toString()}`;
+  }, [accessToken, buildId, previewBase]);
 
   const buildPipeline = useCallback(async () => {
     const trimmed = task.trim();
@@ -159,6 +163,7 @@ export function LandingBuildProvider({
       });
 
       setBuildId(data.buildId);
+      setAccessToken(data.accessToken ?? null);
       setBuildMessage(data.message);
       setStreamMessage(data.message);
       setExampleDocNames(data.exampleDocNames ?? data.run?.exampleDocNames ?? []);

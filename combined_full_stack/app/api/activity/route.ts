@@ -14,6 +14,8 @@ export async function POST(req: NextRequest) {
   if ("validationError" in body) return apiError(body.validationError, HTTP.BAD_REQUEST);
 
   // AI : SECURITY — never persist client-supplied costCents (billing/telemetry integrity).
+  // AI : TODO security — projectId is client-supplied metadata only; optionally verify ownership
+  // AI : before attach so users cannot pollute another project's ops timeline labels.
   await recordActivityEvents(
     body.events.map((e) => ({
       userId: auth.userId,

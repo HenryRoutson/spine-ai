@@ -4,9 +4,9 @@ import { HTTP } from "@/lib/server/api-errors";
 import { parseRequestJson, sessionReplayChunkBodySchema } from "@/lib/server/api_schemas";
 import { isAuthSession, requireAuth } from "@/lib/server/require_auth";
 import {
-  fetchSessionReplayEvents,
   ingestSessionReplayChunk,
   listSessionReplaysForUser,
+  SessionReplayOwnershipError,
 } from "@/lib/server/session_replay";
 import type { session_id_string } from "@/lib/session-replay-types";
 import { SESSION_REPLAY_ENABLED } from "@/lib/session-replay-enabled";
@@ -26,15 +26,22 @@ export async function POST(req: NextRequest) {
     return apiError("events required unless isFinal", HTTP.BAD_REQUEST);
   }
 
-  await ingestSessionReplayChunk({
-    sessionId: body.sessionId as session_id_string,
-    userId: auth.userId,
-    userEmail: auth.email,
-    projectId: body.projectId,
-    chunkIndex: body.chunkIndex,
-    events,
-    isFinal: body.isFinal,
-  });
+  try {
+    await ingestSessionReplayChunk({
+      sessionId: body.sessionId as session_id_string,
+      userId: auth.userId,
+      userEmail: auth.email,
+      projectId: body.projectId,
+      chunkIndex: body.chunkIndex,
+      events,
+      isFinal: body.isFinal,
+    });
+  } catch (err) {
+    if (err instanceof SessionReplayOwnershipError) {
+      return apiError("session ownership mismatch", HTTP.FORBIDDEN);
+    }
+    throw err;
+  }
 
   return NextResponse.json({ ok: true });
 }

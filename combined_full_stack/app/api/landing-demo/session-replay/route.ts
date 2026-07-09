@@ -9,7 +9,7 @@ import {
 } from "@/lib/server/landing_proxy_auth";
 import { landingDemoCorsHeaders } from "@/lib/server/landing_demo_cors";
 import { hasLandingPageSignup, hashLandingDemoIp } from "@/lib/server/landing_page_signups";
-import { ingestLandingSessionReplayChunk } from "@/lib/server/session_replay";
+import { ingestLandingSessionReplayChunk, SessionReplayOwnershipError } from "@/lib/server/session_replay";
 import { SESSION_REPLAY_ENABLED } from "@/lib/session-replay-enabled";
 import type { session_id_string } from "@/lib/session-replay-types";
 
@@ -23,7 +23,7 @@ export async function OPTIONS(req: Request): Promise<NextResponse> {
   return new NextResponse(null, { status: 204, headers: landingDemoCorsHeaders(req) });
 }
 
-// AI : rrweb chunk ingest for anonymous landing visitors (email-gated, proxy-auth on Vercel).
+// AI : rrweb chunk ingest for anonymous landing visitors (email-gated, proxy-auth outside local-dev).
 export async function POST(req: Request): Promise<NextResponse> {
   if (!SESSION_REPLAY_ENABLED) {
     return jsonWithCors(req, { error: "Session replay is disabled" }, HTTP.UNAVAILABLE);
@@ -60,15 +60,22 @@ export async function POST(req: Request): Promise<NextResponse> {
   }
 
   const ip = clientIpForLandingDemo(req.headers);
-  await ingestLandingSessionReplayChunk({
-    sessionId: body.sessionId as session_id_string,
-    demoEmail: body.email.trim().toLowerCase(),
-    ipHash: hashLandingDemoIp(ip),
-    projectId: body.projectId,
-    chunkIndex: body.chunkIndex,
-    events,
-    isFinal: body.isFinal,
-  });
+  try {
+    await ingestLandingSessionReplayChunk({
+      sessionId: body.sessionId as session_id_string,
+      demoEmail: body.email.trim().toLowerCase(),
+      ipHash: hashLandingDemoIp(ip),
+      projectId: body.projectId,
+      chunkIndex: body.chunkIndex,
+      events,
+      isFinal: body.isFinal,
+    });
+  } catch (err) {
+    if (err instanceof SessionReplayOwnershipError) {
+      return jsonWithCors(req, { error: "session ownership mismatch" }, HTTP.FORBIDDEN);
+    }
+    throw err;
+  }
 
   return jsonWithCors(req, { ok: true });
 }

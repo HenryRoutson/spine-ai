@@ -21,6 +21,7 @@ import { blankProject } from "@/lib/server/seed";
 import { logger } from "@/lib/server/server_logger";
 import { migrateProjectModules } from "@/lib/server/validity";
 import { putLandingBuild } from "@/lib/server/demo_store";
+import { mintLandingBuildAccessToken } from "@/lib/server/landing_build_access";
 import {
   materializeLandingExampleDocs,
   runLandingPipelineWithExamples,
@@ -33,6 +34,8 @@ const buildLog = logger("landing-build");
 
 export type LandingBuildResult = {
   buildId: ProjectId;
+  // AI : SECURITY — HMAC token required by /api/demo/state when loading this build.
+  accessToken: string;
   message: string;
   projectName: string;
   moduleCount: number;
@@ -211,6 +214,7 @@ export async function buildLandingPipelineFromTask(
 
     return {
       buildId,
+      accessToken: mintLandingBuildAccessToken(buildId),
       message: result.message,
       projectName: project.name,
       moduleCount: project.modules.length,

@@ -7,7 +7,6 @@ import { PUBLIC_RUN_SPEND_RESERVE_CENTS } from "@/lib/billing_config";
 import { uid } from "@/lib/id";
 import type { HostedApiRecord } from "@/lib/hosted-api-types";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
-import { createClient } from "@/utils/supabase/server";
 import { dataDir } from "./config";
 import { createAdminClient } from "./supabase_admin";
 import { hashContent, type Store } from "./store";
@@ -99,11 +98,9 @@ function isServerless(): boolean {
   return !!process.env.VERCEL;
 }
 
+// AI : SECURITY — deploy mutations require service role after RLS hardening; no user-session fallback.
 async function supabaseForHostedApis(): Promise<SupabaseClient | null> {
-  const admin = await createAdminClient();
-  if (admin) return admin;
-  if (!getSupabasePublicEnv()) return null;
-  return createClient();
+  return createAdminClient();
 }
 
 type StoredHostedApi = HostedApiRecord & {
@@ -341,9 +338,10 @@ export async function publishHostedApi(input: PublishHostedApiInput): Promise<Pu
 
   if (!isServerless()) saveLocalApi(row);
   const db = await supabaseForHostedApis();
-  // AI : TODO security — deploy writes need service role after RLS hardening (same as shared_links.ts).
   if (!db) {
-    if (isServerless()) throw new Error("Supabase env required to publish hosted APIs in production");
+    if (isServerless() || getSupabasePublicEnv()) {
+      throw new Error("SUPABASE_SERVICE_ROLE_KEY required to publish hosted APIs");
+    }
     saveLocalApi(row);
     return { ...toPublicRecord(row), apiKey: key };
   }

@@ -39,6 +39,8 @@ export async function saveLandingPageSignup(email: landing_signup_email, ip: str
 }
 
 export async function hasLandingPageSignup(email: landing_signup_email): Promise<boolean> {
+  // AI : TODO security — email is self-asserted (no magic-link/OTP). Anyone can register any address,
+  // AI : squat victim emails, and burn landing LLM budget / attach replay to that email.
   const normalized = normalizeEmail(email);
   const admin = await createAdminClient();
   // AI : SECURITY — fail closed; missing admin/DB must not bypass the email gate (LLM spend / replay).

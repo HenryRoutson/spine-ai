@@ -352,8 +352,12 @@ export function StoreProvider({
     const params = new URLSearchParams()
     if (projectId) params.set("projectId", projectId)
     if (mode === "demo" && typeof window !== "undefined") {
-      const buildId = new URLSearchParams(window.location.search).get("buildId")
+      const qs = new URLSearchParams(window.location.search)
+      const buildId = qs.get("buildId")
       if (buildId) params.set("buildId", buildId)
+      // AI : SECURITY — forward signed landing-build access token to /api/demo/state.
+      const accessToken = qs.get("accessToken")
+      if (accessToken) params.set("accessToken", accessToken)
     }
     const q = params.toString() ? `?${params}` : ""
     const route = mode === "demo" ? API_ROUTES.demoState : API_ROUTES.state
@@ -607,10 +611,30 @@ export function StoreProvider({
       body: JSON.stringify(body),
     })
       .then(async (fresh) => {
+        const stamped = { ...fresh, lastOpenedAt: Date.now() }
         if (mode === "picker") {
+          // AI : seed session snapshot before full reload — otherwise workspace hydrates without
+          // AI : the new row, clears activeProjectId, and lands on the consumer shell.
+          const snapshot = readStateSnapshot()
+          writeStateSnapshot({
+            projects: snapshot?.projects.some((p) => p.id === fresh.id)
+              ? (snapshot?.projects ?? [stamped])
+              : [stamped, ...(snapshot?.projects ?? [])],
+            docs: snapshot?.docs ?? [],
+            runs: snapshot?.runs ?? [],
+            allRuns: snapshot?.allRuns ?? [],
+            modelOptions: snapshot?.modelOptions ?? [],
+          })
           openProject(fresh.id as ProjectId)
           return fresh
         }
+        // AI : insert before select so activeProjectId never points at a missing row (consumer-shell flash).
+        setState((prev) => {
+          if (!prev) return prev
+          if (prev.projects.some((p) => p.id === fresh.id)) return prev
+          return { ...prev, projects: [stamped, ...prev.projects] }
+        })
+        setProjectLoading(true)
         selectActiveProject(fresh.id)
         // AI : clone may ingest/rename bundled seed docs server-side — reload docs + backfilled seedDocNames.
         await refresh(fresh.id)
@@ -1243,6 +1267,18 @@ export function StoreProvider({
       <>
         {saveErrorBanner}
         <ProjectPickerContext.Provider value={pickerValue}>{children}</ProjectPickerContext.Provider>
+      </>
+    )
+  }
+
+  // AI : opening a project not yet in state — keep loading, don't flash the consumer shell.
+  if (mode === "workspace" && state && !project && (activeProjectId || projectLoading)) {
+    return (
+      <>
+        {saveErrorBanner}
+        <div className="flex h-dvh items-center justify-center bg-background">
+          <p className="font-mono text-xs text-muted-foreground">loading store…</p>
+        </div>
       </>
     )
   }

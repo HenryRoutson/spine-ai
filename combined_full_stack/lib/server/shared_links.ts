@@ -9,7 +9,6 @@ import { PUBLIC_RUN_SPEND_RESERVE_CENTS } from "@/lib/billing_config";
 import { uid } from "@/lib/id";
 import { upstashConfigured } from "@/lib/rate_limit_config";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
-import { createClient } from "@/utils/supabase/server";
 import { dataDir } from "./config";
 import { createAdminClient } from "./supabase_admin";
 import { hashContent, type Store } from "./store";
@@ -90,12 +89,9 @@ function isServerless(): boolean {
   return !!process.env.VERCEL;
 }
 
-// AI : service role bypasses RLS for cross-user runs; session/anon client covers owner + public read policies.
+// AI : SECURITY — deploy mutations require service role after RLS hardening; no user-session fallback.
 async function supabaseForSharedLinks(): Promise<SupabaseClient | null> {
-  const admin = await createAdminClient();
-  if (admin) return admin;
-  if (!getSupabasePublicEnv()) return null;
-  return createClient();
+  return createAdminClient();
 }
 
 type StoredSharedLink = SharedLinkRecord & {
@@ -416,11 +412,9 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
 
   if (!isServerless()) saveLocalLink(row);
   const db = await supabaseForSharedLinks();
-  // AI : TODO security — deploy table writes need service role after RLS hardening; drop user-session
-  // AI : upsert fallback and require SUPABASE_SERVICE_ROLE_KEY for publish/update/revoke mutations.
   if (!db) {
-    if (isServerless()) {
-      throw new Error("Supabase env required to publish shared links in production");
+    if (isServerless() || getSupabasePublicEnv()) {
+      throw new Error("SUPABASE_SERVICE_ROLE_KEY required to publish shared links");
     }
     saveLocalLink(row);
     return toPublicRecord(row);

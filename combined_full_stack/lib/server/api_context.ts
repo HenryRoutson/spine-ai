@@ -55,6 +55,8 @@ export async function enforceIpRateLimit(
   tier: RateLimitTier,
 ): Promise<NextResponse | null> {
   // AI : SECURITY — skip only in true local-dev (never Vercel), so hosted demos stay capped.
+  // AI : TODO security — if a hosted box ever runs NODE_ENV=development, landing demo tiers become
+  // AI : uncapped; gate skip on an explicit ALLOW_UNLIMITED_LANDING_DEMO instead of isLocalDevMode().
   if (
     isLocalDevMode() &&
     (tier === "landing_demo_build" || tier === "landing_demo_signup" || tier === "landing_demo_replay")

@@ -221,6 +221,7 @@ export async function getDemoState(projectId: ProjectId | null, buildId?: string
 }
 
 export async function getDemoDocText(docId: DocId): Promise<string | undefined> {
+  // AI : TODO security — scans all landing builds by doc content-hash; pair with accessToken on the route.
   const snap = await snapshot();
   const fromSnap = snap.docContents.get(docId);
   if (fromSnap !== undefined) return fromSnap;

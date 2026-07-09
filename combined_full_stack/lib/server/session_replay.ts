@@ -102,9 +102,32 @@ async function upsertReplayChunk(
   }
 }
 
+export class SessionReplayOwnershipError extends Error {
+  constructor() {
+    super("session replay ownership mismatch");
+    this.name = "SessionReplayOwnershipError";
+  }
+}
+
 export async function ingestSessionReplayChunk(input: session_replay_chunk_input): Promise<void> {
   const admin = await createAdminClient();
   if (!admin) return;
+
+  // AI : SECURITY — never let a client-supplied sessionId steal another user's replay via service-role upsert.
+  const { data: existing, error: existingError } = await admin
+    .from("session_replay_sessions")
+    .select("user_id,source")
+    .eq("id", input.sessionId)
+    .maybeSingle();
+  if (existingError && !isMissingReplayTable(existingError)) {
+    console.warn("session_replay_sessions ownership check failed:", existingError.message);
+    return;
+  }
+  if (existing) {
+    if (existing.source === "landing" || (existing.user_id && existing.user_id !== input.userId)) {
+      throw new SessionReplayOwnershipError();
+    }
+  }
 
   const { error: sessionError } = await admin.from("session_replay_sessions").upsert(
     {
@@ -136,6 +159,25 @@ export async function ingestLandingSessionReplayChunk(
 ): Promise<void> {
   const admin = await createAdminClient();
   if (!admin) return;
+
+  // AI : SECURITY — refuse to overwrite an authenticated app session with anonymous landing ingest.
+  const { data: existing, error: existingError } = await admin
+    .from("session_replay_sessions")
+    .select("user_id,source,demo_email")
+    .eq("id", input.sessionId)
+    .maybeSingle();
+  if (existingError && !isMissingReplayTable(existingError)) {
+    console.warn("landing session_replay ownership check failed:", existingError.message);
+    return;
+  }
+  if (existing) {
+    if (existing.source === "app" || existing.user_id) {
+      throw new SessionReplayOwnershipError();
+    }
+    if (existing.demo_email && existing.demo_email !== input.demoEmail) {
+      throw new SessionReplayOwnershipError();
+    }
+  }
 
   const { error: sessionError } = await admin.from("session_replay_sessions").upsert(
     {

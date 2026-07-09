@@ -45,6 +45,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   if ("validationError" in body) return jsonWithCors(req, { error: body.validationError }, HTTP.BAD_REQUEST);
 
   try {
+    // AI : TODO security — require magic-link/OTP proof of email ownership before unlock build/replay.
     const ip = clientIpForLandingDemo(req.headers);
     await saveLandingPageSignup(body.email, ip);
     return jsonWithCors(req, { ok: true });

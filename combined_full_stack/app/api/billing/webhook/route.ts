@@ -12,6 +12,8 @@ const apiLog = logger("api:billing:webhook");
 // AI : Stripe sends invoice.paid on subscription renewals — signature-verified, idempotent credit grant.
 export async function POST(req: Request) {
   // AI : SECURITY — never ack unverified payloads; fail closed when Stripe is off in hosted/prod.
+  // AI : TODO security — non-prod still returns { received: true } without signature check when Stripe
+  // AI : is disabled; prefer 503 always, or require an explicit ALLOW_UNVERIFIED_STRIPE_WEBHOOK.
   if (!STRIPE_ENABLED) {
     if (process.env.VERCEL || process.env.NODE_ENV === "production") {
       return apiError("Stripe billing is disabled", HTTP.UNAVAILABLE);

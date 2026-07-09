@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import { buildRunInputDocIds as buildRunInputDocIdsFromDocs } from "../inference-input";
 import {
   buildRunFingerprintPayload,
-  resolveRunModel,
   stableJson,
   stepCacheConfigPayload,
 } from "../run-fingerprint";
@@ -92,35 +91,16 @@ export function computeRunFingerprintForRequest(
   };
 }
 
-function inputDocIdsForRun(store: Store, project: Project, run: PipelineRun): DocId[] {
-  if (run.inputDocIds?.length) return run.inputDocIds;
-  if (!run.inputDocId) return [];
-  return buildRunInputDocIds(store, project, run.inputDocId, []);
-}
-
-// AI : newest matching ok run wins — runs are stored newest-first in the store.
-// AI : legacy runs without `fingerprint` / empty `inputDocIds` are skipped below — ignore, don't backfill.
+// AI : match only the stored fingerprint column — never recompute with current config + old
+// AI : input ids (that falsely rematched after structure/prompt edits; TODO #518).
 export function findMatchingRun(
   store: Store,
-  project: Project,
+  _project: Project,
   projectId: ProjectId,
   fingerprint: RunFingerprint,
-  model?: ModelId,
+  _model?: ModelId,
 ): PipelineRun | undefined {
-  const byColumn = store.findRunByFingerprint(projectId, fingerprint);
-  if (byColumn) return byColumn;
-
-  const migrated = fingerprintProject(project);
-  const resolvedModel = resolveRunModel(migrated, model);
-  for (const r of store.runs(projectId)) {
-    if (r.status !== "ok") continue;
-    const ids = inputDocIdsForRun(store, migrated, r);
-    // AI : legacy runs — missing inputDocIds / fingerprint; skip rather than guess.
-    if (!ids.length) continue;
-    if (computeRunFingerprint(migrated, resolvedModel, ids) === fingerprint) return r;
-    if (computeRunFingerprint(migrated, r.model, ids) === fingerprint) return r;
-  }
-  return undefined;
+  return store.findRunByFingerprint(projectId, fingerprint);
 }
 
 export { resolveRunModel } from "../run-fingerprint";
