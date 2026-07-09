@@ -8,7 +8,7 @@ const signupLog = logger("landing-signup");
 
 export type landing_signup_email = string;
 
-function hashIp(ip: string): string {
+export function hashLandingDemoIp(ip: string): string {
   const salt = process.env.LANDING_DEMO_IP_SALT;
   if (process.env.VERCEL && !salt) {
     throw new Error("LANDING_DEMO_IP_SALT required on Vercel");
@@ -29,7 +29,7 @@ export async function saveLandingPageSignup(email: landing_signup_email, ip: str
   }
 
   const { error } = await admin.from("landing_page_signups").upsert(
-    { email: normalized, ip_hash: hashIp(ip) },
+    { email: normalized, ip_hash: hashLandingDemoIp(ip) },
     { onConflict: "email", ignoreDuplicates: true },
   );
   if (error) signupLog.warn("landing_page_signups insert failed", { error: error.message });

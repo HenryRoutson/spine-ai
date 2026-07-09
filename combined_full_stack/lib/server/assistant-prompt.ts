@@ -224,6 +224,8 @@ export function buildGreenfieldPipelineUserMessage(task: string): string {
   const trimmed = task.trim();
   return `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / llm-batch / transform / custom-code / combine as needed), and output step(s). Name structures clearly. Walk the linear spine chain before returning modules — adjacent steps must match single vs list types.
 
+Also create 1–3 synthetic example inference documents (text or json only, with full realistic content) so the pipeline can be run immediately after you finish — set docs, do not leave docs null.
+
 Task: ${trimmed}`;
 }
 

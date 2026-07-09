@@ -573,11 +573,11 @@ export function DashboardView() {
                     {selectedUserId ? <span className="badge">Filtered</span> : null}
                   </div>
                   <p className="mb-4 text-sm text-muted">
-                    DOM recordings from signed-in app sessions — click a session to replay clicks, typing, and navigation.
+                    DOM recordings from signed-in app sessions and the public landing demo — click a session to replay clicks, typing, and navigation.
                   </p>
                   {replaySessions.length === 0 ? (
                     <p className="text-sm text-muted">
-                      No replay sessions yet — recordings start when users open the app while signed in.
+                      No replay sessions yet — recordings start in the app when signed in, or on the landing demo after privacy consent.
                     </p>
                   ) : (
                     <div className="grid gap-4 lg:grid-cols-[minmax(0,16rem)_1fr]">
@@ -593,7 +593,12 @@ export function DashboardView() {
                             }`}
                             onClick={() => void loadReplayEvents(s.id)}
                           >
-                            <p className="font-medium">{s.userEmail ?? s.userId.slice(0, 8)}</p>
+                            <p className="font-medium">
+                              {s.userEmail ?? (s.userId ? s.userId.slice(0, 8) : "landing")}
+                              {s.source === "landing" ? (
+                                <span className="ml-2 text-xs text-muted">landing</span>
+                              ) : null}
+                            </p>
                             <p className="text-xs text-muted">{formatWhen(s.startedAt)}</p>
                             <p className="text-xs text-muted">
                               {s.eventCount} events · {s.projectId ? `project ${s.projectId}` : "no project"}

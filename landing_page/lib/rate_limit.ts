@@ -1,23 +1,38 @@
 // AI : in-memory IP rate limit for landing page proxy — per-instance on Vercel, still blocks casual abuse.
 
 type RateLimitResult = { ok: true } | { ok: false; retryAfterSec: number };
+type rate_limit_bucket = "build" | "replay";
 
-const WINDOW_MS = 600_000;
-const MAX = 12;
+const LIMITS: Record<rate_limit_bucket, { windowMs: number; max: number }> = {
+  build: { windowMs: 600_000, max: 12 },
+  // AI : rrweb flushes every ~8s — allow a bursty minute without blocking the demo.
+  replay: { windowMs: 60_000, max: 40 },
+};
+
 const buckets = new Map<string, number[]>();
 
-export function checkLandingProxyRateLimit(ip: string): RateLimitResult {
+function checkBucket(ip: string, bucket: rate_limit_bucket): RateLimitResult {
+  const { windowMs, max } = LIMITS[bucket];
+  const key = `${bucket}:${ip}`;
   const now = Date.now();
-  const cutoff = now - WINDOW_MS;
-  const prev = buckets.get(ip) ?? [];
+  const cutoff = now - windowMs;
+  const prev = buckets.get(key) ?? [];
   const kept = prev.filter((t) => t > cutoff);
-  if (kept.length >= MAX) {
-    const retryAfterSec = Math.max(1, Math.ceil((kept[0]! + WINDOW_MS - now) / 1000));
+  if (kept.length >= max) {
+    const retryAfterSec = Math.max(1, Math.ceil((kept[0]! + windowMs - now) / 1000));
     return { ok: false, retryAfterSec };
   }
   kept.push(now);
-  buckets.set(ip, kept);
+  buckets.set(key, kept);
   return { ok: true };
+}
+
+export function checkLandingProxyRateLimit(ip: string): RateLimitResult {
+  return checkBucket(ip, "build");
+}
+
+export function checkLandingReplayProxyRateLimit(ip: string): RateLimitResult {
+  return checkBucket(ip, "replay");
 }
 
 export function clientIpFromRequest(headers: Headers): string {

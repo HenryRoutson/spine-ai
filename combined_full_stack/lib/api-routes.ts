@@ -69,6 +69,7 @@ export const API_ROUTES = {
   hostedApiProgress: (id: string) => `/api/hosted-apis/${id}/progress`,
   landingDemoBuild: "/api/landing-demo/build-pipeline",
   landingDemoSignup: "/api/landing-demo/signup",
+  landingDemoSessionReplay: "/api/landing-demo/session-replay",
   demoState: "/api/demo/state",
   demoDocText: (id: string, layer: "parser" | "vision" = "parser") =>
     `/api/demo/docs/${id}/text${layer === "vision" ? "?layer=vision" : ""}`,

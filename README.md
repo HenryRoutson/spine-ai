@@ -1,6 +1,19 @@
 # antler_vc_hackathon
 
+## Launch all (app + landing + dashboard)
 
+```bash
+npm install
+npm run dev:all
+```
+
+| Service | URL |
+|---|---|
+| App | http://localhost:3000 |
+| Landing page | http://localhost:4000 |
+| Ops dashboard | http://localhost:5050 |
+
+## Individual
 
 App :
 cd combined_full_stack

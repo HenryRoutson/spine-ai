@@ -4,9 +4,10 @@ export type session_id_string = string & { __brand: "session_id" };
 
 export type dashboard_session_replay_row = {
   id: session_id_string;
-  userId: string;
+  userId: string | null;
   userEmail: string | null;
   projectId: string | null;
+  source: "app" | "landing";
   startedAt: string;
   endedAt: string | null;
   eventCount: number;
@@ -24,7 +25,7 @@ export async function fetchDashboardSessionReplays(
 
   let query = admin
     .from("session_replay_sessions")
-    .select("id,user_id,user_email,project_id,started_at,ended_at,event_count,chunk_count")
+    .select("id,user_id,user_email,demo_email,project_id,source,started_at,ended_at,event_count,chunk_count")
     .order("started_at", { ascending: false })
     .limit(limit);
   if (userId) query = query.eq("user_id", userId);
@@ -35,16 +36,24 @@ export async function fetchDashboardSessionReplays(
     return [];
   }
 
-  return (data ?? []).map((r) => ({
-    id: r.id as session_id_string,
-    userId: r.user_id as string,
-    userEmail: (r.user_email as string | null) ?? null,
-    projectId: (r.project_id as string | null) ?? null,
-    startedAt: r.started_at as string,
-    endedAt: (r.ended_at as string | null) ?? null,
-    eventCount: Number(r.event_count ?? 0),
-    chunkCount: Number(r.chunk_count ?? 0),
-  }));
+  return (data ?? []).map((r) => {
+    const source = r.source === "landing" ? "landing" : "app";
+    const email =
+      (r.user_email as string | null) ??
+      (r.demo_email as string | null) ??
+      null;
+    return {
+      id: r.id as session_id_string,
+      userId: (r.user_id as string | null) ?? null,
+      userEmail: email,
+      projectId: (r.project_id as string | null) ?? null,
+      source,
+      startedAt: r.started_at as string,
+      endedAt: (r.ended_at as string | null) ?? null,
+      eventCount: Number(r.event_count ?? 0),
+      chunkCount: Number(r.chunk_count ?? 0),
+    };
+  });
 }
 
 export async function fetchDashboardSessionReplayEvents(

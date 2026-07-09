@@ -20,7 +20,10 @@ function unreachableError(host: SpineApiUrl): string {
   return `Couldn't reach the Spine app at ${host}. The landing page calls that server to build your pipeline — start it from combined_full_stack (npm run dev, usually port 3000). If the app runs elsewhere, set SPINE_API_URL on the landing page to match.`;
 }
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
+export const maxDuration = 300;
+export const dynamic = "force-dynamic";
+
+export async function POST(req: NextRequest): Promise<Response> {
   const ip = clientIpFromRequest(req.headers);
   const limited = checkLandingProxyRateLimit(ip);
   if (!limited.ok) {
@@ -45,10 +48,23 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       headers,
       body: await req.text(),
     });
-    const body = await res.text();
-    return new NextResponse(body, {
+    // AI : pass through NDJSON token stream (or JSON error bodies) without buffering.
+    const contentType = res.headers.get("Content-Type") ?? "application/json";
+    if (!res.body) {
+      const body = await res.text();
+      return new NextResponse(body, {
+        status: res.status,
+        headers: { "Content-Type": contentType },
+      });
+    }
+    return new Response(res.body, {
       status: res.status,
-      headers: { "Content-Type": res.headers.get("Content-Type") ?? "application/json" },
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "no-cache, no-transform",
+        // AI : disable proxy buffering so LLM token deltas reach the browser live.
+        "X-Accel-Buffering": "no",
+      },
     });
   } catch {
     return NextResponse.json({ error: unreachableError(host) }, { status: 502 });

@@ -2,12 +2,25 @@ import type { rrweb_event_json, session_id_string, session_replay_summary } from
 import { createAdminClient } from "./supabase_admin";
 import type { user_id_string } from "./require_auth";
 
+export type session_replay_source = "app" | "landing";
+
 export type session_replay_row = session_replay_summary & { userId: user_id_string };
 
 export type session_replay_chunk_input = {
   sessionId: session_id_string;
   userId: user_id_string;
   userEmail?: string | null;
+  projectId?: string | null;
+  chunkIndex: number;
+  events: rrweb_event_json[];
+  isFinal?: boolean;
+};
+
+// AI : anonymous landing-page rrweb — no auth.users row; keyed by demo email + ip hash.
+export type landing_session_replay_chunk_input = {
+  sessionId: session_id_string;
+  demoEmail: string;
+  ipHash: string;
   projectId?: string | null;
   chunkIndex: number;
   events: rrweb_event_json[];
@@ -60,6 +73,35 @@ async function refreshSessionCounts(
   await admin.from("session_replay_sessions").update(patch).eq("id", sessionId);
 }
 
+async function upsertReplayChunk(
+  admin: NonNullable<Awaited<ReturnType<typeof createAdminClient>>>,
+  sessionId: session_id_string,
+  chunkIndex: number,
+  events: rrweb_event_json[],
+  isFinal: boolean | undefined,
+  projectId: string | null | undefined,
+): Promise<void> {
+  const trimmed = trimEvents(events);
+  if (trimmed.length > 0) {
+    const { error: chunkError } = await admin.from("session_replay_chunks").upsert(
+      {
+        session_id: sessionId,
+        chunk_index: chunkIndex,
+        events: trimmed,
+      },
+      { onConflict: "session_id,chunk_index" },
+    );
+    if (chunkError && !isMissingReplayTable(chunkError)) {
+      console.warn("session_replay_chunks upsert failed:", chunkError.message);
+      return;
+    }
+  }
+
+  if (trimmed.length > 0 || isFinal) {
+    await refreshSessionCounts(admin, sessionId, { projectId, isFinal });
+  }
+}
+
 export async function ingestSessionReplayChunk(input: session_replay_chunk_input): Promise<void> {
   const admin = await createAdminClient();
   if (!admin) return;
@@ -70,6 +112,7 @@ export async function ingestSessionReplayChunk(input: session_replay_chunk_input
       user_id: input.userId,
       user_email: input.userEmail ?? null,
       project_id: input.projectId ?? null,
+      source: "app" satisfies session_replay_source,
     },
     { onConflict: "id", ignoreDuplicates: false },
   );
@@ -78,28 +121,47 @@ export async function ingestSessionReplayChunk(input: session_replay_chunk_input
     return;
   }
 
-  const events = trimEvents(input.events);
-  if (events.length > 0) {
-    const { error: chunkError } = await admin.from("session_replay_chunks").upsert(
-      {
-        session_id: input.sessionId,
-        chunk_index: input.chunkIndex,
-        events,
-      },
-      { onConflict: "session_id,chunk_index" },
-    );
-    if (chunkError && !isMissingReplayTable(chunkError)) {
-      console.warn("session_replay_chunks upsert failed:", chunkError.message);
-      return;
-    }
+  await upsertReplayChunk(
+    admin,
+    input.sessionId,
+    input.chunkIndex,
+    input.events,
+    input.isFinal,
+    input.projectId,
+  );
+}
+
+export async function ingestLandingSessionReplayChunk(
+  input: landing_session_replay_chunk_input,
+): Promise<void> {
+  const admin = await createAdminClient();
+  if (!admin) return;
+
+  const { error: sessionError } = await admin.from("session_replay_sessions").upsert(
+    {
+      id: input.sessionId,
+      user_id: null,
+      user_email: input.demoEmail,
+      demo_email: input.demoEmail,
+      ip_hash: input.ipHash,
+      project_id: input.projectId ?? null,
+      source: "landing" satisfies session_replay_source,
+    },
+    { onConflict: "id", ignoreDuplicates: false },
+  );
+  if (sessionError && !isMissingReplayTable(sessionError)) {
+    console.warn("landing session_replay_sessions upsert failed:", sessionError.message);
+    return;
   }
 
-  if (events.length > 0 || input.isFinal) {
-    await refreshSessionCounts(admin, input.sessionId, {
-      projectId: input.projectId,
-      isFinal: input.isFinal,
-    });
-  }
+  await upsertReplayChunk(
+    admin,
+    input.sessionId,
+    input.chunkIndex,
+    input.events,
+    input.isFinal,
+    input.projectId,
+  );
 }
 
 export async function listSessionReplaysForUser(

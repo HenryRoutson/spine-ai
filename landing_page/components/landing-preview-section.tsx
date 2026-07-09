@@ -6,11 +6,21 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { AppLivePreview } from "./app-live-preview";
+import { LandingLoggingTrace } from "./landing-run-trace";
+import { LandingSessionReplayRecorder } from "./landing-session-replay";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import { readDemoEmail, writeDemoEmail, type demo_email_string } from "@/lib/demo-email";
+import {
+  readLandingDemoBuildStream,
+  type LandingBuildResult,
+  type LandingRunTrace,
+  type landing_demo_stream_phase,
+} from "@/lib/landing-demo-stream";
 import {
   LandingDemoConsentBanner,
   readDemoPrivacyConsent,
@@ -19,13 +29,6 @@ import {
 
 type ApiUrl = string;
 type AppUrl = string;
-
-type BuildResult = {
-  buildId: string;
-  message: string;
-  projectName: string;
-  moduleCount: number;
-};
 
 const PLACEHOLDER_IDEAS = [
   "classify support tickets by urgency and route to the right team",
@@ -36,12 +39,12 @@ const PLACEHOLDER_IDEAS = [
   "turn product feedback dumps into themed feature requests",
 ] as const;
 
-const BUILD_STATUS = [
-  "Mapping structure models…",
-  "Drafting pipeline steps…",
-  "Wiring step inputs and outputs…",
-  "Validating the pipeline…",
-] as const;
+const PHASE_LABEL: Record<landing_demo_stream_phase, string> = {
+  thinking: "Thinking…",
+  structuring: "Drafting pipeline…",
+  retrying: "Fixing validation…",
+  running: "Running on example files…",
+};
 
 function apiReachabilityError(spineApiUrl: ApiUrl): string {
   const host = spineApiUrl.replace(/\/$/, "");
@@ -61,6 +64,11 @@ type LandingBuildContextValue = {
   building: boolean;
   error: string | null;
   buildMessage: string | null;
+  streamThinking: string;
+  streamMessage: string;
+  streamPhase: landing_demo_stream_phase | null;
+  runTrace: LandingRunTrace | null;
+  exampleDocNames: string[];
   tryBuild: () => void;
   iframeSrc: string;
 };
@@ -88,6 +96,11 @@ export function LandingBuildProvider({
   const [building, setBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [buildMessage, setBuildMessage] = useState<string | null>(null);
+  const [streamThinking, setStreamThinking] = useState("");
+  const [streamMessage, setStreamMessage] = useState("");
+  const [streamPhase, setStreamPhase] = useState<landing_demo_stream_phase | null>(null);
+  const [runTrace, setRunTrace] = useState<LandingRunTrace | null>(null);
+  const [exampleDocNames, setExampleDocNames] = useState<string[]>([]);
   const [demoPrivacyAccepted, setDemoPrivacyAccepted] = useState(false);
   const [demoConsentNudge, setDemoConsentNudge] = useState(false);
 
@@ -111,6 +124,11 @@ export function LandingBuildProvider({
     setBuilding(true);
     setError(null);
     setBuildMessage(null);
+    setStreamThinking("");
+    setStreamMessage("");
+    setStreamPhase("thinking");
+    setRunTrace(null);
+    setExampleDocNames([]);
 
     try {
       const res = await fetch(BUILD_PIPELINE_PATH, {
@@ -118,27 +136,41 @@ export function LandingBuildProvider({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ task: trimmed, email: demoEmail }),
       });
-      let data: (BuildResult & { error?: string }) | null = null;
-      try {
-        data = (await res.json()) as BuildResult & { error?: string };
-      } catch {
-        if (!res.ok) {
+
+      const contentType = res.headers.get("Content-Type") ?? "";
+      // AI : pre-stream JSON errors (rate limit, validation) vs NDJSON token stream.
+      if (!res.ok && !contentType.includes("ndjson")) {
+        let data: { error?: string } | null = null;
+        try {
+          data = (await res.json()) as { error?: string };
+        } catch {
           setError(res.status === 502 ? apiReachabilityError(spineApiUrl) : "Could not build pipeline — try again shortly.");
           return;
         }
-      }
-      if (!res.ok) {
         setError(data?.error ?? "Could not build pipeline — try again shortly.");
         return;
       }
-      if (!data?.buildId) {
-        setError("Could not build pipeline — try again shortly.");
-        return;
-      }
+
+      const data: LandingBuildResult = await readLandingDemoBuildStream(res, {
+        onThinkingDelta: (delta) => setStreamThinking((prev) => prev + delta),
+        onThinkingDone: (text) => setStreamThinking(text),
+        onMessageDelta: (delta) => setStreamMessage((prev) => prev + delta),
+        onPhase: (phase) => setStreamPhase(phase),
+      });
+
       setBuildId(data.buildId);
       setBuildMessage(data.message);
-    } catch {
-      setError(apiReachabilityError(spineApiUrl));
+      setStreamMessage(data.message);
+      setExampleDocNames(data.exampleDocNames ?? data.run?.exampleDocNames ?? []);
+      setRunTrace(data.run ?? null);
+      setStreamPhase(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      setError(
+        message && !message.includes("Failed to fetch")
+          ? message
+          : apiReachabilityError(spineApiUrl),
+      );
     } finally {
       setBuilding(false);
     }
@@ -190,9 +222,30 @@ export function LandingBuildProvider({
 
   return (
     <LandingBuildContext.Provider
-      value={{ demoEmail, emailRegistered, registerEmail, task, setTask, building, error, buildMessage, tryBuild, iframeSrc }}
+      value={{
+        demoEmail,
+        emailRegistered,
+        registerEmail,
+        task,
+        setTask,
+        building,
+        error,
+        buildMessage,
+        streamThinking,
+        streamMessage,
+        streamPhase,
+        runTrace,
+        exampleDocNames,
+        tryBuild,
+        iframeSrc,
+      }}
     >
       {children}
+      <LandingSessionReplayRecorder
+        email={demoEmail}
+        enabled={emailRegistered && demoPrivacyAccepted}
+        buildId={buildId}
+      />
       <LandingDemoConsentBanner
         visible={emailRegistered && !demoPrivacyAccepted}
         nudge={demoConsentNudge}
@@ -263,9 +316,8 @@ export function LandingEmailGate() {
 }
 
 export function LandingTaskPrompt() {
-  const { emailRegistered, task, setTask, building, error, buildMessage, tryBuild } = useLandingBuild();
+  const { emailRegistered, task, setTask, building, error, tryBuild } = useLandingBuild();
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
-  const [buildStatusIdx, setBuildStatusIdx] = useState(0);
 
   useEffect(() => {
     if (!emailRegistered || task.trim() || building) return;
@@ -274,17 +326,6 @@ export function LandingTaskPrompt() {
     }, 3200);
     return () => clearInterval(id);
   }, [emailRegistered, task, building]);
-
-  useEffect(() => {
-    if (!emailRegistered || !building) {
-      setBuildStatusIdx(0);
-      return;
-    }
-    const id = setInterval(() => {
-      setBuildStatusIdx((i) => (i + 1) % BUILD_STATUS.length);
-    }, 1800);
-    return () => clearInterval(id);
-  }, [emailRegistered, building]);
 
   if (!emailRegistered) return null;
 
@@ -319,28 +360,96 @@ export function LandingTaskPrompt() {
           {building ? (
             <span className="inline-flex items-center gap-2">
               <span className="demo-spinner border-primary-foreground border-t-transparent" aria-hidden />
-              Building...
+              Building &amp; running...
             </span>
           ) : (
             "Generate"
           )}
         </button>
       </div>
-      {building ? (
-        <p className="landing-build-status mt-3 font-mono text-[10px] uppercase tracking-wider text-accent">
-          {BUILD_STATUS[buildStatusIdx]}
-        </p>
-      ) : null}
       {error ? <p className="mt-3 text-sm leading-relaxed text-red-400">{error}</p> : null}
-      {!building && buildMessage ? (
-        <p className="mt-3 text-sm leading-relaxed text-muted">{buildMessage}</p>
-      ) : null}
-      {!building && !buildMessage && !error ? (
+      {!building && !error ? (
         <p className="mt-4 text-sm leading-relaxed text-muted-dim">
-          Describe a workflow — we&apos;ll generate a pipeline you can explore in the preview below.
+          Describe a workflow — we&apos;ll build a pipeline, run it on example files, and show the full step trace below.
         </p>
       ) : null}
     </div>
+  );
+}
+
+// AI : streamed LLM output sits above the live app preview — grows page length (no nested scroll).
+export function LandingLlmStreamSection() {
+  const {
+    emailRegistered,
+    building,
+    buildMessage,
+    streamThinking,
+    streamMessage,
+    streamPhase,
+  } = useLandingBuild();
+  const streamEndRef = useRef<HTMLDivElement>(null);
+
+  // AI : jump to the stream section when Generate starts, then follow tokens as they arrive.
+  useEffect(() => {
+    if (!building) return;
+    document.getElementById("llm-stream")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [building]);
+
+  useEffect(() => {
+    if (!building) return;
+    if (!streamThinking && !streamMessage) return;
+    streamEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [building, streamThinking, streamMessage]);
+
+  if (!emailRegistered) return null;
+
+  const phaseLabel = streamPhase ? PHASE_LABEL[streamPhase] : null;
+  const finalMessage = !building ? streamMessage || buildMessage : null;
+  const hasContent = Boolean(streamThinking || streamMessage || finalMessage);
+  if (!building && !hasContent) return null;
+
+  return (
+    <section
+      id="llm-stream"
+      className="mx-auto max-w-[1200px] scroll-mt-24 border-x border-b border-line px-8 py-8 sm:px-12 sm:py-10"
+    >
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-normal tracking-tight sm:text-3xl">Agent output</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
+            Live tokens from the pipeline builder — before the app preview updates.
+          </p>
+        </div>
+        {building && phaseLabel ? (
+          <p className="landing-build-status font-mono text-[10px] uppercase tracking-wider text-accent">
+            {phaseLabel}
+          </p>
+        ) : null}
+      </div>
+      <div className="landing-stream mt-5 rounded-[10px] border border-line bg-panel px-4 py-4" aria-live="polite">
+        {building && !hasContent ? (
+          <p className="font-mono text-[13px] leading-relaxed text-muted-dim">
+            Waiting for the first tokens…
+            <span className="landing-stream-caret" aria-hidden />
+          </p>
+        ) : null}
+        {streamThinking ? (
+          <pre className="landing-stream-tokens landing-stream-thinking whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-muted-dim">
+            {streamThinking}
+            {building && !streamMessage ? <span className="landing-stream-caret" aria-hidden /> : null}
+          </pre>
+        ) : null}
+        {(streamMessage || finalMessage) ? (
+          <pre
+            className={`landing-stream-tokens landing-stream-message whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-muted${streamThinking ? " mt-4" : ""}`}
+          >
+            {streamMessage || finalMessage}
+            {building ? <span className="landing-stream-caret" aria-hidden /> : null}
+          </pre>
+        ) : null}
+        <div ref={streamEndRef} />
+      </div>
+    </section>
   );
 }
 
@@ -356,4 +465,101 @@ export function LandingAppPreview() {
     );
   }
   return <AppLivePreview src={iframeSrc} />;
+}
+
+// AI : full diagnostic dump — never truncate; copy button for paste into issues/debug.
+function LandingRunErrorPanel({ error }: { error: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const onCopy = useCallback(async () => {
+    await copyTextToClipboard(error);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 2000);
+  }, [error]);
+
+  return (
+    <div className="landing-run-error mt-4 overflow-hidden rounded-[10px] border border-red-500/40 bg-panel">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-red-500/30 px-4 py-3">
+        <p className="font-mono text-[10px] uppercase tracking-wider text-red-400">
+          Run error · full diagnostic
+        </p>
+        <button
+          type="button"
+          className="rounded-md border border-line bg-black px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-foreground transition-colors hover:border-accent-dim hover:text-accent"
+          onClick={() => void onCopy()}
+        >
+          {copied ? "Copied" : "Copy error"}
+        </button>
+      </div>
+      {/* AI : no nested scroller — diagnostic grows the landing page like the step trace */}
+      <pre className="landing-run-error-body whitespace-pre-wrap break-words px-4 py-4 font-mono text-[12px] leading-relaxed text-red-300">
+        {error}
+      </pre>
+    </div>
+  );
+}
+
+// AI : Logging-shaped step trace + pipeline view — page length, not a nested iframe scroller.
+export function LandingRunTraceSection() {
+  const { emailRegistered, building, runTrace, exampleDocNames } = useLandingBuild();
+
+  if (!emailRegistered) return null;
+  if (!building && !runTrace) return null;
+
+  const statusLabel = runTrace?.error
+    ? "error"
+    : runTrace?.status ?? (building ? "running" : "idle");
+  const hasStructuredTrace = !!(runTrace?.steps?.length || runTrace?.modules?.length);
+
+  return (
+    <section
+      id="run-trace"
+      className="mx-auto max-w-[1200px] scroll-mt-24 border-x border-b border-line px-8 py-10 sm:px-12 sm:py-12"
+    >
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-normal tracking-tight sm:text-3xl">Pipeline run trace</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted">
+            Same step logging as the app — expanded on the page above the live preview, not inside a nested scroller.
+          </p>
+        </div>
+        {runTrace ? (
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-dim">
+            {statusLabel} · {runTrace.totalMs}ms · {runTrace.billedCents.toFixed(2)}c
+          </p>
+        ) : null}
+      </div>
+
+      {exampleDocNames.length > 0 ? (
+        <p className="mt-4 font-mono text-[11px] text-muted">
+          example files: {exampleDocNames.join(" · ")}
+        </p>
+      ) : null}
+
+      {runTrace?.error ? <LandingRunErrorPanel error={runTrace.error} /> : null}
+
+      {building && !runTrace ? (
+        <div className="mt-6 flex min-h-[280px] items-center justify-center rounded-[10px] border border-line bg-panel">
+          <p className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-accent">
+            <span className="demo-spinner border-accent border-t-transparent" aria-hidden />
+            Building pipeline and running example files…
+          </p>
+        </div>
+      ) : null}
+
+      {runTrace && hasStructuredTrace ? <LandingLoggingTrace run={runTrace} /> : null}
+
+      {/* AI : legacy HTML fallback only when structured steps are missing */}
+      {runTrace?.traceHtml && !hasStructuredTrace ? (
+        <div className="landing-run-trace mt-6 overflow-visible rounded-[10px] border border-line bg-white">
+          <iframe
+            title="Pipeline run step trace"
+            className="landing-run-trace-frame w-full border-0 bg-white"
+            srcDoc={runTrace.traceHtml}
+            sandbox=""
+          />
+        </div>
+      ) : null}
+    </section>
+  );
 }

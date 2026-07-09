@@ -5,6 +5,8 @@ import {
   LandingAppPreview,
   LandingBuildProvider,
   LandingEmailGate,
+  LandingLlmStreamSection,
+  LandingRunTraceSection,
   LandingTaskPrompt,
 } from "../components/landing-preview-section";
 import { LegalFooterLinks } from "@/lib/legal/chrome";
@@ -113,6 +115,12 @@ export default function Home() {
             <LandingTaskPrompt />
           </div>
         </section>
+
+        {/* AI : streamed agent tokens — above the live app preview */}
+        <LandingLlmStreamSection />
+
+        {/* AI : Logging-shaped step trace + pipeline view — above live preview, no nested scroll */}
+        <LandingRunTraceSection />
 
         {/* live preview — full app, runs disabled */}
         <section className="mx-auto max-w-[1200px] border-x border-b border-line px-8 py-10 sm:px-12 sm:py-12">

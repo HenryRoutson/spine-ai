@@ -531,3 +531,13 @@ export const sessionReplayChunkBodySchema = z.object({
   projectId: z.string().trim().max(128).optional(),
   isFinal: z.boolean().optional(),
 });
+
+// AI : anonymous landing rrweb ingest — email must already be in landing_page_signups.
+export const landingSessionReplayChunkBodySchema = z.object({
+  sessionId: z.string().uuid(),
+  email: z.string().trim().email().max(320),
+  chunkIndex: z.number().int().nonnegative().max(10_000),
+  events: z.array(z.record(z.string(), z.unknown())).max(200).optional(),
+  projectId: z.string().trim().max(128).optional(),
+  isFinal: z.boolean().optional(),
+});

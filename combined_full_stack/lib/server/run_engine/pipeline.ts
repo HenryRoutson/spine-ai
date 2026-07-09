@@ -210,7 +210,8 @@ export async function resumeRunPipeline(
   clientStep: ClientStepResume,
   opts: Omit<RunOptions, "model"> & { model?: ModelId; clientLogs?: import("@/lib/run-types").JobLogEntry[] } = {},
 ): Promise<PipelineRun> {
-  const rawProject = store.project(checkpoint.projectId);
+  // AI : landing ephemeral store uses projectOverride — same as runPipeline.
+  const rawProject = opts.projectOverride ?? store.project(checkpoint.projectId);
   if (!rawProject) throw new Error(unknownProject(checkpoint.projectId));
   const project = migrateProjectModules(rawProject);
 
@@ -379,6 +380,7 @@ export async function resumeRunPipeline(
       inputDocId: checkpoint.inputDocId,
       inputDocIds: fingerprintInputDocIds,
       fingerprint,
+      ...opts.runMeta,
     };
     if (persist) {
       persistArtifacts(checkpoint.runId, checkpoint.inputDocId, store, artifacts, project.modules, project.models);
@@ -424,6 +426,7 @@ export async function resumeRunPipeline(
     inputDocId: checkpoint.inputDocId,
     inputDocIds: fingerprintInputDocIds,
     fingerprint,
+    ...opts.runMeta,
   };
 
   writeLive(-1);

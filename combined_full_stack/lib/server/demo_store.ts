@@ -17,7 +17,9 @@ type DemoSnapshot = {
   runs: PipelineRun[];
 };
 
-type LandingBuildCache = Map<ProjectId, Project>;
+type LandingBuildDoc = { ref: DocRef; content: string };
+type LandingBuildBundle = { project: Project; docs: LandingBuildDoc[] };
+type LandingBuildCache = Map<ProjectId, LandingBuildBundle>;
 
 let cached: DemoSnapshot | null = null;
 const LANDING_BUILD_CAP = 40;
@@ -61,13 +63,20 @@ function trimLandingBuildFiles(): void {
   }
 }
 
-export function putLandingBuild(project: Project): void {
+type LandingBuildDiskPayload = {
+  project: Project;
+  docs?: { ref: DocRef; content: string }[];
+};
+
+export function putLandingBuild(project: Project, docs: LandingBuildDoc[] = []): void {
   const migrated = migrateProjectModules(structuredClone(project));
-  landingBuildCache().set(project.id, migrated);
+  const bundle: LandingBuildBundle = { project: migrated, docs: structuredClone(docs) };
+  landingBuildCache().set(project.id, bundle);
 
   const dir = landingBuildsDir();
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(landingBuildFile(project.id), JSON.stringify(migrated));
+  const payload: LandingBuildDiskPayload = { project: migrated, docs: bundle.docs };
+  writeFileSync(landingBuildFile(project.id), JSON.stringify(payload));
 
   const cache = landingBuildCache();
   if (cache.size > LANDING_BUILD_CAP) {
@@ -81,7 +90,21 @@ export function putLandingBuild(project: Project): void {
   trimLandingBuildFiles();
 }
 
-function resolveLandingBuild(buildId: string | null | undefined): Project | null {
+function parseLandingBuildDisk(raw: unknown): LandingBuildBundle | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as LandingBuildDiskPayload & Project;
+  // AI : legacy disk files were bare Project JSON — still load those.
+  if ("id" in obj && "modules" in obj && !("project" in obj)) {
+    return { project: migrateProjectModules(obj as Project), docs: [] };
+  }
+  if (!obj.project) return null;
+  return {
+    project: migrateProjectModules(obj.project),
+    docs: (obj.docs ?? []).map((d) => ({ ref: d.ref, content: d.content })),
+  };
+}
+
+function resolveLandingBuildBundle(buildId: string | null | undefined): LandingBuildBundle | null {
   if (!buildId || !isValidLandingBuildId(buildId)) return null;
   const id = buildId as ProjectId;
   const cached = landingBuildCache().get(id);
@@ -90,12 +113,17 @@ function resolveLandingBuild(buildId: string | null | undefined): Project | null
   const file = landingBuildFile(id);
   if (!existsSync(file)) return null;
   try {
-    const project = migrateProjectModules(JSON.parse(readFileSync(file, "utf8")) as Project);
-    landingBuildCache().set(id, project);
-    return project;
+    const bundle = parseLandingBuildDisk(JSON.parse(readFileSync(file, "utf8")));
+    if (!bundle) return null;
+    landingBuildCache().set(id, bundle);
+    return bundle;
   } catch {
     return null;
   }
+}
+
+export function getLandingBuildBundle(buildId: string): LandingBuildBundle | null {
+  return resolveLandingBuildBundle(buildId);
 }
 
 function ingestDemoDoc(
@@ -168,19 +196,23 @@ async function snapshot(): Promise<DemoSnapshot> {
 export async function getDemoState(projectId: ProjectId | null, buildId?: string | null) {
   const snap = await snapshot();
   let projects = snap.projects.map(migrateProjectModules);
-  const built = resolveLandingBuild(buildId);
-  if (built) {
-    projects = [built, ...projects.filter((p) => p.id !== built.id)];
-    projectId = built.id;
+  let docs = snap.docs;
+  const bundle = resolveLandingBuildBundle(buildId);
+  if (bundle) {
+    projects = [bundle.project, ...projects.filter((p) => p.id !== bundle.project.id)];
+    projectId = bundle.project.id;
+    const builtDocs = bundle.docs.map((d) => d.ref);
+    const builtIds = new Set(builtDocs.map((d) => d.id));
+    docs = [...builtDocs, ...snap.docs.filter((d) => !builtIds.has(d.id))];
   }
   const modelOptions = toPublicModelOptions(await getModelOptions());
-  const activeCandidate = built?.id ?? projectId ?? DEMO_DEFAULT_PROJECT_ID;
+  const activeCandidate = bundle?.project.id ?? projectId ?? DEMO_DEFAULT_PROJECT_ID;
   const activeProjectId = projects.some((p) => p.id === activeCandidate)
     ? activeCandidate
     : DEMO_DEFAULT_PROJECT_ID;
   return {
     projects,
-    docs: snap.docs,
+    docs,
     runs: [],
     allRuns: [],
     modelOptions,
@@ -190,5 +222,24 @@ export async function getDemoState(projectId: ProjectId | null, buildId?: string
 
 export async function getDemoDocText(docId: DocId): Promise<string | undefined> {
   const snap = await snapshot();
-  return snap.docContents.get(docId);
+  const fromSnap = snap.docContents.get(docId);
+  if (fromSnap !== undefined) return fromSnap;
+  for (const bundle of landingBuildCache().values()) {
+    const hit = bundle.docs.find((d) => d.ref.id === docId);
+    if (hit) return hit.content;
+  }
+  // AI : cold cache — scan recent landing build files for this doc id.
+  const dir = landingBuildsDir();
+  if (!existsSync(dir)) return undefined;
+  for (const name of readdirSync(dir)) {
+    if (!name.endsWith(".json")) continue;
+    try {
+      const bundle = parseLandingBuildDisk(JSON.parse(readFileSync(join(dir, name), "utf8")));
+      const hit = bundle?.docs.find((d) => d.ref.id === docId);
+      if (hit) return hit.content;
+    } catch {
+      continue;
+    }
+  }
+  return undefined;
 }

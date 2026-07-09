@@ -16,6 +16,7 @@ export type RateLimitTier =
   | "hosted_api"
   | "landing_demo_build"
   | "landing_demo_signup"
+  | "landing_demo_replay"
   | "shared_upload";
 export type RateLimitKey = string & { __brand: "RateLimitKey" };
 
@@ -41,6 +42,8 @@ export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number 
   landing_demo_build: { windowMs: 600_000, max: 12 },
   // AI : landing email signup — low volume gate before demo use.
   landing_demo_signup: { windowMs: 600_000, max: 20 },
+  // AI : landing rrweb chunk flush — frequent small posts.
+  landing_demo_replay: { windowMs: 60_000, max: 40 },
   // AI : per-link session uploads — caps storage exhaustion on public shared links.
   shared_upload: { windowMs: 600_000, max: 10 },
 };
