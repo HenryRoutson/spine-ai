@@ -3,6 +3,8 @@
 // AI : app-Logging-shaped step trace + pipeline view — grows the landing page (no nested scrollers).
 
 import { useState } from "react";
+import { JsonViewerEmbed } from "@shared/json-viewer/embed";
+import { isJsonText } from "@shared/json-viewer/is-json-text";
 import type {
   LandingPipelineModuleTrace,
   LandingRunStepTrace,
@@ -59,8 +61,11 @@ function LandingIoBlock({
   body: string;
   error?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  // AI : spreadsheet / I/O starts expanded so demo runs show table rows without an extra click.
+  const [open, setOpen] = useState(true);
   if (!body && !error) return null;
+  // AI : structured step I/O → same spreadsheet table viewer as app Logging (never dump raw JSON).
+  const jsonBody = !error && isJsonText(body) ? body.trim() : null;
   return (
     <div className="mt-2 rounded-md border border-line bg-black/40">
       <button
@@ -70,13 +75,24 @@ function LandingIoBlock({
       >
         <span className="font-mono text-[10px] uppercase tracking-wider text-muted-dim">
           {title} · {qualifier}
+          {jsonBody ? " · table" : ""}
         </span>
         <span className="font-mono text-[10px] text-muted-dim">{open ? "hide" : "show"}</span>
       </button>
       {!open ? (
         <p className="border-t border-line px-3 py-2 font-mono text-[11px] leading-relaxed text-muted">
-          {compactPreview(body)}
+          {jsonBody
+            ? "Spreadsheet view — expand to browse rows"
+            : compactPreview(body)}
         </p>
+      ) : jsonBody ? (
+        <div className="h-[min(22rem,55vh)] overflow-hidden border-t border-line">
+          <JsonViewerEmbed
+            json={jsonBody}
+            defaultView="table"
+            className="h-full w-full border-0 bg-transparent"
+          />
+        </div>
       ) : (
         <pre
           className={`max-h-none overflow-visible whitespace-pre-wrap break-words border-t border-line px-3 py-2 font-mono text-[11px] leading-relaxed ${

@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "npm run sync:shared && next dev",
+    "build": "npm run sync:shared && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sync:shared": "bash ../scripts/sync-shared.sh"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.1",

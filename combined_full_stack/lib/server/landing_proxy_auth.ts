@@ -1,7 +1,10 @@
 import { clientIpFromHeaders } from "@/lib/rate_limit";
+import {
+  LANDING_PROXY_CLIENT_IP_HEADER,
+  LANDING_PROXY_SECRET_HEADER,
+} from "@shared/landing-proxy/headers";
 
-export const LANDING_PROXY_CLIENT_IP_HEADER = "x-spine-client-ip";
-export const LANDING_PROXY_SECRET_HEADER = "x-spine-proxy-secret";
+export { LANDING_PROXY_CLIENT_IP_HEADER, LANDING_PROXY_SECRET_HEADER };
 
 function landingProxySecret(): string | undefined {
   return process.env.LANDING_DEMO_PROXY_SECRET?.trim();

@@ -10,7 +10,7 @@ import {
   LandingTaskPrompt,
 } from "../components/landing-preview-section";
 import { LegalFooterLinks } from "@/lib/legal/chrome";
-import { LEGAL } from "@/lib/legal/site";
+import { LEGAL } from "@shared/legal/site";
 
 type AppLoginUrl = string;
 type AppUrl = string;

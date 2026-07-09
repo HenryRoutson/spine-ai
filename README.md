@@ -13,6 +13,11 @@ npm run dev:all
 | Landing page | http://localhost:4000 |
 | Ops dashboard | http://localhost:5050 |
 
+## Shared code
+
+Canonical modules live in `shared/` (legal, landing-demo stream, json-viewer, clipboard, session-replay types, …).  
+`npm run sync:shared` copies them into each app’s `lib/shared/` (and `public/json-viewer.html`). Dev/build scripts run this automatically — edit `shared/`, not the copies.
+
 ## Individual
 
 App :

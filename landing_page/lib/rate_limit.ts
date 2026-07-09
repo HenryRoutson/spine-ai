@@ -1,4 +1,7 @@
 // AI : in-memory IP rate limit for landing page proxy — per-instance on Vercel, still blocks casual abuse.
+// AI : limits mirror combined_full_stack RATE_LIMITS.landing_demo_* tiers.
+
+import { clientIpFromHeaders } from "@shared/rate-limit/client-ip";
 
 type RateLimitResult = { ok: true } | { ok: false; retryAfterSec: number };
 type rate_limit_bucket = "build" | "replay";
@@ -36,14 +39,5 @@ export function checkLandingReplayProxyRateLimit(ip: string): RateLimitResult {
 }
 
 export function clientIpFromRequest(headers: Headers): string {
-  if (process.env.VERCEL) {
-    const vercelIp = headers.get("x-vercel-forwarded-for")?.trim();
-    if (vercelIp) return vercelIp;
-  }
-  const forwarded = headers.get("x-forwarded-for");
-  if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  return headers.get("x-real-ip")?.trim() ?? "127.0.0.1";
+  return clientIpFromHeaders(headers, "127.0.0.1");
 }

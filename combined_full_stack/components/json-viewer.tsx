@@ -1,16 +1,15 @@
 "use client"
 
-// AI: embeds json-viewer.html in an iframe in ?embed mode and sends JSON via postMessage.
-// AI: re-sends whenever the json prop changes so the viewer always reflects current data.
+// AI : thin app wrapper — shared embed + localStorage prefs from lib/json-viewer.
 
-import { useEffect, useRef } from "react"
-import { cn } from "@/lib/utils"
+import { JsonViewerEmbed as SharedJsonViewerEmbed } from "@shared/json-viewer/embed"
 import {
   JSON_VIEWER_SETTINGS_CHANGED_EVENT,
   readJsonViewerDefaultView,
   readJsonViewerSyntaxTheme,
   type JsonViewerHumanViewId,
 } from "@/lib/json-viewer"
+import { cn } from "@/lib/utils"
 
 interface JsonViewerEmbedProps {
   json: string
@@ -20,49 +19,14 @@ interface JsonViewerEmbedProps {
 }
 
 export function JsonViewerEmbed({ json, className, defaultView }: JsonViewerEmbedProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-
-  // AI : same-origin only — avoids leaking JSON to arbitrary embedders via postMessage("*").
-  function post(payload: object) {
-    const target = iframeRef.current?.contentWindow
-    if (!target) return
-    target.postMessage(payload, window.location.origin)
-  }
-
-  const resolvedDefaultView = defaultView ?? readJsonViewerDefaultView()
-
-  function sendLoad() {
-    post({
-      type: "json-viewer:load",
-      json,
-      defaultView: resolvedDefaultView,
-      syntaxTheme: readJsonViewerSyntaxTheme(),
-    })
-  }
-
-  useEffect(() => {
-    sendLoad()
-  }, [json, resolvedDefaultView]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    const onSettings = () => {
-      post({
-        type: "json-viewer:settings",
-        defaultView: resolvedDefaultView,
-        syntaxTheme: readJsonViewerSyntaxTheme(),
-      })
-    }
-    window.addEventListener(JSON_VIEWER_SETTINGS_CHANGED_EVENT, onSettings)
-    return () => window.removeEventListener(JSON_VIEWER_SETTINGS_CHANGED_EVENT, onSettings)
-  }, [])
-
   return (
-    <iframe
-      ref={iframeRef}
-      src="/json-viewer.html?embed"
+    <SharedJsonViewerEmbed
+      json={json}
       className={cn("w-full border-0 bg-background", className)}
-      title="JSON Viewer"
-      onLoad={sendLoad}
+      defaultView={defaultView}
+      onSettingsEventName={JSON_VIEWER_SETTINGS_CHANGED_EVENT}
+      readDefaultView={readJsonViewerDefaultView}
+      readSyntaxTheme={readJsonViewerSyntaxTheme}
     />
   )
 }

@@ -156,6 +156,7 @@ export function DashboardView() {
   const [selectedReplayId, setSelectedReplayId] = useState<string>("");
   const [replayEvents, setReplayEvents] = useState<Record<string, unknown>[]>([]);
   const [replayBusy, setReplayBusy] = useState(false);
+  const [replayError, setReplayError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setBusy(true);
@@ -194,8 +195,10 @@ export function DashboardView() {
       const body = (await res.json()) as { sessions?: dashboard_session_replay_row[]; error?: string };
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       setReplaySessions(body.sessions ?? []);
-    } catch {
+      setReplayError(null);
+    } catch (e) {
       setReplaySessions([]);
+      setReplayError(e instanceof Error ? e.message : "Failed to load replay sessions");
     }
   }, [selectedUserId]);
 
@@ -575,6 +578,9 @@ export function DashboardView() {
                   <p className="mb-4 text-sm text-muted">
                     DOM recordings from signed-in app sessions and the public landing demo — click a session to replay clicks, typing, and navigation.
                   </p>
+                  {replayError ? (
+                    <p className="mb-3 text-sm text-red-500">Replay load failed: {replayError}</p>
+                  ) : null}
                   {replaySessions.length === 0 ? (
                     <p className="text-sm text-muted">
                       No replay sessions yet — recordings start in the app when signed in, or on the landing demo after privacy consent.

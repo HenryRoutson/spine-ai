@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "ensure-monaco": "node scripts/ensure_monaco_public.mjs",
-    "dev": "npm run ensure-monaco && next dev",
-    "build": "npm run ensure-monaco && next build",
+    "sync:shared": "bash ../scripts/sync-shared.sh",
+    "dev": "npm run sync:shared && npm run ensure-monaco && next dev",
+    "build": "npm run sync:shared && npm run ensure-monaco && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "typecheck-project": "tsx scripts/typecheck_project.ts",

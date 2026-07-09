@@ -36,48 +36,26 @@ import type {
 } from "@/lib/server/doc_text_cache";
 import type { JobLogEntry } from "@/lib/run-types";
 import { JobLogLevel } from "@/lib/run-types";
+import type {
+  LandingPipelineModuleTrace,
+  LandingRunStepTrace,
+  LandingRunTrace as LandingRunTraceWire,
+} from "@shared/landing-demo/stream";
 
 export type LandingExampleDoc = { ref: DocRef; content: string };
 
-// AI : wire shape for landing Logging UI — mirrors app step rows without shipping full RunStep blobs.
-export type LandingRunStepTrace = {
-  moduleId: string;
-  kind: string;
-  label: string;
-  model?: string;
-  status: string;
-  ms: number;
-  costCents: number;
-  savedCostCents?: number;
-  inputPreview: string;
-  outputPreview: string;
-  outputJson?: string;
-};
+export type { LandingPipelineModuleTrace, LandingRunStepTrace };
 
-// AI : pipeline-at-run-time nodes for the landing pipeline view (page length, not nested scroll).
-export type LandingPipelineModuleTrace = {
-  id: string;
-  kind: string;
-  label: string;
-  note: string;
-  model?: string;
-  prompt?: string;
-};
-
-export type LandingRunTrace = {
+// AI : server run trace — shared wire shape + branded ids / diagnostic fields for persistence.
+export type LandingRunTrace = LandingRunTraceWire & {
   runId: RunId;
   status: PipelineRun["status"];
-  totalMs: number;
-  billedCents: number;
   savedCents: number;
   model: string;
-  exampleDocNames: string[];
   steps: LandingRunStepTrace[];
   modules: LandingPipelineModuleTrace[];
   // AI : kept for downloads/debug; landing UI renders structured steps instead of the HTML iframe.
   traceHtml: string;
-  // AI : full diagnostic dump for the landing page — keep as long as possible for copy/debug.
-  error?: string;
   // AI : structured twin of error — persisted to landing_page_calls.diagnostic_json.
   diagnosticJson?: LandingRunDiagnostic["json"];
   diagnosticSummary?: string;

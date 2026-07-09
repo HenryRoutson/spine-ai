@@ -519,7 +519,11 @@ export function Logging() {
                           >
                             {step.outputJson ? (
                               <div className="-m-2 mt-0 h-[min(12rem,28vh)] overflow-hidden">
-                                <JsonViewerEmbed json={step.outputJson} className="h-full" />
+                                <JsonViewerEmbed
+                                  json={step.outputJson}
+                                  defaultView="table"
+                                  className="h-full"
+                                />
                               </div>
                             ) : step.status !== "error" ? (
                               step.outputPreview

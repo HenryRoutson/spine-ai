@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { LegalDocument } from "@/lib/legal/legal-document"
-import { ACCESSIBILITY_SECTIONS } from "@/lib/legal/content"
+import { ACCESSIBILITY_SECTIONS } from "@shared/legal/content"
 import { LegalPageShell } from "@/components/legal-page-shell"
 
 export const metadata = {

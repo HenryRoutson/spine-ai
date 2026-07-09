@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { LEGAL, LEGAL_ROUTES } from "@/lib/legal/site";
+import { LEGAL, LEGAL_ROUTES } from "@shared/legal/site";
 
 const STORAGE_KEY = `landing_demo_privacy_${LEGAL.policyVersion}`;
 
