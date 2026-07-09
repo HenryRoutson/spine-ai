@@ -1,4 +1,4 @@
-// AI : minimal API — sign-in, activity ingest, timeline fetch for demo + any React client.
+// AI : local dev only — JSON file storage + demo cookie auth. Production uses combined_full_stack + Supabase.
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";

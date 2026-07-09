@@ -8,11 +8,15 @@ import { buildSelector, elementLabel, inputFieldLabel } from "./dom_utils";
 
 type pending_event = activity_event_input;
 
+export type activity_auth_mode = "demo" | "session";
+
 export type activity_recorder_options = {
   userId: string | null;
   userEmail?: string | null;
   projectId?: string;
   postUrl: string;
+  /** demo = include userId in JSON body (local server); session = cookie auth only (combined_full_stack) */
+  authMode?: activity_auth_mode;
   flushMs?: number;
   maxQueue?: number;
   onNavigate?: (window: string) => void;
@@ -34,14 +38,20 @@ type pending_input_snapshot = {
 
 async function postBatch(
   postUrl: string,
+  authMode: activity_auth_mode,
   userId: string,
   userEmail: string | null | undefined,
   events: pending_event[],
 ): Promise<void> {
+  const body =
+    authMode === "session"
+      ? { events }
+      : { userId, userEmail, events };
   await fetch(postUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ userId, userEmail, events }),
+    credentials: authMode === "session" ? "include" : "same-origin",
+    body: JSON.stringify(body),
   }).catch(() => {});
 }
 
@@ -52,6 +62,7 @@ export function useActivityRecorder(options: activity_recorder_options): void {
     userEmail,
     projectId,
     postUrl,
+    authMode = "demo",
     flushMs = DEFAULT_FLUSH_MS,
     maxQueue = DEFAULT_MAX_QUEUE,
     activeWindow,
@@ -111,7 +122,7 @@ export function useActivityRecorder(options: activity_recorder_options): void {
     flushAllPendingInputs();
     const batch = queueRef.current.splice(0, maxQueue);
     if (batch.length === 0) return;
-    void postBatch(postUrl, uid, optsRef.current.userEmail, batch);
+    void postBatch(postUrl, optsRef.current.authMode ?? "demo", uid, optsRef.current.userEmail, batch);
   };
 
   useEffect(() => {
@@ -265,6 +276,7 @@ export function recordActivityEvent(
   category: activity_category,
   action: string,
   detail?: pending_event["detail"],
+  authMode: activity_auth_mode = "demo",
 ): void {
-  void postBatch(postUrl, userId, userEmail, [{ category, action, detail }]);
+  void postBatch(postUrl, authMode, userId, userEmail, [{ category, action, detail }]);
 }

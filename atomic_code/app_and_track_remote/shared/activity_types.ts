@@ -1,12 +1,20 @@
-// AI : shared activity event types — safe for any React app import.
+// AI : shared activity event types — aligned with combined_full_stack user_activity_events.
 
 export type activity_category =
   | "ui_click"
   | "ui_input"
   | "ui_navigate"
   | "error"
-  | "sign_in"
-  | "sign_out";
+  | "llm_call"
+  | "step_create"
+  | "step_delete"
+  | "step_modify"
+  | "log_view"
+  | "run_start"
+  | "run_complete";
+
+// AI : demo-only — local JSON server records these; Supabase schema omits them.
+export type demo_activity_category = activity_category | "sign_in" | "sign_out";
 
 export type user_id_string = string;
 export type user_email_string = string;
