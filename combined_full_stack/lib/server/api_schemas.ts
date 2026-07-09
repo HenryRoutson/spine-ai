@@ -523,3 +523,11 @@ export const activityBatchBodySchema = z.object({
     .min(1)
     .max(50),
 });
+
+export const sessionReplayChunkBodySchema = z.object({
+  sessionId: z.string().uuid(),
+  chunkIndex: z.number().int().nonnegative().max(10_000),
+  events: z.array(z.record(z.string(), z.unknown())).max(200).optional(),
+  projectId: z.string().trim().max(128).optional(),
+  isFinal: z.boolean().optional(),
+});

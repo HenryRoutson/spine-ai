@@ -25,10 +25,13 @@ import {
   User,
   Wallet,
   ShieldAlert,
+  MonitorPlay,
 } from "lucide-react";
 import { formatCents } from "@/lib/format";
 import type { dashboard_stats } from "@/lib/dashboard_stats";
 import type { dashboard_timeline_event } from "@/lib/dashboard_timeline";
+import type { dashboard_session_replay_row } from "@/lib/dashboard_session_replay";
+import { SessionReplayPlayer } from "@/components/session-replay-player";
 
 function KpiCard({
   title,
@@ -149,6 +152,10 @@ export function DashboardView() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [replaySessions, setReplaySessions] = useState<dashboard_session_replay_row[]>([]);
+  const [selectedReplayId, setSelectedReplayId] = useState<string>("");
+  const [replayEvents, setReplayEvents] = useState<Record<string, unknown>[]>([]);
+  const [replayBusy, setReplayBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     setBusy(true);
@@ -179,6 +186,39 @@ export function DashboardView() {
       clearInterval(id);
     };
   }, [refresh]);
+
+  const loadReplaySessions = useCallback(async () => {
+    try {
+      const qs = selectedUserId ? `?userId=${encodeURIComponent(selectedUserId)}` : "";
+      const res = await fetch(`/api/session-replay${qs}`);
+      const body = (await res.json()) as { sessions?: dashboard_session_replay_row[]; error?: string };
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      setReplaySessions(body.sessions ?? []);
+    } catch {
+      setReplaySessions([]);
+    }
+  }, [selectedUserId]);
+
+  useEffect(() => {
+    void loadReplaySessions();
+    const id = setInterval(() => void loadReplaySessions(), 30_000);
+    return () => clearInterval(id);
+  }, [loadReplaySessions]);
+
+  const loadReplayEvents = useCallback(async (sessionId: string) => {
+    setReplayBusy(true);
+    setSelectedReplayId(sessionId);
+    try {
+      const res = await fetch(`/api/session-replay/${encodeURIComponent(sessionId)}`);
+      const body = (await res.json()) as { events?: Record<string, unknown>[]; error?: string };
+      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      setReplayEvents(body.events ?? []);
+    } catch {
+      setReplayEvents([]);
+    } finally {
+      setReplayBusy(false);
+    }
+  }, []);
 
   const timeline = stats?.timeline;
   const errorEvents = useMemo(
@@ -524,6 +564,54 @@ export function DashboardView() {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
+                </div>
+
+                <div className="panel p-4">
+                  <div className="mb-4 flex items-center gap-2">
+                    <MonitorPlay className="h-4 w-4" />
+                    <h2 className="font-medium">Session replay (rrweb)</h2>
+                    {selectedUserId ? <span className="badge">Filtered</span> : null}
+                  </div>
+                  <p className="mb-4 text-sm text-muted">
+                    DOM recordings from signed-in app sessions — click a session to replay clicks, typing, and navigation.
+                  </p>
+                  {replaySessions.length === 0 ? (
+                    <p className="text-sm text-muted">
+                      No replay sessions yet — recordings start when users open the app while signed in.
+                    </p>
+                  ) : (
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,16rem)_1fr]">
+                      <div className="max-h-64 space-y-2 overflow-y-auto">
+                        {replaySessions.map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            className={`w-full rounded-lg border p-2 text-left text-sm transition-colors ${
+                              selectedReplayId === s.id
+                                ? "border-accent bg-background/60"
+                                : "border-line hover:bg-background/40"
+                            }`}
+                            onClick={() => void loadReplayEvents(s.id)}
+                          >
+                            <p className="font-medium">{s.userEmail ?? s.userId.slice(0, 8)}</p>
+                            <p className="text-xs text-muted">{formatWhen(s.startedAt)}</p>
+                            <p className="text-xs text-muted">
+                              {s.eventCount} events · {s.projectId ? `project ${s.projectId}` : "no project"}
+                            </p>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="min-w-0">
+                        {replayBusy ? (
+                          <p className="text-sm text-muted">Loading replay…</p>
+                        ) : selectedReplayId ? (
+                          <SessionReplayPlayer events={replayEvents} className="overflow-hidden rounded-lg border border-line" />
+                        ) : (
+                          <p className="text-sm text-muted">Select a session to play back.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="panel p-4">

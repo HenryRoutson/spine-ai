@@ -74,6 +74,8 @@ const MONITORED_TABLES = [
   "user_profiles",
   "user_activity_events",
   "billing_flow_ledger",
+  "session_replay_sessions",
+  "session_replay_chunks",
   "platform_markup_schedule",
 ] as const;
 

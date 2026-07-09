@@ -38,6 +38,8 @@ export const API_ROUTES = {
   docsContent: "/api/docs/content",
   feedback: "/api/feedback",
   activity: "/api/activity",
+  sessionReplay: "/api/session-replay",
+  sessionReplayById: (id: string) => `/api/session-replay/${id}`,
   supabaseEnv: "/api/supabase-env",
   sharedLinks: "/api/shared-links",
   sharedLink: (id: string) => `/api/shared-links/${id}`,

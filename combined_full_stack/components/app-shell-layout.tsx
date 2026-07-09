@@ -65,6 +65,8 @@ import { clearActiveProjectSession } from "@/lib/active-project-session"
 import { LEGAL } from "@shared/legal/site"
 import { isPreviewOnly } from "@/lib/demo-mode"
 import { ActivityTracker } from "@/components/activity-tracker"
+import { SessionReplayRecorder } from "@/components/session-replay-recorder"
+import { SESSION_REPLAY_ENABLED } from "@/lib/session-replay-enabled"
 import type { Project } from "@/lib/types"
 
 // AI : marketing site lives on a separate deploy from the app
@@ -603,7 +605,12 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
       <SharedRunDocScopeProvider scope={sharedRunDocScopeForViewer}>
         <LazyDocViewer />
       </SharedRunDocScopeProvider>
-      {!previewOnly ? <ActivityTracker /> : null}
+      {!previewOnly ? (
+        <>
+          <ActivityTracker />
+          {SESSION_REPLAY_ENABLED ? <SessionReplayRecorder /> : null}
+        </>
+      ) : null}
     </div>
   )
 }

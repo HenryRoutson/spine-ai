@@ -12,6 +12,12 @@ const supabaseKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
   process.env.SUPABASE_ANON_KEY
 
+// AI : default true — set SESSION_REPLAY_ENABLED=false to disable rrweb recording.
+const sessionReplayEnabled =
+  process.env.SESSION_REPLAY_ENABLED ??
+  process.env.NEXT_PUBLIC_SESSION_REPLAY_ENABLED ??
+  "true"
+
 // AI : app root only — repo-wide root made Turbopack watch old/, landing_page/, etc.
 
 /** @type {import('next').NextConfig} */
@@ -22,6 +28,7 @@ const nextConfig = {
   env: {
     ...(supabaseUrl ? { NEXT_PUBLIC_SUPABASE_URL: supabaseUrl } : {}),
     ...(supabaseKey ? { NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: supabaseKey } : {}),
+    NEXT_PUBLIC_SESSION_REPLAY_ENABLED: sessionReplayEnabled,
   },
   // AI : seeds/ + documents/ are read at runtime (not imported) — must ship in serverless traces.
   outputFileTracingIncludes: {
