@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
   const body = await parseRequestJson(req, activityBatchBodySchema);
   if ("validationError" in body) return apiError(body.validationError, HTTP.BAD_REQUEST);
 
+  // AI : SECURITY — never persist client-supplied costCents (billing/telemetry integrity).
   await recordActivityEvents(
     body.events.map((e) => ({
       userId: auth.userId,
@@ -21,7 +22,6 @@ export async function POST(req: NextRequest) {
       action: e.action,
       detail: e.detail,
       projectId: e.projectId,
-      costCents: e.costCents,
     })),
   );
 

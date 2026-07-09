@@ -24,7 +24,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (!parsed.success) return apiError(formatZodError(parsed.error), HTTP.BAD_REQUEST);
   const { runId, jobId, token, format = "json" } = parsed.data;
 
-  const entry = verifySharedProgressToken(linkId, jobId, token);
+  const entry = await verifySharedProgressToken(linkId, jobId, token);
   if (!entry) return apiError("invalid token", 403);
 
   const store = await openStoreForUser(link.ownerId);

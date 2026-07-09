@@ -50,7 +50,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
   const body = parsed;
 
-  const entry = verifySharedProgressToken(linkId, body.jobId, body.token);
+  const entry = await verifySharedProgressToken(linkId, body.jobId, body.token);
   if (!entry) return apiError("invalid progress token", 403);
 
   const link = await getSharedLink(linkId);

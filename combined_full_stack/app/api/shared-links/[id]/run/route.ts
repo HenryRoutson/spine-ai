@@ -253,7 +253,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     });
     return apiError("Could not start run — job setup failed. Try again in a moment.", 503, "job_create_failed");
   }
-  const progressToken = registerSharedProgressToken(link.id, link.ownerId, jobId);
+  let progressToken: string;
+  try {
+    progressToken = await registerSharedProgressToken(link.id, link.ownerId, jobId);
+  } catch (err) {
+    runLog.error(`progress token register failed`, { linkId: link.id, error: (err as Error).message });
+    return apiError("Could not start run — progress auth unavailable.", 503, "progress_token_failed");
+  }
 
   const res = NextResponse.json({ jobId, progressToken, sessionId });
   res.cookies.set(SESSION_COOKIE, sessionId, secureSessionCookieOptions(60 * 60 * 24 * 30));

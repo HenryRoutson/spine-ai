@@ -187,7 +187,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const jobDb = await openCrossUserJobDb();
   const jobId = await createJob(api.ownerId, jobDb);
-  const progressToken = registerSharedProgressToken(apiId as unknown as import("@/lib/server/types").SharedLinkId, api.ownerId, jobId);
+  let progressToken: string;
+  try {
+    progressToken = await registerSharedProgressToken(
+      apiId as unknown as import("@/lib/server/types").SharedLinkId,
+      api.ownerId,
+      jobId,
+    );
+  } catch {
+    return apiError("Could not start run — progress auth unavailable.", 503, "progress_token_failed");
+  }
 
   after(async () => {
     await withJobLogging(api.ownerId, jobId, jobDb, async () => {

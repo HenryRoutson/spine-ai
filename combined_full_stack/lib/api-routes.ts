@@ -92,7 +92,12 @@ function isSharedLinkPublicApi(pathname: string, method: string): boolean {
 }
 
 function isLandingDemoPublicApi(pathname: string): boolean {
-  return pathname === API_ROUTES.landingDemoBuild || pathname === API_ROUTES.landingDemoSignup;
+  // AI : session-replay is email-gated in the route; must bypass auth middleware like build/signup.
+  return (
+    pathname === API_ROUTES.landingDemoBuild ||
+    pathname === API_ROUTES.landingDemoSignup ||
+    pathname === API_ROUTES.landingDemoSessionReplay
+  );
 }
 
 function isDemoPublicApi(pathname: string): boolean {

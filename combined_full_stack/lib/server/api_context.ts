@@ -6,7 +6,13 @@ import { HTTP } from "./api-errors";
 import { getStore } from "./app_store";
 import { BillingError } from "./billing_account";
 import { storeErrorMessage } from "./errors";
-import { isAuthSession, requireAuth, type AuthSession, type user_id_string } from "./require_auth";
+import {
+  isAuthSession,
+  isLocalDevMode,
+  requireAuth,
+  type AuthSession,
+  type user_id_string,
+} from "./require_auth";
 import type { Store } from "./store";
 
 export function apiError(message: string, status: number, code?: string): NextResponse {
@@ -48,9 +54,9 @@ export async function enforceIpRateLimit(
   req: Request,
   tier: RateLimitTier,
 ): Promise<NextResponse | null> {
-  // AI : local dev + landing proxy share one IP — skip so hackathon demos aren't blocked mid-test.
+  // AI : SECURITY — skip only in true local-dev (never Vercel), so hosted demos stay capped.
   if (
-    process.env.NODE_ENV === "development" &&
+    isLocalDevMode() &&
     (tier === "landing_demo_build" || tier === "landing_demo_signup" || tier === "landing_demo_replay")
   ) {
     return null;

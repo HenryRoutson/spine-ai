@@ -51,6 +51,7 @@ export function LandingSessionReplayRecorder({
       const body: Record<string, unknown> = {
         sessionId: sessionIdRef.current,
         email: currentEmail,
+        privacyAccepted: true,
         chunkIndex: chunkIndexRef.current,
         isFinal,
       };
@@ -91,7 +92,9 @@ export function LandingSessionReplayRecorder({
         },
         maskAllInputs: false,
         maskInputOptions: { password: true },
-        blockSelector: "[data-no-track], [data-rr-block]",
+        // AI : avoid blockSelector — rrweb 2.0.0-alpha.4 calls node.matches on text nodes
+        // AI : (github.com/rrweb-io/rrweb/issues/1486). Use class-based blocking instead.
+        blockClass: "rr-block",
         checkoutEveryNms: 5 * 60_000,
       });
     });

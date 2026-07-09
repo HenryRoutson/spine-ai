@@ -10,9 +10,14 @@ export const dynamic = "force-dynamic";
 const apiLog = logger("api:billing:webhook");
 
 // AI : Stripe sends invoice.paid on subscription renewals — signature-verified, idempotent credit grant.
-// AI : TODO security — when STRIPE_ENABLED=false return 503 in prod so webhook misconfig is visible.
 export async function POST(req: Request) {
-  if (!STRIPE_ENABLED) return NextResponse.json({ received: true });
+  // AI : SECURITY — never ack unverified payloads; fail closed when Stripe is off in hosted/prod.
+  if (!STRIPE_ENABLED) {
+    if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+      return apiError("Stripe billing is disabled", HTTP.UNAVAILABLE);
+    }
+    return NextResponse.json({ received: true });
+  }
 
   const limited = await enforceIpRateLimit(req, "webhook");
   if (limited) return limited;

@@ -138,11 +138,11 @@ export function buildMultiDocumentWorkflowPromptBlock(): string {
 - Excel/json-only inputs may structureOut a typed model directly (JSON parse in the input step) — no auto LLM step.
 - When many files of the same kind upload into one slot, set outIsList: true on that input ("Emit list output"). Without it, inference only allows one file and the spine stays single Document.
 - Set inputMinCount: 2+ when the task implies batch uploads (hundreds, many, each, all).
-- Typical "many unstructured docs → one spreadsheet/report" spine:
+- Typical "many unstructured docs → one spreadsheet" spine (list rows are already CSV/XLSX-exportable in the UI — do NOT hand-fold CSV):
   1. Input (structureOut: Document, outIsList: true) → list[Document]
   2. llm-batch (outIsList implied) OR custom-code (outIsList: true) → list[ExtractedRow]
-  3. custom-code fold → single Report/Table structure (or document field for file output)
-  4. output step
+  3. output step on list[ExtractedRow]
+- Only fold with custom-code when the user needs a non-tabular single artifact (joined prose report, ranked summary, etc.) — never to stringify rows into CSV/Excel.
 - custom-code between list steps: if input is list[T] and output is still one row per input item, set outIsList: true. A custom-code step without outIsList emits a single object — that breaks llm-batch downstream.
 - custom-code code field: TypeScript arrow expression only, e.g. (docs) => docs.map(...). Never Python def/class syntax — it will not compile.
 - Every structureIn / structureOut name MUST appear in your models array — do not reference structures you forgot to define.
@@ -224,6 +224,8 @@ export function buildGreenfieldPipelineUserMessage(task: string): string {
   const trimmed = task.trim();
   return `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / llm-batch / transform / custom-code / combine as needed), and output step(s). Name structures clearly. Walk the linear spine chain before returning modules — adjacent steps must match single vs list types.
 
+If the goal is a spreadsheet/CSV/Excel of extracted rows, end at list[Row] → output — do NOT add custom-code that folds rows into a CSV string (lists are already CSV/XLSX-exportable in the UI).
+
 Also create 1–3 synthetic example inference documents (text or json only, with full realistic content) so the pipeline can be run immediately after you finish — set docs, do not leave docs null.
 
 Task: ${trimmed}`;
@@ -245,9 +247,9 @@ export function resolveAssistantUserMessage(
 export function buildFewShotPromptBlock(): string {
   return `Few-shot examples (match this response JSON shape — structure names not ids; set modulePatch and typeAliases to null unless needed):
 
-Example 1 — many unstructured files → one spreadsheet (map-reduce)
+Example 1 — many unstructured files → spreadsheet rows (map; list is already CSV/XLSX-exportable)
 Task: "Convert hundreds of unstructured receipts into a single Excel file"
-Spine: list[Document] → list[ReceiptRow] → ReceiptSpreadsheet → output
+Spine: list[Document] → list[ReceiptRow] → output
 {
   "projectNameUpdate": "Receipt to Spreadsheet",
   "models": [
@@ -258,13 +260,6 @@ Spine: list[Document] → list[ReceiptRow] → ReceiptSpreadsheet → output
         { "name": "date", "type": "text", "optional": false, "description": "Receipt date" },
         { "name": "vendor", "type": "text", "optional": false, "description": "Vendor name" },
         { "name": "amount", "type": "float", "optional": false, "description": "Total amount" }
-      ]
-    },
-    {
-      "name": "ReceiptSpreadsheet",
-      "description": "Combined tabular export of all receipts.",
-      "fields": [
-        { "name": "content", "type": "text", "optional": false, "description": "CSV rows — one receipt per line" }
       ]
     }
   ],
@@ -290,20 +285,11 @@ Spine: list[Document] → list[ReceiptRow] → ReceiptSpreadsheet → output
       "inputDescription": "List of Document objects — one receipt file each"
     },
     {
-      "kind": "custom-code",
-      "label": "Combine Rows",
-      "note": "Fold list[ReceiptRow] into one CSV string.",
-      "structureIn": "ReceiptRow",
-      "structureOut": "ReceiptSpreadsheet",
-      "code": "(rows) => ({ content: ['date,vendor,amount', ...rows.map(r => [r.date, r.vendor, r.amount].join(','))].join('\\\\n') })",
-      "inputDescription": "List of ReceiptRow objects from batch extraction"
-    },
-    {
       "kind": "output",
-      "label": "Spreadsheet Output",
-      "structureIn": "ReceiptSpreadsheet",
-      "structureOut": "ReceiptSpreadsheet",
-      "inputDescription": "ReceiptSpreadsheet with CSV content field"
+      "label": "Receipt Rows Output",
+      "structureIn": "ReceiptRow",
+      "structureOut": "ReceiptRow",
+      "inputDescription": "List of ReceiptRow objects — date, vendor, amount per receipt"
     }
   ],
   "typeAliases": null,
@@ -319,9 +305,9 @@ Spine: list[Document] → list[ReceiptRow] → ReceiptSpreadsheet → output
       "content": "CITY TAXI\\n2024-03-02\\nTotal: $18.00"
     }
   ],
-  "documentationUpdate": "# Receipt to Spreadsheet\\n\\nUpload many receipt .txt files; batch-extract rows; export CSV.",
+  "documentationUpdate": "# Receipt to Spreadsheet\\n\\nUpload many receipt .txt files; batch-extract rows. Download the list as CSV/XLSX from the viewer.",
   "modulePatch": null,
-  "message": "Pipeline: multi-upload → batch extract → CSV fold → output."
+  "message": "Pipeline: multi-upload → batch extract → output (list is CSV/XLSX-exportable)."
 }
 
 Example 2 — single document → per-item batch → single report
@@ -410,7 +396,8 @@ Spine: Document → list[TextChunk] → list[ChunkSummary] → CombinedReport �
 Key patterns both examples demonstrate:
 - Input structureOut is always Document (never a parsed model).
 - llm-batch follows a list-emitting step (input with outIsList: true, or custom-code with outIsList: true).
-- list → single object uses custom-code fold (not a bare transform).
+- Tabular spreadsheet goals end at list[Row] → output — do NOT custom-code fold rows into a CSV/Excel string (the UI already exports lists as CSV/XLSX).
+- list → single non-tabular object (joined prose report, ranked summary) uses custom-code fold (not a bare transform).
 - custom-code code is TypeScript arrow syntax — never Python.
 - Every structureIn/structureOut name is defined in models.`;
 }

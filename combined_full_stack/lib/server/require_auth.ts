@@ -70,9 +70,8 @@ export async function requireAuth(): Promise<AuthSession | NextResponse> {
     } catch {
       /* local dev without Supabase */
     }
-    // AI : shared JsonStore only when Supabase is not configured — not when env is set but user is logged out.
-    // AI : TODO security — LOCAL_DEV_USER_ID is a shared identity; fail closed on any hosted env even if
-    // AI : NODE_ENV=development (mis-deployed dev config must not merge all users into one store).
+    // AI : SECURITY — shared JsonStore identity only for true local-dev without Supabase.
+    // AI : isLocalDevMode() already excludes Vercel; never mint LOCAL_DEV_USER_ID when public env is set.
     if (!getSupabasePublicEnv()) {
       return { userId: LOCAL_DEV_USER_ID, email: undefined };
     }

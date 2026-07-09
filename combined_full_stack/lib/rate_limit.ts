@@ -36,9 +36,7 @@ function effectiveBackend(): EffectiveBackend {
   if (resolveRateLimitBackend() === "memory") return "memory";
   if (!upstashConfigured()) {
     warnMissingUpstash();
-    // AI : Vercel serverless — in-memory limits are per-instance and trivially bypassed.
-    // AI : TODO security — missing Upstash currently 503s all tiers; consider fail-open on read tiers
-    // AI : with strict caps, or alert-only, so a misconfigured deploy does not brick the whole app.
+    // AI : SECURITY — Vercel without Upstash fails closed (503) rather than per-instance memory limits.
     if (process.env.VERCEL) return "blocked";
     return "memory";
   }

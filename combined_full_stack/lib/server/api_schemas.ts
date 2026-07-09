@@ -57,15 +57,55 @@ export function parseHostedApiId(raw: string): import("./types").HostedApiId | n
   return parsed.success ? (parsed.data as import("./types").HostedApiId) : null;
 }
 
-// AI : TODO security — .passthrough() lets clients persist extra module keys (size-bounded). Tighten to
-// AI : .strict() or a per-ModuleKind allowlist so pipeline snapshots cannot carry unexpected fields.
+// AI : bound arbitrary JSON payloads without losing structure — prevents multi-MB POST bodies.
+function jsonSizeBounded(maxChars: number) {
+  return z.unknown().superRefine((val, ctx) => {
+    try {
+      if (JSON.stringify(val).length > maxChars) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `payload too large (max ${maxChars} chars)` });
+      }
+    } catch {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "payload must be JSON-serializable" });
+    }
+  });
+}
+
+// AI : SECURITY — allowlist PipelineModule keys only (.strict); size-bounded strings.
+const typeExprPatchSchema = jsonSizeBounded(8_000);
+const customCodeEntryPatchSchema = z
+  .object({
+    typescript: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
+    python: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
+  })
+  .strict();
+
 const pipelineModulePatchSchema = z
   .object({
     id: z.string().max(128),
     kind: z.nativeEnum(ModuleKind),
     label: z.string().max(200),
+    note: z.string().max(4_000).optional(),
+    inStructureId: z.string().max(128).optional(),
+    outStructureId: z.string().max(128).optional(),
+    inType: typeExprPatchSchema.optional(),
+    outType: typeExprPatchSchema.optional(),
+    inputType: z.union([z.nativeEnum(InputType), z.array(z.nativeEnum(InputType)).max(20)]).optional(),
+    inputNameContains: z.string().max(256).optional(),
+    inputDescription: z.string().max(4_000).optional(),
+    checkInputDescription: z.boolean().optional(),
+    inputMinCount: z.number().int().min(0).max(100).optional(),
+    prompt: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
+    code: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
+    fallbackList: z.array(customCodeEntryPatchSchema).max(20).optional(),
+    model: z.string().max(128).optional(),
+    useOcr: z.boolean().optional(),
+    cached: z.boolean().optional(),
+    outIsList: z.boolean().optional(),
+    auto: z.boolean().optional(),
+    avgMs: z.number().min(0).optional(),
+    avgCostCents: z.number().min(0).optional(),
   })
-  .passthrough()
+  .strict()
   .superRefine((val, ctx) => {
     try {
       if (JSON.stringify(val).length > MAX_MODULE_PAYLOAD_CHARS) {
@@ -74,22 +114,37 @@ const pipelineModulePatchSchema = z
     } catch {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: "module must be JSON-serializable" });
     }
-    for (const [key, v] of Object.entries(val)) {
-      if (typeof v === "string" && v.length > MAX_MODULE_STRING_CHARS) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `module.${key} exceeds max ${MAX_MODULE_STRING_CHARS} chars`,
-        });
-      }
-    }
   });
+
+const structureFieldPatchSchema = z
+  .object({
+    id: z.string().max(128),
+    name: z.string().max(200),
+    type: z.string().max(64),
+    optional: z.boolean(),
+    description: z.string().max(4_000),
+    example: z.string().max(4_000).optional(),
+    ref: z.string().max(128).optional(),
+    minItems: z.number().int().min(0).max(10_000).optional(),
+    typeExpr: typeExprPatchSchema.optional(),
+    deterministic: z.boolean().optional(),
+    testTolerance: z.number().finite().optional(),
+  })
+  .strict();
 
 const structureModelPatchSchema = z
   .object({
     id: z.string().max(128),
     name: z.string().max(200),
+    description: z.string().max(4_000).optional(),
+    fields: z.array(structureFieldPatchSchema).max(200).optional(),
+    auto: z.boolean().optional(),
+    dynamic: z.boolean().optional(),
+    shared: z.boolean().optional(),
+    locked: z.boolean().optional(),
+    sourceDocId: z.string().max(128).optional(),
   })
-  .passthrough()
+  .strict()
   .superRefine((val, ctx) => {
     try {
       if (JSON.stringify(val).length > MAX_STRUCTURE_PAYLOAD_CHARS) {
@@ -114,19 +169,6 @@ const strategyPatchSchema = z
     costCents: z.number().min(0).optional(),
   })
   .strict();
-
-// AI : bound arbitrary JSON payloads without losing structure — prevents multi-MB POST bodies.
-function jsonSizeBounded(maxChars: number) {
-  return z.unknown().superRefine((val, ctx) => {
-    try {
-      if (JSON.stringify(val).length > maxChars) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `payload too large (max ${maxChars} chars)` });
-      }
-    } catch {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "payload must be JSON-serializable" });
-    }
-  });
-}
 
 export const jobLogEntrySchema = z.object({
   at: z.number(),
@@ -490,9 +532,11 @@ export const landingSignupBodySchema = z.object({
   email: z.string().trim().email().max(320),
 });
 
+// AI : SECURITY — privacyAccepted required server-side; client banner alone is bypassable.
 export const landingBuildPipelineBodySchema = z.object({
   email: z.string().trim().email().max(320),
   task: z.string().trim().min(1).max(2000),
+  privacyAccepted: z.literal(true),
 });
 
 const activityCategorySchema = z.enum([
@@ -512,13 +556,15 @@ const activityCategorySchema = z.enum([
 export const activityBatchBodySchema = z.object({
   events: z
     .array(
-      z.object({
-        category: activityCategorySchema,
-        action: z.string().trim().min(1).max(500),
-        detail: z.record(z.string(), z.unknown()).optional(),
-        projectId: z.string().trim().max(128).optional(),
-        costCents: z.number().finite().nonnegative().optional(),
-      }),
+      z
+        .object({
+          category: activityCategorySchema,
+          action: z.string().trim().min(1).max(500),
+          detail: z.record(z.string(), z.unknown()).optional(),
+          projectId: z.string().trim().max(128).optional(),
+          // AI : SECURITY — costCents is server-derived only; strip any client-supplied value.
+        })
+        .strict(),
     )
     .min(1)
     .max(50),
@@ -536,6 +582,7 @@ export const sessionReplayChunkBodySchema = z.object({
 export const landingSessionReplayChunkBodySchema = z.object({
   sessionId: z.string().uuid(),
   email: z.string().trim().email().max(320),
+  privacyAccepted: z.literal(true),
   chunkIndex: z.number().int().nonnegative().max(10_000),
   events: z.array(z.record(z.string(), z.unknown())).max(200).optional(),
   projectId: z.string().trim().max(128).optional(),

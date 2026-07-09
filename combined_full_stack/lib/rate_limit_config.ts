@@ -62,9 +62,11 @@ export function upstashConfigured(): boolean {
 }
 
 export function publicApiTier(pathname: string): RateLimitTier | null {
-  // AI : TODO security — /api/demo/* has no middleware tier today; add public/read cap on demo/state.
   if (pathname === "/api/billing/webhook") return "webhook";
   if (pathname === "/api/supabase-env") return "public";
+  // AI : SECURITY — public demo preview reads; cap by IP in middleware.
+  if (pathname === "/api/demo/state") return "read";
+  if (/^\/api\/demo\/docs\/[^/]+\/text$/.test(pathname)) return "read";
   if (pathname.startsWith("/api/hosted-apis/")) {
     if (/\/invoke$/.test(pathname)) return "hosted_api";
     if (/\/progress$/.test(pathname)) return "poll";

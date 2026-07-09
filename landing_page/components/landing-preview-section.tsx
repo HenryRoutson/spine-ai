@@ -119,7 +119,7 @@ export function LandingBuildProvider({
 
   const buildPipeline = useCallback(async () => {
     const trimmed = task.trim();
-    if (!trimmed || building || !demoEmail) return;
+    if (!trimmed || building || !demoEmail || !demoPrivacyAccepted) return;
 
     setBuilding(true);
     setError(null);
@@ -134,7 +134,7 @@ export function LandingBuildProvider({
       const res = await fetch(BUILD_PIPELINE_PATH, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: trimmed, email: demoEmail }),
+        body: JSON.stringify({ task: trimmed, email: demoEmail, privacyAccepted: true as const }),
       });
 
       const contentType = res.headers.get("Content-Type") ?? "";
@@ -174,7 +174,7 @@ export function LandingBuildProvider({
     } finally {
       setBuilding(false);
     }
-  }, [spineApiUrl, building, demoEmail, task]);
+  }, [spineApiUrl, building, demoEmail, demoPrivacyAccepted, task]);
 
   const registerEmail = useCallback(async (email: demo_email_string): Promise<{ ok: true } | { ok: false; error: string }> => {
     const normalized = email.trim().toLowerCase();

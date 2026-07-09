@@ -20,7 +20,11 @@ const apiLog = logger("api:testing-assistant");
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  // AI : TODO security — requireAuthStore before parseRequestJson (see pipeline-assistant/route.ts).
+  // AI : SECURITY — auth + rate limit before parsing large assistant bodies.
+  const ctx = await requireAuthStore("llm");
+  if (ctx instanceof NextResponse) return ctx;
+  const { store } = ctx;
+
   const body = await parseRequestJson(req, testingAssistantBodySchema);
   if ("validationError" in body) return apiError(body.validationError, HTTP.BAD_REQUEST);
 
@@ -31,10 +35,6 @@ export async function POST(req: NextRequest) {
     if (err instanceof UnknownModelError) return apiError(err.message, HTTP.BAD_REQUEST);
     throw err;
   }
-
-  const ctx = await requireAuthStore("llm");
-  if (ctx instanceof NextResponse) return ctx;
-  const { store } = ctx;
 
   const projectOrErr = requireProjectOr404(store, body.projectId as ProjectId, apiLog);
   if (projectOrErr instanceof NextResponse) return projectOrErr;
