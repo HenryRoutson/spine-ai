@@ -520,3 +520,5 @@ this is for early users so i can see errors and issues they run into.
 
 please ensure you model the potenial loss money as if everyone instantly used all of their free credits i might suddenly go into the red, even if it looked like previously i was in the green. you need to model for if i'm actually charging the straight llm rate, please record the % cut i'm taking on top of llm calls for each llm call to easily keep track of this. easiest way is to have a have a % markup that is dated with a range of applies from datetime so i don't have to record every single llm call, but just each time i change the markup. ensure you create a virtual table with this denormalised.
 But yes, have a buffer zone for money i may or may not have to pay with the free credit.
+
+please add replay https://rrweb.com/ for all users.

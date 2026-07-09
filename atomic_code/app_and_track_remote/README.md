@@ -2,6 +2,10 @@
 
 Prototype for **recording what users click and type**, storing a timeline, and **replaying their session** in an iframe. The reusable pieces live in `shared/`; everything else is a minimal demo stack.
 
+Use
+https://rrweb.com/ 
+Instead.
+
 ## What each folder does
 
 | Folder | Role | Scales to production? |
