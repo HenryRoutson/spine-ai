@@ -49,9 +49,16 @@ export function isLockedTypeAlias(alias: TypeAlias): boolean {
   return alias.locked === true || isSharedTypeAlias(alias);
 }
 
-export function lockedTypeAliasBanner(alias: TypeAlias): string | null {
+export function lockedTypeAliasWhy(alias: TypeAlias): string | null {
   if (!isLockedTypeAlias(alias)) return null;
-  return "shared built-in type — available in every project and cannot be edited";
+  return "it is a shared built-in type available in every project";
+}
+
+// AI : banner + click feedback share the same wording (spec: clear lock error with why).
+export function lockedTypeAliasBanner(alias: TypeAlias): string | null {
+  const why = lockedTypeAliasWhy(alias);
+  if (!why) return null;
+  return `This type is locked — ${why}`;
 }
 
 export function isBuiltinTypeAliasName(name: string): boolean {
