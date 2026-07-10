@@ -17,6 +17,35 @@ export function modelExportIdentifier(name: string): string {
   return trimmed.replace(/[^\w]+/g, "_").replace(/^(\d)/, "_$1")
 }
 
+// AI : Rust non_camel_case_types — Structure_4 → Structure4; snake_case → PascalCase.
+export function modelExportIdentifierRust(name: string): string {
+  const hit = STRUCTURE_NUMBER_RE.exec(name)
+  if (hit) return `Structure${hit[1]}`
+  const base = modelExportIdentifier(name)
+  if (!/_/.test(base)) return base
+  return base
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("")
+}
+
+// AI : Rust field ids must be snake_case; serde rename preserves the JSON key from the model.
+export function rustFieldIdent(name: string): { ident: string; rename: string | null } {
+  const trimmed = name.trim()
+  if (/^[a-z][a-z0-9_]*$/.test(trimmed)) return { ident: trimmed, rename: null }
+  let snake = trimmed
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "")
+    .toLowerCase()
+  if (!snake) snake = "field"
+  if (/^[0-9]/.test(snake)) snake = `_${snake}`
+  return { ident: snake, rename: snake === trimmed ? null : trimmed }
+}
+
 // AI : shape compare ignores model names — nested @sig carries the structural identity.
 function formatTypeExprShape(expr: TypeExpr): string {
   switch (expr.kind) {

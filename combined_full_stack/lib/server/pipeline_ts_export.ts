@@ -4,16 +4,17 @@ import { generateModelsDts } from "./type_codegen";
 import {
   assertNoEnvKeysInExport,
   exportSpineInTs,
+  exportSpineOutTs,
   generateCombineStepBodyTs,
   generateCustomCodeStepBodyTs,
   generateInputStepBodyTs,
   generateOrchestratorTs,
   modelName,
+  pipelineStateTsInterfaceForExport,
   prepareExportProject,
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsTs } from "./pipeline_export_setup";
-import { pipelineStateTsInterface } from "./pipeline_state";
-import { labelToPyKey, stepSpineOutType, typeExprToTs } from "./type_expr";
+import { labelToPyKey } from "./type_expr";
 import { MODULE_META } from "./types";
 import type { PipelineModule, Project } from "./types";
 
@@ -147,8 +148,7 @@ function stepBodyUsesPipelineState(body: string): boolean {
 function generateStepFn(m: PipelineModule, project: Project, index: number): string {
   const fn = stepFnName(m, index);
   const inTs = exportSpineInTs(m, project, index);
-  const outType = stepSpineOutType(m);
-  const outTs = outType ? typeExprToTs(outType, project.models) : "unknown";
+  const outTs = exportSpineOutTs(m, project, index);
   const meta = MODULE_META[m.kind];
   const body = generateStepBody(m, project, outTs, inTs);
   const stateParam = stepBodyUsesPipelineState(body) ? "state" : "_state";
@@ -184,7 +184,7 @@ export function generatePipelineSourceTs(project: Project): string {
     generateModelsDts(prepared.models, prepared.typeAliases ?? []),
     "",
     "// === pipeline state ===",
-    pipelineStateTsInterface(prepared),
+    pipelineStateTsInterfaceForExport(prepared),
     "",
     runtimeStubs,
     "",

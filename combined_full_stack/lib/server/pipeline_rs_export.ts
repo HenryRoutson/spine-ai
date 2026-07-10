@@ -4,6 +4,7 @@ import { allModelsToRust } from "./pydantic";
 import {
   assertNoEnvKeysInExport,
   exportSpineInRust,
+  exportSpineOutRust,
   generateCombineStepBodyRust,
   generateInputStepBodyRust,
   generateOrchestratorRust,
@@ -12,15 +13,29 @@ import {
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsRust } from "./pipeline_export_setup";
 import { pipelineStateRustType } from "./pipeline_state";
-import { labelToPyKey, stepSpineOutType, typeExprToRust } from "./type_expr";
+import { labelToPyKey } from "./type_expr";
 import { MODULE_META } from "./types";
 import type { PipelineModule, Project } from "./types";
 
 // AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
 
-function stepFnName(m: PipelineModule, index: number): string {
-  const key = labelToPyKey(m.label);
-  return key !== "_empty" ? `step_${key}` : `step_${index}`;
+function makeStepFnName(): (m: PipelineModule, index: number) => string {
+  const byIndex = new Map<number, string>();
+  const used = new Set<string>();
+  return (m, index) => {
+    const cached = byIndex.get(index);
+    if (cached) return cached;
+    // AI : rustc non_snake_case — "✓ Wrap → List" → step_wrap_list; index disambiguates collisions.
+    const key = labelToPyKey(m.label)
+      .toLowerCase()
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "");
+    let name = key ? `step_${key}` : `step_${index}`;
+    if (used.has(name)) name = `step_${index}_${key || "step"}`;
+    used.add(name);
+    byIndex.set(index, name);
+    return name;
+  };
 }
 
 function indentBlock(code: string, spaces: number): string {
@@ -95,7 +110,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
         "Ok(out)",
       ].join("\n");
     case "combine":
-      return generateCombineStepBodyRust(m, project, outRust);
+      return generateCombineStepBodyRust(m, project, outRust, _inRust);
     case "transform": {
       const custom = rsPrimaryCustomCode(m);
       if (custom) {
@@ -137,7 +152,6 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
         return [
           commentForeignCode(entries[0].code, `${entries[0].language} assert`),
           "// Validate pipeline state — passthrough on success",
-          "let _ = state;",
           "Ok(input)",
         ].join("\n");
       }
@@ -156,13 +170,26 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
   }
 }
 
-function generateStepFn(m: PipelineModule, project: Project, index: number): string {
+function stepBodyUsesPipelineState(body: string): boolean {
+  // AI : real state reads only — ignore commented lines.
+  return body
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("//"))
+    .some((line) => /\bstate\.(get|insert)\b|\bstate\[/.test(line));
+}
+
+function generateStepFn(
+  m: PipelineModule,
+  project: Project,
+  index: number,
+  stepFnName: (m: PipelineModule, index: number) => string,
+): string {
   const fn = stepFnName(m, index);
   const inRust = exportSpineInRust(m, project, index);
-  const outType = stepSpineOutType(m);
-  const outRust = outType ? typeExprToRust(outType, project.models) : "Value";
+  const outRust = exportSpineOutRust(m, project, index);
   const meta = MODULE_META[m.kind];
   const body = generateStepBody(m, project, outRust, inRust);
+  const stateParam = stepBodyUsesPipelineState(body) ? "state" : "_state";
   const docLines = [
     `/// ${m.label.replace(/\*\//g, "*\\/")}`,
     `/// Kind: ${meta.label}`,
@@ -172,7 +199,7 @@ function generateStepFn(m: PipelineModule, project: Project, index: number): str
   ];
   const header = [
     ...docLines,
-    `async fn ${fn}(input: ${inRust}, state: &mut PipelineState) -> anyhow::Result<${outRust}> {`,
+    `async fn ${fn}(input: ${inRust}, ${stateParam}: &mut PipelineState) -> anyhow::Result<${outRust}> {`,
   ];
   return [...header, indentBlock(body, 4), "}", ""].join("\n");
 }
@@ -183,7 +210,8 @@ export function generatePipelineSourceRust(project: Project): string {
   const needs = analyzeExportRuntimeNeeds(prepared);
   const runtimeStubs = generateRuntimeStubsRust(needs);
   const sections: string[] = [];
-  const stepFns = prepared.modules.map((m, i) => generateStepFn(m, prepared, i)).join("\n");
+  const stepFnName = makeStepFnName();
+  const stepFns = prepared.modules.map((m, i) => generateStepFn(m, prepared, i, stepFnName)).join("\n");
   const orchestrator = generateOrchestratorRust(prepared, stepFnName);
 
   sections.push(

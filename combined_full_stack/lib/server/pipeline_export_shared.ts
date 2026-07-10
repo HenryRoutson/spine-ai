@@ -1,7 +1,7 @@
 import { orderedInputModules } from "@/lib/inference-input";
 import { buildCustomFnSource } from "@/lib/custom_code";
 import { usesPassthroughStructure } from "@/lib/module-kinds";
-import { modelExportIdentifier } from "@/lib/structure-shape";
+import { modelExportIdentifierRust, rustFieldIdent } from "@/lib/structure-shape";
 import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
 import { stepSpineInType, stepSpineOutType, typeExprToPy, typeExprToRust, typeExprToTs } from "./type_expr";
@@ -46,6 +46,71 @@ export function exportSpineInPy(m: PipelineModule, project: Project, index: numb
 export function exportSpineInRust(m: PipelineModule, project: Project, index: number): string {
   const t = exportSpineInType(m, project, index);
   return t ? typeExprToRust(t, project.models) : "Value";
+}
+
+// AI : passthrough out follows the spine (prev), not a stale inStructureId on the module.
+export function exportSpineOutType(
+  m: PipelineModule,
+  project: Project,
+  index: number,
+): TypeExpr | undefined {
+  if (usesPassthroughStructure(m.kind)) {
+    const prev = index > 0 ? project.modules[index - 1] : undefined;
+    return prev ? stepSpineOutType(prev) : stepSpineOutType(m);
+  }
+  return stepSpineOutType(m);
+}
+
+export function exportSpineOutTs(m: PipelineModule, project: Project, index: number): string {
+  const t = exportSpineOutType(m, project, index);
+  return t ? typeExprToTs(t, project.models) : "unknown";
+}
+
+export function exportSpineOutPy(m: PipelineModule, project: Project, index: number): string {
+  const t = exportSpineOutType(m, project, index);
+  return t ? typeExprToPy(t, project.models) : "Any";
+}
+
+export function exportSpineOutRust(m: PipelineModule, project: Project, index: number): string {
+  const t = exportSpineOutType(m, project, index);
+  return t ? typeExprToRust(t, project.models) : "Value";
+}
+
+// AI : export PipelineState keys use the same spine-out types as step signatures.
+export function pipelineStateTsInterfaceForExport(project: Project): string {
+  const lines: string[] = [];
+  for (let i = 0; i < project.modules.length; i++) {
+    const m = project.modules[i]!;
+    const label = labelAsStateKey(m.label);
+    if (!label) continue;
+    lines.push(`  ${JSON.stringify(label)}: ${exportSpineOutTs(m, project, i)};`);
+  }
+  if (!lines.length) return "export type PipelineState = Record<string, never>;";
+  return `export type PipelineState = {\n${lines.join("\n")}\n};`;
+}
+
+export function pipelineStatePyTypedDictForExport(project: Project): string {
+  const entries: string[] = [];
+  for (let i = 0; i < project.modules.length; i++) {
+    const m = project.modules[i]!;
+    const label = labelAsStateKey(m.label);
+    if (!label) continue;
+    // AI : functional TypedDict — keys must match runtime state["Human Label"] strings.
+    entries.push(`    ${JSON.stringify(label)}: ${exportSpineOutPy(m, project, i)},`);
+  }
+  if (!entries.length) {
+    return 'PipelineState = TypedDict("PipelineState", {})\n';
+  }
+  // AI : total=True (default) matches TS PipelineState — empty init uses cast(object, {}).
+  return [
+    'PipelineState = TypedDict(',
+    '    "PipelineState",',
+    "    {",
+    ...entries,
+    "    },",
+    ")",
+    "",
+  ].join("\n");
 }
 
 export function modelName(project: Project, id: StructureModelId | undefined): string | undefined {
@@ -100,12 +165,14 @@ function tsCustomCodeFnDecl(code: string, inTs: string, outTs: string): string {
   return `const __fn: ${fnType} = ${code};`;
 }
 
-function pyCustomCodeCall(code: string): string {
+function pyCustomCodeCall(code: string, outPy: string): string {
   if (/^\s*def\s+\w+\s*\(/.test(code)) {
-    return "return transform(input, state)  # type: ignore[name-defined]";
+    return `return cast(${outPy}, cast(object, transform(input, state)))  # type: ignore[name-defined]`;
   }
   const unary = /^\(\s*input\s*\)\s*=>/.test(code) || /^\s*input\s*=>/.test(code);
-  return unary ? "return __fn(input)" : "return __fn(input, state)";
+  return unary
+    ? `return cast(${outPy}, cast(object, __fn(input)))`
+    : `return cast(${outPy}, cast(object, __fn(input, state)))`;
 }
 
 export function generateInputStepBodyTs(m: PipelineModule, outTs: string): string {
@@ -136,7 +203,7 @@ export function generateInputStepBodyTs(m: PipelineModule, outTs: string): strin
   return lines.join("\n");
 }
 
-export function generateInputStepBodyPy(m: PipelineModule): string {
+export function generateInputStepBodyPy(m: PipelineModule, outPy: string): string {
   const lines = [
     "# Parse uploaded file — built-in parser or vision OCR when enabled",
     ...(m.inputDescription
@@ -151,16 +218,16 @@ export function generateInputStepBodyPy(m: PipelineModule): string {
   if (inputOutputsDocument(m)) {
     lines.push(
       m.outIsList
-        ? 'return [{"content": doc["content"], "filename": doc["filename"]}]'
-        : 'return {"content": doc["content"], "filename": doc["filename"]}',
+        ? "return [Document(content=doc.content, filename=doc.filename)]"
+        : "return Document(content=doc.content, filename=doc.filename)",
     );
     return lines.join("\n");
   }
   if (m.outIsList) {
-    lines.push("parsed = json.loads(doc['content'])");
-    lines.push("return parsed if isinstance(parsed, list) else [parsed]");
+    lines.push("parsed = json.loads(doc.content)");
+    lines.push(`return cast(${outPy}, cast(object, parsed if isinstance(parsed, list) else [parsed]))`);
   } else {
-    lines.push("return json.loads(doc['content'])");
+    lines.push(`return cast(${outPy}, cast(object, json.loads(doc.content)))`);
   }
   return lines.join("\n");
 }
@@ -212,12 +279,16 @@ export function generateCombineStepBodyTs(m: PipelineModule, project: Project, o
   const inName = modelName(project, m.inStructureId);
   const sideId = combineSideStructId(m, project);
   const upstreamLabel = upstreamLabelForCombine(m, project);
-  const upstreamKey = upstreamLabel ? JSON.stringify(upstreamLabel) : "/* upstream label */";
+  // AI : always a string literal — comment placeholders are invalid as index expressions.
+  const upstreamKey = JSON.stringify(upstreamLabel ?? "upstream");
   const fieldExprs =
     out?.fields.map((f) => {
       if (f.type === FieldType.Document) return `${f.name}: newDoc as Document`;
       if (sideId && f.ref === sideId) return `${f.name}: newDoc as ${modelName(project, sideId)}`;
-      return `${f.name}: state[${upstreamKey}]`;
+      // AI : missing upstream label → index via Record so tsc still accepts the fallback key.
+      return upstreamLabel
+        ? `${f.name}: state[${upstreamKey}]`
+        : `${f.name}: (state as Record<string, unknown>)[${upstreamKey}]`;
     }) ?? [];
   return [
     `// Merge uploaded document with upstream ${inName ?? "pipeline data"} from pipeline state`,
@@ -227,44 +298,58 @@ export function generateCombineStepBodyTs(m: PipelineModule, project: Project, o
   ].join("\n");
 }
 
-export function generateCombineStepBodyPy(m: PipelineModule, project: Project): string {
+export function generateCombineStepBodyPy(
+  m: PipelineModule,
+  project: Project,
+  outPy: string,
+  inPy: string,
+): string {
   const out = project.models.find((x) => x.id === m.outStructureId);
   const inName = modelName(project, m.inStructureId);
   const sideId = combineSideStructId(m, project);
   const upstreamLabel = upstreamLabelForCombine(m, project);
-  const upstreamKey = upstreamLabel ? JSON.stringify(upstreamLabel) : '"upstream"';
+  // AI : always a string literal — comment placeholders are invalid as index expressions.
+  const upstreamKey = JSON.stringify(upstreamLabel ?? "upstream");
   const fieldExprs =
     out?.fields.map((f) => {
       if (f.type === FieldType.Document) return `"${f.name}": new_doc`;
       if (sideId && f.ref === sideId) return `"${f.name}": new_doc`;
       return `"${f.name}": state[${upstreamKey}]`;
     }) ?? [];
+  // AI : skip isinstance when the spine type is already a list.
+  const unwrap = inPy.startsWith("list[") ? "new_doc = input[0]" : "new_doc = input";
+  // AI : cast via object — dict literals are not TypedDict/BaseModel-compatible under strict pyright.
   return [
     `# Merge uploaded document with upstream ${inName ?? "pipeline data"} from pipeline state`,
-    "new_doc = input[0] if isinstance(input, list) else input",
-    `return {${fieldExprs.join(", ")}}`,
+    unwrap,
+    `return cast(${outPy}, cast(object, {${fieldExprs.join(", ")}}))`,
   ].join("\n");
 }
 
-export function generateCombineStepBodyRust(m: PipelineModule, project: Project, outRust: string): string {
+export function generateCombineStepBodyRust(m: PipelineModule, project: Project, outRust: string, inRust: string): string {
   const out = project.models.find((x) => x.id === m.outStructureId);
   const inName = modelName(project, m.inStructureId);
   const sideId = combineSideStructId(m, project);
   const upstreamLabel = upstreamLabelForCombine(m, project);
   const upstreamKey = upstreamLabel ? JSON.stringify(upstreamLabel) : '"upstream"';
   const rawOutName = modelName(project, m.outStructureId);
-  const outName = rawOutName ? modelExportIdentifier(rawOutName) : outRust;
+  const outName = rawOutName ? modelExportIdentifierRust(rawOutName) : outRust;
   const fieldExprs =
     out?.fields.map((f) => {
-      if (f.type === FieldType.Document) return `        ${f.name}: new_doc.clone(),`;
+      const fname = rustFieldIdent(f.name).ident;
+      if (f.type === FieldType.Document) return `        ${fname}: new_doc.clone(),`;
       if (sideId && f.ref === sideId) {
-        return `        ${f.name}: serde_json::from_value(serde_json::to_value(&new_doc)?)?,`;
+        return `        ${fname}: serde_json::from_value(serde_json::to_value(&new_doc)?)?,`;
       }
-      return `        ${f.name}: serde_json::from_value(state.get(${upstreamKey}).cloned().unwrap_or(Value::Null))?,`;
+      return `        ${fname}: serde_json::from_value(state.get(${upstreamKey}).cloned().unwrap_or(Value::Null))?,`;
     }) ?? [];
+  // AI : mirror TS/Py — list side-inputs unwrap to the first document.
+  const unwrap = inRust.startsWith("Vec<")
+    ? 'let new_doc = input.into_iter().next().ok_or_else(|| anyhow::anyhow!("combine expects at least one document"))?;'
+    : "let new_doc = input;";
   return [
     `// Merge uploaded document with upstream ${inName ?? "pipeline data"} from pipeline state`,
-    "let new_doc = input; // AI : list side-inputs — take first element in your runner if needed",
+    unwrap,
     `let merged = ${outName} {`,
     ...fieldExprs,
     "};",
@@ -331,8 +416,7 @@ export function generateOrchestratorTs(project: Project, stepFnName: (m: Pipelin
     const m = project.modules[i]!;
     const fn = stepFnName(m, i);
     const label = labelAsStateKey(m.label);
-    const outType = stepSpineOutType(m);
-    const outTs = outType ? typeExprToTs(outType, project.models) : "unknown";
+    const outTs = exportSpineOutTs(m, project, i);
     const inTs = exportSpineInTs(m, project, i);
     lines.push(`  // ${i + 1}. ${m.label}`);
     lines.push(orchestratorInvokeLine(m, fn, "ts", !multi, inTs));
@@ -355,7 +439,7 @@ export function generateOrchestratorPy(project: Project, stepFnName: (m: Pipelin
     lines.push("async def run_pipeline(initial_input: Document) -> Any:");
   }
 
-  lines.push("    state: PipelineState = {}", "    spine: Any = None", "");
+  lines.push("    state = cast(PipelineState, cast(object, {}))", "    spine: Any = None", "");
 
   for (let i = 0; i < project.modules.length; i++) {
     const m = project.modules[i]!;
@@ -384,7 +468,7 @@ export function generateOrchestratorRust(project: Project, stepFnName: (m: Pipel
     lines.push("pub async fn run_pipeline(initial_input: Document) -> anyhow::Result<Value> {");
   }
 
-  lines.push("    let mut state: PipelineState = HashMap::new();", "    let mut spine = Value::Null;", "");
+  lines.push("    let mut state: PipelineState = HashMap::new();", "    let mut spine: Value;", "");
 
   for (let i = 0; i < project.modules.length; i++) {
     const m = project.modules[i]!;

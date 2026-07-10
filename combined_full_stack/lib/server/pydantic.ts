@@ -2,16 +2,32 @@ import { fieldToPy, fieldToTypeExpr, typeExprToPy, typeExprToRust, typeExprToTs 
 import { stripBuiltinTypeAliases } from "./builtin_types";
 import { stripSharedModels } from "./builtin_models";
 import type { TypeExpr } from "./types";
-import { modelExportIdentifier, modelsForPydanticExport } from "../structure-shape";
+import { modelExportIdentifier, modelExportIdentifierRust, modelsForPydanticExport, rustFieldIdent } from "../structure-shape";
 import type { StructureModel, TypeAlias } from "./types";
 
 function typeAliasExportName(name: string): string {
   return modelExportIdentifier(name);
 }
 
+function typeAliasExportNameRust(name: string): string {
+  return modelExportIdentifierRust(name);
+}
+
+// AI : alias bodies must not self-reference quote/text_quote names — resolve to concrete Py types.
+function typeExprToAliasDefinitionPy(expr: TypeExpr, models: StructureModel[]): string {
+  switch (expr.kind) {
+    case "quote":
+      return "str";
+    case "text_quote":
+      return "dict[str, str]";
+    default:
+      return typeExprToPy(expr, models);
+  }
+}
+
 export function typeAliasToPydantic(alias: TypeAlias, models: StructureModel[]): string {
   const id = typeAliasExportName(alias.name);
-  const body = typeExprToPy(alias.expr, models);
+  const body = typeExprToAliasDefinitionPy(alias.expr, models);
   const note = alias.description?.trim();
   return note ? `type ${id} = ${body}  # ${note}` : `type ${id} = ${body}`;
 }
@@ -57,16 +73,9 @@ export function modelToPydantic(model: StructureModel, models: StructureModel[])
   return [header, doc, body].filter(Boolean).join("\n");
 }
 
-export function allModelsToPydantic(
-  models: StructureModel[],
-  typeAliases: TypeAlias[] = [],
-): string {
-  const imports = [
-    "from __future__ import annotations",
-    "from datetime import datetime",
-    "from typing import Any, Optional, Union",
-    "from pydantic import BaseModel, Field",
-    "",
+// AI : shared builtins — concrete aliases so quote_string_t / text_quote_t never self-reference.
+function pydanticBuiltinModels(): string {
+  return [
     "# `text` is an alias for str — kept readable for non-technical reviewers.",
     "# Quote links extracted text back to its source span (see langextract).",
     "# quote_string_t → str at LLM time; quote_span_t / QuoteSpan after Link Quotes.",
@@ -78,7 +87,7 @@ export function allModelsToPydantic(
     "Quote = QuoteSpan",
     "",
     "class TextQuote(BaseModel):",
-    '    text: str',
+    "    text: str",
     "    quote: QuoteSpan",
     "",
     "class Document(BaseModel):",
@@ -89,13 +98,41 @@ export function allModelsToPydantic(
     "    content: str",
     "    filename: str",
     "",
+    "type quote_string_t = str",
+    "type quote_span_t = QuoteSpan",
+    "type text_quote_t = dict[str, str]",
+    "",
   ].join("\n");
+}
+
+export function allModelsToPydantic(
+  models: StructureModel[],
+  typeAliases: TypeAlias[] = [],
+  opts: { includeImports?: boolean } = {},
+): string {
+  const includeImports = opts.includeImports !== false;
   const userModels = stripSharedModels(models);
   const exportModels = modelsForPydanticExport(userModels);
-  const aliasesBlock = typeAliasesToPydantic(typeAliases, exportModels);
+  const needDatetime = exportModels.some((m) =>
+    m.fields.some((f) => {
+      const t = fieldToTypeExpr(f);
+      return t.kind === "prim" && t.name === "datetime";
+    }),
+  );
+  const imports = includeImports
+    ? [
+        "from __future__ import annotations",
+        "",
+        ...(needDatetime ? ["from datetime import datetime"] : []),
+        "from typing import Any",
+        "from pydantic import BaseModel, Field",
+        "",
+      ].join("\n")
+    : "";
+  const aliasesBlock = typeAliasesToPydantic(stripBuiltinTypeAliases(typeAliases), exportModels);
   const classes = exportModels.map((m) => modelToPydantic(m, exportModels)).join("\n\n\n");
-  const aliasGap = aliasesBlock ? `\n\n${aliasesBlock}` : "";
-  return `${imports}${aliasGap}\n\n${classes}\n`;
+  const aliasGap = aliasesBlock ? `\n${aliasesBlock}` : "";
+  return `${imports}${pydanticBuiltinModels()}${aliasGap}\n${classes}\n`;
 }
 
 function modelToDts(model: StructureModel, models: StructureModel[]): string {
@@ -144,7 +181,7 @@ function typeExprToAliasDefinitionRust(expr: TypeExpr, models: StructureModel[])
 }
 
 export function typeAliasToRust(alias: TypeAlias, models: StructureModel[]): string {
-  const id = typeAliasExportName(alias.name);
+  const id = typeAliasExportNameRust(alias.name);
   const body = typeExprToAliasDefinitionRust(alias.expr, models);
   const note = alias.description?.trim();
   return note ? `/// ${note}\npub type ${id} = ${body};` : `pub type ${id} = ${body};`;
@@ -153,15 +190,16 @@ export function typeAliasToRust(alias: TypeAlias, models: StructureModel[]): str
 function fieldToRust(field: { name: string; optional: boolean; description?: string }, models: StructureModel[], expr: TypeExpr): string {
   let t = typeExprToRust(expr, models);
   if (field.optional && expr.kind !== "optional") t = `Option<${t}>`;
+  const { ident, rename } = rustFieldIdent(field.name);
   const lines: string[] = [];
   if (field.description?.trim()) lines.push(`    /// ${field.description.trim()}`);
-  // AI : serde rename keeps JSON field names when Rust id differs (rare for valid identifiers).
-  lines.push(`    pub ${field.name}: ${t},`);
+  if (rename) lines.push(`    #[serde(rename = ${JSON.stringify(rename)})]`);
+  lines.push(`    pub ${ident}: ${t},`);
   return lines.join("\n");
 }
 
 function modelToRust(model: StructureModel, models: StructureModel[]): string {
-  const id = modelExportIdentifier(model.name);
+  const id = modelExportIdentifierRust(model.name);
   const doc = model.description?.trim() ? `/// ${model.description.trim()}\n` : "";
   const fields = model.fields
     .filter((f) => f.name.trim())
@@ -182,8 +220,8 @@ export function allModelsToRust(
 ): string {
   const header = [
     "use serde::{Deserialize, Serialize};",
-    "use serde_json::{json, Value};",
-    "use std::collections::{HashMap, HashSet};",
+    "use serde_json::Value;",
+    "use std::collections::HashMap;",
     "",
     "#[derive(Debug, Clone, Serialize, Deserialize)]",
     "pub struct QuoteSpan {",
@@ -207,7 +245,10 @@ export function allModelsToRust(
     "}",
     "",
     "pub type FileInput = Document;",
+    // AI : domain names match TS/Python; allow keeps rustc quiet on snake_case aliases.
+    "#[allow(non_camel_case_types)]",
     "pub type quote_string_t = String;",
+    "#[allow(non_camel_case_types)]",
     "pub type quote_span_t = QuoteSpan;",
     "",
     "#[derive(Debug, Clone, Serialize, Deserialize)]",
@@ -216,6 +257,7 @@ export function allModelsToRust(
     "    pub quote: String,",
     "}",
     "",
+    "#[allow(non_camel_case_types)]",
     "pub type text_quote_t = TextQuoteLoose;",
     "",
   ].join("\n");

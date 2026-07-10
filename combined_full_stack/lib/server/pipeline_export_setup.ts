@@ -420,9 +420,12 @@ function openRouterHelpersPy(): string[] {
     "        res = await client.post(OPENROUTER_CHAT_URL, headers=headers, json=payload)",
     "    if res.status_code != 200:",
     '        raise RuntimeError(f"OpenRouter {res.status_code}: {res.text}")',
-    "    data = res.json()",
-    '    content = (data.get("choices") or [{}])[0].get("message", {}).get("content")',
-    "    if not content:",
+    "    data: Any = res.json()",
+    '    choices: Any = data.get("choices") if isinstance(data, dict) else None',
+    "    first: Any = choices[0] if isinstance(choices, list) and choices else {}",
+    '    message: Any = first.get("message", {}) if isinstance(first, dict) else {}',
+    '    content: Any = message.get("content") if isinstance(message, dict) else None',
+    "    if not isinstance(content, str) or not content:",
     '        raise RuntimeError("OpenRouter returned no message content")',
     "    return content",
   ];
@@ -550,13 +553,12 @@ export function generateRuntimeStubsTs(needs: ExportRuntimeNeeds): string {
 export function generateRuntimeConfigSectionPy(needs: ExportRuntimeNeeds): string {
   const lines = [
     "# === runtime config (load .env in your runner — pass values here, not in this file) ===",
-    "from dataclasses import dataclass",
-    "",
     "@dataclass",
     "class PipelineRuntime:",
   ];
+  const fields: string[] = [];
   if (needs.llm || needs.llmBatch || needs.visionOcr) {
-    lines.push(
+    fields.push(
       "    open_router_api_key: str | None = None",
       "    open_router_model: str | None = None",
       "    open_router_site_url: str | None = None",
@@ -564,12 +566,14 @@ export function generateRuntimeConfigSectionPy(needs: ExportRuntimeNeeds): strin
     );
   }
   if (needs.quote) {
-    lines.push("    source_text: str | None = None", "    source_doc_id: str | None = None");
+    fields.push("    source_text: str | None = None", "    source_doc_id: str | None = None");
   }
   if (needs.humanReview) {
-    lines.push("    on_human_review: Any = None  # async callable(input) -> None");
+    fields.push("    on_human_review: Callable[[Any], Any] | None = None");
   }
+  if (!fields.length) fields.push("    pass");
   lines.push(
+    ...fields,
     "    # AI : TODO export — Supabase persistence (supabase_url, supabase_service_key).",
     "    # AI : TODO export — step cache (enable_cache, cache_url / PIPELINE_CACHE_URL).",
   );
@@ -589,7 +593,7 @@ export function generateRuntimeStubsPy(needs: ExportRuntimeNeeds): string {
       "",
       "async def llm_batch_structured(",
       "    items: list[Any],",
-      "    prompt_for: Any,",
+      "    prompt_for: Callable[[Any], str],",
       "    schema: Any,",
       ") -> list[Any]:",
       "    return [await llm_structured(prompt_for(item), schema) for item in items]",
@@ -688,7 +692,7 @@ function openRouterHelpersRust(): string[] {
     "    let site = rt.open_router_site_url.clone().unwrap_or_else(|| \"http://localhost:3000\".to_string());",
     "    let title = rt.open_router_app_title.clone().unwrap_or_else(|| \"forge-pipeline-export\".to_string());",
     "    drop(rt);",
-    "    let mut payload = json!({",
+    "    let mut payload = serde_json::json!({",
     '        "model": model,',
     '        "messages": [{"role": "user", "content": prompt}],',
     '        "temperature": 0,',
@@ -696,7 +700,7 @@ function openRouterHelpersRust(): string[] {
     '        "provider": {"allow_fallbacks": false},',
     "    });",
     "    if json_mode {",
-    '        payload["response_format"] = json!({"type": "json_object"});',
+    '        payload["response_format"] = serde_json::json!({"type": "json_object"});',
     "    }",
     "    let client = reqwest::Client::new();",
     "    let res = client",

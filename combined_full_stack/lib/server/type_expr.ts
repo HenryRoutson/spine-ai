@@ -1,6 +1,6 @@
 import { z, type ZodType } from "zod";
 import { isValidJsonString } from "@/lib/json-utils";
-import { modelExportIdentifier } from "@/lib/structure-shape";
+import { modelExportIdentifier, modelExportIdentifierRust } from "@/lib/structure-shape";
 import type {
   FieldType,
   InputType,
@@ -555,7 +555,7 @@ export function typeExprToPy(expr: TypeExpr, models: StructureModel[] = []): str
       return name ? modelExportIdentifier(name) : "Any";
     }
     case "optional":
-      return `Optional[${typeExprToPy(expr.inner, models)}]`;
+      return `${typeExprToPy(expr.inner, models)} | None`;
     case "set":
       return `set[${typeExprToPy(expr.item, models)}]`;
     case "map":
@@ -585,7 +585,7 @@ export function typeExprToPy(expr: TypeExpr, models: StructureModel[] = []): str
 export function fieldToPy(field: ModelField, models: StructureModel[]): string {
   const expr = fieldToTypeExpr(field);
   let t = typeExprToPy(expr, models);
-  if (field.optional && expr.kind !== "optional") t = `Optional[${t}]`;
+  if (field.optional && expr.kind !== "optional") t = `${t} | None`;
   const fieldArgs: string[] = [];
   if (field.optional) fieldArgs.push("default=None");
   if (field.description) fieldArgs.push(`description=${JSON.stringify(field.description)}`);
@@ -686,7 +686,7 @@ export function typeExprToRust(expr: TypeExpr, models: StructureModel[] = []): s
       return `Vec<${typeExprToRust(expr.item, models)}>`;
     case "ref": {
       const name = modelName(models, expr.modelId);
-      return name ? modelExportIdentifier(name) : "serde_json::Value";
+      return name ? modelExportIdentifierRust(name) : "serde_json::Value";
     }
     case "optional":
       return `Option<${typeExprToRust(expr.inner, models)}>`;
