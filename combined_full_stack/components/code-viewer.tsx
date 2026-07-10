@@ -7,18 +7,20 @@ import type { editor } from "monaco-editor"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
-export type CodeViewerLanguage = "python" | "typescript"
+export type CodeViewerLanguage = "python" | "typescript" | "rust"
 
-export const CODE_VIEWER_LANGUAGES: CodeViewerLanguage[] = ["python", "typescript"]
+export const CODE_VIEWER_LANGUAGES: CodeViewerLanguage[] = ["python", "typescript", "rust"]
 
 export const CODE_LANG_LABEL: Record<CodeViewerLanguage, string> = {
   python: "Python",
   typescript: "TypeScript",
+  rust: "Rust",
 }
 
 export const CODE_LANG_LINT_HINT: Record<CodeViewerLanguage, string> = {
   python: "pyright",
   typescript: "tsc",
+  rust: "cargo check",
 }
 
 export const MONACO_CODE_THEME = "vs-dark" as const

@@ -1,9 +1,10 @@
 import { orderedInputModules } from "@/lib/inference-input";
 import { buildCustomFnSource } from "@/lib/custom_code";
 import { usesPassthroughStructure } from "@/lib/module-kinds";
+import { modelExportIdentifier } from "@/lib/structure-shape";
 import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
-import { stepSpineInType, stepSpineOutType, typeExprToPy, typeExprToTs } from "./type_expr";
+import { stepSpineInType, stepSpineOutType, typeExprToPy, typeExprToRust, typeExprToTs } from "./type_expr";
 import { FieldType, ModuleKind } from "./types";
 import type { StepLabel } from "../run-types";
 import type { PipelineModule, Project, StructureModelId, TypeExpr } from "./types";
@@ -40,6 +41,11 @@ export function exportSpineInTs(m: PipelineModule, project: Project, index: numb
 export function exportSpineInPy(m: PipelineModule, project: Project, index: number): string {
   const t = exportSpineInType(m, project, index);
   return t ? typeExprToPy(t, project.models) : "Any";
+}
+
+export function exportSpineInRust(m: PipelineModule, project: Project, index: number): string {
+  const t = exportSpineInType(m, project, index);
+  return t ? typeExprToRust(t, project.models) : "Value";
 }
 
 export function modelName(project: Project, id: StructureModelId | undefined): string | undefined {
@@ -159,6 +165,40 @@ export function generateInputStepBodyPy(m: PipelineModule): string {
   return lines.join("\n");
 }
 
+export function generateInputStepBodyRust(m: PipelineModule, outRust: string): string {
+  const lines = [
+    "// Parse uploaded file — built-in parser or vision OCR when enabled",
+    ...(m.inputDescription
+      ? [
+          `// Input guard: ${JSON.stringify(m.inputDescription)}${m.checkInputDescription === false ? " (disabled)" : ""}`,
+        ]
+      : []),
+    ...(m.inputNameContains ? [`// Filename must contain: ${JSON.stringify(m.inputNameContains)}`] : []),
+    ...(m.useOcr ? ["// Vision OCR enabled for PDF/image uploads"] : []),
+  ];
+  if (inputOutputsDocument(m)) {
+    if (m.outIsList) {
+      lines.push("Ok(vec![input])");
+    } else {
+      lines.push("Ok(input)");
+    }
+    return lines.join("\n");
+  }
+  lines.push("let parsed: Value = serde_json::from_str(&input.content)?;");
+  if (m.outIsList) {
+    lines.push(`let out: ${outRust} = if parsed.is_array() {`);
+    lines.push("    serde_json::from_value(parsed)?");
+    lines.push("} else {");
+    lines.push("    serde_json::from_value(Value::Array(vec![parsed]))?");
+    lines.push("};");
+    lines.push("Ok(out)");
+  } else {
+    lines.push(`let out: ${outRust} = serde_json::from_value(parsed)?;`);
+    lines.push("Ok(out)");
+  }
+  return lines.join("\n");
+}
+
 // AI : the side input (or its auto parse llm) directly precedes the combine — its emitted
 // AI : structure lands in matching ref fields, mirroring execCombineStep.
 function combineSideStructId(m: PipelineModule, project: Project): StructureModelId | undefined {
@@ -206,7 +246,33 @@ export function generateCombineStepBodyPy(m: PipelineModule, project: Project): 
   ].join("\n");
 }
 
-export type OrchestratorLang = "ts" | "py";
+export function generateCombineStepBodyRust(m: PipelineModule, project: Project, outRust: string): string {
+  const out = project.models.find((x) => x.id === m.outStructureId);
+  const inName = modelName(project, m.inStructureId);
+  const sideId = combineSideStructId(m, project);
+  const upstreamLabel = upstreamLabelForCombine(m, project);
+  const upstreamKey = upstreamLabel ? JSON.stringify(upstreamLabel) : '"upstream"';
+  const rawOutName = modelName(project, m.outStructureId);
+  const outName = rawOutName ? modelExportIdentifier(rawOutName) : outRust;
+  const fieldExprs =
+    out?.fields.map((f) => {
+      if (f.type === FieldType.Document) return `        ${f.name}: new_doc.clone(),`;
+      if (sideId && f.ref === sideId) {
+        return `        ${f.name}: serde_json::from_value(serde_json::to_value(&new_doc)?)?,`;
+      }
+      return `        ${f.name}: serde_json::from_value(state.get(${upstreamKey}).cloned().unwrap_or(Value::Null))?,`;
+    }) ?? [];
+  return [
+    `// Merge uploaded document with upstream ${inName ?? "pipeline data"} from pipeline state`,
+    "let new_doc = input; // AI : list side-inputs — take first element in your runner if needed",
+    `let merged = ${outName} {`,
+    ...fieldExprs,
+    "};",
+    "Ok(merged)",
+  ].join("\n");
+}
+
+export type OrchestratorLang = "ts" | "py" | "rs";
 
 function orchestratorInputMods(project: Project): PipelineModule[] {
   return orderedInputModules(project.modules);
@@ -220,6 +286,15 @@ function orchestratorInvokeLine(
   inTs: string,
 ): string {
   const label = labelAsStateKey(m.label);
+  if (lang === "rs") {
+    if (m.kind !== ModuleKind.Input) {
+      return `    spine = serde_json::to_value(${fn}(serde_json::from_value(spine)?, &mut state).await?)?;`;
+    }
+    if (singleInput) {
+      return `    spine = serde_json::to_value(${fn}(initial_input, &mut state).await?)?;`;
+    }
+    return `    spine = serde_json::to_value(${fn}(inputs.get(${JSON.stringify(label)}).cloned().ok_or_else(|| anyhow::anyhow!("missing input"))?, &mut state).await?)?;`;
+  }
   if (m.kind !== ModuleKind.Input) {
     return lang === "ts"
       ? `  spine = await ${fn}(spine as ${inTs}, state);`
@@ -228,7 +303,7 @@ function orchestratorInvokeLine(
   if (singleInput) {
     return lang === "ts" ? `  spine = await ${fn}(initialInput, state);` : `    spine = await ${fn}(initial_input, state)`;
   }
-  const key = lang === "ts" ? JSON.stringify(label) : JSON.stringify(label);
+  const key = JSON.stringify(label);
   return lang === "ts"
     ? `  spine = await ${fn}(inputs[${key}], state);`
     : `    spine = await ${fn}(inputs[${key}], state)`;
@@ -297,10 +372,44 @@ export function generateOrchestratorPy(project: Project, stepFnName: (m: Pipelin
   return lines.join("\n");
 }
 
+// AI : async Rust orchestrator — spine as Value between steps for open typing.
+export function generateOrchestratorRust(project: Project, stepFnName: (m: PipelineModule, i: number) => string): string {
+  const inputMods = orchestratorInputMods(project);
+  const multi = inputMods.length > 1;
+  const lines: string[] = [];
+
+  if (multi) {
+    lines.push("pub async fn run_pipeline(inputs: HashMap<String, Document>) -> anyhow::Result<Value> {");
+  } else {
+    lines.push("pub async fn run_pipeline(initial_input: Document) -> anyhow::Result<Value> {");
+  }
+
+  lines.push("    let mut state: PipelineState = HashMap::new();", "    let mut spine = Value::Null;", "");
+
+  for (let i = 0; i < project.modules.length; i++) {
+    const m = project.modules[i]!;
+    const fn = stepFnName(m, i);
+    const label = labelAsStateKey(m.label);
+    const inRust = exportSpineInRust(m, project, i);
+    lines.push(`    // ${i + 1}. ${m.label}`);
+    lines.push(orchestratorInvokeLine(m, fn, "rs", !multi, inRust));
+    if (label) {
+      if (m.kind === ModuleKind.Input) {
+        lines.push(`    state.insert(${JSON.stringify(label)}.to_string(), spine.clone());`);
+      } else {
+        lines.push(`    state.insert(${JSON.stringify(label)}.to_string(), spine.clone());`);
+      }
+    }
+    lines.push("");
+  }
+
+  lines.push("    Ok(spine)", "}", "");
+  return lines.join("\n");
+}
+
 export { generateCustomCodeStepBodyTs, tsCustomCodeCall, tsCustomCodeFnDecl, pyCustomCodeCall };
 
 // AI : block exports that reference runtime secrets or env wiring.
-// AI : TODO export — add generatePipelineSourceRust alongside TS/Py.
 // AI : TODO export — optional Supabase hooks in orchestrator (persist run metadata + per-step spine snapshots).
 // AI : TODO export — emit cache lookup/store around LLM steps when module.cached or runtime.enableCache is set.
 const ENV_ACCESS_PATTERNS: RegExp[] = [
@@ -311,6 +420,8 @@ const ENV_ACCESS_PATTERNS: RegExp[] = [
   /\bgetenv\s*\(/,
   /\bDeno\.env\b/,
   /\bimport\.meta\.env\b/,
+  /\bstd::env::/,
+  /\benv::var\b/,
 ];
 
 const ENV_KEY_NAME_PATTERNS: RegExp[] = [

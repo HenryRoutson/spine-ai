@@ -81,7 +81,7 @@ A central visualisation of all steps of the pipeline with boxes for each step an
 steps include 
 
 1. input - select a any subset of input types like pdf, word not just 1. select doucment to be default.
-2. custom function - typescript or python, with built in fallback system
+2. custom function - typescript or python or rust, with built in fallback system
 single llm call
 3. parallel llm call - ensuring this completes in a similar time to the single call.
 4. output (there can be multiple per pipeline)

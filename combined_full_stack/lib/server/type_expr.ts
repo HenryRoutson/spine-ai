@@ -656,3 +656,63 @@ export function labelToPyKey(label: string): string {
   if (!trimmed) return "_empty";
   return trimmed.replace(/[^a-zA-Z0-9_]+/g, "_").replace(/^(\d)/, "_$1");
 }
+
+// AI : Rust type strings for pipeline export — serde-friendly, JSON Value for open shapes.
+export function typeExprToRust(expr: TypeExpr, models: StructureModel[] = []): string {
+  switch (expr.kind) {
+    case "prim":
+      switch (expr.name) {
+        case "text":
+        case "datetime":
+          return "String";
+        case "json":
+          return "serde_json::Value";
+        case "int":
+          return "i64";
+        case "float":
+          return "f64";
+        case "bool":
+          return "bool";
+        default:
+          return "serde_json::Value";
+      }
+    case "document":
+      return "Document";
+    case "quote":
+      return "QuoteSpan";
+    case "text_quote":
+      return "TextQuoteLoose";
+    case "list":
+      return `Vec<${typeExprToRust(expr.item, models)}>`;
+    case "ref": {
+      const name = modelName(models, expr.modelId);
+      return name ? modelExportIdentifier(name) : "serde_json::Value";
+    }
+    case "optional":
+      return `Option<${typeExprToRust(expr.inner, models)}>`;
+    case "set":
+      return `std::collections::HashSet<${typeExprToRust(expr.item, models)}>`;
+    case "map":
+      return `std::collections::HashMap<${typeExprToRust(expr.key, models)}, ${typeExprToRust(expr.value, models)}>`;
+    case "union":
+      // AI : untagged unions → Value; callers can narrow after deserialize.
+      return "serde_json::Value";
+    case "generic":
+      if (expr.name === "tuple") {
+        return `(${expr.args.map((a) => typeExprToRust(a, models)).join(", ")})`;
+      }
+      return expr.args.length
+        ? `${expr.name}<${expr.args.map((a) => typeExprToRust(a, models)).join(", ")}>`
+        : expr.name;
+    case "named":
+      return expr.name;
+    case "unset":
+      return "!";
+    case "file":
+      return "FileInput";
+    case "unknown":
+      return "serde_json::Value";
+    default:
+      return "serde_json::Value";
+  }
+}

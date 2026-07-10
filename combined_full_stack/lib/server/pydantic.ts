@@ -1,4 +1,4 @@
-import { fieldToPy, fieldToTypeExpr, typeExprToPy, typeExprToTs } from "./type_expr";
+import { fieldToPy, fieldToTypeExpr, typeExprToPy, typeExprToRust, typeExprToTs } from "./type_expr";
 import { stripBuiltinTypeAliases } from "./builtin_types";
 import { stripSharedModels } from "./builtin_models";
 import type { TypeExpr } from "./types";
@@ -130,4 +130,101 @@ export function allModelsToDts(
   const aliasGap = aliasesBlock ? `${aliasesBlock}\n` : "";
   const user = exportModels.map((m) => modelToDts(m, exportModels)).join("\n\n");
   return `${header}${aliasGap}${user}\n`;
+}
+
+function typeExprToAliasDefinitionRust(expr: TypeExpr, models: StructureModel[]): string {
+  switch (expr.kind) {
+    case "quote":
+      return "String";
+    case "text_quote":
+      return "TextQuoteLoose";
+    default:
+      return typeExprToRust(expr, models);
+  }
+}
+
+export function typeAliasToRust(alias: TypeAlias, models: StructureModel[]): string {
+  const id = typeAliasExportName(alias.name);
+  const body = typeExprToAliasDefinitionRust(alias.expr, models);
+  const note = alias.description?.trim();
+  return note ? `/// ${note}\npub type ${id} = ${body};` : `pub type ${id} = ${body};`;
+}
+
+function fieldToRust(field: { name: string; optional: boolean; description?: string }, models: StructureModel[], expr: TypeExpr): string {
+  let t = typeExprToRust(expr, models);
+  if (field.optional && expr.kind !== "optional") t = `Option<${t}>`;
+  const lines: string[] = [];
+  if (field.description?.trim()) lines.push(`    /// ${field.description.trim()}`);
+  // AI : serde rename keeps JSON field names when Rust id differs (rare for valid identifiers).
+  lines.push(`    pub ${field.name}: ${t},`);
+  return lines.join("\n");
+}
+
+function modelToRust(model: StructureModel, models: StructureModel[]): string {
+  const id = modelExportIdentifier(model.name);
+  const doc = model.description?.trim() ? `/// ${model.description.trim()}\n` : "";
+  const fields = model.fields
+    .filter((f) => f.name.trim())
+    .map((f) => fieldToRust(f, models, fieldToTypeExpr(f)));
+  const body = fields.length ? fields.join("\n") : "    // empty";
+  return [
+    doc + "#[derive(Debug, Clone, Serialize, Deserialize)]",
+    `pub struct ${id} {`,
+    body,
+    "}",
+  ].join("\n");
+}
+
+// AI : single-file Rust structs for pipeline export — serde JSON round-trip.
+export function allModelsToRust(
+  models: StructureModel[],
+  typeAliases: TypeAlias[] = [],
+): string {
+  const header = [
+    "use serde::{Deserialize, Serialize};",
+    "use serde_json::{json, Value};",
+    "use std::collections::{HashMap, HashSet};",
+    "",
+    "#[derive(Debug, Clone, Serialize, Deserialize)]",
+    "pub struct QuoteSpan {",
+    "    pub doc_id: String,",
+    "    pub start: i64,",
+    "    pub end: i64,",
+    "}",
+    "",
+    "pub type Quote = QuoteSpan;",
+    "",
+    "#[derive(Debug, Clone, Serialize, Deserialize)]",
+    "pub struct TextQuote {",
+    "    pub text: String,",
+    "    pub quote: QuoteSpan,",
+    "}",
+    "",
+    "#[derive(Debug, Clone, Serialize, Deserialize)]",
+    "pub struct Document {",
+    "    pub content: String,",
+    "    pub filename: String,",
+    "}",
+    "",
+    "pub type FileInput = Document;",
+    "pub type quote_string_t = String;",
+    "pub type quote_span_t = QuoteSpan;",
+    "",
+    "#[derive(Debug, Clone, Serialize, Deserialize)]",
+    "pub struct TextQuoteLoose {",
+    "    pub text: String,",
+    "    pub quote: String,",
+    "}",
+    "",
+    "pub type text_quote_t = TextQuoteLoose;",
+    "",
+  ].join("\n");
+  const userModels = stripSharedModels(models);
+  const exportModels = modelsForPydanticExport(userModels);
+  const aliases = stripBuiltinTypeAliases(typeAliases);
+  const aliasesBlock = aliases.length
+    ? `\n// --- project type aliases ---\n${aliases.map((a) => typeAliasToRust(a, exportModels)).join("\n")}\n`
+    : "";
+  const user = exportModels.map((m) => modelToRust(m, exportModels)).join("\n\n");
+  return `${header}${aliasesBlock}\n${user}\n`;
 }

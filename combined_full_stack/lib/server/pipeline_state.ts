@@ -1,7 +1,7 @@
 import { z, type ZodType } from "zod";
 import type { PipelineModule, Project, StructureModel, TypeAlias } from "./types";
 import type { PipelineState, StepLabel } from "../run-types";
-import { formatTypeExpr, labelToPyKey, stepSpineOutType, typeExprToTs, typeExprToZod, zodFromModel } from "./type_expr";
+import { formatTypeExpr, labelToPyKey, stepSpineOutType, typeExprToRust, typeExprToTs, typeExprToZod, zodFromModel } from "./type_expr";
 
 export type { PipelineState, StepLabel };
 
@@ -71,6 +71,19 @@ export function pipelineStateTsInterface(project: Project): string {
   });
   if (!lines.length) return "export type PipelineState = Record<string, never>;";
   return `export type PipelineState = {\n${lines.join("\n")}\n};`;
+}
+
+// AI : label-keyed HashMap — values as Value so heterogeneous step outputs type-check.
+export function pipelineStateRustType(project: Project): string {
+  const lines = pipelineStateFields(project).map((f) => {
+    const t = f.type ? typeExprToRust(f.type, project.models) : "serde_json::Value";
+    return `    // ${JSON.stringify(f.label)}: ${t}`;
+  });
+  const comment = lines.length ? `${lines.join("\n")}\n` : "";
+  return [
+    "// Pipeline state — step label → spine snapshot (JSON for open typing).",
+    comment + "pub type PipelineState = HashMap<String, Value>;",
+  ].join("\n");
 }
 
 // AI : validate one label's stored value against its declared step output type.
