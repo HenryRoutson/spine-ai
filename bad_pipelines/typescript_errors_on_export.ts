@@ -234,3 +234,57 @@ export async function runPipeline(initialInput: unknown): Promise<unknown> {
 
   return spine;
 }
+
+
+
+/*
+
+6133: 'SOURCE_TEXT' is declared but its value is never read. 85:15 - 85:26
+6133: 'SOURCE_DOC_ID' is declared but its value is never read. 86:15 - 86:28
+6133: 'prompt' is declared but its value is never read. 88:33 - 88:39
+6133: 'llmBatchStructured' is declared but its value is never read. 92:16 - 92:34
+6133: 'resolveQuotes' is declared but its value is never read. 100:10 - 100:23
+6133: 'data' is declared but its value is never read. 100:27 - 100:31
+6133: 'state' is declared but its value is never read. 115:50 - 115:55
+6133: 'state' is declared but its value is never read. 128:51 - 128:56
+6133: 'state' is declared but its value is never read. 140:57 - 140:62
+6133: 'state' is declared but its value is never read. 154:55 - 154:60
+6133: 'newDoc' is declared but its value is never read. 156:9 - 156:15
+6133: 'pipelineData' is declared but its value is never read. 157:9 - 157:21
+6133: 'state' is declared but its value is never read. 201:57 - 201:62
+2740: Type 'Document' is missing the following properties from type 'LegacyUser[]': length, pop, push, concat, and 35 more. 120:3 - 120:9
+7006: Parameter 'input' implicitly has an 'any' type. 169:17 - 169:22
+7006: Parameter 'v' implicitly has an 'any' type. 172:19 - 172:20
+7006: Parameter 'v' implicitly has an 'any' type. 173:20 - 173:21
+7006: Parameter 'v' implicitly has an 'any' type. 174:19 - 174:20
+7006: Parameter 'v' implicitly has an 'any' type. 175:20 - 175:21
+7006: Parameter 'v' implicitly has an 'any' type. 176:25 - 176:26
+7006: Parameter 'obj' implicitly has an 'any' type. 178:22 - 178:25
+7006: Parameter 'path' implicitly has an 'any' type. 178:27 - 178:31
+7006: Parameter 'v' implicitly has an 'any' type. 178:33 - 178:34
+7006: Parameter 'rec' implicitly has an 'any' type. 184:36 - 184:39
+18046: 's' is of type 'unknown'. 187:21 - 187:22
+18046: 's' is of type 'unknown'. 187:62 - 187:63
+18046: 's' is of type 'unknown'. 188:51 - 188:52
+18046: 's' is of type 'unknown'. 188:84 - 188:85
+18046: 's' is of type 'unknown'. 188:97 - 188:98
+7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ lowercase: (v: any) => string; first_word: (v: any) => string; last_word: (v: any) => string | undefined; yn_to_bool: (v: any) => boolean; ddmmyyyy_to_iso: (v: any) => string; }'. 188:111 - 188:134
+18046: 's' is of type 'unknown'. 188:122 - 188:123
+2554: Expected 1 arguments, but got 2. 193:22 - 193:27
+2352: Conversion of type 'MigratedUser' to type 'MigratedUser[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Type 'MigratedUser' is missing the following properties from type 'MigratedUser[]': length, pop, push, concat, and 35 more. 203:10 - 203:33
+2740: Type '{}' is missing the following properties from type 'PipelineState': "Legacy Users", "Human Review", "Field Mapping Input", "Combine Inputs", and 2 more. 208:9 - 208:14
+2322: Type 'unknown' is not assignable to type 'LegacyUser[]'. 213:3 - 213:24
+2345: Argument of type 'unknown' is not assignable to parameter of type 'Document'. 216:35 - 216:40
+2322: Type 'unknown' is not assignable to type 'Document'. 217:3 - 217:24
+2322: Type 'unknown' is not assignable to type 'Document'. 221:3 - 221:31
+2345: Argument of type 'unknown' is not assignable to parameter of type 'LegacyUser'. 224:37 - 224:42
+2322: Type 'unknown' is not assignable to type 'MigrationInput'. 225:3 - 225:26
+2345: Argument of type 'unknown' is not assignable to parameter of type 'MigrationInput'. 228:42 - 228:47
+2322: Type 'unknown' is not assignable to type 'MigratedUser[]'. 229:3 - 229:31
+2345: Argument of type 'unknown' is not assignable to parameter of type 'MigratedUser'. 232:37 - 232:42
+2322: Type 'unknown' is not assignable to type 'MigratedUser[]'. 233:3 - 233:26
+1109: Expression expected. 158:55 - 158:56
+1109: Expression expected. 158:98 - 158:99
+
+*/
