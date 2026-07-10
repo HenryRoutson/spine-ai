@@ -3,7 +3,7 @@
 import { useMemo } from "react"
 import { Check, AlertTriangle, FileText, BookOpen, Braces } from "lucide-react"
 import { MultiLangReadonlyCodeViewer, type MultiLangCodeSource } from "@/components/code-viewer"
-import { allModelsToDts, allModelsToPydantic } from "@/lib/pydantic"
+import { allModelsToDts, allModelsToPydantic, allModelsToRust } from "@/lib/pydantic"
 import { API_ROUTES } from "@/lib/api-routes"
 import { JSON_HEADERS } from "@/lib/api-client"
 import { readPipelineAssistantStream } from "@/lib/assistant-stream-read"
@@ -167,6 +167,12 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
         label: "TypeScript",
         filename: "models.d.ts",
         content: allModelsToDts(proposalModels, proposalTypes),
+      },
+      {
+        language: "rust",
+        label: "Rust",
+        filename: "models.rs",
+        content: allModelsToRust(proposalModels, proposalTypes),
       },
     ],
     [proposalModels, proposalTypes],

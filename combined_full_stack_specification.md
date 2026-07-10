@@ -74,6 +74,8 @@ each of the fields will have a boolean for if something is deterministic
 
 if a struct is auto generated then lock it.
 
+for locked fields if you try and click them, there should be a clear error message telling you that this struct is locked with an explaination as to why.
+
 # Pipeline
 
 A central visualisation of all steps of the pipeline with boxes for each step and a descrpition and associated icon.

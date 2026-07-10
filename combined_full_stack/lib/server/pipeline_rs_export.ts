@@ -2,7 +2,11 @@ import { assertEntriesForModule } from "@/lib/assert_steps";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { allModelsToRust } from "./pydantic";
 import {
-  assertNoEnvKeysInExport,
+  exportStringLiteral,
+  indentExportBlock,
+  makeUniqueStepFnName,
+  primaryExportCustomCode,
+  withExportLineCountMeta,
   exportSpineInRust,
   exportSpineOutRust,
   generateCombineStepBodyRust,
@@ -13,49 +17,10 @@ import {
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsRust } from "./pipeline_export_setup";
 import { pipelineStateRustType } from "./pipeline_state";
-import { labelToPyKey } from "./type_expr";
 import { MODULE_META } from "./types";
 import type { PipelineModule, Project } from "./types";
 
 // AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
-
-function makeStepFnName(): (m: PipelineModule, index: number) => string {
-  const byIndex = new Map<number, string>();
-  const used = new Set<string>();
-  return (m, index) => {
-    const cached = byIndex.get(index);
-    if (cached) return cached;
-    // AI : rustc non_snake_case — "✓ Wrap → List" → step_wrap_list; index disambiguates collisions.
-    const key = labelToPyKey(m.label)
-      .toLowerCase()
-      .replace(/_+/g, "_")
-      .replace(/^_|_$/g, "");
-    let name = key ? `step_${key}` : `step_${index}`;
-    if (used.has(name)) name = `step_${index}_${key || "step"}`;
-    used.add(name);
-    byIndex.set(index, name);
-    return name;
-  };
-}
-
-function indentBlock(code: string, spaces: number): string {
-  const pad = " ".repeat(spaces);
-  return code
-    .split("\n")
-    .map((line) => (line ? `${pad}${line}` : line))
-    .join("\n");
-}
-
-function rustStringLiteral(s: string): string {
-  return JSON.stringify(s);
-}
-
-function rsPrimaryCustomCode(m: PipelineModule): { language: string; code: string } | null {
-  const entries = customCodeEntriesForModule(m);
-  const primary = entries[0];
-  if (!primary?.code.trim()) return null;
-  return { language: primary.language, code: primary.code.trim() };
-}
 
 function commentForeignCode(code: string, langLabel: string): string {
   return [
@@ -76,9 +41,9 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
       const model = m.model ?? "deepseek-v3";
       return [
         `// Structured LLM call → ${outName ?? outRust}${m.outIsList ? "[]" : ""}`,
-        `let _model = ${rustStringLiteral(model)};`,
+        `let _model = ${exportStringLiteral(model)};`,
         `let _ = _model;`,
-        `let user_prompt = format!("{}\\n\\nINPUT DATA:\\n{}", ${rustStringLiteral(prompt)}, serde_json::to_string_pretty(&input)?);`,
+        `let user_prompt = format!("{}\\n\\nINPUT DATA:\\n{}", ${exportStringLiteral(prompt)}, serde_json::to_string_pretty(&input)?);`,
         `let schema = serde_json::json!({}); // JSON schema for ${outName ?? "output"}`,
         `let value = llm_structured(&user_prompt, &schema).await?;`,
         `let out: ${outRust} = serde_json::from_value(value)?;`,
@@ -95,7 +60,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
         `let schema = serde_json::json!({}); // JSON schema for ${outName ?? "output"}`,
         "let mut out = Vec::new();",
         "for item in items {",
-        `    let prompt = format!("{}\\n\\nITEM:\\n{}", ${rustStringLiteral(prompt)}, serde_json::to_string_pretty(&item)?);`,
+        `    let prompt = format!("{}\\n\\nITEM:\\n{}", ${exportStringLiteral(prompt)}, serde_json::to_string_pretty(&item)?);`,
         "    let value = llm_structured(&prompt, &schema).await?;",
         `    out.push(serde_json::from_value::<${itemRust}>(value)?);`,
         "}",
@@ -112,7 +77,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
     case "combine":
       return generateCombineStepBodyRust(m, project, outRust, _inRust);
     case "transform": {
-      const custom = rsPrimaryCustomCode(m);
+      const custom = primaryExportCustomCode(m);
       if (custom) {
         return [
           commentForeignCode(custom.code, custom.language === "python" ? "Python transform" : "TypeScript transform"),
@@ -127,7 +92,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
       ].join("\n");
     }
     case "custom-code": {
-      const custom = rsPrimaryCustomCode(m);
+      const custom = primaryExportCustomCode(m);
       const fallbacks = customCodeEntriesForModule(m);
       if (custom) {
         const lines = [
@@ -201,7 +166,7 @@ function generateStepFn(
     ...docLines,
     `async fn ${fn}(input: ${inRust}, ${stateParam}: &mut PipelineState) -> anyhow::Result<${outRust}> {`,
   ];
-  return [...header, indentBlock(body, 4), "}", ""].join("\n");
+  return [...header, indentExportBlock(body, 4), "}", ""].join("\n");
 }
 
 // AI : single-file Rust export — structs + step bodies + orchestrator for LOC comparison.
@@ -210,7 +175,7 @@ export function generatePipelineSourceRust(project: Project): string {
   const needs = analyzeExportRuntimeNeeds(prepared);
   const runtimeStubs = generateRuntimeStubsRust(needs);
   const sections: string[] = [];
-  const stepFnName = makeStepFnName();
+  const stepFnName = makeUniqueStepFnName();
   const stepFns = prepared.modules.map((m, i) => generateStepFn(m, prepared, i, stepFnName)).join("\n");
   const orchestrator = generateOrchestratorRust(prepared, stepFnName);
 
@@ -235,14 +200,7 @@ export function generatePipelineSourceRust(project: Project): string {
     orchestrator,
   );
 
-  const content = sections.join("\n");
-  const lineCount = content.split("\n").length;
-  const withMeta = content.replace(
-    `// ${prepared.modules.length} steps · ${prepared.models.length} structures`,
-    `// ${prepared.modules.length} steps · ${prepared.models.length} structures · ${lineCount} lines`,
-  );
-  assertNoEnvKeysInExport(withMeta);
-  return withMeta;
+  return withExportLineCountMeta(sections.join("\n"), prepared, "//");
 }
 
 export { assertNoEnvKeysInExport, findEnvLeaksInExport } from "./pipeline_export_shared";

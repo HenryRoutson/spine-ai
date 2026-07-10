@@ -6,7 +6,8 @@ import {
   MultiLangReadonlyCodeViewer,
   type MultiLangCodeSource,
 } from "@/components/code-viewer"
-import { allModelsToDts, allModelsToPydantic } from "@/lib/pydantic"
+// AI : same model codegen as pipeline export (py / ts / rust).
+import { allModelsToDts, allModelsToPydantic, allModelsToRust } from "@/lib/pydantic"
 import type { StructureModel, TypeAlias } from "@/lib/types"
 
 export function StructureCodeView({
@@ -29,6 +30,12 @@ export function StructureCodeView({
         label: CODE_LANG_LABEL.typescript,
         filename: "models.d.ts",
         content: allModelsToDts(models, typeAliases),
+      },
+      {
+        language: "rust",
+        label: CODE_LANG_LABEL.rust,
+        filename: "models.rs",
+        content: allModelsToRust(models, typeAliases),
       },
     ],
     [models, typeAliases],

@@ -118,7 +118,7 @@ type WindowId = AppWindowId
 type NavIcon = React.ComponentType<{ className?: string }>
 
 const WINDOWS: { id: WindowId; label: string; hint: string; icon: NavIcon }[] = [
-  { id: "structure", label: "Structure", hint: "01", icon: Boxes },
+  { id: "structure", label: "Structures", hint: "01", icon: Boxes },
   { id: "pipeline", label: "Pipeline", hint: "02", icon: SpineNavIcon },
   // AI : Testing sits before Inference — tests run before demoing (spec § Testing).
   { id: "testing", label: "Testing", hint: "03", icon: SquareCheck },

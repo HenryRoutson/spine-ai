@@ -2,7 +2,10 @@ import { assertEntriesForModule, wrapAssertTypeScriptForExport } from "@/lib/ass
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { generateModelsDts } from "./type_codegen";
 import {
-  assertNoEnvKeysInExport,
+  indentExportBlock,
+  primaryExportCustomCode,
+  stepFnNameFromLabel,
+  withExportLineCountMeta,
   exportSpineInTs,
   exportSpineOutTs,
   generateCombineStepBodyTs,
@@ -14,32 +17,11 @@ import {
   prepareExportProject,
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsTs } from "./pipeline_export_setup";
-import { labelToPyKey } from "./type_expr";
 import { MODULE_META } from "./types";
 import type { PipelineModule, Project } from "./types";
 
 // AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
 // AI : TODO export — emit only pipeline-referenced structures, not every project model.
-
-function stepFnName(m: PipelineModule, index: number): string {
-  const key = labelToPyKey(m.label);
-  return key !== "_empty" ? `step_${key}` : `step_${index}`;
-}
-
-function indentBlock(code: string, spaces: number): string {
-  const pad = " ".repeat(spaces);
-  return code
-    .split("\n")
-    .map((line) => (line ? `${pad}${line}` : line))
-    .join("\n");
-}
-
-function tsPrimaryCustomCode(m: PipelineModule): { language: string; code: string } | null {
-  const entries = customCodeEntriesForModule(m);
-  const primary = entries[0];
-  if (!primary?.code.trim()) return null;
-  return { language: primary.language, code: primary.code.trim() };
-}
 
 function generateStepBody(m: PipelineModule, project: Project, outTs: string, inTs: string): string {
   const outName = modelName(project, m.outStructureId);
@@ -80,7 +62,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
     case "combine":
       return generateCombineStepBodyTs(m, project, outTs);
     case "transform": {
-      const custom = tsPrimaryCustomCode(m);
+      const custom = primaryExportCustomCode(m);
       if (custom?.language === "typescript") {
         return generateCustomCodeStepBodyTs(custom.code, inTs, outTs);
       }
@@ -93,7 +75,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
       ].join("\n");
     }
     case "custom-code": {
-      const custom = tsPrimaryCustomCode(m);
+      const custom = primaryExportCustomCode(m);
       const fallbacks = customCodeEntriesForModule(m);
       if (custom?.language === "typescript") {
         const lines = [generateCustomCodeStepBodyTs(custom.code, inTs, outTs)];
@@ -146,7 +128,7 @@ function stepBodyUsesPipelineState(body: string): boolean {
 }
 
 function generateStepFn(m: PipelineModule, project: Project, index: number): string {
-  const fn = stepFnName(m, index);
+  const fn = stepFnNameFromLabel(m, index);
   const inTs = exportSpineInTs(m, project, index);
   const outTs = exportSpineOutTs(m, project, index);
   const meta = MODULE_META[m.kind];
@@ -162,7 +144,7 @@ function generateStepFn(m: PipelineModule, project: Project, index: number): str
     ` */`,
     `async function ${fn}(input: ${inTs}, ${stateParam}: PipelineState): Promise<${outTs}> {`,
   ];
-  return [...header, indentBlock(body, 2), "}", ""].join("\n");
+  return [...header, indentExportBlock(body, 2), "}", ""].join("\n");
 }
 
 // AI : single-file TS export — types + step bodies + orchestrator for LOC comparison.
@@ -172,7 +154,7 @@ export function generatePipelineSourceTs(project: Project): string {
   const runtimeStubs = generateRuntimeStubsTs(needs);
   const sections: string[] = [];
   const stepFns = prepared.modules.map((m, i) => generateStepFn(m, prepared, i)).join("\n");
-  const orchestrator = generateOrchestratorTs(prepared, stepFnName);
+  const orchestrator = generateOrchestratorTs(prepared, stepFnNameFromLabel);
 
   sections.push(
     "// Generated pipeline export — equivalent TypeScript representation",
@@ -194,14 +176,7 @@ export function generatePipelineSourceTs(project: Project): string {
     orchestrator,
   );
 
-  const content = sections.join("\n");
-  const lineCount = content.split("\n").length;
-  const withMeta = content.replace(
-    `// ${prepared.modules.length} steps · ${prepared.models.length} structures`,
-    `// ${prepared.modules.length} steps · ${prepared.models.length} structures · ${lineCount} lines`,
-  );
-  assertNoEnvKeysInExport(withMeta);
-  return withMeta;
+  return withExportLineCountMeta(sections.join("\n"), prepared, "//");
 }
 
 export { assertNoEnvKeysInExport, findEnvLeaksInExport } from "./pipeline_export_shared";

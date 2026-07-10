@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo } from "react"
 import { Plus, Trash2, Lock, AlertTriangle } from "lucide-react"
 import { useStore, uid } from "@/lib/store"
 import {
@@ -8,9 +9,12 @@ import {
   type StructureModel,
 } from "@/lib/types"
 import { isLockedStructureModel, lockedStructureBanner } from "@/lib/structure"
+import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-validity"
 import { StructureFieldTypeEditor } from "@/components/structure-field-type-editor"
+import { StructureSourceDocLink } from "@/components/structure-source-doc-link"
 import { fieldTypeLabel } from "@/lib/structure-field-labels"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { cn } from "@/lib/utils"
 
@@ -20,9 +24,13 @@ type StructureExcelEditorProps = {
 }
 
 export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelEditorProps) {
-  const { models, setModels } = useStore()
+  const { models, setModels, typeAliases } = useStore()
   const selected = models.find((m) => m.id === selectedId) ?? models[0]
   const selectedLocked = selected ? isLockedStructureModel(selected) : false
+  const selectedIssues = useMemo(() => {
+    if (!selected) return []
+    return computeStructureIssues(models, typeAliases).filter((i) => i.modelId === selected.id)
+  }, [models, typeAliases, selected])
 
   function updateModel(next: StructureModel) {
     if (isLockedStructureModel(next)) return
@@ -82,6 +90,20 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
             {lockedStructureBanner(selected)}
           </div>
         )}
+        {selected.sourceDocId && (
+          <div className="mb-2">
+            <StructureSourceDocLink sourceDocId={selected.sourceDocId} />
+          </div>
+        )}
+        {selectedIssues.length > 0 && (
+          <div className="mb-2 space-y-1 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2">
+            {selectedIssues.map((issue, i) => (
+              <p key={i} className="font-mono text-[11px] text-destructive">
+                {structureIssueMessage(issue, models)}
+              </p>
+            ))}
+          </div>
+        )}
         {selected.fields.length === 0 && (
           <div className={cn("mb-2 flex items-center gap-2 text-[11px]", WARNING_TEXT_CLASS)}>
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -120,7 +142,7 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
 
       {/* AI : spreadsheet grid */}
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full min-w-[720px] border-collapse text-[11.5px]">
+        <table className="w-full min-w-[860px] border-collapse text-[11.5px]">
           <thead className="sticky top-0 z-10">
             <tr className="bg-secondary/80 backdrop-blur-sm">
               <th className="w-9 border-b border-r border-border px-1 py-1.5 text-center text-[10px] font-medium text-muted-foreground">
@@ -140,6 +162,18 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
               </th>
               <th className="w-20 border-b border-r border-border px-2 py-1.5 text-center text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Required
+              </th>
+              <th
+                className="w-14 border-b border-r border-border px-1 py-1.5 text-center text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                title="= exact in tests · ≈ probabilistic (ignored)"
+              >
+                Det
+              </th>
+              <th
+                className="w-14 border-b border-r border-border px-1 py-1.5 text-center text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                title="± tolerance on int/float compare"
+              >
+                ±
               </th>
               <th className="w-10 border-b border-border px-1 py-1.5" />
             </tr>
@@ -186,6 +220,8 @@ type FieldRowProps = {
 
 function FieldRow({ field, fields, rowIdx, locked, models, selectedId, onUpdate, onRemove }: FieldRowProps) {
   const stripe = rowIdx % 2 === 1
+  const isNumeric = field.type === FieldType.Int || field.type === FieldType.Float
+  const toleranceEnabled = isNumeric && field.deterministic !== false
 
   return (
     <>
@@ -231,20 +267,69 @@ function FieldRow({ field, fields, rowIdx, locked, models, selectedId, onUpdate,
           />
         </td>
         <td className="border-b border-r border-border p-0 text-center">
+          <div className="flex h-8 items-center justify-center">
+            <Switch
+              size="sm"
+              checked={!field.optional}
+              disabled={locked}
+              onCheckedChange={(checked) => onUpdate({ optional: !checked })}
+              title={field.optional ? "Optional" : "Required"}
+              aria-label={field.optional ? "Mark required" : "Mark optional"}
+            />
+          </div>
+        </td>
+        <td className="border-b border-r border-border p-0 text-center">
+          {/* AI : deterministic flag — "=" exact in tests, "≈" probabilistic (ignored) */}
           <button
             type="button"
             disabled={locked}
-            onClick={() => onUpdate({ optional: !field.optional })}
+            onClick={() => onUpdate({ deterministic: field.deterministic === false ? undefined : false })}
+            title={
+              field.deterministic === false
+                ? "probabilistic — tests ignore this field"
+                : "deterministic — tests exact-compare this field"
+            }
             className={cn(
-              "mx-auto flex h-6 w-14 items-center justify-center rounded text-[10px] font-medium transition-colors",
-              field.optional
-                ? "bg-secondary text-muted-foreground"
-                : "bg-primary/15 text-primary",
+              "mx-auto flex h-6 w-7 items-center justify-center rounded text-[11px] font-medium transition-colors",
+              field.deterministic === false
+                ? "bg-chart-3/15 text-chart-3"
+                : "bg-secondary text-muted-foreground",
               locked && "cursor-default opacity-70",
             )}
           >
-            {field.optional ? "Optional" : "Required"}
+            {field.deterministic === false ? "≈" : "="}
           </button>
+        </td>
+        <td className="border-b border-r border-border p-0 text-center">
+          {toleranceEnabled ? (
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={field.testTolerance ?? ""}
+              placeholder="±"
+              disabled={locked}
+              title="test tolerance — ± on int/float compare"
+              onChange={(e) => {
+                const raw = e.target.value.trim()
+                if (!raw) {
+                  onUpdate({ testTolerance: undefined })
+                  return
+                }
+                const n = Number(raw)
+                onUpdate({ testTolerance: Number.isFinite(n) && n >= 0 ? n : undefined })
+              }}
+              className={cn(
+                "mx-auto h-6 w-10 rounded border bg-transparent px-0.5 text-center font-mono text-[10px] outline-none",
+                field.testTolerance !== undefined
+                  ? "border-output/50 text-output"
+                  : "border-border text-muted-foreground",
+                locked && "cursor-default opacity-70",
+              )}
+            />
+          ) : (
+            <span className="text-[10px] text-muted-foreground/40">—</span>
+          )}
         </td>
         <td className="border-b border-border p-0 text-center">
           {!locked && (
@@ -261,7 +346,7 @@ function FieldRow({ field, fields, rowIdx, locked, models, selectedId, onUpdate,
       {field.type === "json" && !field.typeExpr && (
         <tr className={cn(stripe && "bg-secondary/15")}>
           <td className="border-b border-r border-border bg-secondary/25" />
-          <td colSpan={6} className="border-b border-border px-2 py-1 text-[10px] text-amber-700 dark:text-amber-500">
+          <td colSpan={8} className="border-b border-border px-2 py-1 text-[10px] text-amber-700 dark:text-amber-500">
             Flexible data stores anything — prefer &ldquo;{fieldTypeLabel(FieldType.Model)}&rdquo; or a Type from the sidebar.
           </td>
         </tr>

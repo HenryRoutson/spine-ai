@@ -1,10 +1,18 @@
 import { orderedInputModules } from "@/lib/inference-input";
 import { buildCustomFnSource } from "@/lib/custom_code";
+import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { usesPassthroughStructure } from "@/lib/module-kinds";
 import { modelExportIdentifierRust, rustFieldIdent } from "@/lib/structure-shape";
 import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
-import { stepSpineInType, stepSpineOutType, typeExprToPy, typeExprToRust, typeExprToTs } from "./type_expr";
+import {
+  labelToPyKey,
+  stepSpineInType,
+  stepSpineOutType,
+  typeExprToPy,
+  typeExprToRust,
+  typeExprToTs,
+} from "./type_expr";
 import { FieldType, ModuleKind } from "./types";
 import type { StepLabel } from "../run-types";
 import type { PipelineModule, Project, StructureModelId, TypeExpr } from "./types";
@@ -15,9 +23,67 @@ export type PipelineSetupFile = {
   mime: string;
 };
 
+export type ExportCustomCode = { language: string; code: string };
+
 // AI : normalize project models before codegen so built-in Document resolves everywhere.
 export function prepareExportProject(project: Project): Project {
   return { ...project, models: withSharedModels(project.models) };
+}
+
+// AI : shared by py / ts / rust pipeline exporters — keep step bodies DRY across languages.
+export function indentExportBlock(code: string, spaces: number): string {
+  const pad = " ".repeat(spaces);
+  return code
+    .split("\n")
+    .map((line) => (line ? `${pad}${line}` : line))
+    .join("\n");
+}
+
+export function exportStringLiteral(s: string): string {
+  return JSON.stringify(s);
+}
+
+export function primaryExportCustomCode(m: PipelineModule): ExportCustomCode | null {
+  const entries = customCodeEntriesForModule(m);
+  const primary = entries[0];
+  if (!primary?.code.trim()) return null;
+  return { language: primary.language, code: primary.code.trim() };
+}
+
+export function stepFnNameFromLabel(m: PipelineModule, index: number): string {
+  const key = labelToPyKey(m.label);
+  return key !== "_empty" ? `step_${key}` : `step_${index}`;
+}
+
+// AI : rustc non_snake_case — "✓ Wrap → List" → step_wrap_list; index disambiguates collisions.
+export function makeUniqueStepFnName(): (m: PipelineModule, index: number) => string {
+  const byIndex = new Map<number, string>();
+  const used = new Set<string>();
+  return (m, index) => {
+    const cached = byIndex.get(index);
+    if (cached) return cached;
+    const key = labelToPyKey(m.label)
+      .toLowerCase()
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "");
+    let name = key ? `step_${key}` : `step_${index}`;
+    if (used.has(name)) name = `step_${index}_${key || "step"}`;
+    used.add(name);
+    byIndex.set(index, name);
+    return name;
+  };
+}
+
+export function withExportLineCountMeta(
+  content: string,
+  prepared: Project,
+  commentPrefix: "#" | "//",
+): string {
+  const base = `${commentPrefix} ${prepared.modules.length} steps · ${prepared.models.length} structures`;
+  const lineCount = content.split("\n").length;
+  const withMeta = content.replace(base, `${base} · ${lineCount} lines`);
+  assertNoEnvKeysInExport(withMeta);
+  return withMeta;
 }
 
 export function exportSpineInType(

@@ -12,7 +12,6 @@ export const API_ROUTES = {
   billingWebhook: "/api/billing/webhook",
   projects: "/api/projects",
   project: (id: string) => `/api/projects/${id}`,
-  projectTypes: (id: string) => `/api/projects/${id}/types`,
   projectsResyncExamples: "/api/projects/resync-examples",
   projectTemplates: "/api/project-templates",
   docs: "/api/docs",
