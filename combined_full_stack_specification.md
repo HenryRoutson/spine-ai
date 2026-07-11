@@ -532,3 +532,10 @@ please ensure you model the potenial loss money as if everyone instantly used al
 But yes, have a buffer zone for money i may or may not have to pay with the free credit.
 
 please add replay https://rrweb.com/ for all users.
+
+# Supported languages
+- typescript 
+- python 
+- rust
+- BAML : https://github.com/boundaryml/baml
+- Go

@@ -1,7 +1,7 @@
 import { z, type ZodType } from "zod";
 import type { PipelineModule, Project, StructureModel, TypeAlias } from "./types";
 import type { PipelineState, StepLabel } from "../run-types";
-import { formatTypeExpr, labelToPyKey, stepSpineOutType, typeExprToRust, typeExprToTs, typeExprToZod, zodFromModel } from "./type_expr";
+import { formatTypeExpr, labelToPyKey, stepSpineOutType, typeExprToGo, typeExprToRust, typeExprToTs, typeExprToZod, zodFromModel } from "./type_expr";
 
 export type { PipelineState, StepLabel };
 
@@ -83,6 +83,19 @@ export function pipelineStateRustType(project: Project): string {
   return [
     "// Pipeline state — step label → spine snapshot (JSON for open typing).",
     comment + "pub type PipelineState = HashMap<String, Value>;",
+  ].join("\n");
+}
+
+// AI : label-keyed map — values as RawMessage so heterogeneous step outputs type-check.
+export function pipelineStateGoType(project: Project): string {
+  const lines = pipelineStateFields(project).map((f) => {
+    const t = f.type ? typeExprToGo(f.type, project.models) : "json.RawMessage";
+    return `// ${JSON.stringify(f.label)}: ${t}`;
+  });
+  const comment = lines.length ? `${lines.join("\n")}\n` : "";
+  return [
+    "// Pipeline state — step label → spine snapshot (JSON for open typing).",
+    comment + "type PipelineState map[string]json.RawMessage",
   ].join("\n");
 }
 

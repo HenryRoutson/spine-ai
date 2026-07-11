@@ -46,6 +46,21 @@ export function rustFieldIdent(name: string): { ident: string; rename: string | 
   return { ident: snake, rename: snake === trimmed ? null : trimmed }
 }
 
+// AI : Go exported types are PascalCase — same as Rust struct names.
+export const modelExportIdentifierGo = modelExportIdentifierRust
+
+// AI : Go exported fields are PascalCase; json tag preserves the model field name.
+export function goFieldIdent(name: string): { ident: string; jsonTag: string } {
+  const trimmed = name.trim() || "field"
+  const { ident: snake } = rustFieldIdent(trimmed)
+  const ident = snake
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("")
+  return { ident: ident || "Field", jsonTag: trimmed }
+}
+
 // AI : shape compare ignores model names — nested @sig carries the structural identity.
 function formatTypeExprShape(expr: TypeExpr): string {
   switch (expr.kind) {

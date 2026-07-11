@@ -1,8 +1,15 @@
-import { fieldToPy, fieldToTypeExpr, typeExprToPy, typeExprToRust, typeExprToTs } from "./type_expr";
+import { fieldToPy, fieldToTypeExpr, typeExprToBaml, typeExprToGo, typeExprToPy, typeExprToRust, typeExprToTs } from "./type_expr";
 import { stripBuiltinTypeAliases } from "./builtin_types";
 import { stripSharedModels } from "./builtin_models";
 import type { TypeExpr } from "./types";
-import { modelExportIdentifier, modelExportIdentifierRust, modelsForPydanticExport, rustFieldIdent } from "../structure-shape";
+import {
+  goFieldIdent,
+  modelExportIdentifier,
+  modelExportIdentifierGo,
+  modelExportIdentifierRust,
+  modelsForPydanticExport,
+  rustFieldIdent,
+} from "../structure-shape";
 import type { StructureModel, TypeAlias } from "./types";
 
 function typeAliasExportName(name: string): string {
@@ -11,6 +18,10 @@ function typeAliasExportName(name: string): string {
 
 function typeAliasExportNameRust(name: string): string {
   return modelExportIdentifierRust(name);
+}
+
+function typeAliasExportNameGo(name: string): string {
+  return modelExportIdentifierGo(name);
 }
 
 // AI : alias bodies must not self-reference quote/text_quote names — resolve to concrete Py types.
@@ -268,5 +279,193 @@ export function allModelsToRust(
     ? `\n// --- project type aliases ---\n${aliases.map((a) => typeAliasToRust(a, exportModels)).join("\n")}\n`
     : "";
   const user = exportModels.map((m) => modelToRust(m, exportModels)).join("\n\n");
+  return `${header}${aliasesBlock}\n${user}\n`;
+}
+
+function typeExprToAliasDefinitionGo(expr: TypeExpr, models: StructureModel[]): string {
+  switch (expr.kind) {
+    case "quote":
+      return "string";
+    case "text_quote":
+      return "TextQuoteLoose";
+    default:
+      return typeExprToGo(expr, models);
+  }
+}
+
+export function typeAliasToGo(alias: TypeAlias, models: StructureModel[]): string {
+  const id = typeAliasExportNameGo(alias.name);
+  const body = typeExprToAliasDefinitionGo(alias.expr, models);
+  const note = alias.description?.trim();
+  return note ? `// ${note}\ntype ${id} = ${body}` : `type ${id} = ${body}`;
+}
+
+function fieldToGo(
+  field: { name: string; optional: boolean; description?: string },
+  models: StructureModel[],
+  expr: TypeExpr,
+): string {
+  let t = typeExprToGo(expr, models);
+  if (field.optional && expr.kind !== "optional") t = `*${t}`;
+  const { ident, jsonTag } = goFieldIdent(field.name);
+  const omit = field.optional || expr.kind === "optional" ? ",omitempty" : "";
+  const lines: string[] = [];
+  if (field.description?.trim()) lines.push(`\t// ${field.description.trim()}`);
+  lines.push(`\t${ident} ${t} \`json:"${jsonTag}${omit}"\``);
+  return lines.join("\n");
+}
+
+function modelToGo(model: StructureModel, models: StructureModel[]): string {
+  const id = modelExportIdentifierGo(model.name);
+  const doc = model.description?.trim() ? `// ${model.description.trim()}\n` : "";
+  const fields = model.fields
+    .filter((f) => f.name.trim())
+    .map((f) => fieldToGo(f, models, fieldToTypeExpr(f)));
+  const body = fields.length ? fields.join("\n") : "\t// empty";
+  return `${doc}type ${id} struct {\n${body}\n}`;
+}
+
+// AI : single-file Go structs for pipeline export — encoding/json round-trip.
+export function allModelsToGo(models: StructureModel[], typeAliases: TypeAlias[] = []): string {
+  const header = [
+    "type QuoteSpan struct {",
+    '\tDocID string `json:"doc_id"`',
+    '\tStart int64  `json:"start"`',
+    '\tEnd   int64  `json:"end"`',
+    "}",
+    "",
+    "type Quote = QuoteSpan",
+    "",
+    "type TextQuote struct {",
+    '\tText  string    `json:"text"`',
+    '\tQuote QuoteSpan `json:"quote"`',
+    "}",
+    "",
+    "type Document struct {",
+    '\tContent  string `json:"content"`',
+    '\tFilename string `json:"filename"`',
+    "}",
+    "",
+    "type FileInput = Document",
+    "",
+    "type QuoteStringT = string",
+    "type QuoteSpanT = QuoteSpan",
+    "",
+    "type TextQuoteLoose struct {",
+    '\tText  string `json:"text"`',
+    '\tQuote string `json:"quote"`',
+    "}",
+    "",
+    "type TextQuoteT = TextQuoteLoose",
+    "",
+  ].join("\n");
+  const userModels = stripSharedModels(models);
+  const exportModels = modelsForPydanticExport(userModels);
+  const aliases = stripBuiltinTypeAliases(typeAliases);
+  const aliasesBlock = aliases.length
+    ? `\n// --- project type aliases ---\n${aliases.map((a) => typeAliasToGo(a, exportModels)).join("\n")}\n`
+    : "";
+  const user = exportModels.map((m) => modelToGo(m, exportModels)).join("\n\n");
+  return `${header}${aliasesBlock}\n${user}\n`;
+}
+
+function typeExprToAliasDefinitionBaml(expr: TypeExpr, models: StructureModel[]): string {
+  switch (expr.kind) {
+    case "quote":
+      return "string";
+    case "text_quote":
+      return "TextQuote";
+    default:
+      return typeExprToBaml(expr, models);
+  }
+}
+
+export function typeAliasToBaml(alias: TypeAlias, models: StructureModel[]): string {
+  const id = typeAliasExportNameRust(alias.name);
+  const body = typeExprToAliasDefinitionBaml(alias.expr, models);
+  const note = alias.description?.trim();
+  return note ? `// ${note}\ntype ${id} = ${body}` : `type ${id} = ${body}`;
+}
+
+function bamlFieldIdent(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "field";
+  let ident = trimmed.replace(/[^\w]+/g, "_").replace(/^(\d)/, "_$1");
+  if (!/^[A-Za-z_]/.test(ident)) ident = `_${ident}`;
+  return ident;
+}
+
+function bamlNeedsParensForField(expr: TypeExpr): boolean {
+  return expr.kind === "union" || expr.kind === "map";
+}
+
+function fieldToBaml(
+  field: { name: string; optional: boolean; description?: string },
+  models: StructureModel[],
+  expr: TypeExpr,
+): string {
+  let t = typeExprToBaml(expr, models);
+  if (field.optional && expr.kind !== "optional") {
+    t = `${bamlNeedsParensForField(expr) ? `(${t})` : t}?`;
+  }
+  const ident = bamlFieldIdent(field.name);
+  const desc = field.description?.trim();
+  const attrs = desc ? ` @description(${JSON.stringify(desc)})` : "";
+  return `  ${ident} ${t}${attrs}`;
+}
+
+function modelToBaml(model: StructureModel, models: StructureModel[]): string {
+  const id = modelExportIdentifierRust(model.name);
+  const doc = model.description?.trim() ? `// ${model.description.trim()}\n` : "";
+  const fields = model.fields
+    .filter((f) => f.name.trim())
+    .map((f) => fieldToBaml(f, models, fieldToTypeExpr(f)));
+  const body = fields.length ? fields.join("\n") : "  // empty";
+  return `${doc}class ${id} {\n${body}\n}`;
+}
+
+// AI : BAML classes + aliases — https://github.com/boundaryml/baml
+export function allModelsToBaml(
+  models: StructureModel[],
+  typeAliases: TypeAlias[] = [],
+): string {
+  const header = [
+    "// Generated BAML types — https://github.com/boundaryml/baml",
+    "// datetime / json / set / tuple map to string or list (BAML limitations).",
+    "",
+    "class QuoteSpan {",
+    '  doc_id string @description("Source document hash")',
+    '  start int @description("Start offset in the source")',
+    '  end int @description("End offset in the source")',
+    "}",
+    "",
+    "class TextQuote {",
+    "  text string",
+    "  quote QuoteSpan",
+    "}",
+    "",
+    "class Document {",
+    '  content string @description("Full extracted text of the file")',
+    '  filename string @description("Original upload filename")',
+    "}",
+    "",
+    "class FileInput {",
+    "  content string",
+    "  filename string",
+    "}",
+    "",
+    "type Quote = QuoteSpan",
+    "type quote_string_t = string",
+    "type quote_span_t = QuoteSpan",
+    "type text_quote_t = TextQuote",
+    "",
+  ].join("\n");
+  const userModels = stripSharedModels(models);
+  const exportModels = modelsForPydanticExport(userModels);
+  const aliases = stripBuiltinTypeAliases(typeAliases);
+  const aliasesBlock = aliases.length
+    ? `\n// --- project type aliases ---\n${aliases.map((a) => typeAliasToBaml(a, exportModels)).join("\n")}\n`
+    : "";
+  const user = exportModels.map((m) => modelToBaml(m, exportModels)).join("\n\n");
   return `${header}${aliasesBlock}\n${user}\n`;
 }

@@ -1,6 +1,6 @@
 import { z, type ZodType } from "zod";
 import { isValidJsonString } from "@/lib/json-utils";
-import { modelExportIdentifier, modelExportIdentifierRust } from "@/lib/structure-shape";
+import { modelExportIdentifier, modelExportIdentifierGo, modelExportIdentifierRust } from "@/lib/structure-shape";
 import type {
   FieldType,
   InputType,
@@ -657,6 +657,76 @@ export function labelToPyKey(label: string): string {
   return trimmed.replace(/[^a-zA-Z0-9_]+/g, "_").replace(/^(\d)/, "_$1");
 }
 
+// AI : wrap composite BAML types before postfix ? / [] so `int | string` stays grouped.
+function bamlNeedsParens(expr: TypeExpr): boolean {
+  return expr.kind === "union" || expr.kind === "optional" || expr.kind === "map";
+}
+
+function bamlWrap(expr: TypeExpr, models: StructureModel[]): string {
+  const inner = typeExprToBaml(expr, models);
+  return bamlNeedsParens(expr) ? `(${inner})` : inner;
+}
+
+// AI : BAML type strings — https://docs.boundaryml.com/ref/baml/types (no datetime/json/set/tuple).
+export function typeExprToBaml(expr: TypeExpr, models: StructureModel[] = []): string {
+  switch (expr.kind) {
+    case "prim":
+      switch (expr.name) {
+        case "text":
+        case "datetime":
+        case "json":
+          return "string";
+        case "int":
+          return "int";
+        case "float":
+          return "float";
+        case "bool":
+          return "bool";
+        default:
+          return "string";
+      }
+    case "document":
+      return "Document";
+    case "quote":
+      return "string";
+    case "text_quote":
+      return "TextQuote";
+    case "list":
+      return `${bamlWrap(expr.item, models)}[]`;
+    case "ref": {
+      const name = modelName(models, expr.modelId);
+      return name ? modelExportIdentifierRust(name) : "string";
+    }
+    case "optional":
+      return `${bamlWrap(expr.inner, models)}?`;
+    case "set":
+      // AI : BAML has no set — list is the documented substitute.
+      return `${bamlWrap(expr.item, models)}[]`;
+    case "map":
+      return `map<${typeExprToBaml(expr.key, models)}, ${typeExprToBaml(expr.value, models)}>`;
+    case "union":
+      return expr.variants.map((v) => typeExprToBaml(v, models)).join(" | ");
+    case "generic":
+      if (expr.name === "tuple") {
+        // AI : BAML has no tuple — flatten to a descriptive string placeholder.
+        return "string";
+      }
+      return expr.args.length
+        ? `${expr.name}<${expr.args.map((a) => typeExprToBaml(a, models)).join(", ")}>`
+        : expr.name;
+    case "named":
+      return expr.name;
+    case "unset":
+      return "null";
+    case "file":
+      return "FileInput";
+    case "unknown":
+      return "string";
+    default:
+      return "string";
+  }
+}
+
 // AI : Rust type strings for pipeline export — serde-friendly, JSON Value for open shapes.
 export function typeExprToRust(expr: TypeExpr, models: StructureModel[] = []): string {
   switch (expr.kind) {
@@ -714,5 +784,66 @@ export function typeExprToRust(expr: TypeExpr, models: StructureModel[] = []): s
       return "serde_json::Value";
     default:
       return "serde_json::Value";
+  }
+}
+
+// AI : Go type strings for pipeline export — JSON tags on structs; RawMessage for open shapes.
+export function typeExprToGo(expr: TypeExpr, models: StructureModel[] = []): string {
+  switch (expr.kind) {
+    case "prim":
+      switch (expr.name) {
+        case "text":
+        case "datetime":
+          return "string";
+        case "json":
+          return "json.RawMessage";
+        case "int":
+          return "int64";
+        case "float":
+          return "float64";
+        case "bool":
+          return "bool";
+        default:
+          return "json.RawMessage";
+      }
+    case "document":
+      return "Document";
+    case "quote":
+      return "QuoteSpan";
+    case "text_quote":
+      return "TextQuoteLoose";
+    case "list":
+      return `[]${typeExprToGo(expr.item, models)}`;
+    case "ref": {
+      const name = modelName(models, expr.modelId);
+      return name ? modelExportIdentifierGo(name) : "json.RawMessage";
+    }
+    case "optional":
+      return `*${typeExprToGo(expr.inner, models)}`;
+    case "set":
+      // AI : Go has no set — slice is the practical substitute.
+      return `[]${typeExprToGo(expr.item, models)}`;
+    case "map":
+      return `map[${typeExprToGo(expr.key, models)}]${typeExprToGo(expr.value, models)}`;
+    case "union":
+      return "json.RawMessage";
+    case "generic":
+      if (expr.name === "tuple") {
+        // AI : Go has no tuple — fall back to RawMessage.
+        return "json.RawMessage";
+      }
+      return expr.args.length
+        ? `${expr.name}[${expr.args.map((a) => typeExprToGo(a, models)).join(", ")}]`
+        : expr.name;
+    case "named":
+      return expr.name;
+    case "unset":
+      return "struct{}";
+    case "file":
+      return "FileInput";
+    case "unknown":
+      return "json.RawMessage";
+    default:
+      return "json.RawMessage";
   }
 }

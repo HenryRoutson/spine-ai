@@ -2,13 +2,14 @@ import { orderedInputModules } from "@/lib/inference-input";
 import { buildCustomFnSource } from "@/lib/custom_code";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { usesPassthroughStructure } from "@/lib/module-kinds";
-import { modelExportIdentifierRust, rustFieldIdent } from "@/lib/structure-shape";
+import { modelExportIdentifierGo, modelExportIdentifierRust, rustFieldIdent } from "@/lib/structure-shape";
 import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
 import {
   labelToPyKey,
   stepSpineInType,
   stepSpineOutType,
+  typeExprToGo,
   typeExprToPy,
   typeExprToRust,
   typeExprToTs,
@@ -30,7 +31,7 @@ export function prepareExportProject(project: Project): Project {
   return { ...project, models: withSharedModels(project.models) };
 }
 
-// AI : shared by py / ts / rust pipeline exporters — keep step bodies DRY across languages.
+// AI : shared by py / ts / rust / go / baml pipeline exporters — keep step bodies DRY across languages.
 export function indentExportBlock(code: string, spaces: number): string {
   const pad = " ".repeat(spaces);
   return code
@@ -114,6 +115,11 @@ export function exportSpineInRust(m: PipelineModule, project: Project, index: nu
   return t ? typeExprToRust(t, project.models) : "Value";
 }
 
+export function exportSpineInGo(m: PipelineModule, project: Project, index: number): string {
+  const t = exportSpineInType(m, project, index);
+  return t ? typeExprToGo(t, project.models) : "json.RawMessage";
+}
+
 // AI : passthrough out follows the spine (prev), not a stale inStructureId on the module.
 export function exportSpineOutType(
   m: PipelineModule,
@@ -140,6 +146,28 @@ export function exportSpineOutPy(m: PipelineModule, project: Project, index: num
 export function exportSpineOutRust(m: PipelineModule, project: Project, index: number): string {
   const t = exportSpineOutType(m, project, index);
   return t ? typeExprToRust(t, project.models) : "Value";
+}
+
+export function exportSpineOutGo(m: PipelineModule, project: Project, index: number): string {
+  const t = exportSpineOutType(m, project, index);
+  return t ? typeExprToGo(t, project.models) : "json.RawMessage";
+}
+
+// AI : zero value for Go return-on-error paths.
+export function goZeroValue(goType: string): string {
+  if (
+    goType.startsWith("[]") ||
+    goType.startsWith("*") ||
+    goType.startsWith("map[") ||
+    goType === "json.RawMessage" ||
+    goType === "any"
+  ) {
+    return "nil";
+  }
+  if (goType === "string") return `""`;
+  if (goType === "bool") return "false";
+  if (goType === "int64" || goType === "float64") return "0";
+  return `${goType}{}`;
 }
 
 // AI : export PipelineState keys use the same spine-out types as step signatures.
@@ -332,6 +360,53 @@ export function generateInputStepBodyRust(m: PipelineModule, outRust: string): s
   return lines.join("\n");
 }
 
+export function generateInputStepBodyGo(m: PipelineModule, outGo: string): string {
+  const zero = goZeroValue(outGo);
+  const lines = [
+    "// Parse uploaded file — built-in parser or vision OCR when enabled",
+    ...(m.inputDescription
+      ? [
+          `// Input guard: ${JSON.stringify(m.inputDescription)}${m.checkInputDescription === false ? " (disabled)" : ""}`,
+        ]
+      : []),
+    ...(m.inputNameContains ? [`// Filename must contain: ${JSON.stringify(m.inputNameContains)}`] : []),
+    ...(m.useOcr ? ["// Vision OCR enabled for PDF/image uploads"] : []),
+  ];
+  if (inputOutputsDocument(m)) {
+    if (m.outIsList) {
+      lines.push("return []Document{input}, nil");
+    } else {
+      lines.push("return input, nil");
+    }
+    return lines.join("\n");
+  }
+  lines.push("var parsed any");
+  lines.push("if err := json.Unmarshal([]byte(input.Content), &parsed); err != nil {");
+  lines.push(`\treturn ${zero}, err`);
+  lines.push("}");
+  if (m.outIsList) {
+    lines.push("arr, ok := parsed.([]any)");
+    lines.push("if !ok {");
+    lines.push("\tarr = []any{parsed}");
+    lines.push("}");
+    lines.push("b, err := json.Marshal(arr)");
+    lines.push("if err != nil {");
+    lines.push(`\treturn ${zero}, err`);
+    lines.push("}");
+  } else {
+    lines.push("b, err := json.Marshal(parsed)");
+    lines.push("if err != nil {");
+    lines.push(`\treturn ${zero}, err`);
+    lines.push("}");
+  }
+  lines.push(`var out ${outGo}`);
+  lines.push("if err := json.Unmarshal(b, &out); err != nil {");
+  lines.push(`\treturn ${zero}, err`);
+  lines.push("}");
+  lines.push("return out, nil");
+  return lines.join("\n");
+}
+
 // AI : the side input (or its auto parse llm) directly precedes the combine — its emitted
 // AI : structure lands in matching ref fields, mirroring execCombineStep.
 function combineSideStructId(m: PipelineModule, project: Project): StructureModelId | undefined {
@@ -423,7 +498,54 @@ export function generateCombineStepBodyRust(m: PipelineModule, project: Project,
   ].join("\n");
 }
 
-export type OrchestratorLang = "ts" | "py" | "rs";
+export function generateCombineStepBodyGo(
+  m: PipelineModule,
+  project: Project,
+  outGo: string,
+  inGo: string,
+): string {
+  const out = project.models.find((x) => x.id === m.outStructureId);
+  const inName = modelName(project, m.inStructureId);
+  const sideId = combineSideStructId(m, project);
+  const upstreamLabel = upstreamLabelForCombine(m, project);
+  const upstreamKey = upstreamLabel ? JSON.stringify(upstreamLabel) : '"upstream"';
+  const rawOutName = modelName(project, m.outStructureId);
+  const outName = rawOutName ? modelExportIdentifierGo(rawOutName) : outGo;
+  const zero = goZeroValue(outGo);
+  const fieldEntries =
+    out?.fields.map((f) => {
+      if (f.type === FieldType.Document || (sideId && f.ref === sideId)) {
+        return `\t\t${JSON.stringify(f.name)}: newDoc,`;
+      }
+      return `\t\t${JSON.stringify(f.name)}: state[${upstreamKey}],`;
+    }) ?? [];
+  const unwrap = inGo.startsWith("[]")
+    ? [
+        "if len(input) == 0 {",
+        `\treturn ${zero}, fmt.Errorf("combine expects at least one document")`,
+        "}",
+        "newDoc := input[0]",
+      ].join("\n")
+    : "newDoc := input";
+  return [
+    `// Merge uploaded document with upstream ${inName ?? "pipeline data"} from pipeline state`,
+    unwrap,
+    "payload := map[string]any{",
+    ...fieldEntries,
+    "}",
+    "b, err := json.Marshal(payload)",
+    "if err != nil {",
+    `\treturn ${zero}, err`,
+    "}",
+    `var merged ${outName}`,
+    "if err := json.Unmarshal(b, &merged); err != nil {",
+    `\treturn ${zero}, err`,
+    "}",
+    "return merged, nil",
+  ].join("\n");
+}
+
+export type OrchestratorLang = "ts" | "py" | "rs" | "go";
 
 function orchestratorInputMods(project: Project): PipelineModule[] {
   return orderedInputModules(project.modules);
@@ -437,6 +559,37 @@ function orchestratorInvokeLine(
   inTs: string,
 ): string {
   const label = labelAsStateKey(m.label);
+  if (lang === "go") {
+    if (m.kind !== ModuleKind.Input) {
+      return [
+        `    var _in_${fn} ${inTs}`,
+        `    if err := json.Unmarshal(spine, &_in_${fn}); err != nil {`,
+        "        return nil, err",
+        "    }",
+        `    _out_${fn}, err := ${fn}(_in_${fn}, state)`,
+        "    if err != nil {",
+        "        return nil, err",
+        "    }",
+        `    spine, err = json.Marshal(_out_${fn})`,
+        "    if err != nil {",
+        "        return nil, err",
+        "    }",
+      ].join("\n");
+    }
+    const inputExpr = singleInput
+      ? "initialInput"
+      : `inputs[${JSON.stringify(label)}]`;
+    return [
+      `    _out_${fn}, err := ${fn}(${inputExpr}, state)`,
+      "    if err != nil {",
+      "        return nil, err",
+      "    }",
+      `    spine, err = json.Marshal(_out_${fn})`,
+      "    if err != nil {",
+      "        return nil, err",
+      "    }",
+    ].join("\n");
+  }
   if (lang === "rs") {
     if (m.kind !== ModuleKind.Input) {
       return `    spine = serde_json::to_value(${fn}(serde_json::from_value(spine)?, &mut state).await?)?;`;
@@ -557,6 +710,37 @@ export function generateOrchestratorRust(project: Project, stepFnName: (m: Pipel
   return lines.join("\n");
 }
 
+// AI : Go orchestrator — spine as json.RawMessage between steps for open typing.
+export function generateOrchestratorGo(project: Project, stepFnName: (m: PipelineModule, i: number) => string): string {
+  const inputMods = orchestratorInputMods(project);
+  const multi = inputMods.length > 1;
+  const lines: string[] = [];
+
+  if (multi) {
+    lines.push("func RunPipeline(inputs map[string]Document) (json.RawMessage, error) {");
+  } else {
+    lines.push("func RunPipeline(initialInput Document) (json.RawMessage, error) {");
+  }
+
+  lines.push("    state := make(PipelineState)", "    var spine json.RawMessage", "    var err error", "");
+
+  for (let i = 0; i < project.modules.length; i++) {
+    const m = project.modules[i]!;
+    const fn = stepFnName(m, i);
+    const label = labelAsStateKey(m.label);
+    const inGo = exportSpineInGo(m, project, i);
+    lines.push(`    // ${i + 1}. ${m.label}`);
+    lines.push(orchestratorInvokeLine(m, fn, "go", !multi, inGo));
+    if (label) {
+      lines.push(`    state[${JSON.stringify(label)}] = append(json.RawMessage(nil), spine...)`);
+    }
+    lines.push("");
+  }
+
+  lines.push("    return spine, nil", "}", "");
+  return lines.join("\n");
+}
+
 export { generateCustomCodeStepBodyTs, tsCustomCodeCall, tsCustomCodeFnDecl, pyCustomCodeCall };
 
 // AI : block exports that reference runtime secrets or env wiring.
@@ -567,6 +751,7 @@ const ENV_ACCESS_PATTERNS: RegExp[] = [
   /\bprocess\[["']env["']\]/,
   /\bos\.environ\b/,
   /\bos\.getenv\s*\(/,
+  /\bos\.Getenv\b/,
   /\bgetenv\s*\(/,
   /\bDeno\.env\b/,
   /\bimport\.meta\.env\b/,

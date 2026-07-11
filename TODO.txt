@@ -20,6 +20,9 @@ add clickable links in the question which link to the live demo like open the sh
 
 
 
+understand this more : https://boundaryml.com/explore#agents
+
+
 
 
 
@@ -137,6 +140,7 @@ No Langfuse-style open SDK for arbitrary apps; observability is scoped to spine 
 Remove playground in structs, components/structure-builder.tsx
 
 add export to Rust ✓
+add export to Go ✓
 
 there should be a group by on the fields where you can see the mapping of what has been mapped to what with autmoatically generated confusion matricies.
 
