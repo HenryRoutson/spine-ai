@@ -374,6 +374,11 @@ you should also be able to host scalable api in a few clicks and monitors the cu
 you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.and you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.
 
 
+you should be able to share the pipeline with all the details of the pipeline itself, so someone can copy it like with the examples and edit it. This won't affect your copy of it.
+
+please add a share to marketplace button in the share tab, where you can put on the marketplace with a price or for free. There should be a marketplace where you can search for pipelines.
+
+
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.
 you can search for runs, based on descriptions provided and editable when selecting the run.

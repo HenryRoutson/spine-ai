@@ -347,6 +347,7 @@ export interface RunStep extends Omit<StepDescriptionFields, "outputPreview"> {
 export type RunFingerprint = string & { __brand: "RunFingerprint" };
 export type SharedLinkId = string & { __brand: "SharedLinkId" };
 export type HostedApiId = string & { __brand: "HostedApiId" };
+export type MarketplaceListingId = string & { __brand: "MarketplaceListingId" };
 // AI : Testing — run started from the Testing tab; flagged in Logging (spec § Testing).
 export enum RunSource {
   App = "app",

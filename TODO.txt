@@ -10,10 +10,15 @@ write code to recreate what a user is doing in the UI from database recorded cli
 delete old accounts and restart.
 
 
+add teams and orgs.
+
+
 update dashboard
 
 
 add clickable links in the question which link to the live demo like open the share tab if question is asking about that
+
+
 
 
 
@@ -27,6 +32,7 @@ https://elu.dev
 
 
 need to add a marketplace
+  → Share tab: Publish → Marketplace (price or free) + Marketplace browse/search/copy
 
 
 please mark files as public before sharing them as examples
@@ -808,3 +814,13 @@ External write-back — CRM, ERP, ticketing (export CSV/JSON is enough for v1)
 Retrieval connector — live KB/vector search instead of static uploads
 Better OCR / images — receipts, scanned clinical forms
 Tabular join step — reconciliation without bespoke Custom TS every time
+
+
+
+
+
+
+
+SECURITY STANDARDS from https://www.stackai.com/
+  HIPAA
+  ISO 27001 information security certification badge

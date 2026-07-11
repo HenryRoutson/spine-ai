@@ -9,6 +9,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Store,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { useAppShell } from "@/lib/app-shell"
@@ -22,6 +23,7 @@ import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
 import { useProjectTemplates } from "@/lib/use-project-templates"
+import { MarketplaceBrowsePanel } from "@/components/share/marketplace-browse-panel"
 import type { Project, ProjectId } from "@/lib/types"
 
 export function Projects() {
@@ -217,6 +219,18 @@ export function Projects() {
               )
             })}
           </ul>
+        </section>
+
+        <section className="mb-8">
+          <div className="mb-3 flex items-center gap-2">
+            <Store className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">Marketplace</h3>
+          </div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Search pipelines others published — copy one into your workspace to edit independently.
+            Publish your own from Share → Marketplace.
+          </p>
+          <MarketplaceBrowsePanel embedded />
         </section>
 
         <section>

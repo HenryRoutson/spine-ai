@@ -10,6 +10,7 @@ export type billing_flow_type =
   | "usage_assistant"
   | "usage_hosted_api"
   | "usage_shared_link"
+  | "usage_marketplace"
   | "usage_other";
 
 export type billing_flow_input = {

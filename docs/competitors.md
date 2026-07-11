@@ -26,3 +26,27 @@ LlamaExtract (part of LlamaCloud)
 https://www.extend.ai/
 https://retool.com/
 claude managed agents
+https://www.stackai.com/
+https://www.wordware.ai/
+https://dust.tt/
+LangChain / LangGraph / LangSmith 
+https://www.llamaindex.ai/workflows
+https://temporal.io/solutions/ai
+https://www.inngest.com/ai
+Trigger.dev
+https://www.windmill.dev/windmill_ai 
+https://dagster.io/
+https://www.promptfoo.dev/
+https://www.braintrust.dev/
+https://www.usebraintrust.com/
+https://deepeval.com/
+https://www.ragas.io/
+https://arize.com/phoenix/
+https://wandb.ai/site/weave/
+https://humanloop.com/home
+https://langfuse.com/
+
+
+
+https://rapidapi.com/
+https://openai.com/index/introducing-the-gpt-store/

@@ -9,6 +9,7 @@ import {
   InputType,
   ModuleKind,
   StrategyKind,
+  type MarketplaceListingId,
   type ProjectId,
   type SharedLinkId,
 } from "@/lib/server/types";
@@ -27,8 +28,9 @@ const MAX_MODULE_STRING_CHARS = 64_000;
 const MAX_MODULE_PAYLOAD_CHARS = 120_000;
 const MAX_STRUCTURE_PAYLOAD_CHARS = 50_000;
 
-export const sharedLinkIdSchema = z.string().regex(/^pub_[a-z0-9]{10,14}$/i);
-export const hostedApiIdSchema = z.string().regex(/^api_[a-z0-9]{10,14}$/i);
+export const sharedLinkIdSchema = z.string().regex(/^pub_[a-z0-9]{10,32}$/i);
+export const hostedApiIdSchema = z.string().regex(/^api_[a-z0-9]{10,32}$/i);
+export const marketplaceListingIdSchema = z.string().regex(/^mkt_[a-z0-9]{10,32}$/i);
 export const userBillingKeyIdSchema = z.string().trim().min(1).max(128);
 
 export function parseProjectId(raw: string): ProjectId | null {
@@ -55,6 +57,11 @@ export function parseSharedLinkId(raw: string): SharedLinkId | null {
 export function parseHostedApiId(raw: string): import("./types").HostedApiId | null {
   const parsed = hostedApiIdSchema.safeParse(raw);
   return parsed.success ? (parsed.data as import("./types").HostedApiId) : null;
+}
+
+export function parseMarketplaceListingId(raw: string): MarketplaceListingId | null {
+  const parsed = marketplaceListingIdSchema.safeParse(raw);
+  return parsed.success ? (parsed.data as MarketplaceListingId) : null;
 }
 
 // AI : bound arbitrary JSON payloads without losing structure — prevents multi-MB POST bodies.
@@ -375,6 +382,23 @@ export const createSharedLinkBodySchema = z
     defaultDocsByModule: inputDocsByModuleSchema,
   })
   .strict();
+
+export const createMarketplaceListingBodySchema = z
+  .object({
+    projectId: projectIdSchema,
+    title: z.string().trim().min(1).max(200),
+    description: z.string().trim().max(2_000).optional(),
+    priceCents: z.number().int().min(0).max(10_000_000).optional(),
+  })
+  .strict();
+
+export const marketplaceSearchQuerySchema = z.object({
+  q: z.string().trim().max(200).optional(),
+  mine: z
+    .enum(["1", "true", "0", "false"])
+    .optional()
+    .transform((v) => v === "1" || v === "true"),
+});
 
 export const updateDeploymentSpendLimitBodySchema = z
   .object({
