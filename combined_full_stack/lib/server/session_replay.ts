@@ -1,3 +1,8 @@
+import {
+  countClicksInRrwebEvents,
+  mergeUniqueStrings,
+  pagesFromRrwebMetaEvents,
+} from "@shared/session-replay/click-stats";
 import type { rrweb_event_json, session_id_string, session_replay_summary } from "@/lib/session-replay-types";
 import { createAdminClient } from "./supabase_admin";
 import type { user_id_string } from "./require_auth";
@@ -5,6 +10,11 @@ import type { user_id_string } from "./require_auth";
 export type session_replay_source = "app" | "landing";
 
 export type session_replay_row = session_replay_summary & { userId: user_id_string };
+
+export type session_replay_chunk_meta = {
+  pages?: string[];
+  clickedComponents?: string[];
+};
 
 export type session_replay_chunk_input = {
   sessionId: session_id_string;
@@ -14,6 +24,8 @@ export type session_replay_chunk_input = {
   chunkIndex: number;
   events: rrweb_event_json[];
   isFinal?: boolean;
+  pages?: string[];
+  clickedComponents?: string[];
 };
 
 // AI : anonymous landing-page rrweb — no auth.users row; keyed by demo email + ip hash.
@@ -25,6 +37,8 @@ export type landing_session_replay_chunk_input = {
   chunkIndex: number;
   events: rrweb_event_json[];
   isFinal?: boolean;
+  pages?: string[];
+  clickedComponents?: string[];
 };
 
 const MAX_EVENTS_PER_CHUNK = 200;
@@ -33,6 +47,14 @@ const MAX_CHUNK_BYTES = 1_500_000;
 function isMissingReplayTable(error: { message?: string }): boolean {
   const msg = error.message ?? "";
   return msg.includes("session_replay") || msg.includes("schema cache");
+}
+
+function isMissingClickFilterColumns(message: string): boolean {
+  return (
+    message.includes("click_count") ||
+    message.includes("clicked_components") ||
+    (message.includes("column") && message.includes("pages"))
+  );
 }
 
 function trimEvents(events: rrweb_event_json[]): rrweb_event_json[] {
@@ -53,24 +75,60 @@ function trimEvents(events: rrweb_event_json[]): rrweb_event_json[] {
 async function refreshSessionCounts(
   admin: Awaited<ReturnType<typeof createAdminClient>>,
   sessionId: session_id_string,
-  opts: { projectId?: string | null; isFinal?: boolean },
+  opts: {
+    projectId?: string | null;
+    isFinal?: boolean;
+    pages?: string[];
+    clickedComponents?: string[];
+  },
 ): Promise<void> {
   if (!admin) return;
   const { data: agg } = await admin
     .from("session_replay_chunks")
     .select("events")
     .eq("session_id", sessionId);
-  const totalEvents = (agg ?? []).reduce((n, row) => {
+  const allEvents: rrweb_event_json[] = [];
+  for (const row of agg ?? []) {
     const arr = row.events as rrweb_event_json[];
-    return n + (Array.isArray(arr) ? arr.length : 0);
-  }, 0);
-  const patch: Record<string, unknown> = {
-    event_count: totalEvents,
+    if (Array.isArray(arr)) allEvents.push(...arr);
+  }
+  const { data: existing, error: existingError } = await admin
+    .from("session_replay_sessions")
+    .select("pages,clicked_components")
+    .eq("id", sessionId)
+    .maybeSingle();
+  const existingPages =
+    existingError || !existing ? [] : ((existing.pages as string[] | null) ?? []);
+  const existingComponents =
+    existingError || !existing ? [] : ((existing.clicked_components as string[] | null) ?? []);
+  const pages = mergeUniqueStrings(
+    existingPages,
+    [...pagesFromRrwebMetaEvents(allEvents), ...(opts.pages ?? [])],
+  );
+  const clickedComponents = mergeUniqueStrings(existingComponents, opts.clickedComponents ?? []);
+  const fullPatch: Record<string, unknown> = {
+    event_count: allEvents.length,
     chunk_count: agg?.length ?? 0,
+    click_count: countClicksInRrwebEvents(allEvents),
+    pages,
+    clicked_components: clickedComponents,
   };
-  if (opts.projectId) patch.project_id = opts.projectId;
-  if (opts.isFinal) patch.ended_at = new Date().toISOString();
-  await admin.from("session_replay_sessions").update(patch).eq("id", sessionId);
+  if (opts.projectId) fullPatch.project_id = opts.projectId;
+  if (opts.isFinal) fullPatch.ended_at = new Date().toISOString();
+
+  const { error: updateError } = await admin
+    .from("session_replay_sessions")
+    .update(fullPatch)
+    .eq("id", sessionId);
+  if (updateError && isMissingClickFilterColumns(updateError.message)) {
+    const legacyPatch: Record<string, unknown> = {
+      event_count: allEvents.length,
+      chunk_count: agg?.length ?? 0,
+    };
+    if (opts.projectId) legacyPatch.project_id = opts.projectId;
+    if (opts.isFinal) legacyPatch.ended_at = new Date().toISOString();
+    await admin.from("session_replay_sessions").update(legacyPatch).eq("id", sessionId);
+  }
 }
 
 async function upsertReplayChunk(
@@ -80,6 +138,7 @@ async function upsertReplayChunk(
   events: rrweb_event_json[],
   isFinal: boolean | undefined,
   projectId: string | null | undefined,
+  meta?: session_replay_chunk_meta,
 ): Promise<void> {
   const trimmed = trimEvents(events);
   if (trimmed.length > 0) {
@@ -97,8 +156,13 @@ async function upsertReplayChunk(
     }
   }
 
-  if (trimmed.length > 0 || isFinal) {
-    await refreshSessionCounts(admin, sessionId, { projectId, isFinal });
+  if (trimmed.length > 0 || isFinal || (meta?.pages?.length ?? 0) > 0 || (meta?.clickedComponents?.length ?? 0) > 0) {
+    await refreshSessionCounts(admin, sessionId, {
+      projectId,
+      isFinal,
+      pages: meta?.pages,
+      clickedComponents: meta?.clickedComponents,
+    });
   }
 }
 
@@ -151,6 +215,7 @@ export async function ingestSessionReplayChunk(input: session_replay_chunk_input
     input.events,
     input.isFinal,
     input.projectId,
+    { pages: input.pages, clickedComponents: input.clickedComponents },
   );
 }
 
@@ -203,6 +268,7 @@ export async function ingestLandingSessionReplayChunk(
     input.events,
     input.isFinal,
     input.projectId,
+    { pages: input.pages, clickedComponents: input.clickedComponents },
   );
 }
 
@@ -213,27 +279,49 @@ export async function listSessionReplaysForUser(
   const admin = await createAdminClient();
   if (!admin) return [];
 
-  const { data, error } = await admin
+  const selectFull =
+    "id,user_id,user_email,project_id,started_at,ended_at,event_count,chunk_count,click_count,pages,clicked_components,source";
+  const selectBase =
+    "id,user_id,user_email,project_id,started_at,ended_at,event_count,chunk_count";
+
+  const first = await admin
     .from("session_replay_sessions")
-    .select("id,user_id,user_email,project_id,started_at,ended_at,event_count,chunk_count")
+    .select(selectFull)
     .eq("user_id", userId)
     .order("started_at", { ascending: false })
     .limit(limit);
 
-  if (error) {
-    if (!isMissingReplayTable(error)) console.warn("session_replay_sessions list failed:", error.message);
+  let rows: Record<string, unknown>[] | null = (first.data ?? null) as Record<string, unknown>[] | null;
+  let listError = first.error;
+  if (listError && isMissingClickFilterColumns(listError.message)) {
+    const fallback = await admin
+      .from("session_replay_sessions")
+      .select(selectBase)
+      .eq("user_id", userId)
+      .order("started_at", { ascending: false })
+      .limit(limit);
+    rows = (fallback.data ?? null) as Record<string, unknown>[] | null;
+    listError = fallback.error;
+  }
+
+  if (listError) {
+    if (!isMissingReplayTable(listError)) console.warn("session_replay_sessions list failed:", listError.message);
     return [];
   }
 
-  return (data ?? []).map((r) => ({
-    id: r.id as session_id_string,
-    userId: r.user_id as user_id_string,
-    userEmail: (r.user_email as string | null) ?? null,
-    projectId: (r.project_id as string | null) ?? null,
-    startedAt: r.started_at as string,
-    endedAt: (r.ended_at as string | null) ?? null,
-    eventCount: Number(r.event_count ?? 0),
-    chunkCount: Number(r.chunk_count ?? 0),
+  return (rows ?? []).map((row) => ({
+    id: row.id as session_id_string,
+    userId: row.user_id as user_id_string,
+    userEmail: (row.user_email as string | null) ?? null,
+    projectId: (row.project_id as string | null) ?? null,
+    startedAt: row.started_at as string,
+    endedAt: (row.ended_at as string | null) ?? null,
+    eventCount: Number(row.event_count ?? 0),
+    chunkCount: Number(row.chunk_count ?? 0),
+    clickCount: Number(row.click_count ?? 0),
+    pages: (row.pages as string[] | null) ?? [],
+    clickedComponents: (row.clicked_components as string[] | null) ?? [],
+    source: row.source === "landing" ? "landing" : "app",
   }));
 }
 

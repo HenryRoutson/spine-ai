@@ -532,6 +532,8 @@ please ensure you model the potenial loss money as if everyone instantly used al
 But yes, have a buffer zone for money i may or may not have to pay with the free credit.
 
 please add replay https://rrweb.com/ for all users.
+You should be able to sort replays by the number of clicks, and by which component was clicked on during that even. You should be able to filter based on what page the user visits, or if they're on the landing page or app.
+You should be able to filter with a searchable users list.
 
 # Supported languages
 - typescript 
@@ -539,3 +541,5 @@ please add replay https://rrweb.com/ for all users.
 - rust
 - BAML : https://github.com/boundaryml/baml
 - Go
+- swift
+- Kotlin

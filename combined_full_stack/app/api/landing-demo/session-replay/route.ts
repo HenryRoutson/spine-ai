@@ -50,7 +50,8 @@ export async function POST(req: Request): Promise<NextResponse> {
   if ("validationError" in body) return jsonWithCors(req, { error: body.validationError }, HTTP.BAD_REQUEST);
 
   const events = body.events ?? [];
-  if (events.length === 0 && !body.isFinal) {
+  const hasMeta = (body.pages?.length ?? 0) > 0 || (body.clickedComponents?.length ?? 0) > 0;
+  if (events.length === 0 && !body.isFinal && !hasMeta) {
     return jsonWithCors(req, { error: "events required unless isFinal" }, HTTP.BAD_REQUEST);
   }
 
@@ -69,6 +70,8 @@ export async function POST(req: Request): Promise<NextResponse> {
       chunkIndex: body.chunkIndex,
       events,
       isFinal: body.isFinal,
+      pages: body.pages,
+      clickedComponents: body.clickedComponents,
     });
   } catch (err) {
     if (err instanceof SessionReplayOwnershipError) {

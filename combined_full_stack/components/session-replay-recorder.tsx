@@ -2,8 +2,14 @@
 
 import { useEffect, useRef } from "react";
 import { API_ROUTES } from "@/lib/api-routes";
+import { useOptionalAppShell } from "@/lib/app-shell";
 import { useOptionalStore } from "@/lib/store";
 import type { session_id_string } from "@/lib/session-replay-types";
+import {
+  createReplayMetaBuffer,
+  currentPagePath,
+  elementClickLabel,
+} from "@shared/session-replay/recorder-meta";
 
 type rrweb_event_json = Record<string, unknown>;
 
@@ -16,18 +22,31 @@ function newSessionId(): session_id_string {
 }
 
 export function SessionReplayRecorder() {
+  const shell = useOptionalAppShell();
   const store = useOptionalStore();
   const projectId = store?.project?.id;
+  const activeWindow = shell?.activeWindow ?? null;
   const sessionIdRef = useRef<session_id_string>(newSessionId());
   const chunkIndexRef = useRef(0);
   const bufferRef = useRef<rrweb_event_json[]>([]);
+  const metaRef = useRef(createReplayMetaBuffer(currentPagePath()));
   const stopRecordRef = useRef<(() => void) | undefined>(undefined);
   const sessionStartedRef = useRef(Date.now());
+  const activeWindowRef = useRef(activeWindow);
+
+  useEffect(() => {
+    activeWindowRef.current = activeWindow;
+    if (activeWindow) metaRef.current.recordPage(`app:${activeWindow}`);
+  }, [activeWindow]);
 
   useEffect(() => {
     let cancelled = false;
 
     const postChunk = (events: rrweb_event_json[], isFinal = false) => {
+      const meta = metaRef.current.drain();
+      metaRef.current.recordPage(currentPagePath());
+      if (activeWindowRef.current) metaRef.current.recordPage(`app:${activeWindowRef.current}`);
+
       const body: Record<string, unknown> = {
         sessionId: sessionIdRef.current,
         chunkIndex: chunkIndexRef.current,
@@ -38,6 +57,8 @@ export function SessionReplayRecorder() {
         body.events = events;
         chunkIndexRef.current += 1;
       }
+      if (meta.pages.length > 0) body.pages = meta.pages;
+      if (meta.clickedComponents.length > 0) body.clickedComponents = meta.clickedComponents;
       void fetch(API_ROUTES.sessionReplay, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -48,7 +69,8 @@ export function SessionReplayRecorder() {
 
     const flush = (isFinal = false) => {
       const events = bufferRef.current.splice(0, MAX_BUFFER);
-      if (events.length === 0 && !isFinal) return;
+      // AI : still flush when click/page meta accumulated without a full rrweb buffer.
+      if (events.length === 0 && !isFinal && !metaRef.current.hasPending()) return;
       postChunk(events, isFinal);
     };
 
@@ -57,7 +79,17 @@ export function SessionReplayRecorder() {
       sessionIdRef.current = newSessionId();
       chunkIndexRef.current = 0;
       bufferRef.current = [];
+      metaRef.current = createReplayMetaBuffer(currentPagePath());
       sessionStartedRef.current = Date.now();
+    };
+
+    const onClick = (ev: MouseEvent) => {
+      const target = ev.target;
+      if (!(target instanceof HTMLElement)) return;
+      const el = target.closest("button, a[href], [role='button'], input, textarea, select");
+      if (!el || !(el instanceof HTMLElement)) return;
+      if (el.closest("[data-no-track]")) return;
+      metaRef.current.recordClick(elementClickLabel(el, activeWindowRef.current));
     };
 
     void import("rrweb").then(({ record }) => {
@@ -68,16 +100,14 @@ export function SessionReplayRecorder() {
           if (bufferRef.current.length >= MAX_BUFFER) flush();
           if (Date.now() - sessionStartedRef.current >= SESSION_ROTATE_MS) rotateSession();
         },
-        // AI : passwords masked by default; other inputs visible for ops debugging.
         maskAllInputs: false,
         maskInputOptions: { password: true },
-        // AI : avoid blockSelector — rrweb 2.0.0-alpha.4 calls node.matches on text nodes
-        // AI : (github.com/rrweb-io/rrweb/issues/1486). Use class-based blocking instead.
         blockClass: "rr-block",
         checkoutEveryNms: 5 * 60_000,
       });
     });
 
+    document.addEventListener("click", onClick, true);
     const intervalId = setInterval(() => flush(), FLUSH_MS);
     const onPageHide = () => flush(true);
     window.addEventListener("pagehide", onPageHide);
@@ -88,6 +118,7 @@ export function SessionReplayRecorder() {
 
     return () => {
       cancelled = true;
+      document.removeEventListener("click", onClick, true);
       clearInterval(intervalId);
       window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibility);

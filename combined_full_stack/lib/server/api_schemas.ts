@@ -594,12 +594,18 @@ export const activityBatchBodySchema = z.object({
     .max(50),
 });
 
+const replayMetaArraysSchema = {
+  pages: z.array(z.string().trim().min(1).max(200)).max(40).optional(),
+  clickedComponents: z.array(z.string().trim().min(1).max(200)).max(80).optional(),
+};
+
 export const sessionReplayChunkBodySchema = z.object({
   sessionId: z.string().uuid(),
   chunkIndex: z.number().int().nonnegative().max(10_000),
   events: z.array(z.record(z.string(), z.unknown())).max(200).optional(),
   projectId: z.string().trim().max(128).optional(),
   isFinal: z.boolean().optional(),
+  ...replayMetaArraysSchema,
 });
 
 // AI : anonymous landing rrweb ingest — email must already be in landing_page_signups.
@@ -611,4 +617,5 @@ export const landingSessionReplayChunkBodySchema = z.object({
   events: z.array(z.record(z.string(), z.unknown())).max(200).optional(),
   projectId: z.string().trim().max(128).optional(),
   isFinal: z.boolean().optional(),
+  ...replayMetaArraysSchema,
 });

@@ -139,8 +139,7 @@ No Langfuse-style open SDK for arbitrary apps; observability is scoped to spine 
 
 Remove playground in structs, components/structure-builder.tsx
 
-add export to Rust ✓
-add export to Go ✓
+
 
 there should be a group by on the fields where you can see the mapping of what has been mapped to what with autmoatically generated confusion matricies.
 
@@ -170,7 +169,9 @@ add a split function
 
 everytime i open the cache in the UI it has to load in again, please fix this. in general try to fix this and load all data for a project but just change it with streaming
 
-
+Export
+- swift
+- Kotlin
 
 add this option in the fields of the structs : you should describe if certain fields are deterministic like a maths answer, or probabilistic if they're something like a summary which will almost never be the same. you should also mark certain steps as either probabilistic or deterministic, as we might want seeds for testing which you can vary, but need to consider when you decide to cache or not
 

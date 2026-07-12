@@ -2,6 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import type { demo_email_string } from "@/lib/demo-email";
+import {
+  createReplayMetaBuffer,
+  currentPagePath,
+  elementClickLabel,
+} from "@shared/session-replay/recorder-meta";
 
 type rrweb_event_json = Record<string, unknown>;
 type session_id_string = string & { __brand: "session_id" };
@@ -28,6 +33,7 @@ export function LandingSessionReplayRecorder({
   const sessionIdRef = useRef<session_id_string>(newSessionId());
   const chunkIndexRef = useRef(0);
   const bufferRef = useRef<rrweb_event_json[]>([]);
+  const metaRef = useRef(createReplayMetaBuffer(currentPagePath()));
   const stopRecordRef = useRef<(() => void) | undefined>(undefined);
   const sessionStartedRef = useRef(Date.now());
   const emailRef = useRef(email);
@@ -44,10 +50,14 @@ export function LandingSessionReplayRecorder({
   useEffect(() => {
     if (!enabled || !email) return;
     let cancelled = false;
+    metaRef.current.recordPage(currentPagePath());
 
     const postChunk = (events: rrweb_event_json[], isFinal = false) => {
       const currentEmail = emailRef.current;
       if (!currentEmail) return;
+      const meta = metaRef.current.drain();
+      metaRef.current.recordPage(currentPagePath());
+
       const body: Record<string, unknown> = {
         sessionId: sessionIdRef.current,
         email: currentEmail,
@@ -60,6 +70,8 @@ export function LandingSessionReplayRecorder({
         body.events = events;
         chunkIndexRef.current += 1;
       }
+      if (meta.pages.length > 0) body.pages = meta.pages;
+      if (meta.clickedComponents.length > 0) body.clickedComponents = meta.clickedComponents;
       void fetch(REPLAY_PATH, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -70,7 +82,8 @@ export function LandingSessionReplayRecorder({
 
     const flush = (isFinal = false) => {
       const events = bufferRef.current.splice(0, MAX_BUFFER);
-      if (events.length === 0 && !isFinal) return;
+      // AI : still flush when click/page meta accumulated without a full rrweb buffer.
+      if (events.length === 0 && !isFinal && !metaRef.current.hasPending()) return;
       postChunk(events, isFinal);
     };
 
@@ -79,7 +92,17 @@ export function LandingSessionReplayRecorder({
       sessionIdRef.current = newSessionId();
       chunkIndexRef.current = 0;
       bufferRef.current = [];
+      metaRef.current = createReplayMetaBuffer(currentPagePath());
       sessionStartedRef.current = Date.now();
+    };
+
+    const onClick = (ev: MouseEvent) => {
+      const target = ev.target;
+      if (!(target instanceof HTMLElement)) return;
+      const el = target.closest("button, a[href], [role='button'], input, textarea, select");
+      if (!el || !(el instanceof HTMLElement)) return;
+      if (el.closest("[data-no-track]")) return;
+      metaRef.current.recordClick(elementClickLabel(el, "landing"));
     };
 
     void import("rrweb").then(({ record }) => {
@@ -92,13 +115,12 @@ export function LandingSessionReplayRecorder({
         },
         maskAllInputs: false,
         maskInputOptions: { password: true },
-        // AI : avoid blockSelector — rrweb 2.0.0-alpha.4 calls node.matches on text nodes
-        // AI : (github.com/rrweb-io/rrweb/issues/1486). Use class-based blocking instead.
         blockClass: "rr-block",
         checkoutEveryNms: 5 * 60_000,
       });
     });
 
+    document.addEventListener("click", onClick, true);
     const intervalId = setInterval(() => flush(), FLUSH_MS);
     const onPageHide = () => flush(true);
     window.addEventListener("pagehide", onPageHide);
@@ -109,6 +131,7 @@ export function LandingSessionReplayRecorder({
 
     return () => {
       cancelled = true;
+      document.removeEventListener("click", onClick, true);
       clearInterval(intervalId);
       window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibility);

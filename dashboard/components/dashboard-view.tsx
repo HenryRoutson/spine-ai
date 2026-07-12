@@ -30,7 +30,15 @@ import {
 import { formatCents } from "@/lib/format";
 import type { dashboard_stats } from "@/lib/dashboard_stats";
 import type { dashboard_timeline_event } from "@/lib/dashboard_timeline";
-import type { dashboard_session_replay_row } from "@/lib/dashboard_session_replay";
+import {
+  sortDashboardReplaySessions,
+  type dashboard_replay_component_filter,
+  type dashboard_replay_sort,
+  type dashboard_replay_source_filter,
+  type dashboard_replay_filter_options,
+  type dashboard_replay_user_option,
+  type dashboard_session_replay_row,
+} from "@/lib/dashboard_session_replay";
 import { SessionReplayPlayer } from "@/components/session-replay-player";
 
 function KpiCard({
@@ -153,6 +161,16 @@ export function DashboardView() {
   const [busy, setBusy] = useState(true);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [replaySessions, setReplaySessions] = useState<dashboard_session_replay_row[]>([]);
+  const [replayUsers, setReplayUsers] = useState<dashboard_replay_user_option[]>([]);
+  const [replayUserSearch, setReplayUserSearch] = useState("");
+  const [replaySource, setReplaySource] = useState<dashboard_replay_source_filter>("all");
+  const [replayPage, setReplayPage] = useState("");
+  const [replayComponent, setReplayComponent] = useState<dashboard_replay_component_filter>("all");
+  const [replayFilterOptions, setReplayFilterOptions] = useState<dashboard_replay_filter_options>({
+    pages: [],
+    components: [],
+  });
+  const [replaySort, setReplaySort] = useState<dashboard_replay_sort>("recent");
   const [selectedReplayId, setSelectedReplayId] = useState<string>("");
   const [replayEvents, setReplayEvents] = useState<Record<string, unknown>[]>([]);
   const [replayBusy, setReplayBusy] = useState(false);
@@ -190,17 +208,35 @@ export function DashboardView() {
 
   const loadReplaySessions = useCallback(async () => {
     try {
-      const qs = selectedUserId ? `?userId=${encodeURIComponent(selectedUserId)}` : "";
-      const res = await fetch(`/api/session-replay${qs}`);
-      const body = (await res.json()) as { sessions?: dashboard_session_replay_row[]; error?: string };
+      const params = new URLSearchParams();
+      if (selectedUserId) params.set("userId", selectedUserId);
+      if (replayUserSearch.trim()) params.set("userSearch", replayUserSearch.trim());
+      if (replaySource !== "all") params.set("source", replaySource);
+      if (replayPage.trim()) params.set("page", replayPage.trim());
+      if (replayComponent !== "all") params.set("component", replayComponent);
+      const qs = params.toString() ? `?${params.toString()}` : "";
+      const res = await fetch(`/api/session-replay${qs}`, { cache: "no-store" });
+      const body = (await res.json()) as {
+        sessions?: dashboard_session_replay_row[];
+        users?: dashboard_replay_user_option[];
+        filterOptions?: dashboard_replay_filter_options;
+        error?: string;
+      };
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
       setReplaySessions(body.sessions ?? []);
+      setReplayUsers(body.users ?? []);
+      setReplayFilterOptions(body.filterOptions ?? { pages: [], components: [] });
       setReplayError(null);
     } catch (e) {
       setReplaySessions([]);
       setReplayError(e instanceof Error ? e.message : "Failed to load replay sessions");
     }
-  }, [selectedUserId]);
+  }, [selectedUserId, replayUserSearch, replaySource, replayPage, replayComponent]);
+
+  const displayReplaySessions = useMemo(
+    () => sortDashboardReplaySessions(replaySessions, replaySort),
+    [replaySessions, replaySort],
+  );
 
   useEffect(() => {
     void loadReplaySessions();
@@ -257,10 +293,14 @@ export function DashboardView() {
           <div className="panel border-destructive/40 p-4 text-sm text-destructive">{error}</div>
         ) : null}
 
-        {!stats?.configured ? (
+        {busy && !stats ? (
+          <div className="panel p-4 text-sm text-muted">Loading dashboard…</div>
+        ) : null}
+
+        {stats && !stats.configured ? (
           <div className="panel p-4">
             <h2 className="font-medium">Supabase not configured</h2>
-            <p className="mt-2 text-sm text-muted">{stats?.configError}</p>
+            <p className="mt-2 text-sm text-muted">{stats.configError}</p>
           </div>
         ) : null}
 
@@ -439,18 +479,60 @@ export function DashboardView() {
                       <User className="h-4 w-4" />
                       <h2 className="font-medium">Users</h2>
                     </div>
-                    <select
-                      className="rounded-md border border-line bg-background px-3 py-1.5 text-sm"
-                      value={selectedUserId}
-                      onChange={(e) => setSelectedUserId(e.target.value)}
-                    >
-                      <option value="">All users</option>
+                    <input
+                      className="input max-w-xs"
+                      list="dashboard-users-list"
+                      placeholder="Search users…"
+                      value={replayUserSearch || (selectedUserId ? (timeline.users.find((u) => u.userId === selectedUserId)?.userEmail ?? selectedUserId.slice(0, 8)) : "")}
+                      onChange={(e) => {
+                        setReplayUserSearch(e.target.value);
+                        setSelectedUserId("");
+                      }}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim().toLowerCase();
+                        if (!v) {
+                          setReplayUserSearch("");
+                          return;
+                        }
+                        const fromTimeline = timeline.users.find(
+                          (u) =>
+                            u.userEmail?.toLowerCase() === v ||
+                            u.userId.toLowerCase().startsWith(v),
+                        );
+                        if (fromTimeline) {
+                          setSelectedUserId(fromTimeline.userId);
+                          setReplayUserSearch("");
+                          return;
+                        }
+                        const fromReplay = replayUsers.find(
+                          (u) =>
+                            u.userEmail?.toLowerCase() === v ||
+                            (u.userId && u.userId.toLowerCase().startsWith(v)),
+                        );
+                        if (fromReplay?.userId) {
+                          setSelectedUserId(fromReplay.userId);
+                          setReplayUserSearch("");
+                        }
+                      }}
+                    />
+                    <datalist id="dashboard-users-list">
                       {timeline.users.map((u) => (
-                        <option key={u.userId} value={u.userId}>
-                          {u.userEmail ?? u.userId.slice(0, 8)} · {u.eventCount} events
-                        </option>
+                        <option
+                          key={u.userId}
+                          value={u.userEmail ?? u.userId}
+                          label={`${u.userEmail ?? u.userId.slice(0, 8)} · ${u.eventCount} events`}
+                        />
                       ))}
-                    </select>
+                      {replayUsers
+                        .filter((u) => !u.userId || !timeline.users.some((t) => t.userId === u.userId))
+                        .map((u) => (
+                          <option
+                            key={u.userEmail ?? "anon"}
+                            value={u.userEmail ?? "landing visitor"}
+                            label={`${u.userEmail ?? "landing"} · ${u.sessionCount} replays`}
+                          />
+                        ))}
+                    </datalist>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -469,7 +551,10 @@ export function DashboardView() {
                           <tr
                             key={u.userId}
                             className="cursor-pointer border-b border-line/60 hover:bg-background/40"
-                            onClick={() => setSelectedUserId(u.userId)}
+                            onClick={() => {
+                              setSelectedUserId(u.userId);
+                              setReplayUserSearch("");
+                            }}
                           >
                             <td className="py-2">
                               <p>{u.userEmail ?? "—"}</p>
@@ -570,25 +655,141 @@ export function DashboardView() {
                 </div>
 
                 <div className="panel p-4">
-                  <div className="mb-4 flex items-center gap-2">
-                    <MonitorPlay className="h-4 w-4" />
-                    <h2 className="font-medium">Session replay (rrweb)</h2>
-                    {selectedUserId ? <span className="badge">Filtered</span> : null}
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <MonitorPlay className="h-4 w-4" />
+                      <h2 className="font-medium">Session replay (rrweb)</h2>
+                      {selectedUserId || replayUserSearch || replaySource !== "all" || replayPage || replayComponent !== "all" ? (
+                        <span className="badge">Filtered</span>
+                      ) : null}
+                    </div>
                   </div>
                   <p className="mb-4 text-sm text-muted">
-                    DOM recordings from signed-in app sessions and the public landing demo — click a session to replay clicks, typing, and navigation.
+                    DOM recordings from signed-in app sessions and the public landing demo — sort by clicks or component, filter by page or source.
                   </p>
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className={`btn text-xs ${replaySort === "recent" ? "border-accent" : ""}`}
+                      onClick={() => setReplaySort("recent")}
+                    >
+                      Recent
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn text-xs ${replaySort === "clicks_desc" ? "border-accent" : ""}`}
+                      onClick={() => setReplaySort("clicks_desc")}
+                    >
+                      Most clicks
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn text-xs ${replaySort === "clicks_asc" ? "border-accent" : ""}`}
+                      onClick={() => setReplaySort("clicks_asc")}
+                    >
+                      Fewest clicks
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn text-xs ${replaySort === "component" ? "border-accent" : ""}`}
+                      onClick={() => setReplaySort("component")}
+                    >
+                      By component
+                    </button>
+                  </div>
+                  <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <label className="text-sm">
+                      <span className="mb-1 block text-xs text-muted">User</span>
+                      <input
+                        className="input"
+                        list="replay-users-list"
+                        placeholder="Search email or id…"
+                        value={replayUserSearch}
+                        onChange={(e) => {
+                          setReplayUserSearch(e.target.value);
+                          setSelectedUserId("");
+                        }}
+                      />
+                      <datalist id="replay-users-list">
+                        {replayUsers.map((u) => (
+                          <option
+                            key={`${u.userId ?? "x"}-${u.userEmail ?? "anon"}`}
+                            value={u.userEmail ?? u.userId ?? "landing"}
+                          />
+                        ))}
+                      </datalist>
+                    </label>
+                    <label className="text-sm">
+                      <span className="mb-1 block text-xs text-muted">Source</span>
+                      <select
+                        className="input"
+                        value={replaySource}
+                        onChange={(e) => setReplaySource(e.target.value as dashboard_replay_source_filter)}
+                      >
+                        <option value="all">All</option>
+                        <option value="app">App</option>
+                        <option value="landing">Landing page</option>
+                      </select>
+                    </label>
+                    <label className="text-sm">
+                      <span className="mb-1 block text-xs text-muted">Page visited</span>
+                      <input
+                        className="input"
+                        list="replay-pages-list"
+                        placeholder="/ or app:pipeline"
+                        value={replayPage}
+                        onChange={(e) => setReplayPage(e.target.value)}
+                      />
+                      <datalist id="replay-pages-list">
+                        {replayFilterOptions.pages.map((p) => (
+                          <option key={p} value={p} />
+                        ))}
+                      </datalist>
+                    </label>
+                    <label className="text-sm">
+                      <span className="mb-1 block text-xs text-muted">Component clicked</span>
+                      <select
+                        className="input"
+                        value={replayComponent}
+                        onChange={(e) =>
+                          setReplayComponent(e.target.value as dashboard_replay_component_filter)
+                        }
+                      >
+                        <option value="all">All</option>
+                        {replayFilterOptions.components.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  {(selectedUserId || replayUserSearch || replaySource !== "all" || replayPage || replayComponent !== "all") ? (
+                    <button
+                      type="button"
+                      className="btn mb-4 text-xs"
+                      onClick={() => {
+                        setSelectedUserId("");
+                        setReplayUserSearch("");
+                        setReplaySource("all");
+                        setReplayPage("");
+                        setReplayComponent("all");
+                      }}
+                    >
+                      Clear replay filters
+                    </button>
+                  ) : null}
                   {replayError ? (
                     <p className="mb-3 text-sm text-red-500">Replay load failed: {replayError}</p>
                   ) : null}
-                  {replaySessions.length === 0 ? (
+                  {displayReplaySessions.length === 0 ? (
                     <p className="text-sm text-muted">
                       No replay sessions yet — recordings start in the app when signed in, or on the landing demo after privacy consent.
                     </p>
                   ) : (
                     <div className="grid gap-4 lg:grid-cols-[minmax(0,16rem)_1fr]">
                       <div className="max-h-64 space-y-2 overflow-y-auto">
-                        {replaySessions.map((s) => (
+                        {displayReplaySessions.map((s) => (
                           <button
                             key={s.id}
                             type="button"
@@ -607,8 +808,21 @@ export function DashboardView() {
                             </p>
                             <p className="text-xs text-muted">{formatWhen(s.startedAt)}</p>
                             <p className="text-xs text-muted">
-                              {s.eventCount} events · {s.projectId ? `project ${s.projectId}` : "no project"}
+                              {s.clickCount} clicks · {s.eventCount} events
+                              {s.projectId ? ` · project ${s.projectId}` : ""}
                             </p>
+                            {s.pages.length > 0 ? (
+                              <p className="mt-1 truncate text-xs text-muted" title={s.pages.join(", ")}>
+                                {s.pages.slice(0, 2).join(", ")}
+                                {s.pages.length > 2 ? ` +${s.pages.length - 2}` : ""}
+                              </p>
+                            ) : null}
+                            {s.clickedComponents.length > 0 ? (
+                              <p className="truncate text-xs text-muted" title={s.clickedComponents.join(", ")}>
+                                {s.clickedComponents.slice(0, 2).join(", ")}
+                                {s.clickedComponents.length > 2 ? ` +${s.clickedComponents.length - 2}` : ""}
+                              </p>
+                            ) : null}
                           </button>
                         ))}
                       </div>

@@ -8,12 +8,15 @@ type session_replay_player_props = {
   className?: string;
 };
 
+// AI : rrweb Replayer throws if events.length < 2 (full snapshot + at least one update).
+const MIN_RRWEB_EVENTS = 2;
+
 export function SessionReplayPlayer({ events, className }: session_replay_player_props) {
   const hostRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const host = hostRef.current;
-    if (!host || events.length === 0) return;
+    if (!host || events.length < MIN_RRWEB_EVENTS) return;
 
     // AI : rrweb-player instance — destroy via getReplayer().destroy() when available.
     let instance: { getReplayer?: () => { destroy?: () => void } } | null = null;
@@ -45,6 +48,14 @@ export function SessionReplayPlayer({ events, className }: session_replay_player
 
   if (events.length === 0) {
     return <p className="text-sm text-muted">No replay events in this session.</p>;
+  }
+
+  if (events.length < MIN_RRWEB_EVENTS) {
+    return (
+      <p className="text-sm text-muted">
+        Recording too short to play back — wait for more interaction or try a longer session.
+      </p>
+    );
   }
 
   return <div ref={hostRef} className={className} />;
