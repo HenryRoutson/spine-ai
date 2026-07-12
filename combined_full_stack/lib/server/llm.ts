@@ -1,4 +1,4 @@
-// AI : facade over openrouter_llm — keep thin when openrouter_llm.ts splits transport vs parse.
+// AI : facade over modular llm providers — maps demo ModelId → provider + providerModel and bills the ledger.
 import { type ZodType } from "zod";
 import {
   getStringResponse,
@@ -7,17 +7,14 @@ import {
   getVisionStringResponse,
   streamStringResponse,
   streamStructuredResponse,
-  type ChatOptions,
-  type VisionAttachment,
-} from "./openrouter_llm";
+} from "./llm/structured";
+import type { LlmCallOptions, VisionAttachment } from "./llm/types";
 import { type ServerLogger } from "./server_logger";
 import { FailureKind, LlmCallStatus, type LlmCallRecord, type ModelId } from "./types";
-import { slugFor } from "./model_catalog";
+import { catalogEntry, parseRoutedModel } from "./model_catalog";
 import { assertWithinStepCostLimit } from "./step_cost_limit";
 import { type UsageLedger } from "./usage";
 
-// AI : single place to call the LLM with a demo ModelId — maps id→slug and bills the ledger.
-// AI : mirrors the pitch's "Get llm instance" idea (one cached entry point for all calls).
 export interface CallContext {
   model: ModelId;
   ledger: UsageLedger;
@@ -26,17 +23,18 @@ export interface CallContext {
   promptIndex?: number;
   round?: number;
   llmCalls?: LlmCallRecord[];
-  onStructuredFailure?: ChatOptions["onStructuredFailure"];
-  // AI : per-step spend cap — checked after each billed LLM call when both are set.
+  onStructuredFailure?: LlmCallOptions["onStructuredFailure"];
   costLimitCents?: number;
   stepBaseCents?: number;
   stepLabel?: string;
 }
 
-function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
+function chatOpts(ctx: CallContext, log?: ServerLogger): LlmCallOptions {
+  const routed = parseRoutedModel(ctx.model);
+  const entry = catalogEntry(routed.modelId);
   return {
-    // AI : the demo ModelId maps to a real OpenRouter slug; both are branded strings.
-    model: slugFor(ctx.model) as unknown as ChatOptions["model"],
+    providerId: routed.providerId,
+    providerModel: entry.providerModel,
     system: ctx.system,
     maxTokens: ctx.maxTokens,
     promptIndex: ctx.promptIndex,
@@ -111,7 +109,6 @@ export function llmStructured<T>(
   return getStructuredResponse(prompt, schema, chatOpts(ctx, log), log);
 }
 
-// AI : like llmStructured but streams the raw JSON response — onRawDelta fires on each token.
 export function llmStreamStructured<T>(
   prompt: string,
   schema: ZodType<T>,
@@ -123,7 +120,6 @@ export function llmStreamStructured<T>(
   return streamStructuredResponse(prompt, schema, onRawDelta, chatOpts(ctx, log), log);
 }
 
-// AI : batch llm — fires all items in one http1-burst parallel round (see openrouter_llm.parallelChat).
 export async function llmBatchStructured<T>(
   items: unknown[],
   promptFor: (item: unknown, index: number) => string,
@@ -140,3 +136,5 @@ export async function llmBatchStructured<T>(
   log?.info(`llmBatchStructured complete`, { itemCount: items.length });
   return rows;
 }
+
+export type { VisionAttachment } from "./llm/types";

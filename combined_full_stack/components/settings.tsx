@@ -55,6 +55,9 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { PrivacySettings } from "@/components/privacy-settings"
 import { TeamSettings } from "@/components/team-settings"
+import { LlmProvidersSettingsPage, LlmProvidersSettingsSummary } from "@/components/llm-providers-settings"
+import { useOptionalAppShell } from "@/lib/app-shell"
+import { OPEN_LLM_PROVIDERS_EVENT, SCROLL_SETTINGS_SECTION_EVENT } from "@/lib/settings-nav"
 import { isDemoMode } from "@/lib/demo-mode"
 import { DEMO_ACCOUNT_EMAIL } from "@/lib/demo-constants"
 
@@ -101,6 +104,7 @@ const SETTINGS_SECTIONS = [
   { id: "settings-team", label: "Team" },
   { id: "settings-account", label: "Account" },
   { id: "settings-model", label: "Default model" },
+  { id: "settings-llm-providers", label: "LLM providers" },
   { id: "settings-json-reader", label: "JSON reader" },
   { id: "settings-json-syntax", label: "JSON syntax" },
   { id: "settings-logging", label: "Run logging" },
@@ -111,6 +115,7 @@ const SETTINGS_SECTIONS = [
 ] as const
 
 export function Settings() {
+  const shell = useOptionalAppShell()
   const { model, setModel } = useWorkspaceModel()
   const [email, setEmail] = useState<string | null>(null)
   const [defaultView, setDefaultView] = useState<JsonViewerHumanViewId>(DEFAULT_JSON_VIEWER_HUMAN_VIEW)
@@ -121,6 +126,7 @@ export function Settings() {
   const [inferenceOutputStepsOnly, setInferenceOutputStepsOnly] = useState(DEFAULT_INFERENCE_OUTPUT_STEPS_ONLY)
   const [allowDuplicateRuns, setAllowDuplicateRuns] = useState(DEFAULT_ALLOW_DUPLICATE_RUNS)
   const [colorScheme, setColorScheme] = useState<ColorSchemeId>(DEFAULT_COLOR_SCHEME)
+  const [llmProvidersOpen, setLlmProvidersOpen] = useState(false)
   const { width: navWidth, setWidth: setNavWidth, commitWidth: commitNavWidth } =
     usePersistedLeadingWidth(settingsNavSplit)
 
@@ -144,6 +150,28 @@ export function Settings() {
     setInferenceOutputStepsOnly(readInferenceOutputStepsOnly())
     setAllowDuplicateRuns(readAllowDuplicateRuns())
     setColorScheme(readColorScheme())
+  }, [])
+
+  useEffect(() => {
+    if (shell?.pendingLlmProvidersOpen) {
+      setLlmProvidersOpen(true)
+      shell.clearPendingLlmProvidersOpen()
+    }
+  }, [shell?.pendingLlmProvidersOpen, shell])
+
+  useEffect(() => {
+    const onScrollSection = (e: Event) => {
+      const sectionId = (e as CustomEvent<{ sectionId?: string }>).detail?.sectionId
+      if (!sectionId) return
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+    const onOpenLlmProviders = () => setLlmProvidersOpen(true)
+    window.addEventListener(SCROLL_SETTINGS_SECTION_EVENT, onScrollSection)
+    window.addEventListener(OPEN_LLM_PROVIDERS_EVENT, onOpenLlmProviders)
+    return () => {
+      window.removeEventListener(SCROLL_SETTINGS_SECTION_EVENT, onScrollSection)
+      window.removeEventListener(OPEN_LLM_PROVIDERS_EVENT, onOpenLlmProviders)
+    }
   }, [])
 
   function pickView(view: JsonViewerHumanViewId) {
@@ -208,7 +236,9 @@ export function Settings() {
                 key={s.id}
                 type="button"
                 onClick={() =>
-                  document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  s.id === "settings-llm-providers"
+                    ? setLlmProvidersOpen(true)
+                    : document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })
                 }
                 className="rounded-md px-2.5 py-2 text-left font-mono text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
               >
@@ -254,13 +284,15 @@ export function Settings() {
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Default model</h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                LLM used for pipeline steps by default.
+                LLM used for pipeline steps by default — format <code className="text-foreground">provider:model</code>.
               </p>
             </div>
             <div className="px-4 py-3">
               <ModelSelector value={model} onChange={setModel} />
             </div>
           </section>
+
+          <LlmProvidersSettingsSummary onOpen={() => setLlmProvidersOpen(true)} />
 
           <section id="settings-json-reader" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
@@ -464,6 +496,7 @@ export function Settings() {
           </div>
         }
       />
+      {llmProvidersOpen && <LlmProvidersSettingsPage onClose={() => setLlmProvidersOpen(false)} />}
     </div>
   )
 }

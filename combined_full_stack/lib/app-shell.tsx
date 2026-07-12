@@ -3,6 +3,7 @@
 // AI : shell navigation — lets Inference/Logging jump to Documents and focus a stored hash.
 
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react"
+import { openLlmProvidersSettings, scrollToSettingsSection } from "@/lib/settings-nav"
 import type { SharedRunDocScope } from "@/lib/shared-run-doc-scope"
 import type { DocId, StructureModelId } from "@/lib/types"
 
@@ -37,6 +38,9 @@ interface AppShellState {
   clearSharedRun: () => void
   sharedRunDocScope: SharedRunDocScope | null
   setSharedRunDocScope: (scope: SharedRunDocScope | null) => void
+  openSettingsSection: (sectionId: string) => void
+  pendingLlmProvidersOpen: boolean
+  clearPendingLlmProvidersOpen: () => void
 }
 
 const AppShellContext = createContext<AppShellState | null>(null)
@@ -48,6 +52,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   const [focusStructureId, setFocusStructureId] = useState<StructureModelId | null>(null)
   const [activeSharedLinkId, setActiveSharedLinkId] = useState<string | null>(null)
   const [sharedRunDocScope, setSharedRunDocScope] = useState<SharedRunDocScope | null>(null)
+  const [pendingLlmProvidersOpen, setPendingLlmProvidersOpen] = useState(false)
 
   const openSharedRun = useCallback((linkId: string) => {
     setActiveSharedLinkId(linkId)
@@ -77,6 +82,18 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
 
   const clearFocusStructure = useCallback(() => setFocusStructureId(null), [])
 
+  const clearPendingLlmProvidersOpen = useCallback(() => setPendingLlmProvidersOpen(false), [])
+
+  const openSettingsSection = useCallback((sectionId: string) => {
+    setActiveWindow("settings")
+    if (sectionId === "settings-llm-providers") {
+      setPendingLlmProvidersOpen(true)
+      window.setTimeout(() => openLlmProvidersSettings(), 50)
+      return
+    }
+    window.setTimeout(() => scrollToSettingsSection(sectionId), 50)
+  }, [])
+
   return (
     <AppShellContext.Provider
       value={{
@@ -96,6 +113,9 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         clearSharedRun,
         sharedRunDocScope,
         setSharedRunDocScope,
+        openSettingsSection,
+        pendingLlmProvidersOpen,
+        clearPendingLlmProvidersOpen,
       }}
     >
       {children}

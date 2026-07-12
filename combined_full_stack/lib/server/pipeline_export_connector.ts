@@ -30,7 +30,7 @@ export function generateConnectorProto(project: Project): string {
     "",
     "package forge.pipeline;",
     "",
-    "// Generated from Forge — language-neutral connector for exported pipeline runners.",
+    "// Generated from Spine — language-neutral connector for exported pipeline runners.",
     `// Project: ${project.name}`,
     "",
     "message Document {",
@@ -107,7 +107,7 @@ export function generateConnectorServerTs(project: Project, slug: string): strin
   const multi = inputMods.length > 1;
 
   return [
-    "// Generated Forge pipeline connector — gRPC + HTTP JSON on the same contract.",
+    "// Generated Spine pipeline connector — gRPC + HTTP JSON on the same contract.",
     "// AI : TODO — persist run + step outputs to Supabase when NEXT_PUBLIC_SUPABASE_URL is set.",
     "// AI : TODO — cache LLM step I/O via PIPELINE_CACHE_URL before invoking runPipeline.",
     "// npm install @grpc/grpc-js @grpc/proto-loader dotenv",
@@ -244,7 +244,7 @@ export function generateConnectorServerPy(project: Project, slug: string): strin
   const multi = inputMods.length > 1;
 
   return [
-    '# Generated Forge pipeline connector — gRPC + HTTP JSON on the same contract.',
+    '# Generated Spine pipeline connector — gRPC + HTTP JSON on the same contract.',
     "# AI : TODO — persist run + step outputs to Supabase when NEXT_PUBLIC_SUPABASE_URL is set.",
     "# AI : TODO — cache LLM step I/O via PIPELINE_CACHE_URL before invoking run_pipeline.",
     "# pip install grpcio grpcio-tools python-dotenv httpx",

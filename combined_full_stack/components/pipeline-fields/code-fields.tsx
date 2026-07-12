@@ -2,6 +2,7 @@
 
 import { Plus, Trash2 } from "lucide-react"
 import { CustomCodeEditor } from "@/components/custom-code-editor"
+import { CodeErrorHistory, CODE_ERROR_NS } from "@/components/code-error-history"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -96,6 +97,7 @@ export function CodeModuleFields({ selected, edit, onUpdate }: CodeModuleFieldsP
                     onUpdate!({ fallbackList: next })
                   }}
                 />
+                <CodeErrorHistory code={code} namespace={CODE_ERROR_NS.customCode} />
               </div>
             )
           })}

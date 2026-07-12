@@ -229,4 +229,9 @@ stripe/state.json
 
 # supabase
 */supabase/.temp
-logo/exports/*.png
+
+
+
+
+# IMAGES
+logo/exports/*

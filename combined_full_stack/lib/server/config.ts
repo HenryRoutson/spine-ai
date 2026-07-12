@@ -14,7 +14,8 @@ type DataDir = string & { __brand: "DataDir" };
 
 interface Config {
   openRouterApiKey: OpenRouterApiKey;
-  dataDir: DataDir; // local JSON persistence root (swap to Supabase later)
+  llmProviderId: string;
+  dataDir: DataDir;
 }
 
 // AI : fail early if a required env var is missing (pitch: "raise errors early").
@@ -30,6 +31,7 @@ export function getConfig(): Config {
   if (cached) return cached;
   cached = {
     openRouterApiKey: requireEnv("OPENROUTER_API_KEY") as OpenRouterApiKey,
+    llmProviderId: process.env.LLM_PROVIDER?.trim() || "openrouter",
     dataDir: dataDir() as DataDir,
   };
   return cached;

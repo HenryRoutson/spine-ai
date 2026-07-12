@@ -166,6 +166,8 @@ or
 
 
 
+custom code should have a hash store of all the errors that code has produced, and maybe even something based on the similarity of the code which you could do with a keyword match and then git diff quite efficiently.
+
 
 the pipeline should have clickable linked to the intput and output structs that are set so you don't have to manually go to the structs tab and find it 
 
@@ -499,7 +501,8 @@ enterprise logic for teams
 
 you can resize different parts of the UI with ResizableSplit.
 
-please add the option to allow for custom llm apis, and make this modular so that whatever the default one is like openrouter is just one of these wrapped APIs. Ensure you support features like batched responses so you can utilise that if it's availble. I'm adding this because if we're doing custom deployments into companies like KPMG, which i've worked at, we're going to need to use their internall LLM. These internal LLMs often have custom logic for calling them. You will likely need to persist a client to avoid recreating it, and try to make it easy to select which model to select in a way that is generic across custom interal APIs. this will likely just be a generic enum for model to a variable that controls this in the custom API. You will need to seperate provider and llm model, as they're seperate concepts. Ensure you export this logic into the exported code, including exporting openrouter as the default and as an option in all exports. 
+please add the option to allow for custom llm apis, and make this modular so that whatever the default one is like openrouter is just one of these wrapped APIs. Ensure you support features like batched responses so you can utilise that if it's availble. I'm adding this because if we're doing custom deployments into companies like KPMG, which i've worked at, we're going to need to use their internall LLM. These internal LLMs often have custom logic for calling them. You will likely need to persist a client to avoid recreating it, and try to make it easy to select which model to select in a way that is generic across custom interal APIs. this will likely just be a generic enum for model to a variable that controls this in the custom API. You will need to seperate provider and llm model, as they're seperate concepts. Ensure you export this logic into the exported code, including exporting openrouter as the default and as an option in all exports. I should be able to view the code for openrouter as an example, with syntax highlighting, and for all the different supported langauges. I should then have an option to add a provider, with code and asserts around this code that there is one function with a certain type signature maybe. I should be able to select either openrouter:gpt-5-mini or custom_provider:gpt-5-mini.
+You should just have a page with a list of providers and openrouter should be a locked example. Ensure you treat the block like custom code, were you can see all the error historically that have occured in the hash exact same code (ignoring whitespace).
 
 
 # history and merging changes 

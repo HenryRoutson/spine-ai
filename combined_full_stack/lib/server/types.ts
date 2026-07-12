@@ -17,8 +17,10 @@ export type TypeAliasId = string & { __brand: "TypeAliasId" };
 export type ModuleId = string & { __brand: "ModuleId" };
 export type DocId = string & { __brand: "ContentHash" }; // content hash == id
 export type RunId = string & { __brand: "RunId" };
-export type ModelId = string; // demo model id, e.g. "qwen-2.5-72b" (see MODEL_CATALOG)
+export type ModelId = string; // demo model id or routed ref "provider:modelId" (see parseRoutedModel)
 export type OpenRouterSlug = string & { __brand: "OpenRouterSlug" };
+export type LlmProviderId = string & { __brand: "LlmProviderId" };
+export type ProviderModelId = string & { __brand: "ProviderModelId" };
 
 // AI : string values are the persisted wire/DB format (seeds/*.json + supabase rows) — do not rename.
 export enum FieldType {
@@ -473,7 +475,8 @@ export interface BillingPoint {
 export interface ModelOptionPublic {
   id: ModelId;
   label: string;
-  provider: string;
+  provider: string; // AI : model vendor from slug prefix (anthropic, openai, …)
+  providerId: string; // AI : LLM infrastructure id (openrouter, custom_provider, …)
   costPer1k: number; // cents per 1k tokens (blended, OpenRouter + 40%)
 }
 
@@ -484,7 +487,8 @@ export interface ModelOption extends ModelOptionPublic {
   slug: OpenRouterSlug;
 }
 
-export { MODEL_CATALOG, catalogEntry, catalogLabel, slugFor, type ModelCatalogEntry } from "./model_catalog";
+export { MODEL_CATALOG, catalogEntry, catalogLabel, slugFor, providerFor, providerModelFor, parseRoutedModel, formatRoutedModel, wireModelId, type ModelCatalogEntry } from "./model_catalog";
+export { OPENROUTER_PROVIDER_ID } from "./openrouter_slugs";
 
 // AI : token usage captured on every real LLM call (feeds Logging + Billing).
 export interface TokenUsage {
@@ -497,7 +501,7 @@ export interface TokenUsage {
 
 // AI : default to DeepSeek V3 — cheap Chinese model, maps to deepseek/deepseek-chat, fast + reliable
 // AI : for large structured outputs (qwen-2.5-72b on OpenRouter is markedly slower here).
-export const DEFAULT_MODEL: ModelId = "deepseek-v3";
+export const DEFAULT_MODEL: ModelId = "openrouter:deepseek-v3";
 
 // AI : default vision model for input OCR — Gemini reads images/PDFs/handwriting well.
 export const DEFAULT_VISION_DOC_PARSE_MODEL: ModelId = "gemini-3-flash";

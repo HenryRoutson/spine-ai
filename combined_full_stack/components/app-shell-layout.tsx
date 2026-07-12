@@ -128,14 +128,35 @@ const WINDOWS: { id: WindowId; label: string; hint: string; icon: NavIcon }[] = 
   { id: "documents", label: "Documents", hint: "09", icon: Files },
   { id: "docs", label: "Docs", hint: "10", icon: BookOpen },
   { id: "billing", label: "Billing", hint: "11", icon: CreditCard },
-  { id: "settings", label: "Settings", hint: "12", icon: Settings },
 ]
 
 const CONSUMER_WINDOWS: { id: WindowId; label: string; hint: string; icon: NavIcon }[] = [
   { id: "share", label: "Shared with me", hint: "01", icon: Users },
   { id: "billing", label: "Billing", hint: "02", icon: CreditCard },
-  { id: "settings", label: "Settings", hint: "03", icon: Settings },
 ]
+
+function HeaderSettingsButton({
+  active,
+  onClick,
+}: {
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Settings"
+      className={cn(
+        "flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 font-mono text-[11px] transition-colors",
+        active ? "bg-secondary text-foreground" : "bg-secondary text-muted-foreground hover:bg-accent hover:text-foreground",
+      )}
+    >
+      <Settings className="h-3.5 w-3.5" />
+      <span className="hidden sm:inline">Settings</span>
+    </button>
+  )
+}
 
 function ProjectRenameInput({
   initialName,
@@ -358,7 +379,8 @@ function ConsumerShellLayout({ variant = "default" }: { variant?: "default" | "e
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.has("session_id") || params.has("canceled")) setActiveWindow("billing")
+    if (params.has("teamInvite")) setActiveWindow("settings")
+    else if (params.has("session_id") || params.has("canceled")) setActiveWindow("billing")
     else if (!consumerTabs.has(activeWindow)) setActiveWindow("share")
   }, [activeWindow, consumerTabs, setActiveWindow])
 
@@ -383,7 +405,13 @@ function ConsumerShellLayout({ variant = "default" }: { variant?: "default" | "e
           <div className="mx-1 h-6 w-px bg-border" />
           <span className="font-mono text-[11px] text-muted-foreground">run shared pipelines</span>
         </div>
-        {!embed ? <FeedbackButton /> : null}
+        <div className="flex items-center gap-2">
+          <HeaderSettingsButton
+            active={activeWindow === "settings"}
+            onClick={() => setActiveWindow("settings")}
+          />
+          {!embed ? <FeedbackButton /> : null}
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -478,7 +506,8 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.has("session_id") || params.has("canceled")) setActiveWindow("billing")
+    if (params.has("teamInvite")) setActiveWindow("settings")
+    else if (params.has("session_id") || params.has("canceled")) setActiveWindow("billing")
   }, [setActiveWindow])
 
   const { width: navWidth, setWidth: setNavWidth, commitWidth: commitNavWidth } =
@@ -517,12 +546,18 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
           <div className="mx-1 h-6 w-px bg-border" />
           <ProjectSelector embed={embed} />
         </div>
-        {!embed && (
         <div className="flex items-center gap-2">
-          <ProjectAssistantDock />
-          <FeedbackButton />
+          <HeaderSettingsButton
+            active={activeWindow === "settings"}
+            onClick={() => setActiveWindow("settings")}
+          />
+          {!embed && (
+            <>
+              <ProjectAssistantDock />
+              <FeedbackButton />
+            </>
+          )}
         </div>
-        )}
       </header>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">

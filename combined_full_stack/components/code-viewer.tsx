@@ -4,6 +4,7 @@ import "@/lib/monaco-loader"
 import dynamic from "next/dynamic"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import type { editor } from "monaco-editor"
+import { ensureMonacoTypeScriptEnv } from "@/lib/monaco-loader"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
@@ -111,10 +112,12 @@ export function MonacoCodeEditor({
   return (
     <div className={cn(compact ? undefined : "min-h-0 flex-1", className)}>
       <MonacoEditor
+        key={`monaco-${language}`}
         height={height}
         language={monacoLanguageId(language)}
         value={value}
         theme={MONACO_CODE_THEME}
+        beforeMount={ensureMonacoTypeScriptEnv}
         onChange={readOnly ? undefined : (next) => onChange?.(next ?? "")}
         options={buildMonacoCodeOptions({ readOnly, compact, wordWrap })}
       />
@@ -223,6 +226,7 @@ export function ReadonlyCodeViewer({
   badge = "generated",
   header,
   className,
+  editorHeight = "min(60vh, 28rem)",
 }: {
   value: string
   language: CodeViewerLanguage | string
@@ -230,11 +234,12 @@ export function ReadonlyCodeViewer({
   badge?: string
   header?: ReactNode
   className?: string
+  editorHeight?: string
 }) {
   return (
-    <div className={cn("flex min-h-0 flex-1 flex-col", CODE_VIEWER_BG, className)}>
+    <div className={cn("flex min-h-0 flex-col", CODE_VIEWER_BG, className)}>
       {(header || filename || badge) && (
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2">
           {header ?? <span />}
           <div className="flex items-center gap-2">
             {filename && (
@@ -248,7 +253,13 @@ export function ReadonlyCodeViewer({
           </div>
         </div>
       )}
-      <MonacoCodeEditor value={value} language={language} readOnly />
+      <MonacoCodeEditor
+        key={`${language}:${filename ?? "file"}`}
+        value={value}
+        language={language}
+        readOnly
+        height={editorHeight}
+      />
     </div>
   )
 }
@@ -258,24 +269,27 @@ export type MultiLangCodeSource = {
   label: string
   filename: string
   content: string
+  hint?: "runtime" | "export"
 }
 
 export function MultiLangReadonlyCodeViewer({
   sources,
-  defaultLanguage = "python",
+  defaultLanguage = "typescript",
   badge = "generated",
   switchVariant = "segment",
   className,
+  editorHeight,
 }: {
   sources: MultiLangCodeSource[]
   defaultLanguage?: CodeViewerLanguage
   badge?: string
   switchVariant?: SwitchVariant
   className?: string
+  editorHeight?: string
 }) {
   const langIds = useMemo(() => new Set(sources.map((s) => s.language)), [sources])
   const [lang, setLang] = useState<CodeViewerLanguage>(() =>
-    langIds.has(defaultLanguage) ? defaultLanguage : (sources[0]?.language ?? "python"),
+    langIds.has(defaultLanguage) ? defaultLanguage : (sources[0]?.language ?? "typescript"),
   )
 
   useEffect(() => {
@@ -283,15 +297,27 @@ export function MultiLangReadonlyCodeViewer({
   }, [lang, langIds, sources])
 
   const active = sources.find((s) => s.language === lang) ?? sources[0]!
-  const langOptions = sources.map((s) => ({ id: s.language, label: s.label }))
+  const langOptions = sources.map((s) => ({
+    id: s.language,
+    label: s.label,
+    title:
+      s.hint === "runtime"
+        ? "Executes in JS runtime"
+        : s.hint === "export"
+          ? "Included in pipeline exports"
+          : s.label,
+  }))
+  const activeBadge =
+    active.hint === "runtime" ? "JS runtime" : active.hint === "export" ? "export" : badge
 
   return (
     <ReadonlyCodeViewer
       value={active.content}
       language={active.language}
       filename={active.filename}
-      badge={badge}
+      badge={activeBadge}
       className={className}
+      editorHeight={editorHeight}
       header={
         <CodeLanguageSwitch
           value={lang}

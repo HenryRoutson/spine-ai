@@ -7,7 +7,9 @@ import {
   formatCustomCodeFailureLog,
   runAssertWithFallbacks,
   runCustomCodeWithFallbacks,
+  type CustomCodeAttemptFailure,
 } from "@/lib/custom_code"
+import { CODE_ERROR_NS, recordCodeError } from "@/lib/code-error-history"
 import { readApiErrorBody, formatApiError, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { RATE_LIMITS } from "@/lib/rate_limit_config"
@@ -229,6 +231,12 @@ function clientStepFailureLogLevel(tag: string): JobLogEntry["level"] {
   return tag === "assert" || tag === "custom-code" ? JobLogLevel.Warn : JobLogLevel.Error
 }
 
+function recordCustomCodeFailures(failures: CustomCodeAttemptFailure[]): void {
+  for (const f of failures) {
+    recordCodeError(f.code, f.error, CODE_ERROR_NS.customCode)
+  }
+}
+
 function clientStepSubmitError(kind: string, err: unknown, stepLabel?: string): string {
   const uiLocation = `Inference → Run Pipeline → ${kind} step${stepLabel ? ` (${stepLabel})` : ""}`;
   if (err instanceof CustomCodeExhaustedError) {
@@ -337,6 +345,7 @@ export async function awaitJobCompletion(
             moduleId,
           })
         }
+        recordCustomCodeFailures(failures)
         if (failures.length) {
           clientLogs.push({
             at: Date.now(),
@@ -379,6 +388,7 @@ export async function awaitJobCompletion(
             moduleId,
           })
         }
+        recordCustomCodeFailures(failures)
         clientLogs.push({
           at: Date.now(),
           level: failureLevel,

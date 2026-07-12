@@ -35,6 +35,7 @@ function catalogToOption(entry: ModelCatalogEntry, rates: OpenRouterRates): Mode
     id: entry.id,
     label: entry.label,
     provider: providerFromSlug(entry.slug),
+    providerId: entry.providerId,
     costPer1k: blendedCentsPer1k(rates),
     promptUsdPerToken: rates.promptUsdPerToken,
     completionUsdPerToken: rates.completionUsdPerToken,
@@ -105,10 +106,11 @@ export async function ensureModelOptionsFresh(): Promise<void> {
 
 // AI : strip slug + raw OpenRouter rates before sending modelOptions to the browser.
 export function toPublicModelOptions(options: readonly ModelOption[]): ModelOptionPublic[] {
-  return options.map(({ id, label, provider, costPer1k }) => ({
+  return options.map(({ id, label, provider, providerId, costPer1k }) => ({
     id,
     label,
     provider,
+    providerId,
     costPer1k,
   }));
 }
@@ -127,6 +129,7 @@ export function modelOption(modelId: ModelId): ModelOption {
     id: entry.id,
     label: entry.label,
     provider: providerFromSlug(entry.slug),
+    providerId: entry.providerId,
     costPer1k: 0,
     promptUsdPerToken: 0,
     completionUsdPerToken: 0,
