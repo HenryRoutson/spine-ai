@@ -4,6 +4,15 @@ rename everything to spine
 name might already be taken https://www.getspine.ai/
 
 
+
+
+switch to a normal graph approach after you get 100% reliablility with current linear approach. use React Flow / XYFlow, Litegraph.js, Rete.js, Drawflow, to use existing library code for Node editor.
+
+
+
+
+
+
 telem : https://posthog.com/ telem
 telem : OpenReplay? check AGPL license
 telem : HyperDX

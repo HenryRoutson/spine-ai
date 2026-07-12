@@ -54,6 +54,7 @@ import {
 import { mostRecentlyOpenedProject } from "@/lib/project-active"
 import { dedupeDocsNewestByName } from "@/lib/project-docs"
 import { readStateSnapshot, writeStateSnapshot } from "@/lib/state-snapshot-cache"
+import { readEarningsSnapshot, writeEarningsSnapshot } from "@/lib/earnings-snapshot-cache"
 import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
 import { setDemoMode } from "@/lib/demo-mode"
 
@@ -306,6 +307,7 @@ export function StoreProvider({
   const pendingSaveRef = useRef<{ id: string; body: string } | null>(null)
   const hydratedRef = useRef(false)
   const prefetchCache = useRef(new Map<string, PrefetchEntry>())
+  const earningsFetchRef = useRef<Promise<void> | null>(null)
   // AI : ignore in-flight /api/state responses that started before a delete switched projects.
   const stateLoadGenRef = useRef(0)
   // AI : filter stale refetches that still list projects the user already deleted this session.
@@ -336,16 +338,28 @@ export function StoreProvider({
   }, [mode])
 
   const refreshEarnings = useCallback(async () => {
-    if (mode === "demo") {
-      setEarningsAccount(DEMO_EARNINGS)
-      return
+    if (earningsFetchRef.current) return earningsFetchRef.current
+    const run = (async () => {
+      if (mode === "demo") {
+        setEarningsAccount(DEMO_EARNINGS)
+        writeEarningsSnapshot(DEMO_EARNINGS)
+        return
+      }
+      const data = await apiJson<EarningsAccountView>(API_ROUTES.earnings)
+      const next = {
+        balanceCents: data.balanceCents ?? 0,
+        totalEarnedCents: data.totalEarnedCents ?? 0,
+        totalWithdrawnCents: data.totalWithdrawnCents ?? 0,
+      }
+      setEarningsAccount(next)
+      writeEarningsSnapshot(next)
+    })()
+    earningsFetchRef.current = run
+    try {
+      await run
+    } finally {
+      earningsFetchRef.current = null
     }
-    const data = await apiJson<EarningsAccountView>(API_ROUTES.earnings)
-    setEarningsAccount({
-      balanceCents: data.balanceCents ?? 0,
-      totalEarnedCents: data.totalEarnedCents ?? 0,
-      totalWithdrawnCents: data.totalWithdrawnCents ?? 0,
-    })
   }, [mode])
 
   const fetchState = useCallback(async (projectId: string) => {
@@ -481,6 +495,8 @@ export function StoreProvider({
     if (mode === "demo") return
     const snapshot = readStateSnapshot()
     if (snapshot) setState(snapshot)
+    const earnings = readEarningsSnapshot()
+    if (earnings) setEarningsAccount(earnings)
   }, [mode])
 
   useLayoutEffect(() => {
@@ -507,6 +523,8 @@ export function StoreProvider({
     if (mode === "workspace" && hydratedRef.current && scopedProjectId && !instant) setProjectLoading(true)
     setStateSyncing(true)
 
+    // AI : warm earnings in parallel with /api/state — tab open should not wait on project hydrate.
+    refreshEarnings().catch(console.error)
     loadProjectState(scopedProjectId)
       .then((data) => {
         if (!alive || loadGen !== stateLoadGenRef.current) return

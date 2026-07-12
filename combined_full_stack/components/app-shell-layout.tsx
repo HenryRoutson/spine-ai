@@ -44,6 +44,7 @@ import { useSyncProjectDocStructures } from "@/lib/use-sync-project-doc-structur
 import { LazyDocViewer } from "@/components/lazy-doc-viewer"
 import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
 import { PanelLoading } from "@/components/panel-loading"
+import { Earnings } from "@/components/earnings"
 import { FeedbackButton } from "@/components/feedback-button"
 import { ProjectAssistantDock } from "@/components/project-assistant-dock"
 import {
@@ -98,9 +99,6 @@ const Cache = dynamic(() => import("@/components/cache").then((m) => ({ default:
 })
 const Documents = dynamic(() => import("@/components/documents").then((m) => ({ default: m.Documents })), {
   loading: () => <PanelLoading label="loading documents…" />,
-})
-const Earnings = dynamic(() => import("@/components/earnings").then((m) => ({ default: m.Earnings })), {
-  loading: () => <PanelLoading label="loading earnings…" />,
 })
 const Billing = dynamic(() => import("@/components/billing").then((m) => ({ default: m.Billing })), {
   loading: () => <PanelLoading label="loading billing…" />,
