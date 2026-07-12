@@ -499,6 +499,8 @@ enterprise logic for teams
 
 you can resize different parts of the UI with ResizableSplit.
 
+please add the option to allow for custom llm apis, and make this modular so that whatever the default one is like openrouter is just one of these wrapped APIs. Ensure you support features like batched responses so you can utilise that if it's availble. I'm adding this because if we're doing custom deployments into companies like KPMG, which i've worked at, we're going to need to use their internall LLM. These internal LLMs often have custom logic for calling them. You will likely need to persist a client to avoid recreating it, and try to make it easy to select which model to select in a way that is generic across custom interal APIs. this will likely just be a generic enum for model to a variable that controls this in the custom API. You will need to seperate provider and llm model, as they're seperate concepts. Ensure you export this logic into the exported code, including exporting openrouter as the default and as an option in all exports. 
+
 
 # history and merging changes 
 

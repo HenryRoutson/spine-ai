@@ -10,6 +10,8 @@ how to do integrations? like google search? don't code yourself.
 
 dashboard : - there should be a graph for overall activity, of how much people are using the landing page or app per day.
 
+explain if we do or don't reccomend and use rag in the landing page. You also might want to use Target rag, which is where an LLM will determine a sentence that has the best embedding rather than just the original prompt. maybe make post explaining this on blog.
+
 
 
 switch to a normal graph approach after you get 100% reliablility with current linear approach. use React Flow / XYFlow, Litegraph.js, Rete.js, Drawflow, to use existing library code for Node editor.
