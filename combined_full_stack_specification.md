@@ -77,6 +77,12 @@ if a struct is auto generated then lock it.
 for locked fields if you try and click them, there should be a clear error message telling you that this struct is locked with an explaination as to why.
 
 
+allow structs to have multpole examples rather than 1. please also add negative examples, in a list. include in prompt automatically
+csv won't work if examples have commas
+you need to ensure that the examples actually validate as the structure you say they are. you sholdn't be able to just have random text in a json field or number field
+you probably need a popup to open the list of examples in a json editor, doesn't work in a single cell. 
+atomic_code/edit_given_struct/edit_given_struct.html
+
 # Pipeline
 
 A central visualisation of all steps of the pipeline with boxes for each step and a descrpition and associated icon.

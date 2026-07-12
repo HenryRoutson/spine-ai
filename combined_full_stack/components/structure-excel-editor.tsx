@@ -1,15 +1,21 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { Plus, Trash2, Lock, AlertTriangle } from "lucide-react"
 import { useStore, uid } from "@/lib/store"
 import {
   FieldType,
   type ModelField,
   type StructureModel,
+  type TypeAlias,
 } from "@/lib/types"
 import { isLockedStructureModel, lockedStructureBanner } from "@/lib/structure"
 import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-validity"
+import {
+  FieldExamplesEditorDialog,
+  fieldExamplesSummary,
+  formatFieldExamplesSummary,
+} from "@/components/field-examples-editor-dialog"
 import { StructureFieldTypeEditor } from "@/components/structure-field-type-editor"
 import { StructureSourceDocLink } from "@/components/structure-source-doc-link"
 import { fieldTypeLabel } from "@/lib/structure-field-labels"
@@ -176,8 +182,8 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
               <th className="min-w-[180px] border-b border-r border-border px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Description
               </th>
-              <th className="min-w-[120px] border-b border-r border-border px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                Example
+              <th className="min-w-[130px] border-b border-r border-border px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Examples
               </th>
               <th className="w-20 border-b border-r border-border px-2 py-1.5 text-center text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Required
@@ -206,6 +212,7 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
                 rowIdx={rowIdx}
                 locked={selectedLocked}
                 models={models}
+                typeAliases={typeAliases}
                 selectedId={selected.id}
                 onLockedInteract={notifyLocked}
                 onUpdate={(patch) => updateField(f.id, patch)}
@@ -233,6 +240,7 @@ type FieldRowProps = {
   rowIdx: number
   locked: boolean
   models: StructureModel[]
+  typeAliases: TypeAlias[]
   selectedId: string
   onLockedInteract: () => void
   onUpdate: (patch: Partial<ModelField>) => void
@@ -245,6 +253,7 @@ function FieldRow({
   rowIdx,
   locked,
   models,
+  typeAliases,
   selectedId,
   onLockedInteract,
   onUpdate,
@@ -253,6 +262,11 @@ function FieldRow({
   const stripe = rowIdx % 2 === 1
   const isNumeric = field.type === FieldType.Int || field.type === FieldType.Float
   const toleranceEnabled = isNumeric && field.deterministic !== false
+  const [examplesOpen, setExamplesOpen] = useState(false)
+  const exampleStats = useMemo(
+    () => fieldExamplesSummary(field, models, typeAliases),
+    [field, models, typeAliases],
+  )
 
   return (
     <>
@@ -297,13 +311,32 @@ function FieldRow({
           />
         </td>
         <td className="border-b border-r border-border p-0">
-          <CellInput
-            value={field.example ?? ""}
-            onChange={(v) => onUpdate({ example: v || undefined })}
-            placeholder="Sample value"
+          <button
+            type="button"
+            onClick={() => setExamplesOpen(true)}
+            className={cn(
+              "flex h-8 w-full items-center px-2 text-left text-[11px] outline-none transition-colors hover:bg-secondary/40",
+              exampleStats.hasInvalid && "text-destructive",
+              exampleStats.positive + exampleStats.negative === 0 && "text-muted-foreground",
+            )}
+            title={
+              exampleStats.hasInvalid
+                ? "Some examples do not match the field type"
+                : "Edit valid and negative examples"
+            }
+          >
+            <span className="truncate">
+              {formatFieldExamplesSummary(exampleStats.positive, exampleStats.negative)}
+            </span>
+          </button>
+          <FieldExamplesEditorDialog
+            open={examplesOpen}
+            onClose={() => setExamplesOpen(false)}
+            field={field}
+            models={models}
+            typeAliases={typeAliases}
             locked={locked}
-            onLockedInteract={onLockedInteract}
-            mono
+            onUpdate={onUpdate}
           />
         </td>
         <td className="border-b border-r border-border p-0 text-center">

@@ -17,7 +17,7 @@ import { resolveModuleNote } from "@/lib/pipeline-module-factory";
 import { usesPassthroughStructure, isLlmKind } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
 import { hasQuoteField, listFieldsForWrap } from "./structure";
-import { stepSpineOutType, stepEmitsList } from "./type_expr";
+import { normalizeStructureModels, stepSpineOutType, stepEmitsList } from "./type_expr";
 import { migrateModulesSpineTypes, patchSpineOutList, refFromType } from "./spine_types";
 import { dedupeInferredModelsByShape } from "@/lib/structure-shape";
 
@@ -389,7 +389,9 @@ function normalizeModuleNotes(modules: PipelineModule[]): PipelineModule[] {
 export function migrateProjectModules(project: Project): Project {
   // AI : dedupe only — do not remap orphan field.refs to MappingRule (hides Structure tab errors).
   // AI : dangling refs surface via computeStructureIssues; repairOrphanModelRefs stays for doc-sync.
-  let models = withSharedModels(dedupeInferredModelsByShape(stripSharedModels(project.models)));
+  let models = normalizeStructureModels(
+    withSharedModels(dedupeInferredModelsByShape(stripSharedModels(project.models))),
+  );
   const folded = foldDocToTextSteps(project.modules);
   const quoted = syncManagedPipelineSteps(folded, models);
   const placed = syncAssertPlacement(quoted);
@@ -399,7 +401,15 @@ export function migrateProjectModules(project: Project): Project {
   const normalized = normalizePassthroughStructureIds(withCache);
   const noted = normalizeModuleNotes(normalized);
   const spineTyped = migrateModulesSpineTypes(noted);
-  const modelsChanged = models.length !== project.models.length || models.some((m, i) => m !== project.models[i]);
+  const modelsChanged =
+    models.length !== project.models.length ||
+    models.some((m, i) => {
+      const prev = project.models[i];
+      if (!prev || m.id !== prev.id) return true;
+      return m.fields.some(
+        (f, fi) => JSON.stringify(f) !== JSON.stringify(prev.fields[fi]),
+      );
+    });
   const changed =
     modelsChanged ||
     folded !== project.modules ||

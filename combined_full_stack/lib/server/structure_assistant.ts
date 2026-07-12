@@ -73,6 +73,8 @@ function buildUserPrompt(project: Project, message: string, history: ChatTurn[])
         typeExpr: f.typeExpr ? fieldTypeExprSource(f, project.models) : undefined,
         optional: f.optional,
         description: f.description,
+        examples: f.examples,
+        negativeExamples: f.negativeExamples,
         ref: project.models.find((x) => x.id === f.ref)?.name,
       })),
     })),

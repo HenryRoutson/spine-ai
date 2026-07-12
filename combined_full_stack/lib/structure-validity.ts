@@ -1,5 +1,9 @@
 // AI : structure field integrity — empty names, dangling refs, duplicate names within a model.
-import { fieldToTypeExpr, collectTypeExprRefModelIds, type TypeExpr } from "@/lib/server/type_expr";
+import { fieldToTypeExpr, collectTypeExprRefModelIds, normalizeModelField, type TypeExpr } from "@/lib/server/type_expr";
+import {
+  validateFieldExampleString,
+  validateNegativeFieldExampleString,
+} from "@/lib/server/field_example_validity";
 import { withSharedModels } from "@/lib/structure";
 import { isBuiltinTypeAliasName, stripBuiltinTypeAliases, withBuiltinTypeAliases } from "@/lib/server/builtin_types";
 import type { ModelField, StructureModel, StructureModelId, TypeAlias } from "@/lib/types";
@@ -11,7 +15,8 @@ export type StructureIssueKind =
   | "unknown-type-alias"
   | "empty-alias-name"
   | "duplicate-alias-name"
-  | "incomplete-type-expr";
+  | "incomplete-type-expr"
+  | "invalid-field-example";
 
 export type StructureIssue = {
   modelId: StructureModelId;
@@ -20,6 +25,9 @@ export type StructureIssue = {
   fieldName?: string;
   refId?: StructureModelId;
   aliasName?: string;
+  exampleIndex?: number;
+  negativeExample?: boolean;
+  exampleError?: string;
 };
 
 function fieldRefIds(field: ModelField): StructureModelId[] {
@@ -142,7 +150,8 @@ export function computeStructureIssues(
   for (const model of models) {
     const seenNames = new Map<string, string>();
 
-    for (const field of model.fields) {
+    for (const rawField of model.fields) {
+      const field = normalizeModelField(rawField);
       const name = field.name.trim();
       if (!name) {
         issues.push({ modelId: model.id, kind: "empty-field-name", fieldId: field.id });
@@ -190,6 +199,37 @@ export function computeStructureIssues(
           fieldId: field.id,
           fieldName: name,
         });
+      }
+
+      if (!typeExprHasUnsetOrAliasUnset(fieldExpr, mergedAliases)) {
+        for (const [exampleIndex, example] of (field.examples ?? []).entries()) {
+          const result = validateFieldExampleString(example, field, models, typeAliases);
+          if (!result.ok) {
+            issues.push({
+              modelId: model.id,
+              kind: "invalid-field-example",
+              fieldId: field.id,
+              fieldName: name,
+              exampleIndex,
+              negativeExample: false,
+              exampleError: result.error,
+            });
+          }
+        }
+        for (const [exampleIndex, example] of (field.negativeExamples ?? []).entries()) {
+          const result = validateNegativeFieldExampleString(example, field, models, typeAliases);
+          if (!result.ok) {
+            issues.push({
+              modelId: model.id,
+              kind: "invalid-field-example",
+              fieldId: field.id,
+              fieldName: name,
+              exampleIndex,
+              negativeExample: true,
+              exampleError: result.error,
+            });
+          }
+        }
       }
     }
   }
@@ -286,6 +326,11 @@ export function structureIssueMessage(issue: StructureIssue, models: StructureMo
         return `type alias "${issue.aliasName}" has unfilled UNSET slots`;
       }
       return `${modelName}.${issue.fieldName ?? "?"} has unfilled UNSET slots in its type`;
+    case "invalid-field-example": {
+      const label = issue.negativeExample ? "negative example" : "example";
+      const n = (issue.exampleIndex ?? 0) + 1;
+      return `${modelName}.${issue.fieldName ?? "?"} ${label} ${n} does not match field type — ${issue.exampleError ?? "invalid value"}`;
+    }
     default:
       return "structure validation error";
   }

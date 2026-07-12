@@ -83,8 +83,8 @@ function mapReplayRow(r: Record<string, unknown>): dashboard_session_replay_row 
 function isMissingLandingColumns(message: string): boolean {
   return (
     message.includes("demo_email") ||
-    message.includes("session_replay_sessions.source") ||
-    (message.includes("column") && message.includes("does not exist"))
+    message.includes("ip_hash") ||
+    (message.includes("column") && message.includes("does not exist") && message.includes("source"))
   );
 }
 
@@ -92,7 +92,7 @@ function isMissingClickFilterColumns(message: string): boolean {
   return (
     message.includes("click_count") ||
     message.includes("clicked_components") ||
-    (message.includes("column") && message.includes("does not exist"))
+    (message.includes("column") && message.includes("pages"))
   );
 }
 
@@ -170,10 +170,7 @@ export async function fetchDashboardSessionReplays(
     if (withClickFilters && query.component?.trim()) {
       q = q.contains("clicked_components", [query.component.trim()]);
     }
-    if (withClickFilters && query.page?.trim() && !query.page.includes("%")) {
-      // AI : exact path match via GIN when no wildcard semantics requested.
-      q = q.contains("pages", [query.page.trim()]);
-    }
+    // AI : page filter is substring-matched client-side — skip DB contains (exact-only).
     if (withClickFilters) {
       if (sort === "clicks_desc") q = q.order("click_count", { ascending: false });
       else if (sort === "clicks_asc") q = q.order("click_count", { ascending: true });

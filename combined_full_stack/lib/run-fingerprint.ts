@@ -2,7 +2,7 @@
 // AI : TODO refactor — vitest target: fingerprint stability (pairs with lib/server/run_fingerprint.ts).
 import { orderedInputModules } from "@/lib/inference-input"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
-import { fieldToTypeExpr } from "@/lib/server/type_expr"
+import { fieldToTypeExpr, normalizeModelField } from "@/lib/server/type_expr"
 import {
   DEFAULT_MODEL,
   type DocId,
@@ -43,16 +43,18 @@ function moduleForFingerprint(m: PipelineModule) {
 }
 
 function fieldForFingerprint(f: ModelField) {
+  const field = normalizeModelField(f)
   return {
-    id: f.id,
-    name: f.name,
-    optional: f.optional,
-    minItems: f.minItems ?? null,
+    id: field.id,
+    name: field.name,
+    optional: field.optional,
+    minItems: field.minItems ?? null,
     // AI : canonical type — typeExpr wins over legacy type/ref so cache keys track schema edits.
-    expr: fieldToTypeExpr(f),
-    // AI : description/example feed LLM JSON Schema via withFieldMeta — must invalidate cache/logs.
-    description: f.description?.trim() || null,
-    example: f.example?.trim() || null,
+    expr: fieldToTypeExpr(field),
+    // AI : description/examples feed LLM JSON Schema via withFieldMeta — must invalidate cache/logs.
+    description: field.description?.trim() || null,
+    examples: field.examples ?? [],
+    negativeExamples: field.negativeExamples ?? [],
   }
 }
 
@@ -179,8 +181,8 @@ export function hashStableJson(value: unknown): TestSigHash {
 
 export function buildRunConfigPayload(project: Project, model: ModelId | undefined) {
   return {
-    // AI : v5 — field description/example in fingerprint (stale cache when only schema hints change).
-    v: 5 as const,
+    // AI : v6 — field examples[] / negativeExamples[] in fingerprint (stale cache when schema hints change).
+    v: 6 as const,
     model: resolveRunModel(project, model),
     models: [...project.models].sort((a, b) => a.id.localeCompare(b.id)).map(modelForFingerprint),
     typeAliases: [...(project.typeAliases ?? [])]

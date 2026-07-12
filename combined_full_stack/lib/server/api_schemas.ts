@@ -123,6 +123,8 @@ const pipelineModulePatchSchema = z
     }
   });
 
+const fieldExampleListSchema = z.array(z.string().max(4_000)).max(32).optional();
+
 const structureFieldPatchSchema = z
   .object({
     id: z.string().max(128),
@@ -130,7 +132,9 @@ const structureFieldPatchSchema = z
     type: z.string().max(64),
     optional: z.boolean(),
     description: z.string().max(4_000),
-    example: z.string().max(4_000).optional(),
+    example: z.string().max(4_000).optional(), // AI : legacy — prefer examples[]
+    examples: fieldExampleListSchema,
+    negativeExamples: fieldExampleListSchema,
     ref: z.string().max(128).optional(),
     minItems: z.number().int().min(0).max(10_000).optional(),
     typeExpr: typeExprPatchSchema.optional(),

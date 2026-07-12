@@ -38,32 +38,33 @@ export function createReplayMetaBuffer(initialPage?: string): {
   hasPending: () => boolean
   drain: () => replay_chunk_meta
 } {
-  const pages = new Set<string>()
+  const pendingPages = new Set<string>()
   const components = new Set<string>()
-  if (initialPage) pages.add(initialPage.slice(0, 200))
-
-  const push = (set: Set<string>, value: string) => {
-    const t = value.trim().slice(0, 200)
-    if (!t || set.size >= MAX_ITEMS) return
-    set.add(t)
-  }
+  // AI : baseline page — navigations away from it are pending; re-record after drain is not.
+  let lastPage = initialPage?.trim().slice(0, 200) ?? ""
 
   return {
     recordPage(path: string) {
-      push(pages, path)
+      const t = path.trim().slice(0, 200)
+      if (!t || pendingPages.size >= MAX_ITEMS) return
+      if (t === lastPage || pendingPages.has(t)) return
+      pendingPages.add(t)
+      lastPage = t
     },
     recordClick(label: string) {
-      push(components, label)
+      const t = label.trim().slice(0, 200)
+      if (!t || components.size >= MAX_ITEMS) return
+      components.add(t)
     },
     hasPending(): boolean {
-      return pages.size > 0 || components.size > 0
+      return pendingPages.size > 0 || components.size > 0
     },
     drain(): replay_chunk_meta {
       const out = {
-        pages: [...pages],
+        pages: [...pendingPages],
         clickedComponents: [...components],
       }
-      pages.clear()
+      pendingPages.clear()
       components.clear()
       return out
     },

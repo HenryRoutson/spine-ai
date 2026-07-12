@@ -355,11 +355,49 @@ export function formatTypeExpr(expr: TypeExpr, models: StructureModel[] = []): s
   }
 }
 
+type LegacyModelField = ModelField & { example?: string };
+
+function fieldExamplesList(f: ModelField): string[] {
+  const legacy = (f as LegacyModelField).example?.trim();
+  const fromList = (f.examples ?? []).map((e) => e.trim()).filter(Boolean);
+  if (fromList.length) return fromList;
+  return legacy ? [legacy] : [];
+}
+
+function fieldNegativeExamplesList(f: ModelField): string[] {
+  return (f.negativeExamples ?? []).map((e) => e.trim()).filter(Boolean);
+}
+
+// AI : legacy `example` string → examples[] on load / patch
+export function normalizeModelField(f: ModelField): ModelField {
+  const examples = fieldExamplesList(f);
+  const negativeExamples = fieldNegativeExamplesList(f);
+  const { example: _legacy, ...rest } = f as LegacyModelField;
+  return {
+    ...rest,
+    ...(examples.length ? { examples } : {}),
+    ...(negativeExamples.length ? { negativeExamples } : {}),
+  };
+}
+
+export function normalizeStructureModels(models: StructureModel[]): StructureModel[] {
+  return models.map((m) => ({
+    ...m,
+    fields: m.fields.map(normalizeModelField),
+  }));
+}
+
 function fieldDescribe(f: ModelField): string | undefined {
   const parts: string[] = [];
   if (f.description.trim()) parts.push(f.description.trim());
-  const ex = f.example?.trim();
-  if (ex) parts.push(`Example: ${ex}`);
+  const examples = fieldExamplesList(f);
+  if (examples.length) {
+    parts.push(`Examples: ${examples.map((e) => JSON.stringify(e)).join(", ")}`);
+  }
+  const negatives = fieldNegativeExamplesList(f);
+  if (negatives.length) {
+    parts.push(`Do NOT use as values: ${negatives.map((e) => JSON.stringify(e)).join(", ")}`);
+  }
   return parts.length ? parts.join(" — ") : undefined;
 }
 
@@ -588,9 +626,21 @@ export function fieldToPy(field: ModelField, models: StructureModel[]): string {
   if (field.optional && expr.kind !== "optional") t = `${t} | None`;
   const fieldArgs: string[] = [];
   if (field.optional) fieldArgs.push("default=None");
-  if (field.description) fieldArgs.push(`description=${JSON.stringify(field.description)}`);
-  const ex = field.example?.trim();
-  if (ex) fieldArgs.push(`examples=[${JSON.stringify(ex)}]`);
+  const negatives = fieldNegativeExamplesList(field);
+  const desc =
+    field.description.trim() ||
+    (negatives.length
+      ? `Do NOT use as values: ${negatives.map((e) => JSON.stringify(e)).join(", ")}`
+      : "");
+  const descWithNegatives =
+    field.description.trim() && negatives.length
+      ? `${field.description.trim()} — Do NOT use as values: ${negatives.map((e) => JSON.stringify(e)).join(", ")}`
+      : desc;
+  if (descWithNegatives) fieldArgs.push(`description=${JSON.stringify(descWithNegatives)}`);
+  const examples = fieldExamplesList(field);
+  if (examples.length) {
+    fieldArgs.push(`examples=[${examples.map((e) => JSON.stringify(e)).join(", ")}]`);
+  }
   const rhs = fieldArgs.length ? ` = Field(${fieldArgs.join(", ")})` : "";
   return `    ${field.name}: ${t}${rhs}`;
 }

@@ -18,7 +18,7 @@ export const BUILTIN_DOCUMENT_MODEL: StructureModel = {
       type: FieldType.Text,
       optional: false,
       description: "Full extracted text of the file",
-      example: "# Expense policy\n\n| Category | Limit |\n| --- | --- |\n| Meals | $75 |",
+      examples: ["# Expense policy\n\n| Category | Limit |\n| --- | --- |\n| Meals | $75 |"],
     },
     {
       id: "f_filename",
@@ -26,7 +26,7 @@ export const BUILTIN_DOCUMENT_MODEL: StructureModel = {
       type: FieldType.Text,
       optional: false,
       description: "Original upload filename",
-      example: "expense_policy_2024.txt",
+      examples: ["expense_policy_2024.txt"],
     },
   ],
 };

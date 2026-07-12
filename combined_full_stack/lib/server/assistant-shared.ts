@@ -2,6 +2,7 @@ import { z } from "zod";
 import { uid } from "@/lib/id";
 import { tryParseTypeExprString } from "@/lib/type-expr-parse";
 import { isLockedStructureModel } from "./builtin_models";
+import { normalizeModelField } from "./type_expr";
 import { withBuiltinTypeAliases } from "./builtin_types";
 import { FIELD_TYPES, FieldType, type ModelField, type StructureModel, type StructureModelId, type TypeAlias, type TypeAliasId } from "./types";
 
@@ -15,6 +16,8 @@ export const modelFieldSpecSchema = z.object({
   type: z.union([z.enum(fieldTypeValues), z.string()]),
   optional: z.boolean().default(false),
   description: z.string().default(""),
+  examples: z.array(z.string()).optional(),
+  negativeExamples: z.array(z.string()).optional(),
   ref: z.string().optional(),
   typeExpr: z.string().optional(),
 });
@@ -124,15 +127,17 @@ export function materializeModelField(
     prevField?: ModelField;
   },
 ): ModelField {
+  const prev = ctx.prevField ? normalizeModelField(ctx.prevField) : undefined;
   const base = {
-    id: ctx.prevField?.id ?? uid(),
+    id: prev?.id ?? uid(),
     name: f.name,
     optional: f.optional,
     description: f.description,
-    example: ctx.prevField?.example,
+    examples: f.examples ?? prev?.examples,
+    negativeExamples: f.negativeExamples ?? prev?.negativeExamples,
     // AI : preserve field-level deterministic flag — assistant edits must not reset probabilistic markers.
-    deterministic: ctx.prevField?.deterministic,
-    testTolerance: ctx.prevField?.testTolerance,
+    deterministic: prev?.deterministic,
+    testTolerance: prev?.testTolerance,
   };
 
   if (f.typeExpr?.trim()) {

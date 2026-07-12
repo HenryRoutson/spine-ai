@@ -47,7 +47,8 @@ export interface ModelField {
   type: FieldType;
   optional: boolean;
   description: string;
-  example?: string; // AI : sample value — shown in structure UI and emitted in pydantic / LLM schema hints
+  examples?: string[]; // AI : sample values — shown in structure UI and emitted in pydantic / LLM schema hints
+  negativeExamples?: string[]; // AI : counterexamples — invalid values the LLM must not emit
   ref?: StructureModelId; // referenced model id when type === "model" | "list[model]"
   minItems?: number; // AI : minimum list length when type is a list[…] field
   typeExpr?: TypeExpr; // AI : when set, overrides type/ref — full Python-style type expression
@@ -62,7 +63,7 @@ export interface ModelField {
 // AI : meta-type — one field row inside a StructureDef (structure-of-structures)
 export type StructureFieldDef = Pick<
   ModelField,
-  "id" | "name" | "type" | "optional" | "description" | "ref" | "minItems" | "typeExpr" | "deterministic" | "testTolerance"
+  "id" | "name" | "type" | "optional" | "description" | "examples" | "negativeExamples" | "ref" | "minItems" | "typeExpr" | "deterministic" | "testTolerance"
 >;
 
 export type TolerantFieldPath = {

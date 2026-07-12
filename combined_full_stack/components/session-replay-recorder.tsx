@@ -44,8 +44,6 @@ export function SessionReplayRecorder() {
 
     const postChunk = (events: rrweb_event_json[], isFinal = false) => {
       const meta = metaRef.current.drain();
-      metaRef.current.recordPage(currentPagePath());
-      if (activeWindowRef.current) metaRef.current.recordPage(`app:${activeWindowRef.current}`);
 
       const body: Record<string, unknown> = {
         sessionId: sessionIdRef.current,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -175,6 +175,11 @@ export function DashboardView() {
   const [replayEvents, setReplayEvents] = useState<Record<string, unknown>[]>([]);
   const [replayBusy, setReplayBusy] = useState(false);
   const [replayError, setReplayError] = useState<string | null>(null);
+  const selectedReplayIdRef = useRef("");
+
+  useEffect(() => {
+    selectedReplayIdRef.current = selectedReplayId;
+  }, [selectedReplayId]);
 
   const refresh = useCallback(async () => {
     setBusy(true);
@@ -214,6 +219,7 @@ export function DashboardView() {
       if (replaySource !== "all") params.set("source", replaySource);
       if (replayPage.trim()) params.set("page", replayPage.trim());
       if (replayComponent !== "all") params.set("component", replayComponent);
+      if (replaySort !== "recent") params.set("sort", replaySort);
       const qs = params.toString() ? `?${params.toString()}` : "";
       const res = await fetch(`/api/session-replay${qs}`, { cache: "no-store" });
       const body = (await res.json()) as {
@@ -231,7 +237,7 @@ export function DashboardView() {
       setReplaySessions([]);
       setReplayError(e instanceof Error ? e.message : "Failed to load replay sessions");
     }
-  }, [selectedUserId, replayUserSearch, replaySource, replayPage, replayComponent]);
+  }, [selectedUserId, replayUserSearch, replaySource, replayPage, replayComponent, replaySort]);
 
   const displayReplaySessions = useMemo(
     () => sortDashboardReplaySessions(replaySessions, replaySort),
@@ -239,23 +245,33 @@ export function DashboardView() {
   );
 
   useEffect(() => {
-    void loadReplaySessions();
+    // AI : defer fetch so setState isn't synchronous in the effect body; debounce text filters.
+    const delayMs = replayUserSearch.trim() || replayPage.trim() ? 300 : 0;
+    const boot = setTimeout(() => void loadReplaySessions(), delayMs);
     const id = setInterval(() => void loadReplaySessions(), 30_000);
-    return () => clearInterval(id);
-  }, [loadReplaySessions]);
+    return () => {
+      clearTimeout(boot);
+      clearInterval(id);
+    };
+  }, [loadReplaySessions, replayUserSearch, replayPage]);
 
   const loadReplayEvents = useCallback(async (sessionId: string) => {
     setReplayBusy(true);
     setSelectedReplayId(sessionId);
+    selectedReplayIdRef.current = sessionId;
     try {
       const res = await fetch(`/api/session-replay/${encodeURIComponent(sessionId)}`);
       const body = (await res.json()) as { events?: Record<string, unknown>[]; error?: string };
       if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      if (selectedReplayIdRef.current !== sessionId) return;
       setReplayEvents(body.events ?? []);
-    } catch {
+      setReplayError(null);
+    } catch (e) {
+      if (selectedReplayIdRef.current !== sessionId) return;
       setReplayEvents([]);
+      setReplayError(e instanceof Error ? e.message : "Failed to load replay events");
     } finally {
-      setReplayBusy(false);
+      if (selectedReplayIdRef.current === sessionId) setReplayBusy(false);
     }
   }, []);
 

@@ -56,7 +56,6 @@ export function LandingSessionReplayRecorder({
       const currentEmail = emailRef.current;
       if (!currentEmail) return;
       const meta = metaRef.current.drain();
-      metaRef.current.recordPage(currentPagePath());
 
       const body: Record<string, unknown> = {
         sessionId: sessionIdRef.current,

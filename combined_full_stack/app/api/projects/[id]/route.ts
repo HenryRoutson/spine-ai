@@ -5,6 +5,7 @@ import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { logger } from "@/lib/server/server_logger";
 import { sanitizeModuleModels } from "@/lib/server/model_catalog";
 import { mergeStrategyConfigPatch } from "@/lib/server/strategies";
+import { normalizeStructureModels } from "@/lib/server/type_expr";
 import { recordActivityEvents } from "@/lib/server/user_activity";
 import type { user_id_string } from "@/lib/server/require_auth";
 import type { PipelineModule, Project } from "@/lib/server/types";
@@ -79,6 +80,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   const patch = patchBody as Partial<Project>;
   const sanitized: Partial<Project> = {
     ...patch,
+    ...(patch.models ? { models: normalizeStructureModels(patch.models) } : {}),
     ...(patch.modules ? { modules: sanitizeModuleModels(patch.modules) } : {}),
     ...(patch.strategies
       ? { strategies: mergeStrategyConfigPatch(project.strategies, patch.strategies) }

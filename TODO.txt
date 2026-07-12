@@ -4,6 +4,10 @@ rename everything to spine
 name might already be taken https://www.getspine.ai/
 
 
+telem : https://posthog.com/ telem
+telem : OpenReplay? check AGPL license
+telem : HyperDX
+
 write code to recreate what a user is doing in the UI from database recorded clicks and inputs. make generic for any repo on react.
 
 
