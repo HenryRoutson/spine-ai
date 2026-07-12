@@ -541,6 +541,24 @@ please add replay https://rrweb.com/ for all users.
 You should be able to sort replays by the number of clicks, and by which component was clicked on during that even. You should be able to filter based on what page the user visits, or if they're on the landing page or app.
 You should be able to filter with a searchable users list.
 
+The goal of the dashboard is to 
+- get a clear overview of current errors and if the platform is operating reliabily
+- if there are errors, they need to be logged in as much detail as possible and tied to a rrweb recording to see how it occured.
+- there needs to be a graph of errors over time, potentially with different production changes indicated
+- there needs to be a list of sign up members, where you can click on a single person and see their usage and retention. I need to be able to see all their AI prompts, projects and files to to see what they're building and where they might be having issues.
+- tracking of money, in the liability of free credits, the markup for llm calls, the total ammount paid for credits, usage out,
+- landing page tracking, including emails from the landing page and the demos which are built from the landing page agent and the recording of that with rrweb.
+- marketplace tracking, API hosting tracking, sharing tracking
+- heatmaps for where people spend their time in the UI for each button to light up based on it's clicks
+- database size mangagement, the number of rows per table , table size in gb, 
+- user feedback
+- be minimal in it's code, as i don't want to be spending my time building a dashboard and would prefer to outsource that
+
+
+
+
+
+
 # Supported languages
 - typescript 
 - python 
