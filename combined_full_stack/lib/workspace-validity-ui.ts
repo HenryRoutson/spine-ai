@@ -19,13 +19,14 @@ export function computeWorkspaceValidity(
   modules: PipelineModule[],
   models: StructureModel[],
   typeAliases: TypeAlias[] = [],
+  teamReadOnly = false,
 ): WorkspaceValidity {
   const typesInvalid = typesInvalidForUi(models, typeAliases)
   const pipelineInvalid = computeInvalidForUi(modules, models, typeAliases).size > 0
   return {
     typesInvalid,
     pipelineInvalid,
-    pipelineEditingBlocked: typesInvalid,
+    pipelineEditingBlocked: typesInvalid || teamReadOnly,
     runTabsBlocked: typesInvalid || pipelineInvalid,
   }
 }

@@ -303,6 +303,37 @@ body {
   }
 }
 
+/* AI : live LLM token stream under the generate prompt — grows page length, no nested scroll */
+.landing-stream-tokens {
+  border-left: 2px solid var(--accent-dim);
+  padding-left: 0.75rem;
+}
+
+.landing-stream-thinking {
+  border-left-color: color-mix(in srgb, var(--muted-dim) 70%, transparent);
+  opacity: 0.85;
+}
+
+.landing-stream-message {
+  border-left-color: var(--accent);
+}
+
+.landing-stream-caret {
+  display: inline-block;
+  width: 0.45em;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--accent);
+  animation: landing-caret-blink 1s steps(1) infinite;
+}
+
+@keyframes landing-caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
 .demo-spinner {
   width: 14px;
   height: 14px;
@@ -316,4 +347,10 @@ body {
   to {
     transform: rotate(360deg);
   }
+}
+
+/* AI : legacy HTML fallback only — prefer structured LandingLoggingTrace (page length). */
+.landing-run-trace-frame {
+  min-height: 480px;
+  height: auto;
 }

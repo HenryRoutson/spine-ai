@@ -16,7 +16,7 @@ type Args = {
   phase: InferencePhase
   run: PipelineRun | null
   linkedTest: LinkedTest | null
-  project: Pick<Project, "modules" | "models" | "typeAliases">
+  project: Pick<Project, "id" | "modules" | "models" | "typeAliases">
   modules: PipelineModule[]
   models: StructureModel[]
   typeAliases: TypeAlias[]

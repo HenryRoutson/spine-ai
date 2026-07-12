@@ -47,7 +47,8 @@ export interface ModelField {
   type: FieldType;
   optional: boolean;
   description: string;
-  example?: string; // AI : sample value — shown in structure UI and emitted in pydantic / LLM schema hints
+  examples?: string[]; // AI : sample values — shown in structure UI and emitted in pydantic / LLM schema hints
+  negativeExamples?: string[]; // AI : counterexamples — invalid values the LLM must not emit
   ref?: StructureModelId; // referenced model id when type === "model" | "list[model]"
   minItems?: number; // AI : minimum list length when type is a list[…] field
   typeExpr?: TypeExpr; // AI : when set, overrides type/ref — full Python-style type expression
@@ -62,7 +63,7 @@ export interface ModelField {
 // AI : meta-type — one field row inside a StructureDef (structure-of-structures)
 export type StructureFieldDef = Pick<
   ModelField,
-  "id" | "name" | "type" | "optional" | "description" | "ref" | "minItems" | "typeExpr" | "deterministic" | "testTolerance"
+  "id" | "name" | "type" | "optional" | "description" | "examples" | "negativeExamples" | "ref" | "minItems" | "typeExpr" | "deterministic" | "testTolerance"
 >;
 
 export type TolerantFieldPath = {
@@ -174,6 +175,7 @@ export interface PipelineModule {
   code?: string; // AI : transform steps with custom code only
   fallbackList?: CustomCodeEntry[]; // AI : custom-code — ordered attempts, first is primary
   model?: ModelId; // per-step model override
+  costLimitCents?: number; // AI : per-llm-step spend cap — defaults to $1 when unset
   useOcr?: boolean; // input only — vision OCR when PDF/image is accepted (built-in parser when off)
   cached: boolean;
   // AI : backend-only — llm/transform steps may emit a list of `outStructure` rather than one.
@@ -212,6 +214,9 @@ export interface Project {
   createdAt?: number; // AI : ms since epoch — set when blank/cloned; templates from seeds/*.json omit this
   lastOpenedAt?: number; // AI : ms since epoch — updated when user opens/switches to this project
   documentation?: string; // AI : freeform markdown — prepended to every agent/assistant prompt call to prevent regressions
+  teamId?: import("@/lib/team-types").team_id_string; // AI : when set, team members can view/run; bills team owner
+  teamReadOnly?: boolean; // AI : true when loaded from another member's account — client disables edits
+  teamProjectOwnerId?: import("./require_auth").user_id_string; // AI : runtime-only — owner's user_id when viewing a shared team project
 }
 
 export enum StrategyKind {
@@ -280,6 +285,7 @@ export enum FailureKind {
   JsonParse = "json_parse",
   Schema = "schema",
   StepOutput = "step_output",
+  CostLimit = "cost_limit",
 }
 
 export interface RunFailureRecord {
@@ -347,6 +353,7 @@ export interface RunStep extends Omit<StepDescriptionFields, "outputPreview"> {
 export type RunFingerprint = string & { __brand: "RunFingerprint" };
 export type SharedLinkId = string & { __brand: "SharedLinkId" };
 export type HostedApiId = string & { __brand: "HostedApiId" };
+export type MarketplaceListingId = string & { __brand: "MarketplaceListingId" };
 // AI : Testing — run started from the Testing tab; flagged in Logging (spec § Testing).
 export enum RunSource {
   App = "app",

@@ -10,6 +10,15 @@ import { DocLabel, InputType } from "@/lib/server/types";
 import type { DocId, ProjectId } from "@/lib/server/types";
 import { inputTypeFromFilename } from "@/lib/server/upload_constants";
 
+// AI : SECURITY — same HTML probe as validateUploadBytes for text created via JSON body.
+function rejectHtmlTextContent(content: string): string | null {
+  const probe = content.slice(0, 512).trimStart().toLowerCase();
+  if (probe.startsWith("<!doctype html") || probe.startsWith("<html") || probe.includes("<script")) {
+    return "HTML content is not allowed in text documents";
+  }
+  return null;
+}
+
 const apiLog = logger("api:docs-content");
 
 type ValidatedDocContent = {
@@ -48,6 +57,9 @@ function validateDocContent(body: {
     const parsed = tryParseJson(content);
     if (!parsed.ok) return apiError(`invalid json: ${parsed.error.message}`, HTTP.BAD_REQUEST);
     normalized = prettyJsonString(content);
+  } else {
+    const htmlBlock = rejectHtmlTextContent(content);
+    if (htmlBlock) return apiError(htmlBlock, HTTP.BAD_REQUEST);
   }
 
   const label: DocLabel = body.label === DocLabel.Training ? DocLabel.Training : DocLabel.Inference;

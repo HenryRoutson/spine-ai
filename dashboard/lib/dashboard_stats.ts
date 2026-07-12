@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { APP_DATA_DIR } from "./load_env";
 import { createAdminClient } from "./supabase_admin";
 
+import type { dashboard_timeline_stats } from "./dashboard_timeline";
+
 export type dashboard_day_bucket = {
   day: string;
   count: number;
@@ -55,6 +57,7 @@ export type dashboard_stats = {
   tableCounts: dashboard_table_count[];
   recentFeedback: dashboard_feedback_row[];
   failedJobs: dashboard_failed_job[];
+  timeline?: dashboard_timeline_stats;
 };
 
 const MONITORED_TABLES = [
@@ -69,6 +72,11 @@ const MONITORED_TABLES = [
   "landing_page_signups",
   "creator_earnings",
   "user_profiles",
+  "user_activity_events",
+  "billing_flow_ledger",
+  "session_replay_sessions",
+  "session_replay_chunks",
+  "platform_markup_schedule",
 ] as const;
 
 const DAY_MS = 86_400_000;

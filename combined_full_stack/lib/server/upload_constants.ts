@@ -2,7 +2,7 @@ import { InputType } from "@/lib/server/types"
 
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
-// AI : TODO security — html/htm → InputType.Web but validateUploadBytes has no web sniff; align policy.
+// AI : SECURITY — html/htm rejected (stored XSS / inline script risk); Web type is not uploadable.
 export const EXT_TYPE: Record<string, InputType> = {
   pdf: InputType.Pdf,
   doc: InputType.Word,
@@ -13,11 +13,12 @@ export const EXT_TYPE: Record<string, InputType> = {
   json: InputType.Json,
   txt: InputType.Text,
   md: InputType.Text,
-  html: InputType.Web,
   png: InputType.Image,
   jpg: InputType.Image,
   jpeg: InputType.Image,
 }
+
+export const REJECTED_UPLOAD_EXTS = new Set(["html", "htm", "svg", "js", "mjs", "cjs", "wasm"])
 
 export function inputTypeFromFilename(filename: string): InputType {
   const ext = filename.split(".").pop()?.toLowerCase() ?? ""

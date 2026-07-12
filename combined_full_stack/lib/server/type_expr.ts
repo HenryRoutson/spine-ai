@@ -1,6 +1,6 @@
 import { z, type ZodType } from "zod";
 import { isValidJsonString } from "@/lib/json-utils";
-import { modelExportIdentifier } from "@/lib/structure-shape";
+import { modelExportIdentifier, modelExportIdentifierGo, modelExportIdentifierRust } from "@/lib/structure-shape";
 import type {
   FieldType,
   InputType,
@@ -355,11 +355,49 @@ export function formatTypeExpr(expr: TypeExpr, models: StructureModel[] = []): s
   }
 }
 
+type LegacyModelField = ModelField & { example?: string };
+
+function fieldExamplesList(f: ModelField): string[] {
+  const legacy = (f as LegacyModelField).example?.trim();
+  const fromList = (f.examples ?? []).map((e) => e.trim()).filter(Boolean);
+  if (fromList.length) return fromList;
+  return legacy ? [legacy] : [];
+}
+
+function fieldNegativeExamplesList(f: ModelField): string[] {
+  return (f.negativeExamples ?? []).map((e) => e.trim()).filter(Boolean);
+}
+
+// AI : legacy `example` string → examples[] on load / patch
+export function normalizeModelField(f: ModelField): ModelField {
+  const examples = fieldExamplesList(f);
+  const negativeExamples = fieldNegativeExamplesList(f);
+  const { example: _legacy, ...rest } = f as LegacyModelField;
+  return {
+    ...rest,
+    ...(examples.length ? { examples } : {}),
+    ...(negativeExamples.length ? { negativeExamples } : {}),
+  };
+}
+
+export function normalizeStructureModels(models: StructureModel[]): StructureModel[] {
+  return models.map((m) => ({
+    ...m,
+    fields: m.fields.map(normalizeModelField),
+  }));
+}
+
 function fieldDescribe(f: ModelField): string | undefined {
   const parts: string[] = [];
   if (f.description.trim()) parts.push(f.description.trim());
-  const ex = f.example?.trim();
-  if (ex) parts.push(`Example: ${ex}`);
+  const examples = fieldExamplesList(f);
+  if (examples.length) {
+    parts.push(`Examples: ${examples.map((e) => JSON.stringify(e)).join(", ")}`);
+  }
+  const negatives = fieldNegativeExamplesList(f);
+  if (negatives.length) {
+    parts.push(`Do NOT use as values: ${negatives.map((e) => JSON.stringify(e)).join(", ")}`);
+  }
   return parts.length ? parts.join(" — ") : undefined;
 }
 
@@ -555,7 +593,7 @@ export function typeExprToPy(expr: TypeExpr, models: StructureModel[] = []): str
       return name ? modelExportIdentifier(name) : "Any";
     }
     case "optional":
-      return `Optional[${typeExprToPy(expr.inner, models)}]`;
+      return `${typeExprToPy(expr.inner, models)} | None`;
     case "set":
       return `set[${typeExprToPy(expr.item, models)}]`;
     case "map":
@@ -585,12 +623,24 @@ export function typeExprToPy(expr: TypeExpr, models: StructureModel[] = []): str
 export function fieldToPy(field: ModelField, models: StructureModel[]): string {
   const expr = fieldToTypeExpr(field);
   let t = typeExprToPy(expr, models);
-  if (field.optional && expr.kind !== "optional") t = `Optional[${t}]`;
+  if (field.optional && expr.kind !== "optional") t = `${t} | None`;
   const fieldArgs: string[] = [];
   if (field.optional) fieldArgs.push("default=None");
-  if (field.description) fieldArgs.push(`description=${JSON.stringify(field.description)}`);
-  const ex = field.example?.trim();
-  if (ex) fieldArgs.push(`examples=[${JSON.stringify(ex)}]`);
+  const negatives = fieldNegativeExamplesList(field);
+  const desc =
+    field.description.trim() ||
+    (negatives.length
+      ? `Do NOT use as values: ${negatives.map((e) => JSON.stringify(e)).join(", ")}`
+      : "");
+  const descWithNegatives =
+    field.description.trim() && negatives.length
+      ? `${field.description.trim()} — Do NOT use as values: ${negatives.map((e) => JSON.stringify(e)).join(", ")}`
+      : desc;
+  if (descWithNegatives) fieldArgs.push(`description=${JSON.stringify(descWithNegatives)}`);
+  const examples = fieldExamplesList(field);
+  if (examples.length) {
+    fieldArgs.push(`examples=[${examples.map((e) => JSON.stringify(e)).join(", ")}]`);
+  }
   const rhs = fieldArgs.length ? ` = Field(${fieldArgs.join(", ")})` : "";
   return `    ${field.name}: ${t}${rhs}`;
 }
@@ -655,4 +705,195 @@ export function labelToPyKey(label: string): string {
   const trimmed = label.trim();
   if (!trimmed) return "_empty";
   return trimmed.replace(/[^a-zA-Z0-9_]+/g, "_").replace(/^(\d)/, "_$1");
+}
+
+// AI : wrap composite BAML types before postfix ? / [] so `int | string` stays grouped.
+function bamlNeedsParens(expr: TypeExpr): boolean {
+  return expr.kind === "union" || expr.kind === "optional" || expr.kind === "map";
+}
+
+function bamlWrap(expr: TypeExpr, models: StructureModel[]): string {
+  const inner = typeExprToBaml(expr, models);
+  return bamlNeedsParens(expr) ? `(${inner})` : inner;
+}
+
+// AI : BAML type strings — https://docs.boundaryml.com/ref/baml/types (no datetime/json/set/tuple).
+export function typeExprToBaml(expr: TypeExpr, models: StructureModel[] = []): string {
+  switch (expr.kind) {
+    case "prim":
+      switch (expr.name) {
+        case "text":
+        case "datetime":
+        case "json":
+          return "string";
+        case "int":
+          return "int";
+        case "float":
+          return "float";
+        case "bool":
+          return "bool";
+        default:
+          return "string";
+      }
+    case "document":
+      return "Document";
+    case "quote":
+      return "string";
+    case "text_quote":
+      return "TextQuote";
+    case "list":
+      return `${bamlWrap(expr.item, models)}[]`;
+    case "ref": {
+      const name = modelName(models, expr.modelId);
+      return name ? modelExportIdentifierRust(name) : "string";
+    }
+    case "optional":
+      return `${bamlWrap(expr.inner, models)}?`;
+    case "set":
+      // AI : BAML has no set — list is the documented substitute.
+      return `${bamlWrap(expr.item, models)}[]`;
+    case "map":
+      return `map<${typeExprToBaml(expr.key, models)}, ${typeExprToBaml(expr.value, models)}>`;
+    case "union":
+      return expr.variants.map((v) => typeExprToBaml(v, models)).join(" | ");
+    case "generic":
+      if (expr.name === "tuple") {
+        // AI : BAML has no tuple — flatten to a descriptive string placeholder.
+        return "string";
+      }
+      return expr.args.length
+        ? `${expr.name}<${expr.args.map((a) => typeExprToBaml(a, models)).join(", ")}>`
+        : expr.name;
+    case "named":
+      return expr.name;
+    case "unset":
+      return "null";
+    case "file":
+      return "FileInput";
+    case "unknown":
+      return "string";
+    default:
+      return "string";
+  }
+}
+
+// AI : Rust type strings for pipeline export — serde-friendly, JSON Value for open shapes.
+export function typeExprToRust(expr: TypeExpr, models: StructureModel[] = []): string {
+  switch (expr.kind) {
+    case "prim":
+      switch (expr.name) {
+        case "text":
+        case "datetime":
+          return "String";
+        case "json":
+          return "serde_json::Value";
+        case "int":
+          return "i64";
+        case "float":
+          return "f64";
+        case "bool":
+          return "bool";
+        default:
+          return "serde_json::Value";
+      }
+    case "document":
+      return "Document";
+    case "quote":
+      return "QuoteSpan";
+    case "text_quote":
+      return "TextQuoteLoose";
+    case "list":
+      return `Vec<${typeExprToRust(expr.item, models)}>`;
+    case "ref": {
+      const name = modelName(models, expr.modelId);
+      return name ? modelExportIdentifierRust(name) : "serde_json::Value";
+    }
+    case "optional":
+      return `Option<${typeExprToRust(expr.inner, models)}>`;
+    case "set":
+      return `std::collections::HashSet<${typeExprToRust(expr.item, models)}>`;
+    case "map":
+      return `std::collections::HashMap<${typeExprToRust(expr.key, models)}, ${typeExprToRust(expr.value, models)}>`;
+    case "union":
+      // AI : untagged unions → Value; callers can narrow after deserialize.
+      return "serde_json::Value";
+    case "generic":
+      if (expr.name === "tuple") {
+        return `(${expr.args.map((a) => typeExprToRust(a, models)).join(", ")})`;
+      }
+      return expr.args.length
+        ? `${expr.name}<${expr.args.map((a) => typeExprToRust(a, models)).join(", ")}>`
+        : expr.name;
+    case "named":
+      return expr.name;
+    case "unset":
+      return "!";
+    case "file":
+      return "FileInput";
+    case "unknown":
+      return "serde_json::Value";
+    default:
+      return "serde_json::Value";
+  }
+}
+
+// AI : Go type strings for pipeline export — JSON tags on structs; RawMessage for open shapes.
+export function typeExprToGo(expr: TypeExpr, models: StructureModel[] = []): string {
+  switch (expr.kind) {
+    case "prim":
+      switch (expr.name) {
+        case "text":
+        case "datetime":
+          return "string";
+        case "json":
+          return "json.RawMessage";
+        case "int":
+          return "int64";
+        case "float":
+          return "float64";
+        case "bool":
+          return "bool";
+        default:
+          return "json.RawMessage";
+      }
+    case "document":
+      return "Document";
+    case "quote":
+      return "QuoteSpan";
+    case "text_quote":
+      return "TextQuoteLoose";
+    case "list":
+      return `[]${typeExprToGo(expr.item, models)}`;
+    case "ref": {
+      const name = modelName(models, expr.modelId);
+      return name ? modelExportIdentifierGo(name) : "json.RawMessage";
+    }
+    case "optional":
+      return `*${typeExprToGo(expr.inner, models)}`;
+    case "set":
+      // AI : Go has no set — slice is the practical substitute.
+      return `[]${typeExprToGo(expr.item, models)}`;
+    case "map":
+      return `map[${typeExprToGo(expr.key, models)}]${typeExprToGo(expr.value, models)}`;
+    case "union":
+      return "json.RawMessage";
+    case "generic":
+      if (expr.name === "tuple") {
+        // AI : Go has no tuple — fall back to RawMessage.
+        return "json.RawMessage";
+      }
+      return expr.args.length
+        ? `${expr.name}[${expr.args.map((a) => typeExprToGo(a, models)).join(", ")}]`
+        : expr.name;
+    case "named":
+      return expr.name;
+    case "unset":
+      return "struct{}";
+    case "file":
+      return "FileInput";
+    case "unknown":
+      return "json.RawMessage";
+    default:
+      return "json.RawMessage";
+  }
 }

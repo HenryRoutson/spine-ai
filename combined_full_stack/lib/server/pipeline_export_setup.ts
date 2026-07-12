@@ -114,6 +114,9 @@ export function generateSetupReadme(project: Project, slug: string): string {
     "",
     `- \`${slug}_pipeline.ts\` — TypeScript types, steps, orchestrator`,
     `- \`${slug}_pipeline.py\` — Python models, steps, orchestrator`,
+    `- \`${slug}_pipeline.rs\` — Rust structs, steps, orchestrator`,
+    `- \`${slug}_pipeline.go\` — Go structs, steps, orchestrator`,
+    `- \`${slug}_pipeline.baml\` — BAML classes + LLM functions (https://github.com/boundaryml/baml)`,
     "- `pipeline_connector.proto` — gRPC contract (same for TS and Python)",
     "- `connector_server.ts` / `connector_server.py` — gRPC + HTTP JSON bridge",
     "- `inference_ui.html` — standalone inference UI (open in browser, POST to connector)",
@@ -132,6 +135,10 @@ export function generateSetupReadme(project: Project, slug: string): string {
     "The exported pipeline file intentionally does **not** embed env access — pass config via `configurePipelineRuntime`.",
     "",
     "TypeScript runner: `npm install dotenv` (or load env in your shell).",
+    "",
+    "Rust runner: add crates `serde`, `serde_json`, `tokio`, `reqwest` (json feature), `anyhow` — see Cargo snippet under **Run**.",
+    "",
+    "Go runner: stdlib only (`encoding/json`, `net/http`) — see snippet under **Run**.",
     "",
   ];
 
@@ -256,6 +263,48 @@ export function generateSetupReadme(project: Project, slug: string): string {
     "",
     runtimeConfigPy,
     "# await run_pipeline(...)",
+    "```",
+    "",
+    "Rust:",
+    "",
+    "```toml",
+    "# Cargo.toml deps",
+    "serde = { version = \"1\", features = [\"derive\"] }",
+    "serde_json = \"1\"",
+    "tokio = { version = \"1\", features = [\"rt-multi-thread\", \"macros\"] }",
+    "reqwest = { version = \"0.12\", features = [\"json\"] }",
+    "anyhow = \"1\"",
+    "```",
+    "",
+    "```rust",
+    "// include! or copy " + slug + "_pipeline.rs into your crate",
+    needs.llm || needs.llmBatch || needs.visionOcr
+      ? '// configure_pipeline_runtime(PipelineRuntime { open_router_api_key: Some(/* from your .env loader */), ..Default::default() });'
+      : "// configure_pipeline_runtime(PipelineRuntime { ..Default::default() });",
+    "// let result = run_pipeline(/* Document or HashMap */).await?;",
+    "```",
+    "",
+    "Go:",
+    "",
+    "```go",
+    "// copy " + slug + "_pipeline.go into your module (package pipeline)",
+    needs.llm || needs.llmBatch || needs.visionOcr
+      ? "ConfigurePipelineRuntime(PipelineRuntime{OpenRouterAPIKey: /* from your .env loader */})"
+      : "ConfigurePipelineRuntime(PipelineRuntime{})",
+    "// result, err := RunPipeline(/* Document or map[string]Document */)",
+    "```",
+    "",
+    "BAML (LLM steps only — orchestrate non-LLM steps in Python/TS):",
+    "",
+    "```bash",
+    "npm i -g @boundaryml/baml   # or: pip install baml",
+    "# place " + slug + "_pipeline.baml under baml_src/",
+    "baml generate",
+    "```",
+    "",
+    "```python",
+    "# from baml_client import b",
+    "# result = await b.YourLlmStep(input=...)",
     "```",
     "",
   );
@@ -398,9 +447,12 @@ function openRouterHelpersPy(): string[] {
     "        res = await client.post(OPENROUTER_CHAT_URL, headers=headers, json=payload)",
     "    if res.status_code != 200:",
     '        raise RuntimeError(f"OpenRouter {res.status_code}: {res.text}")',
-    "    data = res.json()",
-    '    content = (data.get("choices") or [{}])[0].get("message", {}).get("content")',
-    "    if not content:",
+    "    data: Any = res.json()",
+    '    choices: Any = data.get("choices") if isinstance(data, dict) else None',
+    "    first: Any = choices[0] if isinstance(choices, list) and choices else {}",
+    '    message: Any = first.get("message", {}) if isinstance(first, dict) else {}',
+    '    content: Any = message.get("content") if isinstance(message, dict) else None',
+    "    if not isinstance(content, str) or not content:",
     '        raise RuntimeError("OpenRouter returned no message content")',
     "    return content",
   ];
@@ -528,13 +580,12 @@ export function generateRuntimeStubsTs(needs: ExportRuntimeNeeds): string {
 export function generateRuntimeConfigSectionPy(needs: ExportRuntimeNeeds): string {
   const lines = [
     "# === runtime config (load .env in your runner — pass values here, not in this file) ===",
-    "from dataclasses import dataclass",
-    "",
     "@dataclass",
     "class PipelineRuntime:",
   ];
+  const fields: string[] = [];
   if (needs.llm || needs.llmBatch || needs.visionOcr) {
-    lines.push(
+    fields.push(
       "    open_router_api_key: str | None = None",
       "    open_router_model: str | None = None",
       "    open_router_site_url: str | None = None",
@@ -542,12 +593,14 @@ export function generateRuntimeConfigSectionPy(needs: ExportRuntimeNeeds): strin
     );
   }
   if (needs.quote) {
-    lines.push("    source_text: str | None = None", "    source_doc_id: str | None = None");
+    fields.push("    source_text: str | None = None", "    source_doc_id: str | None = None");
   }
   if (needs.humanReview) {
-    lines.push("    on_human_review: Any = None  # async callable(input) -> None");
+    fields.push("    on_human_review: Callable[[Any], Any] | None = None");
   }
+  if (!fields.length) fields.push("    pass");
   lines.push(
+    ...fields,
     "    # AI : TODO export — Supabase persistence (supabase_url, supabase_service_key).",
     "    # AI : TODO export — step cache (enable_cache, cache_url / PIPELINE_CACHE_URL).",
   );
@@ -567,7 +620,7 @@ export function generateRuntimeStubsPy(needs: ExportRuntimeNeeds): string {
       "",
       "async def llm_batch_structured(",
       "    items: list[Any],",
-      "    prompt_for: Any,",
+      "    prompt_for: Callable[[Any], str],",
       "    schema: Any,",
       ") -> list[Any]:",
       "    return [await llm_structured(prompt_for(item), schema) for item in items]",
@@ -594,6 +647,401 @@ export function generateRuntimeStubsPy(needs: ExportRuntimeNeeds): string {
       "        await runtime.on_human_review(input)",
       "        return",
       '    raise NotImplementedError("wire wait_for_human_review or configure_pipeline_runtime(on_human_review=...)")',
+    );
+  }
+
+  return lines.join("\n");
+}
+
+export function generateRuntimeConfigSectionRust(needs: ExportRuntimeNeeds): string {
+  const fields: string[] = [];
+  if (needs.llm || needs.llmBatch || needs.visionOcr) {
+    fields.push(
+      "    pub open_router_api_key: Option<String>,",
+      "    pub open_router_model: Option<String>,",
+      "    pub open_router_site_url: Option<String>,",
+      "    pub open_router_app_title: Option<String>,",
+    );
+  }
+  if (needs.quote) {
+    fields.push("    pub source_text: Option<String>,", "    pub source_doc_id: Option<String>,");
+  }
+  if (needs.humanReview) {
+    fields.push("    // Wire wait_for_human_review below — no callback field in this stub.");
+  }
+  if (!fields.length) fields.push("    // extend as needed");
+  return [
+    "// === runtime config (load .env in your runner — pass values here, not in this file) ===",
+    "#[derive(Debug, Clone, Default)]",
+    "pub struct PipelineRuntime {",
+    ...fields,
+    "    // AI : TODO export — Supabase persistence / step cache.",
+    "}",
+    "",
+    "static RUNTIME: std::sync::OnceLock<std::sync::Mutex<PipelineRuntime>> = std::sync::OnceLock::new();",
+    "",
+    "fn runtime() -> std::sync::MutexGuard<'static, PipelineRuntime> {",
+    "    RUNTIME",
+    "        .get_or_init(|| std::sync::Mutex::new(PipelineRuntime::default()))",
+    "        .lock()",
+    '        .expect("pipeline runtime lock")',
+    "}",
+    "",
+    "pub fn configure_pipeline_runtime(config: PipelineRuntime) {",
+    "    *runtime() = config;",
+    "}",
+    "",
+  ].join("\n");
+}
+
+function openRouterHelpersRust(): string[] {
+  return [
+    'const OPENROUTER_CHAT_URL: &str = "https://openrouter.ai/api/v1/chat/completions";',
+    'const DEFAULT_OPENROUTER_MODEL: &str = "deepseek/deepseek-chat";',
+    "",
+    "fn extract_json_reply(raw: &str) -> String {",
+    "    let body = if let Some(start) = raw.find(\"```\") {",
+    "        let after = &raw[start + 3..];",
+    "        let after = after.strip_prefix(\"json\").unwrap_or(after).trim_start();",
+    "        after.split(\"```\").next().unwrap_or(after).trim()",
+    "    } else {",
+    "        raw.trim()",
+    "    };",
+    "    let start = body.find(['{', '[']).unwrap_or(0);",
+    "    let end = body.rfind(['}', ']']).map(|i| i + 1).unwrap_or(body.len());",
+    "    if end > start { body[start..end].to_string() } else { body.to_string() }",
+    "}",
+    "",
+    "async fn open_router_chat(prompt: &str, json_mode: bool) -> anyhow::Result<String> {",
+    "    let rt = runtime();",
+    "    let key = rt.open_router_api_key.clone().ok_or_else(|| anyhow::anyhow!(\"configure_pipeline_runtime first\"))?;",
+    "    let model = rt.open_router_model.clone().unwrap_or_else(|| DEFAULT_OPENROUTER_MODEL.to_string());",
+    "    let site = rt.open_router_site_url.clone().unwrap_or_else(|| \"http://localhost:3000\".to_string());",
+    "    let title = rt.open_router_app_title.clone().unwrap_or_else(|| \"forge-pipeline-export\".to_string());",
+    "    drop(rt);",
+    "    let mut payload = serde_json::json!({",
+    '        "model": model,',
+    '        "messages": [{"role": "user", "content": prompt}],',
+    '        "temperature": 0,',
+    '        "max_tokens": 8192,',
+    '        "provider": {"allow_fallbacks": false},',
+    "    });",
+    "    if json_mode {",
+    '        payload["response_format"] = serde_json::json!({"type": "json_object"});',
+    "    }",
+    "    let client = reqwest::Client::new();",
+    "    let res = client",
+    "        .post(OPENROUTER_CHAT_URL)",
+    "        .header(\"Authorization\", format!(\"Bearer {}\", key))",
+    "        .header(\"HTTP-Referer\", site)",
+    "        .header(\"X-Title\", title)",
+    "        .json(&payload)",
+    "        .send()",
+    "        .await?;",
+    "    if !res.status().is_success() {",
+    "        let status = res.status();",
+    "        let text = res.text().await.unwrap_or_default();",
+    '        anyhow::bail!("OpenRouter {}: {}", status, text);',
+    "    }",
+    "    let data: Value = res.json().await?;",
+    "    let content = data",
+    '        .pointer("/choices/0/message/content")',
+    "        .and_then(|v| v.as_str())",
+    '        .ok_or_else(|| anyhow::anyhow!("OpenRouter returned no message content"))?;',
+    "    Ok(content.to_string())",
+    "}",
+  ];
+}
+
+function llmStructuredStubRust(): string[] {
+  return [
+    "async fn llm_structured(prompt: &str, schema: &Value) -> anyhow::Result<Value> {",
+    "    if runtime().open_router_api_key.is_none() {",
+    '        anyhow::bail!("configure_pipeline_runtime(open_router_api_key=...) first");',
+    "    }",
+    "    let schema_json = serde_json::to_string_pretty(schema)?;",
+    "    let base = format!(",
+    '        "{}\\n\\nRespond with ONLY a JSON value that validates against this JSON Schema:\\n{}",',
+    "        prompt, schema_json",
+    "    );",
+    "    let mut last_error = String::new();",
+    "    for attempt in 0..2 {",
+    "        let ask = if attempt == 0 {",
+    "            base.clone()",
+    "        } else {",
+    '            format!("{}\\n\\nYour previous reply failed validation:\\n{}\\nReturn corrected JSON only.", base, last_error)',
+    "        };",
+    "        let raw = open_router_chat(&ask, true).await?;",
+    "        let json_text = extract_json_reply(&raw);",
+    "        match serde_json::from_str::<Value>(&json_text) {",
+    "            Ok(v) => return Ok(v),",
+    "            Err(e) => {",
+    "                last_error = e.to_string();",
+    "                if attempt == 1 {",
+    '                    anyhow::bail!("structured response parse failed after retry: {}", last_error);',
+    "                }",
+    "            }",
+    "        }",
+    "    }",
+    '    anyhow::bail!("structured response failed")',
+    "}",
+  ];
+}
+
+export function generateRuntimeStubsRust(needs: ExportRuntimeNeeds): string {
+  const lines = [
+    generateRuntimeConfigSectionRust(needs),
+    "// --- runtime stubs (replace bodies or inject via configure_pipeline_runtime) ---",
+  ];
+
+  if (needs.llm || needs.llmBatch || needs.visionOcr) {
+    lines.push("", ...openRouterHelpersRust(), "", ...llmStructuredStubRust());
+  }
+
+  if (needs.quote) {
+    lines.push(
+      "",
+      "fn resolve_quotes(data: &impl serde::Serialize, source_text: &str, doc_id: &str) -> anyhow::Result<Value> {",
+      "    let rt = runtime();",
+      "    let text = rt.source_text.as_deref().unwrap_or(source_text);",
+      "    let did = rt.source_doc_id.as_deref().unwrap_or(doc_id);",
+      "    if text.is_empty() || did.is_empty() {",
+      '        anyhow::bail!("configure_pipeline_runtime(source_text=..., source_doc_id=...) for quote steps");',
+      "    }",
+      "    let _ = data;",
+      '    anyhow::bail!("wire resolve_quotes to your quote linker")',
+      "}",
+    );
+  }
+
+  if (needs.humanReview) {
+    lines.push(
+      "",
+      "async fn wait_for_human_review<T: serde::Serialize>(_input: &T) -> anyhow::Result<()> {",
+      '    anyhow::bail!("wire wait_for_human_review")',
+      "}",
+    );
+  }
+
+  return lines.join("\n");
+}
+
+export function generateRuntimeConfigSectionGo(needs: ExportRuntimeNeeds): string {
+  const fields: string[] = [];
+  if (needs.llm || needs.llmBatch || needs.visionOcr) {
+    fields.push(
+      "\tOpenRouterAPIKey  string",
+      "\tOpenRouterModel   string",
+      "\tOpenRouterSiteURL string",
+      "\tOpenRouterAppTitle string",
+    );
+  }
+  if (needs.quote) {
+    fields.push("\tSourceText  string", "\tSourceDocID string");
+  }
+  if (needs.humanReview) {
+    fields.push("\t// Wire WaitForHumanReview below — no callback field in this stub.");
+  }
+  if (!fields.length) fields.push("\t// extend as needed");
+  return [
+    "// === runtime config (load .env in your runner — pass values here, not in this file) ===",
+    "type PipelineRuntime struct {",
+    ...fields,
+    "\t// AI : TODO export — Supabase persistence / step cache.",
+    "}",
+    "",
+    "var (",
+    "\truntimeMu sync.Mutex",
+    "\truntimeCfg PipelineRuntime",
+    ")",
+    "",
+    "func ConfigurePipelineRuntime(config PipelineRuntime) {",
+    "\truntimeMu.Lock()",
+    "\tdefer runtimeMu.Unlock()",
+    "\truntimeCfg = config",
+    "}",
+    "",
+    "func currentRuntime() PipelineRuntime {",
+    "\truntimeMu.Lock()",
+    "\tdefer runtimeMu.Unlock()",
+    "\treturn runtimeCfg",
+    "}",
+    "",
+  ].join("\n");
+}
+
+function openRouterHelpersGo(): string[] {
+  return [
+    'const openRouterChatURL = "https://openrouter.ai/api/v1/chat/completions"',
+    'const defaultOpenRouterModel = "deepseek/deepseek-chat"',
+    "",
+    "func extractJSONReply(raw string) string {",
+    "\tbody := strings.TrimSpace(raw)",
+    '\tif i := strings.Index(body, "```"); i >= 0 {',
+    "\t\tafter := body[i+3:]",
+    '\t\tafter = strings.TrimPrefix(after, "json")',
+    "\t\tafter = strings.TrimSpace(after)",
+    '\t\tif j := strings.Index(after, "```"); j >= 0 {',
+    "\t\t\tafter = after[:j]",
+    "\t\t}",
+    "\t\tbody = strings.TrimSpace(after)",
+    "\t}",
+    '	start := strings.IndexAny(body, "{[")',
+    "\tif start < 0 {",
+    "\t\tstart = 0",
+    "\t}",
+    '	end := strings.LastIndexAny(body, "}]")',
+    "\tif end >= start {",
+    "\t\treturn body[start : end+1]",
+    "\t}",
+    "\treturn body",
+    "}",
+    "",
+    "func openRouterChat(prompt string, jsonMode bool) (string, error) {",
+    "\trt := currentRuntime()",
+    '\tif rt.OpenRouterAPIKey == "" {',
+    '\t\treturn "", fmt.Errorf("ConfigurePipelineRuntime first")',
+    "\t}",
+    "\tmodel := rt.OpenRouterModel",
+    '\tif model == "" {',
+    "\t\tmodel = defaultOpenRouterModel",
+    "\t}",
+    "\tsite := rt.OpenRouterSiteURL",
+    '\tif site == "" {',
+    '\t\tsite = "http://localhost:3000"',
+    "\t}",
+    "\ttitle := rt.OpenRouterAppTitle",
+    '\tif title == "" {',
+    '\t\ttitle = "forge-pipeline-export"',
+    "\t}",
+    "\tpayload := map[string]any{",
+    '\t\t"model": model,',
+    '\t\t"messages": []map[string]string{{"role": "user", "content": prompt}},',
+    '\t\t"temperature": 0,',
+    '\t\t"max_tokens": 8192,',
+    '\t\t"provider": map[string]any{"allow_fallbacks": false},',
+    "\t}",
+    "\tif jsonMode {",
+    '\t\tpayload["response_format"] = map[string]string{"type": "json_object"}',
+    "\t}",
+    "\tbody, err := json.Marshal(payload)",
+    "\tif err != nil {",
+    '\t\treturn "", err',
+    "\t}",
+    "\treq, err := http.NewRequest(http.MethodPost, openRouterChatURL, bytes.NewReader(body))",
+    "\tif err != nil {",
+    '\t\treturn "", err',
+    "\t}",
+    '\treq.Header.Set("Authorization", "Bearer "+rt.OpenRouterAPIKey)',
+    '\treq.Header.Set("HTTP-Referer", site)',
+    '\treq.Header.Set("X-Title", title)',
+    '\treq.Header.Set("Content-Type", "application/json")',
+    "\tres, err := http.DefaultClient.Do(req)",
+    "\tif err != nil {",
+    '\t\treturn "", err',
+    "\t}",
+    "\tdefer res.Body.Close()",
+    "\trespBody, err := io.ReadAll(res.Body)",
+    "\tif err != nil {",
+    '\t\treturn "", err',
+    "\t}",
+    "\tif res.StatusCode < 200 || res.StatusCode >= 300 {",
+    '\t\treturn "", fmt.Errorf("OpenRouter %s: %s", res.Status, string(respBody))',
+    "\t}",
+    "\tvar data map[string]any",
+    "\tif err := json.Unmarshal(respBody, &data); err != nil {",
+    '\t\treturn "", err',
+    "\t}",
+    '\tchoices, _ := data["choices"].([]any)',
+    "\tif len(choices) == 0 {",
+    '\t\treturn "", fmt.Errorf("OpenRouter returned no message content")',
+    "\t}",
+    "\tchoice, _ := choices[0].(map[string]any)",
+    '\tmsg, _ := choice["message"].(map[string]any)',
+    '\tcontent, _ := msg["content"].(string)',
+    '\tif content == "" {',
+    '\t\treturn "", fmt.Errorf("OpenRouter returned no message content")',
+    "\t}",
+    "\treturn content, nil",
+    "}",
+  ];
+}
+
+function llmStructuredStubGo(): string[] {
+  return [
+    "func llmStructured(prompt string, schema json.RawMessage) (json.RawMessage, error) {",
+    '\tif currentRuntime().OpenRouterAPIKey == "" {',
+    '\t\treturn nil, fmt.Errorf("ConfigurePipelineRuntime(OpenRouterAPIKey=...) first")',
+    "\t}",
+    "\tvar pretty any",
+    "\t_ = json.Unmarshal(schema, &pretty)",
+    '\tschemaJSON, _ := json.MarshalIndent(pretty, "", "  ")',
+    "\tif len(schemaJSON) == 0 {",
+    '\t\tschemaJSON = []byte("{}")',
+    "\t}",
+    '\tbase := prompt + "\\n\\nRespond with ONLY a JSON value that validates against this JSON Schema:\\n" + string(schemaJSON)',
+    "\tvar lastError string",
+    "\tfor attempt := 0; attempt < 2; attempt++ {",
+    "\t\task := base",
+    "\t\tif attempt > 0 {",
+    '\t\t\task = base + "\\n\\nYour previous reply failed validation:\\n" + lastError + "\\nReturn corrected JSON only."',
+    "\t\t}",
+    "\t\traw, err := openRouterChat(ask, true)",
+    "\t\tif err != nil {",
+    "\t\t\treturn nil, err",
+    "\t\t}",
+    "\t\tjsonText := extractJSONReply(raw)",
+    "\t\tif json.Valid([]byte(jsonText)) {",
+    "\t\t\treturn json.RawMessage(jsonText), nil",
+    "\t\t}",
+    '\t\tlastError = "invalid JSON"',
+    "\t\tif attempt == 1 {",
+    '\t\t\treturn nil, fmt.Errorf("structured response parse failed after retry: %s", lastError)',
+    "\t\t}",
+    "\t}",
+    '\treturn nil, fmt.Errorf("structured response failed")',
+    "}",
+  ];
+}
+
+export function generateRuntimeStubsGo(needs: ExportRuntimeNeeds): string {
+  const lines = [
+    generateRuntimeConfigSectionGo(needs),
+    "// --- runtime stubs (replace bodies or inject via ConfigurePipelineRuntime) ---",
+  ];
+
+  if (needs.llm || needs.llmBatch || needs.visionOcr) {
+    lines.push("", ...openRouterHelpersGo(), "", ...llmStructuredStubGo());
+  }
+
+  if (needs.quote) {
+    lines.push(
+      "",
+      "func resolveQuotes(data any, sourceText, docID string) (json.RawMessage, error) {",
+      "\trt := currentRuntime()",
+      "\ttext := rt.SourceText",
+      '\tif text == "" {',
+      "\t\ttext = sourceText",
+      "\t}",
+      "\tdid := rt.SourceDocID",
+      '\tif did == "" {',
+      "\t\tdid = docID",
+      "\t}",
+      '\tif text == "" || did == "" {',
+      '\t\treturn nil, fmt.Errorf("ConfigurePipelineRuntime(SourceText=..., SourceDocID=...) for quote steps")',
+      "\t}",
+      "\t_ = data",
+      '\treturn nil, fmt.Errorf("wire resolveQuotes to your quote linker")',
+      "}",
+    );
+  }
+
+  if (needs.humanReview) {
+    lines.push(
+      "",
+      "func WaitForHumanReview(_input any) error {",
+      '\treturn fmt.Errorf("wire WaitForHumanReview")',
+      "}",
     );
   }
 

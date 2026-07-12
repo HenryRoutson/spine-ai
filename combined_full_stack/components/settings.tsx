@@ -54,6 +54,7 @@ import {
 } from "@/lib/color-scheme"
 import { Switch } from "@/components/ui/switch"
 import { PrivacySettings } from "@/components/privacy-settings"
+import { TeamSettings } from "@/components/team-settings"
 import { isDemoMode } from "@/lib/demo-mode"
 import { DEMO_ACCOUNT_EMAIL } from "@/lib/demo-constants"
 
@@ -97,6 +98,7 @@ function SyntaxThemePreview({ theme }: { theme: JsonViewerSyntaxThemeId }) {
 }
 
 const SETTINGS_SECTIONS = [
+  { id: "settings-team", label: "Team" },
   { id: "settings-account", label: "Account" },
   { id: "settings-model", label: "Default model" },
   { id: "settings-json-reader", label: "JSON reader" },
@@ -218,6 +220,8 @@ export function Settings() {
         trailing={
           <div className="min-h-0 flex-1 overflow-auto p-5">
             <div className="mx-auto flex max-w-lg flex-col gap-4">
+          <TeamSettings />
+
           <section id="settings-account" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Account</h3>

@@ -1,6 +1,8 @@
 import { invariant } from "@/lib/assert";
 import { NextResponse, after, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
+import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate_limit";
+import type { RateLimitKey } from "@/lib/rate_limit_config";
 import { apiError } from "@/lib/server/api_context";
 import { HTTP, unknownJob } from "@/lib/server/api-errors";
 import { parseRequestJson, parseSharedLinkId, sharedLinkClientStepBodySchema } from "@/lib/server/api_schemas";
@@ -46,11 +48,20 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const linkId = parseSharedLinkId(id);
   if (!linkId) return apiError("link not found", 404);
 
+  // AI : SECURITY — per-link + IP cap (same tier as /run) so resume cannot bypass shared_run limits.
+  // AI : TODO security — same IP-rotation drain risk as /run when fundingMode is sharer_pays.
+  const ip = clientIpFromHeaders(req.headers);
+  const stepLimitKey = `shared-run:${linkId}:${ip}` as RateLimitKey;
+  const stepLimited = await checkRateLimit(stepLimitKey, "shared_run");
+  if (!stepLimited.ok) {
+    return apiError("Too many runs on this link — try again later.", HTTP.TOO_MANY_REQUESTS, "rate_limited");
+  }
+
   const parsed = await parseRequestJson(req, sharedLinkClientStepBodySchema);
   if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
   const body = parsed;
 
-  const entry = verifySharedProgressToken(linkId, body.jobId, body.token);
+  const entry = await verifySharedProgressToken(linkId, body.jobId, body.token);
   if (!entry) return apiError("invalid progress token", 403);
 
   const link = await getSharedLink(linkId);

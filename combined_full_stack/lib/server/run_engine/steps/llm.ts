@@ -11,6 +11,15 @@ import { materializeHints, modelById, sourceDocumentBlock } from "../helpers";
 import { requireLinearInput } from "../context";
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types";
 
+function llmCallBudget(ctx: RunCtx, stepLabel: string) {
+  if (ctx.stepCostLimitCents == null || ctx.stepBaseCents == null) return {};
+  return {
+    costLimitCents: ctx.stepCostLimitCents,
+    stepBaseCents: ctx.stepBaseCents,
+    stepLabel,
+  };
+}
+
 export async function execLlmStep(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   const { project } = ctx;
   const out = modelById(project.models, m.outStructureId);
@@ -28,7 +37,12 @@ export async function execLlmStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
   log.debug(`llm prompt built`, { promptChars: prompt.length, hasQuoteField: hasQuoteField(out, project.models) });
   ctx.reportSub?.({ label: "LLM call", current: 0, total: 1 });
   ctx.stepLlmCalls = [];
-  const raw = await llmStructured(userPrompt, schema, { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls }, log.child("llm"));
+  const raw = await llmStructured(
+    userPrompt,
+    schema,
+    { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls, ...llmCallBudget(ctx, m.label) },
+    log.child("llm"),
+  );
   log.info(`llm response received`, { moduleId: m.id, items: Array.isArray(raw) ? raw.length : 1 });
   if (out.dynamic) logDynamicStructureCreated(log, out, raw, project.models);
   const value = raw;

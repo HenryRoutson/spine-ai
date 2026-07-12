@@ -70,6 +70,9 @@ export interface RunCtx {
   reportSub?: (sub: StepSubProgress) => void;
   stepLlmCalls?: LlmCallRecord[];
   stepExtraFailures?: RunFailureRecord[];
+  // AI : per-llm-step spend cap — set in linear runner before description check / exec.
+  stepCostLimitCents?: number;
+  stepBaseCents?: number;
 }
 
 export type StepInputForCheck = {

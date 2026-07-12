@@ -48,7 +48,7 @@ export async function billSharedLinkRun(
     };
   }
 
-  await billRunUsage(billingKey, charge.totalCents);
+  await billRunUsage(billingKey, charge.totalCents, { flowType: "usage_shared_link" });
   if (charge.earningsCents > 0) {
     await creditCreatorEarnings(ownerId, charge.earningsCents);
   }

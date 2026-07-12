@@ -335,7 +335,7 @@
   "docs": [
     {
       "name": "gps_site_locations.json",
-      "type": "json",
+      "type": "text",
       "label": "inference",
       "file": "gps_site_profiling/gps_site_locations.json"
     },

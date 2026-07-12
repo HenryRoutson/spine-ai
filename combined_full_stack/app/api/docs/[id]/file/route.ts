@@ -24,13 +24,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   }
   const file = await resolveOriginalDocFile(store, id as DocId);
   if (!file) return apiError(`no original file for ${id}`, 404);
+  // AI : SECURITY — attachment avoids inline PDF/JS execution in the browser; viewer can still fetch bytes.
+  const disposition = file.mime === "application/pdf" ? "attachment" : "inline";
   return new NextResponse(new Uint8Array(readFileSync(file.path)), {
     headers: {
       "Content-Type": file.mime,
-      "Content-Disposition": "inline",
-      // AI : SECURITY — stop the browser guessing a script/html type from bytes when serving uploads.
+      "Content-Disposition": disposition,
       "X-Content-Type-Options": "nosniff",
-      // AI : TODO security — serve PDFs as attachment or sandboxed viewer to limit embedded JS in uploads.
     },
   });
 }
@@ -46,10 +46,11 @@ export async function HEAD(_req: Request, ctx: { params: Promise<{ id: string }>
   }
   const file = await resolveOriginalDocFile(store, id as DocId);
   if (!file) return apiError(`no original file for ${id}`, 404);
+  const disposition = file.mime === "application/pdf" ? "attachment" : "inline";
   return new NextResponse(null, {
     headers: {
       "Content-Type": file.mime,
-      "Content-Disposition": "inline",
+      "Content-Disposition": disposition,
       "X-Content-Type-Options": "nosniff",
     },
   });

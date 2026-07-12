@@ -2,7 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { abtestBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
-import { assertCanStartRun, billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
+import { assertCanStartRun, billRunUsage } from "@/lib/server/billing_account";
+import { billingKeyForProject } from "@/lib/server/team_billing";
+import { teamProjectWriteError } from "@/lib/server/teams";
 import { mergeBenchmarkStrategies, runBenchmark } from "@/lib/server/strategies";
 import { ensureModelOptionsFresh } from "@/lib/server/openrouter_models";
 import { logger } from "@/lib/server/server_logger";
@@ -20,7 +22,7 @@ export const maxDuration = 300;
 export async function POST(req: NextRequest) {
   const ctx = await requireAuthStore("llm");
   if (ctx instanceof NextResponse) return ctx;
-  const { store } = ctx;
+  const { store, auth } = ctx;
 
   const parsed = await parseRequestJson(req, abtestBodySchema);
   if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
@@ -32,11 +34,14 @@ export async function POST(req: NextRequest) {
     return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
   }
 
+  const writeErr = teamProjectWriteError(project);
+  if (writeErr) return apiError(writeErr, HTTP.FORBIDDEN);
+
   // AI : default task input = the oldest inference doc (the seeded source document).
   const docId = inputDocId ?? [...store.docs()].reverse().find((d) => d.label === DocLabel.Inference)?.id;
   if (!docId) return apiError("no inference document in the store", 400);
 
-  const billingKey = await getBillingUserKey();
+  const billingKey = await billingKeyForProject(ctx.auth.userId, project);
   try {
     await assertCanStartRun(billingKey);
   } catch (err) {

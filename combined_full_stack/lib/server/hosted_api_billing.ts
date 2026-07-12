@@ -56,7 +56,7 @@ export async function billHostedApiRun(
     };
   }
 
-  await billRunUsage(billingKey, charge.totalCents);
+  await billRunUsage(billingKey, charge.totalCents, { flowType: "usage_hosted_api" });
   if (charge.earningsCents > 0) {
     await creditCreatorEarnings(ownerId, charge.earningsCents);
   }

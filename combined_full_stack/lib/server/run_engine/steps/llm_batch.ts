@@ -5,6 +5,15 @@ import { modelById } from "../helpers";
 import { requireLinearInput } from "../context";
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types";
 
+function llmCallBudget(ctx: RunCtx, stepLabel: string) {
+  if (ctx.stepCostLimitCents == null || ctx.stepBaseCents == null) return {};
+  return {
+    costLimitCents: ctx.stepCostLimitCents,
+    stepBaseCents: ctx.stepBaseCents,
+    stepLabel,
+  };
+}
+
 export async function execLlmBatchStep(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   const { project } = ctx;
   const out = modelById(project.models, m.outStructureId);
@@ -27,7 +36,7 @@ export async function execLlmBatchStep(m: PipelineModule, ctx: RunCtx, log: RunL
     items,
     (item: unknown) => `${m.prompt ?? "Process the item."}\n\nITEM:\n${JSON.stringify(item, null, 2)}`,
     schema,
-    { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls },
+    { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls, ...llmCallBudget(ctx, m.label) },
     log.child("llm-batch"),
     (current: number, total: number) => ctx.reportSub?.({ label: "LLM calls", current, total }),
   );

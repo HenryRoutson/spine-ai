@@ -29,7 +29,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   if (!parsed.success) return apiError(formatZodError(parsed.error), HTTP.BAD_REQUEST);
   const { jobId, token } = parsed.data;
 
-  const entry = verifySharedProgressToken(linkId, jobId, token);
+  const entry = await verifySharedProgressToken(linkId, jobId, token);
   if (!entry) return apiError("invalid progress token", 403);
 
   const jobDb = await openCrossUserJobDb();

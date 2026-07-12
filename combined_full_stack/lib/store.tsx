@@ -54,6 +54,7 @@ import {
 import { mostRecentlyOpenedProject } from "@/lib/project-active"
 import { dedupeDocsNewestByName } from "@/lib/project-docs"
 import { readStateSnapshot, writeStateSnapshot } from "@/lib/state-snapshot-cache"
+import { readEarningsSnapshot, writeEarningsSnapshot } from "@/lib/earnings-snapshot-cache"
 import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
 import { setDemoMode } from "@/lib/demo-mode"
 
@@ -306,6 +307,7 @@ export function StoreProvider({
   const pendingSaveRef = useRef<{ id: string; body: string } | null>(null)
   const hydratedRef = useRef(false)
   const prefetchCache = useRef(new Map<string, PrefetchEntry>())
+  const earningsFetchRef = useRef<Promise<void> | null>(null)
   // AI : ignore in-flight /api/state responses that started before a delete switched projects.
   const stateLoadGenRef = useRef(0)
   // AI : filter stale refetches that still list projects the user already deleted this session.
@@ -315,13 +317,15 @@ export function StoreProvider({
 
   const persistProject = useCallback(async (id: string, body: string) => {
     if (mode === "demo") return
+    const readOnly = state?.projects.find((p) => p.id === id)?.teamReadOnly
+    if (readOnly) return
     const result = await apiPut(API_ROUTES.project(id), body)
     if (!result.ok) {
       setSaveError(result.error)
       return
     }
     setSaveError(null)
-  }, [mode])
+  }, [mode, state?.projects])
 
   const refreshBilling = useCallback(async () => {
     if (mode === "demo") {
@@ -336,24 +340,40 @@ export function StoreProvider({
   }, [mode])
 
   const refreshEarnings = useCallback(async () => {
-    if (mode === "demo") {
-      setEarningsAccount(DEMO_EARNINGS)
-      return
+    if (earningsFetchRef.current) return earningsFetchRef.current
+    const run = (async () => {
+      if (mode === "demo") {
+        setEarningsAccount(DEMO_EARNINGS)
+        writeEarningsSnapshot(DEMO_EARNINGS)
+        return
+      }
+      const data = await apiJson<EarningsAccountView>(API_ROUTES.earnings)
+      const next = {
+        balanceCents: data.balanceCents ?? 0,
+        totalEarnedCents: data.totalEarnedCents ?? 0,
+        totalWithdrawnCents: data.totalWithdrawnCents ?? 0,
+      }
+      setEarningsAccount(next)
+      writeEarningsSnapshot(next)
+    })()
+    earningsFetchRef.current = run
+    try {
+      await run
+    } finally {
+      earningsFetchRef.current = null
     }
-    const data = await apiJson<EarningsAccountView>(API_ROUTES.earnings)
-    setEarningsAccount({
-      balanceCents: data.balanceCents ?? 0,
-      totalEarnedCents: data.totalEarnedCents ?? 0,
-      totalWithdrawnCents: data.totalWithdrawnCents ?? 0,
-    })
   }, [mode])
 
   const fetchState = useCallback(async (projectId: string) => {
     const params = new URLSearchParams()
     if (projectId) params.set("projectId", projectId)
     if (mode === "demo" && typeof window !== "undefined") {
-      const buildId = new URLSearchParams(window.location.search).get("buildId")
+      const qs = new URLSearchParams(window.location.search)
+      const buildId = qs.get("buildId")
       if (buildId) params.set("buildId", buildId)
+      // AI : SECURITY — forward signed landing-build access token to /api/demo/state.
+      const accessToken = qs.get("accessToken")
+      if (accessToken) params.set("accessToken", accessToken)
     }
     const q = params.toString() ? `?${params}` : ""
     const route = mode === "demo" ? API_ROUTES.demoState : API_ROUTES.state
@@ -448,7 +468,9 @@ export function StoreProvider({
         const current = prev.projects.find((p) => p.id === id)
         if (!current) return prev
         const next = { ...current, lastOpenedAt: Date.now() }
-        void persistProject(id, serializeProjectPutBody(next))
+        if (!current.teamReadOnly) {
+          void persistProject(id, serializeProjectPutBody(next))
+        }
         return { ...prev, projects: prev.projects.map((p) => (p.id === id ? next : p)) }
       })
     },
@@ -477,6 +499,8 @@ export function StoreProvider({
     if (mode === "demo") return
     const snapshot = readStateSnapshot()
     if (snapshot) setState(snapshot)
+    const earnings = readEarningsSnapshot()
+    if (earnings) setEarningsAccount(earnings)
   }, [mode])
 
   useLayoutEffect(() => {
@@ -503,6 +527,8 @@ export function StoreProvider({
     if (mode === "workspace" && hydratedRef.current && scopedProjectId && !instant) setProjectLoading(true)
     setStateSyncing(true)
 
+    // AI : warm earnings in parallel with /api/state — tab open should not wait on project hydrate.
+    refreshEarnings().catch(console.error)
     loadProjectState(scopedProjectId)
       .then((data) => {
         if (!alive || loadGen !== stateLoadGenRef.current) return
@@ -573,6 +599,8 @@ export function StoreProvider({
       setState((prev) => {
         if (!prev) return prev
         const id = activeProjectId || prev.projects[0]?.id
+        const current = prev.projects.find((p) => p.id === id)
+        if (current?.teamReadOnly) return prev
         let next: Project | undefined
         const nextProjects = prev.projects.map((p) => (p.id === id ? (next = { ...p, ...patch }) : p))
         if (next) {
@@ -607,10 +635,30 @@ export function StoreProvider({
       body: JSON.stringify(body),
     })
       .then(async (fresh) => {
+        const stamped = { ...fresh, lastOpenedAt: Date.now() }
         if (mode === "picker") {
+          // AI : seed session snapshot before full reload — otherwise workspace hydrates without
+          // AI : the new row, clears activeProjectId, and lands on the consumer shell.
+          const snapshot = readStateSnapshot()
+          writeStateSnapshot({
+            projects: snapshot?.projects.some((p) => p.id === fresh.id)
+              ? (snapshot?.projects ?? [stamped])
+              : [stamped, ...(snapshot?.projects ?? [])],
+            docs: snapshot?.docs ?? [],
+            runs: snapshot?.runs ?? [],
+            allRuns: snapshot?.allRuns ?? [],
+            modelOptions: snapshot?.modelOptions ?? [],
+          })
           openProject(fresh.id as ProjectId)
           return fresh
         }
+        // AI : insert before select so activeProjectId never points at a missing row (consumer-shell flash).
+        setState((prev) => {
+          if (!prev) return prev
+          if (prev.projects.some((p) => p.id === fresh.id)) return prev
+          return { ...prev, projects: [stamped, ...prev.projects] }
+        })
+        setProjectLoading(true)
         selectActiveProject(fresh.id)
         // AI : clone may ingest/rename bundled seed docs server-side — reload docs + backfilled seedDocNames.
         await refresh(fresh.id)
@@ -769,6 +817,7 @@ export function StoreProvider({
     return doc
   }, [activeProjectId, persistProject])
 
+  // AI : TODO — team members on shared projects bill the team owner; gate uploads when teamReadOnly.
   const addDocContent = useCallback(
     async (
       name: string,
@@ -1243,6 +1292,18 @@ export function StoreProvider({
       <>
         {saveErrorBanner}
         <ProjectPickerContext.Provider value={pickerValue}>{children}</ProjectPickerContext.Provider>
+      </>
+    )
+  }
+
+  // AI : opening a project not yet in state — keep loading, don't flash the consumer shell.
+  if (mode === "workspace" && state && !project && (activeProjectId || projectLoading)) {
+    return (
+      <>
+        {saveErrorBanner}
+        <div className="flex h-dvh items-center justify-center bg-background">
+          <p className="font-mono text-xs text-muted-foreground">loading store…</p>
+        </div>
       </>
     )
   }

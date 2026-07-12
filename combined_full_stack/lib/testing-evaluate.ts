@@ -19,7 +19,7 @@ import type { ModelId, PipelineRun, Project } from "@/lib/types"
 export async function evaluateTestReport(
   run: PipelineRun,
   test: SpineTestFile,
-  project: Pick<Project, "modules" | "models">,
+  project: Pick<Project, "id" | "modules" | "models">,
   model: ModelId,
 ): Promise<TestStepResult[]> {
   let report = compareRunToTest(run, test, project)
@@ -37,6 +37,7 @@ export async function evaluateTestReport(
       steps: probabilisticPayloads.length ? probabilisticPayloads : undefined,
       diffSteps: diffPayloads.length ? diffPayloads : undefined,
       model,
+      projectId: project.id,
     }),
   })
   report = mergeProbabilisticEvaluations(report, probabilisticResults ?? [])

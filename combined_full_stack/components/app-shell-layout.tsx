@@ -44,6 +44,7 @@ import { useSyncProjectDocStructures } from "@/lib/use-sync-project-doc-structur
 import { LazyDocViewer } from "@/components/lazy-doc-viewer"
 import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
 import { PanelLoading } from "@/components/panel-loading"
+import { Earnings } from "@/components/earnings"
 import { FeedbackButton } from "@/components/feedback-button"
 import { ProjectAssistantDock } from "@/components/project-assistant-dock"
 import {
@@ -64,6 +65,9 @@ import { SpineLogoBox, SpineNavIcon } from "@/components/spine-mark"
 import { clearActiveProjectSession } from "@/lib/active-project-session"
 import { LEGAL } from "@shared/legal/site"
 import { isPreviewOnly } from "@/lib/demo-mode"
+import { ActivityTracker } from "@/components/activity-tracker"
+import { SessionReplayRecorder } from "@/components/session-replay-recorder"
+import { SESSION_REPLAY_ENABLED } from "@/lib/session-replay-enabled"
 import type { Project } from "@/lib/types"
 
 // AI : marketing site lives on a separate deploy from the app
@@ -96,9 +100,6 @@ const Cache = dynamic(() => import("@/components/cache").then((m) => ({ default:
 const Documents = dynamic(() => import("@/components/documents").then((m) => ({ default: m.Documents })), {
   loading: () => <PanelLoading label="loading documents…" />,
 })
-const Earnings = dynamic(() => import("@/components/earnings").then((m) => ({ default: m.Earnings })), {
-  loading: () => <PanelLoading label="loading earnings…" />,
-})
 const Billing = dynamic(() => import("@/components/billing").then((m) => ({ default: m.Billing })), {
   loading: () => <PanelLoading label="loading billing…" />,
 })
@@ -115,7 +116,7 @@ type WindowId = AppWindowId
 type NavIcon = React.ComponentType<{ className?: string }>
 
 const WINDOWS: { id: WindowId; label: string; hint: string; icon: NavIcon }[] = [
-  { id: "structure", label: "Structure", hint: "01", icon: Boxes },
+  { id: "structure", label: "Structures", hint: "01", icon: Boxes },
   { id: "pipeline", label: "Pipeline", hint: "02", icon: SpineNavIcon },
   // AI : Testing sits before Inference — tests run before demoing (spec § Testing).
   { id: "testing", label: "Testing", hint: "03", icon: SquareCheck },
@@ -471,8 +472,8 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
   const { modules, models, project, projectLoading, typeAliases } = useStore()
   useSyncProjectDocStructures()
   const validity = useMemo(
-    () => computeWorkspaceValidity(modules, models, typeAliases),
-    [modules, models, typeAliases],
+    () => computeWorkspaceValidity(modules, models, typeAliases, !!project?.teamReadOnly),
+    [modules, models, typeAliases, project?.teamReadOnly],
   )
 
   useEffect(() => {
@@ -602,6 +603,12 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
       <SharedRunDocScopeProvider scope={sharedRunDocScopeForViewer}>
         <LazyDocViewer />
       </SharedRunDocScopeProvider>
+      {!previewOnly ? (
+        <>
+          <ActivityTracker />
+          {SESSION_REPLAY_ENABLED ? <SessionReplayRecorder /> : null}
+        </>
+      ) : null}
     </div>
   )
 }

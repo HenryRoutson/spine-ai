@@ -7,6 +7,7 @@ import { z } from "zod";
 import { DOCUMENTS_DIR, REPO_ROOT } from "./config";
 import { isUnavailableSeedDoc, unavailableSeedDocMessage } from "../seed-doc";
 import { TypeExprSchema } from "./spine_types";
+import { normalizeStructureModels } from "./type_expr";
 import {
   DocLabel,
   FIELD_TYPES,
@@ -16,6 +17,7 @@ import {
   InputType,
   ModuleKind,
   type InferencePreset,
+  type ModelField,
   type ModuleId,
   type PipelineModule,
   type Project,
@@ -37,6 +39,8 @@ const InputTypeSchema = enumOf(INPUT_TYPES.map((t) => t.value) as InputType[]);
 const ModuleKindSchema = enumOf(Object.keys(MODULE_META) as ModuleKind[]);
 const StrategyKindSchema = enumOf(Object.keys(STRATEGY_META) as StrategyKind[]);
 
+const fieldExampleListSchema = z.array(z.string().max(4_000)).max(32).optional();
+
 const SeedFileSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -55,7 +59,9 @@ const SeedFileSchema = z.object({
           type: FieldTypeSchema,
           optional: z.boolean(),
           description: z.string(),
-          example: z.string().optional(),
+          example: z.string().optional(), // AI : legacy — prefer examples[]
+          examples: fieldExampleListSchema,
+          negativeExamples: fieldExampleListSchema,
           ref: z.string().optional(),
           minItems: z.number().int().min(1).optional(),
           typeExpr: TypeExprSchema.optional(),
@@ -83,6 +89,7 @@ const SeedFileSchema = z.object({
       prompt: z.string().optional(),
       code: z.string().optional(),
       model: z.string().optional(),
+      costLimitCents: z.number().min(0).optional(),
       cached: z.boolean(),
       outIsList: z.boolean().optional(),
       auto: z.boolean().optional(),
@@ -238,7 +245,7 @@ export function loadProjectSeed(path: string): ProjectSeed {
       id: raw.id as ProjectId,
       name: raw.name,
       kind: raw.kind,
-      models: raw.models as StructureModel[],
+      models: normalizeStructureModels(raw.models as StructureModel[]),
       modules: raw.modules.map((m) => ({
         ...m,
         note: resolveModuleNote(m.kind, m.note, {

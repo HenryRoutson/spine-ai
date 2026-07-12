@@ -36,9 +36,7 @@ function effectiveBackend(): EffectiveBackend {
   if (resolveRateLimitBackend() === "memory") return "memory";
   if (!upstashConfigured()) {
     warnMissingUpstash();
-    // AI : Vercel serverless — in-memory limits are per-instance and trivially bypassed.
-    // AI : TODO security — missing Upstash currently 503s all tiers; consider fail-open on read tiers
-    // AI : with strict caps, or alert-only, so a misconfigured deploy does not brick the whole app.
+    // AI : SECURITY — Vercel without Upstash fails closed (503) rather than per-instance memory limits.
     if (process.env.VERCEL) return "blocked";
     return "memory";
   }
@@ -88,16 +86,4 @@ export async function checkRateLimit(key: RateLimitKey, tier: RateLimitTier): Pr
   return upstashCheck(key, tier);
 }
 
-export function clientIpFromHeaders(headers: Headers): string {
-  // AI : Vercel sets this — do not trust client-supplied X-Forwarded-For on production.
-  if (process.env.VERCEL) {
-    const vercelIp = headers.get("x-vercel-forwarded-for")?.trim();
-    if (vercelIp) return vercelIp;
-  }
-  const forwarded = headers.get("x-forwarded-for");
-  if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  return headers.get("x-real-ip")?.trim() || "unknown";
-}
+export { clientIpFromHeaders } from "@shared/rate-limit/client-ip";

@@ -4,10 +4,11 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { Redis } from "@upstash/redis";
 import { PUBLIC_RUN_SPEND_RESERVE_CENTS } from "@/lib/billing_config";
 import { uid } from "@/lib/id";
+import { upstashConfigured } from "@/lib/rate_limit_config";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
-import { createClient } from "@/utils/supabase/server";
 import { dataDir } from "./config";
 import { createAdminClient } from "./supabase_admin";
 import { hashContent, type Store } from "./store";
@@ -88,12 +89,9 @@ function isServerless(): boolean {
   return !!process.env.VERCEL;
 }
 
-// AI : service role bypasses RLS for cross-user runs; session/anon client covers owner + public read policies.
+// AI : SECURITY — deploy mutations require service role after RLS hardening; no user-session fallback.
 async function supabaseForSharedLinks(): Promise<SupabaseClient | null> {
-  const admin = await createAdminClient();
-  if (admin) return admin;
-  if (!getSupabasePublicEnv()) return null;
-  return createClient();
+  return createAdminClient();
 }
 
 type StoredSharedLink = SharedLinkRecord & {
@@ -125,10 +123,14 @@ function defaultDocsDir(linkId: SharedLinkId): string {
   return join(linkDocsDir(linkId), "defaults");
 }
 
-// AI : TODO security — progress tokens live in local progress_tokens.json; on serverless they are not
-// AI : shared across instances/regions. Move to Redis/Supabase with TTL before multi-region deploy.
+const PROGRESS_TOKEN_TTL_SEC = 86_400;
+
 function progressTokensFile(): string {
   return join(linksDir(), "progress_tokens.json");
+}
+
+function progressTokenRedisKey(linkId: SharedLinkId, jobId: string): string {
+  return `shared_progress:${linkId}:${jobId}`;
 }
 
 function readProgressTokens(): ProgressTokenEntry[] {
@@ -142,23 +144,40 @@ function writeProgressTokens(entries: ProgressTokenEntry[]): void {
   writeFileSync(progressTokensFile(), JSON.stringify(entries, null, 2));
 }
 
-export function registerSharedProgressToken(
+// AI : SECURITY — prefer Upstash so tokens work across serverless instances; local JSON for local-dev only.
+export async function registerSharedProgressToken(
   linkId: SharedLinkId,
   ownerId: user_id_string,
   jobId: string,
-): string {
+): Promise<string> {
   const token = randomBytes(24).toString("hex");
-  const entries = readProgressTokens().filter((e) => Date.now() - e.createdAt < 86_400_000);
-  entries.push({ linkId, ownerId, jobId, token, createdAt: Date.now() });
+  const entry: ProgressTokenEntry = { linkId, ownerId, jobId, token, createdAt: Date.now() };
+  if (upstashConfigured()) {
+    const redis = Redis.fromEnv();
+    await redis.set(progressTokenRedisKey(linkId, jobId), entry, { ex: PROGRESS_TOKEN_TTL_SEC });
+    return token;
+  }
+  if (process.env.VERCEL) {
+    throw new Error("Progress tokens require UPSTASH_REDIS_REST_URL/TOKEN on Vercel");
+  }
+  const entries = readProgressTokens().filter((e) => Date.now() - e.createdAt < PROGRESS_TOKEN_TTL_SEC * 1000);
+  entries.push(entry);
   writeProgressTokens(entries);
   return token;
 }
 
-export function verifySharedProgressToken(
+export async function verifySharedProgressToken(
   linkId: SharedLinkId,
   jobId: string,
   token: string,
-): ProgressTokenEntry | null {
+): Promise<ProgressTokenEntry | null> {
+  if (upstashConfigured()) {
+    const redis = Redis.fromEnv();
+    const entry = await redis.get<ProgressTokenEntry>(progressTokenRedisKey(linkId, jobId));
+    if (!entry || entry.token !== token || entry.linkId !== linkId || entry.jobId !== jobId) return null;
+    return entry;
+  }
+  if (process.env.VERCEL) return null;
   return (
     readProgressTokens().find((e) => e.linkId === linkId && e.jobId === jobId && e.token === token) ??
     null
@@ -393,11 +412,9 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
 
   if (!isServerless()) saveLocalLink(row);
   const db = await supabaseForSharedLinks();
-  // AI : TODO security — deploy table writes need service role after RLS hardening; drop user-session
-  // AI : upsert fallback and require SUPABASE_SERVICE_ROLE_KEY for publish/update/revoke mutations.
   if (!db) {
-    if (isServerless()) {
-      throw new Error("Supabase env required to publish shared links in production");
+    if (isServerless() || getSupabasePublicEnv()) {
+      throw new Error("SUPABASE_SERVICE_ROLE_KEY required to publish shared links");
     }
     saveLocalLink(row);
     return toPublicRecord(row);

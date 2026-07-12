@@ -29,6 +29,9 @@ export type LandingDemoCallRow = {
   promptText: string;
   promptPreview: string;
   outputPreview: string | null;
+  // AI : full denormalized diagnostic — reconstruct failing runs from DB alone.
+  diagnosticText: string | null;
+  diagnosticJson: Record<string, unknown> | null;
   tag: landing_demo_tag;
   buildId: ProjectId | null;
   projectName: string | null;
@@ -73,6 +76,8 @@ function normalizeLocalCall(raw: Partial<LandingDemoCallRow> & Pick<LandingDemoC
     promptText,
     promptPreview: raw.promptPreview ?? previewText(promptText),
     outputPreview: raw.outputPreview ?? null,
+    diagnosticText: raw.diagnosticText ?? null,
+    diagnosticJson: raw.diagnosticJson ?? null,
     tag: raw.tag ?? "build-pipeline",
     buildId: raw.buildId ?? null,
     projectName: raw.projectName ?? null,
@@ -188,6 +193,8 @@ export async function assertLandingBudget(): Promise<void> {
 async function recordCall(params: {
   prompt: string;
   outputPreview?: string;
+  diagnosticText?: string;
+  diagnosticJson?: Record<string, unknown>;
   tag: landing_demo_tag;
   buildId?: ProjectId;
   projectName?: string;
@@ -205,6 +212,8 @@ async function recordCall(params: {
     promptText,
     promptPreview: previewText(promptText),
     outputPreview: params.outputPreview ?? null,
+    diagnosticText: params.diagnosticText ?? null,
+    diagnosticJson: params.diagnosticJson ?? null,
     tag: params.tag,
     buildId: params.buildId ?? null,
     projectName: params.projectName ?? null,
@@ -223,6 +232,8 @@ async function recordCall(params: {
       prompt_text: row.promptText,
       prompt_preview: row.promptPreview,
       output_preview: row.outputPreview,
+      diagnostic_text: row.diagnosticText,
+      diagnostic_json: row.diagnosticJson,
       tag: row.tag,
       build_id: row.buildId,
       project_name: row.projectName,
@@ -261,6 +272,8 @@ async function recordCall(params: {
 export async function recordLandingUsage(params: {
   prompt: string;
   outputPreview: string;
+  diagnosticText?: string;
+  diagnosticJson?: Record<string, unknown>;
   tag: landing_demo_tag;
   buildId?: ProjectId;
   projectName?: string;
@@ -275,6 +288,8 @@ export async function recordLandingUsage(params: {
   return recordCall({
     prompt: params.prompt,
     outputPreview: params.outputPreview,
+    diagnosticText: params.diagnosticText,
+    diagnosticJson: params.diagnosticJson,
     tag: params.tag,
     buildId: params.buildId,
     projectName: params.projectName,
@@ -374,7 +389,7 @@ export async function fetchLandingUsageProfile(opts?: {
     const { data, error } = await admin
       .from("landing_page_calls")
       .select(
-        "id, prompt_text, prompt_preview, output_preview, tag, build_id, project_name, model, prompt_tokens, completion_tokens, cost_cents, latency_ms, created_at",
+        "id, prompt_text, prompt_preview, output_preview, diagnostic_text, diagnostic_json, tag, build_id, project_name, model, prompt_tokens, completion_tokens, cost_cents, latency_ms, created_at",
       )
       .gte("created_at", since)
       .order("created_at", { ascending: false })
@@ -385,6 +400,8 @@ export async function fetchLandingUsageProfile(opts?: {
         promptText: row.prompt_text ?? row.prompt_preview,
         promptPreview: row.prompt_preview,
         outputPreview: row.output_preview,
+        diagnosticText: row.diagnostic_text ?? null,
+        diagnosticJson: (row.diagnostic_json as Record<string, unknown> | null) ?? null,
         tag: (row.tag ?? "build-pipeline") as landing_demo_tag,
         buildId: (row.build_id as ProjectId | null) ?? null,
         projectName: row.project_name ?? null,
@@ -428,6 +445,8 @@ export async function backfillLocalLandingUsageToSupabase(): Promise<{
       prompt_text: call.promptText,
       prompt_preview: call.promptPreview,
       output_preview: call.outputPreview,
+      diagnostic_text: call.diagnosticText,
+      diagnostic_json: call.diagnosticJson,
       tag: call.tag,
       build_id: call.buildId,
       project_name: call.projectName,

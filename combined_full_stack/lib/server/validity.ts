@@ -300,7 +300,7 @@ function computeCodeCompileInvalid(modules: PipelineModule[]): InvalidMap {
       const err = tryCompileCustomCodeEntry(entry, { assert: m.kind === "assert" });
       if (err) pushInvalid(invalid, { moduleId: m.id, kind: "code-compile-error", compileError: err });
     }
-    // AI : TODO — run struct example payloads through code at compile time (not just syntax check).
+    // AI : struct field examples validated via computeStructureIssues (invalid-field-example).
   }
   return invalid;
 }

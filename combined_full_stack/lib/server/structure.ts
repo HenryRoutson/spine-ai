@@ -197,6 +197,7 @@ function coerceFieldValue(
   purpose: string,
   filename: string,
   docId: string,
+  allowDocumentHints: boolean,
 ): unknown {
   const expr = fieldToTypeExpr(field);
   if (val !== undefined && val !== null) {
@@ -221,6 +222,7 @@ function coerceFieldValue(
         purpose,
         filename,
         docId,
+        allowDocumentHints,
       );
     }
     if (field.type === "model" && field.ref) {
@@ -240,38 +242,17 @@ function coerceFieldValue(
     }
     return val;
   }
-  switch (field.type) {
-    case "text":
-      return defaultTextForField(field, hints, content, purpose, filename);
-    case "int":
-      return 0;
-    case "float":
-      return 0;
-    case "bool":
-      return false;
-    case "datetime":
-      return "";
-    case "document":
-      return documentValueFrom(undefined, hints, content);
-    case "list[document]":
-      return [];
-    case "json":
-      return "[]";
-    case "list[text]":
-      return [];
-    case "tuple[text,quote]":
-      return "";
-    case "list[tuple[text,quote]]":
-      return [];
-    case "model":
-      if (!field.ref) return {};
-      const ref = models.find((m) => m.id === field.ref);
-      return ref ? materializeToModel({}, ref, models, hints) : {};
-    case "list[model]":
-      return [];
-    default:
-      return null;
+  // AI : optional / Optional[T] missing → undefined; required missing must not invent 0/""/false.
+  if (field.optional || expr.kind === "optional") return undefined;
+  // AI : only builtin Document may fill content/filename/purpose from upload hints.
+  if (allowDocumentHints && field.type === "text") {
+    const filled = defaultTextForField(field, hints, content, purpose, filename);
+    if (filled !== "") return filled;
   }
+  if (allowDocumentHints && field.type === "document") {
+    return documentValueFrom(undefined, hints, content);
+  }
+  throw new Error(`missing required field "${field.name}"`);
 }
 
 /** @deprecated use isBuiltinDocumentModel from builtin_models */
@@ -319,8 +300,8 @@ export function materializeInputDocument(
   return documentValueFrom(undefined, { docId, docName: hints.docName }, content);
 }
 
-// AI : map loose runtime values (file text, doc_id) into every field of a pydantic/zod StructureModel.
-// AI : TODO bug — missing/wrong fields get silent defaults at run time; should fail in Structure tab / computeInvalid.
+// AI : map loose runtime values (file text, doc_id) into every field of a StructureModel.
+// AI : missing required fields throw — no silent 0/""/false defaults.
 export function materializeToModel(
   partial: unknown,
   model: StructureModel,
@@ -342,10 +323,21 @@ export function materializeToModel(
         "Document";
   const filename = documentFilenameFrom(raw, hints, hints.docName ?? hints.docId ?? "document");
   const docId = typeof raw.doc_id === "string" ? raw.doc_id : hints.docId ?? "";
+  const allowDocumentHints = isBuiltinDocumentModel(model);
 
   const out: Record<string, unknown> = {};
   for (const f of model.fields) {
-    out[f.name] = coerceFieldValue(raw[f.name], f, models, hints, content, purpose, filename, docId);
+    out[f.name] = coerceFieldValue(
+      raw[f.name],
+      f,
+      models,
+      hints,
+      content,
+      purpose,
+      filename,
+      docId,
+      allowDocumentHints,
+    );
   }
   return out;
 }

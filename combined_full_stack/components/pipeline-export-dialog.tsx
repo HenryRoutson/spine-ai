@@ -16,6 +16,9 @@ import { cn } from "@/lib/utils"
 type ExportTabId =
   | "typescript"
   | "python"
+  | "rust"
+  | "go"
+  | "baml"
   | "proto"
   | "ui"
   | "connector-ts"
@@ -46,6 +49,9 @@ function projectSlug(name: string): string {
 const TAB_ORDER: ExportTabId[] = [
   "typescript",
   "python",
+  "rust",
+  "go",
+  "baml",
   "proto",
   "ui",
   "connector-ts",
@@ -108,6 +114,9 @@ export function PipelineExportDialog({
       try {
         const { generatePipelineSourceTs } = await import("@/lib/server/pipeline_ts_export")
         const { generatePipelineSourcePy } = await import("@/lib/server/pipeline_py_export")
+        const { generatePipelineSourceRust } = await import("@/lib/server/pipeline_rs_export")
+        const { generatePipelineSourceGo } = await import("@/lib/server/pipeline_go_export")
+        const { generatePipelineSourceBaml } = await import("@/lib/server/pipeline_baml_export")
         const { generatePipelineSetupFiles, assertNoSecretValuesInExport } = await import(
           "@/lib/server/pipeline_export_setup"
         )
@@ -132,6 +141,30 @@ export function PipelineExportDialog({
             content: generatePipelineSourcePy(exportProject),
             mime: "text/x-python",
             language: "python",
+          },
+          {
+            id: "rust",
+            label: "Rust",
+            filename: `${slug}_pipeline.rs`,
+            content: generatePipelineSourceRust(exportProject),
+            mime: "text/x-rust",
+            language: "rust",
+          },
+          {
+            id: "go",
+            label: "Go",
+            filename: `${slug}_pipeline.go`,
+            content: generatePipelineSourceGo(exportProject),
+            mime: "text/x-go",
+            language: "go",
+          },
+          {
+            id: "baml",
+            label: "BAML",
+            filename: `${slug}_pipeline.baml`,
+            content: generatePipelineSourceBaml(exportProject),
+            mime: "text/plain",
+            language: "baml",
           },
           ...setupFiles.map((f) => {
             const meta = setupFileTabMeta(f.filename)
@@ -174,7 +207,13 @@ export function PipelineExportDialog({
   const active = files.find((f) => f.id === tab) ?? files[0]
   const lineCount = active?.content.split("\n").length ?? 0
   const previewLanguage =
-    active?.language === "typescript" || active?.language === "python" ? active.language : "plaintext"
+    active?.language === "typescript" ||
+    active?.language === "python" ||
+    active?.language === "rust" ||
+    active?.language === "go" ||
+    active?.language === "baml"
+      ? active.language
+      : "plaintext"
 
   function downloadFile(file: ExportFile) {
     downloadBlob(file.filename, file.content, file.mime)

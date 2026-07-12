@@ -1,7 +1,49 @@
 
-Spine
-rename everything to spine
-name might already be taken https://www.getspine.ai/
+PRIORITY
+
+
+
+
+
+how to do integrations? like google search? don't code yourself.
+
+
+dashboard : - there should be a graph for overall activity, of how much people are using the landing page or app per day.
+
+
+
+switch to a normal graph approach after you get 100% reliablility with current linear approach. use React Flow / XYFlow, Litegraph.js, Rete.js, Drawflow, to use existing library code for Node editor.
+
+
+
+
+
+
+telem : https://posthog.com/ telem
+telem : OpenReplay? check AGPL license
+telem : HyperDX
+
+write code to recreate what a user is doing in the UI from database recorded clicks and inputs. make generic for any repo on react.
+
+
+delete old accounts and restart.
+
+
+add teams and orgs.
+
+
+update dashboard
+
+
+add clickable links in the question which link to the live demo like open the share tab if question is asking about that
+
+
+
+understand this more : https://boundaryml.com/explore#agents
+
+
+
+
 
 
 LANDING_DEMO_IP_SALT required on Vercel
@@ -12,6 +54,7 @@ https://elu.dev
 
 
 need to add a marketplace
+  → Share tab: Publish → Marketplace (price or free) + Marketplace browse/search/copy
 
 
 please mark files as public before sharing them as examples
@@ -115,7 +158,7 @@ No Langfuse-style open SDK for arbitrary apps; observability is scoped to spine 
 
 Remove playground in structs, components/structure-builder.tsx
 
-add export to Rust
+
 
 there should be a group by on the fields where you can see the mapping of what has been mapped to what with autmoatically generated confusion matricies.
 
@@ -145,7 +188,9 @@ add a split function
 
 everytime i open the cache in the UI it has to load in again, please fix this. in general try to fix this and load all data for a project but just change it with streaming
 
-
+Export
+- swift
+- Kotlin
 
 add this option in the fields of the structs : you should describe if certain fields are deterministic like a maths answer, or probabilistic if they're something like a summary which will almost never be the same. you should also mark certain steps as either probabilistic or deterministic, as we might want seeds for testing which you can vary, but need to consider when you decide to cache or not
 
@@ -793,3 +838,13 @@ External write-back — CRM, ERP, ticketing (export CSV/JSON is enough for v1)
 Retrieval connector — live KB/vector search instead of static uploads
 Better OCR / images — receipts, scanned clinical forms
 Tabular join step — reconciliation without bespoke Custom TS every time
+
+
+
+
+
+
+
+SECURITY STANDARDS from https://www.stackai.com/
+  HIPAA
+  ISO 27001 information security certification badge

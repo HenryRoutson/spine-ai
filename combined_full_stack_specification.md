@@ -74,6 +74,15 @@ each of the fields will have a boolean for if something is deterministic
 
 if a struct is auto generated then lock it.
 
+for locked fields if you try and click them, there should be a clear error message telling you that this struct is locked with an explaination as to why.
+
+
+allow structs to have multpole examples rather than 1. please also add negative examples, in a list. include in prompt automatically
+csv won't work if examples have commas
+you need to ensure that the examples actually validate as the structure you say they are. you sholdn't be able to just have random text in a json field or number field
+you probably need a popup to open the list of examples in a json editor, doesn't work in a single cell. 
+atomic_code/edit_given_struct/edit_given_struct.html
+
 # Pipeline
 
 A central visualisation of all steps of the pipeline with boxes for each step and a descrpition and associated icon.
@@ -81,13 +90,12 @@ A central visualisation of all steps of the pipeline with boxes for each step an
 steps include 
 
 1. input - select a any subset of input types like pdf, word not just 1. select doucment to be default.
-2. custom function - typescript or python, with built in fallback system
+2. custom function - typescript or python or rust, with built in fallback system
 single llm call
 3. parallel llm call - ensuring this completes in a similar time to the single call.
 4. output (there can be multiple per pipeline)
-
-
-  transform which converts a list into a single pydantic / zod model with a field containing that list
+Other more advanced types
+5. Group By (like SQL) - comes with default logic for lists, dicts, sets to implment group by in every supported coding language so it gets filled in automatically on export.
 
 
 Input types include 
@@ -216,6 +224,11 @@ There should be a button to copy the json of the whole pipeline,
 but also the pipeline json, all code that it exports to and lints of that code.
 You should run automated tests to assert that generated code from a valid pipeline has no lint errors before prod, and in prod any lint errors in export should be recoded in the supabase database to be fixed.
 
+
+please add the option for cost limits per llm step, by default this should be $1
+
+No rag, just quotes as it's more tracable and reliable.
+
 # Testing 
 
 please create a testing tab, where you can describe the exact output at each step to precisely pinpoint where a pipeline goes wrong
@@ -304,9 +317,6 @@ inference contains a list of possible runs which have been pre selected, not jus
 
 The inference tab should be able to save multiple named setups like for the homework example '10th grade' and 'pre school' with specific input files associated. there should not be a single default setup to the inference tab. use the same backend logic that is used to save the input setup in the testing tab.
 
-please add the ability to put spending limits on shared links
-you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.
-you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.and you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.
 
 
 # Share 
@@ -368,6 +378,16 @@ there should be another page for looking at runs, should include data about how 
 live deployment buttons should have a toggle power button for temp disable or a pipeline and also a trash button
 
 note that billing information shouldn't be lost when a deployment is deleted.
+
+please add the ability to put spending limits on shared links
+you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.
+you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.and you should also be able to host scalable api in a few clicks and monitors the current live links and apis usage, and take them down.
+
+
+you should be able to share the pipeline with all the details of the pipeline itself, so someone can copy it like with the examples and edit it. This won't affect your copy of it.
+
+please add a share to marketplace button in the share tab, where you can put on the marketplace with a price or for free. There should be a marketplace where you can search for pipelines.
+
 
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.
@@ -475,6 +495,8 @@ if a tab is disabled it turns red and so it should be a waterfall or if you fix 
 
 please make a shared component which is the run with stop button which should have a play icon, which when clicked shows a loading animation and a stop button next to it. ensure you handle stop logic elegantly and with shared logic.
 
+enterprise logic for teams
+
 you can resize different parts of the UI with ResizableSplit.
 
 
@@ -493,7 +515,7 @@ For true 3D software with built-in version control featuring Git-like branching 
 be able to put a prompt in on the landing page website and it run. obv put rate limits and use cheap model, please put into the supabase set up as billed to landing page, and have a landing page budget and record the list of calls. need a more interactive and engaging live demo than a bunch of random tabs
 
 To get a clear idea of the app please have
-  1. A text box with an enter button for a task you would like to automate which when pressed builds a full pipline
+  1. A text box with an enter button for a task you would like to automate which when pressed builds a full pipline and runs it with a clear trace in full expanded html outside of the view of the full app preview which isn't in the iframe. You need to run the pipeline with examples files right after the agent is done.
   2. A preview of the whole app with no run buttons working.
 
 
@@ -501,3 +523,50 @@ have a live preview on the landing page
 have a try now button which links to sign in 
 
 have a button to book a demo in calendar using https://cal.com/
+
+the landing page should stream tokens from the llm to make it intereseting and keep a recording with https://rrweb.com/.
+
+Pipeline run trace in landing page should look exactly like logging in the app  and it shouldn't be a scroller inside the scroll of the landing page, but just add to the length of the landing page.
+Ensure you also add the pipeline view to the length of the landing page. the output from the llm prompt in the landing page should be above the live preview. 
+
+# dashboard 
+
+please upgrade the dashbaord to show full timelines of people using the app including all the buttons they click, things they type and what errors are shown. please also include a visualisation of all billing and a step by step visualisation of money flow to ensure i don't lose track of it.
+Include all calls to the llm, created and deleted steps, step modifications, log views, etc in this full timeline.
+
+I need to see accounts entering money into their account, the provided starting ammount in an account, calls to llm and other expenses and what that would cost. this should create a graph over time of expenses vs money made. i should clearly be able to see if someone has started abusing the free starting amount of money and if i'm in the green or red.
+
+I should be able to see any errors the users get.
+ensure this is in the privacy policy and is legal.
+this is for early users so i can see errors and issues they run into.
+
+please ensure you model the potenial loss money as if everyone instantly used all of their free credits i might suddenly go into the red, even if it looked like previously i was in the green. you need to model for if i'm actually charging the straight llm rate, please record the % cut i'm taking on top of llm calls for each llm call to easily keep track of this. easiest way is to have a have a % markup that is dated with a range of applies from datetime so i don't have to record every single llm call, but just each time i change the markup. ensure you create a virtual table with this denormalised.
+But yes, have a buffer zone for money i may or may not have to pay with the free credit.
+
+please add replay https://rrweb.com/ for all users.
+You should be able to sort replays by the number of clicks, and by which component was clicked on during that even. You should be able to filter based on what page the user visits, or if they're on the landing page or app.
+You should be able to filter with a searchable users list.
+
+The goal of the dashboard is to 
+- get a clear overview of current errors and if the platform is operating reliabily
+- if there are errors, they need to be logged in as much detail as possible and tied to a rrweb recording to see how it occured.
+- there needs to be a graph of errors over time, potentially with different production changes indicated
+- there needs to be a list of sign up members, where you can click on a single person and see their usage and retention. I need to be able to see all their AI prompts, projects and files to to see what they're building and where they might be having issues.
+- tracking of money, in the liability of free credits, the markup for llm calls, the total ammount paid for credits, usage out,
+- landing page tracking, including emails from the landing page and the demos which are built from the landing page agent and the recording of that with rrweb.
+- marketplace tracking, API hosting tracking, sharing tracking
+- heatmaps for where people spend their time in the UI for each button to light up based on it's clicks
+- database size mangagement, the number of rows per table , table size in gb, 
+- user feedback
+- be minimal in it's code, as i don't want to be spending my time building a dashboard and would prefer to outsource that
+- there should be a graph for overall activity, of how much people are using the landing page or app per day.
+
+
+# Supported languages
+- typescript 
+- python 
+- rust
+- BAML : https://github.com/boundaryml/baml
+- Go
+- swift
+- Kotlin

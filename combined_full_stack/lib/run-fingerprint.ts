@@ -2,7 +2,7 @@
 // AI : TODO refactor — vitest target: fingerprint stability (pairs with lib/server/run_fingerprint.ts).
 import { orderedInputModules } from "@/lib/inference-input"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
-import { fieldToTypeExpr } from "@/lib/server/type_expr"
+import { fieldToTypeExpr, normalizeModelField } from "@/lib/server/type_expr"
 import {
   DEFAULT_MODEL,
   type DocId,
@@ -43,13 +43,18 @@ function moduleForFingerprint(m: PipelineModule) {
 }
 
 function fieldForFingerprint(f: ModelField) {
+  const field = normalizeModelField(f)
   return {
-    id: f.id,
-    name: f.name,
-    optional: f.optional,
-    minItems: f.minItems ?? null,
+    id: field.id,
+    name: field.name,
+    optional: field.optional,
+    minItems: field.minItems ?? null,
     // AI : canonical type — typeExpr wins over legacy type/ref so cache keys track schema edits.
-    expr: fieldToTypeExpr(f),
+    expr: fieldToTypeExpr(field),
+    // AI : description/examples feed LLM JSON Schema via withFieldMeta — must invalidate cache/logs.
+    description: field.description?.trim() || null,
+    examples: field.examples ?? [],
+    negativeExamples: field.negativeExamples ?? [],
   }
 }
 
@@ -176,7 +181,8 @@ export function hashStableJson(value: unknown): TestSigHash {
 
 export function buildRunConfigPayload(project: Project, model: ModelId | undefined) {
   return {
-    v: 4 as const,
+    // AI : v6 — field examples[] / negativeExamples[] in fingerprint (stale cache when schema hints change).
+    v: 6 as const,
     model: resolveRunModel(project, model),
     models: [...project.models].sort((a, b) => a.id.localeCompare(b.id)).map(modelForFingerprint),
     typeAliases: [...(project.typeAliases ?? [])]
@@ -226,7 +232,7 @@ export async function computeRunFingerprintClient(
   return `runfp_${hex.slice(0, 24)}` as RunFingerprint
 }
 
-// AI : browser-side prior-run match — mirrors server findMatchingRun (stored fp + legacy recompute).
+// AI : browser-side prior-run match — stored fingerprint only (mirrors server findMatchingRun).
 export async function findMatchingRunClient(
   runs: PipelineRun[],
   project: Project,
@@ -234,16 +240,5 @@ export async function findMatchingRunClient(
   inputDocIds: DocId[],
 ): Promise<PipelineRun | null> {
   const fingerprint = await computeRunFingerprintClient(project, model, inputDocIds)
-  const byColumn = runs.find((r) => r.status === "ok" && r.fingerprint === fingerprint)
-  if (byColumn) return byColumn
-
-  const resolvedModel = resolveRunModel(project, model)
-  for (const r of runs) {
-    if (r.status !== "ok") continue
-    const ids = r.inputDocIds?.length ? r.inputDocIds : []
-    if (!ids.length) continue
-    if ((await computeRunFingerprintClient(project, resolvedModel, ids)) === fingerprint) return r
-    if (r.model && (await computeRunFingerprintClient(project, r.model, ids)) === fingerprint) return r
-  }
-  return null
+  return runs.find((r) => r.status === "ok" && r.fingerprint === fingerprint) ?? null
 }

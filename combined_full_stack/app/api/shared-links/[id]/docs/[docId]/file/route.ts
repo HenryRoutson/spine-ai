@@ -46,11 +46,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string;
   const resolved = await sharedDocFileResponse(req, ctx);
   if (resolved instanceof NextResponse) return resolved;
   const { file } = resolved;
+  // AI : SECURITY — attachment for PDFs; nosniff blocks MIME sniffing to script/html.
+  const disposition = file.mime === "application/pdf" ? "attachment" : "inline";
   return new NextResponse(new Uint8Array(readFileSync(file.path)), {
     headers: {
       "Content-Type": file.mime,
-      "Content-Disposition": "inline",
-      // AI : SECURITY — anonymous shared-link uploads; block MIME sniffing to script/html.
+      "Content-Disposition": disposition,
       "X-Content-Type-Options": "nosniff",
     },
   });
@@ -60,10 +61,11 @@ export async function HEAD(req: NextRequest, ctx: { params: Promise<{ id: string
   const resolved = await sharedDocFileResponse(req, ctx);
   if (resolved instanceof NextResponse) return resolved;
   const { file } = resolved;
+  const disposition = file.mime === "application/pdf" ? "attachment" : "inline";
   return new NextResponse(null, {
     headers: {
       "Content-Type": file.mime,
-      "Content-Disposition": "inline",
+      "Content-Disposition": disposition,
       "X-Content-Type-Options": "nosniff",
     },
   });

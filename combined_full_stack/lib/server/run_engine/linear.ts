@@ -9,6 +9,7 @@ import { expectedOutputsForRun } from "../seed";
 import { stepCacheKey } from "../run_fingerprint";
 import { readStepCache, writeStepCache } from "../step_cache";
 import { hasQuoteField, validateStepOutput } from "../structure";
+import { llmStepCostLimitCents, StepCostLimitExceededError } from "../step_cost_limit";
 import { DEFAULT_INPUT_CHECK_MODEL, FailureKind, inputUsesVisionOcr, ModuleKind, RunStepStatus, type LlmCallRecord } from "../types";
 import { serializeCtx, resolveStepInputForCheck } from "./context";
 import { execModule } from "./exec_module";
@@ -59,10 +60,13 @@ export async function runLinearStepsFrom(
     };
     ctx.stepLlmCalls = undefined;
     ctx.stepExtraFailures = undefined;
+    const llmStep = isLlmKind(m.kind);
+    ctx.stepCostLimitCents = llmStep ? llmStepCostLimitCents(m) : undefined;
+    ctx.stepBaseCents = llmStep ? ledger.totalCents() : undefined;
 
     const defaultInputPreview =
       i === 0 ? `${inputTypeLabel(m.inputType)} document` : modelById(project.models, m.inStructureId)?.name ?? "Any";
-    const beforeCents = ledger.totalCents();
+    const beforeCents = ctx.stepBaseCents ?? ledger.totalCents();
     const t0 = Date.now();
 
     const { logs: serverLogs, value: stepOutcome } = await withStepModuleContext(m.id, () =>
@@ -93,7 +97,14 @@ export async function runLinearStepsFrom(
                   m.label,
                   inDesc,
                   value,
-                  { model: DEFAULT_INPUT_CHECK_MODEL, ledger, llmCalls: ctx.stepLlmCalls },
+                  {
+                    model: DEFAULT_INPUT_CHECK_MODEL,
+                    ledger,
+                    llmCalls: ctx.stepLlmCalls,
+                    costLimitCents: ctx.stepCostLimitCents,
+                    stepBaseCents: beforeCents,
+                    stepLabel: m.label,
+                  },
                   log.child("input-desc"),
                   vision,
                   items,
@@ -237,6 +248,15 @@ export async function runLinearStepsFrom(
           status = RunStepStatus.Error;
           if (err instanceof InputDescriptionRejectedError) {
             inputDescriptionCheck = err.check;
+          }
+          if (err instanceof StepCostLimitExceededError) {
+            ctx.stepExtraFailures = [
+              {
+                kind: FailureKind.CostLimit,
+                detail: err.message,
+                recovered: false,
+              },
+            ];
           }
           result = failedStepResult(err, m, ctx, result);
           log.error(`step failed`, {

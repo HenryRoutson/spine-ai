@@ -1,0 +1,15 @@
+{
+  "name": "logo",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "export": "node export.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "puppeteer": "^24.43.1"
+  }
+}

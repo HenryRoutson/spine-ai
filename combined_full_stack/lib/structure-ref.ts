@@ -166,8 +166,8 @@ const MAPPING_RULE_FIELDS: ModelField[] = [
   { id: "f_default", name: "default", type: FieldType.Text, optional: true, description: "" },
 ]
 
-// AI : TODO bug — silent remap hides broken field refs; surface computeStructureInvalid instead.
-// AI : recreate missing companions so model refs resolve to named structures again.
+// AI : explicit repair only (doc-structure sync) — migrateProjectModules must NOT call this;
+// AI : dangling refs stay visible via computeStructureIssues / Structure tab.
 export function repairOrphanModelRefs(
   models: StructureModel[],
   idGen: () => StructureModelId,

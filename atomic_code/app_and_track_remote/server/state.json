@@ -1,0 +1,102 @@
+{
+  "users": {
+    "7a6c72dc-9e43-4cb4-9b83-9bb4b5bf8f50": {
+      "userId": "7a6c72dc-9e43-4cb4-9b83-9bb4b5bf8f50",
+      "email": "james@james.com",
+      "displayName": "james",
+      "signedInAt": "2026-07-09T00:26:21.079Z"
+    },
+    "b11d70d3-1afa-4115-be5d-2982f8397ea9": {
+      "userId": "b11d70d3-1afa-4115-be5d-2982f8397ea9",
+      "email": "alex@example.com",
+      "displayName": "Alex",
+      "signedInAt": "2026-07-09T00:26:24.595Z"
+    },
+    "50b0b9da-8298-47e5-b692-62ae6e5a56d9": {
+      "userId": "50b0b9da-8298-47e5-b692-62ae6e5a56d9",
+      "email": "test@demo.com",
+      "displayName": "Tester",
+      "signedInAt": "2026-07-09T00:26:40.811Z"
+    }
+  },
+  "sessions": {
+    "d2c33dd4-77e7-49bf-809e-7c5d525f2637": {
+      "userId": "7a6c72dc-9e43-4cb4-9b83-9bb4b5bf8f50",
+      "email": "james@james.com",
+      "displayName": "james"
+    },
+    "68db88f5-8054-4c6e-8f17-06b0a98e02d4": {
+      "userId": "b11d70d3-1afa-4115-be5d-2982f8397ea9",
+      "email": "alex@example.com",
+      "displayName": "Alex"
+    },
+    "cb435010-e4d1-47c3-bcec-926bab47bcce": {
+      "userId": "50b0b9da-8298-47e5-b692-62ae6e5a56d9",
+      "email": "test@demo.com",
+      "displayName": "Tester"
+    },
+    "fd8d1b8d-1d66-4265-a9d6-451f389bdab3": {
+      "userId": "50b0b9da-8298-47e5-b692-62ae6e5a56d9",
+      "email": "test@demo.com",
+      "displayName": "Tester"
+    }
+  },
+  "events": [
+    {
+      "id": "6e99a1a5-2dfc-4896-a03d-60cd60686beb",
+      "userId": "7a6c72dc-9e43-4cb4-9b83-9bb4b5bf8f50",
+      "userEmail": "james@james.com",
+      "category": "ui_click",
+      "action": "Clicked nav-tasks",
+      "detail": {
+        "tag": "button",
+        "selector": "[data-testid=\"nav-tasks\"]",
+        "testId": "nav-tasks"
+      },
+      "projectId": null,
+      "createdAt": "2026-07-09T01:22:11.649Z"
+    },
+    {
+      "id": "678b589c-1492-48f2-8cd4-d05e012b35c6",
+      "userId": "7a6c72dc-9e43-4cb4-9b83-9bb4b5bf8f50",
+      "userEmail": "james@james.com",
+      "category": "ui_navigate",
+      "action": "Opened tasks",
+      "detail": {
+        "window": "tasks"
+      },
+      "projectId": null,
+      "createdAt": "2026-07-09T01:22:11.650Z"
+    },
+    {
+      "id": "bc05c0b8-5242-4b6e-85bb-ecf3d5daeb41",
+      "userId": "7a6c72dc-9e43-4cb4-9b83-9bb4b5bf8f50",
+      "userEmail": "james@james.com",
+      "category": "ui_input",
+      "action": "Typed \"test\" in task-title-input",
+      "detail": {
+        "field": "task-title-input",
+        "value": "test",
+        "length": 4,
+        "selector": "[data-testid=\"task-title-input\"]",
+        "testId": "task-title-input"
+      },
+      "projectId": null,
+      "createdAt": "2026-07-09T01:22:14.645Z"
+    },
+    {
+      "id": "b7ca9d25-5478-4844-886a-9cb262480f01",
+      "userId": "7a6c72dc-9e43-4cb4-9b83-9bb4b5bf8f50",
+      "userEmail": "james@james.com",
+      "category": "ui_click",
+      "action": "Clicked add-task-button",
+      "detail": {
+        "tag": "button",
+        "selector": "[data-testid=\"add-task-button\"]",
+        "testId": "add-task-button"
+      },
+      "projectId": null,
+      "createdAt": "2026-07-09T01:22:14.646Z"
+    }
+  ]
+}

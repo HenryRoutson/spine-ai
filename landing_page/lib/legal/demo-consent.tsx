@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
-import { LEGAL, LEGAL_ROUTES } from "@/lib/legal/site";
+import { LEGAL, LEGAL_ROUTES } from "@shared/legal/site";
 
 const STORAGE_KEY = `landing_demo_privacy_${LEGAL.policyVersion}`;
 
@@ -40,7 +40,8 @@ export function LandingDemoConsentBanner({ visible, nudge, onAccept }: LandingDe
     >
       <div className="mx-auto flex max-w-3xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm leading-relaxed text-muted">
-          Generate sends your task to an AI provider. Details in our{" "}
+          Generate sends your task to an AI provider. We also record a session replay of this page
+          (clicks and typing) to debug the demo. Details in our{" "}
           <Link href={LEGAL_ROUTES.privacy} className="underline underline-offset-2">
             Privacy Policy
           </Link>

@@ -16,6 +16,7 @@ export type RateLimitTier =
   | "hosted_api"
   | "landing_demo_build"
   | "landing_demo_signup"
+  | "landing_demo_replay"
   | "shared_upload";
 export type RateLimitKey = string & { __brand: "RateLimitKey" };
 
@@ -34,6 +35,7 @@ export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number 
   // AI : authenticated doc upload — parse/OCR/storage is expensive; cap well below the default bucket.
   upload: { windowMs: 60_000, max: 30 },
   // AI : per-link + IP — limits anonymous credit drain on sharer_pays links.
+  // AI : TODO security — IP rotation still drains owner credits; pair with CAPTCHA / spend caps.
   shared_run: { windowMs: 600_000, max: 5 },
   // AI : bearer-key pipeline invoke — per-api + IP cap.
   hosted_api: { windowMs: 600_000, max: 30 },
@@ -41,6 +43,8 @@ export const RATE_LIMITS: Record<RateLimitTier, { windowMs: number; max: number 
   landing_demo_build: { windowMs: 600_000, max: 12 },
   // AI : landing email signup — low volume gate before demo use.
   landing_demo_signup: { windowMs: 600_000, max: 20 },
+  // AI : landing rrweb chunk flush — frequent small posts.
+  landing_demo_replay: { windowMs: 60_000, max: 40 },
   // AI : per-link session uploads — caps storage exhaustion on public shared links.
   shared_upload: { windowMs: 600_000, max: 10 },
 };
@@ -59,9 +63,11 @@ export function upstashConfigured(): boolean {
 }
 
 export function publicApiTier(pathname: string): RateLimitTier | null {
-  // AI : TODO security — /api/demo/* has no middleware tier today; add public/read cap on demo/state.
   if (pathname === "/api/billing/webhook") return "webhook";
   if (pathname === "/api/supabase-env") return "public";
+  // AI : SECURITY — public demo preview reads; tighter than authenticated read tier.
+  if (pathname === "/api/demo/state") return "public";
+  if (/^\/api\/demo\/docs\/[^/]+\/text$/.test(pathname)) return "public";
   if (pathname.startsWith("/api/hosted-apis/")) {
     if (/\/invoke$/.test(pathname)) return "hosted_api";
     if (/\/progress$/.test(pathname)) return "poll";
@@ -69,7 +75,8 @@ export function publicApiTier(pathname: string): RateLimitTier | null {
   if (!pathname.startsWith("/api/shared-links/")) return null;
   if (/\/run$/.test(pathname)) return "llm";
   if (/\/progress$/.test(pathname)) return "poll";
-  if (/\/client-step$/.test(pathname)) return "default";
+  // AI : SECURITY — resume is as expensive as a run; share the shared_run bucket.
+  if (/\/client-step$/.test(pathname)) return "shared_run";
   if (/\/docs$/.test(pathname)) return "shared_upload";
   if (/\/docs\/[^/]+\/(text|file)$/.test(pathname)) return "read";
   return "public";

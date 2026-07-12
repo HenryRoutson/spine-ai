@@ -1,17 +1,28 @@
 "use client"
 
+import { useMemo, useState } from "react"
 import { Plus, Trash2, Lock, AlertTriangle } from "lucide-react"
 import { useStore, uid } from "@/lib/store"
 import {
   FieldType,
   type ModelField,
   type StructureModel,
+  type TypeAlias,
 } from "@/lib/types"
 import { isLockedStructureModel, lockedStructureBanner } from "@/lib/structure"
+import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-validity"
+import {
+  FieldExamplesEditorDialog,
+  fieldExamplesSummary,
+  formatFieldExamplesSummary,
+} from "@/components/field-examples-editor-dialog"
 import { StructureFieldTypeEditor } from "@/components/structure-field-type-editor"
+import { StructureSourceDocLink } from "@/components/structure-source-doc-link"
 import { fieldTypeLabel } from "@/lib/structure-field-labels"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
+import { useLockedInteractFlash } from "@/lib/use-locked-interact-flash"
 import { cn } from "@/lib/utils"
 
 type StructureExcelEditorProps = {
@@ -20,16 +31,31 @@ type StructureExcelEditorProps = {
 }
 
 export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelEditorProps) {
-  const { models, setModels } = useStore()
+  const { models, setModels, typeAliases, project } = useStore()
+  const teamReadOnly = !!project?.teamReadOnly
   const selected = models.find((m) => m.id === selectedId) ?? models[0]
-  const selectedLocked = selected ? isLockedStructureModel(selected) : false
+  const selectedLocked = teamReadOnly || (selected ? isLockedStructureModel(selected) : false)
+  const lockMessage = teamReadOnly
+    ? "Read-only team project — you can view and run, but not edit structures."
+    : selected
+      ? lockedStructureBanner(selected)
+      : null
+  const { flash: lockFlash, bannerRef: lockBannerRef, notifyLocked } = useLockedInteractFlash(
+    lockMessage,
+    selectedId,
+  )
+  const selectedIssues = useMemo(() => {
+    if (!selected) return []
+    return computeStructureIssues(models, typeAliases).filter((i) => i.modelId === selected.id)
+  }, [models, typeAliases, selected])
 
   function updateModel(next: StructureModel) {
-    if (isLockedStructureModel(next)) return
+    if (teamReadOnly || isLockedStructureModel(next)) return
     setModels(models.map((m) => (m.id === next.id ? next : m)))
   }
 
   function deleteModel(id: string) {
+    if (teamReadOnly) return
     const target = models.find((m) => m.id === id)
     if (target && isLockedStructureModel(target)) return
     const next = models.filter((m) => m.id !== id)
@@ -76,10 +102,33 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
     <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[oklch(0.16_0.004_264)]">
       {/* AI : model title row — spreadsheet header band */}
       <div className="shrink-0 border-b border-border bg-secondary/30 px-4 py-3">
-        {selectedLocked && lockedStructureBanner(selected) && (
-          <div className="mb-2 flex items-center gap-2 text-[11px] text-muted-foreground">
-            <Lock className="h-3.5 w-3.5" />
-            {lockedStructureBanner(selected)}
+        {selectedLocked && lockMessage && (
+          <div
+            ref={lockBannerRef}
+            role={lockFlash ? "alert" : "status"}
+            className={cn(
+              "mb-2 flex items-start gap-2 rounded-md border px-3 py-2 font-mono text-[11px] transition-colors",
+              lockFlash
+                ? "border-destructive/50 bg-destructive/15 text-destructive"
+                : "border-border bg-secondary/40 text-muted-foreground",
+            )}
+          >
+            <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{lockMessage}</span>
+          </div>
+        )}
+        {selected.sourceDocId && (
+          <div className="mb-2">
+            <StructureSourceDocLink sourceDocId={selected.sourceDocId} />
+          </div>
+        )}
+        {selectedIssues.length > 0 && (
+          <div className="mb-2 space-y-1 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2">
+            {selectedIssues.map((issue, i) => (
+              <p key={i} className="font-mono text-[11px] text-destructive">
+                {structureIssueMessage(issue, models)}
+              </p>
+            ))}
           </div>
         )}
         {selected.fields.length === 0 && (
@@ -94,15 +143,19 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
               value={selected.name}
               onChange={(e) => updateModel({ ...selected, name: e.target.value })}
               readOnly={selectedLocked}
+              onPointerDown={selectedLocked ? notifyLocked : undefined}
+              onFocus={selectedLocked ? notifyLocked : undefined}
               placeholder="Structure name"
-              className="w-full border-0 bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground read-only:cursor-default"
+              className="w-full border-0 bg-transparent text-sm font-semibold text-foreground outline-none placeholder:text-muted-foreground read-only:cursor-not-allowed"
             />
             <input
               value={selected.description}
               onChange={(e) => updateModel({ ...selected, description: e.target.value })}
               readOnly={selectedLocked}
+              onPointerDown={selectedLocked ? notifyLocked : undefined}
+              onFocus={selectedLocked ? notifyLocked : undefined}
               placeholder="What does this structure represent?"
-              className="w-full border-0 bg-transparent text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/70 read-only:cursor-default"
+              className="w-full border-0 bg-transparent text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/70 read-only:cursor-not-allowed"
             />
           </div>
           {models.length > 1 && !selectedLocked && (
@@ -120,7 +173,7 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
 
       {/* AI : spreadsheet grid */}
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full min-w-[720px] border-collapse text-[11.5px]">
+        <table className="w-full min-w-[860px] border-collapse text-[11.5px]">
           <thead className="sticky top-0 z-10">
             <tr className="bg-secondary/80 backdrop-blur-sm">
               <th className="w-9 border-b border-r border-border px-1 py-1.5 text-center text-[10px] font-medium text-muted-foreground">
@@ -135,11 +188,23 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
               <th className="min-w-[180px] border-b border-r border-border px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Description
               </th>
-              <th className="min-w-[120px] border-b border-r border-border px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                Example
+              <th className="min-w-[130px] border-b border-r border-border px-2 py-1.5 text-left text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Examples
               </th>
               <th className="w-20 border-b border-r border-border px-2 py-1.5 text-center text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Required
+              </th>
+              <th
+                className="w-14 border-b border-r border-border px-1 py-1.5 text-center text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                title="= exact in tests · ≈ probabilistic (ignored)"
+              >
+                Det
+              </th>
+              <th
+                className="w-14 border-b border-r border-border px-1 py-1.5 text-center text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                title="± tolerance on int/float compare"
+              >
+                ±
               </th>
               <th className="w-10 border-b border-border px-1 py-1.5" />
             </tr>
@@ -153,7 +218,9 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
                 rowIdx={rowIdx}
                 locked={selectedLocked}
                 models={models}
+                typeAliases={typeAliases}
                 selectedId={selected.id}
+                onLockedInteract={notifyLocked}
                 onUpdate={(patch) => updateField(f.id, patch)}
                 onRemove={() => removeField(f.id)}
               />
@@ -179,13 +246,33 @@ type FieldRowProps = {
   rowIdx: number
   locked: boolean
   models: StructureModel[]
+  typeAliases: TypeAlias[]
   selectedId: string
+  onLockedInteract: () => void
   onUpdate: (patch: Partial<ModelField>) => void
   onRemove: () => void
 }
 
-function FieldRow({ field, fields, rowIdx, locked, models, selectedId, onUpdate, onRemove }: FieldRowProps) {
+function FieldRow({
+  field,
+  fields,
+  rowIdx,
+  locked,
+  models,
+  typeAliases,
+  selectedId,
+  onLockedInteract,
+  onUpdate,
+  onRemove,
+}: FieldRowProps) {
   const stripe = rowIdx % 2 === 1
+  const isNumeric = field.type === FieldType.Int || field.type === FieldType.Float
+  const toleranceEnabled = isNumeric && field.deterministic !== false
+  const [examplesOpen, setExamplesOpen] = useState(false)
+  const exampleStats = useMemo(
+    () => fieldExamplesSummary(field, models, typeAliases),
+    [field, models, typeAliases],
+  )
 
   return (
     <>
@@ -199,18 +286,25 @@ function FieldRow({ field, fields, rowIdx, locked, models, selectedId, onUpdate,
             onChange={(v) => onUpdate({ name: v })}
             placeholder="e.g. Company name"
             locked={locked}
+            onLockedInteract={onLockedInteract}
           />
         </td>
         <td className="border-b border-r border-border p-0 align-top">
-          <div className="px-1 py-1">
-            <StructureFieldTypeEditor
-              field={field}
-              fields={fields}
-              models={models}
-              selectedId={selectedId}
-              locked={locked}
-              onUpdate={onUpdate}
-            />
+          {/* AI : disabled Select swallows clicks — catch on the cell wrapper. */}
+          <div
+            className={cn("px-1 py-1", locked && "cursor-not-allowed")}
+            onPointerDown={locked ? onLockedInteract : undefined}
+          >
+            <div className={cn(locked && "pointer-events-none")}>
+              <StructureFieldTypeEditor
+                field={field}
+                fields={fields}
+                models={models}
+                selectedId={selectedId}
+                locked={locked}
+                onUpdate={onUpdate}
+              />
+            </div>
           </div>
         </td>
         <td className="border-b border-r border-border p-0">
@@ -219,32 +313,117 @@ function FieldRow({ field, fields, rowIdx, locked, models, selectedId, onUpdate,
             onChange={(v) => onUpdate({ description: v })}
             placeholder="What should go here?"
             locked={locked}
+            onLockedInteract={onLockedInteract}
           />
         </td>
         <td className="border-b border-r border-border p-0">
-          <CellInput
-            value={field.example ?? ""}
-            onChange={(v) => onUpdate({ example: v || undefined })}
-            placeholder="Sample value"
+          <button
+            type="button"
+            onClick={() => setExamplesOpen(true)}
+            className={cn(
+              "flex h-8 w-full items-center px-2 text-left text-[11px] outline-none transition-colors hover:bg-secondary/40",
+              exampleStats.hasInvalid && "text-destructive",
+              exampleStats.positive + exampleStats.negative === 0 && "text-muted-foreground",
+            )}
+            title={
+              exampleStats.hasInvalid
+                ? "Some examples do not match the field type"
+                : "Edit valid and negative examples"
+            }
+          >
+            <span className="truncate">
+              {formatFieldExamplesSummary(exampleStats.positive, exampleStats.negative)}
+            </span>
+          </button>
+          <FieldExamplesEditorDialog
+            open={examplesOpen}
+            onClose={() => setExamplesOpen(false)}
+            field={field}
+            models={models}
+            typeAliases={typeAliases}
             locked={locked}
-            mono
+            onUpdate={onUpdate}
           />
         </td>
         <td className="border-b border-r border-border p-0 text-center">
-          <button
-            type="button"
-            disabled={locked}
-            onClick={() => onUpdate({ optional: !field.optional })}
-            className={cn(
-              "mx-auto flex h-6 w-14 items-center justify-center rounded text-[10px] font-medium transition-colors",
-              field.optional
-                ? "bg-secondary text-muted-foreground"
-                : "bg-primary/15 text-primary",
-              locked && "cursor-default opacity-70",
-            )}
+          <div
+            className="flex h-8 items-center justify-center"
+            onPointerDown={locked ? onLockedInteract : undefined}
           >
-            {field.optional ? "Optional" : "Required"}
-          </button>
+            <div className={cn(locked && "pointer-events-none")}>
+              <Switch
+                size="sm"
+                checked={!field.optional}
+                disabled={locked}
+                onCheckedChange={(checked) => onUpdate({ optional: !checked })}
+                title={field.optional ? "Optional" : "Required"}
+                aria-label={field.optional ? "Mark required" : "Mark optional"}
+              />
+            </div>
+          </div>
+        </td>
+        <td className="border-b border-r border-border p-0 text-center">
+          {/* AI : deterministic flag — "=" exact in tests, "≈" probabilistic (ignored) */}
+          <div
+            className="flex h-8 items-center justify-center"
+            onPointerDown={locked ? onLockedInteract : undefined}
+          >
+            <button
+              type="button"
+              disabled={locked}
+              onClick={() => onUpdate({ deterministic: field.deterministic === false ? undefined : false })}
+              title={
+                field.deterministic === false
+                  ? "probabilistic — tests ignore this field"
+                  : "deterministic — tests exact-compare this field"
+              }
+              className={cn(
+                "mx-auto flex h-6 w-7 items-center justify-center rounded text-[11px] font-medium transition-colors",
+                field.deterministic === false
+                  ? "bg-chart-3/15 text-chart-3"
+                  : "bg-secondary text-muted-foreground",
+                locked && "pointer-events-none cursor-not-allowed opacity-70",
+              )}
+            >
+              {field.deterministic === false ? "≈" : "="}
+            </button>
+          </div>
+        </td>
+        <td className="border-b border-r border-border p-0 text-center">
+          {toleranceEnabled ? (
+            <div
+              className="flex h-8 items-center justify-center"
+              onPointerDown={locked ? onLockedInteract : undefined}
+            >
+              <input
+                type="number"
+                min={0}
+                step={1}
+                value={field.testTolerance ?? ""}
+                placeholder="±"
+                disabled={locked}
+                title="test tolerance — ± on int/float compare"
+                onChange={(e) => {
+                  const raw = e.target.value.trim()
+                  if (!raw) {
+                    onUpdate({ testTolerance: undefined })
+                    return
+                  }
+                  const n = Number(raw)
+                  onUpdate({ testTolerance: Number.isFinite(n) && n >= 0 ? n : undefined })
+                }}
+                className={cn(
+                  "mx-auto h-6 w-10 rounded border bg-transparent px-0.5 text-center font-mono text-[10px] outline-none",
+                  field.testTolerance !== undefined
+                    ? "border-output/50 text-output"
+                    : "border-border text-muted-foreground",
+                  locked && "pointer-events-none cursor-not-allowed opacity-70",
+                )}
+              />
+            </div>
+          ) : (
+            <span className="text-[10px] text-muted-foreground/40">—</span>
+          )}
         </td>
         <td className="border-b border-border p-0 text-center">
           {!locked && (
@@ -261,7 +440,7 @@ function FieldRow({ field, fields, rowIdx, locked, models, selectedId, onUpdate,
       {field.type === "json" && !field.typeExpr && (
         <tr className={cn(stripe && "bg-secondary/15")}>
           <td className="border-b border-r border-border bg-secondary/25" />
-          <td colSpan={6} className="border-b border-border px-2 py-1 text-[10px] text-amber-700 dark:text-amber-500">
+          <td colSpan={8} className="border-b border-border px-2 py-1 text-[10px] text-amber-700 dark:text-amber-500">
             Flexible data stores anything — prefer &ldquo;{fieldTypeLabel(FieldType.Model)}&rdquo; or a Type from the sidebar.
           </td>
         </tr>
@@ -275,12 +454,14 @@ function CellInput({
   onChange,
   placeholder,
   locked,
+  onLockedInteract,
   mono,
 }: {
   value: string
   onChange: (v: string) => void
   placeholder?: string
   locked: boolean
+  onLockedInteract: () => void
   mono?: boolean
 }) {
   return (
@@ -288,9 +469,11 @@ function CellInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       readOnly={locked}
+      onPointerDown={locked ? onLockedInteract : undefined}
+      onFocus={locked ? onLockedInteract : undefined}
       placeholder={placeholder}
       className={cn(
-        "h-8 w-full border-0 bg-transparent px-2 text-[11.5px] outline-none placeholder:text-muted-foreground/50 read-only:cursor-default",
+        "h-8 w-full border-0 bg-transparent px-2 text-[11.5px] outline-none placeholder:text-muted-foreground/50 read-only:cursor-not-allowed",
         mono && "font-mono",
       )}
     />

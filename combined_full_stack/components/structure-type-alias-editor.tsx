@@ -8,6 +8,7 @@ import { typeExprHasUnset } from "@/lib/type-expr-edit"
 import { formatTypeExprPy, tryParseTypeExprString } from "@/lib/type-expr-parse"
 import { TypeAliasPreview } from "@/components/type-expr-preview"
 import type { StructureModel, TypeAlias } from "@/lib/types"
+import { cn } from "@/lib/utils"
 
 export function StructureTypeAliasEditor({
   alias,
@@ -16,6 +17,7 @@ export function StructureTypeAliasEditor({
   locked,
   onUpdate,
   onDelete,
+  onLockedInteract,
 }: {
   alias: TypeAlias
   models: StructureModel[]
@@ -23,6 +25,7 @@ export function StructureTypeAliasEditor({
   locked: boolean
   onUpdate: (patch: Partial<TypeAlias>) => void
   onDelete: () => void
+  onLockedInteract?: () => void
 }) {
   return (
     <div className="space-y-5">
@@ -32,15 +35,19 @@ export function StructureTypeAliasEditor({
             value={alias.name}
             onChange={(e) => onUpdate({ name: e.target.value })}
             readOnly={locked}
+            onPointerDown={locked ? onLockedInteract : undefined}
+            onFocus={locked ? onLockedInteract : undefined}
             placeholder="Type name — e.g. quote_id_t"
-            className="h-9 font-mono text-sm font-medium"
+            className="h-9 font-mono text-sm font-medium read-only:cursor-not-allowed"
           />
           <Input
             value={alias.description}
             onChange={(e) => onUpdate({ description: e.target.value })}
             readOnly={locked}
+            onPointerDown={locked ? onLockedInteract : undefined}
+            onFocus={locked ? onLockedInteract : undefined}
             placeholder="What this type represents…"
-            className="h-8 text-xs text-muted-foreground"
+            className="h-8 text-xs text-muted-foreground read-only:cursor-not-allowed"
           />
         </div>
         {!locked && (
@@ -55,16 +62,21 @@ export function StructureTypeAliasEditor({
         )}
       </div>
 
-      <div className="rounded-lg border border-border bg-secondary/10 p-4">
+      <div
+        className={cn("rounded-lg border border-border bg-secondary/10 p-4", locked && "cursor-not-allowed")}
+        onPointerDown={locked ? onLockedInteract : undefined}
+      >
         <p className="mb-3 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
           Type expression
         </p>
-        <TypeExprEditor
-          expr={alias.expr}
-          models={models}
-          typeAliases={typeAliases.filter((t) => t.id !== alias.id)}
-          onChange={(expr) => onUpdate({ expr })}
-        />
+        <div className={cn(locked && "pointer-events-none opacity-70")}>
+          <TypeExprEditor
+            expr={alias.expr}
+            models={models}
+            typeAliases={typeAliases.filter((t) => t.id !== alias.id)}
+            onChange={(expr) => onUpdate({ expr })}
+          />
+        </div>
       </div>
 
       <TypeAliasPreview name={alias.name} expr={alias.expr} models={models} />
@@ -89,11 +101,13 @@ export function TypeAliasTextSync({
   models,
   locked,
   onUpdate,
+  onLockedInteract,
 }: {
   alias: TypeAlias
   models: StructureModel[]
   locked: boolean
   onUpdate: (patch: Partial<TypeAlias>) => void
+  onLockedInteract?: () => void
 }) {
   return (
     <div className="space-y-2">
@@ -104,16 +118,19 @@ export function TypeAliasTextSync({
         defaultValue={formatTypeExprPy(alias.expr, models)}
         key={alias.id + formatTypeExprPy(alias.expr, models)}
         readOnly={locked}
+        onPointerDown={locked ? onLockedInteract : undefined}
+        onFocus={locked ? onLockedInteract : undefined}
         placeholder="e.g. list[int] | dict[str, str]"
-        className="font-mono text-xs"
+        className="font-mono text-xs read-only:cursor-not-allowed"
         onBlur={(e) => {
+          if (locked) return
           const raw = e.target.value.trim()
           if (!raw) return
           const parsed = tryParseTypeExprString(raw, models)
           if (parsed.ok) onUpdate({ expr: parsed.expr })
         }}
         onKeyDown={(e) => {
-          if (e.key !== "Enter") return
+          if (locked || e.key !== "Enter") return
           e.preventDefault()
           const raw = e.currentTarget.value.trim()
           if (!raw) return

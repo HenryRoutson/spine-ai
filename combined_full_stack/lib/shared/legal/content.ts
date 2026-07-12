@@ -25,8 +25,9 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     body: [
       "Account data: email address and authentication credentials (hashed by our auth provider).",
       "Product data: pipelines, documents you upload, inference runs, logs, billing metadata, and feedback you submit.",
+      "Early-access diagnostics: while the product is in early access we may log signed-in usage events to help us fix bugs — including buttons you click, text you type into form fields (up to 2,000 characters per field), tab navigation, pipeline step changes, log views, LLM call metadata, and error messages shown in the app. This is disclosed here and in our Terms; we use it only to operate and improve reliability, not for advertising.",
       "Technical data: essential session cookies, IP address, and request logs needed to operate and secure the service.",
-      "Landing page demo (no account required): the full text of the automation task you submit, a short preview of the generated pipeline message, model and token-usage metadata, build identifiers, and a one-way hash of your IP address for abuse prevention.",
+      "Landing page demo (no account required): the full text of the automation task you submit, a short preview of the generated pipeline message, model and token-usage metadata, build identifiers, a one-way hash of your IP address for abuse prevention, and — after you accept the demo privacy banner — a session replay recording of the landing page (DOM mutations, clicks, and typed text via rrweb) so we can debug demo failures.",
     ],
     bullets: [
       "We do not require health, biometric, or children's data to use the core product or the public demo.",
@@ -46,6 +47,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
       "Send service emails such as confirmations and security notices (contract / legitimate interests).",
       "Send marketing only if you opt in (consent — withdraw any time in Settings or by emailing us).",
       "Improve reliability, understand common demo use cases, and debug issues using aggregated diagnostics (legitimate interests).",
+      "During early access, record per-user activity timelines and billing flow for operator debugging when you use a signed-in account (legitimate interests — see What we collect).",
+      "Record landing-page session replays after demo privacy consent to diagnose demo UX and pipeline-build failures (consent / legitimate interests).",
     ],
   },
   {
@@ -54,15 +57,16 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     body: [
       `The marketing site at ${LEGAL.productName} lets visitors describe an automation task and receive a generated pipeline preview without creating an account.`,
       "When you use this demo we record your submitted task (up to 2,000 characters), the model response summary, pipeline name, build identifier, token counts, estimated cost, latency, and a salted hash of your IP address.",
+      "After you accept the demo privacy banner we also record a session replay of the landing page using rrweb (page structure, clicks, scrolls, and form input — passwords are masked). Replays are stored with your demo email and IP hash so we can reproduce bugs; they are not used for advertising.",
       "Your prompt is transmitted to our LLM inference provider (OpenRouter and the underlying model provider) solely to produce the preview. We do not use landing demo prompts to train our own models.",
-      `Before you can click Generate, you must accept via the banner at the bottom of the page confirming you have read this Privacy Policy (version ${LEGAL.policyVersion}) and agree that your task text will be logged and sent to an LLM as described above.`,
+      `Before you can click Generate, you must accept via the banner at the bottom of the page confirming you have read this Privacy Policy (version ${LEGAL.policyVersion}) and agree that your task text will be logged and sent to an LLM, and that a session replay may be recorded, as described above.`,
       "Lawful basis: your consent when you click I accept, plus legitimate interests in preventing abuse and maintaining service reliability.",
       "We do not sell landing demo data. We do not use it for advertising profiles.",
     ],
     bullets: [
       "Do not submit passwords, API keys, personal identifiers, or confidential business data.",
       "You must be at least 16 years old (or the age of digital consent in your country, if higher) to use the demo.",
-      "To request deletion of a landing demo log entry, email us with the approximate time of your request and, if possible, the task text you submitted.",
+      "To request deletion of a landing demo log entry or session replay, email us with the approximate time of your request and, if possible, the task text or email you submitted.",
     ],
   },
   {
@@ -93,7 +97,8 @@ export const PRIVACY_SECTIONS: LegalSection[] = [
     body: [
       "We keep account and project data while your account is active.",
       "After account deletion we remove or anonymise personal data within 30 days, except where law requires longer retention (e.g. billing records).",
-      "Landing demo logs are kept for up to 12 months, then deleted or aggregated for statistics. You may request earlier deletion by email.",
+      "Landing demo logs and landing-page session replays are kept for up to 12 months, then deleted or aggregated for statistics. You may request earlier deletion by email.",
+      "Early-access usage event logs are kept for up to 12 months, then deleted or aggregated. You may request deletion by emailing us from your account email.",
       "Cached inference results may be deleted sooner via cache controls in the product.",
     ],
   },

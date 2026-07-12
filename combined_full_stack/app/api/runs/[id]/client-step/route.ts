@@ -3,7 +3,8 @@ import { NextResponse, after, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, unknownJob } from "@/lib/server/api-errors";
 import { clientStepBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
-import { billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
+import { billRunUsage } from "@/lib/server/billing_account";
+import { billingKeyForProject } from "@/lib/server/team_billing";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { resumeRunPipeline } from "@/lib/server/run_engine";
 import {
@@ -74,7 +75,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         await store.flush();
         if (run.billedCents > 0) {
           try {
-            const billingKey = await getBillingUserKey();
+            const project = store.project(checkpoint.projectId);
+            const billingKey = await billingKeyForProject(auth.userId, project ?? {});
             await billRunUsage(billingKey, run.billedCents);
           } catch (billErr) {
             apiLog.warn(`resume billing failed`, { jobId, error: (billErr as Error).message });

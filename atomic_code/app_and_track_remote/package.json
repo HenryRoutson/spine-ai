@@ -1,0 +1,20 @@
+{
+  "name": "app-and-track-remote",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server/index.js",
+    "dev:all": "node scripts/dev-all.mjs",
+    "dev:app": "npm run dev --prefix application_react",
+    "dev:dashboard": "npm run dev --prefix recreate_application_activity",
+    "build": "npm run build --prefix application_react && npm run build --prefix recreate_application_activity"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "http-proxy-middleware": "^3.0.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "react": "^19.1.0"
+  }
+}

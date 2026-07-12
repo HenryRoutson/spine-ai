@@ -12,7 +12,6 @@ export const API_ROUTES = {
   billingWebhook: "/api/billing/webhook",
   projects: "/api/projects",
   project: (id: string) => `/api/projects/${id}`,
-  projectTypes: (id: string) => `/api/projects/${id}/types`,
   projectsResyncExamples: "/api/projects/resync-examples",
   projectTemplates: "/api/project-templates",
   docs: "/api/docs",
@@ -37,6 +36,9 @@ export const API_ROUTES = {
   testingEvaluate: "/api/testing-evaluate",
   docsContent: "/api/docs/content",
   feedback: "/api/feedback",
+  activity: "/api/activity",
+  sessionReplay: "/api/session-replay",
+  sessionReplayById: (id: string) => `/api/session-replay/${id}`,
   supabaseEnv: "/api/supabase-env",
   sharedLinks: "/api/shared-links",
   sharedLink: (id: string) => `/api/shared-links/${id}`,
@@ -60,15 +62,24 @@ export const API_ROUTES = {
   },
   sharedLinkDownload: (id: string) => `/api/shared-links/${id}/download`,
   sharedLinkClientStep: (id: string) => `/api/shared-links/${id}/client-step`,
+  marketplace: "/api/marketplace",
+  marketplaceListing: (id: string) => `/api/marketplace/${id}`,
+  marketplaceClone: (id: string) => `/api/marketplace/${id}/clone`,
   hostedApis: "/api/hosted-apis",
   hostedApi: (id: string) => `/api/hosted-apis/${id}`,
   hostedApiInvoke: (id: string) => `/api/hosted-apis/${id}/invoke`,
   hostedApiProgress: (id: string) => `/api/hosted-apis/${id}/progress`,
   landingDemoBuild: "/api/landing-demo/build-pipeline",
   landingDemoSignup: "/api/landing-demo/signup",
+  landingDemoSessionReplay: "/api/landing-demo/session-replay",
   demoState: "/api/demo/state",
   demoDocText: (id: string, layer: "parser" | "vision" = "parser") =>
     `/api/demo/docs/${id}/text${layer === "vision" ? "?layer=vision" : ""}`,
+  teams: "/api/teams",
+  teamInvite: (id: string) => `/api/teams/${id}/invite`,
+  teamMember: (teamId: string, userId: string) => `/api/teams/${teamId}/members/${userId}`,
+  teamInvitesAccept: "/api/teams/invites/accept",
+  projectTeam: (id: string) => `/api/projects/${id}/team`,
 } as const
 
 function isHostedApiPublicApi(pathname: string): boolean {
@@ -88,7 +99,12 @@ function isSharedLinkPublicApi(pathname: string, method: string): boolean {
 }
 
 function isLandingDemoPublicApi(pathname: string): boolean {
-  return pathname === API_ROUTES.landingDemoBuild || pathname === API_ROUTES.landingDemoSignup;
+  // AI : session-replay is email-gated in the route; must bypass auth middleware like build/signup.
+  return (
+    pathname === API_ROUTES.landingDemoBuild ||
+    pathname === API_ROUTES.landingDemoSignup ||
+    pathname === API_ROUTES.landingDemoSessionReplay
+  );
 }
 
 function isDemoPublicApi(pathname: string): boolean {

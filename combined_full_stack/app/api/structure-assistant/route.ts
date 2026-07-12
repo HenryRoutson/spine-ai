@@ -16,7 +16,11 @@ const apiLog = logger("api:structure-assistant");
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  // AI : TODO security — requireAuthStore before parseRequestJson (see pipeline-assistant/route.ts).
+  // AI : SECURITY — auth + rate limit before parsing large assistant bodies.
+  const ctx = await requireAuthStore("llm");
+  if (ctx instanceof NextResponse) return ctx;
+  const { store } = ctx;
+
   const parsed = await parseRequestJson(req, assistantRequestBodySchema);
   if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
   const { projectId, message, history = [] } = parsed;
@@ -24,10 +28,6 @@ export async function POST(req: NextRequest) {
   const modelOrErr = parseAssistantRequestModel(parsed.model);
   if (modelOrErr instanceof NextResponse) return modelOrErr;
   const model = modelOrErr;
-
-  const ctx = await requireAuthStore("llm");
-  if (ctx instanceof NextResponse) return ctx;
-  const { store } = ctx;
 
   const projectOrErr = requireProjectOr404(store, projectId as ProjectId, apiLog);
   if (projectOrErr instanceof NextResponse) return projectOrErr;

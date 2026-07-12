@@ -8,6 +8,7 @@ import type {
   StructureModelId,
 } from "./types";
 import { DEFAULT_MODEL, MODULE_META, ModuleKind } from "./types";
+import { DEFAULT_LLM_STEP_COST_LIMIT_CENTS } from "@/lib/llm-cost-limit";
 import {
   inputModuleTypesAreAllJsonNative,
 } from "@/lib/inference-input-core";
@@ -17,11 +18,9 @@ import { resolveModuleNote } from "@/lib/pipeline-module-factory";
 import { usesPassthroughStructure, isLlmKind } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
 import { hasQuoteField, listFieldsForWrap } from "./structure";
-import { stepSpineOutType, stepEmitsList } from "./type_expr";
+import { normalizeStructureModels, stepSpineOutType, stepEmitsList } from "./type_expr";
 import { migrateModulesSpineTypes, patchSpineOutList, refFromType } from "./spine_types";
 import { dedupeInferredModelsByShape } from "@/lib/structure-shape";
-import { repairOrphanModelRefs } from "@/lib/structure-ref";
-import { uid } from "../id";
 
 export { stepEmitsList } from "./type_expr";
 
@@ -187,6 +186,7 @@ export function syncAutoStructureParseSteps(
           existing?.prompt?.trim() ||
           `Extract structured data from the uploaded document into the ${target.name} schema. Use only content from the document.`,
         model: existing?.model ?? globalModel,
+        costLimitCents: existing?.costLimitCents ?? DEFAULT_LLM_STEP_COST_LIMIT_CENTS,
         cached: true,
         avgMs: existing?.avgMs ?? 0,
         avgCostCents: existing?.avgCostCents ?? 0,
@@ -389,12 +389,11 @@ function normalizeModuleNotes(modules: PipelineModule[]): PipelineModule[] {
 }
 
 export function migrateProjectModules(project: Project): Project {
-  // AI : match client useSyncProjectDocStructures — dedupe + repair before I/O validation at run time.
-  let models = repairOrphanModelRefs(
-    dedupeInferredModelsByShape(stripSharedModels(project.models)),
-    () => uid<StructureModelId>(),
+  // AI : dedupe only — do not remap orphan field.refs to MappingRule (hides Structure tab errors).
+  // AI : dangling refs surface via computeStructureIssues; repairOrphanModelRefs stays for doc-sync.
+  let models = normalizeStructureModels(
+    withSharedModels(dedupeInferredModelsByShape(stripSharedModels(project.models))),
   );
-  models = withSharedModels(models);
   const folded = foldDocToTextSteps(project.modules);
   const quoted = syncManagedPipelineSteps(folded, models);
   const placed = syncAssertPlacement(quoted);
@@ -404,7 +403,15 @@ export function migrateProjectModules(project: Project): Project {
   const normalized = normalizePassthroughStructureIds(withCache);
   const noted = normalizeModuleNotes(normalized);
   const spineTyped = migrateModulesSpineTypes(noted);
-  const modelsChanged = models.length !== project.models.length || models.some((m, i) => m !== project.models[i]);
+  const modelsChanged =
+    models.length !== project.models.length ||
+    models.some((m, i) => {
+      const prev = project.models[i];
+      if (!prev || m.id !== prev.id) return true;
+      return m.fields.some(
+        (f, fi) => JSON.stringify(f) !== JSON.stringify(prev.fields[fi]),
+      );
+    });
   const changed =
     modelsChanged ||
     folded !== project.modules ||

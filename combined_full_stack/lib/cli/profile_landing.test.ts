@@ -13,6 +13,8 @@ function call(partial: Partial<LandingDemoCallRow> & Pick<LandingDemoCallRow, "c
     promptText,
     promptPreview: partial.promptPreview ?? promptText.slice(0, 120),
     outputPreview: partial.outputPreview ?? null,
+    diagnosticText: partial.diagnosticText ?? null,
+    diagnosticJson: partial.diagnosticJson ?? null,
     tag: partial.tag ?? "build-pipeline",
     buildId: partial.buildId ?? null,
     projectName: partial.projectName ?? null,
