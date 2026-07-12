@@ -472,8 +472,8 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
   const { modules, models, project, projectLoading, typeAliases } = useStore()
   useSyncProjectDocStructures()
   const validity = useMemo(
-    () => computeWorkspaceValidity(modules, models, typeAliases),
-    [modules, models, typeAliases],
+    () => computeWorkspaceValidity(modules, models, typeAliases, !!project?.teamReadOnly),
+    [modules, models, typeAliases, project?.teamReadOnly],
   )
 
   useEffect(() => {

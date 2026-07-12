@@ -54,6 +54,8 @@ export function failureKindLabel(kind: FailureKind): string {
       return "Schema validation (pydantic/zod)"
     case FailureKind.StepOutput:
       return "Step output validation (pydantic/zod)"
+    case FailureKind.CostLimit:
+      return "Cost limit"
   }
 }
 

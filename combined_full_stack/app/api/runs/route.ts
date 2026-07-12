@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest, after } from "next/server";
 import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, unknownDoc, unknownProject } from "@/lib/server/api-errors";
 import { parseRequestJson, runBodySchema } from "@/lib/server/api_schemas";
-import { assertCanStartRun, billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
+import { assertCanStartRun, billRunUsage } from "@/lib/server/billing_account";
+import { billingKeyForProject } from "@/lib/server/team_billing";
 import { recordActivityEvent } from "@/lib/server/user_activity";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
@@ -131,7 +132,7 @@ export async function POST(req: NextRequest) {
     resolvedByModule,
   );
 
-  const billingKey = await getBillingUserKey();
+  const billingKey = await billingKeyForProject(auth.userId, project);
   const jobDb = await openJobDb();
 
   try {

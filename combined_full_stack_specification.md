@@ -94,9 +94,8 @@ steps include
 single llm call
 3. parallel llm call - ensuring this completes in a similar time to the single call.
 4. output (there can be multiple per pipeline)
-
-
-  transform which converts a list into a single pydantic / zod model with a field containing that list
+Other more advanced types
+5. Group By (like SQL) - comes with default logic for lists, dicts, sets to implment group by in every supported coding language so it gets filled in automatically on export.
 
 
 Input types include 
@@ -224,6 +223,11 @@ please have a dedicated button to click which goes back to document for input st
 There should be a button to copy the json of the whole pipeline, 
 but also the pipeline json, all code that it exports to and lints of that code.
 You should run automated tests to assert that generated code from a valid pipeline has no lint errors before prod, and in prod any lint errors in export should be recoded in the supabase database to be fixed.
+
+
+please add the option for cost limits per llm step, by default this should be $1
+
+No rag, just quotes as it's more tracable and reliable.
 
 # Testing 
 
@@ -491,6 +495,8 @@ if a tab is disabled it turns red and so it should be a waterfall or if you fix 
 
 please make a shared component which is the run with stop button which should have a play icon, which when clicked shows a loading animation and a stop button next to it. ensure you handle stop logic elegantly and with shared logic.
 
+enterprise logic for teams
+
 you can resize different parts of the UI with ResizableSplit.
 
 
@@ -553,10 +559,7 @@ The goal of the dashboard is to
 - database size mangagement, the number of rows per table , table size in gb, 
 - user feedback
 - be minimal in it's code, as i don't want to be spending my time building a dashboard and would prefer to outsource that
-
-
-
-
+- there should be a graph for overall activity, of how much people are using the landing page or app per day.
 
 
 # Supported languages

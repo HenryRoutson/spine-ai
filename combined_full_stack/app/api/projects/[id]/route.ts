@@ -7,6 +7,7 @@ import { sanitizeModuleModels } from "@/lib/server/model_catalog";
 import { mergeStrategyConfigPatch } from "@/lib/server/strategies";
 import { normalizeStructureModels } from "@/lib/server/type_expr";
 import { recordActivityEvents } from "@/lib/server/user_activity";
+import { teamProjectWriteError } from "@/lib/server/teams";
 import type { user_id_string } from "@/lib/server/require_auth";
 import type { PipelineModule, Project } from "@/lib/server/types";
 
@@ -75,6 +76,8 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     apiLog.warn(`PUT /api/projects — unknown`, { projectId });
     return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
   }
+  const writeErr = teamProjectWriteError(project);
+  if (writeErr) return apiError(writeErr, HTTP.FORBIDDEN);
   const patchBody = await parseRequestJson(req, projectPatchSchema);
   if ("validationError" in patchBody) return apiError(patchBody.validationError, HTTP.BAD_REQUEST);
   const patch = patchBody as Partial<Project>;
@@ -114,6 +117,9 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
     apiLog.warn(`DELETE /api/projects — unknown`, { projectId });
     return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
   }
+  const project = store.project(projectId)!;
+  const writeErr = teamProjectWriteError(project);
+  if (writeErr) return apiError(writeErr, HTTP.FORBIDDEN);
   store.deleteProject(projectId);
   apiLog.info(`DELETE /api/projects`, { projectId });
   await store.flush();

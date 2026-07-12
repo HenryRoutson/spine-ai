@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { hashContent, type Store } from "./store";
 import type { user_id_string } from "./require_auth";
 import { storeErrorMessage } from "./errors";
+import { listTeamsForUser } from "./teams";
 import { migrateProjectModules } from "./validity";
 import { stripSharedModels } from "./builtin_models";
 import type {
@@ -95,6 +96,7 @@ export class SupabaseStore implements Store {
   private projectIdsAtInit = new Set<ProjectId>();
   private createdProjectIds = new Set<ProjectId>();
   private hasFingerprintColumn = false;
+  private hasProjectTeamIdColumn = false;
   private hasVisionCacheTable = false;
   private hasParserCacheTable = false;
 
@@ -107,14 +109,24 @@ export class SupabaseStore implements Store {
     return { ...row, user_id: this.scopedUserId };
   }
 
+  // AI : shared team projects persist on the owner's row — not the viewer's scoped user id.
+  private projectPersistUserId(p: Pick<Project, "teamProjectOwnerId">): user_id_string {
+    return p.teamProjectOwnerId ?? this.scopedUserId;
+  }
+
+  private projectDataForStorage(p: Project): Project {
+    const { teamReadOnly, teamProjectOwnerId, ...rest } = p;
+    return rest;
+  }
+
   // AI : Supabase DELETE with RLS deny returns 204 + 0 rows — treat that as failure.
-  private queueProjectDelete(id: ProjectId): void {
+  private queueProjectDelete(id: ProjectId, ownerId: user_id_string): void {
     this.pendingRest.push(
       (async () => {
         const { data, error } = await this.db
           .from("projects")
           .delete()
-          .eq("user_id", this.scopedUserId)
+          .eq("user_id", ownerId)
           .eq("id", id)
           .select("id");
         if (error) return { error };
@@ -125,10 +137,90 @@ export class SupabaseStore implements Store {
   }
 
   async init(): Promise<void> {
-    let projectsQ = this.db.from("projects").select("data").eq("user_id", this.scopedUserId);
-    let docsQ = this.db.from("docs").select("*").order("uploaded_at", { ascending: false }).eq("user_id", this.scopedUserId);
-    const [projects, docs] = await Promise.all([projectsQ, docsQ]);
-    for (const r of [projects, docs]) if (r.error) throw r.error;
+    const docsQ = this.db.from("docs").select("*").order("uploaded_at", { ascending: false }).eq("user_id", this.scopedUserId);
+    const projectsWithTeam = await this.db.from("projects").select("data, team_id, user_id").eq("user_id", this.scopedUserId);
+    let projects;
+    if (projectsWithTeam.error?.message?.includes("team_id")) {
+      this.hasProjectTeamIdColumn = false;
+      projects = await this.db.from("projects").select("data, user_id").eq("user_id", this.scopedUserId);
+      if (projects.error) throw projects.error;
+    } else {
+      if (projectsWithTeam.error) throw projectsWithTeam.error;
+      this.hasProjectTeamIdColumn = true;
+      projects = projectsWithTeam;
+    }
+
+    const docs = await docsQ;
+    if (docs.error) throw docs.error;
+
+    const ownedProjects = (projects.data ?? []).map((row) => {
+      const data = row.data as Project;
+      const teamId = this.hasProjectTeamIdColumn
+        ? ((row as { team_id?: string }).team_id as Project["teamId"]) ?? data.teamId
+        : data.teamId;
+      return teamId ? { ...data, teamId } : data;
+    });
+
+    let sharedTeamProjects: Project[] = [];
+    if (this.hasProjectTeamIdColumn) {
+      try {
+        const teams = await listTeamsForUser(this.scopedUserId);
+        const roleByTeamId = new Map(teams.map((t) => [t.id, t.role]));
+        const teamIds = [...roleByTeamId.keys()];
+        if (teamIds.length) {
+          const shared = await this.db
+            .from("projects")
+            .select("data, team_id, user_id")
+            .in("team_id", teamIds)
+            .neq("user_id", this.scopedUserId);
+          if (!shared.error) {
+            sharedTeamProjects = (shared.data ?? []).map((row) => {
+              const data = row.data as Project;
+              const teamId = (row.team_id as Project["teamId"]) ?? data.teamId;
+              const role = teamId ? roleByTeamId.get(teamId) : undefined;
+              const canEdit = role === "owner" || role === "admin";
+              return {
+                ...data,
+                ...(teamId ? { teamId } : {}),
+                teamProjectOwnerId: row.user_id as user_id_string,
+                teamReadOnly: !canEdit,
+              };
+            });
+          }
+        }
+      } catch {
+        // AI : teams tables may not exist yet — owned projects still load.
+      }
+    }
+
+    this.state.projects = [...ownedProjects, ...sharedTeamProjects];
+    this.projectIdsAtInit = new Set(this.state.projects.map((p) => p.id));
+
+    const docRows: DocRow[] = [...((docs.data ?? []) as DocRow[])];
+    const sharedOwnerIds = [
+      ...new Set(
+        sharedTeamProjects
+          .map((p) => p.teamProjectOwnerId)
+          .filter((id): id is user_id_string => !!id),
+      ),
+    ];
+    if (sharedOwnerIds.length) {
+      const sharedDocs = await this.db
+        .from("docs")
+        .select("*")
+        .in("user_id", sharedOwnerIds)
+        .order("uploaded_at", { ascending: false });
+      if (!sharedDocs.error) {
+        const seen = new Set(docRows.map((row) => row.id));
+        for (const row of (sharedDocs.data ?? []) as DocRow[]) {
+          if (!seen.has(row.id)) {
+            seen.add(row.id);
+            docRows.push(row);
+          }
+        }
+      }
+      // AI : TODO — load owner runs for shared team projects so members see shared run history.
+    }
 
     let runRows: RunRow[] = [];
     let runsWithFpQ = this.db
@@ -153,9 +245,7 @@ export class SupabaseStore implements Store {
       runRows = (runsWithFp.data ?? []) as RunRow[];
     }
 
-    this.state.projects = (projects.data ?? []).map((row) => row.data as Project);
-    this.projectIdsAtInit = new Set(this.state.projects.map((p) => p.id));
-    for (const row of (docs.data ?? []) as DocRow[]) {
+    for (const row of docRows) {
       this.state.docs.push({
         id: row.id as DocId,
         name: row.name,
@@ -239,23 +329,35 @@ export class SupabaseStore implements Store {
 
   saveProject(p: Project): void {
     const migrated = migrateProjectModules(p);
-    const toPersist = { ...migrated, models: stripSharedModels(migrated.models) };
+    const existing = this.state.projects.find((x) => x.id === migrated.id);
+    const toPersist = {
+      ...migrated,
+      models: stripSharedModels(migrated.models),
+      teamProjectOwnerId: migrated.teamProjectOwnerId ?? existing?.teamProjectOwnerId,
+      teamReadOnly: migrated.teamReadOnly ?? existing?.teamReadOnly,
+    };
     const i = this.state.projects.findIndex((x) => x.id === toPersist.id);
     if (i === -1) {
       this.state.projects.push(toPersist);
       this.createdProjectIds.add(toPersist.id);
     } else this.state.projects[i] = toPersist;
+    const ownerId = this.projectPersistUserId(toPersist);
+    const projectRow: Record<string, unknown> = {
+      id: toPersist.id,
+      user_id: ownerId,
+      data: this.projectDataForStorage(toPersist),
+    };
+    if (this.hasProjectTeamIdColumn) projectRow.team_id = toPersist.teamId ?? null;
     this.pendingProjectUpserts.set(
       toPersist.id,
-      this.db.from("projects").upsert(this.withUserId({ id: toPersist.id, data: toPersist }), {
-        onConflict: "user_id,id",
-      }),
+      this.db.from("projects").upsert(projectRow, { onConflict: "user_id,id" }),
     );
   }
 
   deleteProject(id: ProjectId): boolean {
     const i = this.state.projects.findIndex((p) => p.id === id);
     if (i === -1) return false;
+    const ownerId = this.projectPersistUserId(this.state.projects[i]!);
     this.state.projects.splice(i, 1);
     this.pendingProjectUpserts.delete(id);
     this.projectIdsAtInit.delete(id);
@@ -267,7 +369,7 @@ export class SupabaseStore implements Store {
     );
     this.state.runs = this.state.runs.filter((r) => !runIds.has(r.id));
     for (const rid of runIds) delete this.state.runProjects[rid];
-    this.queueProjectDelete(id);
+    this.queueProjectDelete(id, ownerId);
     if (runIds.size) {
       this.pendingRest.push(
         this.db.from("runs").delete().eq("user_id", this.scopedUserId).eq("project_id", id),
@@ -455,6 +557,7 @@ export class SupabaseStore implements Store {
   }
 
   addRun(projectId: ProjectId, run: PipelineRun): void {
+    // AI : TODO — persist shared-project runs under teamProjectOwnerId so owners see member runs.
     this.state.runProjects[run.id] = projectId;
     this.state.runs = [run, ...this.state.runs];
     this.pendingRest.push(
@@ -526,7 +629,8 @@ export function isMissingSchemaError(error: unknown): boolean {
     code === "PGRST205" ||
     msg.includes("schema cache") ||
     msg.includes("Could not find the table") ||
-    (msg.includes("relation") && msg.includes("does not exist"))
+    (msg.includes("relation") && msg.includes("does not exist")) ||
+    (msg.includes("column") && msg.includes("does not exist"))
   );
 }
 

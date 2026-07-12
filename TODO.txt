@@ -5,6 +5,9 @@ name might already be taken https://www.getspine.ai/
 
 
 
+dashboard : - there should be a graph for overall activity, of how much people are using the landing page or app per day.
+
+
 
 switch to a normal graph approach after you get 100% reliablility with current linear approach. use React Flow / XYFlow, Litegraph.js, Rete.js, Drawflow, to use existing library code for Node editor.
 

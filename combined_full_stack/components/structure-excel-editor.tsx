@@ -31,10 +31,15 @@ type StructureExcelEditorProps = {
 }
 
 export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelEditorProps) {
-  const { models, setModels, typeAliases } = useStore()
+  const { models, setModels, typeAliases, project } = useStore()
+  const teamReadOnly = !!project?.teamReadOnly
   const selected = models.find((m) => m.id === selectedId) ?? models[0]
-  const selectedLocked = selected ? isLockedStructureModel(selected) : false
-  const lockMessage = selected ? lockedStructureBanner(selected) : null
+  const selectedLocked = teamReadOnly || (selected ? isLockedStructureModel(selected) : false)
+  const lockMessage = teamReadOnly
+    ? "Read-only team project — you can view and run, but not edit structures."
+    : selected
+      ? lockedStructureBanner(selected)
+      : null
   const { flash: lockFlash, bannerRef: lockBannerRef, notifyLocked } = useLockedInteractFlash(
     lockMessage,
     selectedId,
@@ -45,11 +50,12 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
   }, [models, typeAliases, selected])
 
   function updateModel(next: StructureModel) {
-    if (isLockedStructureModel(next)) return
+    if (teamReadOnly || isLockedStructureModel(next)) return
     setModels(models.map((m) => (m.id === next.id ? next : m)))
   }
 
   function deleteModel(id: string) {
+    if (teamReadOnly) return
     const target = models.find((m) => m.id === id)
     if (target && isLockedStructureModel(target)) return
     const next = models.filter((m) => m.id !== id)

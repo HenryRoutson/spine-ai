@@ -13,6 +13,7 @@ import {
 import { type ServerLogger } from "./server_logger";
 import { FailureKind, LlmCallStatus, type LlmCallRecord, type ModelId } from "./types";
 import { slugFor } from "./model_catalog";
+import { assertWithinStepCostLimit } from "./step_cost_limit";
 import { type UsageLedger } from "./usage";
 
 // AI : single place to call the LLM with a demo ModelId — maps id→slug and bills the ledger.
@@ -26,6 +27,10 @@ export interface CallContext {
   round?: number;
   llmCalls?: LlmCallRecord[];
   onStructuredFailure?: ChatOptions["onStructuredFailure"];
+  // AI : per-step spend cap — checked after each billed LLM call when both are set.
+  costLimitCents?: number;
+  stepBaseCents?: number;
+  stepLabel?: string;
 }
 
 function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
@@ -39,6 +44,9 @@ function chatOpts(ctx: CallContext, log?: ServerLogger): ChatOptions {
     onUsage: (u) => {
       log?.info(`token usage`, { model: ctx.model, ...u });
       ctx.ledger.recordLlm({ model: ctx.model, ...u });
+      if (ctx.costLimitCents != null && ctx.stepBaseCents != null) {
+        assertWithinStepCostLimit(ctx.ledger, ctx.stepBaseCents, ctx.costLimitCents, ctx.stepLabel);
+      }
     },
     onRoundTrip: (inputChars, outputChars, ok, latencyMs, meta) => {
       ctx.llmCalls?.push({

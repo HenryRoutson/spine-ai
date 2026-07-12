@@ -317,13 +317,15 @@ export function StoreProvider({
 
   const persistProject = useCallback(async (id: string, body: string) => {
     if (mode === "demo") return
+    const readOnly = state?.projects.find((p) => p.id === id)?.teamReadOnly
+    if (readOnly) return
     const result = await apiPut(API_ROUTES.project(id), body)
     if (!result.ok) {
       setSaveError(result.error)
       return
     }
     setSaveError(null)
-  }, [mode])
+  }, [mode, state?.projects])
 
   const refreshBilling = useCallback(async () => {
     if (mode === "demo") {
@@ -466,7 +468,9 @@ export function StoreProvider({
         const current = prev.projects.find((p) => p.id === id)
         if (!current) return prev
         const next = { ...current, lastOpenedAt: Date.now() }
-        void persistProject(id, serializeProjectPutBody(next))
+        if (!current.teamReadOnly) {
+          void persistProject(id, serializeProjectPutBody(next))
+        }
         return { ...prev, projects: prev.projects.map((p) => (p.id === id ? next : p)) }
       })
     },
@@ -595,6 +599,8 @@ export function StoreProvider({
       setState((prev) => {
         if (!prev) return prev
         const id = activeProjectId || prev.projects[0]?.id
+        const current = prev.projects.find((p) => p.id === id)
+        if (current?.teamReadOnly) return prev
         let next: Project | undefined
         const nextProjects = prev.projects.map((p) => (p.id === id ? (next = { ...p, ...patch }) : p))
         if (next) {
@@ -811,6 +817,7 @@ export function StoreProvider({
     return doc
   }, [activeProjectId, persistProject])
 
+  // AI : TODO — team members on shared projects bill the team owner; gate uploads when teamReadOnly.
   const addDocContent = useCallback(
     async (
       name: string,

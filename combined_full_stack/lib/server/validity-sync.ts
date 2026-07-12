@@ -8,6 +8,7 @@ import type {
   StructureModelId,
 } from "./types";
 import { DEFAULT_MODEL, MODULE_META, ModuleKind } from "./types";
+import { DEFAULT_LLM_STEP_COST_LIMIT_CENTS } from "@/lib/llm-cost-limit";
 import {
   inputModuleTypesAreAllJsonNative,
 } from "@/lib/inference-input-core";
@@ -185,6 +186,7 @@ export function syncAutoStructureParseSteps(
           existing?.prompt?.trim() ||
           `Extract structured data from the uploaded document into the ${target.name} schema. Use only content from the document.`,
         model: existing?.model ?? globalModel,
+        costLimitCents: existing?.costLimitCents ?? DEFAULT_LLM_STEP_COST_LIMIT_CENTS,
         cached: true,
         avgMs: existing?.avgMs ?? 0,
         avgCostCents: existing?.avgCostCents ?? 0,

@@ -75,6 +75,11 @@ export const API_ROUTES = {
   demoState: "/api/demo/state",
   demoDocText: (id: string, layer: "parser" | "vision" = "parser") =>
     `/api/demo/docs/${id}/text${layer === "vision" ? "?layer=vision" : ""}`,
+  teams: "/api/teams",
+  teamInvite: (id: string) => `/api/teams/${id}/invite`,
+  teamMember: (teamId: string, userId: string) => `/api/teams/${teamId}/members/${userId}`,
+  teamInvitesAccept: "/api/teams/invites/accept",
+  projectTeam: (id: string) => `/api/projects/${id}/team`,
 } as const
 
 function isHostedApiPublicApi(pathname: string): boolean {

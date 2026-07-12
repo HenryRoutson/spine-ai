@@ -89,6 +89,7 @@ const SeedFileSchema = z.object({
       prompt: z.string().optional(),
       code: z.string().optional(),
       model: z.string().optional(),
+      costLimitCents: z.number().min(0).optional(),
       cached: z.boolean(),
       outIsList: z.boolean().optional(),
       auto: z.boolean().optional(),

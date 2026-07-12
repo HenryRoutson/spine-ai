@@ -1,6 +1,7 @@
 import type { CustomCodeEntry, ModelId, ModuleId, PipelineModule, StructureModel, StructureModelId } from "@/lib/types"
 import { makeCustomCodeEntry } from "@/lib/custom_code_entries"
 import { DEFAULT_ASSERT_TS } from "@/lib/assert_steps"
+import { DEFAULT_LLM_STEP_COST_LIMIT_CENTS } from "@/lib/llm-cost-limit"
 import { CustomCodeLanguage, InputType, ModuleKind, MODULE_META } from "@/lib/types"
 import { uid } from "@/lib/id"
 import { isLlmKind, stepRequiresNote, usesPassthroughStructure } from "@/lib/module-kinds"
@@ -22,6 +23,7 @@ export type ModuleFactoryOpts = {
   code?: string
   fallbackList?: CustomCodeEntry[]
   model?: ModelId
+  costLimitCents?: number
 }
 
 // AI : fallback when legacy data omits note on steps that require it.
@@ -74,6 +76,7 @@ export function createPipelineModule(
           ? (opts.fallbackList ?? [makeCustomCodeEntry(CustomCodeLanguage.TypeScript, DEFAULT_ASSERT_TS)])
           : undefined,
     model: isLlm ? opts.model ?? globalModel : undefined,
+    costLimitCents: isLlm ? opts.costLimitCents ?? DEFAULT_LLM_STEP_COST_LIMIT_CENTS : undefined,
   })
 }
 

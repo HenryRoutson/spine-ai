@@ -34,7 +34,8 @@ type EditorTarget =
 type StructureView = "structures" | "code"
 
 export function StructureBuilder() {
-  const { models, setModels, typeAliases, setTypeAliases } = useStore()
+  const { models, setModels, typeAliases, setTypeAliases, project } = useStore()
+  const teamReadOnly = !!project?.teamReadOnly
   const { focusStructureId, clearFocusStructure } = useAppShell()
   const [target, setTarget] = useState<EditorTarget>(() =>
     models[0]?.id ? { kind: "struct", id: models[0].id } : { kind: "struct", id: "" },
@@ -57,8 +58,12 @@ export function StructureBuilder() {
   }, [focusStructureId, models, clearFocusStructure])
 
   const selectedType = typeAliases.find((t) => t.id === selectedTypeId)
-  const selectedTypeLocked = selectedType ? isLockedTypeAlias(selectedType) : false
-  const typeLockMessage = selectedType ? lockedTypeAliasBanner(selectedType) : null
+  const selectedTypeLocked = teamReadOnly || (selectedType ? isLockedTypeAlias(selectedType) : false)
+  const typeLockMessage = teamReadOnly
+    ? "Read-only team project — you can view and run, but not edit types."
+    : selectedType
+      ? lockedTypeAliasBanner(selectedType)
+      : null
   const {
     flash: typeLockFlash,
     bannerRef: typeLockBannerRef,
@@ -77,6 +82,7 @@ export function StructureBuilder() {
   }, [structureIssues, selectedType])
 
   function addStruct() {
+    if (teamReadOnly) return
     const m: StructureModel = {
       id: uid(),
       name: "NewStruct",
@@ -89,6 +95,7 @@ export function StructureBuilder() {
   }
 
   function addType() {
+    if (teamReadOnly) return
     const t: TypeAlias = {
       id: uid(),
       name: "NewType",
@@ -101,6 +108,7 @@ export function StructureBuilder() {
   }
 
   function deleteType(id: string) {
+    if (teamReadOnly) return
     const alias = typeAliases.find((t) => t.id === id)
     if (alias && isLockedTypeAlias(alias)) return
     const next = typeAliases.filter((t) => t.id !== id)
@@ -117,6 +125,7 @@ export function StructureBuilder() {
   }
 
   function updateTypeAlias(id: string, patch: Partial<TypeAlias>) {
+    if (teamReadOnly) return
     setTypeAliases((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
   }
 
@@ -127,6 +136,15 @@ export function StructureBuilder() {
         title="Structures"
         description="Define the pydantic models your LLM must output to. Schema validation is implicit on every step's I/O."
       />
+
+      {teamReadOnly && (
+        <div className="border-b border-border bg-muted/40 px-4 py-2.5">
+          <p className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+            <Lock className="h-3.5 w-3.5 shrink-0" />
+            Read-only team project — you can view and run, but not edit structures.
+          </p>
+        </div>
+      )}
 
       <div className="flex min-h-0 flex-1">
         <ResizableSplit
@@ -149,6 +167,7 @@ export function StructureBuilder() {
                     size="sm"
                     className="h-7 w-full justify-start gap-1.5 bg-transparent font-mono text-[10px]"
                     onClick={addStruct}
+                    disabled={teamReadOnly}
                   >
                     <Plus className="h-3.5 w-3.5" /> Add struct
                   </Button>
@@ -201,6 +220,7 @@ export function StructureBuilder() {
                     size="sm"
                     className="mb-2 h-7 w-full justify-start gap-1.5 bg-transparent font-mono text-[10px]"
                     onClick={addType}
+                    disabled={teamReadOnly}
                   >
                     <Plus className="h-3.5 w-3.5" /> Add type
                   </Button>

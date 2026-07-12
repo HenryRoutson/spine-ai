@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
 import { parseRequestJson, testingEvaluateBodySchema } from "@/lib/server/api_schemas";
 import { HTTP } from "@/lib/server/api-errors";
-import { assertCanStartRun, billRunUsage, getBillingUserKey } from "@/lib/server/billing_account";
+import { assertCanStartRun, billRunUsage } from "@/lib/server/billing_account";
+import { billingKeyForProject } from "@/lib/server/team_billing";
 import { UnknownModelError, parseRequestModel } from "@/lib/server/model_catalog";
 import { ensureModelOptionsFresh } from "@/lib/server/openrouter_models";
 import { logger } from "@/lib/server/server_logger";
@@ -28,7 +29,10 @@ export async function POST(req: NextRequest) {
   const ctx = await requireAuthStore("llm");
   if (ctx instanceof NextResponse) return ctx;
 
-  const billingKey = await getBillingUserKey();
+  const project = body.projectId
+    ? ctx.store.project(body.projectId as import("@/lib/server/types").ProjectId)
+    : undefined;
+  const billingKey = await billingKeyForProject(ctx.auth.userId, project ?? {});
   try {
     await assertCanStartRun(billingKey);
   } catch (err) {

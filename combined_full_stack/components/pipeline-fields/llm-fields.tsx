@@ -2,7 +2,14 @@
 
 import { JsonHighlight } from "@/components/highlight"
 import { ModelSelector } from "@/components/model-selector"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { formatCostCents } from "@/lib/format"
+import {
+  formatCostLimitUsdInput,
+  llmStepCostLimitCents,
+  parseCostLimitUsdInput,
+} from "@/lib/llm-cost-limit"
 import type { PipelineModule, StructureModel } from "@/lib/types"
 import { PipelineField, StaticValue, llmModelLabel } from "@/components/pipeline-fields/shared"
 
@@ -24,6 +31,8 @@ export function LlmModuleFields({
   llmSchemaPreview,
   onUpdate,
 }: LlmModuleFieldsProps) {
+  const costLimitCents = llmStepCostLimitCents(selected)
+
   return (
     <>
       <PipelineField label="Model">
@@ -34,6 +43,26 @@ export function LlmModuleFields({
           />
         ) : (
           <StaticValue mono>{llmModelLabel(selected.model)}</StaticValue>
+        )}
+      </PipelineField>
+      <PipelineField label="Cost limit" hint="max spend for this step per run — includes input guard + LLM calls">
+        {edit ? (
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-muted-foreground">$</span>
+            <Input
+              type="number"
+              min={0}
+              step={0.01}
+              value={formatCostLimitUsdInput(costLimitCents)}
+              onChange={(e) => {
+                const cents = parseCostLimitUsdInput(e.target.value)
+                if (cents != null) onUpdate!({ costLimitCents: cents })
+              }}
+              className="h-8 font-mono text-xs"
+            />
+          </div>
+        ) : (
+          <StaticValue mono>{formatCostCents(costLimitCents)}</StaticValue>
         )}
       </PipelineField>
       <PipelineField label={hasNoPromptWarning ? "Prompt · optional" : "Prompt"}>

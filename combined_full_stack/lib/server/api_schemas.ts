@@ -31,6 +31,33 @@ const MAX_STRUCTURE_PAYLOAD_CHARS = 50_000;
 export const sharedLinkIdSchema = z.string().regex(/^pub_[a-z0-9]{10,32}$/i);
 export const hostedApiIdSchema = z.string().regex(/^api_[a-z0-9]{10,32}$/i);
 export const marketplaceListingIdSchema = z.string().regex(/^mkt_[a-z0-9]{10,32}$/i);
+export const teamIdSchema = z.string().regex(/^team_[a-z0-9]{10,32}$/i);
+export const teamInviteTokenSchema = z.string().regex(/^tinv_[a-z0-9]{10,32}$/i);
+
+export const createTeamBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+  })
+  .strict();
+
+export const teamInviteBodySchema = z
+  .object({
+    email: z.string().trim().email().max(320),
+    role: z.enum(["admin", "member"]).default("member"),
+  })
+  .strict();
+
+export const acceptTeamInviteBodySchema = z
+  .object({
+    token: teamInviteTokenSchema,
+  })
+  .strict();
+
+export const projectTeamBodySchema = z
+  .object({
+    teamId: teamIdSchema.nullable(),
+  })
+  .strict();
 export const userBillingKeyIdSchema = z.string().trim().min(1).max(128);
 
 export function parseProjectId(raw: string): ProjectId | null {
@@ -105,6 +132,7 @@ const pipelineModulePatchSchema = z
     code: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
     fallbackList: z.array(customCodeEntryPatchSchema).max(20).optional(),
     model: z.string().max(128).optional(),
+    costLimitCents: z.number().min(0).max(1_000_000).optional(),
     useOcr: z.boolean().optional(),
     cached: z.boolean().optional(),
     outIsList: z.boolean().optional(),
@@ -268,6 +296,7 @@ export const testingEvaluateBodySchema = z
     steps: z.array(probabilisticEvalStepSchema).max(20).optional(),
     diffSteps: z.array(deterministicDiffStepSchema).max(20).optional(),
     model: z.string().max(128).optional(),
+    projectId: projectIdSchema.optional(),
   })
   .refine((body) => (body.steps?.length ?? 0) + (body.diffSteps?.length ?? 0) > 0, {
     message: "Provide steps and/or diffSteps",

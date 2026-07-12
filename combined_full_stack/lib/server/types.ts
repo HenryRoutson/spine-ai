@@ -175,6 +175,7 @@ export interface PipelineModule {
   code?: string; // AI : transform steps with custom code only
   fallbackList?: CustomCodeEntry[]; // AI : custom-code — ordered attempts, first is primary
   model?: ModelId; // per-step model override
+  costLimitCents?: number; // AI : per-llm-step spend cap — defaults to $1 when unset
   useOcr?: boolean; // input only — vision OCR when PDF/image is accepted (built-in parser when off)
   cached: boolean;
   // AI : backend-only — llm/transform steps may emit a list of `outStructure` rather than one.
@@ -213,6 +214,9 @@ export interface Project {
   createdAt?: number; // AI : ms since epoch — set when blank/cloned; templates from seeds/*.json omit this
   lastOpenedAt?: number; // AI : ms since epoch — updated when user opens/switches to this project
   documentation?: string; // AI : freeform markdown — prepended to every agent/assistant prompt call to prevent regressions
+  teamId?: import("@/lib/team-types").team_id_string; // AI : when set, team members can view/run; bills team owner
+  teamReadOnly?: boolean; // AI : true when loaded from another member's account — client disables edits
+  teamProjectOwnerId?: import("./require_auth").user_id_string; // AI : runtime-only — owner's user_id when viewing a shared team project
 }
 
 export enum StrategyKind {
@@ -281,6 +285,7 @@ export enum FailureKind {
   JsonParse = "json_parse",
   Schema = "schema",
   StepOutput = "step_output",
+  CostLimit = "cost_limit",
 }
 
 export interface RunFailureRecord {

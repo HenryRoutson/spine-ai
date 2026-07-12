@@ -78,6 +78,7 @@ export function PipelineBuilder() {
     modules,
     models,
     typeAliases,
+    !!project?.teamReadOnly,
   )
   const typeIssueMessages = structureIssueMessagesForUi(models, typeAliases)
   const invalid = computeInvalidForUi(modules, models, typeAliases)
@@ -216,7 +217,16 @@ export function PipelineBuilder() {
           }
         />
 
-        {editingBlocked && (
+        {project.teamReadOnly && (
+          <div className="border-b border-border bg-muted/40 px-4 py-2.5">
+            <p className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+              <Lock className="h-3.5 w-3.5 shrink-0" />
+              Read-only team project — you can view and run, but not edit.
+            </p>
+          </div>
+        )}
+
+        {editingBlocked && !project.teamReadOnly && (
           <div className="border-b border-destructive/30 bg-destructive/10 px-4 py-2.5">
             <p className="flex items-center gap-1.5 font-mono text-[11px] text-destructive">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
