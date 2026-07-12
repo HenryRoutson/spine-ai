@@ -1,8 +1,11 @@
 
-Spine
-rename everything to spine
-name might already be taken https://www.getspine.ai/
+PRIORITY
 
+
+
+
+
+how to do integrations? like google search? don't code yourself.
 
 
 dashboard : - there should be a graph for overall activity, of how much people are using the landing page or app per day.
