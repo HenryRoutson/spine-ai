@@ -166,6 +166,8 @@ or
 
 
 
+custom code should have a hash store of all the errors that code has produced, and maybe even something based on the similarity of the code which you could do with a keyword match and then git diff quite efficiently.
+
 
 the pipeline should have clickable linked to the intput and output structs that are set so you don't have to manually go to the structs tab and find it 
 
@@ -434,10 +436,10 @@ flag and block uploads if they contain 'confidential' until you click approve
 uploading a new document will check if it matches any of the existing structs and display this. you have the option to add any new structures in the document.
 
 when viewing a pdf or image you need to options to see 
-1. raw markdown text
-2. formatted markdown
-3. pdf
-4. OCR labelled
+1. raw markdown text derived from pdf or image
+2. formatted markdown derived from pdf or image
+3. pdf or image
+4. OCR labelled with bounding boxes like deepseek OCR can.
 
 an option for csvs and also for files like excel, csv or json to automatically derive their excel structures . you should be able to go into the doucments tab and click any of the derived pydantic zod models to add to strcutres, then those structures should link back to the original document with a clickable link to show where they came from
 
@@ -498,6 +500,9 @@ please make a shared component which is the run with stop button which should ha
 enterprise logic for teams
 
 you can resize different parts of the UI with ResizableSplit.
+
+please add the option to allow for custom llm apis, and make this modular so that whatever the default one is like openrouter is just one of these wrapped APIs. Ensure you support features like batched responses so you can utilise that if it's availble. I'm adding this because if we're doing custom deployments into companies like KPMG, which i've worked at, we're going to need to use their internall LLM. These internal LLMs often have custom logic for calling them. You will likely need to persist a client to avoid recreating it, and try to make it easy to select which model to select in a way that is generic across custom interal APIs. this will likely just be a generic enum for model to a variable that controls this in the custom API. You will need to seperate provider and llm model, as they're seperate concepts. Ensure you export this logic into the exported code, including exporting openrouter as the default and as an option in all exports. I should be able to view the code for openrouter as an example, with syntax highlighting, and for all the different supported langauges. I should then have an option to add a provider, with code and asserts around this code that there is one function with a certain type signature maybe. I should be able to select either openrouter:gpt-5-mini or custom_provider:gpt-5-mini.
+You should just have a page with a list of providers and openrouter should be a locked example. Ensure you treat the block like custom code, were you can see all the error historically that have occured in the hash exact same code (ignoring whitespace).
 
 
 # history and merging changes 
@@ -570,3 +575,13 @@ The goal of the dashboard is to
 - Go
 - swift
 - Kotlin
+
+
+
+
+# graduated complexity
+need to start off the UI with a 
+- builder developer section
+- builder section (for non technical)
+- consumer (for ppl not developing)
+Starting a project, you start with a single prompt, and then give feedback on what was built to ensure that you're improving the agent's single prompt ability.

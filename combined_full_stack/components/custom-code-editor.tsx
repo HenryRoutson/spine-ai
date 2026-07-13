@@ -15,6 +15,7 @@ type CustomCodeEditorProps = {
   readOnly?: boolean
   label?: string
   className?: string
+  compact?: boolean
 }
 
 // AI : Monaco-backed editor — compact inline + optional fullscreen VS Code-style overlay.
@@ -25,6 +26,7 @@ export function CustomCodeEditor({
   readOnly = false,
   label,
   className,
+  compact = true,
 }: CustomCodeEditorProps) {
   const [fullscreen, setFullscreen] = useState(false)
 
@@ -65,7 +67,7 @@ export function CustomCodeEditor({
             onChange={onChange}
             language={language}
             readOnly={readOnly}
-            compact
+            compact={compact}
           />
         </div>
       )}

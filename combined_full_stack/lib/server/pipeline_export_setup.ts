@@ -1,6 +1,19 @@
 import { orderedInputModules } from "@/lib/inference-input";
 import { labelAsStateKey } from "./pipeline_state";
 import type { PipelineSetupFile } from "./pipeline_export_shared";
+import {
+  generateLlmProviderStubsPy,
+  generateLlmProviderStubsTs,
+  llmBatchStubPyModular,
+  llmBatchStubTsModular,
+  llmRuntimeFieldsGo,
+  llmRuntimeFieldsPy,
+  llmRuntimeFieldsRust,
+  llmRuntimeFieldsTs,
+  llmStructuredStubPyModular,
+  llmStructuredStubTsModular,
+  openRouterHelpersPyModular,
+} from "./pipeline_export_llm";
 import { ModuleKind } from "./types";
 import type { PipelineModule, Project } from "./types";
 
@@ -56,10 +69,15 @@ export function generateEnvExample(project: Project): string {
 
   if (needs.llm || needs.llmBatch || needs.visionOcr) {
     lines.push(
-      "# LLM inference (OpenRouter-compatible API)",
+      "# LLM inference — OpenRouter is default; set LLM_PROVIDER for enterprise internal APIs",
+      'LLM_PROVIDER="openrouter"',
       'OPENROUTER_API_KEY=""',
       'OPENROUTER_SITE_URL="http://localhost:3000"',
       'OPENROUTER_APP_TITLE=""',
+      "# Custom / enterprise provider (when LLM_PROVIDER is not openrouter)",
+      'CUSTOM_LLM_PROVIDER_ID="custom"',
+      'CUSTOM_LLM_API_URL=""',
+      'CUSTOM_LLM_API_KEY=""',
       "",
     );
   }
@@ -94,7 +112,7 @@ export function generateEnvExample(project: Project): string {
     "# Optional — step cache store (TODO: wire Redis/Supabase in connector + orchestrator)",
     '# PIPELINE_CACHE_URL=""',
     "",
-    "# Optional — billing UI in the full Forge app (not required for pipeline-only runs)",
+    "# Optional — billing UI in the full Spine app (not required for pipeline-only runs)",
     '# NEXT_PUBLIC_STRIPE_ENABLED="false"',
     '# STRIPE_SECRET_KEY=""',
     "",
@@ -108,7 +126,7 @@ export function generateSetupReadme(project: Project, slug: string): string {
   const lines = [
     `# ${project.name} — exported pipeline setup`,
     "",
-    "This folder was generated from Forge. Wire the runtime stubs, then run the orchestrator.",
+    "This folder was generated from Spine. Wire the runtime stubs, then run the orchestrator.",
     "",
     "## Files",
     "",
@@ -146,7 +164,8 @@ export function generateSetupReadme(project: Project, slug: string): string {
     lines.push(
       "## 2. LLM",
       "",
-      "Wire `configurePipelineRuntime({ openRouterApiKey })` (or Python equivalent) — `llmStructured` calls OpenRouter by default.",
+      "Wire `configurePipelineRuntime({ openRouterApiKey })` (or Python equivalent) — OpenRouter is the default LLM provider.",
+      "For enterprise internal LLMs, call `registerCustomLlmProvider()` / `register_custom_llm_provider()` and set `llmProviderId`.",
       "Override the model via `openRouterModel` in runtime config, or edit step bodies to pass a different slug.",
       "",
     );
@@ -503,9 +522,7 @@ export function generateRuntimeConfigSectionTs(needs: ExportRuntimeNeeds): strin
   const lines = [
     "// === runtime config (load .env in your runner — pass values here, not in this file) ===",
     "export type PipelineRuntime = {",
-    ...(needs.llm || needs.llmBatch || needs.visionOcr
-      ? ["  openRouterApiKey?: string;", "  openRouterModel?: string;", "  openRouterSiteUrl?: string;", "  openRouterAppTitle?: string;"]
-      : []),
+    ...(needs.llm || needs.llmBatch || needs.visionOcr ? llmRuntimeFieldsTs() : []),
     ...(needs.quote ? ["  sourceText?: string;", "  sourceDocId?: string;"] : []),
     ...(needs.humanReview ? ["  onHumanReview?: <T>(input: T) => Promise<void>;"] : []),
     "  // AI : TODO export — Supabase persistence (supabaseUrl, supabaseServiceKey).",
@@ -531,22 +548,14 @@ export function generateRuntimeStubsTs(needs: ExportRuntimeNeeds): string {
   if (needs.llm || needs.llmBatch || needs.visionOcr) {
     lines.push(
       "",
-      ...openRouterHelpersTs(),
-      "",
-      ...llmStructuredStubTs(),
+      ...generateLlmProviderStubsTs(),
     );
-    if (needs.llmBatch) {
-      lines.push(
-        "",
-        "async function llmBatchStructured<T>(",
-        "  items: unknown[],",
-        "  promptFor: (item: unknown) => string,",
-        "  schema: unknown,",
-        "): Promise<T[]> {",
-        "  return Promise.all(items.map((item) => llmStructured<T>(promptFor(item), schema)));",
-        "}",
-      );
-    }
+  }
+  if (needs.llm || needs.visionOcr) {
+    lines.push("", ...llmStructuredStubTsModular());
+  }
+  if (needs.llmBatch) {
+    lines.push("", ...llmBatchStubTsModular());
   }
 
   if (needs.quote) {
@@ -585,12 +594,7 @@ export function generateRuntimeConfigSectionPy(needs: ExportRuntimeNeeds): strin
   ];
   const fields: string[] = [];
   if (needs.llm || needs.llmBatch || needs.visionOcr) {
-    fields.push(
-      "    open_router_api_key: str | None = None",
-      "    open_router_model: str | None = None",
-      "    open_router_site_url: str | None = None",
-      "    open_router_app_title: str | None = None",
-    );
+    fields.push(...llmRuntimeFieldsPy());
   }
   if (needs.quote) {
     fields.push("    source_text: str | None = None", "    source_doc_id: str | None = None");
@@ -614,17 +618,16 @@ export function generateRuntimeStubsPy(needs: ExportRuntimeNeeds): string {
   if (needs.llm || needs.llmBatch || needs.visionOcr) {
     lines.push(
       "",
-      ...openRouterHelpersPy(),
+      ...generateLlmProviderStubsPy(),
       "",
-      ...llmStructuredStubPy(),
-      "",
-      "async def llm_batch_structured(",
-      "    items: list[Any],",
-      "    prompt_for: Callable[[Any], str],",
-      "    schema: Any,",
-      ") -> list[Any]:",
-      "    return [await llm_structured(prompt_for(item), schema) for item in items]",
+      ...openRouterHelpersPyModular(),
     );
+  }
+  if (needs.llm || needs.visionOcr) {
+    lines.push("", ...llmStructuredStubPyModular());
+  }
+  if (needs.llmBatch) {
+    lines.push("", ...llmBatchStubPyModular());
   }
 
   if (needs.quote) {
@@ -656,12 +659,7 @@ export function generateRuntimeStubsPy(needs: ExportRuntimeNeeds): string {
 export function generateRuntimeConfigSectionRust(needs: ExportRuntimeNeeds): string {
   const fields: string[] = [];
   if (needs.llm || needs.llmBatch || needs.visionOcr) {
-    fields.push(
-      "    pub open_router_api_key: Option<String>,",
-      "    pub open_router_model: Option<String>,",
-      "    pub open_router_site_url: Option<String>,",
-      "    pub open_router_app_title: Option<String>,",
-    );
+    fields.push(...llmRuntimeFieldsRust());
   }
   if (needs.quote) {
     fields.push("    pub source_text: Option<String>,", "    pub source_doc_id: Option<String>,");
@@ -829,12 +827,7 @@ export function generateRuntimeStubsRust(needs: ExportRuntimeNeeds): string {
 export function generateRuntimeConfigSectionGo(needs: ExportRuntimeNeeds): string {
   const fields: string[] = [];
   if (needs.llm || needs.llmBatch || needs.visionOcr) {
-    fields.push(
-      "\tOpenRouterAPIKey  string",
-      "\tOpenRouterModel   string",
-      "\tOpenRouterSiteURL string",
-      "\tOpenRouterAppTitle string",
-    );
+    fields.push(...llmRuntimeFieldsGo());
   }
   if (needs.quote) {
     fields.push("\tSourceText  string", "\tSourceDocID string");

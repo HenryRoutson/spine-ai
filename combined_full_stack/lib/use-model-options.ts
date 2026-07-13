@@ -1,6 +1,11 @@
 "use client"
 
-import { catalogLabel } from "@/lib/types"
+import {
+  catalogLabel,
+  formatRoutedModel,
+  parseRoutedModel,
+  wireModelId,
+} from "@/lib/types"
 import { useOptionalConsumerStore, useOptionalStore } from "@/lib/store"
 
 export function useModelOptions() {
@@ -12,5 +17,16 @@ export function useModelOptions() {
 }
 
 export function modelLabel(id?: string): string {
-  return catalogLabel(id) ?? id ?? "—"
+  if (!id) return "—"
+  const parsed = parseRoutedModel(id)
+  const model = catalogLabel(parsed.modelId)
+  return `${parsed.providerId}:${model}`
 }
+
+export function normalizeModelRef(id: string | undefined, defaultProviderId = "openrouter"): string {
+  if (!id) return formatRoutedModel(defaultProviderId, "deepseek-v3")
+  const parsed = parseRoutedModel(id)
+  return formatRoutedModel(parsed.providerId, parsed.modelId)
+}
+
+export { wireModelId }

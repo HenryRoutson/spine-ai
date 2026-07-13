@@ -1,5 +1,5 @@
 import { allModelsToBaml } from "./pydantic";
-import { slugFor } from "./model_catalog";
+import { providerModelFor } from "./model_catalog";
 import {
   exportStringLiteral,
   makeUniqueStepFnName,
@@ -25,12 +25,12 @@ function bamlFnName(raw: string, index: number): string {
   return /^[A-Z]/.test(base) ? base : `Step${base}`;
 }
 
-function openRouterModelSlug(model: string | undefined): string {
-  return slugFor(model ?? DEFAULT_MODEL);
+function providerModelSlug(model: string | undefined): string {
+  return providerModelFor(model ?? DEFAULT_MODEL);
 }
 
 function clientNameForModel(model: string | undefined, used: Set<string>): string {
-  const slug = openRouterModelSlug(model);
+  const slug = providerModelSlug(model);
   const raw = slug
     .replace(/[^a-zA-Z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
@@ -119,7 +119,7 @@ export function generatePipelineSourceBaml(project: Project): string {
   if (needs.llm || needs.llmBatch) {
     for (const m of prepared.modules) {
       if (m.kind !== "llm" && m.kind !== "llm-batch") continue;
-      const slug = openRouterModelSlug(m.model);
+      const slug = providerModelSlug(m.model);
       if (clientByModel.has(slug)) continue;
       const name = clientNameForModel(m.model, clientUsed);
       clientByModel.set(slug, name);
@@ -138,13 +138,13 @@ export function generatePipelineSourceBaml(project: Project): string {
     }
     if (!clients.length) {
       const name = clientNameForModel(undefined, clientUsed);
-      clientByModel.set(openRouterModelSlug(undefined), name);
+      clientByModel.set(providerModelSlug(undefined), name);
       clients.push(
         [
           `client<llm> ${name} {`,
           `  provider openrouter`,
           `  options {`,
-          `    model ${exportStringLiteral(openRouterModelSlug(undefined))}`,
+            `    model ${exportStringLiteral(providerModelSlug(undefined))}`,
           `  }`,
           `}`,
           "",
@@ -157,7 +157,7 @@ export function generatePipelineSourceBaml(project: Project): string {
     const key = stepFnName(m, i);
     const fn = bamlFnName(key, i);
     if (m.kind === "llm" || m.kind === "llm-batch") {
-      const slug = openRouterModelSlug(m.model);
+      const slug = providerModelSlug(m.model);
       const client = clientByModel.get(slug) ?? [...clientByModel.values()][0] ?? "OpenRouterDefault";
       functions.push(generateLlmFunction(m, prepared, i, fn, client, m.kind === "llm-batch"));
     } else {
