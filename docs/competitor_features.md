@@ -19,10 +19,12 @@ Important features to consider in a product if it's a competitor.
 - human in the loop ability 
 - latency flame charts
 - tool calling agents
-- mcp support
+- mcp support for agents
 - openclaw like integrations
 - support for efficient langauges like rust
 - option to export to pure code 
 - durable retries
 - document OCR visualisation for PDF files
 - automatically improving agents or pipelines
+- projects can be exported as an MCP tool
+- 

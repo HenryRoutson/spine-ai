@@ -575,3 +575,13 @@ The goal of the dashboard is to
 - Go
 - swift
 - Kotlin
+
+
+
+
+# graduated complexity
+need to start off the UI with a 
+- builder developer section
+- builder section (for non technical)
+- consumer (for ppl not developing)
+Starting a project, you start with a single prompt, and then give feedback on what was built to ensure that you're improving the agent's single prompt ability.

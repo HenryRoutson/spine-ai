@@ -3,6 +3,13 @@ PRIORITY
 
 
 
+SEO https://search.google.com/search-console/welcome?utm_source=about-page
+
+
+try https://cloud.flowiseai.com/canvas
+
+
+regex RAG, with an example regex constant, connected to web search directly
 
 how to do integrations? like google search? don't code yourself.
 
@@ -97,6 +104,9 @@ When input text/JSON is mapped into a structure, missing or wrong fields get sil
 fix 
 4. OCR is a placeholder
 useOcr on PDF/image inputs does not use real DeepSeek OCR; it falls back to PDF.js text extraction.
+https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/deepseek/deepseek-ocr#:~:text=Model%20ID,Fixed
+https://replicate.com/lucataco/deepseek-ocr
+
 
 
 fix 
