@@ -1,0 +1,28 @@
+Important features to consider in a product if it's a competitor.
+- document ingestion
+- structured extraction and output with pydantic or zod like schemas
+- logging syntax highlighting
+- parallel llm calls
+- caching
+- custom provider support
+- confidential deployments to enterprise clients
+- integrations like n8n
+- rag like support with either embedding or quote extraction
+- option to deploy pages without view of backend logic for others to use, and ability to control billing of those pages
+- scheduled runs
+- automatic prompting with schema derived prompts
+- automatic input validation with json schemas
+- directed ascyclic graphs
+- marketplace
+- testing logic with automatic deterministic vs probabilistic comparison depending on fields to ensure efficiency
+- prompt profiling, which prompts have long outputs or inputs and is this causing errors
+- human in the loop ability 
+- latency flame charts
+- tool calling agents
+- mcp support
+- openclaw like integrations
+- support for efficient langauges like rust
+- option to export to pure code 
+- durable retries
+- document OCR visualisation for PDF files
+- automatically improving agents or pipelines

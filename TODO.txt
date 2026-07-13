@@ -7,6 +7,8 @@ PRIORITY
 how to do integrations? like google search? don't code yourself.
 
 
+- latency flame charts?
+
 dashboard : - there should be a graph for overall activity, of how much people are using the landing page or app per day.
 
 explain if we do or don't reccomend and use rag in the landing page. You also might want to use Target rag, which is where an LLM will determine a sentence that has the best embedding rather than just the original prompt. maybe make post explaining this on blog.
