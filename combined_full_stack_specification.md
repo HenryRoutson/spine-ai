@@ -436,10 +436,10 @@ flag and block uploads if they contain 'confidential' until you click approve
 uploading a new document will check if it matches any of the existing structs and display this. you have the option to add any new structures in the document.
 
 when viewing a pdf or image you need to options to see 
-1. raw markdown text
-2. formatted markdown
-3. pdf
-4. OCR labelled
+1. raw markdown text derived from pdf or image
+2. formatted markdown derived from pdf or image
+3. pdf or image
+4. OCR labelled with bounding boxes like deepseek OCR can.
 
 an option for csvs and also for files like excel, csv or json to automatically derive their excel structures . you should be able to go into the doucments tab and click any of the derived pydantic zod models to add to strcutres, then those structures should link back to the original document with a clickable link to show where they came from
 
