@@ -47,7 +47,12 @@ https://humanloop.com/home
 https://langfuse.com/
 https://rapidapi.com/
 https://openai.com/index/introducing-the-gpt-store/
-
+Helicone - https://www.helicone.ai/
+Portkey - https://portkey.ai/
+https://www.make.com/en
+https://www.coze.com/
+https://dspy.ai/
+https://crewai.com/
 
 
 
