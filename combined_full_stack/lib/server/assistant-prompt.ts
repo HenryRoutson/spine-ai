@@ -111,6 +111,7 @@ What each step puts on the spine (emits):
 - llm / transform / custom-code with outIsList true → list[structureOut]
 - llm-batch → ALWAYS list[structureOut] (outIsList is implied true)
 - quote (auto-inserted "Link Quotes") → INHERITS outIsList from its upstream LLM step. If the LLM has outIsList true the quote step also emits list[structureOut]. Do NOT create transform or quote steps named "Link Quotes ·…" yourself — they are inserted automatically.
+- retrieval ("Traditional RAG") → ALWAYS list[RetrievedChunk] (built-in shared structure). Auto-chunks ctx.sourceText, BM25-ranks by retrievalQuery / prompt / retrievalQueryField, and emits every chunk with score + explanation of why it was or was not in top-K. Use before LLM quote extraction when the source doc is long. Inspect results on the Retrieval tab; ask why-questions about retrieve/skip quotes.
 
 What each step requires from the previous step (expects):
 - Most steps → single structureIn matching the previous step's emit

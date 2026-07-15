@@ -19,6 +19,7 @@ import {
   LayoutGrid,
   ChevronDown,
   BookOpen,
+  Search,
   SquareCheck,
   Share2,
   SquareArrowUp,
@@ -82,6 +83,10 @@ const PipelineBuilder = dynamic(
   () => import("@/components/pipeline-builder").then((m) => ({ default: m.PipelineBuilder })),
   { loading: () => <PanelLoading label="loading pipeline…" /> },
 )
+const RetrievalPage = dynamic(
+  () => import("@/components/retrieval-page").then((m) => ({ default: m.RetrievalPage })),
+  { loading: () => <PanelLoading label="loading retrieval…" /> },
+)
 const Testing = dynamic(() => import("@/components/testing").then((m) => ({ default: m.Testing })), {
   loading: () => <PanelLoading label="loading testing…" />,
 })
@@ -118,6 +123,7 @@ type NavIcon = React.ComponentType<{ className?: string }>
 const WINDOWS: { id: WindowId; label: string; hint: string; icon: NavIcon }[] = [
   { id: "structure", label: "Structures", hint: "01", icon: Boxes },
   { id: "pipeline", label: "Pipeline", hint: "02", icon: SpineNavIcon },
+  { id: "retrieval", label: "Retrieval", hint: "02b", icon: Search },
   // AI : Testing sits before Inference — tests run before demoing (spec § Testing).
   { id: "testing", label: "Testing", hint: "03", icon: SquareCheck },
   { id: "inference", label: "Inference", hint: "04", icon: Play },
@@ -620,6 +626,7 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
               {projectLoading && <ProjectSwitchOverlay projectName={project.name} />}
               {activeWindow === "structure" && <StructureBuilder />}
               {activeWindow === "pipeline" && <PipelineBuilder />}
+              {activeWindow === "retrieval" && <RetrievalPage />}
               {activeWindow === "testing" && <Testing />}
               {activeWindow === "inference" && <Inference />}
               {activeWindow === "share" && <Share />}

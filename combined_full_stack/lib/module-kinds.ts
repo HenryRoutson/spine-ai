@@ -6,6 +6,7 @@ export const USER_ADDABLE_MODULE_KINDS = [
   ModuleKind.Input,
   ModuleKind.Llm,
   ModuleKind.LlmBatch,
+  ModuleKind.Retrieval,
   ModuleKind.Transform,
   ModuleKind.Combine,
   ModuleKind.CustomCode,
@@ -35,6 +36,9 @@ export function stepRequiresNote(kind: ModuleKind): boolean {
 export function stepIoLabels(kind: RunStepKind) {
   if (kind === ModuleKind.Quote) {
     return { inTitle: "Source + extracts", outTitle: "Linked quotes" }
+  }
+  if (kind === ModuleKind.Retrieval) {
+    return { inTitle: "Query + source", outTitle: "Retrieved chunks" }
   }
   const isLlm = kind === ModuleKind.Llm || kind === ModuleKind.LlmBatch
   return {

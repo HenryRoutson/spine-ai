@@ -1,0 +1,118 @@
+{
+  "id": "p_rag_quotes",
+  "name": "RAG Quote Retrieval",
+  "kind": "rag-demo",
+  "models": [
+    {
+      "id": "m_passage",
+      "name": "PassageAnswer",
+      "description": "Answer grounded in retrieved passages with a verbatim quote.",
+      "fields": [
+        {
+          "id": "f_answer",
+          "name": "answer",
+          "type": "text",
+          "optional": false,
+          "description": "Short answer using only retrieved passages",
+          "deterministic": false
+        },
+        {
+          "id": "f_evidence",
+          "name": "evidence",
+          "type": "json",
+          "typeExpr": { "kind": "named", "name": "text_quote_t" },
+          "optional": false,
+          "description": "Supporting quote from retrieved context"
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_input",
+      "kind": "input",
+      "label": "Policy Document",
+      "note": "Long policy text — Traditional RAG chunks and retrieves relevant passages before the LLM step.",
+      "inputType": "text",
+      "inputDescription": "Company policy or contract text",
+      "outStructureId": "m_builtin_document",
+      "cached": true,
+      "avgMs": 80,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_retrieve",
+      "kind": "retrieval",
+      "label": "Retrieve Policy Passages",
+      "note": "BM25 top-K passages for the termination query — inspect explanations on the Retrieval tab.",
+      "inputDescription": "Full policy Document text",
+      "inStructureId": "m_builtin_document",
+      "outStructureId": "m_builtin_retrieved_chunk",
+      "outIsList": true,
+      "retrievalQuery": "employee termination notice period severance",
+      "retrievalTopK": 3,
+      "cached": true,
+      "avgMs": 15,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_answer",
+      "kind": "llm",
+      "label": "Answer From Retrieved Passages",
+      "note": "Uses only retrieved chunks as context — quote field links downstream via auto Link Quotes.",
+      "inputDescription": "List of RetrievedChunk rows marked retrieved=true",
+      "inStructureId": "m_builtin_retrieved_chunk",
+      "outStructureId": "m_passage",
+      "outIsList": false,
+      "prompt": "Using ONLY the retrieved policy passages in the input list (retrieved=true), answer: What is the employee termination notice period and severance rule? Return a concise answer and a verbatim evidence quote.",
+      "model": "deepseek-v3",
+      "cached": true,
+      "avgMs": 1800,
+      "avgCostCents": 4
+    },
+    {
+      "id": "mod_link",
+      "kind": "quote",
+      "label": "Link Quotes",
+      "auto": true,
+      "note": "Auto · PassageAnswer → PassageAnswer",
+      "inStructureId": "m_passage",
+      "outStructureId": "m_passage",
+      "cached": true,
+      "avgMs": 5,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_out",
+      "kind": "output",
+      "label": "Final Answer",
+      "note": "Grounded answer snapshot",
+      "inStructureId": "m_passage",
+      "outStructureId": "m_passage",
+      "cached": true,
+      "avgMs": 1,
+      "avgCostCents": 0
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_default",
+      "kind": "single-llm",
+      "name": "Default",
+      "enabled": true,
+      "model": "deepseek-v3",
+      "accuracy": 0.85,
+      "latencyMs": 2000,
+      "costCents": 5,
+      "passRate": 0.9
+    }
+  ],
+  "docs": [
+    {
+      "name": "sample_policy.txt",
+      "type": "text",
+      "label": "inference",
+      "file": "rag_quote_retrieval/sample_policy.txt"
+    }
+  ]
+}

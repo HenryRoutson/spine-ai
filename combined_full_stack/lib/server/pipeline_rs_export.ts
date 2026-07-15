@@ -74,6 +74,13 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
         `let out: ${outRust} = serde_json::from_value(linked)?;`,
         "Ok(out)",
       ].join("\n");
+    case "retrieval":
+      return [
+        "// Traditional RAG — auto-chunk source text, BM25 top-K with per-chunk explanations",
+        `let ranked = retrieve_chunks(${JSON.stringify(m.retrievalQuery ?? m.prompt ?? "")}, &input, ${m.retrievalTopK ?? 5})?;`,
+        `let out: ${outRust} = serde_json::from_value(ranked)?;`,
+        "Ok(out)",
+      ].join("\n");
     case "combine":
       return generateCombineStepBodyRust(m, project, outRust, _inRust);
     case "transform": {

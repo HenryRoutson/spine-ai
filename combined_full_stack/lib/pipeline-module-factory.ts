@@ -6,6 +6,7 @@ import { CustomCodeLanguage, InputType, ModuleKind, MODULE_META } from "@/lib/ty
 import { uid } from "@/lib/id"
 import { isLlmKind, stepRequiresNote, usesPassthroughStructure } from "@/lib/module-kinds"
 import { migrateModuleSpineTypes } from "@/lib/server/spine_types"
+import { BUILTIN_RETRIEVED_CHUNK_ID } from "@/lib/server/builtin_models"
 
 export type ModuleFactoryOpts = {
   id?: ModuleId
@@ -24,6 +25,11 @@ export type ModuleFactoryOpts = {
   fallbackList?: CustomCodeEntry[]
   model?: ModelId
   costLimitCents?: number
+  retrievalQuery?: string
+  retrievalQueryField?: string
+  retrievalTopK?: number
+  retrievalChunkSize?: number
+  retrievalChunkOverlap?: number
 }
 
 // AI : fallback when legacy data omits note on steps that require it.
@@ -64,11 +70,13 @@ export function createPipelineModule(
     inputMinCount: kind === ModuleKind.Input ? opts.inputMinCount : undefined,
     inStructureId: kind !== ModuleKind.Input ? opts.inStructureId ?? defaultModel : undefined,
     outStructureId:
-      usesPassthroughStructure(kind)
-        ? opts.outStructureId ?? opts.inStructureId ?? defaultModel
-        : opts.outStructureId ?? defaultModel,
-    outIsList: opts.outIsList,
-    prompt: isLlm ? opts.prompt ?? "" : undefined,
+      kind === ModuleKind.Retrieval
+        ? opts.outStructureId ?? BUILTIN_RETRIEVED_CHUNK_ID
+        : usesPassthroughStructure(kind)
+          ? opts.outStructureId ?? opts.inStructureId ?? defaultModel
+          : opts.outStructureId ?? defaultModel,
+    outIsList: kind === ModuleKind.Retrieval ? (opts.outIsList ?? true) : opts.outIsList,
+    prompt: isLlm ? opts.prompt ?? "" : kind === ModuleKind.Retrieval ? (opts.prompt ?? "") : undefined,
     fallbackList:
       kind === ModuleKind.CustomCode
         ? (opts.fallbackList ?? [makeCustomCodeEntry(CustomCodeLanguage.TypeScript, opts.code ?? "(input) => input")])
@@ -77,6 +85,11 @@ export function createPipelineModule(
           : undefined,
     model: isLlm ? opts.model ?? globalModel : undefined,
     costLimitCents: isLlm ? opts.costLimitCents ?? DEFAULT_LLM_STEP_COST_LIMIT_CENTS : undefined,
+    retrievalTopK: kind === ModuleKind.Retrieval ? (opts.retrievalTopK ?? 5) : undefined,
+    retrievalQuery: kind === ModuleKind.Retrieval ? (opts.retrievalQuery ?? "") : undefined,
+    retrievalQueryField: kind === ModuleKind.Retrieval ? opts.retrievalQueryField : undefined,
+    retrievalChunkSize: kind === ModuleKind.Retrieval ? opts.retrievalChunkSize : undefined,
+    retrievalChunkOverlap: kind === ModuleKind.Retrieval ? opts.retrievalChunkOverlap : undefined,
   })
 }
 

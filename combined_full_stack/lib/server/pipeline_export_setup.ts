@@ -21,6 +21,7 @@ export type ExportRuntimeNeeds = {
   llm: boolean;
   llmBatch: boolean;
   quote: boolean;
+  retrieval: boolean;
   humanReview: boolean;
   visionOcr: boolean;
   inputModules: { label: string; filenameHint?: string; inputType?: string }[];
@@ -37,16 +38,18 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
   let llm = false;
   let llmBatch = false;
   let quote = false;
+  let retrieval = false;
   let humanReview = false;
   let visionOcr = false;
   for (const m of project.modules) {
     if (m.kind === ModuleKind.Llm) llm = true;
     if (m.kind === ModuleKind.LlmBatch) llmBatch = true;
     if (m.kind === ModuleKind.Quote) quote = true;
+    if (m.kind === ModuleKind.Retrieval) retrieval = true;
     if (m.kind === ModuleKind.HumanReview) humanReview = true;
     if (m.kind === ModuleKind.Input && m.useOcr) visionOcr = true;
   }
-  return { llm, llmBatch, quote, humanReview, visionOcr, inputModules };
+  return { llm, llmBatch, quote, retrieval, humanReview, visionOcr, inputModules };
 }
 
 function projectSlug(name: string): string {

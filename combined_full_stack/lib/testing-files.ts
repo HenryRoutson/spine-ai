@@ -12,6 +12,7 @@ import { validateNamedInputs, isInferenceSetupFileName } from "@/lib/inference-s
 import { labelAsStateKey, validatePipelineStateEntry } from "@/lib/server/pipeline_state"
 import { fieldToTypeExpr, stepSpineOutType } from "@/lib/server/type_expr"
 import { tryParseJson } from "@/lib/json-utils"
+import { retrievalMissesFromCompare } from "@/lib/retrieval-utils"
 import { buildRunConfigPayload, hashStableJson, stableJson } from "@/lib/run-fingerprint"
 import { DocLabel, ModuleKind, RunSource, RunTestStepStatus, type RunTestProbabilisticResult } from "@/lib/types"
 import type {
@@ -758,9 +759,15 @@ export function compareRunToTest(
       tolerantByPattern: tolerant.length ? new Map(tolerant.map((t) => [t.path, t.tolerance])) : undefined,
     }
     if (testValuesEqual(actualCore, expectedCore, compareOpts)) {
-      results.push({ label: m.label, status: RunTestStepStatus.Pass, ignoredPaths, tolerantPaths, expected, actual })
+      const base = { label: m.label, status: RunTestStepStatus.Pass, ignoredPaths, tolerantPaths, expected, actual }
+      if (m.kind === ModuleKind.Retrieval) {
+        const misses = retrievalMissesFromCompare(expected, actual)
+        results.push(misses.length ? { ...base, retrievalMissExplanations: misses } : base)
+      } else {
+        results.push(base)
+      }
     } else {
-      results.push({
+      const row = {
         label: m.label,
         status: RunTestStepStatus.Fail,
         diffPath: testValuesDiffPath(actualCore, expectedCore, compareOpts),
@@ -769,7 +776,13 @@ export function compareRunToTest(
         tolerantPaths,
         expected,
         actual,
-      })
+      }
+      if (m.kind === ModuleKind.Retrieval) {
+        const misses = retrievalMissesFromCompare(expected, actual)
+        results.push(misses.length ? { ...row, retrievalMissExplanations: misses } : row)
+      } else {
+        results.push(row)
+      }
     }
   }
   return results

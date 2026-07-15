@@ -128,6 +128,19 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         "}",
         "return out, nil",
       ].join("\n");
+    case "retrieval":
+      return [
+        "// Traditional RAG — auto-chunk source text, BM25 top-K with per-chunk explanations",
+        `ranked, err := retrieveChunks(${JSON.stringify(m.retrievalQuery ?? m.prompt ?? "")}, input, ${m.retrievalTopK ?? 5})`,
+        "if err != nil {",
+        `\treturn ${zero}, err`,
+        "}",
+        `var out ${outGo}`,
+        "if err := json.Unmarshal(ranked, &out); err != nil {",
+        `\treturn ${zero}, err`,
+        "}",
+        "return out, nil",
+      ].join("\n");
     case "combine":
       return generateCombineStepBodyGo(m, project, outGo, inGo);
     case "transform": {

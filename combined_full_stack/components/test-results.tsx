@@ -140,6 +140,21 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
           <StepInputDescription check={result.inputDescriptionCheck} forceVisible />
         </div>
       )}
+      {open && !!result.retrievalMissExplanations?.length && (
+        <div className="border-t border-destructive/30 bg-destructive/5 px-2.5 py-2">
+          <p className="mb-2 font-mono text-[10px] uppercase text-destructive">
+            retrieval debug — expected chunks missed ({result.retrievalMissExplanations.length})
+          </p>
+          <ul className="space-y-2">
+            {result.retrievalMissExplanations.map((m) => (
+              <li key={m.chunk_id} className="rounded border border-destructive/30 bg-background/80 p-2">
+                <p className="font-mono text-[11px] font-medium text-destructive">{m.chunk_id}</p>
+                <p className="mt-1 font-mono text-[10px] leading-relaxed text-muted-foreground">{m.explanation}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {open && result.deterministicDiff && (
         <div className="border-t border-border px-2.5 py-2">
           <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">deterministic diff</p>

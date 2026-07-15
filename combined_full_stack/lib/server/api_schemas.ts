@@ -313,6 +313,27 @@ export const testingAssistantBodySchema = z.object({
   model: z.string().max(128).optional(),
 });
 
+const retrievalChunkSchema = z.object({
+  chunk_id: z.string().max(64),
+  text: z.string().max(20_000),
+  start: z.number(),
+  end: z.number(),
+  score: z.number(),
+  retrieved: z.boolean(),
+  rank: z.number().nullable(),
+  explanation: z.string().max(4_000),
+});
+
+export const retrievalQuestionsBodySchema = z.object({
+  projectId: projectIdSchema,
+  stepLabel: z.string().max(200),
+  question: z.string().trim().min(1).max(4_000),
+  query: z.string().max(4_000),
+  chunks: z.array(retrievalChunkSchema).max(500),
+  quoteContext: z.string().max(20_000).optional(),
+  model: z.string().max(128).optional(),
+});
+
 const inputDocsByModuleSchema = z.record(z.string().max(128), z.array(docIdSchema).max(50)).optional();
 
 export const runBodySchema = z

@@ -34,6 +34,7 @@ export const API_ROUTES = {
   structureAssistant: "/api/structure-assistant",
   testingAssistant: "/api/testing-assistant",
   testingEvaluate: "/api/testing-evaluate",
+  retrievalQuestions: "/api/retrieval-questions",
   docsContent: "/api/docs/content",
   feedback: "/api/feedback",
   activity: "/api/activity",

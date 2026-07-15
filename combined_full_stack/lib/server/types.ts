@@ -126,6 +126,7 @@ export enum ModuleKind {
   Llm = "llm",
   LlmBatch = "llm-batch", // AI : backend addition — one structured call per list item, merged typed list out
   Quote = "quote", // AI : deterministic — resolve LLM quote strings → source-linked spans
+  Retrieval = "retrieval", // AI : traditional RAG — auto-chunk + BM25 retrieve with explanations
   Transform = "transform",
   Combine = "combine",
   CustomCode = "custom-code",
@@ -184,6 +185,12 @@ export interface PipelineModule {
   outIsList?: boolean;
   // AI : pipeline-managed step — auto-inserted Link Quotes; locked in the builder UI.
   auto?: boolean;
+  // AI : retrieval step — BM25 over auto-chunked source text (alternative to full-doc LLM context).
+  retrievalQuery?: string;
+  retrievalQueryField?: string;
+  retrievalTopK?: number;
+  retrievalChunkSize?: number;
+  retrievalChunkOverlap?: number;
   // metrics (real ones are recomputed from run history, see billing.ts)
   avgMs: number;
   avgCostCents: number;
@@ -410,8 +417,17 @@ export type RunTestStepResult = {
   deterministicDiff?: string;
   // AI : LLM chain-of-thought explanations for each deterministic diff field (spec § Testing).
   deterministicDiffExplanations?: RunTestDeterministicDiffResult[];
+  // AI : retrieval testing — chunks expected retrieved but missed, with isolated explanations.
+  retrievalMissExplanations?: RunTestRetrievalMiss[];
   expected?: unknown;
   actual?: unknown;
+};
+
+export type RunTestRetrievalMiss = {
+  chunk_id: string;
+  explanation: string;
+  expected: boolean;
+  actual: boolean;
 };
 
 export type RunTestReport = {
@@ -552,6 +568,10 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   [ModuleKind.Quote]: {
     label: "Link Quotes",
     description: "Match verbatim LLM quote strings against the source document and attach byte offsets (zero LLM cost)",
+  },
+  [ModuleKind.Retrieval]: {
+    label: "Traditional RAG",
+    description: "Auto-chunk the source document and BM25-retrieve top passages for a query — each chunk includes why it was or was not retrieved",
   },
   [ModuleKind.Transform]: {
     label: "Transform",

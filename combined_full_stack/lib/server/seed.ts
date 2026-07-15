@@ -98,6 +98,11 @@ const SeedFileSchema = z.object({
       fallbackList: z
         .array(z.object({ typescript: z.string().optional(), python: z.string().optional() }))
         .optional(),
+      retrievalQuery: z.string().optional(),
+      retrievalQueryField: z.string().optional(),
+      retrievalTopK: z.number().int().min(1).max(50).optional(),
+      retrievalChunkSize: z.number().int().min(200).optional(),
+      retrievalChunkOverlap: z.number().int().min(0).optional(),
     }),
   ),
   strategies: z.array(

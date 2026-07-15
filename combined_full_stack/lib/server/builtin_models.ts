@@ -3,6 +3,7 @@ import type { StructureModel, StructureModelId } from "./types";
 
 export const BUILTIN_DOCUMENT_ID = "m_builtin_document" as StructureModelId;
 export const BUILTIN_QUOTE_SPAN_ID = "m_builtin_quote_span" as StructureModelId;
+export const BUILTIN_RETRIEVED_CHUNK_ID = "m_builtin_retrieved_chunk" as StructureModelId;
 
 // AI : shared across every project — the canonical shape for field type `document`.
 export const BUILTIN_DOCUMENT_MODEL: StructureModel = {
@@ -63,9 +64,78 @@ export const BUILTIN_QUOTE_SPAN_MODEL: StructureModel = {
   ],
 };
 
+// AI : one BM25-ranked chunk row from Traditional RAG — includes retrieval explanation.
+export const BUILTIN_RETRIEVED_CHUNK_MODEL: StructureModel = {
+  id: BUILTIN_RETRIEVED_CHUNK_ID,
+  name: "RetrievedChunk",
+  description: "Auto-chunked source passage with BM25 score and retrieval explanation.",
+  shared: true,
+  locked: true,
+  fields: [
+    {
+      id: "f_chunk_id",
+      name: "chunk_id",
+      type: FieldType.Text,
+      optional: false,
+      description: "Stable chunk id within the source document",
+    },
+    {
+      id: "f_text",
+      name: "text",
+      type: FieldType.Text,
+      optional: false,
+      description: "Chunk text from the source document",
+    },
+    {
+      id: "f_start",
+      name: "start",
+      type: FieldType.Int,
+      optional: false,
+      description: "Start byte offset in the source document",
+    },
+    {
+      id: "f_end",
+      name: "end",
+      type: FieldType.Int,
+      optional: false,
+      description: "End byte offset in the source document",
+    },
+    {
+      id: "f_score",
+      name: "score",
+      type: FieldType.Float,
+      optional: false,
+      description: "BM25 relevance score for the query",
+    },
+    {
+      id: "f_retrieved",
+      name: "retrieved",
+      type: FieldType.Bool,
+      optional: false,
+      description: "True when this chunk is in the top-K retrieved set",
+    },
+    {
+      id: "f_rank",
+      name: "rank",
+      type: FieldType.Int,
+      optional: true,
+      description: "1-based BM25 rank across all chunks (null when unranked)",
+    },
+    {
+      id: "f_explanation",
+      name: "explanation",
+      type: FieldType.Text,
+      optional: false,
+      description: "Why this chunk was or was not retrieved for the query",
+      deterministic: false,
+    },
+  ],
+};
+
 export const SHARED_STRUCTURE_MODELS: StructureModel[] = [
   BUILTIN_DOCUMENT_MODEL,
   BUILTIN_QUOTE_SPAN_MODEL,
+  BUILTIN_RETRIEVED_CHUNK_MODEL,
 ];
 
 export function isSharedStructureModel(m: StructureModel): boolean {
@@ -73,8 +143,10 @@ export function isSharedStructureModel(m: StructureModel): boolean {
     m.shared === true ||
     m.id === BUILTIN_DOCUMENT_ID ||
     m.id === BUILTIN_QUOTE_SPAN_ID ||
+    m.id === BUILTIN_RETRIEVED_CHUNK_ID ||
     m.name === "Document" ||
-    m.name === "QuoteSpan"
+    m.name === "QuoteSpan" ||
+    m.name === "RetrievedChunk"
   );
 }
 

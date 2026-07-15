@@ -69,6 +69,11 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
         "# Match LLM quote strings against source document byte offsets (no LLM cost)",
         castOut("resolve_quotes(input, '', '')"),
       ].join("\n");
+    case "retrieval":
+      return [
+        "# Traditional RAG — auto-chunk source text, BM25 top-K with per-chunk explanations",
+        castOut(`retrieve_chunks(${JSON.stringify(m.retrievalQuery ?? m.prompt ?? "")}, input, top_k=${m.retrievalTopK ?? 5})`),
+      ].join("\n");
     case "combine":
       return generateCombineStepBodyPy(m, project, outPy, inPy);
     case "transform": {

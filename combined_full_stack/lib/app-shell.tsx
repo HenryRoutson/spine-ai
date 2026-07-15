@@ -10,6 +10,7 @@ import type { DocId, StructureModelId } from "@/lib/types"
 export type AppWindowId =
   | "structure"
   | "pipeline"
+  | "retrieval"
   | "testing"
   | "inference"
   | "share"

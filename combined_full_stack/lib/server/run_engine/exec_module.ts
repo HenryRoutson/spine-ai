@@ -13,6 +13,7 @@ import {
   execQuoteStep,
   execTransformStep,
 } from "./steps/misc";
+import { execRetrievalStep } from "./steps/retrieval";
 
 export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   log.debug(`execModule start`, { moduleId: m.id, kind: m.kind, label: m.label });
@@ -31,6 +32,8 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
       return execLlmBatchStep(m, ctx, log);
     case ModuleKind.Quote:
       return execQuoteStep(m, ctx, log);
+    case ModuleKind.Retrieval:
+      return execRetrievalStep(m, ctx, log);
     case ModuleKind.Output:
       return execOutputStep(m, ctx, log);
     case ModuleKind.Assert:

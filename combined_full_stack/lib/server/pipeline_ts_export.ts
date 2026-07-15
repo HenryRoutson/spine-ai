@@ -59,6 +59,12 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
         "// Match LLM quote strings against source document byte offsets (no LLM cost)",
         `return resolveQuotes(input, "", "") as unknown as ${outTs};`,
       ].join("\n");
+    case "retrieval":
+      return [
+        "// Traditional RAG — auto-chunk source text, BM25 top-K with per-chunk explanations",
+        `const query = ${JSON.stringify(m.retrievalQuery ?? m.prompt ?? "")};`,
+        `return retrieveChunks(query, input, { topK: ${m.retrievalTopK ?? 5} }) as unknown as ${outTs};`,
+      ].join("\n");
     case "combine":
       return generateCombineStepBodyTs(m, project, outTs);
     case "transform": {

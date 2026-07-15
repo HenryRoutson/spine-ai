@@ -41,6 +41,7 @@ import {
 import { InputModuleFields } from "@/components/pipeline-fields/input-fields"
 import { LlmModuleFields } from "@/components/pipeline-fields/llm-fields"
 import { CodeModuleFields } from "@/components/pipeline-fields/code-fields"
+import { RetrievalModuleFields } from "@/components/pipeline-fields/retrieval-fields"
 
 export { useLlmSchemaPreview } from "@/components/pipeline-fields/shared"
 
@@ -358,6 +359,10 @@ export function PipelineModuleFields({
           edit={!!edit}
           onUpdate={onUpdate}
         />
+      )}
+
+      {selected.kind === "retrieval" && (
+        <RetrievalModuleFields selected={selected} edit={!!edit} onUpdate={onUpdate} />
       )}
     </>
   )
