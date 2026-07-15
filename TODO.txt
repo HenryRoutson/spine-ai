@@ -9,6 +9,19 @@ SEO https://search.google.com/search-console/welcome?utm_source=about-page
 try https://cloud.flowiseai.com/canvas
 
 
+
+need to handle logic for pass throughs and avoid rewriting each step completely. Need to be able to click a field and trace it's whole history, which might be difficult with custom code blocks. I want to be able to see ok this field alone is a function of these things.
+
+
+
+i do like the idea of pure stateless functions, need to label which are which and which use state, note will need to use this for cache. may need AI to decide?
+
+
+
+embed into websites as an option for sharing
+
+
+
 regex RAG, with an example regex constant, connected to web search directly
 
 how to do integrations? like google search? don't code yourself.
@@ -91,6 +104,22 @@ Ensure the user doesn't have the think about, if this structure isn't json i nee
   Web - not json
   Image - not json
 
+
+how to noify when something is finished. email or slack
+
+
+
+
+
+databases integration and profiling.
+third-party API calls and profiling.
+
+
+https://docs.ag-ui.com/introduction?
+
+
+
+need to be able to see if a field is from an llm or if from python, although the python might be from llm originally. trace full path to ensure something like quotes are valid and not generated and hence possibly hallucinated by the llm
 
 
 export excel with metadata

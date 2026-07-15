@@ -9,7 +9,7 @@ Langflow - https://www.langflow.org/
 Flowise - https://flowiseai.com/
 Gumloop - https://www.gumloop.com/
 Relevance AI - https://relevanceai.com/
-Dify.ai
+Dify AI - https://dify.ai/
 anyformat - https://anyformat.ai/
 LlamaParse - https://developers.llamaindex.ai/llamaparse/
 Langfuse - https://github.com/langfuse/langfuse
@@ -53,8 +53,8 @@ https://www.make.com/en
 https://www.coze.com/
 https://dspy.ai/
 https://crewai.com/
-
-
+haystack (deepset) - https://haystack.deepset.ai/
+OpenTelemetry
 
 
 

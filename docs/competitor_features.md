@@ -5,7 +5,7 @@ Important features to consider in a product if it's a competitor.
 - parallel llm calls
 - caching
 - custom provider support
-- confidential deployments to enterprise clients
+- confidential deployments to enterprise clients (need everything like database to be open souce like supabase and not firebase)
 - integrations like n8n
 - rag like support with either embedding or quote extraction
 - option to deploy pages without view of backend logic for others to use, and ability to control billing of those pages
@@ -27,4 +27,7 @@ Important features to consider in a product if it's a competitor.
 - document OCR visualisation for PDF files
 - automatically improving agents or pipelines
 - projects can be exported as an MCP tool
-- 
+- custom databases integration and profiling.
+- custom third-party API calls and profiling.
+- MCP profiling.
+- embedding into websites
