@@ -24,6 +24,9 @@ export type ModuleFactoryOpts = {
   fallbackList?: CustomCodeEntry[]
   model?: ModelId
   costLimitCents?: number
+  feedbackMode?: PipelineModule["feedbackMode"]
+  feedbackPrompt?: string
+  requireFeedback?: boolean
 }
 
 // AI : fallback when legacy data omits note on steps that require it.
@@ -77,6 +80,9 @@ export function createPipelineModule(
           : undefined,
     model: isLlm ? opts.model ?? globalModel : undefined,
     costLimitCents: isLlm ? opts.costLimitCents ?? DEFAULT_LLM_STEP_COST_LIMIT_CENTS : undefined,
+    feedbackMode: kind === ModuleKind.HumanReview ? opts.feedbackMode : undefined,
+    feedbackPrompt: kind === ModuleKind.HumanReview ? opts.feedbackPrompt?.trim() || undefined : undefined,
+    requireFeedback: kind === ModuleKind.HumanReview ? opts.requireFeedback : undefined,
   })
 }
 

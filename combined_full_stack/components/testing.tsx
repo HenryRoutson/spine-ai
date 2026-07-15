@@ -549,7 +549,7 @@ function staleLoadFailedContent(content: string): string | null {
             return next
           }),
         // AI : tests are unattended — auto-approve human-review gates.
-        onHumanReview: () => Promise.resolve("approved" as const),
+        onHumanReview: () => Promise.resolve({ decision: "approved" as const }),
       }, pollIntervalMs)
       const report = await evaluateTestReport(run, state.test, project, model)
       refreshBilling().catch(console.error)

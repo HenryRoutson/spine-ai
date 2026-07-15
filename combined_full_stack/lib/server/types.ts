@@ -170,6 +170,10 @@ export interface PipelineModule {
   inputNameContains?: string; // AI : optional filename substring — only matching docs can fill this input slot
   inputDescription?: string; // AI : optional expected input — LLM guard rejects mismatches before the step runs
   checkInputDescription?: boolean; // AI : when false, skip the LLM guard even if inputDescription is set
+  // AI : human-review — optional operator feedback via text and/or voice before approve/reject.
+  feedbackMode?: import("@/lib/feedback-types").FeedbackInputMode;
+  feedbackPrompt?: string;
+  requireFeedback?: boolean;
   // AI : TODO (spec) — outputDescription?: string + checkOutputDescription?: boolean (post-step LLM output guard).
   // AI : TODO (spec) — dynamicOutputSchema?: boolean on llm steps for variable homework-style marking schemas.
   inputMinCount?: number; // AI : minimum documents for this input slot (default 1); pair with outIsList for N submissions
@@ -350,6 +354,7 @@ export interface RunStep extends Omit<StepDescriptionFields, "outputPreview"> {
   llmCalls?: LlmCallRecord[];
   failures?: RunFailureRecord[];
   serverLogs?: import("@/lib/run-types").JobLogEntry[]; // AI : mirrored ServerLogger lines for this step
+  operatorFeedback?: import("@/lib/feedback-types").UserFeedbackPayload; // AI : human-review — text/voice note from operator
 }
 
 export type RunFingerprint = string & { __brand: "RunFingerprint" };
@@ -568,7 +573,7 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   },
   [ModuleKind.HumanReview]: {
     label: "Human Review",
-    description: "Pause in Inference for approve or reject — passthrough on approval",
+    description: "Pause in Inference for approve or reject — optional text/voice feedback; passthrough on approval",
   },
   [ModuleKind.Output]: {
     label: "Output",

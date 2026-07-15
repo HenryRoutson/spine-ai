@@ -11,6 +11,7 @@ import { AUTO_STRUCTURE_PARSE_EXPLAINER, isAutoStructureParseStep } from "@/lib/
 import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds"
 import { formatModuleSpineIn, formatModuleSpineOut } from "@/lib/spine-type"
 import { MODULE_META } from "@/lib/types"
+import { FEEDBACK_INPUT_MODES } from "@/lib/feedback-types"
 import type {
   PipelineModule,
   StructureModel,
@@ -338,6 +339,71 @@ export function PipelineModuleFields({
             {formatModuleSpineIn(selected, models)} → {formatModuleSpineOut(selected, models)}
           </StaticValue>
         </PipelineField>
+      )}
+
+      {selected.kind === "human-review" && (
+        <>
+          <PipelineField
+            label="Feedback input"
+            hint="Optional text or voice note from the operator during review"
+          >
+            {edit ? (
+              <select
+                className="h-9 w-full rounded-md border border-input bg-background px-2 font-mono text-xs"
+                value={selected.feedbackMode ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value
+                  onUpdate!({
+                    feedbackMode: v ? (v as PipelineModule["feedbackMode"]) : undefined,
+                  })
+                }}
+              >
+                <option value="">None — approve/reject only</option>
+                {FEEDBACK_INPUT_MODES.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <StaticValue mono>
+                {selected.feedbackMode
+                  ? FEEDBACK_INPUT_MODES.find((m) => m.value === selected.feedbackMode)?.label ??
+                    selected.feedbackMode
+                  : "None"}
+              </StaticValue>
+            )}
+          </PipelineField>
+          {selected.feedbackMode && (
+            <>
+              <PipelineField label="Feedback prompt" hint="Shown above the feedback field in Inference">
+                {edit ? (
+                  <Textarea
+                    value={selected.feedbackPrompt ?? ""}
+                    onChange={(e) => onUpdate!({ feedbackPrompt: e.target.value || undefined })}
+                    placeholder="What should the reviewer comment on?"
+                    className="min-h-14 resize-none font-mono text-xs"
+                    rows={2}
+                  />
+                ) : (
+                  <StaticValue>{selected.feedbackPrompt?.trim() || "—"}</StaticValue>
+                )}
+              </PipelineField>
+              <PipelineField label="Require feedback" hint="Block approve/reject until feedback is provided">
+                <div className="flex items-center gap-2.5">
+                  <Switch
+                    checked={!!selected.requireFeedback}
+                    onCheckedChange={(checked) => onUpdate!({ requireFeedback: checked || undefined })}
+                    disabled={!edit}
+                  />
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {selected.requireFeedback ? "Required" : "Optional"}
+                  </span>
+                </div>
+              </PipelineField>
+            </>
+          )}
+        </>
       )}
 
       {isLlmKind(selected.kind) && (

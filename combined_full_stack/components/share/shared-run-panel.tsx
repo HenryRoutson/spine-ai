@@ -185,8 +185,8 @@ export function SharedRunPanel({
         <HumanReviewPanel
           spec={run.pendingHumanReview}
           module={link.modules.find((m) => m.id === run.pendingHumanReview!.moduleId)}
-          onApprove={() => run.resolveHumanReview("approved")}
-          onReject={() => run.resolveHumanReview("rejected")}
+          onApprove={(feedback) => run.resolveHumanReview("approved", feedback)}
+          onReject={(feedback) => run.resolveHumanReview("rejected", feedback)}
         />
       )}
 

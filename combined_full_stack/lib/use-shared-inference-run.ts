@@ -15,6 +15,7 @@ import { modelName } from "@/lib/validity"
 import type { DocId, DocRef, ModuleId, PipelineModule, PipelineRun, RunJobId } from "@/lib/types"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
 import type { ClientStepSpec } from "@/lib/run-types"
+import type { HumanReviewDecision } from "@/lib/feedback-types"
 import {
   awaitSharedRun,
   startSharedRun,
@@ -50,7 +51,7 @@ export function useSharedInferenceRun(
   const [pendingHumanReview, setPendingHumanReview] = useState<ClientStepSpec | null>(null)
   const [jobId, setJobId] = useState<RunJobId | null>(null)
   const [progressToken, setProgressToken] = useState<string | null>(null)
-  const humanReviewResolveRef = useRef<((decision: "approved" | "rejected") => void) | null>(null)
+  const humanReviewResolveRef = useRef<((decision: HumanReviewDecision) => void) | null>(null)
   const activeJobGenRef = useRef(0)
 
   const defaultForModule = useCallback(
@@ -159,9 +160,11 @@ export function useSharedInferenceRun(
             setStepStates((prev) => mergeStepStates(prev, steps))
           },
           onHumanReview: (spec) => {
-            if (jobGen !== activeJobGenRef.current) return Promise.resolve("rejected" as const)
+            if (jobGen !== activeJobGenRef.current) {
+              return Promise.resolve({ decision: "rejected" as const })
+            }
             setPendingHumanReview(spec)
-            return new Promise<"approved" | "rejected">((resolve) => {
+            return new Promise<HumanReviewDecision>((resolve) => {
               humanReviewResolveRef.current = resolve
             })
           },
@@ -178,8 +181,8 @@ export function useSharedInferenceRun(
     }
   }
 
-  function resolveHumanReview(decision: "approved" | "rejected") {
-    humanReviewResolveRef.current?.(decision)
+  function resolveHumanReview(decision: "approved" | "rejected", feedback?: HumanReviewDecision["feedback"]) {
+    humanReviewResolveRef.current?.({ decision, feedback })
     humanReviewResolveRef.current = null
     setPendingHumanReview(null)
   }

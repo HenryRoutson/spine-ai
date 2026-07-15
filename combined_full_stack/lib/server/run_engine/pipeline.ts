@@ -365,6 +365,7 @@ export async function resumeRunPipeline(
     llmCalls: result.llmCalls?.length ? result.llmCalls : undefined,
     failures: stepFailuresFor(result, status, ctx.stepExtraFailures),
     serverLogs: stepServerLogs(serverLogs, m.id),
+    operatorFeedback: clientStep.feedback,
   });
   await opts.onStep?.({ index: checkpoint.stepIndex, total: project.modules.length, moduleId: m.id, label: m.label, status });
   if (status === "error") {

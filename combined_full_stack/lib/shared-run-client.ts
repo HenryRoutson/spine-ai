@@ -17,6 +17,7 @@ import type {
 } from "@/lib/types"
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
 import type { ClientStepSpec } from "@/lib/run-types"
+import type { HumanReviewDecision } from "@/lib/feedback-types"
 
 export async function fetchSharedLink(id: string): Promise<SharedLinkPublicView> {
   const res = await fetch(API_ROUTES.sharedLink(id), FETCH_NO_STORE)
@@ -84,7 +85,7 @@ export async function awaitSharedRun(
   jobId: RunJobId,
   token: string,
   callbacks:
-    | { onStep: (steps: StepProgress[]) => void; onHumanReview?: (spec: ClientStepSpec) => Promise<"approved" | "rejected"> }
+    | { onStep: (steps: StepProgress[]) => void; onHumanReview?: (spec: ClientStepSpec) => Promise<HumanReviewDecision> }
     | ((steps: StepProgress[]) => void),
   intervalMs = 700,
 ): Promise<PipelineRun> {

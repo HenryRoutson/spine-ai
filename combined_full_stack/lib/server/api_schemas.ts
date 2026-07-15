@@ -113,6 +113,17 @@ const customCodeEntryPatchSchema = z
   })
   .strict();
 
+const feedbackInputModeSchema = z.enum(["text", "voice", "both"]);
+
+export const userFeedbackPayloadSchema = z
+  .object({
+    mode: z.enum(["text", "voice"]),
+    text: z.string().trim().min(1).max(MAX_FEEDBACK_MESSAGE_CHARS),
+    transcript: z.string().max(MAX_FEEDBACK_MESSAGE_CHARS).optional(),
+    at: z.number().int().min(0),
+  })
+  .strict();
+
 const pipelineModulePatchSchema = z
   .object({
     id: z.string().max(128),
@@ -127,6 +138,9 @@ const pipelineModulePatchSchema = z
     inputNameContains: z.string().max(256).optional(),
     inputDescription: z.string().max(4_000).optional(),
     checkInputDescription: z.boolean().optional(),
+    feedbackMode: feedbackInputModeSchema.optional(),
+    feedbackPrompt: z.string().max(4_000).optional(),
+    requireFeedback: z.boolean().optional(),
     inputMinCount: z.number().int().min(0).max(100).optional(),
     prompt: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
     code: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
@@ -392,6 +406,7 @@ export const clientStepBodySchema = z
     output: jsonSizeBounded(MAX_CLIENT_STEP_OUTPUT_CHARS).optional(),
     error: z.string().max(4_000).optional(),
     clientLogs: z.array(jobLogEntrySchema).max(MAX_CLIENT_LOGS).optional(),
+    feedback: userFeedbackPayloadSchema.optional(),
   })
   .strict()
   .refine((d) => d.output !== undefined || !!d.error, { message: "output or error required" });
@@ -492,6 +507,7 @@ export const sharedLinkClientStepBodySchema = z
     output: jsonSizeBounded(MAX_CLIENT_STEP_OUTPUT_CHARS).optional(),
     error: z.string().max(4_000).optional(),
     clientLogs: z.array(jobLogEntrySchema).max(MAX_CLIENT_LOGS).optional(),
+    feedback: userFeedbackPayloadSchema.optional(),
   })
   .strict()
   .refine((d) => d.output !== undefined || !!d.error, { message: "output or error required" });
@@ -506,6 +522,8 @@ const assistantChatMessageSchema = z.object({
   retryCount: z.number().int().min(0).max(100).optional(),
   validationErrors: z.string().max(4_000).nullable().optional(),
   debugTrace: z.array(z.unknown()).max(200).optional(),
+  inputMode: feedbackInputModeSchema.optional(),
+  responseFeedback: userFeedbackPayloadSchema.optional(),
 });
 
 export const assistantChatCreateBodySchema = z

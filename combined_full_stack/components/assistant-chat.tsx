@@ -1,17 +1,24 @@
 "use client"
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { Bot, Check, Loader2, Send, Sparkles, User, X } from "lucide-react"
+import { Bot, Check, Loader2, MessageSquarePlus, Mic, Send, Sparkles, User, X } from "lucide-react"
 import { uid } from "@/lib/id"
 import {
   ASSISTANT_HISTORY_LIMIT,
   ASSISTANT_REQUEST_FAILED,
+  type AssistantChatMessageExtras,
   type AssistantChatRole,
   type AssistantDebugEntry,
   type AssistantLoadingPhase,
   type AssistantStreamingDraft,
+  type FeedbackInputMode,
   type ProposalStatus,
+  type UserFeedbackPayload,
 } from "@/lib/assistant-chat-types"
+import { FEEDBACK_INPUT_MODES, feedbackModeAllowsVoice } from "@/lib/feedback-types"
+import { useChatInputMode, writeChatInputMode } from "@/lib/chat-settings"
+import { useVoiceInput } from "@/lib/use-voice-input"
+import { FeedbackInput } from "@/components/feedback-input"
 import { appendAssistantDebugEntry } from "@/lib/assistant-debug"
 import { buildAssistantHistory } from "@/lib/assistant-history"
 import { AssistantDebugPanel } from "@/components/assistant-debug-panel"
@@ -36,7 +43,7 @@ export type AssistantChatMessage<TProposal> = {
   retryCount?: number
   validationErrors?: string | null
   debugTrace?: AssistantDebugEntry[]
-}
+} & AssistantChatMessageExtras
 
 type AssistantRequestResult<TProposal> = {
   message: string
@@ -109,7 +116,16 @@ export function AssistantChat<TProposal>({
   const [errorDebugTrace, setErrorDebugTrace] = useState<AssistantDebugEntry[]>([])
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [rejectingId, setRejectingId] = useState<string | null>(null)
+  const [responseFeedbackForId, setResponseFeedbackForId] = useState<string | null>(null)
+  const [responseFeedbackDraft, setResponseFeedbackDraft] = useState<UserFeedbackPayload | undefined>()
+  const [composeMode, setComposeMode] = useState<FeedbackInputMode>("text")
+  const savedChatInputMode = useChatInputMode()
+  const voiceCompose = useVoiceInput()
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setComposeMode(savedChatInputMode)
+  }, [savedChatInputMode])
 
   const pending = [...messages].reverse().find((m) => m.proposal && m.status === "pending")
 
@@ -137,7 +153,7 @@ export function AssistantChat<TProposal>({
     })
   }
 
-  async function send(text: string) {
+  async function send(text: string, opts?: { inputMode?: FeedbackInputMode }) {
     const trimmed = text.trim()
     if (!trimmed || loading) return
 
@@ -149,9 +165,15 @@ export function AssistantChat<TProposal>({
       )
     }
 
-    const userMsg: AssistantChatMessage<TProposal> = { id: uid(), role: "user", content: trimmed }
+    const userMsg: AssistantChatMessage<TProposal> = {
+      id: uid(),
+      role: "user",
+      content: trimmed,
+      inputMode: opts?.inputMode,
+    }
     setMessages((prev) => [...prev, userMsg])
     setInput("")
+    voiceCompose.reset()
     setLoading(true)
     setLoadingPhase("thinking")
     setLiveThinking("")
@@ -239,6 +261,31 @@ export function AssistantChat<TProposal>({
     }
   }
 
+  function saveResponseFeedback(messageId: string, feedback: UserFeedbackPayload) {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, responseFeedback: feedback } : m)),
+    )
+    setResponseFeedbackForId(null)
+    setResponseFeedbackDraft(undefined)
+  }
+
+  const composeUsesVoice = composeMode === "voice" || composeMode === "both"
+  const composeUsesText = composeMode === "text" || composeMode === "both"
+  const voiceDraft = voiceCompose.transcript.trim()
+  const canSend =
+    (composeUsesText && input.trim()) || (composeUsesVoice && voiceDraft.length > 0)
+
+  function handleSendCompose() {
+    const body = composeUsesVoice && !input.trim() ? voiceDraft : input
+    const mode: FeedbackInputMode =
+      composeMode === "both"
+        ? voiceDraft && !input.trim()
+          ? "voice"
+          : "text"
+        : composeMode
+    void send(body, { inputMode: mode })
+  }
+
   const loadingText =
     typeof loadingLabel === "function" ? loadingLabel(loadingPhase) : loadingLabel
 
@@ -281,6 +328,68 @@ export function AssistantChat<TProposal>({
                 )}
               >
                 <p className="text-xs leading-relaxed whitespace-pre-wrap">{m.content}</p>
+                {m.role === "user" && m.inputMode && m.inputMode !== "text" && (
+                  <p className="mt-1 font-mono text-[9px] text-muted-foreground">
+                    via {m.inputMode === "voice" ? "voice" : "text or voice"}
+                  </p>
+                )}
+                {m.role === "assistant" && m.responseFeedback && (
+                  <p className="mt-2 rounded border border-border/60 bg-background/40 px-2 py-1 font-mono text-[9px] text-muted-foreground">
+                    Feedback ({m.responseFeedback.mode}): {m.responseFeedback.text}
+                  </p>
+                )}
+                {m.role === "assistant" && !loading && (
+                  <div className="mt-2">
+                    {responseFeedbackForId === m.id ? (
+                      <div className="rounded-md border border-border/70 bg-background/30 p-2">
+                        <FeedbackInput
+                          mode="both"
+                          prompt="Optional feedback on this response"
+                          onChange={setResponseFeedbackDraft}
+                        />
+                        <div className="mt-2 flex gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-7 text-[10px]"
+                            disabled={!responseFeedbackDraft?.text.trim()}
+                            onClick={() => {
+                              if (responseFeedbackDraft) saveResponseFeedback(m.id, responseFeedbackDraft)
+                            }}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-[10px]"
+                            onClick={() => {
+                              setResponseFeedbackForId(null)
+                              setResponseFeedbackDraft(undefined)
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 gap-1 px-1.5 text-[10px] text-muted-foreground"
+                        onClick={() => {
+                          setResponseFeedbackForId(m.id)
+                          setResponseFeedbackDraft(m.responseFeedback)
+                        }}
+                      >
+                        <MessageSquarePlus className="h-3 w-3" />
+                        {m.responseFeedback ? "Edit feedback" : "Feedback"}
+                      </Button>
+                    )}
+                  </div>
+                )}
                 {m.proposal && (
                   <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3">
                     {renderProposal(m)}
@@ -406,27 +515,74 @@ export function AssistantChat<TProposal>({
         </div>
       )}
 
-      <div className="border-t border-border p-3">
+      <div className="border-t border-border p-3 space-y-2">
+        <div className="flex flex-wrap items-center gap-1">
+          {FEEDBACK_INPUT_MODES.map((m) => (
+            <button
+              key={m.value}
+              type="button"
+              disabled={loading}
+              onClick={() => {
+                setComposeMode(m.value)
+                writeChatInputMode(m.value)
+              }}
+              className={cn(
+                "rounded-full border px-2 py-0.5 font-mono text-[9px] transition-colors",
+                composeMode === m.value
+                  ? "border-primary/50 bg-primary/10 text-foreground"
+                  : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
         <div className="flex gap-2">
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                void send(input)
-              }
-            }}
-            placeholder={placeholder}
-            className="min-h-10 resize-none text-xs"
-            rows={2}
-            disabled={loading}
-          />
+          {composeUsesText && (
+            <Textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSendCompose()
+                }
+              }}
+              placeholder={placeholder}
+              className="min-h-10 resize-none text-xs"
+              rows={2}
+              disabled={loading}
+            />
+          )}
+          {composeUsesVoice && feedbackModeAllowsVoice(composeMode) && (
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              {!composeUsesText && (
+                <div className="min-h-10 rounded-md border border-input bg-background px-2 py-1.5 text-xs leading-relaxed whitespace-pre-wrap">
+                  {voiceDraft || "Tap record and speak…"}
+                </div>
+              )}
+              <Button
+                type="button"
+                size="sm"
+                variant={voiceCompose.listening ? "destructive" : "outline"}
+                className="h-8 w-fit gap-1.5 text-[10px]"
+                disabled={loading || !voiceCompose.supported}
+                onClick={voiceCompose.toggle}
+              >
+                {voiceCompose.listening ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Mic className="h-3.5 w-3.5" />
+                )}
+                {voiceCompose.listening ? "Stop" : "Record"}
+              </Button>
+            </div>
+          )}
           <Button
             size="icon"
             className="h-10 w-10 shrink-0"
-            disabled={!input.trim() || loading}
-            onClick={() => void send(input)}
+            disabled={!canSend || loading}
+            onClick={handleSendCompose}
             aria-label="Send"
           >
             <Send className="h-4 w-4" />

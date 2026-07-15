@@ -8,6 +8,7 @@ import type {
   StepDescriptionFields,
 } from "./types";
 import type { ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
+import type { FeedbackInputMode } from "@/lib/feedback-types";
 
 // AI : spec vision — accumulated step outputs keyed by module.label (see lib/server/pipeline_state.ts TODO).
 export type StepLabel = string;
@@ -54,6 +55,9 @@ export type ClientStepSpec = {
   input: unknown;
   pipelineState?: PipelineState;
   expectedOutputs?: Record<string, unknown>;
+  feedbackMode?: FeedbackInputMode;
+  feedbackPrompt?: string;
+  requireFeedback?: boolean;
 };
 
 export interface RunJob {

@@ -29,6 +29,7 @@ import type {
   StepSubProgress,
 } from "@/lib/types"
 import { JobLogLevel, type ClientStepSpec } from "@/lib/run-types"
+import type { HumanReviewDecision, UserFeedbackPayload } from "@/lib/feedback-types"
 
 export type StepUiState = StepDescriptionFields & {
   status: StepProgress["status"] | "idle"
@@ -205,7 +206,7 @@ export interface AwaitRunCallbacks {
   onStep?: (steps: StepProgress[]) => void
   onLogs?: (logs: JobLogEntry[], newLines: JobLogEntry[]) => void
   // AI : human-review steps pause until the operator approves or rejects in Inference.
-  onHumanReview?: (spec: ClientStepSpec) => Promise<"approved" | "rejected">
+  onHumanReview?: (spec: ClientStepSpec) => Promise<HumanReviewDecision>
   signal?: AbortSignal
 }
 
@@ -219,6 +220,7 @@ export type ClientStepSubmitPayload = {
   output?: unknown
   error?: string
   clientLogs?: JobLogEntry[]
+  feedback?: UserFeedbackPayload
 }
 
 // AI : assert/custom-code failures are expected project outcomes — warn in console, not Next.js console.error overlay.
@@ -301,10 +303,13 @@ export async function awaitJobCompletion(
         clientStepBusy = true
         try {
           const decision = await onHumanReview(spec)
-          if (decision === "approved") {
-            await submitClientStep({ output: spec.input })
+          if (decision.decision === "approved") {
+            await submitClientStep({ output: spec.input, feedback: decision.feedback })
           } else {
-            await submitClientStep({ error: "Human review rejected" })
+            await submitClientStep({
+              error: "Human review rejected",
+              feedback: decision.feedback,
+            })
           }
           clientStepSubmittedFor = spec.moduleId
         } finally {

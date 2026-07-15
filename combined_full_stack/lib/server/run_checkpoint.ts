@@ -43,6 +43,9 @@ export type RunCheckpoint = {
     input: unknown;
     pipelineState?: import("../run-types").PipelineState;
     expectedOutputs?: Record<string, unknown>;
+    feedbackMode?: import("@/lib/feedback-types").FeedbackInputMode;
+    feedbackPrompt?: string;
+    requireFeedback?: boolean;
   };
   expectedOutputs?: Record<string, unknown>;
 };

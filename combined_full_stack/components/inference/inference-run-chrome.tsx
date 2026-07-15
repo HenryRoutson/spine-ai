@@ -14,7 +14,9 @@ import {
 } from "lucide-react"
 import { JsonHighlight } from "@/components/highlight"
 import { Button } from "@/components/ui/button"
+import { FeedbackInput } from "@/components/feedback-input"
 import { cn } from "@/lib/utils"
+import { isFeedbackPayloadComplete, type UserFeedbackPayload } from "@/lib/feedback-types"
 import { copyTextToClipboard } from "@/lib/clipboard"
 import { formatErrorForClipboard } from "@/lib/error-copy"
 import type { RunErrorDisplay } from "@/lib/run-errors"
@@ -236,10 +238,15 @@ export function HumanReviewPanel({
 }: {
   spec: ClientStepSpec
   module?: PipelineModule
-  onApprove: () => void | Promise<void>
-  onReject: () => void | Promise<void>
+  onApprove: (feedback?: UserFeedbackPayload) => void | Promise<void>
+  onReject: (feedback?: UserFeedbackPayload) => void | Promise<void>
 }) {
   const [pendingAction, setPendingAction] = useState<"approve" | "reject" | null>(null)
+  const [feedback, setFeedback] = useState<UserFeedbackPayload | undefined>()
+  const feedbackMode = spec.feedbackMode ?? module?.feedbackMode
+  const feedbackPrompt = spec.feedbackPrompt ?? module?.feedbackPrompt
+  const requireFeedback = spec.requireFeedback ?? module?.requireFeedback
+  const feedbackReady = isFeedbackPayloadComplete(feedback, !!requireFeedback && !!feedbackMode)
 
   const previewJson = useMemo(() => {
     try {
@@ -266,16 +273,25 @@ export function HumanReviewPanel({
           <div className="max-h-64 min-w-0 overflow-auto rounded-md border border-border bg-[oklch(0.14_0.004_264)] p-2">
             <JsonHighlight json={previewJson} />
           </div>
+          {feedbackMode && (
+            <FeedbackInput
+              mode={feedbackMode}
+              prompt={feedbackPrompt}
+              required={requireFeedback}
+              disabled={pendingAction !== null}
+              onChange={setFeedback}
+            />
+          )}
           {/* AI : todo — approve/reject settle animations (pulse on click, panel dismiss transition) */}
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
               className="gap-1.5"
-              disabled={pendingAction !== null}
+              disabled={pendingAction !== null || !feedbackReady}
               onClick={() => {
-                if (pendingAction) return
+                if (pendingAction || !feedbackReady) return
                 setPendingAction("approve")
-                void Promise.resolve(onApprove()).finally(() => setPendingAction(null))
+                void Promise.resolve(onApprove(feedback)).finally(() => setPendingAction(null))
               }}
             >
               {pendingAction === "approve" ? (
@@ -289,11 +305,11 @@ export function HumanReviewPanel({
               size="sm"
               variant="outline"
               className="gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
-              disabled={pendingAction !== null}
+              disabled={pendingAction !== null || !feedbackReady}
               onClick={() => {
-                if (pendingAction) return
+                if (pendingAction || !feedbackReady) return
                 setPendingAction("reject")
-                void Promise.resolve(onReject()).finally(() => setPendingAction(null))
+                void Promise.resolve(onReject(feedback)).finally(() => setPendingAction(null))
               }}
             >
               {pendingAction === "reject" ? (

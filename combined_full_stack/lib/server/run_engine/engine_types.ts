@@ -43,7 +43,11 @@ export interface RunOptions {
   >;
 }
 
-export type ClientStepResume = { output?: unknown; error?: string };
+export type ClientStepResume = {
+  output?: unknown;
+  error?: string;
+  feedback?: import("@/lib/feedback-types").UserFeedbackPayload;
+};
 
 export interface ExecResult {
   value: unknown;

@@ -22,6 +22,7 @@ import { isPreviewOnly } from "@/lib/demo-mode"
 import { useRunNotesFlushOnLeave } from "@/lib/run-notes-flush"
 import type { DocId, JobLogEntry, ModuleId, PipelineModule, PipelineRun, ProjectId, RunJobId } from "@/lib/types"
 import type { ClientStepSpec } from "@/lib/run-types"
+import type { HumanReviewDecision } from "@/lib/feedback-types"
 
 export type InferencePhase = "idle" | "running" | "done"
 
@@ -66,7 +67,7 @@ export function useInferenceRunProgress({
   const [runNotes, setRunNotes] = useState("")
   const [pendingHumanReview, setPendingHumanReview] = useState<ClientStepSpec | null>(null)
   const [deduped, setDeduped] = useState(false)
-  const humanReviewResolveRef = useRef<((decision: "approved" | "rejected") => void) | null>(null)
+  const humanReviewResolveRef = useRef<((decision: HumanReviewDecision) => void) | null>(null)
   const runNotesRef = useRef("")
   const savedNotesRef = useRef<string | undefined>(undefined)
   const logEndRef = useRef<HTMLDivElement>(null)
@@ -184,10 +185,10 @@ export function useInferenceRunProgress({
         },
         onHumanReview: (spec) => {
           if (jobGen !== activeJobGenRef.current) {
-            return Promise.resolve("rejected" as const)
+            return Promise.resolve({ decision: "rejected" as const })
           }
           setPendingHumanReview(spec)
-          return new Promise<"approved" | "rejected">((resolve) => {
+          return new Promise<HumanReviewDecision>((resolve) => {
             humanReviewResolveRef.current = resolve
           })
         },
@@ -211,8 +212,8 @@ export function useInferenceRunProgress({
     }
   }
 
-  function resolveHumanReview(decision: "approved" | "rejected") {
-    humanReviewResolveRef.current?.(decision)
+  function resolveHumanReview(decision: "approved" | "rejected", feedback?: HumanReviewDecision["feedback"]) {
+    humanReviewResolveRef.current?.({ decision, feedback })
     humanReviewResolveRef.current = null
     setPendingHumanReview(null)
   }

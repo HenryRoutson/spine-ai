@@ -242,6 +242,9 @@ export async function runLinearStepsFrom(
                 label: m.label,
                 kind: ModuleKind.HumanReview,
                 input: err.input,
+                feedbackMode: m.feedbackMode,
+                feedbackPrompt: m.feedbackPrompt,
+                requireFeedback: m.requireFeedback,
               },
             });
           }

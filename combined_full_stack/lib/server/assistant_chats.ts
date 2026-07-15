@@ -7,6 +7,7 @@ import { LOCAL_DEV_USER_ID, type AuthSession } from "./require_auth";
 import type { ProjectId } from "./types";
 
 import type { AssistantDebugEntry } from "@/lib/assistant-debug-types";
+import type { FeedbackInputMode, UserFeedbackPayload } from "@/lib/feedback-types";
 
 export type assistant_chat_id_string = string & { __brand: "assistant_chat_id" };
 
@@ -20,6 +21,8 @@ export type StoredAssistantChatMessage = {
   retryCount?: number;
   validationErrors?: string | null;
   debugTrace?: AssistantDebugEntry[];
+  inputMode?: FeedbackInputMode;
+  responseFeedback?: UserFeedbackPayload;
 };
 
 export type AssistantChatSummary = {

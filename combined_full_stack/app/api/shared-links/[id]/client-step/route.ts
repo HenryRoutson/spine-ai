@@ -113,7 +113,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         const run = await resumeRunPipeline(
           overlay,
           checkpoint,
-          { output: body.output, error: body.error },
+          { output: body.output, error: body.error, feedback: body.feedback },
           {
             cacheOwnerId: checkpoint.cacheOwnerId ?? link.ownerId,
             clientLogs: body.clientLogs as JobLogEntry[] | undefined,
