@@ -79,7 +79,7 @@ function serializeProjectPutBody(p: Project): string {
 export type BillingCreditHistoryEntry = {
   creditKey: string
   amountCents: number
-  source: "checkout" | "invoice"
+  source: "checkout" | "invoice" | "feedback"
   createdAt: string
 }
 
@@ -88,6 +88,9 @@ export type BillingAccountView = {
   totalBilledCents: number
   totalUsageCents: number
   freeCreditCents: number
+  feedbackCreditCents: number
+  feedbackMinChars: number
+  feedbackMaxCreditsPerDay: number
   subscribed: boolean
   minRunBalanceCents: number
   topupOptionsCents: number[]
@@ -107,6 +110,9 @@ const DEMO_BILLING: BillingAccountView = {
   totalBilledCents: 12_000,
   totalUsageCents: 7_800,
   freeCreditCents: 4_200,
+  feedbackCreditCents: 100,
+  feedbackMinChars: 100,
+  feedbackMaxCreditsPerDay: 10,
   subscribed: false,
   minRunBalanceCents: 50,
   topupOptionsCents: [500, 1000, 2500],

@@ -1,4 +1,9 @@
-import { MIN_ACCOUNT_BALANCE_CENTS, MIN_RUN_BALANCE_CENTS, NEW_ACCOUNT_BALANCE_CENTS } from "@/lib/billing_config";
+import {
+  FEEDBACK_MAX_CREDITS_PER_DAY,
+  FEEDBACK_MIN_CHARS,
+  MIN_ACCOUNT_BALANCE_CENTS,
+  MIN_RUN_BALANCE_CENTS,
+} from "@/lib/billing_config";
 import { NextResponse } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import {
@@ -9,6 +14,7 @@ import {
   loadBillingAccount,
   loadBillingCreditHistory,
 } from "@/lib/server/billing_account";
+import { loadFreeCreditAmounts } from "@/lib/server/free_credit_schedule";
 import { logger } from "@/lib/server/server_logger";
 
 const apiLog = logger("api:billing");
@@ -18,9 +24,10 @@ export async function GET() {
   if (ctx instanceof NextResponse) return ctx;
 
   const key = ctx.auth.userId as unknown as BillingUserKey;
-  const [account, creditHistory] = await Promise.all([
+  const [account, creditHistory, freeCredits] = await Promise.all([
     loadBillingAccount(key),
     loadBillingCreditHistory(key),
+    loadFreeCreditAmounts(),
   ]);
   apiLog.debug(`GET /api/billing`, {
     key,
@@ -33,7 +40,10 @@ export async function GET() {
     balanceCents: account.balanceCents,
     totalBilledCents: account.totalBilledCents,
     totalUsageCents: account.totalUsageCents ?? 0,
-    freeCreditCents: NEW_ACCOUNT_BALANCE_CENTS,
+    freeCreditCents: freeCredits.signupCreditCents,
+    feedbackCreditCents: freeCredits.feedbackCreditCents,
+    feedbackMinChars: FEEDBACK_MIN_CHARS,
+    feedbackMaxCreditsPerDay: FEEDBACK_MAX_CREDITS_PER_DAY,
     subscribed: account.subscribed,
     minRunBalanceCents: MIN_RUN_BALANCE_CENTS,
     minAccountBalanceCents: MIN_ACCOUNT_BALANCE_CENTS,
