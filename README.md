@@ -18,6 +18,16 @@ npm run dev:all
 Canonical modules live in `shared/` (legal, landing-demo stream, json-viewer, clipboard, session-replay types, …).  
 `npm run sync:shared` copies them into each app’s `lib/shared/` (and `public/json-viewer.html`). Dev/build scripts run this automatically — edit `shared/`, not the copies.
 
+## Landing demo proxy (required for hosted deploys)
+
+The landing page proxies `/api/landing-demo/*` to the Spine app. In production both apps must share the same secret:
+
+1. Run `openssl rand -hex 32` and set `LANDING_DEMO_PROXY_SECRET` in the repo root `.env`.
+2. Add the **same value** to both Vercel projects (landing page + Spine app).
+3. On the landing Vercel project, set `SPINE_API_URL=https://www.spine-ai-app.dev` if it is not already.
+
+Local `npm run dev:all` injects a dev default secret automatically.
+
 ## Individual
 
 App :

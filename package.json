@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "sync:shared": "bash scripts/sync-shared.sh",
-    "dev:all": "npm run sync:shared && concurrently -n app,landing,dashboard -c blue,green,magenta \"npm run dev --prefix combined_full_stack -- -p 3000\" \"npm run dev --prefix landing_page -- -p 4000\" \"npm run dev --prefix dashboard -- -p 5050\""
+    "dev:all": "npm run sync:shared && LANDING_DEMO_PROXY_SECRET=${LANDING_DEMO_PROXY_SECRET:-local-dev-landing-proxy-secret} concurrently -n app,landing,dashboard -c blue,green,magenta \"npm run dev --prefix combined_full_stack -- -p 3000\" \"npm run dev --prefix landing_page -- -p 4000\" \"npm run dev --prefix dashboard -- -p 5050\""
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

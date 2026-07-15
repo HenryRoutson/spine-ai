@@ -39,6 +39,25 @@ function unreachableError(host: SpineApiUrl, detail?: string): string {
   return detail ? `${base} ${detail}` : base;
 }
 
+function landingDemoProxyAuthError(host: SpineApiUrl): string {
+  const hasSecret = Boolean(process.env.LANDING_DEMO_PROXY_SECRET?.trim());
+  if (!hasSecret) {
+    return `Landing demo proxy is not configured. Set LANDING_DEMO_PROXY_SECRET in the repo root .env (and on both Vercel projects: landing page + Spine app). The landing page at ${host.replace(/\/$/, "")} rejected the request without a matching proxy secret.`;
+  }
+  return `Landing demo proxy secret mismatch. Use the same LANDING_DEMO_PROXY_SECRET on the landing page and Spine app (currently calling ${host.replace(/\/$/, "")}).`;
+}
+
+function proxyResponseError(status: number, body: string, host: SpineApiUrl): string | null {
+  if (status !== 401) return null;
+  try {
+    const data = JSON.parse(body) as { error?: string };
+    if (data.error === "unauthorized") return landingDemoProxyAuthError(host);
+  } catch {
+    /* non-JSON 401 */
+  }
+  return null;
+}
+
 export async function proxyLandingDemoPost(
   req: Request,
   opts: {
@@ -66,7 +85,7 @@ export async function proxyLandingDemoPost(
       body: await req.text(),
     });
     const contentType = res.headers.get("Content-Type") ?? "application/json";
-    if (opts.stream && res.body) {
+    if (opts.stream && res.ok && res.body) {
       return new Response(res.body, {
         status: res.status,
         headers: {
@@ -78,6 +97,10 @@ export async function proxyLandingDemoPost(
       });
     }
     const body = await res.text();
+    const proxyError = proxyResponseError(res.status, body, host);
+    if (proxyError) {
+      return NextResponse.json({ error: proxyError }, { status: 502 });
+    }
     return new NextResponse(body, {
       status: res.status,
       headers: { "Content-Type": contentType },
