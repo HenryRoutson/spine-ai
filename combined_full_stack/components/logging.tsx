@@ -37,7 +37,7 @@ import { RunNotesEditor } from "@/components/run-notes-editor"
 import { StepServerLogsSection } from "@/components/server-logs-panel"
 import { StepInputDescription, resolveStepInputDescription } from "@/components/step-input-description"
 import { stepKindIcon } from "@/lib/module-ui"
-import { Search, GitCompareArrows, Zap, Copy, Check } from "lucide-react"
+import { Search, GitCompareArrows, Zap, Copy, Check, AlertTriangle, Bot } from "lucide-react"
 import { resolveRunInputDocIds, runInputDocsSummary } from "@/lib/inference-input"
 import { stepIoLabels } from "@/lib/module-kinds"
 import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
@@ -49,6 +49,9 @@ import { IoSection } from "@/components/logging/io-section"
 import { IoPager } from "@/components/logging/io-pager"
 import { StepLoadedDocSection } from "@/components/step-loaded-doc-section"
 import { filterRuns, isTestingRun, RunNotesPreview } from "@/components/logging/run-picker-column"
+import { filterRunsByErrorStatus, runHasErrors } from "@/lib/run-error-log"
+import { IsolatedErrorActions } from "@/components/logging/isolated-error-actions"
+import { useDiagnosisAgents } from "@/lib/diagnosis-agent-context"
 import { TestResults } from "@/components/test-results"
 import { CompareModal } from "@/components/logging/compare-modal"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
@@ -56,13 +59,14 @@ import { LlmRetryGridSection } from "@/components/logging/llm-retry-grid"
 
 export function Logging() {
   const palette = useStatusPalette()
-  const { runs, billingRuns, docs, modules, models, project, typeAliases } = useStore()
+  const { runs, billingRuns, docs, modules, models, project, typeAliases, model: globalModel } = useStore()
   const { focusRunId, clearFocusRun, setSharedRunDocScope } = useAppShell()
   const [query, setQuery] = useState("")
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
   const [popup, setPopup] = useState<PopupPayload | null>(null)
   const [selectedPipelineModuleId, setSelectedPipelineModuleId] = useState<ModuleId | undefined>()
   const [compareOpen, setCompareOpen] = useState(false)
+  const [errorsOnly, setErrorsOnly] = useState(false)
   const [logCopied, setLogCopied] = useState(false)
   const [jsonCopied, setJsonCopied] = useState(false)
   const { width: sidebarWidth, setWidth: setSidebarWidth, commitWidth: commitSidebarWidth } =
@@ -101,7 +105,12 @@ export function Logging() {
   const runInputDocIds = (run: PipelineRun) => resolveRunInputDocIds(docs, project, run)
   const runInputLabel = (run: PipelineRun) => runInputDocsSummary(docs, project, run)
 
-  const filtered = useMemo(() => filterRuns(runs, query), [runs, query])
+  const { spawnDiagnosis } = useDiagnosisAgents()
+
+  const filtered = useMemo(() => {
+    const byError = filterRunsByErrorStatus(runs, errorsOnly ? "errors" : "all")
+    return filterRuns(byError, query)
+  }, [runs, query, errorsOnly])
 
   const active = runs.find((r) => r.id === selectedRun) ?? billingRuns.find((r) => r.id === selectedRun) ?? null
 
@@ -161,7 +170,7 @@ export function Logging() {
         maxLeading={loggingSidebarSplit.max}
         leading={
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="border-b border-border p-3">
+            <div className="border-b border-border p-3 space-y-2">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -171,6 +180,16 @@ export function Logging() {
                   className="h-8 pl-8 font-mono text-xs"
                 />
               </div>
+              <Button
+                type="button"
+                variant={errorsOnly ? "secondary" : "outline"}
+                size="sm"
+                className="h-7 w-full gap-1.5 font-mono text-[10px]"
+                onClick={() => setErrorsOnly((v) => !v)}
+              >
+                <AlertTriangle className="h-3 w-3" />
+                {errorsOnly ? "Showing errors only" : "Errors only"}
+              </Button>
             </div>
             <ScrollArea className="min-h-0 flex-1">
               {filtered.length === 0 ? (
@@ -259,6 +278,30 @@ export function Logging() {
                     <p className="truncate font-mono text-xs">{active.id}</p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
+                    {active && runHasErrors(active) && (
+                      <>
+                        <IsolatedErrorActions run={active} modules={modules} />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-6 gap-1 font-mono text-[10px]"
+                          onClick={() =>
+                            spawnDiagnosis(
+                              {
+                                run: active,
+                                projectId: project.id,
+                                runLabel: runInputLabel(active),
+                              },
+                              globalModel,
+                            )
+                          }
+                        >
+                          <Bot className="h-3 w-3" />
+                          diagnose
+                        </Button>
+                      </>
+                    )}
                     <Button
                       type="button"
                       variant="outline"

@@ -307,6 +307,13 @@ export const pipelineSummaryBodySchema = z.object({
   model: z.string().max(128).optional(),
 });
 
+export const diagnosisAssistantBodySchema = z.object({
+  projectId: projectIdSchema,
+  runId: z.string().trim().min(1).max(128),
+  message: z.string().trim().min(1).max(MAX_ASSISTANT_MESSAGE_CHARS),
+  model: z.string().max(128).optional(),
+});
+
 export const testingAssistantBodySchema = z.object({
   projectId: projectIdSchema,
   instruction: z.string().trim().min(1).max(MAX_ASSISTANT_MESSAGE_CHARS),

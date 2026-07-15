@@ -4,6 +4,7 @@ import { StoreProvider } from "@/lib/store"
 import { DocViewerProvider } from "@/lib/doc-viewer"
 import { AppShellProvider } from "@/lib/app-shell"
 import { ProjectAssistantProvider } from "@/lib/project-assistant-context"
+import { DiagnosisAgentProvider } from "@/lib/diagnosis-agent-context"
 import { AppShellLayout } from "@/components/app-shell-layout"
 
 export default function Page() {
@@ -12,7 +13,9 @@ export default function Page() {
       <DocViewerProvider>
         <AppShellProvider>
           <ProjectAssistantProvider>
-            <AppShellLayout />
+            <DiagnosisAgentProvider>
+              <AppShellLayout />
+            </DiagnosisAgentProvider>
           </ProjectAssistantProvider>
         </AppShellProvider>
       </DocViewerProvider>
