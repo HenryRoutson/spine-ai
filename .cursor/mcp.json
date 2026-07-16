@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "spine-pinpoint": {
+      "command": "npm",
+      "args": ["run", "start", "--prefix", "mcp_tool"],
+      "cwd": "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon",
+      "env": {
+        "SPINE_REPO_ROOT": "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon",
+        "SPINE_APP_ROOT": "/Users/henry/Documents/documents.nosync/Git.nosync/antler_vc_hackathon/combined_full_stack"
+      }
+    }
+  }
+}
