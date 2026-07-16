@@ -1,5 +1,15 @@
 # antler_vc_hackathon
 
+## Local hosting (Supabase + all apps)
+
+Automated setup — see [`docs/local_deployment.md`](docs/local_deployment.md).
+
+```bash
+export OPENROUTER_API_KEY="sk-or-..."
+python3 scripts/setup_local.py all
+python3 scripts/setup_local.py dev
+```
+
 ## Launch all (app + landing + dashboard)
 
 ```bash
