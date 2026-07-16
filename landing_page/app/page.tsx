@@ -10,6 +10,7 @@ import {
   LandingTaskPrompt,
 } from "../components/landing-preview-section";
 import { LegalFooterLinks } from "@/lib/legal/chrome";
+import { USE_KPMG_LOGO_IMAGE } from "@/lib/site-branding";
 import { LEGAL } from "@shared/legal/site";
 
 type AppLoginUrl = string;
@@ -97,7 +98,11 @@ export default function Home() {
                   className="inline-flex items-center gap-2.5 text-xs text-muted transition-colors hover:text-foreground"
                 >
                   <span>developed by engineers from</span>
-                  <Image src="/kpmg-logo.svg" alt="KPMG" width={50} height={20} className="brightness-0 invert opacity-70" />
+                  {USE_KPMG_LOGO_IMAGE ? (
+                    <Image src="/kpmg-logo.svg" alt="KPMG" width={50} height={20} className="brightness-0 invert opacity-70" />
+                  ) : (
+                    <span className="font-semibold uppercase tracking-wider opacity-70">KPMG</span>
+                  )}
                 </a>
                 <a
                   href="https://www.antler.co/"

@@ -1,11 +1,12 @@
-import { NEW_ACCOUNT_BALANCE_CENTS } from "@/lib/billing_config";
 import { createAdminClient } from "./supabase_admin";
 import type { BillingUserKey } from "./billing_account";
+import { freeCreditCentsAt } from "./free_credit_schedule";
 
 export type billing_flow_type =
   | "signup_credit"
   | "checkout_credit"
   | "invoice_credit"
+  | "feedback_credit"
   | "usage_run"
   | "usage_assistant"
   | "usage_hosted_api"
@@ -52,12 +53,13 @@ export async function recordSignupCredit(
   userId: BillingUserKey,
   userEmail?: string | null,
 ): Promise<void> {
+  const amountCents = await freeCreditCentsAt("signup");
   await recordBillingFlow({
     userId,
     userEmail,
     flowType: "signup_credit",
-    amountCents: NEW_ACCOUNT_BALANCE_CENTS,
-    balanceAfterCents: NEW_ACCOUNT_BALANCE_CENTS,
+    amountCents,
+    balanceAfterCents: amountCents,
     detail: { note: "New account starting credit" },
   });
 }

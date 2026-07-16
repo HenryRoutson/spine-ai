@@ -39,7 +39,9 @@ function chartYMaxCents(peakCents: number): number {
 type BillingScope = "all" | "project"
 
 function creditHistoryLabel(source: BillingAccountView["creditHistory"][number]["source"]): string {
-  return source === "invoice" ? "Subscription renewal" : "Checkout payment"
+  if (source === "invoice") return "Subscription renewal"
+  if (source === "feedback") return "Feedback reward"
+  return "Checkout payment"
 }
 
 function formatCreditWhen(iso: string): string {

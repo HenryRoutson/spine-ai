@@ -3,7 +3,7 @@
 import { JobLogLevel } from "@/lib/run-types";
 import { z } from "zod";
 import { ASSISTANT_HISTORY_LIMIT } from "@/lib/assistant-chat-types";
-import { TOPUP_OPTIONS_CENTS } from "@/lib/billing_config";
+import { TOPUP_OPTIONS_CENTS, FEEDBACK_MIN_CHARS } from "@/lib/billing_config";
 import {
   DocLabel,
   InputType,
@@ -218,7 +218,7 @@ export const jobLogEntrySchema = z.object({
 });
 
 export const feedbackBodySchema = z.object({
-  message: z.string().trim().min(1).max(MAX_FEEDBACK_MESSAGE_CHARS),
+  message: z.string().trim().min(FEEDBACK_MIN_CHARS).max(MAX_FEEDBACK_MESSAGE_CHARS),
 });
 
 export const createProjectBodySchema = z
@@ -304,6 +304,13 @@ export const testingEvaluateBodySchema = z
 
 export const pipelineSummaryBodySchema = z.object({
   projectId: projectIdSchema,
+  model: z.string().max(128).optional(),
+});
+
+export const diagnosisAssistantBodySchema = z.object({
+  projectId: projectIdSchema,
+  runId: z.string().trim().min(1).max(128),
+  message: z.string().trim().min(1).max(MAX_ASSISTANT_MESSAGE_CHARS),
   model: z.string().max(128).optional(),
 });
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import type { RefObject } from "react"
 import { ChevronDown, Copy, Check } from "lucide-react"
+import { runErrorLogText, runHasErrors } from "@/lib/run-error-log"
 import { runLogText } from "@/lib/run-log-text"
 import { runLogJson } from "@/lib/run-log-json"
 import { copyTextToClipboard } from "@/lib/clipboard"
@@ -50,6 +51,7 @@ export function InferenceStepTracePanel({
   const [stepsExpanded, setStepsExpanded] = useState(true)
   const [logCopied, setLogCopied] = useState(false)
   const [jsonCopied, setJsonCopied] = useState(false)
+  const [errorCopied, setErrorCopied] = useState(false)
   // AI : show input/output viz while running and again after done when trace is expanded.
   const showStepIo = stepsExpanded && (phase === "running" || phase === "done")
   const ioCompact = phase === "running"
@@ -80,6 +82,20 @@ export function InferenceStepTracePanel({
         <div className="flex items-center gap-2">
           {phase === "done" && run && (
             <>
+              {runHasErrors(run) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void copyTextToClipboard(runErrorLogText(run))
+                    setErrorCopied(true)
+                    setTimeout(() => setErrorCopied(false), 2000)
+                  }}
+                  className="inline-flex items-center gap-1 font-mono text-[10px] text-destructive hover:text-destructive/80"
+                >
+                  {errorCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  {errorCopied ? "copied" : "copy_errors"}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={async () => {
