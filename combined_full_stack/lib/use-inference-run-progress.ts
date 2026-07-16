@@ -20,6 +20,9 @@ import {
 } from "@/lib/run-engine"
 import { isPreviewOnly } from "@/lib/demo-mode"
 import { useRunNotesFlushOnLeave } from "@/lib/run-notes-flush"
+import { useRunJobs } from "@/lib/run-jobs-context"
+import { activeStepLabelFromStepStates, progressPctFromStepStates } from "@/lib/run-jobs-progress"
+import { isRunAbortedError, useCancellableRun } from "@/lib/use-cancellable-run"
 import type { DocId, JobLogEntry, ModuleId, PipelineModule, PipelineRun, ProjectId, RunJobId } from "@/lib/types"
 import type { ClientStepSpec } from "@/lib/run-types"
 
@@ -72,9 +75,14 @@ export function useInferenceRunProgress({
   const logEndRef = useRef<HTMLDivElement>(null)
   const activeJobGenRef = useRef(0)
   const activeJobIdRef = useRef<RunJobId | null>(null)
+  const activeTrackIdRef = useRef<string | null>(null)
+  const mountedRef = useRef(true)
+  const stepStatesRef = useRef<Map<ModuleId, StepUiState>>(new Map())
   const configChangedDuringRunRef = useRef(false)
   const runsRef = useRef(runs)
   runsRef.current = runs
+  const runJobs = useRunJobs()
+  const cancellable = useCancellableRun()
 
   useEffect(() => {
     runNotesRef.current = runNotes
@@ -86,10 +94,24 @@ export function useInferenceRunProgress({
   }, [debugLogs.length, phase])
 
   useEffect(() => {
-    return () => {
-      activeJobGenRef.current++
+    stepStatesRef.current = stepStates
+  }, [stepStates])
+
+  useEffect(() => {
+    mountedRef.current = true
+    const tracked = runJobs.runningInferenceForProject(projectId)
+    if (tracked) {
+      activeTrackIdRef.current = tracked.id
+      activeJobIdRef.current = tracked.jobId
+      setPhase("running")
+      setStepStates(new Map(tracked.stepStates))
+      stepStatesRef.current = new Map(tracked.stepStates)
+      setError(null)
     }
-  }, [])
+    return () => {
+      mountedRef.current = false
+    }
+  }, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useRunNotesFlushOnLeave(
     phase === "done" ? run?.id : undefined,
@@ -105,6 +127,7 @@ export function useInferenceRunProgress({
   function resetRunState() {
     activeJobGenRef.current++
     activeJobIdRef.current = null
+    activeTrackIdRef.current = null
     setPhase("idle")
     setStepStates(new Map())
     setRun(null)
@@ -154,6 +177,14 @@ export function useInferenceRunProgress({
       setRunNotes("")
       runNotesRef.current = ""
     }
+    const signal = cancellable.begin()
+    const trackId = runJobs.registerJob({
+      source: "inference",
+      label: "Pipeline run",
+      projectId,
+      cancel: () => cancellable.stop(),
+    })
+    activeTrackIdRef.current = trackId
     setPhase("running")
     setError(null)
     setRun(null)
@@ -172,43 +203,79 @@ export function useInferenceRunProgress({
       )
       if (jobGen !== activeJobGenRef.current) return
       activeJobIdRef.current = jobId
+      runJobs.bindJobId(trackId, jobId)
+      cancellable.trackJobId(jobId)
       refreshBilling().catch(console.error)
       const { run: finished, deduped } = await awaitRun(jobId, {
+        signal,
         onStep: (steps) => {
           if (jobGen !== activeJobGenRef.current || activeJobIdRef.current !== jobId) return
-          setStepStates((prev) => mergeStepStates(prev, steps))
+          const merged = mergeStepStates(stepStatesRef.current, steps)
+          stepStatesRef.current = merged
+          runJobs.updateJobProgress(trackId, {
+            stepStates: merged,
+            progressPct: progressPctFromStepStates(modules, merged),
+            activeStepLabel: activeStepLabelFromStepStates(modules, merged),
+          })
+          if (mountedRef.current) setStepStates(merged)
         },
         onLogs: (logs) => {
           if (jobGen !== activeJobGenRef.current || activeJobIdRef.current !== jobId) return
+          if (!mountedRef.current) return
           setDebugLogs(logs)
         },
         onHumanReview: (spec) => {
           if (jobGen !== activeJobGenRef.current) {
             return Promise.resolve("rejected" as const)
           }
+          if (!mountedRef.current) return Promise.resolve("rejected" as const)
           setPendingHumanReview(spec)
           return new Promise<"approved" | "rejected">((resolve) => {
             humanReviewResolveRef.current = resolve
           })
         },
       })
-      if (jobGen !== activeJobGenRef.current) return
       const notes = runNotesRef.current.trim() || undefined
       const withNotes = notes ? { ...finished, notes } : finished
       savedNotesRef.current = notes
-      setRun(withNotes)
-      setDeduped(!!deduped)
+      runJobs.completeJob(trackId, { runId: finished.id })
+      activeTrackIdRef.current = null
       if (!runsRef.current.some((r) => r.id === finished.id)) {
         addRun(withNotes)
       }
       if (notes) updateRunNotes(finished.id, notes).catch(console.error)
+      if (jobGen !== activeJobGenRef.current || !mountedRef.current) return
+      setRun(withNotes)
+      setDeduped(!!deduped)
       setPhase("done")
     } catch (e) {
-      if (jobGen !== activeJobGenRef.current) return
+      if (isRunAbortedError(e)) {
+        if (activeTrackIdRef.current) runJobs.stopJob(activeTrackIdRef.current)
+        activeTrackIdRef.current = null
+        if (jobGen !== activeJobGenRef.current || !mountedRef.current) return
+        setPhase("idle")
+        return
+      }
+      if (activeTrackIdRef.current) runJobs.failJob(activeTrackIdRef.current, (e as Error).message)
+      activeTrackIdRef.current = null
+      if (jobGen !== activeJobGenRef.current || !mountedRef.current) return
       if (isRunBillingError(e)) refreshBilling().catch(console.error)
       setError((e as Error).message)
       setPhase("idle")
+    } finally {
+      cancellable.clear()
     }
+  }
+
+  function stop() {
+    cancellable.stop()
+    if (activeTrackIdRef.current) runJobs.stopJob(activeTrackIdRef.current)
+    activeTrackIdRef.current = null
+    activeJobGenRef.current++
+    activeJobIdRef.current = null
+    setPhase("idle")
+    setPendingHumanReview(null)
+    humanReviewResolveRef.current = null
   }
 
   function resolveHumanReview(decision: "approved" | "rejected") {
@@ -265,6 +332,7 @@ export function useInferenceRunProgress({
     deduped,
     resolveHumanReview,
     start,
+    stop,
     reset,
     resetRunState,
   }

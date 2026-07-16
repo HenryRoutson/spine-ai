@@ -13,7 +13,7 @@
     "title": "Section A — Linear equations — Q2",
     "body": "Solve for y: 2(y - 4) = 10\nStudent work: 2y - 8 = 10, 2y = 18, y = 9",
     "max_score": 5,
-    "criteria": "Award exactly one total (max 5) by summing only these components: 1 pt for distributing to 2y−8=10; 1 pt for adding 8 to get 2y=18; 1 pt for dividing by 2; 2 pts for final answer y=9. If correct method through 2y=18 but final y is wrong, award exactly 2 pts. If only final answer y=9 with no steps, award exactly 3 pts. Wrong method or blank: 0."
+    "criteria": "Apply exactly one band — never sum components when an alternate band applies. Band B first: if student shows 2y−8=10 and 2y=18 but final y ≠ 9, award exactly 2 pts. Band C next: if only final answer y=9 appears with no intermediate steps (no distributing, no 2y=18), award exactly 3 pts — a correct answer alone is not full marks. Band A: if full method with y=9, sum components for exactly 5 pts (1 pt distributing to 2y−8=10; 1 pt adding 8 to 2y=18; 1 pt dividing by 2; 2 pts final y=9). Otherwise: 0."
   },
   {
     "student_label": "Sam Rivera",
@@ -53,7 +53,7 @@
     "title": "Section A — Linear equations — Q2",
     "body": "Solve for y: 2(y - 4) = 10\nStudent work: 2y - 8 = 10, 2y = 18, y = 8",
     "max_score": 5,
-    "criteria": "Award exactly one total (max 5) by summing only these components: 1 pt for distributing to 2y−8=10; 1 pt for adding 8 to get 2y=18; 1 pt for dividing by 2; 2 pts for final answer y=9. If correct method through 2y=18 but final y is wrong, award exactly 2 pts. If only final answer y=9 with no steps, award exactly 3 pts. Wrong method or blank: 0."
+    "criteria": "Apply exactly one band — never sum components when an alternate band applies. Band B first: if student shows 2y−8=10 and 2y=18 but final y ≠ 9, award exactly 2 pts. Band C next: if only final answer y=9 appears with no intermediate steps (no distributing, no 2y=18), award exactly 3 pts — a correct answer alone is not full marks. Band A: if full method with y=9, sum components for exactly 5 pts (1 pt distributing to 2y−8=10; 1 pt adding 8 to 2y=18; 1 pt dividing by 2; 2 pts final y=9). Otherwise: 0."
   },
   {
     "student_label": "Jordan Lee",
@@ -93,7 +93,7 @@
     "title": "Section A — Linear equations — Q2",
     "body": "Solve for y: 2(y - 4) = 10\nStudent work: y = 9",
     "max_score": 5,
-    "criteria": "Award exactly one total (max 5) by summing only these components: 1 pt for distributing to 2y−8=10; 1 pt for adding 8 to get 2y=18; 1 pt for dividing by 2; 2 pts for final answer y=9. If correct method through 2y=18 but final y is wrong, award exactly 2 pts. If only final answer y=9 with no steps, award exactly 3 pts. Wrong method or blank: 0."
+    "criteria": "Apply exactly one band — never sum components when an alternate band applies. Band B first: if student shows 2y−8=10 and 2y=18 but final y ≠ 9, award exactly 2 pts. Band C next: if only final answer y=9 appears with no intermediate steps (no distributing, no 2y=18), award exactly 3 pts — a correct answer alone is not full marks. Band A: if full method with y=9, sum components for exactly 5 pts (1 pt distributing to 2y−8=10; 1 pt adding 8 to 2y=18; 1 pt dividing by 2; 2 pts final y=9). Otherwise: 0."
   },
   {
     "student_label": "Alex Kim",

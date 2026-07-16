@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { ExpectedActualCompare } from "@/components/expected-actual-compare"
 import { JsonFieldKindHighlight, JsonFieldKindLegend } from "@/components/highlight"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
@@ -60,7 +61,16 @@ import {
   type SpineTestFile,
   type TestStepTrackStatus,
 } from "@/lib/testing-files"
-import { ExpectedActualCompare } from "@/components/expected-actual-compare"
+import {
+  serializeExpectFailure,
+  testExpectFailureReason,
+  testExpectsInputCompatFailure,
+  testExpectsStepFailure,
+  testOutcomeMode,
+  testOutcomeModeInfo,
+  testResultCompareLabels,
+  type TestExpectFailure,
+} from "@/lib/test-expect-failure"
 import {
   readTestingCompareWidth,
   readTestingPipelineWidth,
@@ -83,6 +93,7 @@ type json_text_string = string
 // AI : deterministic-ness is not per test — it lives on structure fields (Structures tab).
 export type TestDraft = {
   description: string
+  expectFailure?: TestExpectFailure
   inputs: Record<step_label_string, doc_name_string[]>
   expected: { label: step_label_string; text: json_text_string }[]
 }
@@ -103,6 +114,7 @@ export function draftFromTest(test: SpineTestFile, project: Project): TestDraft 
   }
   return {
     description: cleaned.description ?? "",
+    expectFailure: cleaned.expectFailure,
     inputs: Object.fromEntries(
       Object.entries(cleaned.inputs ?? {}).map(([label, v]) => [label, Array.isArray(v) ? v : [v]]),
     ),
@@ -131,6 +143,7 @@ export function draftToContent(draft: TestDraft, project: Project): string | nul
   }
   const file: SpineTestFile = {
     ...(draft.description.trim() ? { description: draft.description.trim() } : {}),
+    ...(draft.expectFailure ? { expectFailure: serializeExpectFailure(draft.expectFailure) } : {}),
     inputs,
     expectedOutputs,
   }
@@ -139,6 +152,89 @@ export function draftToContent(draft: TestDraft, project: Project): string | nul
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {
   return <p className="font-mono text-[10px] uppercase text-muted-foreground">{children}</p>
+}
+
+function InputValidationSection({
+  draft,
+  setDraft,
+}: {
+  draft: TestDraft
+  setDraft: (d: TestDraft) => void
+}) {
+  const expectsInputValidation = testExpectsInputCompatFailure({ expectFailure: draft.expectFailure })
+  const stepFailure = testExpectsStepFailure({ expectFailure: draft.expectFailure })
+  const passInfo = testOutcomeModeInfo("pass")
+  const inputInfo = testOutcomeModeInfo("input-validation-error")
+
+  const setPassMode = () => {
+    if (expectsInputValidation) setDraft({ ...draft, expectFailure: undefined })
+  }
+
+  const setInputValidationMode = () => {
+    if (stepFailure || expectsInputValidation) return
+    setDraft({ ...draft, expectFailure: "input-compat" })
+  }
+
+  return (
+    <section>
+      <SectionLabel>input validation</SectionLabel>
+      <p className="mt-1 font-mono text-[10px] leading-relaxed text-muted-foreground">
+        Step output failures are marked on each pinned expected output below. Use this only when pairing should block
+        the run before inference.
+      </p>
+      <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+        <button
+          type="button"
+          onClick={setPassMode}
+          className={cn(
+            "rounded-md border px-2.5 py-2 text-left transition-colors",
+            !expectsInputValidation
+              ? "border-primary/50 bg-primary/5 ring-1 ring-primary/30"
+              : "border-border bg-card hover:border-muted-foreground/40",
+          )}
+        >
+          <span className="font-mono text-[11px] font-medium">normal test</span>
+          <p className="mt-1 font-mono text-[9px] leading-relaxed text-muted-foreground">{passInfo.summary}</p>
+          <p className="mt-2 font-mono text-[9px] leading-relaxed">
+            <span className="text-chart-2">{passInfo.expectedLabel}</span>
+            <span className="mx-1 text-muted-foreground/50">·</span>
+            <span className="text-primary">{passInfo.actualLabel}</span>
+          </p>
+        </button>
+        <button
+          type="button"
+          onClick={setInputValidationMode}
+          disabled={!!stepFailure}
+          className={cn(
+            "rounded-md border px-2.5 py-2 text-left transition-colors",
+            expectsInputValidation
+              ? "border-yellow-500/50 bg-yellow-500/5 ring-1 ring-yellow-500/30"
+              : "border-border bg-card hover:border-muted-foreground/40",
+            stepFailure && "cursor-not-allowed opacity-50",
+          )}
+        >
+          <span className="font-mono text-[11px] font-medium">{inputInfo.label}</span>
+          <p className="mt-1 font-mono text-[9px] leading-relaxed text-muted-foreground">{inputInfo.summary}</p>
+          <p className="mt-2 font-mono text-[9px] leading-relaxed">
+            <span className="text-chart-2">{inputInfo.expectedLabel}</span>
+            <span className="mx-1 text-muted-foreground/50">·</span>
+            <span className="text-primary">{inputInfo.actualLabel}</span>
+          </p>
+        </button>
+      </div>
+      {stepFailure && (
+        <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+          Input validation is disabled while step <span className="text-yellow-600">{stepFailure}</span> is marked as
+          the expected failure.
+        </p>
+      )}
+      {testOutcomeMode(draft.expectFailure) === "run-error" && (
+        <p className="mt-2 rounded border border-yellow-500/30 bg-yellow-500/5 px-2 py-1.5 font-mono text-[10px] text-yellow-700 dark:text-yellow-500">
+          Legacy <span className="font-semibold">expectFailure: run-error</span> — edit the JSON file directly.
+        </p>
+      )}
+    </section>
+  )
 }
 
 function sameStep(a: step_label_string, b: step_label_string): boolean {
@@ -269,6 +365,38 @@ function RemapSelect({
 
 type RowIssue = { level: "error" | "warning"; message: string }
 
+function expectedRowIssues(
+  row: TestDraft["expected"][number],
+  draft: TestDraft,
+  project: Project,
+  stale: boolean,
+): RowIssue[] {
+  const issues: RowIssue[] = []
+  const base = expectedIssue(row, project, stale)
+  if (base) issues.push(base)
+
+  const failureStep = testExpectsStepFailure({ expectFailure: draft.expectFailure })
+  if (!failureStep) return issues
+
+  const order = project.modules.filter(isComparableStep)
+  const failIdx = order.findIndex((m) => sameStep(m.label, failureStep))
+  const rowIdx = order.findIndex((m) => sameStep(m.label, row.label))
+  if (failIdx >= 0 && rowIdx > failIdx) {
+    issues.push({
+      level: "warning",
+      message: `pinned expected output after expected failure at "${failureStep}" — pipeline should stop there; remove this`,
+    })
+  }
+  if (sameStep(row.label, failureStep) && !testExpectFailureReason({ expectFailure: draft.expectFailure })) {
+    issues.push({
+      level: "warning",
+      message: "expected failure has no reason — describe why comparison should fail at this step",
+    })
+  }
+
+  return issues
+}
+
 function expectedIssue(
   row: TestDraft["expected"][number],
   project: Project,
@@ -300,6 +428,10 @@ export function draftHasErrors(draft: TestDraft, project: Project, projectDocs: 
     inputs[label] = clean.length === 1 ? clean[0] : clean
   }
   if (validateNamedInputs(inputs, project, projectDocs).some((i) => i.level === "error")) return true
+  if (draft.expectFailure === "input-compat") return false
+  if (typeof draft.expectFailure === "object" && "step" in draft.expectFailure && !draft.expectFailure.step.trim()) {
+    return true
+  }
   return draft.expected.some((row) => {
     const mod = project.modules.find((m) => sameStep(m.label, row.label))
     if (!mod || !isComparableStep(mod)) return false
@@ -407,6 +539,46 @@ export function TestFileEditor({
   const inputCheckFor = (m: PipelineModule) =>
     stepStates?.get(m.id)?.inputDescriptionCheck ?? inputChecksByModuleId?.get(m.id)
 
+  const failureStepKey = useMemo(() => {
+    const step = testExpectsStepFailure({ expectFailure: draft.expectFailure })
+    return step ? labelAsStateKey(step) : null
+  }, [draft.expectFailure])
+
+  const inputValidationMode = testExpectsInputCompatFailure({ expectFailure: draft.expectFailure })
+
+  const isAfterFailureStep = (label: step_label_string) => {
+    if (!failureStepKey) return false
+    const order = project.modules.filter(isComparableStep)
+    const failIdx = order.findIndex((m) => labelAsStateKey(m.label) === failureStepKey)
+    const rowIdx = order.findIndex((m) => sameStep(m.label, label))
+    return failIdx >= 0 && rowIdx > failIdx
+  }
+
+  const setStepFailure = (label: step_label_string, enabled: boolean) => {
+    const key = labelAsStateKey(label)
+    if (enabled) {
+      setDraft({
+        ...draft,
+        expectFailure: {
+          step: key,
+          reason: testExpectFailureReason({ expectFailure: draft.expectFailure }) ?? "",
+        },
+      })
+      return
+    }
+    if (failureStepKey === key) setDraft({ ...draft, expectFailure: undefined })
+  }
+
+  const setFailureReason = (reason: string) => {
+    const step = testExpectsStepFailure({ expectFailure: draft.expectFailure })
+    if (!step) return
+    const trimmed = reason.trim()
+    setDraft({
+      ...draft,
+      expectFailure: trimmed ? { step, reason: trimmed } : { step },
+    })
+  }
+
   const renderTestStep = (m: PipelineModule, trackStatus: TestStepTrackStatus) => {
     if (trackStatus === "input") {
       return (
@@ -444,12 +616,20 @@ export function TestFileEditor({
           module={m}
           row={rowFor(m.label)!}
           project={project}
+          draft={draft}
+          expectFailure={draft.expectFailure}
+          isFailureStep={failureStepKey === labelAsStateKey(m.label)}
+          isAfterFailureStep={isAfterFailureStep(m.label)}
+          failureReason={testExpectFailureReason({ expectFailure: draft.expectFailure })}
+          failureControlsDisabled={inputValidationMode}
           ignoredFields={probabilisticPathsForModule(m, project.models)}
           tolerantFields={tolerantPathsForModule(m, project.models)}
           actual={actuals.get(labelAsStateKey(m.label))}
           onText={(text) => setRowText(m.label, text)}
           onRemove={() => removeRow(m.label)}
           onExpand={setPopup}
+          onToggleFailure={(enabled) => setStepFailure(m.label, enabled)}
+          onFailureReason={setFailureReason}
         />
       )
     }
@@ -467,6 +647,8 @@ export function TestFileEditor({
           className="mt-1.5 h-8 text-xs"
         />
       </section>
+
+      <InputValidationSection draft={draft} setDraft={setDraft} />
 
       <section className="space-y-0">
         <SectionLabel>pipeline</SectionLabel>
@@ -535,12 +717,20 @@ export function TestFileEditor({
                           module={(mod ?? { id: label, kind: ModuleKind.Llm, label }) as PipelineModule}
                           row={row}
                           project={project}
+                          draft={draft}
+                          expectFailure={draft.expectFailure}
+                          isFailureStep={failureStepKey === labelAsStateKey(label)}
+                          isAfterFailureStep={isAfterFailureStep(label)}
+                          failureReason={testExpectFailureReason({ expectFailure: draft.expectFailure })}
+                          failureControlsDisabled={inputValidationMode}
                           stale
                           ignoredFields={[]}
                           actual={undefined}
                           onText={(text) => setRowText(row.label, text)}
                           onRemove={() => removeRow(row.label)}
                           onExpand={setPopup}
+                          onToggleFailure={(enabled) => setStepFailure(row.label, enabled)}
+                          onFailureReason={setFailureReason}
                         />
                         <div className="rounded-md border border-dashed border-destructive/30 bg-destructive/5 px-3 py-2">
                           <p className="font-mono text-[10px] text-destructive">
@@ -756,6 +946,12 @@ function ScoredStepCard({
   module,
   row,
   project,
+  draft,
+  expectFailure,
+  isFailureStep = false,
+  isAfterFailureStep = false,
+  failureReason,
+  failureControlsDisabled = false,
   stale = false,
   ignoredFields,
   tolerantFields = [],
@@ -763,10 +959,18 @@ function ScoredStepCard({
   onText,
   onRemove,
   onExpand,
+  onToggleFailure,
+  onFailureReason,
 }: {
   module: PipelineModule
   row: TestDraft["expected"][number]
   project: Project
+  draft: TestDraft
+  expectFailure?: TestExpectFailure
+  isFailureStep?: boolean
+  isAfterFailureStep?: boolean
+  failureReason?: string
+  failureControlsDisabled?: boolean
   stale?: boolean
   ignoredFields: string[]
   tolerantFields?: TolerantFieldPath[]
@@ -774,9 +978,12 @@ function ScoredStepCard({
   onText: (text: json_text_string) => void
   onRemove: () => void
   onExpand: (payload: PopupPayload) => void
+  onToggleFailure?: (enabled: boolean) => void
+  onFailureReason?: (reason: string) => void
 }) {
-  const issue = expectedIssue(row, project, stale)
-  const [editing, setEditing] = useState(issue?.level === "error")
+  const rowIssues = expectedRowIssues(row, draft, project, stale)
+  const primaryIssue = rowIssues.find((i) => i.level === "error") ?? rowIssues[0] ?? null
+  const [editing, setEditing] = useState(primaryIssue?.level === "error")
   const stepSchema = useMemo(
     () => (stale ? null : stepOutputJsonSchema(project, row.label)),
     [project, row.label, stale],
@@ -793,24 +1000,41 @@ function ScoredStepCard({
   const savedCompareWidth = useTestingCompareWidth()
   const [compareWidth, setCompareWidth] = useState(readTestingCompareWidth)
   useEffect(() => setCompareWidth(savedCompareWidth), [savedCompareWidth])
+  const compareLabels = testResultCompareLabels(expectFailure, row.label)
 
   return (
     <div
       className={cn(
         "rounded-lg border bg-card shadow-sm",
-        issue?.level === "error" ? "border-destructive/40" : "border-border",
+        isFailureStep
+          ? "border-yellow-500/50 ring-1 ring-yellow-500/20"
+          : isAfterFailureStep
+            ? "border-yellow-500/30 border-dashed"
+            : primaryIssue?.level === "error"
+              ? "border-destructive/40"
+              : "border-border",
       )}
     >
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
         <StepKindBadge kind={module.kind} />
-        {issue === null ? (
+        {primaryIssue === null ? (
           <CircleCheck className="h-3.5 w-3.5 shrink-0 text-chart-2" />
-        ) : issue.level === "error" ? (
+        ) : primaryIssue.level === "error" ? (
           <CircleX className="h-3.5 w-3.5 shrink-0 text-destructive" />
         ) : (
           <TriangleAlert className="h-3.5 w-3.5 shrink-0 text-yellow-500" />
         )}
         <span className="font-mono text-[11px] font-medium">{row.label}</span>
+        {isFailureStep && (
+          <Badge variant="outline" className="border-yellow-500/40 font-mono text-[9px] text-yellow-700 dark:text-yellow-500">
+            expected failure
+          </Badge>
+        )}
+        {isAfterFailureStep && (
+          <Badge variant="outline" className="border-yellow-500/30 font-mono text-[9px] text-yellow-600">
+            after failure
+          </Badge>
+        )}
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {actual !== undefined && !stale && (
             <Button
@@ -870,6 +1094,35 @@ function ScoredStepCard({
       </div>
 
       <div className="space-y-3 p-3">
+        {!stale && !failureControlsDisabled && onToggleFailure && (
+          <div className="space-y-2 rounded-md border border-border/80 bg-muted/20 px-2.5 py-2">
+            <label className="flex cursor-pointer items-start gap-2">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={isFailureStep}
+                onChange={(e) => onToggleFailure(e.target.checked)}
+              />
+              <span className="min-w-0 space-y-1">
+                <span className="block font-mono text-[10px] font-medium">Expect comparison failure here</span>
+                <span className="block font-mono text-[9px] leading-relaxed text-muted-foreground">
+                  Only one step may be the expected failure. Nothing should be pinned after it in the pipeline.
+                </span>
+              </span>
+            </label>
+            {isFailureStep && onFailureReason && (
+              <div className="space-y-1 pl-5">
+                <SectionLabel>failure reason</SectionLabel>
+                <Input
+                  value={failureReason ?? ""}
+                  onChange={(e) => onFailureReason(e.target.value)}
+                  placeholder="e.g. deliberately wrong score for Jordan Q2"
+                  className="h-8 font-mono text-[11px]"
+                />
+              </div>
+            )}
+          </div>
+        )}
         {!stale && <StepTypeLine module={module} project={project} />}
         {ignoredFields.length > 0 && (
           <p className="flex items-start gap-1.5 font-mono text-[10px] text-muted-foreground">
@@ -886,7 +1139,7 @@ function ScoredStepCard({
 
         {editing ? (
           stepSchema ? (
-            <SchemaJsonEditor schema={stepSchema} text={row.text} onText={onText} />
+            <SchemaJsonEditor schema={stepSchema} text={row.text} onText={onText} formOnly />
           ) : (
             <Textarea
               value={row.text}
@@ -908,6 +1161,8 @@ function ScoredStepCard({
             probabilisticPaths={ignoredFields}
             probabilisticCheckedPaths={probabilisticCheckedPaths}
             tolerantPaths={tolerantFields}
+            expectedLabel={compareLabels.expected}
+            actualLabel={compareLabels.actual}
             compareWidth={compareWidth}
             onCompareWidthChange={setCompareWidth}
             onCompareWidthCommit={writeTestingCompareWidth}
@@ -916,7 +1171,7 @@ function ScoredStepCard({
           />
         ) : (
           <div className="min-w-0 space-y-1">
-            <SectionLabel>expected</SectionLabel>
+            <SectionLabel>{compareLabels.expected}</SectionLabel>
             <div className="max-h-80 overflow-auto rounded-md border border-border bg-muted/20 p-2.5">
               <JsonFieldKindHighlight
                 json={row.text}
@@ -928,15 +1183,20 @@ function ScoredStepCard({
           </div>
         )}
 
-        {issue && (
-          <p
-            className={cn(
-              "max-h-32 overflow-auto whitespace-pre-wrap font-mono text-[10px]",
-              issue.level === "error" ? "text-destructive" : "text-yellow-500",
-            )}
-          >
-            {issue.message}
-          </p>
+        {rowIssues.length > 0 && (
+          <div className="space-y-1">
+            {rowIssues.map((issue, i) => (
+              <p
+                key={i}
+                className={cn(
+                  "max-h-32 overflow-auto whitespace-pre-wrap font-mono text-[10px]",
+                  issue.level === "error" ? "text-destructive" : "text-yellow-500",
+                )}
+              >
+                {issue.message}
+              </p>
+            ))}
+          </div>
         )}
       </div>
     </div>

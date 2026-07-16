@@ -4,6 +4,11 @@ import { failuresFromLlmCalls } from "@/lib/llm-distribution"
 import { formatCostCents, formatSecondsShort } from "@/lib/format"
 import { formatRunErrorForDisplay } from "@/lib/run-errors"
 import { enrichRunModules, modulesFromRunSteps } from "@/lib/pipeline-run-diff"
+import {
+  formatTestFailuresForClipboard,
+  formatTestFailuresJsonObject,
+  testResultsHaveFailures,
+} from "@/lib/test-error-copy"
 import { JobLogLevel } from "@/lib/run-types"
 import type { PipelineModule, PipelineRun, RunStep } from "@/lib/types"
 
@@ -11,7 +16,7 @@ export type RunErrorFilter = "all" | "errors"
 
 export function runHasErrors(run: PipelineRun): boolean {
   if (run.status === "error") return true
-  if (run.test?.results.some((r) => r.status === "fail")) return true
+  if (run.test && testResultsHaveFailures(run.test.results)) return true
   return run.steps.some((s) => s.status === "error")
 }
 
@@ -49,7 +54,13 @@ export function runErrorSteps(run: PipelineRun): RunStep[] {
   return run.steps.filter((s) => stepErrorLines(s).length > 0 || s.status === "error")
 }
 
-export function runErrorLogText(run: PipelineRun): string {
+export type RunErrorLogOpts = {
+  // AI : step input previews + pipelineAtRun JSON — off by default in isolated error UI.
+  includePipeline?: boolean
+}
+
+export function runErrorLogText(run: PipelineRun, opts?: RunErrorLogOpts): string {
+  const includePipeline = opts?.includePipeline ?? false
   const lines: string[] = []
   lines.push(`Run: ${run.id}`)
   lines.push(`Status: ${run.status}`)
@@ -67,14 +78,16 @@ export function runErrorLogText(run: PipelineRun): string {
     }
   }
 
-  if (run.test?.results.some((r) => r.status === "fail")) {
-    lines.push("")
-    lines.push(`── Test failures · ${run.test.testDocName} ──`)
-    for (const r of run.test.results.filter((x) => x.status === "fail")) {
-      lines.push(`[FAIL] ${r.label}${r.diffPath ? ` (diff at ${r.diffPath})` : ""}`)
-      if (r.deterministicDiff) lines.push(r.deterministicDiff)
-      if (r.expected !== undefined) lines.push(`Expected: ${JSON.stringify(r.expected)}`)
-      if (r.actual !== undefined) lines.push(`Actual: ${JSON.stringify(r.actual)}`)
+  if (run.test && testResultsHaveFailures(run.test.results)) {
+    const testBlock = formatTestFailuresForClipboard(run.test.results, {
+      testDocName: run.test.testDocName,
+      run,
+      includePipelineInput: includePipeline,
+    })
+    if (testBlock) {
+      lines.push("")
+      lines.push("── Test failures ──")
+      lines.push(testBlock)
     }
   }
 
@@ -94,6 +107,20 @@ export function runErrorLogText(run: PipelineRun): string {
   return lines.join("\n")
 }
 
+export type RunErrorLogPipelineStep = {
+  id: string
+  kind: string
+  label: string
+  status: string
+  model?: string
+  ms: number
+  costCents: number
+  structureIn?: string
+  structureOut?: string
+  prompt?: string
+  note?: string
+}
+
 export type RunErrorLogJson = {
   kind: "pipeline_run_error"
   version: 1
@@ -107,19 +134,8 @@ export type RunErrorLogJson = {
     notes?: string
   }
   summary?: ReturnType<typeof formatRunErrorForDisplay>
-  pipelineAtRun: Array<{
-    id: string
-    kind: string
-    label: string
-    status: string
-    model?: string
-    ms: number
-    costCents: number
-    structureIn?: string
-    structureOut?: string
-    prompt?: string
-    note?: string
-  }>
+  includePipeline?: boolean
+  pipelineAtRun?: RunErrorLogPipelineStep[]
   errorSteps: Array<{
     moduleId: string
     label: string
@@ -130,19 +146,15 @@ export type RunErrorLogJson = {
     outputPreview?: string
     serverLogErrors?: string[]
   }>
-  testFailures?: Array<{
-    label: string
-    diffPath?: string
-    deterministicDiff?: string
-    expected?: unknown
-    actual?: unknown
-  }>
+  testFailures?: ReturnType<typeof formatTestFailuresJsonObject>
 }
 
 export function runErrorLogJsonObject(
   run: PipelineRun,
   pipelineModules: PipelineModule[],
+  opts?: RunErrorLogOpts,
 ): RunErrorLogJson {
+  const includePipeline = opts?.includePipeline ?? false
   const modulesAtRun = enrichRunModules(modulesFromRunSteps(run.steps), pipelineModules)
   const errorSteps = runErrorSteps(run).map((step) => ({
     moduleId: step.moduleId,
@@ -150,7 +162,8 @@ export function runErrorLogJsonObject(
     kind: step.kind,
     status: step.status,
     errors: stepErrorLines(step),
-    inputPreview: step.inputPreview?.trim() || undefined,
+    inputPreview:
+      includePipeline && step.inputPreview?.trim() ? step.inputPreview.trim() : undefined,
     outputPreview: step.status === "error" ? step.outputPreview?.trim() : undefined,
     serverLogErrors: errorServerLogLines(step),
   }))
@@ -168,36 +181,41 @@ export function runErrorLogJsonObject(
       notes: run.notes,
     },
     summary: formatRunErrorForDisplay(run) ?? undefined,
-    pipelineAtRun: run.steps.map((step, i) => ({
-      id: step.moduleId,
-      kind: step.kind,
-      label: step.label,
-      status: step.status,
-      model: step.model,
-      ms: step.ms,
-      costCents: step.costCents,
-      ...(modulesAtRun[i]
-        ? {
-            structureIn: modulesAtRun[i]!.inStructureId,
-            structureOut: modulesAtRun[i]!.outStructureId,
-            prompt: modulesAtRun[i]!.prompt?.trim() || undefined,
-            note: modulesAtRun[i]!.note?.trim() || undefined,
-          }
-        : {}),
-    })),
+    includePipeline,
+    pipelineAtRun: includePipeline
+      ? run.steps.map((step, i) => ({
+          id: step.moduleId,
+          kind: step.kind,
+          label: step.label,
+          status: step.status,
+          model: step.model,
+          ms: step.ms,
+          costCents: step.costCents,
+          ...(modulesAtRun[i]
+            ? {
+                structureIn: modulesAtRun[i]!.inStructureId,
+                structureOut: modulesAtRun[i]!.outStructureId,
+                prompt: modulesAtRun[i]!.prompt?.trim() || undefined,
+                note: modulesAtRun[i]!.note?.trim() || undefined,
+              }
+            : {}),
+        }))
+      : undefined,
     errorSteps,
-    testFailures: run.test?.results
-      .filter((r) => r.status === "fail")
-      .map((r) => ({
-        label: r.label,
-        diffPath: r.diffPath,
-        deterministicDiff: r.deterministicDiff,
-        expected: r.expected,
-        actual: r.actual,
-      })),
+    testFailures: run.test
+      ? formatTestFailuresJsonObject(run.test.results, {
+          testDocName: run.test.testDocName,
+          run,
+          includePipelineInput: includePipeline,
+        })
+      : undefined,
   }
 }
 
-export function runErrorLogJson(run: PipelineRun, pipelineModules: PipelineModule[]): string {
-  return JSON.stringify(runErrorLogJsonObject(run, pipelineModules), null, 2)
+export function runErrorLogJson(
+  run: PipelineRun,
+  pipelineModules: PipelineModule[],
+  opts?: RunErrorLogOpts,
+): string {
+  return JSON.stringify(runErrorLogJsonObject(run, pipelineModules, opts), null, 2)
 }

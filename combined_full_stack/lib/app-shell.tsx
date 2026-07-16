@@ -41,6 +41,9 @@ interface AppShellState {
   openSettingsSection: (sectionId: string) => void
   pendingLlmProvidersOpen: boolean
   clearPendingLlmProvidersOpen: () => void
+  focusTestDocName: string | null
+  openTesting: (testDocName?: string) => void
+  clearFocusTestDoc: () => void
 }
 
 const AppShellContext = createContext<AppShellState | null>(null)
@@ -53,6 +56,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   const [activeSharedLinkId, setActiveSharedLinkId] = useState<string | null>(null)
   const [sharedRunDocScope, setSharedRunDocScope] = useState<SharedRunDocScope | null>(null)
   const [pendingLlmProvidersOpen, setPendingLlmProvidersOpen] = useState(false)
+  const [focusTestDocName, setFocusTestDocName] = useState<string | null>(null)
 
   const openSharedRun = useCallback((linkId: string) => {
     setActiveSharedLinkId(linkId)
@@ -83,6 +87,13 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   const clearFocusStructure = useCallback(() => setFocusStructureId(null), [])
 
   const clearPendingLlmProvidersOpen = useCallback(() => setPendingLlmProvidersOpen(false), [])
+
+  const openTesting = useCallback((testDocName?: string) => {
+    setFocusTestDocName(testDocName ?? null)
+    setActiveWindow("testing")
+  }, [])
+
+  const clearFocusTestDoc = useCallback(() => setFocusTestDocName(null), [])
 
   const openSettingsSection = useCallback((sectionId: string) => {
     setActiveWindow("settings")
@@ -116,6 +127,9 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         openSettingsSection,
         pendingLlmProvidersOpen,
         clearPendingLlmProvidersOpen,
+        focusTestDocName,
+        openTesting,
+        clearFocusTestDoc,
       }}
     >
       {children}

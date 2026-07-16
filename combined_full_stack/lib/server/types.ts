@@ -173,6 +173,8 @@ export interface PipelineModule {
   // AI : TODO (spec) — outputDescription?: string + checkOutputDescription?: boolean (post-step LLM output guard).
   // AI : TODO (spec) — dynamicOutputSchema?: boolean on llm steps for variable homework-style marking schemas.
   inputMinCount?: number; // AI : minimum documents for this input slot (default 1); pair with outIsList for N submissions
+  // AI : after both slots have docs, compare extracted keys against an upstream input — distinct from assert / per-doc validity.
+  inputCompatWith?: InputCompatWith;
   prompt?: string;
   code?: string; // AI : transform steps with custom code only
   fallbackList?: CustomCodeEntry[]; // AI : custom-code — ordered attempts, first is primary
@@ -191,6 +193,27 @@ export interface PipelineModule {
 
 type step_label_string = string;
 type doc_name_string = string;
+
+export type InputCompatNormalize = "lower-trim" | "question-id" | "question-id-set";
+
+export type InputCompatExtractor =
+  | { kind: "json-path"; path: string; normalize?: InputCompatNormalize }
+  | { kind: "text-regex"; pattern: string; group?: number; flags?: string; normalize?: InputCompatNormalize }
+  | { kind: "question-ids-text" };
+
+export type InputCompatCompare = "equal" | "set-equal";
+
+export type InputCompatKey = {
+  label: string;
+  upstream: InputCompatExtractor;
+  local: InputCompatExtractor;
+  compare?: InputCompatCompare;
+};
+
+export type InputCompatWith = {
+  moduleId: ModuleId;
+  keys: InputCompatKey[];
+};
 
 // AI : a named, pre-selected inference run — input step label → bundled doc name(s).
 // AI : optional per-preset golden outputs let assert steps pass on non-default inputs.
@@ -417,6 +440,9 @@ export type RunTestStepResult = {
 export type RunTestReport = {
   testDocName: string;
   results: RunTestStepResult[];
+  // AI : negative test — verdict uses testOutcomePassed instead of raw step pass/fail.
+  expectFailure?: import("@/lib/test-expect-failure").TestExpectFailure;
+  inputCompatBlocked?: boolean;
   // AI : persisted on the run row in Supabase — separate hashes so revert-to-old test/pipeline
   // AI : re-matches a prior verdict without any client-side verdict cache.
   testContentSig?: string;

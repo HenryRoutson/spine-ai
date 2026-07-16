@@ -26,8 +26,8 @@ export function buildDiagnosisUserPrompt(
   run: PipelineRun,
   userMessage: string,
 ): string {
-  const errorJson = runErrorLogJsonObject(run, project.modules)
-  const errorText = runErrorLogText(run)
+  const errorJson = runErrorLogJsonObject(run, project.modules, { includePipeline: true })
+  const errorText = runErrorLogText(run, { includePipeline: true })
   const modelsJson = JSON.stringify(
     project.models.map((m) => ({
       name: m.name,

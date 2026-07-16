@@ -139,7 +139,7 @@ const HOMEWORK_COMBINE_INPUT_DESC =
 const SECTION_GRADES_OUTPUT_DESC =
   "List of SectionGrade rows — student_label, section_id, score, max_score, correct, mistake_explanation (one row per student × rubric question)";
 const HOMEWORK_GRADE_PROMPT =
-  "Apply criteria literally and deterministically. Score MUST equal the exact sum of rubric components listed in criteria — use only point values explicitly named in criteria (no rounding, no extra credit, no in-between scores). Score is an integer from 0 to max_score inclusive. Copy max_score from input unchanged. Set correct=true iff score equals max_score; never set correct=true when score is below max_score. Copy student_label and section_id exactly from input. When correct is false, mistake_explanation must cite the rubric clause applied and state the student's wrong value vs the required value. When correct is true, mistake_explanation must be an empty string.";
+  "Apply criteria literally and deterministically. When criteria lists alternate bands (e.g. 'award exactly N pts if…'), check those bands before summing components — pick exactly one band score, never mix. Score MUST equal the exact points from the matching band or component sum — use only point values explicitly named in criteria (no rounding, no extra credit, no in-between scores). Score is an integer from 0 to max_score inclusive. Copy max_score from input unchanged. Set correct=true iff score equals max_score; never set correct=true when score is below max_score. Copy student_label and section_id exactly from input. When correct is false, mistake_explanation must cite the rubric clause applied and state the student's wrong value vs the required value. When correct is true, mistake_explanation must be an empty string.";
 const HOMEWORK_ASSEMBLE_TS =
   '(_combined, state) => { const stableJson = (v) => { if (v === null || typeof v !== "object") return JSON.stringify(v); if (Array.isArray(v)) return "[" + v.map(stableJson).join(",") + "]"; return "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + stableJson(v[k])).join(",") + "}"; }; const schema = state["Marking Schema"]; const subs = state["Student Submissions"]; const list = Array.isArray(subs) ? subs : subs ? [subs] : []; const text = (s) => (typeof s?.content === "string" ? s.content : typeof s?.body === "string" ? s.body : ""); const name = (s, i) => (typeof s?.filename === "string" && s.filename ? s.filename : typeof s?.doc_id === "string" ? s.doc_id : `student_${i + 1}.md`); return { marking_schema: { filename: "marking_schema.json", content: stableJson(schema ?? {}) }, student_submissions: list.map((s, i) => ({ filename: name(s, i), content: text(s) })) }; }';
 const FEEDBACK_DUMP_INPUT_DESC = "Raw product feedback dump — bullet list of user comments";
@@ -629,7 +629,7 @@ const seeds: Record<string, unknown> = {
         fields: [
           field("f_student", "student_label", "text", "Student graded"),
           field("f_sid", "section_id", "text", "Matches section id"),
-          field("f_score", "score", "int", "Points awarded", { testTolerance: 0 }),
+          field("f_score", "score", "int", "Points awarded", { testTolerance: 1 }),
           field("f_max", "max_score", "int", "Points possible"),
           field("f_correct", "correct", "bool", "True when the student earns full marks (score equals max_score)"),
           field(
@@ -678,6 +678,31 @@ const seeds: Record<string, unknown> = {
         inputType: "text",
         inputNameContains: "homework_student",
         inputMinCount: 1,
+        inputCompatWith: {
+          moduleId: "mod_in_schema",
+          keys: [
+            {
+              label: "assignment title",
+              upstream: { kind: "json-path", path: "assignment_title", normalize: "lower-trim" },
+              local: {
+                kind: "text-regex",
+                pattern: "^#\\s*(.+?)\\s+—\\s+Student",
+                group: 1,
+                normalize: "lower-trim",
+              },
+            },
+            {
+              label: "question IDs",
+              compare: "set-equal",
+              upstream: {
+                kind: "json-path",
+                path: "sections[].questions[].question_id",
+                normalize: "question-id-set",
+              },
+              local: { kind: "question-ids-text" },
+            },
+          ],
+        },
         outStructureId: DOC_ID,
         outIsList: true,
         cached: true,

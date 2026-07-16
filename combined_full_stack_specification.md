@@ -287,6 +287,10 @@ in addition to the very fast per field comparisons, there should also be a large
 
 ensure that the order of keys inside each object does not cause issues with comparisons with git diff or on a line level.
 
+in addition to expected outputs, there should also be expected errors. you should be able to catch any type of error and be specfic. For example you should have a test to pass in the wrong homework assignment, and you should fail on validation, as the homework marking schema should validate the homework it needs to make. so nothing in the pipeline should run besides the input and it should catch this error. avoid catch all test where you say this whole test will fail, as that isn't specific and could have different failures than expected.
+
+please ensure that when editing tests, that you're editing in a UI generated from the pydantic model and not loose json, to ensure valid json data and to make things easier for non or semi technical users.
+
 # inference
 
 All inputs are shown with the option to select documents.
@@ -505,6 +509,14 @@ you can resize different parts of the UI with ResizableSplit.
 
 please add the option to allow for custom llm apis, and make this modular so that whatever the default one is like openrouter is just one of these wrapped APIs. Ensure you support features like batched responses so you can utilise that if it's availble. I'm adding this because if we're doing custom deployments into companies like KPMG, which i've worked at, we're going to need to use their internall LLM. These internal LLMs often have custom logic for calling them. You will likely need to persist a client to avoid recreating it, and try to make it easy to select which model to select in a way that is generic across custom interal APIs. this will likely just be a generic enum for model to a variable that controls this in the custom API. You will need to seperate provider and llm model, as they're seperate concepts. Ensure you export this logic into the exported code, including exporting openrouter as the default and as an option in all exports. I should be able to view the code for openrouter as an example, with syntax highlighting, and for all the different supported langauges. I should then have an option to add a provider, with code and asserts around this code that there is one function with a certain type signature maybe. I should be able to select either openrouter:gpt-5-mini or custom_provider:gpt-5-mini.
 You should just have a page with a list of providers and openrouter should be a locked example. Ensure you treat the block like custom code, were you can see all the error historically that have occured in the hash exact same code (ignoring whitespace).
+
+
+
+
+Thinking of errors when running the homework assessment pipeline,
+although i can filter down file names to contains certain things like 
+marking criteria might always contain "marking guide" in their name,
+there is nothing stopping me from passing in a  "marking guide"  and a "homework sheet" which do not match. You need to have the option to only upload files after another input step when you can further filter down what files fit a format. You could do this both with pydantic format, where you check if the marking schema matches with the homework schema, but with extra marking fields. You could also do it with names where you parse the name into different values and check if those values equal. like marking_guide_SPLIT_grade10.txt and homework_SPLIT_james_miller_SPLIT_grade10.txt. However, this is janky and could lead to very long names, although names still do need to be unique. There is probably some approach with metadata or some derived data. How do i approach this? How do i error early rather than waiting for an error later? You shouldn't be blocking one file upload before another, but checking that they're compatible after both are uploaded. You should be clearly displaying the variables that are conflicting in the UI. rather than a generic 'these are not compatible', you should see something like 'MATCH assignment names, MISMATCH assignment questions, MISMATCH assignment year'. please ensure you're using dynamic pydantic schemas to be able to parse not just variables, but also how structures might change. i'm not sure how this is going to be put in the pipeline. this is a different type of error than assert, and it should come back to the user differently.
 
 
 # history and merging changes 

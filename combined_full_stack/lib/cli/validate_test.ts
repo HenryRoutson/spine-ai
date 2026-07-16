@@ -7,6 +7,10 @@ import {
   validateTestFile,
   type TestFileIssue,
 } from "@/lib/testing-files"
+import {
+  loadTestInputContents,
+  verifyExpectFailurePrecondition,
+} from "@/lib/test-expect-failure"
 import { loadProjectContext, readTextFile, type ProjectContext } from "@/lib/cli/project_context"
 import type { CliCommandResult, CliIssue } from "@/lib/cli/types"
 
@@ -52,6 +56,21 @@ export function validateTestContent(
     }
   }
   const issues = toCliIssues(validateTestFile(parsed.test, ctx.project, ctx.docRefs))
+  const contentByDocId = loadTestInputContents(parsed.test, ctx.project.modules, ctx.docRefs, (name) => {
+    const spec = ctx.seed.docSpecs.find((d) => d.name === name)
+    return spec ? readTextFile(spec.path) : undefined
+  })
+  const expectCheck = verifyExpectFailurePrecondition(
+    parsed.test,
+    ctx.project,
+    ctx.docRefs,
+    contentByDocId,
+  )
+  if (expectCheck && !expectCheck.ok) {
+    issues.push({ level: "error", where: "expectFailure", message: expectCheck.message })
+  } else if (expectCheck) {
+    issues.push({ level: "warning", where: "expectFailure", message: expectCheck.message })
+  }
   const alignment = analyzeTestPipelineAlignment(parsed.test, ctx.project)
   return {
     ok: !issues.some((i) => i.level === "error"),

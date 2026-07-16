@@ -12,9 +12,13 @@ import {
 } from "@/lib/inference-input"
 import {
   collectInferenceInputIssues,
-  inferenceDocNeedsFullContent,
   type InferenceInputIssue,
 } from "@/lib/inference-validity"
+import {
+  evaluateInputCompat,
+  inputCompatHasMismatch,
+  type InputCompatPairResult,
+} from "@/lib/input-compat"
 import { docTextContent, fetchDocText } from "@/lib/doc-text-cache"
 import type { DocId, DocRef, ModuleId, PipelineModule, Project, ProjectId } from "@/lib/types"
 
@@ -53,6 +57,7 @@ export function useInferenceDocs({
 }: UseInferenceDocsArgs) {
   const [inputDocs, setInputDocs] = useState<InputDocsAssignment>({})
   const [inputIssues, setInputIssues] = useState<InferenceInputIssue[]>([])
+  const [inputCompatPairs, setInputCompatPairs] = useState<InputCompatPairResult[]>([])
   const [pickerModuleId, setPickerModuleId] = useState<ModuleId | null>(null)
   const prevProjectIdRef = useRef<ProjectId | null>(null)
 
@@ -60,6 +65,8 @@ export function useInferenceDocs({
   const pickerModule = pickerModuleId ? inputModules.find((m) => m.id === pickerModuleId) : undefined
   const allInputsReady = inputModules.every((m) => moduleInputReady(m, inputDocs))
   const inputsInvalid = inputIssues.length > 0
+  const inputCompatInvalid = inputCompatHasMismatch(inputCompatPairs)
+  const runInputsBlocked = inputsInvalid || inputCompatInvalid
   const inputIssueByModule = useMemo(
     () => new Map(inputIssues.map((issue) => [issue.moduleId, issue])),
     [inputIssues],
@@ -70,26 +77,45 @@ export function useInferenceDocs({
   useEffect(() => {
     if (!allInputsReady) {
       setInputIssues((prev) => (prev.length === 0 ? prev : []))
+      setInputCompatPairs((prev) => (prev.length === 0 ? prev : []))
       return
     }
     let cancelled = false
     ;(async () => {
       const contentByDocId: Record<string, string> = {}
       const loads: Promise<void>[] = []
+      const needsContent = new Set<string>()
       for (const m of inputModules) {
         for (const doc of docsForInputModule(inputDocs, m.id)) {
-          if (!inferenceDocNeedsFullContent(m, doc)) continue
-          loads.push(
-            fetchDocText(doc.id).then((data) => {
-              contentByDocId[doc.id] = docTextContent(data)
-            }),
-          )
+          needsContent.add(doc.id)
         }
+      }
+      for (const docId of needsContent) {
+        loads.push(
+          fetchDocText(docId).then((data) => {
+            contentByDocId[docId] = docTextContent(data)
+          }),
+        )
       }
       await Promise.all(loads)
       if (cancelled) return
       const next = collectInferenceInputIssues(inputModules, {}, contentByDocId, inputDocs)
       setInputIssues((prev) => (inferenceIssuesEqual(prev, next) ? prev : next))
+      const compat = evaluateInputCompat(inputModules, inputDocs, contentByDocId)
+      setInputCompatPairs((prev) =>
+        prev.length === compat.length &&
+        prev.every(
+          (p, i) =>
+            p.localModuleId === compat[i]?.localModuleId &&
+            p.localDocName === compat[i]?.localDocName &&
+            p.keys.every(
+              (k, j) =>
+                k.label === compat[i]?.keys[j]?.label && k.status === compat[i]?.keys[j]?.status,
+            ),
+        )
+          ? prev
+          : compat,
+      )
     })().catch(() => {})
     return () => {
       cancelled = true
@@ -129,6 +155,7 @@ export function useInferenceDocs({
     })
     if (switched) {
       setInputIssues([])
+      setInputCompatPairs([])
       setPickerModuleId(null)
       onProjectSwitch?.()
     }
@@ -179,6 +206,9 @@ export function useInferenceDocs({
     inputDocs,
     inputDocIdsKey,
     inputIssues,
+    inputCompatPairs,
+    inputCompatInvalid,
+    runInputsBlocked,
     pickerModuleId,
     setPickerModuleId,
     pickerModule,

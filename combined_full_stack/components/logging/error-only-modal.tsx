@@ -1,9 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Check, Copy, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { copyTextToClipboard } from "@/lib/clipboard"
+import { runErrorLogJson, runErrorLogText } from "@/lib/run-error-log"
 import type { PipelineModule, PipelineRun } from "@/lib/types"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 
@@ -11,18 +12,23 @@ export function ErrorOnlyModal({
   run,
   modules,
   onClose,
-  errorText,
-  errorJson,
 }: {
   run: PipelineRun
   modules: PipelineModule[]
   onClose: () => void
-  errorText: string
-  errorJson: string
 }) {
-  void modules
   const [mode, setMode] = useState<"text" | "json">("text")
+  const [includePipeline, setIncludePipeline] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  const errorText = useMemo(
+    () => runErrorLogText(run, { includePipeline }),
+    [run, includePipeline],
+  )
+  const errorJson = useMemo(
+    () => runErrorLogJson(run, modules, { includePipeline }),
+    [run, modules, includePipeline],
+  )
 
   async function copyContent() {
     await copyTextToClipboard(mode === "text" ? errorText : errorJson)
@@ -38,9 +44,22 @@ export function ErrorOnlyModal({
             <p className="font-mono text-[10px] uppercase tracking-wider text-destructive">
               Isolated errors
             </p>
-            <p className="font-mono text-xs text-muted-foreground">{run.id}</p>
+            <p className="font-mono text-[11px] text-muted-foreground">
+              Failed fields only{includePipeline ? " · pipeline included" : ""}
+            </p>
+            <p className="font-mono text-[10px] text-muted-foreground/80">{run.id}</p>
           </div>
           <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant={includePipeline ? "secondary" : "ghost"}
+              className="h-7 font-mono text-[10px]"
+              onClick={() => setIncludePipeline((v) => !v)}
+              title="Include full step inputs and pipeline definition"
+            >
+              pipeline
+            </Button>
             <Button
               type="button"
               size="sm"

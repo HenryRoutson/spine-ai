@@ -10,6 +10,7 @@ export type FormSchemaNode = {
   format?: string
   enum?: string[]
   required: boolean
+  nullable?: boolean
   minimum?: number
   maximum?: number
   minLength?: number
@@ -43,9 +44,37 @@ function resolveSchemaType(raw: Record<string, unknown>): SchemaType | null {
   return null
 }
 
+// AI : Zod emits string|null as anyOf or type unions — treat as a nullable scalar/object, not “too complex”.
+function resolveNullableUnion(raw: Record<string, unknown>): { inner: Record<string, unknown>; nullable: boolean } | null {
+  const t = raw.type
+  if (Array.isArray(t)) {
+    const nonNull = t.filter((x) => x !== "null")
+    if (nonNull.length === 1 && t.includes("null")) {
+      return { inner: { ...raw, type: nonNull[0] }, nullable: true }
+    }
+    return null
+  }
+
+  const variants = raw.anyOf ?? raw.oneOf
+  if (!Array.isArray(variants)) return null
+  const records = variants.map(asRecord).filter(Boolean) as Record<string, unknown>[]
+  const rest = records.filter((r) => r.type !== "null")
+  if (rest.length !== 1 || records.length - rest.length < 1) return null
+  return { inner: rest[0]!, nullable: true }
+}
+
 function normalizeNode(raw: unknown, key: string, required: boolean): FormSchemaNode | null {
   const s = asRecord(raw)
   if (!s) return null
+
+  const nullableUnion = resolveNullableUnion(s)
+  if (nullableUnion) {
+    const node = normalizeNode(nullableUnion.inner, key, required)
+    if (!node) return null
+    node.nullable = true
+    return node
+  }
+
   if ("anyOf" in s || "oneOf" in s || "allOf" in s || "$ref" in s) return null
 
   const type = resolveSchemaType(s)
@@ -104,8 +133,10 @@ function inferScoreCorrectFields(obj: Record<string, unknown>): void {
   if (obj.correct === undefined || obj.correct === null) obj.correct = score === maxScore
 }
 
-function fieldMissing(val: unknown, type: SchemaType): boolean {
-  return val === undefined || val === null || (type !== "boolean" && val === "")
+function fieldMissing(val: unknown, type: SchemaType, nullable = false): boolean {
+  if (val === undefined) return true
+  if (val === null) return !nullable
+  return type !== "boolean" && val === ""
 }
 
 // AI : merge missing required keys from schema defaults; keeps partial guided-form rows valid for Zod.
@@ -116,8 +147,8 @@ export function applySchemaDefaults(data: unknown, node: FormSchemaNode): unknow
     inferScoreCorrectFields(raw)
     for (const [k, sub] of Object.entries(node.properties)) {
       const val = raw[k]
-      if (fieldMissing(val, sub.type) && sub.required) raw[k] = defaultFromSchema(sub)
-      else if (!fieldMissing(val, sub.type) && (sub.type === "object" || sub.type === "array")) {
+      if (fieldMissing(val, sub.type, sub.nullable) && sub.required) raw[k] = defaultFromSchema(sub)
+      else if (!fieldMissing(val, sub.type, sub.nullable) && (sub.type === "object" || sub.type === "array")) {
         raw[k] = applySchemaDefaults(val, sub)
       }
     }
@@ -195,7 +226,7 @@ export function validateFormData(
     for (const [k, sub] of Object.entries(node.properties)) {
       const p = path ? `${path}.${k}` : k
       const val = obj[k]
-      const missing = fieldMissing(val, sub.type)
+      const missing = fieldMissing(val, sub.type, sub.nullable)
       if (sub.required && missing) {
         errors[p] = "Required"
         continue
@@ -218,7 +249,8 @@ export function validateFormData(
     return errors
   }
 
-  if (data === undefined || data === null || data === "") return errors
+  if (data === undefined || data === "") return errors
+  if (data === null) return node.nullable ? errors : { ...errors, [path]: "Required" }
 
   if (node.type === "integer" && (!Number.isInteger(data) || typeof data !== "number")) {
     errors[path] = "Must be a whole number"

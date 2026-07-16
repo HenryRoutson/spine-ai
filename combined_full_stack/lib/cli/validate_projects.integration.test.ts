@@ -56,7 +56,7 @@ describe("homework grader — agent example baseline", () => {
     const inferenceSetups = ctx.seed.docSpecs.filter((d) => d.name.endsWith("_inference.json"))
     const testFiles = ctx.seed.docSpecs.filter((d) => d.name.endsWith("_testing.json"))
     expect(inferenceSetups.length).toBeGreaterThanOrEqual(3)
-    expect(testFiles.length).toBeGreaterThanOrEqual(3)
+    expect(testFiles.length).toBeGreaterThanOrEqual(5)
     expect(ctx.project.modules.some((m) => m.kind === "llm-batch")).toBe(true)
   })
 })

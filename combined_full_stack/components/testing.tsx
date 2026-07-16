@@ -41,6 +41,8 @@ import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { evaluateTestReport } from "@/lib/testing-evaluate"
 import { useAppShell } from "@/lib/app-shell"
+import { useRunJobs } from "@/lib/run-jobs-context"
+import { activeStepLabelFromStepStates, progressPctFromStepStates } from "@/lib/run-jobs-progress"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
 import { labelAsStateKey } from "@/lib/server/pipeline_state"
@@ -67,12 +69,22 @@ import {
   testPipelineStableSig,
   testRunContextStableSig,
   testRunHistoryForDoc,
-  testVerdictPassed,
+  testVerdictForFile,
+  testReportPassed,
   validateTestFile,
   type SpineTestFile,
   type TestFileIssue,
   type TestStepResult,
 } from "@/lib/testing-files"
+import {
+  evaluateInputCompatForTest,
+  inputCompatBlockedForTest,
+  syntheticInputCompatResults,
+  testExpectsInputCompatFailure,
+  testOutcomePassed,
+  testOutcomeMode,
+  testOutcomeModeInfo,
+} from "@/lib/test-expect-failure"
 import { ResizableSplit } from "@/components/resizable-split"
 import {
   readTestingSidebarWidth,
@@ -82,7 +94,7 @@ import {
   writeTestingSidebarWidth,
 } from "@/lib/testing-settings"
 import { cn } from "@/lib/utils"
-import { DocLabel, InputType, RunSource, type PipelineRun, type RunTestReport } from "@/lib/types"
+import { DocLabel, InputType, RunSource, RunTestStepStatus, type PipelineRun, type RunTestReport } from "@/lib/types"
 import { isPreviewOnly } from "@/lib/demo-mode"
 import type { DocId, DocRef, ModuleId, PipelineModule, Project, RunJobId } from "@/lib/types"
 
@@ -109,6 +121,7 @@ type TestRunUiState = {
   resultRunId: string | null
   runError: string | null
   jobId: RunJobId | null
+  inputCompatBlocked?: boolean
 }
 
 const EMPTY_TEST_RUN: TestRunUiState = {
@@ -131,8 +144,7 @@ function testStatus(t: TestDocState): "loading" | "load_failed" | "broken" | "er
 
 function isRunnableTest(t: TestDocState): boolean {
   if (!t.test || t.loadError || t.parseError || t.content === undefined) return false
-  if (t.issues.some((i) => i.level === "error")) return false
-  return true
+  return !t.issues.some((i) => i.level === "error")
 }
 
 type TestSidebarBadgeInfo = { label: string; className: string; tooltip: string }
@@ -198,7 +210,7 @@ export function Testing() {
 
   const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
   const testDocs = useMemo(() => projectDocs.filter((d) => isTestingFileName(d.name)), [projectDocs])
-  const { setActiveWindow } = useAppShell()
+  const { setActiveWindow, focusTestDocName, clearFocusTestDoc } = useAppShell()
   const { typesInvalid, runTabsBlocked: runBlocked } = computeWorkspaceValidity(
     modules,
     models,
@@ -216,6 +228,8 @@ export function Testing() {
   // AI : per-test run state — stale batch runs many jobs in parallel, each with its own progress.
   const [runByName, setRunByName] = useState<Map<doc_name_string, TestRunUiState>>(new Map())
   const cancellable = useCancellableRunRegistry<doc_name_string>()
+  const trackIdByDocName = useRef(new Map<doc_name_string, string>())
+  const runJobs = useRunJobs()
   const [runAllActive, setRunAllActive] = useState(false)
   const [runAllDone, setRunAllDone] = useState(0)
   const [runAllTotal, setRunAllTotal] = useState(0)
@@ -294,6 +308,46 @@ function staleLoadFailedContent(content: string): string | null {
     })
   }, [])
 
+  const beginTestJob = useCallback(
+    (docName: doc_name_string) => {
+      const trackId = runJobs.registerJob({
+        source: "testing",
+        label: docName,
+        projectId: project.id,
+        testDocName: docName,
+        cancel: () => cancellable.stop(docName),
+      })
+      trackIdByDocName.current.set(docName, trackId)
+      return trackId
+    },
+    [cancellable, project.id, runJobs],
+  )
+
+  const updateTestJobProgress = useCallback(
+    (docName: doc_name_string, stepStates: Map<ModuleId, StepUiState>) => {
+      const trackId = trackIdByDocName.current.get(docName)
+      if (!trackId) return
+      runJobs.updateJobProgress(trackId, {
+        stepStates,
+        progressPct: progressPctFromStepStates(modules, stepStates),
+        activeStepLabel: activeStepLabelFromStepStates(modules, stepStates),
+      })
+    },
+    [modules, runJobs],
+  )
+
+  const finishTestJob = useCallback(
+    (docName: doc_name_string, outcome: { runId?: string } | { error: string } | "stopped") => {
+      const trackId = trackIdByDocName.current.get(docName)
+      if (!trackId) return
+      trackIdByDocName.current.delete(docName)
+      if (outcome === "stopped") runJobs.stopJob(trackId)
+      else if ("error" in outcome) runJobs.failJob(trackId, outcome.error)
+      else runJobs.completeJob(trackId, outcome)
+    },
+    [runJobs],
+  )
+
   const pipelineSnapshot = useMemo(
     () => ({ modules, models, typeAliases }),
     [modules, models, typeAliases],
@@ -345,9 +399,16 @@ function staleLoadFailedContent(content: string): string | null {
   )
 
   const resolveLastRunVerdict = useCallback(
-    (docName: doc_name_string): boolean | null => {
+    (docName: doc_name_string, test?: SpineTestFile): boolean | null => {
       const live = runByName.get(docName)
-      if (live?.phase === "done" && live.results) return testVerdictPassed(live.results)
+      if (live?.phase === "done" && live.results) {
+        if (test) {
+          return testVerdictForFile(test, live.results, null, live.inputCompatBlocked ?? false)
+        }
+        return live.results.every(
+          (r) => r.status !== RunTestStepStatus.Fail && r.status !== RunTestStepStatus.NotReached,
+        )
+      }
       return lastTestRunVerdictForDoc(runs, docName)
     },
     [runByName, runs],
@@ -407,9 +468,36 @@ function staleLoadFailedContent(content: string): string | null {
     setActionError(null)
   }, [])
 
+  useEffect(() => {
+    if (!focusTestDocName) return
+    const match = testStates.find((t) => t.doc.name === focusTestDocName)
+    if (match) selectTest(match.doc.id, match.doc.name)
+    clearFocusTestDoc()
+  }, [focusTestDocName, testStates, clearFocusTestDoc, selectTest])
+
+  useEffect(() => {
+    const running = runJobs.runningTestsForProject(project.id)
+    if (!running.length) return
+    setRunByName((prev) => {
+      const next = new Map(prev)
+      for (const job of running) {
+        if (!job.testDocName) continue
+        trackIdByDocName.current.set(job.testDocName, job.id)
+        next.set(job.testDocName, {
+          ...(next.get(job.testDocName) ?? EMPTY_TEST_RUN),
+          phase: "running",
+          stepStates: new Map(job.stepStates),
+          jobId: job.jobId,
+        })
+      }
+      return next
+    })
+  }, [project.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const stopTest = useCallback(
     (docName: doc_name_string) => {
       cancellable.stop(docName)
+      finishTestJob(docName, "stopped")
       setRunByName((prev) => {
         const next = new Map(prev)
         const cur = next.get(docName) ?? EMPTY_TEST_RUN
@@ -417,11 +505,14 @@ function staleLoadFailedContent(content: string): string | null {
         return next
       })
     },
-    [cancellable],
+    [cancellable, finishTestJob],
   )
 
   const stopAllRunningTests = useCallback(() => {
     cancellable.stopAll()
+    for (const docName of trackIdByDocName.current.keys()) {
+      finishTestJob(docName, "stopped")
+    }
     setRunByName((prev) => {
       const next = new Map(prev)
       for (const [docName, rs] of prev) {
@@ -433,7 +524,7 @@ function staleLoadFailedContent(content: string): string | null {
     setRunAllActive(false)
     setRunAllDone(0)
     setRunAllTotal(0)
-  }, [cancellable])
+  }, [cancellable, finishTestJob])
 
   async function createBlankTest() {
     setActionError(null)
@@ -509,12 +600,76 @@ function staleLoadFailedContent(content: string): string | null {
     if (isPreviewOnly()) return "error"
     if (!state.test) return "error"
     const docName = state.doc.name
+
+    if (testExpectsInputCompatFailure(state.test)) {
+      const resolved = resolveTestRunInputs(state.test, modules, projectDocs)
+      if (!resolved.ok) {
+        patchRunState(docName, { runError: resolved.error, phase: "idle" })
+        return "error"
+      }
+      const signal = cancellable.begin(docName)
+      beginTestJob(docName)
+      patchRunState(docName, {
+        phase: "running",
+        stepStates: new Map(),
+        results: null,
+        resultRunId: null,
+        runError: null,
+        jobId: null,
+        inputCompatBlocked: undefined,
+      })
+      try {
+        const contentByDocId: Record<string, string> = {}
+        const docIds = new Set<string>()
+        for (const docs of Object.values(resolved.assignment)) {
+          const list = Array.isArray(docs) ? docs : [docs]
+          for (const doc of list) {
+            if (doc) docIds.add(doc.id)
+          }
+        }
+        await Promise.all(
+          [...docIds].map((id) =>
+            fetchDocText(id).then((data) => {
+              contentByDocId[id] = docTextContent(data)
+            }),
+          ),
+        )
+        if (signal.aborted) {
+          finishTestJob(docName, "stopped")
+          return "stopped"
+        }
+        const pairs = evaluateInputCompatForTest(state.test, modules, projectDocs, contentByDocId)
+        const blocked = inputCompatBlockedForTest(state.test, modules, projectDocs, contentByDocId)
+        const report = syntheticInputCompatResults(pairs, blocked)
+        finishTestJob(docName, {})
+        patchRunState(docName, {
+          results: report,
+          phase: "done",
+          inputCompatBlocked: blocked,
+          resultRunId: null,
+        })
+        return testOutcomePassed(state.test, report, null, blocked) ? "ok" : "error"
+      } catch (err) {
+        if (isRunAbortedError(err)) {
+          finishTestJob(docName, "stopped")
+          patchRunState(docName, { phase: "idle", runError: "Stopped" })
+          return "stopped"
+        }
+        finishTestJob(docName, { error: (err as Error).message })
+        patchRunState(docName, { runError: (err as Error).message, phase: "idle" })
+        return "error"
+      } finally {
+        cancellable.clear(docName)
+      }
+    }
+
     const resolved = resolveTestRunInputs(state.test, modules, projectDocs)
     if (!resolved.ok) {
       patchRunState(docName, { runError: resolved.error, phase: "idle" })
       return "error"
     }
     const signal = cancellable.begin(docName)
+    const trackId = beginTestJob(docName)
     patchRunState(docName, {
       phase: "running",
       stepStates: new Map(),
@@ -537,17 +692,23 @@ function staleLoadFailedContent(content: string): string | null {
         RunSource.Testing, // AI : flags the run in Logging (spec § Testing)
       )
       cancellable.trackJobId(docName, jobId)
+      runJobs.bindJobId(trackId, jobId)
       patchRunState(docName, { jobId })
       refreshBilling().catch(console.error)
       const { run } = await awaitRun(jobId, {
         signal,
-        onStep: (steps) =>
+        onStep: (steps) => {
+          // AI : compute merged in updater, but sync RunJobsProvider outside it — setState updaters must stay pure.
+          let merged: Map<ModuleId, StepUiState> = new Map()
           setRunByName((prev) => {
+            const cur = prev.get(docName) ?? EMPTY_TEST_RUN
+            merged = mergeStepStates(cur.stepStates, steps)
             const next = new Map(prev)
-            const cur = next.get(docName) ?? EMPTY_TEST_RUN
-            next.set(docName, { ...cur, stepStates: mergeStepStates(cur.stepStates, steps) })
+            next.set(docName, { ...cur, stepStates: merged })
             return next
-          }),
+          })
+          updateTestJobProgress(docName, merged)
+        },
         // AI : tests are unattended — auto-approve human-review gates.
         onHumanReview: () => Promise.resolve("approved" as const),
       }, pollIntervalMs)
@@ -559,23 +720,28 @@ function staleLoadFailedContent(content: string): string | null {
         results: report,
         testContentSig: testContentSig(content),
         pipelineSig,
+        expectFailure: state.test.expectFailure,
       }
       // AI : upsert locally with verdict immediately so run history updates before PATCH returns.
       addRun({ ...run, source: run.source ?? RunSource.Testing, test: persistedTest })
+      finishTestJob(docName, { runId: run.id })
       patchRunState(docName, { results: report, resultRunId: run.id, phase: "done" })
       // AI : pin verdict + content/pipeline hashes onto the run row (Supabase via PATCH /api/runs).
       updateRunTest(run.id, persistedTest).catch(console.error)
-      return "ok"
+      return testOutcomePassed(state.test, report, run, false) ? "ok" : "error"
     } catch (err) {
       if (isRunAbortedError(err)) {
+        finishTestJob(docName, "stopped")
         patchRunState(docName, { phase: "idle", runError: "Stopped" })
         return "stopped"
       }
       if (isRunBillingError(err)) {
+        finishTestJob(docName, { error: (err as Error).message })
         refreshBilling().catch(console.error)
         patchRunState(docName, { runError: (err as Error).message, phase: "idle" })
         return "billing"
       }
+      finishTestJob(docName, { error: (err as Error).message })
       patchRunState(docName, { runError: (err as Error).message, phase: "idle" })
       return "error"
     } finally {
@@ -766,7 +932,7 @@ function staleLoadFailedContent(content: string): string | null {
                     const status = testStatus(t)
                     const isSelected = selected?.doc.id === t.doc.id
                     const currentVerdict = resolveLastVerdict(t.doc.name)
-                    const lastRunVerdict = resolveLastRunVerdict(t.doc.name)
+                    const lastRunVerdict = resolveLastRunVerdict(t.doc.name, t.test)
                     const verdictStale = lastRunVerdict !== null && currentVerdict === null
                     const testRun = runByName.get(t.doc.name) ?? EMPTY_TEST_RUN
                     const isRunning = testRun.phase === "running"
@@ -851,9 +1017,9 @@ function staleLoadFailedContent(content: string): string | null {
                 onStop={() => stopTest(selected.doc.name)}
                 onRetryLoad={() => loadTestDoc(selected.doc.id, true)}
                 onDirtyContentChange={onDirtyContentChange}
-                lastRunVerdict={resolveLastRunVerdict(selected.doc.name)}
+                lastRunVerdict={resolveLastRunVerdict(selected.doc.name, selected.test)}
                 verdictStale={
-                  resolveLastRunVerdict(selected.doc.name) !== null &&
+                  resolveLastRunVerdict(selected.doc.name, selected.test) !== null &&
                   resolveLastVerdict(selected.doc.name) === null
                 }
                 runs={runs}
@@ -863,6 +1029,7 @@ function staleLoadFailedContent(content: string): string | null {
                 results={selectedRun.results}
                 resultRunId={selectedRun.resultRunId}
                 runError={selectedRun.runError}
+                inputCompatBlocked={selectedRun.inputCompatBlocked}
                 modules={modules}
               />
             ) : (
@@ -984,7 +1151,7 @@ function TestRunHistory({
       ) : (
       <ul className="mt-1.5 space-y-1">
         {history.map((run) => {
-          const passed = run.test ? testVerdictPassed(run.test.results) : run.status === "ok"
+          const passed = run.test ? testReportPassed(run.test, run) : run.status === "ok"
           const verdictColor = passed ? palette.ok : palette.err
           return (
             <li key={run.id}>
@@ -1040,6 +1207,7 @@ function TestDetail({
   results,
   resultRunId,
   runError,
+  inputCompatBlocked,
   modules,
 }: {
   state: TestDocState
@@ -1059,6 +1227,7 @@ function TestDetail({
   results: TestStepResult[] | null
   resultRunId: string | null
   runError: string | null
+  inputCompatBlocked?: boolean
   modules: PipelineModule[]
 }) {
   const { openLogging } = useAppShell()
@@ -1085,6 +1254,11 @@ function TestDetail({
   const dirty = draft !== null && JSON.stringify(draft) !== initialSig
   const serialized = draft ? draftToContent(draft, project) : null
   const draftBlocked = draft === null || serialized === null || draftHasErrors(draft, project, projectDocs)
+  const expectFailure = state.test?.expectFailure
+  const resultsVerdict =
+    results && state.test
+      ? testVerdictForFile(state.test, results, null, inputCompatBlocked ?? false)
+      : undefined
 
   useEffect(() => {
     if (state.parseError) {
@@ -1133,6 +1307,11 @@ function TestDetail({
               <TestLastVerdictIcon passed={lastRunVerdict} stale={verdictStale} />
             )}
             <span className="break-all font-mono">{state.doc.name}</span>
+            {expectFailure && (
+              <Badge variant="outline" className="shrink-0 font-mono text-[9px] text-yellow-700 dark:text-yellow-500">
+                {testOutcomeModeInfo(testOutcomeMode(expectFailure)).label}
+              </Badge>
+            )}
             {lastRunVerdict !== null && (
               <span
                 className={cn(
@@ -1276,6 +1455,11 @@ function TestDetail({
           {results && (
             <TestResults
               results={results}
+              verdictPassed={resultsVerdict}
+              expectFailure={expectFailure}
+              testDocName={state.doc.name}
+              run={resultRunId ? (runs.find((r) => r.id === resultRunId) ?? null) : null}
+              runError={runError}
               action={
                 resultRunId ? (
                   // AI : testing output lands in Logging tagged "test" — link straight to it.

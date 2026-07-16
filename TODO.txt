@@ -2,6 +2,20 @@
 PRIORITY
 
 
+Thinking of errors when running the homework assessment pipeline,
+although i can filter down file names to contains certain things like 
+marking criteria might always contain "marking guide" in their name,
+there is nothing stopping me from passing in a  "marking guide"  and a "homework sheet" which do not match. You need to have the option to only upload files after another input step when you can further filter down what files fit a format. You could do this both with pydantic format, where you check if the marking schema matches with the homework schema, but with extra marking fields. You could also do it with names where you parse the name into different values and check if those values equal. like marking_guide_SPLIT_grade10.txt and homework_SPLIT_james_miller_SPLIT_grade10.txt. However, this is janky and could lead to very long names, although names still do need to be unique. How do i approach this?
+
+
+
+
+
+
+
+
+
+
 
 SEO https://search.google.com/search-console/welcome?utm_source=about-page
 
@@ -22,10 +36,15 @@ try https://cloud.flowiseai.com/canvas
 need to handle logic for pass throughs and avoid rewriting each step completely. Need to be able to click a field and trace it's whole history, which might be difficult with custom code blocks. I want to be able to see ok this field alone is a function of these things.
 
 
+I just realised we can probably undercut API pricing because we're splitting up tasks. at high enough scale, we're getting SPLITS^2 the compute saving if SPLITS is the number of parallel llm calls.
+
+
 
 i do like the idea of pure stateless functions, need to label which are which and which use state, note will need to use this for cache. may need AI to decide?
 
 
+
+note you can test if something is deterministic if you run it twice. with an llm.
 
 embed into websites as an option for sharing
 

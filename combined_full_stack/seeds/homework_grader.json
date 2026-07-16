@@ -223,7 +223,7 @@
           "type": "int",
           "optional": false,
           "description": "Points awarded",
-          "testTolerance": 0
+          "testTolerance": 1
         },
         {
           "id": "f_max",
@@ -290,6 +290,31 @@
       "inputType": "text",
       "inputNameContains": "homework_student",
       "inputMinCount": 1,
+      "inputCompatWith": {
+        "moduleId": "mod_in_schema",
+        "keys": [
+          {
+            "label": "assignment title",
+            "upstream": { "kind": "json-path", "path": "assignment_title", "normalize": "lower-trim" },
+            "local": {
+              "kind": "text-regex",
+              "pattern": "^#\\s*(.+?)\\s+—\\s+Student",
+              "group": 1,
+              "normalize": "lower-trim"
+            }
+          },
+          {
+            "label": "question IDs",
+            "compare": "set-equal",
+            "upstream": {
+              "kind": "json-path",
+              "path": "sections[].questions[].question_id",
+              "normalize": "question-id-set"
+            },
+            "local": { "kind": "question-ids-text" }
+          }
+        ]
+      },
       "outStructureId": "m_builtin_document",
       "outIsList": true,
       "cached": true,
@@ -352,7 +377,7 @@
       "outStructureId": "m_grade",
       "outIsList": true,
       "inputDescription": "List of GradableSection objects — student_label, question body, max_score, and criteria",
-      "prompt": "Apply criteria literally and deterministically. Score MUST equal the exact sum of rubric components listed in criteria — use only point values explicitly named in criteria (no rounding, no extra credit, no in-between scores). Score is an integer from 0 to max_score inclusive. Copy max_score from input unchanged. Set correct=true iff score equals max_score; never set correct=true when score is below max_score. Copy student_label and section_id exactly from input. When correct is false, mistake_explanation must cite the rubric clause applied and state the student's wrong value vs the required value. When correct is true, mistake_explanation must be an empty string.",
+      "prompt": "Apply criteria literally and deterministically. When criteria lists alternate bands (e.g. 'award exactly N pts if…'), check those bands before summing components — pick exactly one band score, never mix. Score MUST equal the exact points from the matching band or component sum — use only point values explicitly named in criteria (no rounding, no extra credit, no in-between scores). Score is an integer from 0 to max_score inclusive. Copy max_score from input unchanged. Set correct=true iff score equals max_score; never set correct=true when score is below max_score. Copy student_label and section_id exactly from input. When correct is false, mistake_explanation must cite the rubric clause applied and state the student's wrong value vs the required value. When correct is true, mistake_explanation must be an empty string.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2400,
@@ -511,6 +536,18 @@
       "type": "json",
       "label": "training",
       "file": "homework_grader/homework_university_testing.json"
+    },
+    {
+      "name": "homework_wrong_pairing_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "homework_grader/homework_wrong_pairing_testing.json"
+    },
+    {
+      "name": "homework_wrong_grade_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "homework_grader/homework_wrong_grade_testing.json"
     }
   ]
 }

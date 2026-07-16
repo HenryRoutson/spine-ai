@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { API_ROUTES } from "@/lib/api-routes"
 import { formatCents } from "@/lib/format"
-import { useStore } from "@/lib/store"
+import { useWorkspaceBilling } from "@/lib/use-workspace-billing"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 
 type FeedbackResponse = {
@@ -22,7 +22,7 @@ type FeedbackResponse = {
 }
 
 export function FeedbackButton() {
-  const { billingAccount, refreshBilling } = useStore()
+  const { billingAccount, refreshBilling } = useWorkspaceBilling()
   const [open, setOpen] = useState(false)
   const [message, setMessage] = useState("")
   const [busy, setBusy] = useState(false)

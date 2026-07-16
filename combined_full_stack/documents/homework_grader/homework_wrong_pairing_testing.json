@@ -1,0 +1,9 @@
+{
+  "description": "Negative test — Algebra II marking schema paired with a 1st-grade student sheet. expectFailure input-compat: run must be blocked before inference.",
+  "expectFailure": "input-compat",
+  "inputs": {
+    "Marking Schema": "homework_marking_schema.json",
+    "Student Submissions": ["homework_student_riley_first_grade.md"]
+  },
+  "expectedOutputs": {}
+}

@@ -14,7 +14,6 @@ import {
   userProjectsFrom,
   type SeedDocSpec,
 } from "./seed";
-import { isTestingFileName } from "../testing-files";
 import { computeInvalid, migrateProjectModules, syncManagedPipelineSteps } from "./validity";
 import { stripSharedModels } from "./builtin_models";
 import type {
@@ -369,19 +368,21 @@ async function ingestSeedDoc(store: Store, spec: SeedDocSpec, refreshStale = fal
     console.error(`seed doc missing (${spec.name}):`, err);
     fresh = unavailableSeedDocMessage(spec.name);
   }
-  const existingByName = store.docs().find((d) => d.name === spec.name);
-  if (existingByName) {
-    const content = store.docContent(existingByName.id);
+  const existingByName = store.docs().filter((d) => d.name === spec.name);
+  if (existingByName.length) {
+    const content = store.docContent(existingByName[0]!.id);
+    // AI : metadata-only rows (ref without bytes) must re-ingest — otherwise GET /api/docs/:id/text 404s.
+    const missingContent = content === undefined;
     const placeholderFixed =
       content && isUnavailableSeedDoc(content, spec.name) && !isUnavailableSeedDoc(fresh, spec.name);
     const stale = refreshStale && content !== undefined && content !== fresh && !isUnavailableSeedDoc(fresh, spec.name);
-    const bundledTestDrift =
-      isTestingFileName(spec.name) &&
+    // AI : all seeds/*.json docs drift-sync on bootstrap — git is canonical for bundled examples.
+    const bundledSeedDrift =
       content !== undefined &&
       content !== fresh &&
       !isUnavailableSeedDoc(fresh, spec.name);
-    if (placeholderFixed || stale || bundledTestDrift) {
-      store.removeDoc(existingByName.id);
+    if (placeholderFixed || stale || bundledSeedDrift || missingContent) {
+      for (const d of existingByName) store.removeDoc(d.id);
       store.addDoc(spec.name, spec.type, fresh, spec.label);
     }
     return;
@@ -430,6 +431,8 @@ export class JsonStore implements Store {
     const i = this.state.docs.findIndex((d) => d.id === id);
     if (i >= 0) {
       // AI : content-addressed reuse — bump uploadedAt + filename so docsForProject picks this edit.
+      const path = join(this.docsDir, `${id}.txt`);
+      if (!existsSync(path)) writeFileSync(path, content, "utf8");
       const doc: DocRef = {
         ...this.state.docs[i]!,
         name,

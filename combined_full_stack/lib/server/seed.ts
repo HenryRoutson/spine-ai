@@ -86,6 +86,47 @@ const SeedFileSchema = z.object({
       inputDescription: z.string().optional(),
       checkInputDescription: z.boolean().optional(),
       inputMinCount: z.number().int().min(1).optional(),
+      inputCompatWith: z
+        .object({
+          moduleId: z.string(),
+          keys: z.array(
+            z.object({
+              label: z.string(),
+              compare: z.enum(["equal", "set-equal"]).optional(),
+              upstream: z.discriminatedUnion("kind", [
+                z.object({
+                  kind: z.literal("json-path"),
+                  path: z.string(),
+                  normalize: z.enum(["lower-trim", "question-id", "question-id-set"]).optional(),
+                }),
+                z.object({
+                  kind: z.literal("text-regex"),
+                  pattern: z.string(),
+                  group: z.number().int().optional(),
+                  flags: z.string().optional(),
+                  normalize: z.enum(["lower-trim", "question-id", "question-id-set"]).optional(),
+                }),
+                z.object({ kind: z.literal("question-ids-text") }),
+              ]),
+              local: z.discriminatedUnion("kind", [
+                z.object({
+                  kind: z.literal("json-path"),
+                  path: z.string(),
+                  normalize: z.enum(["lower-trim", "question-id", "question-id-set"]).optional(),
+                }),
+                z.object({
+                  kind: z.literal("text-regex"),
+                  pattern: z.string(),
+                  group: z.number().int().optional(),
+                  flags: z.string().optional(),
+                  normalize: z.enum(["lower-trim", "question-id", "question-id-set"]).optional(),
+                }),
+                z.object({ kind: z.literal("question-ids-text") }),
+              ]),
+            }),
+          ),
+        })
+        .optional(),
       prompt: z.string().optional(),
       code: z.string().optional(),
       model: z.string().optional(),

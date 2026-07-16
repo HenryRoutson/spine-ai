@@ -128,6 +128,52 @@ const pipelineModulePatchSchema = z
     inputDescription: z.string().max(4_000).optional(),
     checkInputDescription: z.boolean().optional(),
     inputMinCount: z.number().int().min(0).max(100).optional(),
+    inputCompatWith: z
+      .object({
+        moduleId: z.string().max(128),
+        keys: z
+          .array(
+            z
+              .object({
+                label: z.string().max(200),
+                compare: z.enum(["equal", "set-equal"]).optional(),
+                upstream: z.discriminatedUnion("kind", [
+                  z.object({
+                    kind: z.literal("json-path"),
+                    path: z.string().max(512),
+                    normalize: z.enum(["lower-trim", "question-id", "question-id-set"]).optional(),
+                  }),
+                  z.object({
+                    kind: z.literal("text-regex"),
+                    pattern: z.string().max(512),
+                    group: z.number().int().min(0).max(20).optional(),
+                    flags: z.string().max(8).optional(),
+                    normalize: z.enum(["lower-trim", "question-id", "question-id-set"]).optional(),
+                  }),
+                  z.object({ kind: z.literal("question-ids-text") }),
+                ]),
+                local: z.discriminatedUnion("kind", [
+                  z.object({
+                    kind: z.literal("json-path"),
+                    path: z.string().max(512),
+                    normalize: z.enum(["lower-trim", "question-id", "question-id-set"]).optional(),
+                  }),
+                  z.object({
+                    kind: z.literal("text-regex"),
+                    pattern: z.string().max(512),
+                    group: z.number().int().min(0).max(20).optional(),
+                    flags: z.string().max(8).optional(),
+                    normalize: z.enum(["lower-trim", "question-id", "question-id-set"]).optional(),
+                  }),
+                  z.object({ kind: z.literal("question-ids-text") }),
+                ]),
+              })
+              .strict(),
+          )
+          .max(20),
+      })
+      .strict()
+      .optional(),
     prompt: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
     code: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
     fallbackList: z.array(customCodeEntryPatchSchema).max(20).optional(),

@@ -68,7 +68,7 @@ export function useInferenceRun({
 
   // AI : fingerprint match — offer "view log" when this exact setup already completed successfully.
   useEffect(() => {
-    if (!docsState.allInputsReady || docsState.inputsInvalid) {
+    if (!docsState.allInputsReady || docsState.runInputsBlocked) {
       setMatchingPriorRun(null)
       return
     }
@@ -86,7 +86,7 @@ export function useInferenceRun({
     return () => {
       cancelled = true
     }
-  }, [configResetKey, docsState.allInputsReady, docsState.inputsInvalid, docsState.inputDocs, docsState.inputModules, model, modules, project, runs])
+  }, [configResetKey, docsState.allInputsReady, docsState.runInputsBlocked, docsState.inputDocs, docsState.inputModules, model, modules, project, runs])
 
   const progress = useInferenceRunProgress({
     projectId: project.id as ProjectId,
@@ -96,7 +96,7 @@ export function useInferenceRun({
     inputModules: docsState.inputModules,
     inputDocs: docsState.inputDocs,
     allInputsReady: docsState.allInputsReady,
-    inputsInvalid: docsState.inputsInvalid,
+    inputsInvalid: docsState.runInputsBlocked,
     runs,
     addRun,
     updateRunNotes,

@@ -5,7 +5,7 @@
 // AI : TODO (spec) — confusion matrix / field group-by view for test failures (spec § testing).
 
 import { useEffect, useState, type ReactNode } from "react"
-import { ChevronDown, ChevronRight, CircleCheck, CircleX, MinusCircle } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, CircleCheck, CircleX, Copy, MinusCircle } from "lucide-react"
 import { ExpectedActualCompare } from "@/components/expected-actual-compare"
 import { JsonUnifiedDiffView } from "@/components/json-unified-diff-view"
 import { JsonFieldKindHighlight, JsonFieldKindLegend } from "@/components/highlight"
@@ -18,15 +18,62 @@ import {
   writeTestingCompareWidth,
 } from "@/lib/testing-settings"
 import { firstFailure, probabilisticReferencePaths, diffExplanationMap, deterministicCompareCores } from "@/lib/testing-files"
+import { testOutcomeModeInfo, testResultCompareLabels, type TestExpectFailure } from "@/lib/test-expect-failure"
+import { formatTestFailuresForClipboard, testResultsHaveFailures } from "@/lib/test-error-copy"
+import { copyTextToClipboard } from "@/lib/clipboard"
 import { stablePrettyJson } from "@/lib/deep_equal"
+import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { jsonUnifiedDiffSourceIndexes } from "@/lib/json-diff"
 import { cn } from "@/lib/utils"
-import { RunTestStepStatus, type RunTestProbabilisticResult, type RunTestStepResult } from "@/lib/types"
+import {
+  RunTestStepStatus,
+  type PipelineRun,
+  type RunTestProbabilisticResult,
+  type RunTestStepResult,
+} from "@/lib/types"
 import { StepInputDescription } from "@/components/step-input-description"
 
-export function TestResults({ results, action }: { results: RunTestStepResult[]; action?: ReactNode }) {
+function negativeTestSummary(expectFailure: TestExpectFailure, passed: boolean): string {
+  if (expectFailure === "input-compat") {
+    return passed
+      ? "input pairing blocked as expected — negative test passed"
+      : "inputs paired successfully — expected mismatch did not occur"
+  }
+  if (expectFailure === "run-error") {
+    return passed ? "pipeline errored as expected — negative test passed" : "pipeline completed — expected run error did not occur"
+  }
+  if (typeof expectFailure === "object" && "step" in expectFailure) {
+    const reason = expectFailure.reason?.trim()
+    const reasonNote = reason ? ` (${reason})` : ""
+    return passed
+      ? `step "${expectFailure.step}" failed as expected${reasonNote} — negative test passed`
+      : `step "${expectFailure.step}" did not fail${reasonNote} — negative test failed`
+  }
+  return passed ? "negative test passed" : "negative test failed"
+}
+
+export function TestResults({
+  results,
+  verdictPassed,
+  expectFailure,
+  action,
+  testDocName,
+  run,
+  runError,
+}: {
+  results: RunTestStepResult[]
+  verdictPassed?: boolean
+  expectFailure?: TestExpectFailure
+  action?: ReactNode
+  testDocName?: string
+  run?: PipelineRun | null
+  runError?: string | null
+}) {
+  const [errorsCopied, setErrorsCopied] = useState(false)
   const failure = firstFailure(results)
-  const passed = results.filter((r) => r.status === RunTestStepStatus.Pass).length
+  const passed = verdictPassed ?? !failure
+  const showCopyErrors = testResultsHaveFailures(results) || !!runError?.trim()
+  const stepPassCount = results.filter((r) => r.status === RunTestStepStatus.Pass).length
   // AI : skipped steps (input/combine) are recorded but never scored — out of the score.
   const skipped = results.filter((r) => r.status === RunTestStepStatus.Skipped).length
   const compared = results.length - skipped
@@ -34,44 +81,82 @@ export function TestResults({ results, action }: { results: RunTestStepResult[];
   const skippedNote =
     (skipped ? ` · ${skipped} step(s) skipped` : "") +
     (llmChecked ? ` · ${llmChecked} step(s) LLM-checked (probabilistic fields)` : "")
+  const summary = expectFailure
+    ? negativeTestSummary(expectFailure, passed)
+    : failure
+      ? `${stepPassCount}/${compared} steps match — pipeline diverges at "${failure.label}"${skippedNote}`
+      : `all ${compared} expected outputs match${skippedNote}`
   return (
     <section>
       <div className="flex items-center justify-between gap-2">
         <SectionLabel>results</SectionLabel>
-        {action}
+        <div className="flex shrink-0 items-center gap-2">
+          {showCopyErrors && (
+            <button
+              type="button"
+              onClick={() => {
+                void copyTextToClipboard(
+                  formatTestFailuresForClipboard(results, { testDocName, run, runError }),
+                )
+                setErrorsCopied(true)
+                setTimeout(() => setErrorsCopied(false), COPY_FEEDBACK_MS)
+              }}
+              className="inline-flex items-center gap-1 font-mono text-[10px] text-destructive hover:text-destructive/80"
+              title="Copy failed fields (input, process, output, expected)"
+            >
+              {errorsCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+              {errorsCopied ? "copied" : "copy errors"}
+            </button>
+          )}
+          {action}
+        </div>
       </div>
       <p
         className={cn(
           "mt-1.5 flex items-center gap-1.5 rounded border p-2 font-mono text-[11px]",
-          failure
-            ? "border-destructive/30 bg-destructive/10 text-destructive"
-            : "border-chart-2/30 bg-chart-2/10 text-chart-2",
+          passed
+            ? "border-chart-2/30 bg-chart-2/10 text-chart-2"
+            : "border-destructive/30 bg-destructive/10 text-destructive",
         )}
       >
-        {failure ? <CircleX className="h-3.5 w-3.5 shrink-0" /> : <CircleCheck className="h-3.5 w-3.5 shrink-0" />}
-        {failure
-          ? `${passed}/${compared} steps match — pipeline diverges at "${failure.label}"${skippedNote}`
-          : `all ${compared} expected outputs match${skippedNote}`}
+        {passed ? <CircleCheck className="h-3.5 w-3.5 shrink-0" /> : <CircleX className="h-3.5 w-3.5 shrink-0" />}
+        {summary}
       </p>
       <ul className="mt-2 space-y-1.5">
         {results.map((r) => (
-          <StepResultRow key={r.label} result={r} isFirstFailure={failure?.label === r.label} />
+          <StepResultRow
+            key={r.label}
+            result={r}
+            isFirstFailure={!expectFailure && failure?.label === r.label}
+            expectFailure={expectFailure}
+          />
         ))}
       </ul>
     </section>
   )
 }
 
-function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; isFirstFailure: boolean }) {
+function StepResultRow({
+  result,
+  isFirstFailure,
+  expectFailure,
+}: {
+  result: RunTestStepResult
+  isFirstFailure: boolean
+  expectFailure?: TestExpectFailure
+}) {
   const [open, setOpen] = useState(isFirstFailure)
   const savedCompareWidth = useTestingCompareWidth()
   const [compareWidth, setCompareWidth] = useState(readTestingCompareWidth)
   useEffect(() => setCompareWidth(savedCompareWidth), [savedCompareWidth])
   const inputCheckFailed = result.inputDescriptionCheck?.matches === false
+  const expectedNegativeRow =
+    expectFailure === "input-compat" && result.label === "Input pairing"
   const failed =
-    result.status === RunTestStepStatus.Fail ||
-    result.status === RunTestStepStatus.NotReached ||
-    inputCheckFailed
+    !expectedNegativeRow &&
+    (result.status === RunTestStepStatus.Fail ||
+      result.status === RunTestStepStatus.NotReached ||
+      inputCheckFailed)
   const probabilisticCheckedPaths =
     result.expected !== undefined && result.ignoredPaths?.length
       ? probabilisticReferencePaths(result.expected, result.ignoredPaths)
@@ -89,11 +174,16 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
     deterministicCores
       ? jsonUnifiedDiffSourceIndexes(deterministicCores.expectedCore, deterministicCores.actualCore)
       : undefined
+  const compareLabels = testResultCompareLabels(expectFailure, result.label)
   return (
     <li
       className={cn(
         "rounded-md border",
-        failed ? "border-destructive/40" : "border-border",
+        expectedNegativeRow
+          ? "border-yellow-500/40"
+          : failed
+            ? "border-destructive/40"
+            : "border-border",
         isFirstFailure && "ring-1 ring-destructive/40",
       )}
     >
@@ -169,7 +259,12 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
       )}
       {open && (result.expected !== undefined || result.actual !== undefined) && (
         <div className="space-y-2 border-t border-border p-2.5">
-          <JsonFieldKindLegend />
+          {expectedNegativeRow && (
+            <p className="font-mono text-[10px] text-yellow-700 dark:text-yellow-500">
+              {testOutcomeModeInfo("input-validation-error").summary}
+            </p>
+          )}
+          {!expectedNegativeRow && <JsonFieldKindLegend />}
           {result.expected !== undefined && result.actual !== undefined ? (
             <ExpectedActualCompare
               expectedJson={stablePrettyJson(result.expected)}
@@ -178,8 +273,8 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
               probabilisticCheckedPaths={probabilisticCheckedPaths}
               tolerantPaths={result.tolerantPaths ?? []}
               deterministicDiffExplanations={result.deterministicDiffExplanations}
-              expectedLabel="expected"
-              actualLabel="actual"
+              expectedLabel={compareLabels.expected}
+              actualLabel={compareLabels.actual}
               compareWidth={compareWidth}
               onCompareWidthChange={setCompareWidth}
               onCompareWidthCommit={writeTestingCompareWidth}
@@ -190,7 +285,7 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
             <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
               {result.expected !== undefined && (
                 <div>
-                  <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">expected</p>
+                  <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">{compareLabels.expected}</p>
                   <div className="max-h-72 overflow-auto rounded border border-border bg-secondary/30 p-2">
                     <JsonFieldKindHighlight
                       json={stablePrettyJson(result.expected)}
@@ -202,7 +297,7 @@ function StepResultRow({ result, isFirstFailure }: { result: RunTestStepResult; 
                 </div>
               )}
               <div className={result.expected === undefined ? "lg:col-span-2" : ""}>
-                <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">actual</p>
+                <p className="mb-1 font-mono text-[10px] uppercase text-muted-foreground">{compareLabels.actual}</p>
                 <div className="max-h-72 overflow-auto rounded border border-border bg-secondary/30 p-2">
                   {result.actual === undefined ? (
                     <p className="font-mono text-[11px] text-muted-foreground">— no output —</p>

@@ -4,7 +4,7 @@ import { useState } from "react"
 import { AlertTriangle, Check, Copy, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { copyTextToClipboard } from "@/lib/clipboard"
-import { runErrorLogJson, runErrorLogText } from "@/lib/run-error-log"
+import { runErrorLogText } from "@/lib/run-error-log"
 import type { PipelineModule, PipelineRun } from "@/lib/types"
 import { ErrorOnlyModal } from "@/components/logging/error-only-modal"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
@@ -24,7 +24,7 @@ export function IsolatedErrorActions({
   const [viewOpen, setViewOpen] = useState(false)
 
   async function copyErrors() {
-    await copyTextToClipboard(runErrorLogText(run))
+    await copyTextToClipboard(runErrorLogText(run, { includePipeline: false }))
     setCopied(true)
     setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)
   }
@@ -37,7 +37,7 @@ export function IsolatedErrorActions({
         size={size}
         className="h-6 gap-1 border-destructive/40 font-mono text-[10px] text-destructive hover:bg-destructive/10"
         onClick={() => void copyErrors()}
-        title="Copy error-only log"
+        title="Copy failed fields only (input, process, diverging output)"
       >
         {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
         {copied ? "copied" : "copy_errors"}
@@ -49,20 +49,14 @@ export function IsolatedErrorActions({
           size={size}
           className="h-6 gap-1 border-destructive/40 font-mono text-[10px] text-destructive hover:bg-destructive/10"
           onClick={() => setViewOpen(true)}
-          title="View isolated errors"
+          title="View failed fields only"
         >
           <Eye className="h-3 w-3" />
           errors_only
         </Button>
       )}
       {viewOpen && (
-        <ErrorOnlyModal
-          run={run}
-          modules={modules}
-          onClose={() => setViewOpen(false)}
-          errorText={runErrorLogText(run)}
-          errorJson={runErrorLogJson(run, modules)}
-        />
+        <ErrorOnlyModal run={run} modules={modules} onClose={() => setViewOpen(false)} />
       )}
     </>
   )
@@ -95,13 +89,7 @@ export function IsolatedErrorButton({
         Isolated errors
       </Button>
       {viewOpen && (
-        <ErrorOnlyModal
-          run={run}
-          modules={modules}
-          onClose={() => setViewOpen(false)}
-          errorText={runErrorLogText(run)}
-          errorJson={runErrorLogJson(run, modules)}
-        />
+        <ErrorOnlyModal run={run} modules={modules} onClose={() => setViewOpen(false)} />
       )}
     </>
   )

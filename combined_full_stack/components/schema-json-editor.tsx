@@ -26,10 +26,12 @@ export function SchemaJsonEditor({
   schema,
   text,
   onText,
+  formOnly = false,
 }: {
   schema: Record<string, unknown>
   text: json_text_string
   onText: (text: json_text_string) => void
+  formOnly?: boolean
 }) {
   const formRoot = useMemo(() => jsonSchemaToFormRoot(schema), [schema])
   const [mode, setMode] = useState<"form" | "json">("form")
@@ -79,16 +81,19 @@ export function SchemaJsonEditor({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <Tabs value={mode} onValueChange={(v) => setMode(v as "form" | "json")}>
-          <TabsList className="h-7">
-            <TabsTrigger value="form" className="px-2.5 font-mono text-[10px]">
-              guided form
-            </TabsTrigger>
-            <TabsTrigger value="json" className="px-2.5 font-mono text-[10px]">
-              raw JSON
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {!formOnly && (
+          <Tabs value={mode} onValueChange={(v) => setMode(v as "form" | "json")}>
+            <TabsList className="h-7">
+              <TabsTrigger value="form" className="px-2.5 font-mono text-[10px]">
+                guided form
+              </TabsTrigger>
+              <TabsTrigger value="json" className="px-2.5 font-mono text-[10px]">
+                raw JSON
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
+        {formOnly && <p className="font-mono text-[10px] text-muted-foreground">guided form</p>}
         <span
           className={cn(
             "rounded-full px-2 py-0.5 font-mono text-[10px] font-semibold",
@@ -99,19 +104,32 @@ export function SchemaJsonEditor({
         </span>
       </div>
 
-      {mode === "form" ? (
+      {(formOnly || mode === "form") ? (
         <div className="max-h-96 overflow-auto rounded border border-border bg-muted/10 p-3">
-          {formRoot.title && <p className="text-sm font-semibold">{formRoot.title}</p>}
-          {formRoot.description && (
+          {formRoot.title && formRoot.type === "object" && (
+            <p className="text-sm font-semibold">{formRoot.title}</p>
+          )}
+          {formRoot.description && formRoot.type === "object" && (
             <p className="mb-3 text-xs text-muted-foreground">{formRoot.description}</p>
           )}
-          <FormFields
-            node={formRoot}
-            data={data}
-            errors={fieldErrors}
-            path=""
-            onChange={(next) => pushData(next)}
-          />
+          {formRoot.type === "array" ? (
+            <ArrayField
+              node={formRoot}
+              itemNode={formRoot.items ?? { key: "item", type: "string", required: true }}
+              arr={Array.isArray(data) ? data : []}
+              errors={fieldErrors}
+              path=""
+              onChange={(next) => pushData(next)}
+            />
+          ) : (
+            <FormFields
+              node={formRoot}
+              data={data}
+              errors={fieldErrors}
+              path=""
+              onChange={(next) => pushData(next)}
+            />
+          )}
         </div>
       ) : (
         <div className="space-y-1.5">
@@ -164,7 +182,8 @@ export function SchemaJsonEditor({
 
 function parseOrDefault(text: json_text_string, formRoot: FormSchemaNode | null): unknown {
   const parsed = tryParseJson(text, { trim: true })
-  const base = parsed.ok && parsed.value !== null ? parsed.value : formRoot ? defaultFromSchema(formRoot) : {}
+  const fallback = formRoot ? defaultFromSchema(formRoot) : {}
+  const base = parsed.ok && parsed.value !== null ? parsed.value : fallback
   return formRoot ? applySchemaDefaults(base, formRoot) : base
 }
 
@@ -422,23 +441,27 @@ function ScalarInput({
         onChange={(e) => {
           const raw = e.target.value
           if (!raw.trim()) {
-            onValue(undefined)
+            onValue(node.nullable ? null : undefined)
             return
           }
           const n = node.type === "integer" ? parseInt(raw, 10) : parseFloat(raw)
-          onValue(Number.isNaN(n) ? undefined : n)
+          onValue(Number.isNaN(n) ? (node.nullable ? null : undefined) : n)
         }}
         className={cls}
       />
     )
   }
 
-  const longText = (node.maxLength ?? 0) > 200 || node.format === "uri"
+  const longText =
+    (node.maxLength ?? 0) > 200 || node.format === "uri" || (node.description?.length ?? 0) > 80
   if (longText) {
     return (
       <Textarea
         value={typeof value === "string" ? value : ""}
-        onChange={(e) => onValue(e.target.value)}
+        onChange={(e) => {
+          const raw = e.target.value
+          onValue(raw === "" && node.nullable ? null : raw)
+        }}
         className={cn("min-h-[72px] font-mono text-[11px]", invalid && "border-destructive/70")}
         spellCheck={false}
       />
@@ -449,7 +472,10 @@ function ScalarInput({
     <Input
       type={node.format === "email" ? "email" : "text"}
       value={typeof value === "string" ? value : ""}
-      onChange={(e) => onValue(e.target.value)}
+      onChange={(e) => {
+        const raw = e.target.value
+        onValue(raw === "" && node.nullable ? null : raw)
+      }}
       className={cls}
     />
   )

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { ModuleKind, RunStatus, RunStepStatus, type RunId } from "@/lib/types"
+import { ModuleKind, RunStatus, RunStepStatus, RunTestStepStatus, type RunId } from "@/lib/types"
 import type { PipelineRun } from "@/lib/types"
 import {
   filterRunsByErrorStatus,
@@ -91,5 +91,80 @@ describe("run-error-log", () => {
     expect(text).not.toContain("parsed")
     expect(runErrorSteps(run)).toHaveLength(1)
     expect(runErrorSteps(run)[0]!.label).toBe("Extract")
+  })
+
+  it("runErrorLogText isolates test failures to diverging fields only", () => {
+    const largeShared = {
+      meta: { version: 1, title: "Homework batch", notes: "x".repeat(200) },
+      students: [
+        { id: "a", name: "Alex", score: 10 },
+        { id: "b", name: "Jordan", score: 8 },
+      ],
+    }
+    const run = makeRun({
+      id: runId("test-run"),
+      status: RunStatus.Ok,
+      test: {
+        testDocName: "homework_grader_testing.json",
+        results: [
+          {
+            label: "Final Output",
+            status: RunTestStepStatus.Fail,
+            diffPath: "students[1].score",
+            expected: { ...largeShared, students: [{ id: "a", name: "Alex", score: 10 }, { id: "b", name: "Jordan", score: 9 }] },
+            actual: largeShared,
+          },
+        ],
+      },
+    })
+    const text = runErrorLogText(run)
+    expect(text).toContain("field: students[1].score")
+    expect(text).toContain("expected:")
+    expect(text).toContain("output:")
+    expect(text).not.toContain("x".repeat(200))
+    expect(text).not.toContain('"Alex"')
+    expect(runHasErrors(run)).toBe(true)
+  })
+
+  it("runErrorLogText omits step input by default but includes it with includePipeline", () => {
+    const run = makeRun({
+      id: runId("batch-run"),
+      status: RunStatus.Ok,
+      steps: [
+        {
+          moduleId: "m1" as never,
+          kind: ModuleKind.Llm,
+          label: "Grade Each Section",
+          status: RunStepStatus.Ok,
+          ms: 1,
+          costCents: 0,
+          inputPreview: "",
+          outputPreview: "ok",
+          inputPreviewItems: [
+            { label: "item 1/2", text: "long prompt body ".repeat(20) },
+            { label: "item 2/2", text: "another prompt ".repeat(20) },
+          ],
+        },
+      ],
+      test: {
+        testDocName: "homework_grader_testing.json",
+        results: [
+          {
+            label: "Grade Each Section",
+            status: RunTestStepStatus.Fail,
+            diffPath: "[1].score",
+            expected: [{ score: 5 }, { score: 5 }],
+            actual: [{ score: 5 }, { score: 3 }],
+          },
+        ],
+      },
+    })
+    const compact = runErrorLogText(run)
+    expect(compact).toContain("input: 2 batched item(s)")
+    expect(compact).toContain("relevant: item 2/2")
+    expect(compact).not.toContain("long prompt body")
+
+    const full = runErrorLogText(run, { includePipeline: true })
+    expect(full).toContain("long prompt body")
   })
 })

@@ -3,6 +3,7 @@
 // AI : TODO (spec) — test verdict expiry (~7d) in Supabase keyed on testContentSig + pipelineSig; revert restores cached pass/fail.
 // AI : TODO (spec) — confusion matrices / field group-by mapping in test compare UI (spec § testing).
 
+import { parseExpectFailure, testExpectFailureReason, testExpectsInputCompatFailure, testExpectsStepFailure, testOutcomePassed } from "@/lib/test-expect-failure"
 import { applySchemaDefaults, jsonSchemaToFormRoot } from "@/lib/schema-form"
 import { stepOutputJsonSchema } from "@/lib/step-json-schema"
 import { collectTestDiffFields, testValuesDiffPath, testValuesEqual, type TestCompareOpts, type TestDiffField } from "@/lib/deep_equal"
@@ -22,6 +23,7 @@ import type {
   PipelineRun,
   Project,
   RunTestStepResult,
+  RunTestReport,
   RunTestDeterministicDiffResult,
   StructureModel,
   TypeAlias,
@@ -38,6 +40,8 @@ type doc_name_string = string
 // AI : (ModelField.deterministic); probabilistic fields are exact-excluded then LLM-checked.
 export type SpineTestFile = {
   description?: string
+  // AI : negative test — passing means the expected failure occurred (input pairing block, run error, or step mismatch).
+  expectFailure?: import("@/lib/test-expect-failure").TestExpectFailure
   // AI : input step label → doc name(s) — every Input module, including the one paired with Combine Inputs
   inputs?: Record<step_label_string, doc_name_string | doc_name_string[]>
   // AI : step label → exact expected output; null = placeholder not yet filled in
@@ -67,7 +71,11 @@ export function parseTestFile(content: string): TestParseResult {
   }
   const obj = value as Record<string, unknown>
   const expected = obj.expectedOutputs
-  if (expected === null || typeof expected !== "object" || Array.isArray(expected)) {
+  const expectFailure = parseExpectFailure(obj.expectFailure)
+  if (
+    (expected === null || typeof expected !== "object" || Array.isArray(expected)) &&
+    !expectFailure
+  ) {
     return { ok: false, error: 'missing "expectedOutputs" object (step label → expected value)' }
   }
   const inputs = obj.inputs
@@ -78,8 +86,9 @@ export function parseTestFile(content: string): TestParseResult {
     ok: true,
     test: {
       description: typeof obj.description === "string" ? obj.description : undefined,
+      expectFailure,
       inputs: inputs as SpineTestFile["inputs"],
-      expectedOutputs: expected as SpineTestFile["expectedOutputs"],
+      expectedOutputs: (expected ?? {}) as SpineTestFile["expectedOutputs"],
     },
   }
 }
@@ -132,7 +141,7 @@ export function validateTestFile(
   test = sanitizeTestFile(test, project)
 
   const expectedEntries = Object.entries(test.expectedOutputs)
-  if (!expectedEntries.length) {
+  if (!expectedEntries.length && !testExpectsInputCompatFailure(test)) {
     issues.push({ level: "error", where: "expectedOutputs", message: "no expected outputs defined" })
   }
   for (const [label, value] of expectedEntries) {
@@ -163,6 +172,39 @@ export function validateTestFile(
   }
 
   issues.push(...validateNamedInputs(test.inputs ?? {}, project, projectDocs))
+  issues.push(...expectFailureScopeIssues(test, project))
+  return issues
+}
+
+// AI : step-failure tests may only fail once — nothing pinned after the failure step in pipeline order.
+export function expectFailureScopeIssues(test: SpineTestFile, project: Project): TestFileIssue[] {
+  const issues: TestFileIssue[] = []
+  const failureStep = testExpectsStepFailure(test)
+  if (!failureStep) return issues
+
+  const order = project.modules.filter(isComparableStep)
+  const failIdx = order.findIndex((m) => labelAsStateKey(m.label) === labelAsStateKey(failureStep))
+  if (failIdx < 0) return issues
+
+  for (const mod of order.slice(failIdx + 1)) {
+    const key = labelAsStateKey(mod.label)
+    if (Object.keys(test.expectedOutputs).some((k) => labelAsStateKey(k) === key)) {
+      issues.push({
+        level: "warning",
+        where: mod.label,
+        message: `pinned expected output after expected failure at "${failureStep}" — pipeline should stop there; remove this`,
+      })
+    }
+  }
+
+  if (!testExpectFailureReason(test)) {
+    issues.push({
+      level: "warning",
+      where: failureStep,
+      message: "expected failure has no reason — describe why comparison should fail at this step",
+    })
+  }
+
   return issues
 }
 
@@ -670,6 +712,11 @@ function deterministicDiffFieldsForResult(r: TestStepResult): TestDiffField[] {
   )
 }
 
+// AI : per-field expected vs actual for a failed step — used by copy-errors in the Testing tab.
+export function testStepDiffFields(r: TestStepResult): TestDiffField[] {
+  return deterministicDiffFieldsForResult(r)
+}
+
 export function deterministicDiffEvalPayloads(results: TestStepResult[]): DeterministicDiffEvalPayload[] {
   const out: DeterministicDiffEvalPayload[] = []
   for (const r of results) {
@@ -788,6 +835,27 @@ export function testVerdictPassed(results: TestStepResult[]): boolean {
   return firstFailure(results) === undefined
 }
 
+export function testVerdictForFile(
+  test: SpineTestFile,
+  results: TestStepResult[] | null,
+  run: PipelineRun | null,
+  inputCompatBlocked = false,
+): boolean {
+  return testOutcomePassed(test, results, run, inputCompatBlocked, results ? testVerdictPassed(results) : false)
+}
+
+export function testReportPassed(report: RunTestReport, run: PipelineRun | null): boolean {
+  return testOutcomePassed(
+    { expectFailure: report.expectFailure, expectedOutputs: {} },
+    report.results,
+    run,
+    report.inputCompatBlocked ?? false,
+    testVerdictPassed(report.results),
+  )
+}
+
+export { testOutcomePassed, parseExpectFailure, testExpectsInputCompatFailure, isExpectFailureTest } from "@/lib/test-expect-failure"
+
 function testContentPayload(content: string): unknown {
   const parsed = parseTestFile(content)
   if (parsed.ok) return parsed.test
@@ -902,7 +970,7 @@ export function latestTestVerdictForDoc(
     if (!latest || r.startedAt > latest.startedAt) latest = r
   }
   if (!latest?.test) return null
-  return testVerdictPassed(latest.test.results)
+  return testReportPassed(latest.test, latest)
 }
 
 // AI : all persisted runs for a test file — unlike lastVerdict, no sig filter (spec § run history).
@@ -916,7 +984,7 @@ export function testRunHistoryForDoc(runs: PipelineRun[], testDocName: string): 
 export function lastTestRunVerdictForDoc(runs: PipelineRun[], testDocName: string): boolean | null {
   const latest = testRunHistoryForDoc(runs, testDocName)[0]
   if (!latest?.test) return null
-  return testVerdictPassed(latest.test.results)
+  return testReportPassed(latest.test, latest)
 }
 
 // AI : starter file — golden outputs when the project ships them; otherwise just the output

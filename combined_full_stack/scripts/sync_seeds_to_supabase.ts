@@ -63,26 +63,26 @@ async function syncUser(
         content,
       };
 
-      const { data: existing, error: lookupErr } = await supabase
+      // AI : duplicate name rows (content-hash renames) — delete every stale id before upserting fresh bytes.
+      const { data: existingRows, error: lookupErr } = await supabase
         .from("docs")
         .select("id, content")
         .eq("user_id", userId)
-        .eq("name", spec.name)
-        .maybeSingle();
+        .eq("name", spec.name);
       if (lookupErr) throw lookupErr;
 
-      if (existing && existing.id !== id) {
+      for (const existing of existingRows ?? []) {
+        if (existing.id === id) continue;
         const stale =
           isUnavailableSeedDoc(existing.content as string, spec.name) || existing.id !== id;
-        if (stale) {
-          const { error: delErr } = await supabase
-            .from("docs")
-            .delete()
-            .eq("user_id", userId)
-            .eq("id", existing.id);
-          if (delErr) throw delErr;
-          replaced += 1;
-        }
+        if (!stale) continue;
+        const { error: delErr } = await supabase
+          .from("docs")
+          .delete()
+          .eq("user_id", userId)
+          .eq("id", existing.id);
+        if (delErr) throw delErr;
+        replaced += 1;
       }
 
       const { error: docErr } = await supabase.from("docs").upsert(docRow, {

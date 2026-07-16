@@ -1,0 +1,52 @@
+{
+  "description": "Negative test — valid pairing but wrong expected grade for Jordan Q2. expectFailure step Final Output: comparison should fail after run.",
+  "expectFailure": { "step": "Final Output", "reason": "deliberately wrong expected score for Jordan Q2" },
+  "inputs": {
+    "Marking Schema": "homework_marking_schema.json",
+    "Student Submissions": ["homework_student_jordan.md"]
+  },
+  "expectedOutputs": {
+    "Final Output": [
+      {
+        "student_label": "Jordan Lee",
+        "section_id": "A",
+        "score": 5,
+        "max_score": 5,
+        "correct": true,
+        "mistake_explanation": null
+      },
+      {
+        "student_label": "Jordan Lee",
+        "section_id": "A",
+        "score": 99,
+        "max_score": 5,
+        "correct": false,
+        "mistake_explanation": "deliberately wrong expected score for negative test"
+      },
+      {
+        "student_label": "Jordan Lee",
+        "section_id": "B",
+        "score": 5,
+        "max_score": 5,
+        "correct": true,
+        "mistake_explanation": null
+      },
+      {
+        "student_label": "Jordan Lee",
+        "section_id": "B",
+        "score": 10,
+        "max_score": 10,
+        "correct": true,
+        "mistake_explanation": null
+      },
+      {
+        "student_label": "Jordan Lee",
+        "section_id": "C",
+        "score": 15,
+        "max_score": 15,
+        "correct": true,
+        "mistake_explanation": null
+      }
+    ]
+  }
+}

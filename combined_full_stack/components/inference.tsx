@@ -49,6 +49,7 @@ import { useInferenceTestEval } from "@/lib/use-inference-test-eval"
 import { TestResults } from "@/components/test-results"
 import { RunNotesPad } from "@/components/run-notes-pad"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
+import { InputCompatPanel } from "@/components/input-compat-panel"
 import { InferenceRunOutputs } from "@/components/inference/inference-outputs"
 import {
   ErrorBanner,
@@ -58,6 +59,7 @@ import {
   RunErrorSummary,
 } from "@/components/inference/inference-run-chrome"
 import { InferenceStepTracePanel } from "@/components/inference/inference-step-trace-panel"
+import { RunWithStopButton } from "@/components/run-with-stop-button"
 import { IsolatedErrorButton } from "@/components/logging/isolated-error-actions"
 import { useDiagnosisAgents } from "@/lib/diagnosis-agent-context"
 import { runHasErrors } from "@/lib/run-error-log"
@@ -516,6 +518,9 @@ export function Inference() {
                         onRemoveDoc={(docId) => run.removeInputDocForModule(m.id, docId)}
                       />
                     ))}
+                    {run.inputCompatPairs.length > 0 && (
+                      <InputCompatPanel pairs={run.inputCompatPairs} />
+                    )}
                   </div>
                 </div>
 
@@ -574,24 +579,28 @@ export function Inference() {
                         />
                       </div>
                     )}
-                    <Button
+                    <RunWithStopButton
                       className="w-full"
+                      runButtonClassName="flex-1"
+                      running={run.phase === "running"}
+                      onRun={run.start}
+                      onStop={() => run.stop()}
                       disabled={
                         !run.allInputsReady ||
                         run.inputsInvalid ||
-                        run.phase === "running" ||
                         insufficientCredit ||
                         previewOnly
                       }
-                      onClick={run.start}
-                    >
-                      {run.runButtonBusy ? (
-                        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Zap className="mr-1.5 h-4 w-4" />
-                      )}
-                      {run.runButtonLabel}
-                    </Button>
+                      label={run.runButtonLabel}
+                      runningLabel={run.runButtonLabel}
+                      idleIcon={
+                        run.runButtonBusy ? (
+                          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Zap className="mr-1.5 h-4 w-4" />
+                        )
+                      }
+                    />
                   </>
                 )}
 
@@ -604,7 +613,7 @@ export function Inference() {
                   />
                 )}
 
-                {run.inputsInvalid && (
+                {run.inputsInvalid && run.inputIssues.length > 0 && (
                   <ErrorBanner
                     text={inferenceInputIssueMessage(run.inputIssues, run.inputModules)}
                     copyText={inferenceInputIssueClipboard(
@@ -614,6 +623,15 @@ export function Inference() {
                     )}
                     uiLocation="Inference → Run Pipeline → input validation"
                   />
+                )}
+
+                {run.inputCompatInvalid && (
+                  <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-3 py-2.5">
+                    <p className="font-mono text-[10px] text-yellow-800 dark:text-yellow-400">
+                      Input pairing mismatch — fix the highlighted keys above before running. This is separate from
+                      pipeline assert steps.
+                    </p>
+                  </div>
                 )}
 
                 {run.error && run.phase !== "done" && (
