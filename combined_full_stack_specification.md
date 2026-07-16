@@ -96,7 +96,9 @@ single llm call
 4. output (there can be multiple per pipeline)
 Other more advanced types
 5. Group By (like SQL) - comes with default logic for lists, dicts, sets to implment group by in every supported coding language so it gets filled in automatically on export.
-
+6. Human review - bool
+7. Human review - chat until resolution - optional voice trascribe 
+8. Human review - single text response - optional voice trascribe  
 
 Input types include 
 1. PDF - add a is_use_ocr toggle if pdf is an option.

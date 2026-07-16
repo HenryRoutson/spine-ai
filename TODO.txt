@@ -6,6 +6,12 @@ PRIORITY
 SEO https://search.google.com/search-console/welcome?utm_source=about-page
 
 
+
+human review got skipped over in inference tab, you need an approve or reject button for boolean and other logic for chat and single text : requirements for step options 6. Human review - bool
+7. Human review - chat until resolution - optional voice trascribe 
+8. Human review - single text response - optional voice trascribe
+
+
 try https://cloud.flowiseai.com/canvas
 
 
