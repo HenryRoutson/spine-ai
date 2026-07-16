@@ -12,6 +12,9 @@ human review got skipped over in inference tab, you need an approve or reject bu
 8. Human review - single text response - optional voice trascribe
 
 
+need to make pydantic schemas able to limit what files are able to be uploaded. for example if i have a homework schema, i shouldn't be able to upload the wrong homework. there could be something like a naning limitation or a pydantic limtation
+
+
 try https://cloud.flowiseai.com/canvas
 
 
