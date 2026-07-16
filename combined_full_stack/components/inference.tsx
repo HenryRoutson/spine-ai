@@ -58,6 +58,10 @@ import {
   RunErrorSummary,
 } from "@/components/inference/inference-run-chrome"
 import { InferenceStepTracePanel } from "@/components/inference/inference-step-trace-panel"
+import { IsolatedErrorButton } from "@/components/logging/isolated-error-actions"
+import { useDiagnosisAgents } from "@/lib/diagnosis-agent-context"
+import { runHasErrors } from "@/lib/run-error-log"
+import { runInputDocsSummary } from "@/lib/inference-input"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 import { timeAgo } from "@/lib/time-ago"
@@ -127,6 +131,7 @@ export function Inference() {
     updateRunTest,
   } = useStore()
   const { setActiveWindow, openLogging } = useAppShell()
+  const { maybeAutoDiagnose } = useDiagnosisAgents()
   const { open } = useDocViewer()
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
   const { typesInvalid, pipelineInvalid } = computeWorkspaceValidity(modules, models, typeAliases)
@@ -206,6 +211,22 @@ export function Inference() {
     updateRunTest,
     refreshBilling,
   })
+
+  const lastAutoDiagnoseRunId = useRef<string | null>(null)
+  useEffect(() => {
+    if (run.phase !== "done" || !run.run || run.deduped) return
+    if (!runHasErrors(run.run)) return
+    if (lastAutoDiagnoseRunId.current === run.run.id) return
+    lastAutoDiagnoseRunId.current = run.run.id
+    maybeAutoDiagnose(
+      {
+        run: run.run,
+        projectId: project.id,
+        runLabel: runInputDocsSummary(docs, project, run.run),
+      },
+      model as ModelId,
+    )
+  }, [run.phase, run.run, run.deduped, maybeAutoDiagnose, project.id, docs, project, model])
 
   const applyPreset = useCallback(
     (assignment: InputDocsAssignment, meta?: PresetApplyMeta) => {
@@ -661,7 +682,7 @@ export function Inference() {
                     )}
 
                     {run.run.status !== "ok" && (
-                      <div className="rounded-lg border border-border bg-card px-6 py-6">
+                      <div className="rounded-lg border border-border bg-card px-6 py-6 space-y-3">
                         {run.runErrorDisplay ? (
                           <RunErrorSummary
                             display={run.runErrorDisplay}
@@ -677,6 +698,9 @@ export function Inference() {
                             </p>
                           </div>
                         )}
+                        <div className="flex justify-center">
+                          <IsolatedErrorButton run={run.run} modules={modules} />
+                        </div>
                       </div>
                     )}
 

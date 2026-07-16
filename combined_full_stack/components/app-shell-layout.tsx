@@ -47,6 +47,7 @@ import { PanelLoading } from "@/components/panel-loading"
 import { Earnings } from "@/components/earnings"
 import { FeedbackButton } from "@/components/feedback-button"
 import { ProjectAssistantDock } from "@/components/project-assistant-dock"
+import { DiagnosisAgentHub } from "@/components/diagnosis-agents/diagnosis-agent-hub"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -554,6 +555,7 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
           {!embed && (
             <>
               <ProjectAssistantDock />
+              <DiagnosisAgentHub />
               <FeedbackButton />
             </>
           )}
