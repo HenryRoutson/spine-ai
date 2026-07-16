@@ -38,7 +38,7 @@ export function materializeHints(m: PipelineModule, ctx: RunCtx, docId?: DocId, 
   };
 }
 
-// AI : passthrough steps inherit list-ness from upstream / runtime value — outIsList may be stripped by spine migration.
+// AI : passthrough steps inherit list-ness from upstream / runtime value — outType encodes list[T] vs T.
 export function validatesStepOutputAsList(
   m: PipelineModule,
   value: unknown,

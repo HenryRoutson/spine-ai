@@ -1,4 +1,5 @@
 import { allModelsToPydantic, allModelsToDts } from "./pydantic";
+// AI : TODO (linter-first) — add generatePipelineTypesRust + pipeline_types.rs; typecheck via cargo check, not TS.
 import {
   pipelineStatePyTypedDict,
   pipelineStateFields,

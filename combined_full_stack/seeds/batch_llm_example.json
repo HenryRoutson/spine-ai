@@ -90,7 +90,6 @@
       "inputDescription": "Plain-text bullet checklist — one actionable line per row",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_chunk",
-      "outIsList": true,
       "cached": true,
       "avgMs": 5,
       "avgCostCents": 0,
@@ -98,7 +97,14 @@
         {
           "typescript": "(doc) => doc.content.split('\\n').filter((l) => l.trim()).map((line, i) => ({ id: String(i + 1), text: line.trim() }))"
         }
-      ]
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_chunk"
+        }
+      }
     },
     {
       "id": "mod_batch",
@@ -108,12 +114,18 @@
       "inputDescription": "List of TextChunk objects — one checklist line with id and text",
       "inStructureId": "m_chunk",
       "outStructureId": "m_summary",
-      "outIsList": true,
       "prompt": "Summarize the checklist line in one concise sentence. Keep the same id as the input item.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 1800,
-      "avgCostCents": 4
+      "avgCostCents": 4,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_summary"
+        }
+      }
     },
     {
       "id": "mod_wrap_out",
@@ -139,7 +151,6 @@
       "note": "Golden fixture — bullet list split into TextChunk rows",
       "inStructureId": "m_chunk",
       "outStructureId": "m_chunk",
-      "outIsList": true,
       "cached": true,
       "avgMs": 2,
       "avgCostCents": 0,
@@ -147,7 +158,14 @@
         {
           "typescript": "assertEqual(step(\"Wrap → List\"), \"Wrap → List\");"
         }
-      ]
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_chunk"
+        }
+      }
     },
     {
       "id": "mod_assert_batch",
@@ -156,7 +174,6 @@
       "note": "Structural check — one summary per input chunk, ids preserved",
       "inStructureId": "m_summary",
       "outStructureId": "m_summary",
-      "outIsList": true,
       "cached": true,
       "avgMs": 2,
       "avgCostCents": 0,
@@ -164,7 +181,14 @@
         {
           "typescript": "const rows = step(\"Summarize Each Line\");\nconst chunks = step(\"Wrap → List\");\nif (len(rows) !== len(chunks)) throw new Error(`expected ${len(chunks)} summaries, got ${len(rows)}`);\nfor (let i = 0; i < rows.length; i++) {\n  if (rows[i]?.id !== chunks[i]?.id || typeof rows[i]?.summary !== \"string\" || !rows[i].summary.trim()) {\n    throw new Error(`summary row ${i + 1} missing id or summary`);\n  }\n}"
         }
-      ]
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_summary"
+        }
+      }
     },
     {
       "id": "mod_assert_unwrap_shape",

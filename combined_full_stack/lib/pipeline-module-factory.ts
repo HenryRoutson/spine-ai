@@ -5,7 +5,8 @@ import { DEFAULT_LLM_STEP_COST_LIMIT_CENTS } from "@/lib/llm-cost-limit"
 import { CustomCodeLanguage, InputType, ModuleKind, MODULE_META } from "@/lib/types"
 import { uid } from "@/lib/id"
 import { isLlmKind, stepRequiresNote, usesPassthroughStructure } from "@/lib/module-kinds"
-import { migrateModuleSpineTypes } from "@/lib/server/spine_types"
+import { migrateModuleSpineTypes, patchSpineOutList } from "@/lib/server/spine_types"
+import type { TypeExpr } from "@/lib/server/type_expr"
 
 export type ModuleFactoryOpts = {
   id?: ModuleId
@@ -18,7 +19,8 @@ export type ModuleFactoryOpts = {
   inputMinCount?: number
   inStructureId?: StructureModelId
   outStructureId?: StructureModelId
-  outIsList?: boolean
+  outType?: TypeExpr
+  emitsList?: boolean
   prompt?: string
   code?: string
   fallbackList?: CustomCodeEntry[]
@@ -47,6 +49,19 @@ export function createPipelineModule(
   const { kind } = opts
   const isLlm = isLlmKind(kind)
   const defaultModel = models[0]?.id
+  const outStructureId =
+    usesPassthroughStructure(kind)
+      ? opts.outStructureId ?? opts.inStructureId ?? defaultModel
+      : opts.outStructureId ?? defaultModel
+  const spineList =
+    opts.outType != null
+      ? opts.outType.kind === "list"
+      : opts.emitsList ?? false
+  const outType =
+    opts.outType ??
+    (outStructureId
+      ? patchSpineOutList({ outStructureId } as PipelineModule, spineList).outType
+      : undefined)
   return migrateModuleSpineTypes({
     id: opts.id ?? uid<ModuleId>(),
     kind,
@@ -63,11 +78,8 @@ export function createPipelineModule(
     inputDescription: opts.inputDescription?.trim() || undefined,
     inputMinCount: kind === ModuleKind.Input ? opts.inputMinCount : undefined,
     inStructureId: kind !== ModuleKind.Input ? opts.inStructureId ?? defaultModel : undefined,
-    outStructureId:
-      usesPassthroughStructure(kind)
-        ? opts.outStructureId ?? opts.inStructureId ?? defaultModel
-        : opts.outStructureId ?? defaultModel,
-    outIsList: opts.outIsList,
+    outStructureId,
+    ...(outType ? { outType } : {}),
     prompt: isLlm ? opts.prompt ?? "" : undefined,
     fallbackList:
       kind === ModuleKind.CustomCode

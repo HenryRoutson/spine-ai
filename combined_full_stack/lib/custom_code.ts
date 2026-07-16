@@ -123,7 +123,7 @@ export function tryCompileCustomCodeEntry(
 ): string | undefined {
   const raw = entry.code.trim();
   if (!raw) return "code is empty";
-  if (entry.language === "python") return undefined; // AI : TODO bug — Pyodide compile check before inference (same as TS tryCompileCustomCodeEntry).
+  if (entry.language === "python") return undefined; // AI : TODO (linter-first) — pyright on generated pipeline.py + inlined user fn, not Pyodide syntax-only.
   const code = opts?.assert ? wrapAssertCode(raw, entry.language, opts.expectedOutputs ?? {}) : raw;
   try {
     assertCustomFnSyntax(code);

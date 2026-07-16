@@ -125,7 +125,6 @@
       "inputDescription": "TableRow list parsed from the W-2 wage statement markdown table",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_row",
-      "outIsList": true,
       "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
@@ -133,7 +132,14 @@
         {
           "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(doc)=>mdFirstTableRows(doc.content).map((row,i)=>({row_id:String(i+1),cells_json:JSON.stringify(row)}))"
         }
-      ]
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_row"
+        }
+      }
     },
     {
       "id": "mod_in_1099",
@@ -181,13 +187,19 @@
       "label": "Populate Workpaper",
       "inStructureId": "m_merged2",
       "outStructureId": "m_field",
-      "outIsList": true,
       "inputDescription": "Merged form tables — parsed W-2 rows and 1099 field rows as JSON arrays",
       "prompt": "table_a_json is parsed W-2 box rows; table_b_json is parsed 1099 field rows. Emit standardized WorkpaperField entries for wages, federal withholding, 401(k), state tax, and 1099 other income — each with source_form and source_box.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2600,
-      "avgCostCents": 8
+      "avgCostCents": 8,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_field"
+        }
+      }
     },
     {
       "id": "mod_out",
@@ -195,11 +207,17 @@
       "label": "Client Workpaper",
       "inStructureId": "m_field",
       "outStructureId": "m_field",
-      "outIsList": true,
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of WorkpaperField entries sourced from W-2 and 1099 forms"
+      "inputDescription": "List of WorkpaperField entries sourced from W-2 and 1099 forms",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_field"
+        }
+      }
     }
   ],
   "strategies": [

@@ -15,6 +15,7 @@ export type PipelineExportLintResult = {
 };
 
 // AI : typecheck generated pipeline export — catches codegen regressions before copy/export.
+// AI : TODO (linter-first) — add lintPipelineExportPy (pyright) + lintPipelineExportRust (cargo check); TS lint is fallback.
 export function lintPipelineExportTs(project: Project): PipelineExportLintResult {
   const dir = mkdtempSync(join(tmpdir(), "forge-pipeline-export-"));
   try {

@@ -181,7 +181,6 @@ const pipelineModulePatchSchema = z
     costLimitCents: z.number().min(0).max(1_000_000).optional(),
     useOcr: z.boolean().optional(),
     cached: z.boolean().optional(),
-    outIsList: z.boolean().optional(),
     auto: z.boolean().optional(),
     avgMs: z.number().min(0).optional(),
     avgCostCents: z.number().min(0).optional(),

@@ -162,7 +162,7 @@ export interface PipelineModule {
   // io contract — every step declares the structure it consumes and emits
   inStructureId?: StructureModelId;
   outStructureId?: StructureModelId;
-  // AI : explicit spine types — canonical when set; legacy in/outStructureId + outIsList are synced from these.
+  // AI : explicit spine types — canonical; list[T] vs T lives here, not a separate boolean flag.
   inType?: TypeExpr;
   outType?: TypeExpr;
   // config
@@ -172,7 +172,7 @@ export interface PipelineModule {
   checkInputDescription?: boolean; // AI : when false, skip the LLM guard even if inputDescription is set
   // AI : TODO (spec) — outputDescription?: string + checkOutputDescription?: boolean (post-step LLM output guard).
   // AI : TODO (spec) — dynamicOutputSchema?: boolean on llm steps for variable homework-style marking schemas.
-  inputMinCount?: number; // AI : minimum documents for this input slot (default 1); pair with outIsList for N submissions
+  inputMinCount?: number; // AI : minimum documents for this input slot (default 1); pair with list outType for N submissions
   // AI : after both slots have docs, compare extracted keys against an upstream input — distinct from assert / per-doc validity.
   inputCompatWith?: InputCompatWith;
   prompt?: string;
@@ -182,8 +182,6 @@ export interface PipelineModule {
   costLimitCents?: number; // AI : per-llm-step spend cap — defaults to $1 when unset
   useOcr?: boolean; // input only — vision OCR when PDF/image is accepted (built-in parser when off)
   cached: boolean;
-  // AI : backend-only — llm/transform steps may emit a list of `outStructure` rather than one.
-  outIsList?: boolean;
   // AI : pipeline-managed step — auto-inserted Link Quotes; locked in the builder UI.
   auto?: boolean;
   // metrics (real ones are recomputed from run history, see billing.ts)

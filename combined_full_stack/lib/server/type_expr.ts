@@ -13,7 +13,9 @@ import type {
 import { withBuiltinTypeAliases } from "./builtin_types";
 
 // AI : canonical type IR — one definition for static checks, zod, pydantic, and codegen.
-// AI : TODO — per-step compile (pyright/tsc from generated stubs); list vs scalar on steps not enforced yet.
+// AI : TODO (linter-first) — TypeExpr → generated models.py / models.rs only; delete parallel zod/cardinality
+// AI :   logic once pyright + cargo check (or clippy) validate spine + custom-code on every save/CI.
+// AI : TODO (linter-first) — set/map/union/generic: express in generated Py/Rust, not hand-rolled TS in validity.ts.
 export type PrimName = "text" | "int" | "float" | "bool" | "datetime" | "json";
 
 export type TypeExpr =
@@ -200,12 +202,12 @@ function structureSpineType(modelId: StructureModelId | undefined, isList: boole
   return isList ? { kind: "list", item: base } : base;
 }
 
-// AI : list-ness on the spine comes from outType when set, else legacy outIsList / llm-batch.
+// AI : list-ness on the spine is encoded in outType (list[T] vs T); llm-batch always emits a list.
 export function stepEmitsList(m: PipelineModule | undefined): boolean {
   if (!m) return false;
   if (m.outType) return isListRoot(m.outType);
   if (m.kind === "llm-batch") return true;
-  return !!m.outIsList;
+  return !!(m as PipelineModule & { outIsList?: boolean }).outIsList;
 }
 
 export function stepSpineOutType(m: PipelineModule | undefined): TypeExpr | undefined {
@@ -213,11 +215,10 @@ export function stepSpineOutType(m: PipelineModule | undefined): TypeExpr | unde
   if (m.outType) return m.outType;
   if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review") {
     const id = m.inStructureId ?? m.outStructureId;
-    // AI : output/assert/human-review may snapshot a list — honour legacy outIsList (see deriveOutType).
     return id ? structureSpineType(id, stepEmitsList(m)) : undefined;
   }
   if (!m.outStructureId) return undefined;
-  if (m.kind === "transform" && !m.code?.trim() && !m.outIsList) {
+  if (m.kind === "transform" && !m.code?.trim() && !stepEmitsList(m)) {
     return structureSpineType(m.outStructureId, false);
   }
   return structureSpineType(m.outStructureId, stepEmitsList(m));
@@ -300,6 +301,7 @@ export function typeExprEqual(a: TypeExpr, b: TypeExpr): boolean {
 }
 
 export function cardinalityMismatch(expected: TypeExpr, actual: TypeExpr): boolean {
+  // AI : TODO (linter-first) — replace with generated step fn signatures + pyright/cargo assignability check.
   const eList = isListRoot(expected);
   const aList = isListRoot(actual);
   if (eList === aList) return false;
@@ -471,8 +473,10 @@ export function typeExprToZod(
     case "optional":
       return typeExprToZod(expr.inner, models, opts).optional();
     case "set":
+      // AI : TODO (linter-first) — JSON has no set; validate via generated Rust HashSet or pydantic conset, not z.array.
       return z.array(typeExprToZod(expr.item, models, opts));
     case "map":
+      // AI : TODO (linter-first) — non-str map keys need generated Py/Rust types + pyright/cargo, not z.record alone.
       return z.record(
         typeExprToZod(expr.key, models, opts) as z.ZodString,
         typeExprToZod(expr.value, models, opts),

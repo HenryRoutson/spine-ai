@@ -184,11 +184,17 @@
       "inputNameContains": "legacy_users",
       "inputDescription": "JSON array of legacy user records with old field names and formats",
       "outStructureId": "m_legacy",
-      "outIsList": true,
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "note": "JSON array of legacy user records with old field names and formats"
+      "note": "JSON array of legacy user records with old field names and formats",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_legacy"
+        }
+      }
     },
     {
       "id": "mod_input_mapping",
@@ -223,7 +229,6 @@
       "inputDescription": "Migration bundle — mapping spec document plus legacy_users JSON array",
       "inStructureId": "m_mig",
       "outStructureId": "m_user",
-      "outIsList": true,
       "cached": true,
       "avgMs": 10,
       "avgCostCents": 0,
@@ -231,7 +236,14 @@
         {
           "typescript": "(input) => {\n  const spec = JSON.parse(input.mapping.content).fields;\n  const transforms = {\n    lowercase: (v) => String(v).toLowerCase(),\n    first_word: (v) => String(v).trim().split(/\\s+/)[0],\n    last_word: (v) => String(v).trim().split(/\\s+/).pop(),\n    yn_to_bool: (v) => v === 'Y',\n    ddmmyyyy_to_iso: (v) => { const [d, m, y] = String(v).split('/'); return y + '-' + m + '-' + d; }\n  };\n  const setPath = (obj, path, v) => {\n    const keys = path.split('.');\n    let cur = obj;\n    for (const k of keys.slice(0, -1)) cur = cur[k] = cur[k] ?? {};\n    cur[keys[keys.length - 1]] = v;\n  };\n  return input.legacy_users.map((rec) => {\n    const out = {};\n    for (const [target, s] of Object.entries(spec)) {\n      const raw = s.source === undefined ? undefined : rec[s.source];\n      setPath(out, target, raw === undefined ? (s.default === undefined ? null : s.default) : s.transform ? transforms[s.transform](raw) : raw);\n    }\n    return out;\n  });\n}"
         }
-      ]
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_user"
+        }
+      }
     },
     {
       "id": "mod_output_db",
@@ -240,11 +252,17 @@
       "inputDescription": "List of User objects — normalized records after applying the field mapping",
       "inStructureId": "m_user",
       "outStructureId": "m_user",
-      "outIsList": true,
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "note": ""
+      "note": "",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_user"
+        }
+      }
     }
   ],
   "strategies": [

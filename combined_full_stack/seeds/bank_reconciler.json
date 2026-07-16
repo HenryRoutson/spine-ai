@@ -132,7 +132,6 @@
       "inputDescription": "TableRow list parsed from the open accounts-payable invoice markdown table",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_row",
-      "outIsList": true,
       "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
@@ -140,7 +139,14 @@
         {
           "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(doc)=>mdFirstTableRows(doc.content).map((row,i)=>({row_id:String(i+1),cells_json:JSON.stringify(row)}))"
         }
-      ]
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_row"
+        }
+      }
     },
     {
       "id": "mod_in_stmt",
@@ -188,13 +194,19 @@
       "label": "Match Transactions",
       "inStructureId": "m_merged2",
       "outStructureId": "m_match",
-      "outIsList": true,
       "inputDescription": "Merged JSON — bank statement rows in table_a_json and open invoices in table_b_json",
       "prompt": "table_a_json is bank statement rows; table_b_json is open invoices. For each bank outflow (negative amount), output one ReconcileLine with matched=true if an invoice explains it, else matched=false with explanation.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 3000,
-      "avgCostCents": 10
+      "avgCostCents": 10,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_match"
+        }
+      }
     },
     {
       "id": "mod_out",
@@ -202,11 +214,17 @@
       "label": "Reconciliation",
       "inStructureId": "m_match",
       "outStructureId": "m_match",
-      "outIsList": true,
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of ReconcileLine records — one match verdict per bank outflow"
+      "inputDescription": "List of ReconcileLine records — one match verdict per bank outflow",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_match"
+        }
+      }
     }
   ],
   "strategies": [

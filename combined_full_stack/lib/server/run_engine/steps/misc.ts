@@ -8,7 +8,7 @@ import { collectQuotes, resolveQuotesValue } from "../../quotation";
 import { stepEmits } from "../../validity";
 import { FieldType } from "../../types";
 import type { PipelineModule, StructureModelId } from "../../types";
-import { resolveOutIsList } from "../../spine_types";
+import { stepEmitsList } from "../../type_expr";
 import { materializeHints, materializeStepOutput, modelById, prevModuleFor, sourceDocumentBlock } from "../helpers";
 import { requireLinearInput } from "../context";
 import { buildAssertResult, jsonStringifyStepValue } from "../results";
@@ -67,7 +67,7 @@ export async function execTransformStep(m: PipelineModule, ctx: RunCtx, log: Run
       fallbacks: Math.max(0, entries.length - 1),
     });
     throw new ClientStepPendingError(entries, input, ctx.byLabel);
-  } else if (out && !resolveOutIsList(m) && Array.isArray(input)) {
+  } else if (out && !stepEmitsList(m) && Array.isArray(input)) {
     if (input.length === 1 && m.inStructureId === m.outStructureId) {
       value = input[0];
       log.debug(`transform unwrapped single-item list`, { moduleId: m.id });
@@ -110,7 +110,7 @@ export async function execQuoteStep(m: PipelineModule, ctx: RunCtx, log: RunLogg
     throw new Error(`quote step ${m.id} needs source text from an upstream input step`);
   }
   const data = requireLinearInput(m, ctx);
-  const isList = !!m.outIsList || Array.isArray(data);
+  const isList = stepEmitsList(m) || Array.isArray(data);
   log.info(`quote step`, {
     moduleId: m.id,
     sourceDocId: ctx.sourceDocId,

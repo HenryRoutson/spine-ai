@@ -25,6 +25,8 @@ import {
 } from "./validity";
 import { UsageLedger } from "./usage";
 import { createPipelineModule } from "@/lib/pipeline-module-factory";
+import { migrateModuleSpineTypes, patchSpineOutList } from "./spine_types";
+import { stepEmitsList } from "./type_expr";
 import { uid } from "@/lib/id";
 import { USER_ADDABLE_MODULE_KINDS, stepRequiresNote } from "@/lib/module-kinds";
 import { attachAssistantUsage } from "./assistant_billing";
@@ -63,7 +65,6 @@ const moduleSpecSchema = z
     prompt: z.string().optional(),
     code: z.string().optional(),
     model: z.string().optional(),
-    outIsList: z.boolean().optional(),
     inputMinCount: z.number().int().min(1).optional(),
   })
   .superRefine((spec, ctx) => {
@@ -90,7 +91,6 @@ const modulePatchEntrySchema = z.object({
   prompt: z.string().optional(),
   code: z.string().optional(),
   model: z.string().optional(),
-  outIsList: z.boolean().optional(),
   inputMinCount: z.number().int().min(1).optional(),
 });
 
@@ -188,7 +188,7 @@ function makeModuleFromSpec(
   const outId =
     resolveStructureIdFromModels(outHint?.name ?? spec.structureOut, models) ??
     defaultOutForKind(spec.kind, models);
-  const outIsList = spec.outIsList ?? outHint?.isList ?? false;
+  const emitsList = outHint?.isList ?? false;
   const modelId = spec.model && catalogHasModel(spec.model) ? resolveModelId(spec.model) : undefined;
   return createPipelineModule(
     {
@@ -202,7 +202,7 @@ function makeModuleFromSpec(
       inputMinCount: spec.inputMinCount,
       inStructureId: spec.kind !== "input" ? inId ?? defaultOutForKind(spec.kind, models) : undefined,
       outStructureId: outId,
-      outIsList,
+      emitsList,
       prompt: spec.prompt,
       code: spec.code,
       model: modelId,
@@ -263,7 +263,7 @@ function applyModulePatch(
   const inId = inHint ? resolveStructureIdFromModels(inHint.name ?? patch.structureIn!, models) : undefined;
   const outId = outHint ? resolveStructureIdFromModels(outHint.name ?? patch.structureOut!, models) : undefined;
   const modelId = patch.model && catalogHasModel(patch.model) ? resolveModelId(patch.model) : undefined;
-  return {
+  let next: PipelineModule = {
     ...existing,
     ...(patch.label !== undefined ? { label: patch.label } : {}),
     ...(patch.note !== undefined ? { note: patch.note } : {}),
@@ -276,9 +276,12 @@ function applyModulePatch(
     ...(patch.prompt !== undefined ? { prompt: patch.prompt } : {}),
     ...(patch.code !== undefined ? { code: patch.code } : {}),
     ...(modelId !== undefined ? { model: modelId } : {}),
-    ...(patch.outIsList !== undefined ? { outIsList: patch.outIsList } : {}),
     ...(patch.inputMinCount !== undefined ? { inputMinCount: patch.inputMinCount } : {}),
   };
+  if (outHint?.isList !== undefined) {
+    next = { ...next, ...patchSpineOutList(next, outHint.isList) };
+  }
+  return migrateModuleSpineTypes(next);
 }
 
 function applyModulePatches(
@@ -310,7 +313,7 @@ function buildThinkingSystemPrompt(hasValidationErrors: boolean): string {
 
 ${hasValidationErrors
     ? "The live project has pipeline validation errors — focus on diagnosing and fixing those I/O mismatches. Do not propose a greenfield architecture."
-    : "Reason step-by-step: required structures, linear data flow, chunking/map-reduce if inputs may exceed context or the user mentions many/hundreds of files, whether input steps need outIsList (Emit list output), which test documents to synthesize, and edge cases."}
+    : "Reason step-by-step: required structures, linear data flow, chunking/map-reduce if inputs may exceed context or the user mentions many/hundreds of files, whether input steps need list[structureOut] (Emit list output), which test documents to synthesize, and edge cases."}
 Plain text only — no JSON, no markdown headings. Be concise (roughly 150–300 words).`;
 }
 
@@ -328,7 +331,7 @@ function buildThinkingUserPrompt(
     ? project.modules
         .map((m, i) => {
           const outName = project.models.find((x) => x.id === m.outStructureId)?.name;
-          const list = m.outIsList ? "list" : "single";
+          const list = stepEmitsList(m) ? "list" : "single";
           return `${i + 1}. ${m.label} (${m.kind}) → ${outName ?? "?"} [${list}]`;
         })
         .join("\n")
@@ -383,7 +386,7 @@ function buildUserPrompt(
     : "";
   const forceFixBlock =
     forceFix && currentValidation
-      ? `\nThe user asked to fix validation errors on the LIVE project. You MUST return a FULL replacement modules array and models array if needed — modules MUST NOT be null, modulePatch MUST be null. Fix every error above (e.g. add outIsList on upstream steps, align structureIn/structureOut names). In message, briefly say what you fixed — not a generic greenfield overview.\n`
+      ? `\nThe user asked to fix validation errors on the LIVE project. You MUST return a FULL replacement modules array and models array if needed — modules MUST NOT be null, modulePatch MUST be null. Fix every error above (e.g. set structureOut to list[Foo] on upstream steps, align structureIn/structureOut names). In message, briefly say what you fixed — not a generic greenfield overview.\n`
       : "";
   const thinkingBlock = thinking?.trim()
     ? `\nYour prior reasoning (use this; do not repeat it in message):\n${thinking.trim()}\n`

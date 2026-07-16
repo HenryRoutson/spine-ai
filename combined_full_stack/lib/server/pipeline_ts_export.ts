@@ -18,6 +18,7 @@ import {
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsTs } from "./pipeline_export_setup";
 import { MODULE_META } from "./types";
+import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
 
 // AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
@@ -35,7 +36,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
       const prompt = m.prompt ?? "Process the input.";
       const model = m.model ?? "/* global default model */";
       return [
-        `// Structured LLM call → ${outName ?? outTs}${m.outIsList ? "[]" : ""}`,
+        `// Structured LLM call → ${outName ?? outTs}${stepEmitsList(m) ? "[]" : ""}`,
         `const _model = ${typeof model === "string" && model.startsWith("/*") ? `"deepseek-v3"` : JSON.stringify(model)};`,
         `void _model;`,
         `const userPrompt = ${JSON.stringify(prompt)} + "\\n\\nINPUT DATA:\\n" + JSON.stringify(input, null, 2);`,
@@ -70,7 +71,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
         return [`// Python transform (not inlined):`, `// ${custom.code.split("\n").join("\n// ")}`, `return input as unknown as ${outTs};`].join("\n");
       }
       return [
-        `// Reshape ${inName ?? "input"} → ${outName ?? outTs}${m.outIsList ? " (list)" : ""}`,
+        `// Reshape ${inName ?? "input"} → ${outName ?? outTs}${stepEmitsList(m) ? " (list)" : ""}`,
         `return input as unknown as ${outTs};`,
       ].join("\n");
     }

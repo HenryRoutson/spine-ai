@@ -10,6 +10,7 @@ import {
   fieldIsListType,
   formatTypeExpr,
   isListFieldType,
+  stepEmitsList,
   typeExprToZod,
   withFieldMeta,
   zodFromModel as zodFromModelExpr,
@@ -285,14 +286,14 @@ export function materializeInputDocument(
       }
       if (Array.isArray(parsed)) {
         const items = parsed.map((item) => materializeToModel(item, out, models, docHints));
-        if (m.outIsList) return items;
+        if (stepEmitsList(m)) return items;
         if (items.length === 1) return items[0]!;
         throw new Error(
           `input "${m.label}" JSON array has ${items.length} items but step expects a single ${out.name}`,
         );
       }
       const item = materializeToModel(parsed, out, models, docHints);
-      return m.outIsList ? [item] : item;
+      return stepEmitsList(m) ? [item] : item;
     }
   }
 
@@ -402,6 +403,7 @@ export function validate(
 }
 
 // AI : LLM steps emit plain quote strings; quote steps emit linked spans — pick the right schema.
+// AI : TODO (linter-first) — runtime output check via pydantic models from type_codegen, not hand-built zodFromModel.
 export function validateStepOutput(
   value: unknown,
   model: StructureModel,

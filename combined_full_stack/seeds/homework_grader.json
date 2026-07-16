@@ -272,7 +272,6 @@
       "inputDescription": "MarkingSchema object — sections with nested RubricQuestion lists",
       "inStructureId": "m_schema",
       "outStructureId": "m_rubric_q",
-      "outIsList": true,
       "cached": true,
       "avgMs": 3,
       "avgCostCents": 0,
@@ -280,7 +279,14 @@
         {
           "typescript": "(schema) => (schema.sections ?? []).flatMap((s) => s.questions ?? [])"
         }
-      ]
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_rubric_q"
+        }
+      }
     },
     {
       "id": "mod_in_students",
@@ -295,7 +301,11 @@
         "keys": [
           {
             "label": "assignment title",
-            "upstream": { "kind": "json-path", "path": "assignment_title", "normalize": "lower-trim" },
+            "upstream": {
+              "kind": "json-path",
+              "path": "assignment_title",
+              "normalize": "lower-trim"
+            },
             "local": {
               "kind": "text-regex",
               "pattern": "^#\\s*(.+?)\\s+—\\s+Student",
@@ -311,16 +321,24 @@
               "path": "sections[].questions[].question_id",
               "normalize": "question-id-set"
             },
-            "local": { "kind": "question-ids-text" }
+            "local": {
+              "kind": "question-ids-text"
+            }
           }
         ]
       },
       "outStructureId": "m_builtin_document",
-      "outIsList": true,
       "cached": true,
       "avgMs": 90,
       "avgCostCents": 0,
-      "inputDescription": "One student's completed homework sheet — markdown with question prompts and student work answers"
+      "inputDescription": "One student's completed homework sheet — markdown with question prompts and student work answers",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_builtin_document"
+        }
+      }
     },
     {
       "id": "mod_combine",
@@ -359,7 +377,6 @@
       "inputDescription": "GraderWork — marking_schema Document plus list of student submission Documents",
       "inStructureId": "m_work",
       "outStructureId": "m_gradable",
-      "outIsList": true,
       "cached": true,
       "avgMs": 10,
       "avgCostCents": 0,
@@ -367,7 +384,14 @@
         {
           "typescript": "(work) => { let sections = []; const ms = work.marking_schema; if (ms?.sections) sections = ms.sections; else if (typeof ms?.content === \"string\") { try { sections = JSON.parse(ms.content).sections ?? []; } catch {} } const out = []; for (const sub of work.student_submissions ?? []) { const content = sub.content ?? \"\"; const student = (content.match(/Student:\\s*([^\\n]+)/i) || [])[1]?.trim() || sub.filename?.replace(/\\.md$/i, \"\") || \"student\"; for (const sec of sections) { for (const q of sec.questions ?? []) { const qRe = new RegExp(`\\\\*\\\\*${q.question_id}\\\\.\\\\*\\\\*[\\\\s\\\\S]*?(Student work:[^\\\\n]*)`, \"i\"); const workLine = (content.match(qRe) || [])[1]?.trim() ?? \"\"; out.push({ student_label: student, section_id: sec.section_id, title: `${sec.title} — ${q.question_id}`, body: `${q.prompt ?? \"\"}${workLine ? \"\\n\" + workLine : \"\"}`, max_score: q.max_score ?? 1, criteria: q.marking_criteria ?? sec.criteria ?? \"\" }); } } } return out; }"
         }
-      ]
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_gradable"
+        }
+      }
     },
     {
       "id": "mod_grade",
@@ -375,13 +399,19 @@
       "label": "Grade Each Section",
       "inStructureId": "m_gradable",
       "outStructureId": "m_grade",
-      "outIsList": true,
       "inputDescription": "List of GradableSection objects — student_label, question body, max_score, and criteria",
       "prompt": "Apply criteria literally and deterministically. When criteria lists alternate bands (e.g. 'award exactly N pts if…'), check those bands before summing components — pick exactly one band score, never mix. Score MUST equal the exact points from the matching band or component sum — use only point values explicitly named in criteria (no rounding, no extra credit, no in-between scores). Score is an integer from 0 to max_score inclusive. Copy max_score from input unchanged. Set correct=true iff score equals max_score; never set correct=true when score is below max_score. Copy student_label and section_id exactly from input. When correct is false, mistake_explanation must cite the rubric clause applied and state the student's wrong value vs the required value. When correct is true, mistake_explanation must be an empty string.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2400,
-      "avgCostCents": 6
+      "avgCostCents": 6,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_grade"
+        }
+      }
     },
     {
       "id": "mod_out",
@@ -389,11 +419,17 @@
       "label": "Final Output",
       "inStructureId": "m_grade",
       "outStructureId": "m_grade",
-      "outIsList": true,
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of SectionGrade rows — student_label, section_id, score, max_score, correct, mistake_explanation (one row per student × rubric question)"
+      "inputDescription": "List of SectionGrade rows — student_label, section_id, score, max_score, correct, mistake_explanation (one row per student × rubric question)",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_grade"
+        }
+      }
     },
     {
       "id": "mod_assert",
@@ -402,7 +438,6 @@
       "note": "len(Student Submissions) × len(Marking Questions List) = len(Final Output)",
       "inStructureId": "m_grade",
       "outStructureId": "m_grade",
-      "outIsList": true,
       "inputDescription": "List of SectionGrade rows — student_label, section_id, score, max_score, correct, mistake_explanation (one row per student × rubric question)",
       "cached": true,
       "avgMs": 2,
@@ -414,7 +449,14 @@
         {
           "python": "n_students = len_of(step('Student Submissions'))\nn_questions = len_of(step('Marking Questions List'))\nn_out = len_of(step('Final Output'))\nif n_students * n_questions != n_out:\n    raise ValueError(f'expected {n_students}×{n_questions}={n_students * n_questions} grades, got {n_out}')"
         }
-      ]
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_grade"
+        }
+      }
     }
   ],
   "strategies": [

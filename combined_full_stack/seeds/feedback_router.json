@@ -73,7 +73,6 @@
       "inputDescription": "Product feedback Document from the upload step, ready to split into bullet items",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_item",
-      "outIsList": true,
       "cached": true,
       "avgMs": 5,
       "avgCostCents": 0,
@@ -81,7 +80,14 @@
         {
           "typescript": "(doc)=>doc.content.split(\"\\n\").filter((l)=>l.trim().startsWith(\"-\")).map((l,i)=>({feedback_id:String(i+1),text:l.replace(/^-\\s*/,\"\").trim()}))"
         }
-      ]
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_item"
+        }
+      }
     },
     {
       "id": "mod_route",
@@ -89,13 +95,19 @@
       "label": "Classify Each Item",
       "inStructureId": "m_item",
       "outStructureId": "m_route",
-      "outIsList": true,
       "inputDescription": "List of FeedbackItem objects — one bullet of verbatim user feedback",
       "prompt": "Classify product feedback into eng, design, docs, sales, or praise. Include a short representative_quote. Keep feedback_id.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 1800,
-      "avgCostCents": 4
+      "avgCostCents": 4,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_route"
+        }
+      }
     },
     {
       "id": "mod_out",
@@ -103,11 +115,17 @@
       "label": "Routed Feedback",
       "inStructureId": "m_route",
       "outStructureId": "m_route",
-      "outIsList": true,
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of RoutedFeedback records — bucket and quote per feedback item"
+      "inputDescription": "List of RoutedFeedback records — bucket and quote per feedback item",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_route"
+        }
+      }
     }
   ],
   "strategies": [

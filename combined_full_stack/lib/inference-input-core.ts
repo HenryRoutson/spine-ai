@@ -1,3 +1,5 @@
+import { stepEmitsList } from "@/lib/server/type_expr"
+
 import { INPUT_TYPES, InputType, type DocRef, type InputTypeSpec, type ModuleId, type PipelineModule } from "@/lib/types"
 
 export type InputDocsAssignment = Partial<Record<ModuleId, DocRef | DocRef[]>>
@@ -7,7 +9,7 @@ export function inputMinCountForModule(inputModule: PipelineModule): number {
 }
 
 export function isMultiDocInputModule(inputModule: PipelineModule): boolean {
-  return inputModule.kind === "input" && (inputMinCountForModule(inputModule) > 1 || !!inputModule.outIsList)
+  return inputModule.kind === "input" && (inputMinCountForModule(inputModule) > 1 || stepEmitsList(inputModule))
 }
 
 export function docsForInputModule(assignment: InputDocsAssignment, moduleId: ModuleId): DocRef[] {

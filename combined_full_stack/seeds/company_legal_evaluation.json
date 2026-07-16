@@ -26,7 +26,10 @@
           "id": "f_source",
           "name": "source",
           "type": "json",
-          "typeExpr": { "kind": "named", "name": "text_quote_t" },
+          "typeExpr": {
+            "kind": "named",
+            "name": "text_quote_t"
+          },
           "optional": false,
           "description": "Rule text + originating quote"
         },
@@ -132,12 +135,18 @@
       "inputDescription": "Parsed legal contract Document with full body text ready for rule extraction",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_rule",
-      "outIsList": true,
       "prompt": "Extract the 6 most important atomic, independently verifiable legal rules from the document. For each rule, give a stable rule_id (R-01, R-02, …), a concise plain-language description, the verbatim source quote it came from, and a 1-5 severity. Return at most 6 rules.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2300,
-      "avgCostCents": 6
+      "avgCostCents": 6,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_rule"
+        }
+      }
     },
     {
       "id": "mod_link_quotes",
@@ -148,10 +157,16 @@
       "inputDescription": "List of AtomicRule objects with verbatim source quote strings to link to the contract",
       "inStructureId": "m_rule",
       "outStructureId": "m_rule",
-      "outIsList": true,
       "cached": true,
       "avgMs": 12,
-      "avgCostCents": 0
+      "avgCostCents": 0,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_rule"
+        }
+      }
     },
     {
       "id": "mod_sort_rules",
@@ -161,7 +176,6 @@
       "inputDescription": "List of AtomicRule objects with severity scores to sort descending",
       "inStructureId": "m_rule",
       "outStructureId": "m_rule",
-      "outIsList": true,
       "cached": true,
       "avgMs": 5,
       "avgCostCents": 0,
@@ -169,7 +183,14 @@
         {
           "typescript": "(rules) => [...rules].sort((a, b) => b.severity - a.severity)"
         }
-      ]
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_rule"
+        }
+      }
     },
     {
       "id": "mod_input_company",
@@ -207,12 +228,18 @@
       "inputDescription": "Combined evaluation input — company_data document plus extracted legal rules list",
       "inStructureId": "m_combined",
       "outStructureId": "m_report",
-      "outIsList": true,
       "prompt": "Given the company data and the extracted legal requirements, produce one concise assessment per rule: a short summary, the rule_id, a compliant verdict, a brief rationale, and the estimated USD liability exposure if non-compliant.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 3100,
-      "avgCostCents": 12
+      "avgCostCents": 12,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_report"
+        }
+      }
     },
     {
       "id": "mod_output",
@@ -221,11 +248,17 @@
       "inputDescription": "List of LegalConsiderations records — one compliance assessment per extracted rule",
       "inStructureId": "m_report",
       "outStructureId": "m_report",
-      "outIsList": true,
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "note": ""
+      "note": "",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_report"
+        }
+      }
     }
   ],
   "strategies": [

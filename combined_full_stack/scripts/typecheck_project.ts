@@ -1,7 +1,7 @@
 #!/usr/bin/env npx tsx
-// AI : TODO — full per-step type system: compile user code + validate example payloads (see docs/new_type_system_plan.md).
-// AI : TODO refactor — add vitest for validity, run-fingerprint, quotation, billing (no runtime tests yet).
-// AI : generate models.py + pipeline_types from a seed/project JSON and optionally run pyright/tsc.
+// AI : TODO (linter-first) — primary path: generate models.py + pipeline_types.py (+ optional .rs), run pyright/cargo.
+// AI : TODO (linter-first) — drop computeInvalid static pass once pyright/cargo is source of truth for spine IO.
+// AI : TODO (linter-first) — add --cargo / --pyright-only flags; deprioritize tsc (TS stubs are secondary).
 import { readFileSync, mkdirSync, writeFileSync } from "fs";
 import { dirname, join, resolve } from "path";
 import { spawnSync } from "child_process";

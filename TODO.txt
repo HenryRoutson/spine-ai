@@ -306,10 +306,17 @@ add an export to python button to export the whole pipeline to python, including
 
 
 
-please write up a plan to make the type system more generic: remove outIsList as it's not generic and won't scale to other types. How are generics handled? Tree node generic. like how does a set work? ensure you have full type checking using a typed python script or typescript file that you run a linter on , so you can handle generics. i should be able to view that typed file in the UI. please remove inIsList as it's not generic.
-docs/new_type_system_plan.md
-
-
+=== TYPE SYSTEM: linter-first (Python or Rust) ===
+Target: generate models.py + pipeline_types.py (or .rs equivalents), lint with pyright / cargo check — NOT custom TS in validity.ts.
+- [ ] generatePipelineTypesRust → pipeline_types.rs + models.rs (type_codegen.ts)
+- [ ] scripts/typecheck_project.ts: --cargo, pyright as default; remove computeInvalid once linter covers spine IO
+- [ ] lintPipelineExportPy (pyright) + lintPipelineExportRust (cargo check) — primary CI; TS export lint secondary
+- [ ] UI Types tab: view generated .py/.rs, show pyright/cargo diagnostics (see docs/new_type_system_plan.md)
+- [ ] Delete stepAcceptsSpineType, cardinalityMismatch, bareTransformCanAutoWrapList when orchestrator is typed Py/Rust
+- [ ] Runtime validateStepOutput → pydantic from generated models, not zodFromModel
+- [ ] custom-code: pyright/cargo on user fn embedded in generated export, not tryCompileCustomCodeEntry heuristics
+- [ ] set/map/union/generic: only in generated Py/Rust + linter; drop z.array-as-set / z.record approximations
+Tag in code: AI : TODO (linter-first)
 
 allow plugins
 

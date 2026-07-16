@@ -36,7 +36,6 @@ function moduleForFingerprint(m: PipelineModule) {
     model: m.model ?? null,
     useOcr: m.useOcr ?? null,
     note: m.note ?? null,
-    outIsList: m.outIsList ?? null,
     inType: m.inType ?? null,
     outType: m.outType ?? null,
   }

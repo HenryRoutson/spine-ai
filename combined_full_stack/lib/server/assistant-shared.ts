@@ -39,7 +39,7 @@ export type TypeAliasSpec = z.infer<typeof typeAliasSpecSchema>;
 
 const LIST_STRUCTURE_HINT = /^list\[(.+)\]$/i;
 
-/** AI : LLMs often emit structureOut "list[Foo]" — normalize to name + outIsList. */
+/** AI : LLMs often emit structureOut "list[Foo]" — normalize to structure name + list flag. */
 export function parseStructureHint(hint: string | undefined): { name: string; isList: boolean } | undefined {
   if (!hint?.trim()) return undefined;
   const trimmed = hint.trim();

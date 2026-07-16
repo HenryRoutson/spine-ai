@@ -96,13 +96,19 @@
       "label": "Build Breach Table",
       "inStructureId": "m_parsed",
       "outStructureId": "m_breach",
-      "outIsList": true,
       "inputDescription": "ParsedTable with rows_json — JSON array of uptime rows from the SLA report",
       "prompt": "rows_json is a JSON array parsed from the uptime markdown table. Emit one SlaBreachRow per service with breached=true when the Breach column is yes. Include credit_note from the document narrative when breached.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2200,
-      "avgCostCents": 7
+      "avgCostCents": 7,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_breach"
+        }
+      }
     },
     {
       "id": "mod_out",
@@ -110,11 +116,17 @@
       "label": "Breach Table",
       "inStructureId": "m_breach",
       "outStructureId": "m_breach",
-      "outIsList": true,
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of SlaBreachRow records — one breach verdict per monitored service"
+      "inputDescription": "List of SlaBreachRow records — one breach verdict per monitored service",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_breach"
+        }
+      }
     }
   ],
   "strategies": [

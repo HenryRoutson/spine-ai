@@ -22,7 +22,6 @@ export type LandingRunDiagnosticJson = {
     label: string;
     inStructureId?: string;
     outStructureId?: string;
-    outIsList?: boolean;
     spineIn: string;
     spineOut: string;
     inputType?: unknown;
@@ -99,7 +98,6 @@ export function buildLandingRunDiagnostic(opts: {
       label: m.label,
       inStructureId: m.inStructureId,
       outStructureId: m.outStructureId,
-      outIsList: m.outIsList,
       spineIn: formatModuleSpineIn(m, models),
       spineOut: formatModuleSpineOut(m, models),
       inputType: m.inputType,
@@ -197,7 +195,7 @@ export function formatLandingRunDiagnosticText(
         : null;
     return [
       `  [${i}] id=${m.id} kind=${m.kind} label=${JSON.stringify(m.label)}`,
-      `      inStructureId=${m.inStructureId ?? "—"} outStructureId=${m.outStructureId ?? "—"} outIsList=${m.outIsList ?? false}`,
+      `      inStructureId=${m.inStructureId ?? "—"} outStructureId=${m.outStructureId ?? "—"}`,
       `      spineIn=${m.spineIn} spineOut=${m.spineOut}`,
       m.inputType != null ? `      inputType=${JSON.stringify(m.inputType)}` : null,
       m.inputNameContains ? `      inputNameContains=${JSON.stringify(m.inputNameContains)}` : null,

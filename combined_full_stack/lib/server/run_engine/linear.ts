@@ -148,6 +148,7 @@ export async function runLinearStepsFrom(
               const prev = i > 0 ? project.modules[i - 1] : undefined;
               const isList = validatesStepOutputAsList(m, result.value, prev);
               const rawQuotes = isLlmKind(m.kind) && hasQuoteField(out, project.models);
+              // AI : TODO (linter-first) — replace zod validateStepOutput with pydantic parse from generated models.py.
               const check = validateStepOutput(result.value, out, project.models, {
                 isList,
                 rawQuotes,

@@ -3,6 +3,7 @@ import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { dataDir } from "../config";
 import { fileWriteHelper } from "../file_write_helper";
 import { collectQuotes } from "../quotation";
+import { stepEmitsList } from "../type_expr";
 import type { DocId, ModuleId, PipelineModule, RunId, StructureModel } from "../types";
 import type { Store } from "../store";
 
@@ -64,7 +65,7 @@ export function persistArtifacts(
       artifacts
         .flatMap((a) => {
           const mod = modById.get(a.moduleId);
-          const isList = !!mod?.outIsList || mod?.kind === "llm-batch";
+          const isList = stepEmitsList(mod) || mod?.kind === "llm-batch";
           return collectQuotes(a.value, [], a.structure, models, isList);
         })
         .map((q) => [q.href, q]),

@@ -215,6 +215,24 @@ No need for users to run CLI locally; the UI mirrors what CI runs.
 
 ---
 
+## Linter-first validation (target architecture)
+
+**Principle:** `TypeExpr` is the IR for *codegen only*. Correctness comes from **generated Python or Rust** + an external type linter — not parallel logic in `validity.ts`, `typeExprToZod`, or `cardinalityMismatch`.
+
+| Concern | Today (interim) | Target |
+|---------|-----------------|--------|
+| Spine IO compat | `computeInvalid` / `stepAcceptsSpineType` in TS | Typed orchestrator in `pipeline_types.py` or `.rs`; **pyright** / **cargo check** |
+| Structure fields | `zodFromModel` / `typeExprToZod` | **pydantic** / **serde** types from `type_codegen` |
+| Custom code | `tryCompileCustomCodeEntry` (TS syntax) | User fn inlined in export; **pyright** / **cargo** on full file |
+| set / map / union | TS approximations (`z.array`, `z.record`) | Native `set[T]`, `dict[K,V]`, `enum` in generated Py/Rust only |
+| CI / UI | `lintPipelineExportTs` + optional `computeInvalid` | **`lintPipelineExportPy`** + **`lintPipelineExportRust`** primary; view `.py`/`.rs` in Types tab |
+
+**Pick one primary language for lint:** Python (pyright + pydantic, already partially wired in `scripts/typecheck_project.ts`) *or* Rust (cargo check, stronger set/map). Do not maintain three parallel checkers long-term.
+
+Code markers: `AI : TODO (linter-first)` in repo.
+
+---
+
 ## Migration plan
 
 ### Phase 1 — IR on spine (non-breaking)
@@ -223,13 +241,14 @@ No need for users to run CLI locally; the UI mirrors what CI runs.
 - [x] Fix bare transform auto-wrap validation (`canAutoWrapListIntoOutputStructure`).
 - [x] Persist optional `inType` / `outType` on modules — auto-populated on load via `migrateModulesSpineTypes`.
 - [x] Extended `TypeExpr` IR: `optional`, `set`, `map`, `union`, `generic`.
-- [ ] All validation reads TypeExpr only (stop reading `outIsList` outside `type_expr.ts`) — partial; legacy `outIsList` still synced for run engine compat.
+- [x] Remove `outIsList` from `PipelineModule`; list-ness is `outType: list[ref]`.
+- [ ] All spine validation reads TypeExpr only — **then delete TS spine rules once pyright/cargo passes**.
 
 ### Phase 2 — Remove `outIsList` from UI and assistant
 
-- [ ] Pipeline builder: show `outType` as text (`list[Section]`) instead of toggle.
-- [ ] Assistant prompt: emit `outType` string or `structureOut` + `cardinality: "list" | "single"` then materialize to TypeExpr.
-- [ ] Seeds migration script: set `outType` explicitly, keep `outIsList` as derived read-only for one release.
+- [x] Pipeline builder: `outType` via `patchSpineOutList` (Emit list output toggle).
+- [x] Assistant prompt: `structureOut: list[Foo]` via `parseStructureHint`.
+- [x] Seeds: explicit `outType` on list-emitting steps.
 
 ### Phase 3 — Field-level generics
 
@@ -237,17 +256,21 @@ No need for users to run CLI locally; the UI mirrors what CI runs.
 - [ ] Structure editor: generic params UI on model header.
 - [ ] Fix `HierarchicalSection`-style trees: allow self-ref with same type args for nested subsections.
 
-### Phase 4 — Full codegen + UI types panel
+### Phase 4 — Full codegen + linter (Python **or** Rust)
 
 - [x] Upgrade `type_codegen.ts` to emit strict TS model types (`models.d.ts`).
 - [x] API + Types tab in UI (`GET /api/projects/:id/types`, sidebar **Types** tab).
-- [ ] Wire custom-code editor to import generated types (Monaco extra libs).
-- [ ] CI: `typecheck-project` on example seeds.
+- [ ] `generatePipelineTypesRust` → `models.rs` + `pipeline_types.rs`
+- [ ] `lintPipelineExportPy` (pyright) + `lintPipelineExportRust` (cargo check) — seed CI like TS lint today
+- [ ] `typecheck_project.ts`: pyright/cargo default; deprioritize tsc
+- [ ] Wire custom-code editor to import generated types (Monaco extra libs / pyright in browser N/A — server lint on save)
+- [ ] CI: pyright + cargo on all seeds; drop redundant `computeInvalid` when coverage matches
 
-### Phase 5 — Remove legacy fields
+### Phase 5 — Remove legacy custom validation
 
-- [ ] Drop `outIsList` from `PipelineModule` type and DB JSON.
-- [ ] Drop `inStructureId`-only spine checks; require `inType`/`outType` or auto-derive on load.
+- [ ] Delete `stepAcceptsSpineType`, `cardinalityMismatch`, `bareTransformCanAutoWrapList`
+- [ ] Delete `typeExprToZod` spine path; runtime validation via pydantic/serde only
+- [ ] Drop duplicate TS export lint or keep as secondary smoke test only
 
 ---
 

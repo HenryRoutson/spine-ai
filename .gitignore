@@ -238,3 +238,7 @@ logo/exports/*
 
 # browser "Save Page As" snapshots (not part of the app)
 csv_demo_files/
+
+
+# Clones 
+AutomationBench

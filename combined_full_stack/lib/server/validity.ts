@@ -1,4 +1,6 @@
 // AI : Pipeline I/O graph validation — core computation and pipeline utilities.
+// AI : TODO (linter-first) — shrink computeInvalid: generate pipeline.py or pipeline.rs with typed step chain,
+// AI :   run pyright / cargo check; surface diagnostics in UI instead of custom stepAcceptsSpineType rules.
 // AI : Types + messages → validity-types.ts / validity-messages.ts / validity-inspect.ts.
 // AI : TODO (spec) — derive dependency graph from step() refs in custom code; flag unused/isolated steps (linear spine only today).
 // AI : TODO security — runs.data is user-writable via RLS; billedCents in JSON can be forged for display.
@@ -150,7 +152,8 @@ function bareTransformCanAutoWrapList(
   actual: TypeExpr,
   models: StructureModel[],
 ): boolean {
-  if (m.kind !== "transform" || m.code?.trim() || m.outIsList) return false;
+  // AI : TODO (linter-first) — encode auto-wrap as explicit generated transform signature, not TS heuristic.
+  if (m.kind !== "transform" || m.code?.trim() || stepEmitsList(m)) return false;
   if (actual.kind !== "list" || actual.item.kind !== "ref") return false;
   const out = models.find((x) => x.id === m.outStructureId);
   if (!out) return false;
@@ -163,6 +166,7 @@ function stepAcceptsSpineType(
   actual: TypeExpr,
   models: StructureModel[],
 ): boolean {
+  // AI : TODO (linter-first) — delete when spine compat is cargo/pyright on generated orchestrator only.
   if (typeExprEqual(expected, actual)) return true;
   // AI : passthrough steps read pipeline state by label — spine type at this index is not their contract.
   if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review" || m.kind === "quote") return true;
@@ -185,7 +189,7 @@ export function transformListWrapInvalid(
   prev: PipelineModule | undefined,
   models: StructureModel[],
 ): InvalidStep | undefined {
-  if (m.kind !== "transform" || m.code?.trim() || m.outIsList || !stepEmitsList(prev)) return undefined;
+  if (m.kind !== "transform" || m.code?.trim() || stepEmitsList(m) || !stepEmitsList(prev)) return undefined;
   const out = models.find((x) => x.id === m.outStructureId);
   if (!out) return undefined;
   // AI : same in/out unwraps only when the upstream list has exactly one item — checked as a warning.
@@ -688,7 +692,7 @@ export function computeWarnings(
     if (
       m.kind === "transform" &&
       !m.code?.trim() &&
-      !m.outIsList &&
+      !stepEmitsList(m) &&
       stepEmitsList(prev) &&
       m.inStructureId === m.outStructureId &&
       m.outStructureId

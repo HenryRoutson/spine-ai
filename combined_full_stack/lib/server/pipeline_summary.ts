@@ -65,7 +65,7 @@ function buildUserPrompt(project: Project): string {
       prompt: m.prompt,
       code: m.code,
       model: m.model,
-      outIsList: m.outIsList,
+      outType: m.outType,
       cached: m.cached,
     })),
     null,

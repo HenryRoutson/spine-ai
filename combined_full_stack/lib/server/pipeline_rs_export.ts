@@ -18,9 +18,11 @@ import {
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsRust } from "./pipeline_export_setup";
 import { pipelineStateRustType } from "./pipeline_state";
 import { MODULE_META } from "./types";
+import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
 
 // AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
+// AI : TODO (linter-first) — exported .rs is the lint target (cargo check on full pipeline export + user custom code).
 
 function commentForeignCode(code: string, langLabel: string): string {
   return [
@@ -40,7 +42,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
       const prompt = m.prompt ?? "Process the input.";
       const model = m.model ?? "deepseek-v3";
       return [
-        `// Structured LLM call → ${outName ?? outRust}${m.outIsList ? "[]" : ""}`,
+        `// Structured LLM call → ${outName ?? outRust}${stepEmitsList(m) ? "[]" : ""}`,
         `let _model = ${exportStringLiteral(model)};`,
         `let _ = _model;`,
         `let user_prompt = format!("{}\\n\\nINPUT DATA:\\n{}", ${exportStringLiteral(prompt)}, serde_json::to_string_pretty(&input)?);`,
@@ -86,7 +88,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
         ].join("\n");
       }
       return [
-        `// Reshape ${inName ?? "input"} → ${outName ?? outRust}${m.outIsList ? " (list)" : ""}`,
+        `// Reshape ${inName ?? "input"} → ${outName ?? outRust}${stepEmitsList(m) ? " (list)" : ""}`,
         `let out: ${outRust} = serde_json::from_value(serde_json::to_value(&input)?)?;`,
         "Ok(out)",
       ].join("\n");

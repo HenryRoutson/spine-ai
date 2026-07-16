@@ -228,7 +228,6 @@
       "inputDescription": "GPS site catalog Document from the upload step, ready to parse into site locations",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_site",
-      "outIsList": true,
       "cached": true,
       "avgMs": 5,
       "avgCostCents": 0,
@@ -236,7 +235,14 @@
         {
           "typescript": "(d) => JSON.parse(d.content).sites"
         }
-      ]
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_site"
+        }
+      }
     },
     {
       "id": "mod_profile",
@@ -246,12 +252,18 @@
       "inputDescription": "List of GPSLocation objects — site id, coordinates, name, and notes",
       "inStructureId": "m_site",
       "outStructureId": "m_profile",
-      "outIsList": true,
       "prompt": "Profile this GPS site from its coordinates and notes. Infer country, region, nearest settlement, and climate zone from latitude/longitude. Set is_cold_location true for polar, subarctic, or routinely sub-zero climates. Guess facility_type_guess from the name and notes (research lab, military, industrial, logistics, etc.). Set is_likely_research_lab and is_russian_or_post_soviet from geography and context. Keep the same site_id and name as the input. Write a concise two-sentence profile_summary.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2200,
-      "avgCostCents": 5
+      "avgCostCents": 5,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_profile"
+        }
+      }
     },
     {
       "id": "mod_bundle",

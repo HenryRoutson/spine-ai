@@ -4,6 +4,7 @@ import {
   isMultiDocInputModule,
 } from "../../../inference-input";
 import { docToTextViaLlm } from "../../doc_to_text";
+import { stepEmitsList } from "../../type_expr";
 import { materializeInputDocument, wrapListForOutputStructure } from "../../structure";
 import { DEFAULT_VISION_DOC_PARSE_MODEL, inputUsesVisionOcr, type DocId, type PipelineModule } from "../../types";
 import { materializeHints, modelById } from "../helpers";
@@ -75,7 +76,7 @@ export async function execInputStep(m: PipelineModule, ctx: RunCtx, log: RunLogg
   }
   const out = modelById(project.models, m.outStructureId);
   const value =
-    m.outIsList || !out
+    stepEmitsList(m) || !out
       ? items
       : wrapListForOutputStructure(items, out, m.outStructureId);
   ctx.outputs.set(m.id, value);

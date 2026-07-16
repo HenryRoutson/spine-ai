@@ -15,17 +15,12 @@ import { withBuiltinTypeAliases } from "./builtin_types";
 import { withSharedModels } from "./builtin_models";
 import { isUnnamedProjectName, UNNAMED_PROJECT_NAME } from "@/lib/project-assistant-types";
 import type { ChatTurn } from "./assistant-shared";
-import { fieldToTypeExpr } from "./type_expr";
+import { fieldToTypeExpr, stepEmitsList } from "./type_expr";
 import type { ModuleKind, PipelineModule, StructureModel } from "./types";
 
 function structureName(models: StructureModel[], id: string | undefined): string | undefined {
   if (!id) return undefined;
   return models.find((m) => m.id === id)?.name;
-}
-
-function stepEmitsList(kind: ModuleKind, outIsList: boolean | undefined): boolean {
-  if (kind === "llm-batch") return true;
-  return !!outIsList;
 }
 
 /** AI : human-readable spine type for assistant context — matches validity.ts rules. */
@@ -35,7 +30,7 @@ export function spineEmitsLabel(m: PipelineModule, models: StructureModel[]): st
     const passthrough = structureName(models, m.inStructureId ?? m.outStructureId);
     return passthrough ?? undefined;
   }
-  return stepEmitsList(m.kind, m.outIsList) ? `list[${name}]` : name;
+  return stepEmitsList(m) ? `list[${name}]` : name;
 }
 
 export function spineExpectsLabel(m: PipelineModule, models: StructureModel[]): string | undefined {
@@ -105,28 +100,28 @@ Spine notation (for reasoning only — never put this in structureIn/structureOu
 - List of objects: list[ChunkItem]
 
 What each step puts on the spine (emits):
-- input with outIsList false → single structureOut (e.g. Document)
-- input with outIsList true → list[structureOut] — required when one slot accepts many uploaded files ("Emit list output" in the UI)
-- llm / transform (no code) with outIsList false → single structureOut
-- llm / transform / custom-code with outIsList true → list[structureOut]
-- llm-batch → ALWAYS list[structureOut] (outIsList is implied true)
-- quote (auto-inserted "Link Quotes") → INHERITS outIsList from its upstream LLM step. If the LLM has outIsList true the quote step also emits list[structureOut]. Do NOT create transform or quote steps named "Link Quotes ·…" yourself — they are inserted automatically.
+- input with single structureOut → one structure on the spine (e.g. Document)
+- input with list output → set structureOut to list[structureOut] — required when one slot accepts many uploaded files ("Emit list output" in the UI)
+- llm / transform (no code) with single structureOut → one item on the spine
+- llm / transform / custom-code with list output → list[structureOut] on the spine
+- llm-batch → ALWAYS list[structureOut]
+- quote (auto-inserted "Link Quotes") → INHERITS list-ness from its upstream LLM step. Do NOT create transform or quote steps named "Link Quotes ·…" yourself — they are inserted automatically.
 
 What each step requires from the previous step (expects):
 - Most steps → single structureIn matching the previous step's emit
 - llm-batch → list[structureIn] — the previous step MUST emit that list, not a single object
 
-structureIn and structureOut in your JSON are structure NAMES only (e.g. "ChunkItem"). Never write "list[ChunkItem]" there — set outIsList: true on the emitting step instead.
+structureIn and structureOut use structure NAMES. Write list[ChunkItem] when the step emits a list; plain ChunkItem when it emits one item.
 
 Common mistakes that fail validation:
-1. llm-batch after llm without outIsList — e.g. chunking llm emits single Document but batch expects list[ChunkItem]. Fix: add outIsList: true on the chunking step (or use custom-code to emit the list).
+1. llm-batch after llm without list output — e.g. chunking llm emits single Document but batch expects list[ChunkItem]. Fix: set structureOut to list[ChunkItem] on the chunking step (or use custom-code to emit the list).
 2. Wrong item type on a list — e.g. upstream emits list[Document] but batch expects list[ChunkItem]. Fix: align structureOut on the upstream step.
 3. list → single object without a reshape — e.g. list[ExtractedRow] → SummaryRow needs custom-code, or a SummaryRow model with a list[model] field + transform, not a bare transform.
 4. Map-reduce on paper but linear types not wired — design the spine chain first: Document → list[Chunk] → list[Candidate] → list[Extracted] → Summary.
-5. LLM with outIsList: true followed by a bare transform — if the output structure has a list[model] field (ref = input structure or upstream list item type), bare transform auto-wraps list[T] → { field: T[] }. Otherwise use custom-code with explicit fold logic, or keep the list on the spine with outIsList: true on the transform.
+5. LLM with list output followed by a bare transform — if the output structure has a list[model] field (ref = input structure or upstream list item type), bare transform auto-wraps list[T] → { field: T[] }. Otherwise use custom-code with explicit fold logic, or keep list[T] on the spine via list[structureOut] on the transform.
 6. Input structureOut set to a parsed model — input only ever emits Document; parsing belongs in the next custom-code or llm step.
 7. structureIn/structureOut names not in models array — every referenced structure must be defined in models.
-8. custom-code without outIsList after a list-emitting step — downstream llm-batch then fails with "expects list[X], upstream emits X".
+8. custom-code without list output after a list-emitting step — downstream llm-batch then fails with "expects list[X], upstream emits X".
 
 Before returning modules, walk the chain: for each adjacent pair, confirm previous emits exactly what next expects. If the user prompt lists validation errors, fix every listed mismatch.`;
 }
@@ -137,19 +132,19 @@ export function buildMultiDocumentWorkflowPromptBlock(): string {
 - One input step per kind of document (e.g. "Receipts"). Do NOT create hundreds of separate input steps.
 - Non-JSON input types (pdf, word, text, web, image) always structureOut Document on the input step — a locked "Parse to structure" LLM step is auto-inserted when you pick a target structure. Do NOT emit that LLM yourself.
 - Excel/json-only inputs may structureOut a typed model directly (JSON parse in the input step) — no auto LLM step.
-- When many files of the same kind upload into one slot, set outIsList: true on that input ("Emit list output"). Without it, inference only allows one file and the spine stays single Document.
+- When many files of the same kind upload into one slot, use list[structureOut] on that input ("Emit list output"). Without it, inference only allows one file and the spine stays single Document.
 - Set inputMinCount: 2+ when the task implies batch uploads (hundreds, many, each, all).
 - Typical "many unstructured docs → one spreadsheet" spine (list rows are already CSV/XLSX-exportable in the UI — do NOT hand-fold CSV):
-  1. Input (structureOut: Document, outIsList: true) → list[Document]
-  2. llm-batch (outIsList implied) OR custom-code (outIsList: true) → list[ExtractedRow]
+  1. Input (structureOut: list[Document]) → list[Document]
+  2. llm-batch OR custom-code (structureOut: list[ExtractedRow]) → list[ExtractedRow]
   3. output step on list[ExtractedRow]
 - Only fold with custom-code when the user needs a non-tabular single artifact (joined prose report, ranked summary, etc.) — never to stringify rows into CSV/Excel.
-- custom-code between list steps: if input is list[T] and output is still one row per input item, set outIsList: true. A custom-code step without outIsList emits a single object — that breaks llm-batch downstream.
+- custom-code between list steps: if input is list[T] and output is still one row per input item, set structureOut to list[YourRow]. A custom-code step with single structureOut emits one object — that breaks llm-batch downstream.
 - custom-code code field: TypeScript arrow expression only, e.g. (docs) => docs.map(...). Never Python def/class syntax — it will not compile.
 - Every structureIn / structureOut name MUST appear in your models array — do not reference structures you forgot to define.
-- llm-batch requires list[structureIn] on the spine — the step before it must emit a list (often the input with outIsList: true, or custom-code with outIsList: true).
+- llm-batch requires list[structureIn] on the spine — the step before it must emit a list (often the input with list[Document], or custom-code with list[Row]).
 - Two different document kinds (policy + expense report) = two input steps + combine — not the same as many receipts in one slot.
-- Reference: Batch LLM Example seed (Wrap → List → llm-batch → Unwrap); homework grader Student Submissions (outIsList: true).`;
+- Reference: Batch LLM Example seed (Wrap → List → llm-batch → Unwrap); homework grader Student Submissions (list[Document] input).`;
 }
 
 export function buildPipelineRulesPromptBlock(globalModel: ModelId): string {
@@ -172,7 +167,7 @@ ${buildMultiDocumentWorkflowPromptBlock()}
 - Use model ids from:\n${buildModelOptionsPromptBlock()}
 - Default LLM model: ${globalModel}
 - For large changes (restructuring, new steps, changing the overall flow): set modules to the FULL replacement array and modulePatch to null. To clear all steps, return modules as [] — never null.
-- For small targeted changes (fixing a prompt, swapping a model, adding outIsList, editing 1–3 steps): set modules to null and use modulePatch instead. Each entry must include the step's 0-based index (shown in the current pipeline JSON) and ONLY the fields you want to change — untouched fields are preserved as-is.
+- For small targeted changes (fixing a prompt, swapping a model, setting structureOut to list[Foo], editing 1–3 steps): set modules to null and use modulePatch instead. Each entry must include the step's 0-based index (shown in the current pipeline JSON) and ONLY the fields you want to change — untouched fields are preserved as-is.
 - When answering questions without pipeline changes, set both modules and modulePatch to null.`;
 }
 
@@ -273,7 +268,7 @@ Spine: list[Document] → list[ReceiptRow] → output
       "inputType": "text",
       "inputNameContains": "receipt",
       "inputMinCount": 2,
-      "outIsList": true,
+      "structureOut": "list[ChunkItem]",
       "inputDescription": "Plain-text receipt files — one upload per receipt"
     },
     {
@@ -357,7 +352,7 @@ Spine: Document → list[TextChunk] → list[ChunkSummary] → CombinedReport �
       "note": "Document → list[TextChunk] before llm-batch.",
       "structureIn": "Document",
       "structureOut": "TextChunk",
-      "outIsList": true,
+      "structureOut": "list[ChunkItem]",
       "code": "(doc) => doc.content.split('\\\\n').filter(l => l.trim()).map((line, i) => ({ id: String(i + 1), text: line.trim() }))",
       "inputDescription": "Single Document with newline-separated checklist lines"
     },
@@ -396,7 +391,7 @@ Spine: Document → list[TextChunk] → list[ChunkSummary] → CombinedReport �
 
 Key patterns both examples demonstrate:
 - Input structureOut is always Document (never a parsed model).
-- llm-batch follows a list-emitting step (input with outIsList: true, or custom-code with outIsList: true).
+- llm-batch follows a list-emitting step (input with list[Document], or custom-code with list[Row]).
 - Tabular spreadsheet goals end at list[Row] → output — do NOT custom-code fold rows into a CSV/Excel string (the UI already exports lists as CSV/XLSX).
 - list → single non-tabular object (joined prose report, ranked summary) uses custom-code fold (not a bare transform).
 - custom-code code is TypeScript arrow syntax — never Python.
@@ -495,7 +490,6 @@ export function buildProjectContextBlock(
       prompt: m.prompt,
       code: m.code,
       model: m.model,
-      outIsList: m.outIsList,
       inputMinCount: m.inputMinCount,
     })),
     null,

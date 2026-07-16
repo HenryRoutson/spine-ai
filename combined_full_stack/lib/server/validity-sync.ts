@@ -115,7 +115,7 @@ function documentInputPatch(m: PipelineModule): PipelineModule {
   return {
     ...m,
     outStructureId: BUILTIN_DOCUMENT_ID,
-    ...patchSpineOutList({ ...m, outStructureId: BUILTIN_DOCUMENT_ID }, !!m.outIsList),
+    ...patchSpineOutList({ ...m, outStructureId: BUILTIN_DOCUMENT_ID }, stepEmitsList(m)),
   };
 }
 
@@ -128,7 +128,7 @@ function targetInputPatch(m: PipelineModule, targetId: StructureModelId): Pipeli
   return {
     ...m,
     outStructureId: targetId,
-    ...patchSpineOutList({ ...m, outStructureId: targetId }, !!m.outIsList),
+    ...patchSpineOutList({ ...m, outStructureId: targetId }, stepEmitsList(m)),
   };
 }
 
@@ -170,7 +170,7 @@ export function syncAutoStructureParseSteps(
           ? preferred
           : autoStructureParseStepLabel(m, taken);
       taken.add(label);
-      const listOut = !!m.outIsList;
+      const listOut = stepEmitsList(m);
       out.push({
         id: (existing?.id ?? (`mod_struct_${m.id}` as ModuleId)) as ModuleId,
         kind: ModuleKind.Llm,
@@ -179,7 +179,6 @@ export function syncAutoStructureParseSteps(
         note: `Auto · Document → ${target.name} · LLM maps uploaded content into your structure.`,
         inStructureId: BUILTIN_DOCUMENT_ID,
         outStructureId: target.id,
-        outIsList: listOut || undefined,
         inType: structureSpineType(BUILTIN_DOCUMENT_ID, listOut),
         outType: structureSpineType(target.id, listOut),
         prompt:
@@ -324,6 +323,7 @@ export function syncAutoQuoteSteps(
           ? uniqueStepLabel(MODULE_META.quote.label, taken)
           : autoQuoteStepLabel(m, taken);
     taken.add(label);
+    const upstreamList = m.kind === "llm-batch" || stepEmitsList(m);
     out.push({
       id: (existing?.id ?? (`mod_quote_${m.id}` as ModuleId)) as ModuleId,
       kind: ModuleKind.Quote,
@@ -332,7 +332,7 @@ export function syncAutoQuoteSteps(
       note: `Auto · ${outModel.name} → ${outModel.name} · links LLM quote strings to source spans.`,
       inStructureId: m.outStructureId,
       outStructureId: m.outStructureId,
-      outIsList: !!m.outIsList || m.kind === "llm-batch",
+      outType: structureSpineType(m.outStructureId, upstreamList),
       cached: true,
       avgMs: existing?.avgMs ?? 12,
       avgCostCents: 0,

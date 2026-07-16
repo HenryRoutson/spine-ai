@@ -11,6 +11,7 @@ import { BUILTIN_DOCUMENT_ID } from "@/lib/server/builtin_models";
 import { ModuleKind, type ModuleId, type PipelineModule } from "@/lib/server/types";
 
 describe("pipeline TS export lint", () => {
+  // AI : TODO (linter-first) — mirror this suite for pyright (pipeline.py) and cargo check (pipeline.rs); make Py/Rust primary.
   const seeds = readdirSync(SEEDS_DIR).filter((f) => f.endsWith(".json"));
 
   it.each(seeds)("generates lint-clean TS for %s", (file) => {

@@ -6,6 +6,7 @@ import {
   logDynamicStructureCreated,
   structuredLlmPrompt,
 } from "../../structure";
+import { stepEmitsList } from "../../type_expr";
 import type { PipelineModule } from "../../types";
 import { materializeHints, modelById, sourceDocumentBlock } from "../helpers";
 import { requireLinearInput } from "../context";
@@ -25,14 +26,14 @@ export async function execLlmStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
   const out = modelById(project.models, m.outStructureId);
   if (!out) throw new Error(`llm step ${m.id} has no output structure`);
   const stepModel = m.model ?? ctx.model;
-  log.info(`llm step`, { moduleId: m.id, model: stepModel, outStructure: out.name, outIsList: !!m.outIsList });
+  log.info(`llm step`, { moduleId: m.id, model: stepModel, outStructure: out.name, emitsList: stepEmitsList(m) });
   const inputData = requireLinearInput(m, ctx);
   const usesSourceDoc = ctx.sourceText && hasQuoteField(out, project.models);
   const context = usesSourceDoc
     ? sourceDocumentBlock(ctx.sourceText, ctx.sourceDocId)
     : `INPUT DATA:\n${JSON.stringify(inputData, null, 2)}`;
   const userPrompt = `${m.prompt ?? "Process the input."}\n\n${context}`;
-  const schema = llmSchema(out, project.models, !!m.outIsList, project.typeAliases ?? []);
+  const schema = llmSchema(out, project.models, stepEmitsList(m), project.typeAliases ?? []);
   const prompt = structuredLlmPrompt(userPrompt, schema);
   log.debug(`llm prompt built`, { promptChars: prompt.length, hasQuoteField: hasQuoteField(out, project.models) });
   ctx.reportSub?.({ label: "LLM call", current: 0, total: 1 });

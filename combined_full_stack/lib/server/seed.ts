@@ -132,7 +132,6 @@ const SeedFileSchema = z.object({
       model: z.string().optional(),
       costLimitCents: z.number().min(0).optional(),
       cached: z.boolean(),
-      outIsList: z.boolean().optional(),
       auto: z.boolean().optional(),
       avgMs: z.number(),
       avgCostCents: z.number(),

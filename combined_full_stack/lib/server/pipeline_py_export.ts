@@ -19,9 +19,11 @@ import {
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsPy } from "./pipeline_export_setup";
 import { MODULE_META } from "./types";
+import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
 
 // AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
+// AI : TODO (linter-first) — exported .py is the lint target (pyright on full pipeline export + user custom code).
 
 function inlinePythonCustomCode(code: string, outPy: string): string {
   if (/^\s*def\s+\w+\s*\(/.test(code)) {
@@ -45,7 +47,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
       const prompt = m.prompt ?? "Process the input.";
       const model = m.model ?? "deepseek-v3";
       return [
-        `# Structured LLM call → ${outName ?? outPy}${m.outIsList ? "[]" : ""}`,
+        `# Structured LLM call → ${outName ?? outPy}${stepEmitsList(m) ? "[]" : ""}`,
         `_model = ${exportStringLiteral(model)}`,
         `user_prompt = ${exportStringLiteral(prompt)} + "\\n\\nINPUT DATA:\\n" + json.dumps(input, indent=2, default=str)`,
         `schema = None  # JSON schema for ${outName ?? "output"}`,
@@ -84,7 +86,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
         ].join("\n");
       }
       return [
-        `# Reshape ${inName ?? "input"} → ${outName ?? outPy}${m.outIsList ? " (list)" : ""}`,
+        `# Reshape ${inName ?? "input"} → ${outName ?? outPy}${stepEmitsList(m) ? " (list)" : ""}`,
         castOut("input"),
       ].join("\n");
     }

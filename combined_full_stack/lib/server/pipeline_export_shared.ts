@@ -7,6 +7,7 @@ import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
 import {
   labelToPyKey,
+  stepEmitsList,
   stepSpineInType,
   stepSpineOutType,
   typeExprToGo,
@@ -285,10 +286,10 @@ export function generateInputStepBodyTs(m: PipelineModule, outTs: string): strin
   ];
   if (inputOutputsDocument(m)) {
     const docObj = "{ content: doc.content, filename: doc.filename }";
-    lines.push(m.outIsList ? `return [${docObj}];` : `return ${docObj};`);
+    lines.push(stepEmitsList(m) ? `return [${docObj}];` : `return ${docObj};`);
     return lines.join("\n");
   }
-  if (m.outIsList) {
+  if (stepEmitsList(m)) {
     lines.push(`const parsed = JSON.parse(doc.content) as unknown;`);
     lines.push(`return (Array.isArray(parsed) ? parsed : [parsed]) as ${outTs};`);
   } else {
@@ -311,13 +312,13 @@ export function generateInputStepBodyPy(m: PipelineModule, outPy: string): strin
   ];
   if (inputOutputsDocument(m)) {
     lines.push(
-      m.outIsList
+      stepEmitsList(m)
         ? "return [Document(content=doc.content, filename=doc.filename)]"
         : "return Document(content=doc.content, filename=doc.filename)",
     );
     return lines.join("\n");
   }
-  if (m.outIsList) {
+  if (stepEmitsList(m)) {
     lines.push("parsed = json.loads(doc.content)");
     lines.push(`return cast(${outPy}, cast(object, parsed if isinstance(parsed, list) else [parsed]))`);
   } else {
@@ -338,7 +339,7 @@ export function generateInputStepBodyRust(m: PipelineModule, outRust: string): s
     ...(m.useOcr ? ["// Vision OCR enabled for PDF/image uploads"] : []),
   ];
   if (inputOutputsDocument(m)) {
-    if (m.outIsList) {
+    if (stepEmitsList(m)) {
       lines.push("Ok(vec![input])");
     } else {
       lines.push("Ok(input)");
@@ -346,7 +347,7 @@ export function generateInputStepBodyRust(m: PipelineModule, outRust: string): s
     return lines.join("\n");
   }
   lines.push("let parsed: Value = serde_json::from_str(&input.content)?;");
-  if (m.outIsList) {
+  if (stepEmitsList(m)) {
     lines.push(`let out: ${outRust} = if parsed.is_array() {`);
     lines.push("    serde_json::from_value(parsed)?");
     lines.push("} else {");
@@ -373,7 +374,7 @@ export function generateInputStepBodyGo(m: PipelineModule, outGo: string): strin
     ...(m.useOcr ? ["// Vision OCR enabled for PDF/image uploads"] : []),
   ];
   if (inputOutputsDocument(m)) {
-    if (m.outIsList) {
+    if (stepEmitsList(m)) {
       lines.push("return []Document{input}, nil");
     } else {
       lines.push("return input, nil");
@@ -384,7 +385,7 @@ export function generateInputStepBodyGo(m: PipelineModule, outGo: string): strin
   lines.push("if err := json.Unmarshal([]byte(input.Content), &parsed); err != nil {");
   lines.push(`\treturn ${zero}, err`);
   lines.push("}");
-  if (m.outIsList) {
+  if (stepEmitsList(m)) {
     lines.push("arr, ok := parsed.([]any)");
     lines.push("if !ok {");
     lines.push("\tarr = []any{parsed}");

@@ -19,6 +19,7 @@ import {
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsGo, type ExportRuntimeNeeds } from "./pipeline_export_setup";
 import { pipelineStateGoType } from "./pipeline_state";
 import { MODULE_META } from "./types";
+import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
 
 // AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
@@ -62,7 +63,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
       const prompt = m.prompt ?? "Process the input.";
       const model = m.model ?? "deepseek-v3";
       return [
-        `// Structured LLM call → ${outName ?? outGo}${m.outIsList ? "[]" : ""}`,
+        `// Structured LLM call → ${outName ?? outGo}${stepEmitsList(m) ? "[]" : ""}`,
         `_ = ${exportStringLiteral(model)}`,
         `inJSON, err := json.MarshalIndent(input, "", "  ")`,
         `if err != nil {`,
@@ -150,7 +151,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         ].join("\n");
       }
       return [
-        `// Reshape ${inName ?? "input"} → ${outName ?? outGo}${m.outIsList ? " (list)" : ""}`,
+        `// Reshape ${inName ?? "input"} → ${outName ?? outGo}${stepEmitsList(m) ? " (list)" : ""}`,
         ...passthrough,
       ].join("\n");
     }

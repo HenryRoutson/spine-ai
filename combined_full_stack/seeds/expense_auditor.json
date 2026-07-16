@@ -132,7 +132,6 @@
       "inputDescription": "TableRow list parsed from the expense policy markdown table",
       "inStructureId": "m_builtin_document",
       "outStructureId": "m_row",
-      "outIsList": true,
       "cached": true,
       "avgMs": 8,
       "avgCostCents": 0,
@@ -140,7 +139,14 @@
         {
           "typescript": "const splitMdRow=(r)=>r.slice(1,-1).split(\"|\").map(c=>c.trim());const mdTableToRows=(body)=>{const t=[];const lines=body.split(\"\\n\");let i=0,ti=0;while(i<lines.length){const line=lines[i].trim();if(!line.startsWith(\"|\")||!line.endsWith(\"|\")){i++;continue;}const block=[];while(i<lines.length){const l=lines[i].trim();if(!l.startsWith(\"|\")||!l.endsWith(\"|\"))break;block.push(l);i++;}if(block.length<2)continue;const headers=splitMdRow(block[0]);const data=block.slice(2).filter(l=>!/^[|][\\s\\-:|]+[|]$/.test(l));t.push({name:\"table_\"+ ++ti,rows:data.map(ln=>{const c=splitMdRow(ln);const o={};headers.forEach((h,j)=>o[h]=c[j]??\"\");return o;})});}return t;};const mdFirstTableRows=(body)=>(mdTableToRows(body)[0]?.rows??[]);(doc)=>mdFirstTableRows(doc.content).map((row,i)=>({row_id:String(i+1),cells_json:JSON.stringify(row)}))"
         }
-      ]
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_row"
+        }
+      }
     },
     {
       "id": "mod_in_report",
@@ -188,13 +194,19 @@
       "label": "Audit Lines",
       "inStructureId": "m_merged2",
       "outStructureId": "m_flag",
-      "outIsList": true,
       "inputDescription": "Merged JSON tables — policy limits in table_a_json and expense lines in table_b_json",
       "prompt": "table_a_json is the travel policy limits (JSON array). table_b_json is submitted expenses (JSON array). For EACH expense row, output one ComplianceFlag: line_id from the row index, category and amount_usd from the row, compliant verdict vs policy limits, and issue text if non-compliant.",
       "model": "deepseek-v3",
       "cached": true,
       "avgMs": 2800,
-      "avgCostCents": 9
+      "avgCostCents": 9,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_flag"
+        }
+      }
     },
     {
       "id": "mod_out",
@@ -202,11 +214,17 @@
       "label": "Compliance Flags",
       "inStructureId": "m_flag",
       "outStructureId": "m_flag",
-      "outIsList": true,
       "cached": true,
       "avgMs": 40,
       "avgCostCents": 0,
-      "inputDescription": "List of ComplianceFlag records — one per audited expense line"
+      "inputDescription": "List of ComplianceFlag records — one per audited expense line",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_flag"
+        }
+      }
     }
   ],
   "strategies": [

@@ -1,10 +1,12 @@
-// AI : spine type migration — derive inType/outType from legacy fields and keep them in sync.
+// AI : spine type migration — derive inType/outType and strip legacy outIsList on load.
+// AI : TODO (linter-first) — deriveOutType is interim; canonical spine types live in generated pipeline_types.py/.rs.
 import { z } from "zod";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import type { ModuleKind, PipelineModule, StructureModelId } from "./types";
 import {
   formatTypeExpr,
   isListRoot,
+  stepEmitsList,
   type TypeExpr,
 } from "./type_expr";
 
@@ -12,6 +14,7 @@ export type { TypeExpr } from "./type_expr";
 export {
   formatTypeExpr,
   isListRoot,
+  stepEmitsList,
   stepSpineInType,
   stepSpineOutType,
   typeExprEqual,
@@ -53,11 +56,22 @@ const TypeExprSchemaInner: z.ZodType<TypeExpr> = z.lazy(() =>
 
 export const TypeExprSchema = TypeExprSchemaInner;
 
+type LegacyModule = PipelineModule & { outIsList?: boolean };
+
+function readLegacyOutIsList(m: PipelineModule): boolean {
+  return !!(m as LegacyModule).outIsList;
+}
+
+function stripLegacyOutIsList(m: PipelineModule): PipelineModule {
+  const { outIsList: _legacy, ...rest } = m as LegacyModule;
+  return rest;
+}
+
 function refType(modelId: StructureModelId | undefined): TypeExpr | undefined {
   return modelId ? { kind: "ref", modelId } : undefined;
 }
 
-function listOf(item: TypeExpr): TypeExpr {
+export function listOf(item: TypeExpr): TypeExpr {
   return { kind: "list", item };
 }
 
@@ -67,16 +81,15 @@ function codedTransform(m: PipelineModule): boolean {
 
 function legacyEmitsList(m: PipelineModule): boolean {
   if (m.kind === "llm-batch") return true;
-  return !!m.outIsList;
+  return readLegacyOutIsList(m);
 }
 
-// AI : legacy derivation when inType/outType not yet persisted.
+// AI : derive spine out type when outType not yet persisted (incl. one-time legacy outIsList read).
 export function deriveOutType(m: PipelineModule): TypeExpr | undefined {
   if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review") {
     const id = m.inStructureId ?? m.outStructureId;
     const base = refType(id);
     if (!base) return undefined;
-    // AI : output/assert/human-review may materialize a list snapshot — preserve legacy outIsList in outType.
     return legacyEmitsList(m) ? listOf(base) : base;
   }
   if (!m.outStructureId) return undefined;
@@ -98,28 +111,26 @@ export function deriveInType(m: PipelineModule): TypeExpr | undefined {
   return base;
 }
 
+/** @deprecated use stepEmitsList */
 export function resolveOutIsList(m: PipelineModule): boolean {
-  if (m.outType) return isListRoot(m.outType);
-  return legacyEmitsList(m);
+  return stepEmitsList(m);
 }
 
-export function syncLegacyFromSpineTypes(m: PipelineModule): PipelineModule {
+export function ensureSpineTypes(m: PipelineModule): PipelineModule {
   const outType = m.outType ?? deriveOutType(m);
   const inType = m.inType ?? deriveInType(m);
-  const outIsList = outType ? isListRoot(outType) : m.outIsList;
-  return {
+  return stripLegacyOutIsList({
     ...m,
     ...(outType ? { outType } : {}),
     ...(inType ? { inType } : {}),
-    ...(outIsList ? { outIsList: true } : outIsList === false ? { outIsList: undefined } : {}),
-  };
+  });
 }
 
 export function migrateModuleSpineTypes(m: PipelineModule): PipelineModule {
   const derived = deriveOutType(m);
   const outType = reconcileSpineOutType(m, derived);
   const inType = m.inType ?? deriveInType(m);
-  return syncLegacyFromSpineTypes({ ...m, ...(outType ? { outType } : {}), ...(inType ? { inType } : {}) });
+  return ensureSpineTypes({ ...m, ...(outType ? { outType } : {}), ...(inType ? { inType } : {}) });
 }
 
 // AI : sync may change outStructureId while outType still references the old target — prefer derived.
@@ -145,15 +156,11 @@ export function refFromType(expr: TypeExpr | undefined): StructureModelId | unde
   return undefined;
 }
 
-export function patchSpineOutList(
-  m: PipelineModule,
-  isList: boolean,
-): Pick<PipelineModule, "outType" | "outIsList"> {
+export function patchSpineOutList(m: PipelineModule, isList: boolean): Pick<PipelineModule, "outType"> {
   const modelId = m.outStructureId ?? refFromType(m.outType);
-  if (!modelId) return { outIsList: isList || undefined };
+  if (!modelId) return {};
   const base: TypeExpr = { kind: "ref", modelId };
-  const outType = isList ? listOf(base) : base;
-  return { outType, outIsList: isList || undefined };
+  return { outType: isList ? listOf(base) : base };
 }
 
 export function formatModuleSpineOut(m: PipelineModule, models: Parameters<typeof formatTypeExpr>[1] = []): string {
@@ -175,6 +182,5 @@ export function spineInLabel(m: PipelineModule, models: Parameters<typeof format
 }
 
 export function llmStepEmitsList(m: PipelineModule): boolean {
-  if (m.kind === "llm-batch") return true;
-  return resolveOutIsList(m);
+  return stepEmitsList(m);
 }
