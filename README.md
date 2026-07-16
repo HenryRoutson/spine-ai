@@ -23,8 +23,11 @@ Canonical modules live in `shared/` (legal, landing-demo stream, json-viewer, cl
 The landing page proxies `/api/landing-demo/*` to the Spine app. In production both apps must share the same secret:
 
 1. Run `openssl rand -hex 32` and set `LANDING_DEMO_PROXY_SECRET` in the repo root `.env`.
-2. Add the **same value** to both Vercel projects (landing page + Spine app).
-3. On the landing Vercel project, set `SPINE_API_URL=https://www.spine-ai-app.dev` if it is not already.
+2. Add the **same value** to **both** Vercel projects (landing page **and** Spine app) — Production environment.
+3. **Redeploy both projects** after adding/changing the env var (Vercel does not pick up new secrets on already-running deployments).
+4. On the landing Vercel project, set `SPINE_API_URL=https://www.spine-ai-app.dev` if it is not already.
+
+If signup shows `unauthorized` / proxy errors: the secret is missing on one project, the values differ, or a redeploy was skipped. Check Spine function logs for `[landing-proxy-auth]` with `proxy_header_missing` vs `proxy_secret_mismatch`.
 
 Local `npm run dev:all` injects a dev default secret automatically.
 

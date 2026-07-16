@@ -33,7 +33,7 @@ export async function POST(req: Request): Promise<Response> {
     assertLandingProxyAllowed(req.headers);
   } catch (err) {
     if (err instanceof LandingProxyAuthError) {
-      return jsonWithCors(req, { error: "unauthorized" }, HTTP.UNAUTHORIZED);
+      return jsonWithCors(req, { error: "unauthorized", code: err.code }, HTTP.UNAUTHORIZED);
     }
     throw err;
   }
