@@ -9,3 +9,6 @@ export const NEW_ACCOUNT_BALANCE_CENTS = 1000;
 export const TOPUP_OPTIONS_CENTS = [100, 1000, 2000] as const;
 export const SUB_CENTS_PER_MONTH = 500;
 export const BILLING_CAP_CENTS = 30000;
+export const FEEDBACK_CREDIT_CENTS = 100;
+export const FEEDBACK_MIN_CHARS = 100;
+export const FEEDBACK_MAX_CREDITS_PER_DAY = 10;

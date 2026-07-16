@@ -23,6 +23,7 @@ import {
   type user_id_string,
 } from "./require_auth";
 import { recordBillingFlow, recordSignupCredit, type billing_flow_type } from "./billing_flow";
+import { freeCreditCentsAt } from "./free_credit_schedule";
 import { logger } from "./server_logger";
 import { getStripe } from "./stripe_client";
 
@@ -43,7 +44,7 @@ export type BillingAccount = {
 export type BillingCreditHistoryEntry = {
   creditKey: string;
   amountCents: number;
-  source: "checkout" | "invoice";
+  source: "checkout" | "invoice" | "feedback";
   createdAt: string;
 };
 
@@ -201,9 +202,10 @@ async function claimBillingCredit(
 async function seedSupabaseBillingAccount(key: BillingUserKey): Promise<BillingAccount> {
   const admin = await createAdminClient();
   if (!admin) return { ...EMPTY };
+  const signupCents = await freeCreditCentsAt("signup");
   const row = {
     user_id: key,
-    balance_cents: toExactCents(NEW_ACCOUNT_BALANCE_CENTS),
+    balance_cents: toExactCents(signupCents),
     total_billed_cents: 0,
     total_usage_cents: 0,
     subscribed: false,
