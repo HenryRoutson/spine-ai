@@ -20,7 +20,7 @@ import {
   type SpineTestFile,
   type TestStepResult,
 } from "@/lib/testing-files"
-import { RunStatus, type PipelineRun, type Project, type RunId } from "@/lib/types"
+import { RunStatus, type PipelineRun, type Project, type RunId } from "@/lib/server/types"
 import { schemaValidationForStepOutput } from "./spine-step-models.js"
 
 export type repo_path_string = string

@@ -13,6 +13,6 @@
       "@/*": ["../combined_full_stack/*"]
     }
   },
-  "include": ["src/**/*.ts"],
+  "include": ["src/**/*.ts", "scripts/**/*.ts"],
   "exclude": ["node_modules", "../combined_full_stack/node_modules"]
 }

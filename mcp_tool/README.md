@@ -59,3 +59,20 @@ npm install --prefix mcp_tool
 npm test --prefix mcp_tool
 npm run typecheck --prefix mcp_tool
 ```
+
+## Benchmark (DeepSeek vs Spine MCP)
+
+Compare **DeepSeek alone** vs **DeepSeek + Spine tool logic** (`derive_step_prompt`, `validate_step_output`) on pinned `*_testing.json` benchmarks:
+
+```bash
+# list runnable benchmarks (golden expectedOutputs filled)
+python3 scripts/benchmark_mcp_deepseek.py --list
+
+# quick run — Batch LLM Example only
+python3 scripts/benchmark_mcp_deepseek.py --benchmark batch_llm --limit 1
+
+# full suite (homework grader tests are slow / many LLM calls)
+python3 scripts/benchmark_mcp_deepseek.py --output /tmp/spine_bench.json
+```
+
+Requires `OPENROUTER_API_KEY` in repo `.env`. Uses `mcp_tool/scripts/benchmark_bridge.ts` for prepare/score (same compare rules as the Testing tab).

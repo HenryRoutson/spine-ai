@@ -40,6 +40,9 @@ I just realised we can probably undercut API pricing because we're splitting up 
 
 
 
+please add file types so that files like legal.txt and soil_report.txt can be differentiated. Maybe just put tags on files which add notes about them, which is automatically attatched to a prompt. Explain a legal file and a soil_report.
+
+
 i do like the idea of pure stateless functions, need to label which are which and which use state, note will need to use this for cache. may need AI to decide?
 
 

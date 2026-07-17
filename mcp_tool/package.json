@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "tsx --tsconfig tsconfig.json src/index.ts",
+    "benchmark-bridge": "tsx --tsconfig tsconfig.json scripts/benchmark_bridge.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
