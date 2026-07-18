@@ -10,6 +10,13 @@ there is nothing stopping me from passing in a  "marking guide"  and a "homework
 
 
 
+Create an example around PTR or payment time reporting in austrlaia
+Map different excel files into the same PRT stanard format which is compliant with regulations
+Alteryx data cleaning software  - https://www.alteryx.com
+  to remove white spaces, unneeded commas, spelling, missing values, date format standardisation
+ensure all invoice dates are before payment dates
+remoev duplicate transactions
+calculate compliance statistics after all anomolies have been resolved.
 
 
 

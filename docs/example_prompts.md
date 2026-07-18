@@ -28,5 +28,13 @@ Continuous monitoring of opportunities for tax reduction
 
 ```
 Investment banking
+A coal mine is being aquired.
+```
 
+
+```
+Create an example around PTR or payment time reporting in Australia
+Map different excel files into the same PRT stanard format which is compliant with regulations
+Clean white spaces, unneeded commas, spelling, missing values, date format standardisation
+calculate compliance statistics after all anomolies have been resolved.
 ```
