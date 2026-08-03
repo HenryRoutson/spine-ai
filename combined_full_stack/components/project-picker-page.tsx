@@ -1,19 +1,19 @@
 "use client"
 
 import { useCallback, useState } from "react"
-import { useRouter } from "next/navigation"
+import type { AppPrimarySection } from "@/components/app-primary-nav"
 import {
-  ArrowLeft,
   Copy,
   FolderKanban,
   Loader2,
   Pencil,
-  Play,
   RefreshCw,
   Store,
 } from "lucide-react"
 import { useStorePicker } from "@/lib/store"
-import { clearActiveProjectSession } from "@/lib/active-project-session"
+import { AppChromeHeader } from "@/components/app-chrome-header"
+import { navigateToBuildMode, navigateToRunMode } from "@/lib/app-mode-nav"
+import { wrapPrimarySectionChange } from "@/lib/primary-section-opening"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,13 +27,10 @@ import {
   ExampleTemplateGrid,
 } from "@/components/project-workspace-sections"
 import { MarketplaceBrowsePanel } from "@/components/share/marketplace-browse-panel"
-import { SpineLogoBox } from "@/components/spine-mark"
-import { LEGAL } from "@shared/legal/site"
-import { LANDING_PAGE_URL } from "@/lib/app-nav-config"
+import { StoreShellSkeleton } from "@/components/store-shell-skeletons"
 import type { Project, ProjectId } from "@/lib/types"
 
 export function ProjectPickerPage() {
-  const router = useRouter()
   const {
     projects,
     addProject,
@@ -48,11 +45,27 @@ export function ProjectPickerPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
   const [busy, setBusy] = useState<string | null>(null)
+  const [openingId, setOpeningId] = useState<ProjectId | null>(null)
+  const [openingShell, setOpeningShell] = useState(false)
   const [resyncMsg, setResyncMsg] = useState<string | null>(null)
+  const [openingSection, setOpeningSection] = useState<AppPrimarySection | null>(null)
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
   const displayProjects = mergeWithGhosts(projects)
 
-  const handleOpen = useCallback((id: ProjectId) => openProject(id), [openProject])
+  const handleOpen = useCallback(
+    async (id: ProjectId) => {
+      setOpeningId(id)
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      })
+      setOpeningShell(true)
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve())
+      })
+      openProject(id)
+    },
+    [openProject],
+  )
 
   async function handleCreateBlank() {
     setBusy("blank")
@@ -104,46 +117,39 @@ export function ProjectPickerPage() {
     setEditingId(null)
   }
 
+  if (openingShell) {
+    return <StoreShellSkeleton />
+  }
+
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
-      <header className="flex items-center gap-3 border-b border-border px-4 py-2.5">
-        <a
-          href={LANDING_PAGE_URL}
-          title="Back to landing page"
-          className="flex items-center gap-2.5 rounded-md transition-opacity hover:opacity-80"
-        >
-          <SpineLogoBox />
-          <div className="hidden leading-tight sm:block">
-            <h1 className="text-sm font-semibold tracking-tight">{LEGAL.productName}</h1>
-          </div>
-        </a>
-        <div className="mx-1 h-6 w-px bg-border" />
-        <span className="font-mono text-[11px] text-muted-foreground">build pipelines</span>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-auto h-8 gap-1.5 font-mono text-[11px]"
-          onClick={() => {
-            clearActiveProjectSession()
-            router.push("/")
-          }}
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to run
-        </Button>
-        {syncing && (
-          <span className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            syncing
-          </span>
-        )}
-      </header>
+      <AppChromeHeader
+        mode="build"
+        primarySection="build"
+        openingSection={openingSection}
+        onPrimarySectionChange={(section) => {
+          wrapPrimarySectionChange(section, "build", setOpeningSection, () => {
+            if (section === "run") navigateToRunMode()
+            else if (section === "build") navigateToBuildMode()
+            else if (section === "billing") window.location.assign("/?window=billing")
+            else window.location.assign("/?window=settings")
+          })
+        }}
+        trailing={
+          syncing ? (
+            <span className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              syncing
+            </span>
+          ) : null
+        }
+      />
 
       <div className="flex min-h-0 flex-1 flex-col">
         <WindowHeader
-          step="Build"
-          title="Your pipelines"
-          description="Create and edit automation pipelines. To run someone else's shared link without building, go back to Run."
+          step="Project"
+          title="Choose a project"
+          description="Pick a pipeline to open, or create a new one below."
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -169,28 +175,6 @@ export function ProjectPickerPage() {
         />
 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          <section className="mb-8 rounded-lg border border-primary/30 bg-primary/5 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Just want to run a shared pipeline?</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  No project needed — paste a shared link, top up in Billing, and run.
-                </p>
-              </div>
-              <Button
-                size="sm"
-                className="gap-1.5"
-                onClick={() => {
-                  clearActiveProjectSession()
-                  router.push("/")
-                }}
-              >
-                <Play className="h-3.5 w-3.5" />
-                Run shared links
-              </Button>
-            </div>
-          </section>
-
           {resyncMsg && (
             <p className="mb-4 rounded-md border border-border bg-secondary/30 px-3 py-2 font-mono text-[11px] text-muted-foreground">
               {resyncMsg}
@@ -262,7 +246,16 @@ export function ProjectPickerPage() {
                       )}
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-                      <Button variant="default" size="sm" className="h-8" onClick={() => handleOpen(p.id)}>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => void handleOpen(p.id)}
+                        disabled={openingId !== null || busy !== null}
+                      >
+                        {openingId === p.id ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : null}
                         Open
                       </Button>
                       <Button variant="ghost" size="icon-sm" onClick={() => startEdit(p)} aria-label={`Rename ${p.name}`}>

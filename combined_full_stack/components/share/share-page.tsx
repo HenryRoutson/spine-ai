@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils"
 import { useOptionalStore } from "@/lib/store"
 import { useAppShell } from "@/lib/app-shell"
 import { consumePendingSharedRun } from "@/lib/pending-shared-run"
+import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 
 type ShareSection = "publish" | "shared" | "marketplace" | "activity"
@@ -26,6 +27,7 @@ type ShareSection = "publish" | "shared" | "marketplace" | "activity"
 type PublishTab = "link" | "api" | "marketplace"
 
 export function SharePage() {
+  useMarkPrimarySectionReady("run")
   const builder = useOptionalStore()
   const isConsumer = !builder
   const { setActiveWindow, activeSharedLinkId, openSharedRun } = useAppShell()

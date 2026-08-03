@@ -2,12 +2,18 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { Loader2, Search, Store, Trash2 } from "lucide-react"
+import {
+  MarketplaceDetailSkeleton,
+  MarketplaceListSkeleton,
+} from "@/components/account-panel-skeletons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { openProjectInWorkspace } from "@/lib/active-project-session"
+import { readMarketplaceSnapshot } from "@/lib/marketplace-snapshot-cache"
 import { seedProjectInStateSnapshot } from "@/lib/state-snapshot-cache"
+import { fetchMarketplaceListings } from "@/lib/warm-run-data"
 import { formatCents } from "@/lib/format"
 import type { MarketplaceListingCard, MarketplaceListingDetail } from "@/lib/marketplace-types"
 import type { Project, ProjectId } from "@/lib/types"
@@ -24,8 +30,10 @@ export function MarketplaceBrowsePanel({
   embedded?: boolean
 }) {
   const [query, setQuery] = useState("")
-  const [listings, setListings] = useState<MarketplaceListingCard[]>([])
-  const [loading, setLoading] = useState(true)
+  const [listings, setListings] = useState<MarketplaceListingCard[]>(
+    () => readMarketplaceSnapshot() ?? [],
+  )
+  const [loading, setLoading] = useState(() => readMarketplaceSnapshot() == null)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<MarketplaceListingDetail | null>(null)
@@ -34,18 +42,15 @@ export function MarketplaceBrowsePanel({
   const [actionError, setActionError] = useState<string | null>(null)
 
   const load = useCallback(async (q: string) => {
-    setLoading(true)
+    const cached = !q.trim() ? readMarketplaceSnapshot() : null
+    if (cached) setListings(cached)
+    setLoading(!cached && !q.trim())
     setError(null)
     try {
-      const params = new URLSearchParams()
-      if (q.trim()) params.set("q", q.trim())
-      const qs = params.toString()
-      const body = await apiJson<{ listings: MarketplaceListingCard[] }>(
-        `${API_ROUTES.marketplace}${qs ? `?${qs}` : ""}`,
-      )
-      setListings(body.listings)
+      const next = await fetchMarketplaceListings(q)
+      setListings(next)
     } catch (e) {
-      setError((e as Error).message)
+      if (!cached) setError((e as Error).message)
     } finally {
       setLoading(false)
     }
@@ -146,9 +151,7 @@ export function MarketplaceBrowsePanel({
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-2">
           {loading && listings.length === 0 ? (
-            <p className="py-8 text-center font-mono text-[11px] text-muted-foreground">
-              loading…
-            </p>
+            <MarketplaceListSkeleton />
           ) : listings.length === 0 ? (
             <p className="py-8 text-center text-xs text-muted-foreground">
               No listings yet — publish from the Share tab.
@@ -194,10 +197,7 @@ export function MarketplaceBrowsePanel({
               Select a listing to preview and copy.
             </p>
           ) : detailLoading || !detail ? (
-            <div className="flex items-center justify-center gap-2 py-10 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              loading details…
-            </div>
+            <MarketplaceDetailSkeleton />
           ) : (
             <div className="space-y-3">
               <div>

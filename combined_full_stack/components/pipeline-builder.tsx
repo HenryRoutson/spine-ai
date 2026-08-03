@@ -293,7 +293,10 @@ export function PipelineBuilder() {
             </div>
           }
           trailing={
-            <aside className="flex min-h-0 flex-col overflow-hidden">
+            <aside className="flex min-h-0 w-[280px] shrink-0 flex-col overflow-hidden border-l border-border/80 bg-muted/20">
+              <div className="border-b border-border/60 px-3 py-2">
+                <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Step inspector</p>
+              </div>
               <InspectorCollapsibleSection title="Inspector" variant="panel" fill>
                 {selected ? (
                   <div className="space-y-3">

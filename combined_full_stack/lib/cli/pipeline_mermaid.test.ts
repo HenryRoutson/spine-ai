@@ -12,7 +12,8 @@ describe("derivePipelineMermaid", () => {
   it("derives a linear flowchart for a seed project", () => {
     const ctx = loadProjectContext(resolve(SEEDS_DIR, "batch_llm_example.json"))
     const chart = derivePipelineMermaid(ctx.project.modules, ctx.project.models)
-    expect(chart).toMatch(/^flowchart LR/)
+    expect(chart).toContain("flowchart LR")
+    expect(chart).toContain("classDef step")
     expect(chart).toContain("-->")
     expect(chart.split("-->").length).toBeGreaterThan(ctx.project.modules.length - 1)
     for (const m of ctx.project.modules) {
@@ -25,7 +26,7 @@ describe("derivePipelineMermaid", () => {
     const combineIndex = ctx.project.modules.findIndex((m) => m.kind === "combine")
     if (combineIndex < 0) return
     const chart = derivePipelineMermaid(ctx.project.modules, ctx.project.models)
-    expect(chart).toContain("-. side input .->")
+    expect(chart).toContain('-. "side input" .->')
     expect(combineSideInputIndex(ctx.project.modules, combineIndex)).toBeGreaterThanOrEqual(0)
   })
 })

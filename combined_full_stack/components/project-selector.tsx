@@ -1,8 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { useRouter } from "next/navigation"
-import { Check, ChevronDown, LayoutGrid, Pencil, Plus, Share2 } from "lucide-react"
+import { Check, ChevronDown, LayoutGrid, Pencil, Plus } from "lucide-react"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import { Button } from "@/components/ui/button"
@@ -16,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { clearActiveProjectSession } from "@/lib/active-project-session"
+import { navigateToBuildMode } from "@/lib/app-mode-nav"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
 import { useStore } from "@/lib/store"
 import type { Project } from "@/lib/types"
@@ -74,7 +73,6 @@ function ProjectRenameInput({
 }
 
 export function ProjectSelector({ embed = false }: { embed?: boolean }) {
-  const router = useRouter()
   const { projects, project, setActiveProjectId, prefetchProject, addProject, renameProject, deleteProject } =
     useStore()
   const [editing, setEditing] = useState<{ id: string; initialName: string } | null>(null)
@@ -93,6 +91,7 @@ export function ProjectSelector({ embed = false }: { embed?: boolean }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className="flex items-center gap-2 rounded-md border border-border bg-secondary px-2.5 py-1.5 text-xs transition-colors hover:bg-accent">
+        <span className="font-mono text-[10px] text-muted-foreground">Project</span>
         <span className="h-1.5 w-1.5 rounded-full bg-primary" />
         <span className="max-w-[180px] truncate font-medium">{project.name}</span>
         <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
@@ -180,29 +179,13 @@ export function ProjectSelector({ embed = false }: { embed?: boolean }) {
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem
-                onClick={() => {
-                  clearActiveProjectSession()
-                  router.push("/")
-                }}
-                className="gap-2 py-2.5 font-medium"
-              >
-                <Share2 className="h-4 w-4" />
-                Run shared links…
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  clearActiveProjectSession()
-                  router.push("/projects")
-                }}
+                onClick={() => navigateToBuildMode()}
                 className="gap-2 py-2.5 font-medium"
               >
                 <LayoutGrid className="h-4 w-4" />
                 All projects…
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => void addProject()}
-                className="gap-2 py-2.5 font-medium text-primary"
-              >
+              <DropdownMenuItem onClick={() => void addProject()} className="gap-2 py-2.5 font-medium text-primary">
                 <Plus className="h-4 w-4" />
                 New project
               </DropdownMenuItem>

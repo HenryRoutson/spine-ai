@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, type ReactNode } from "react"
-import { Bot, Check, Loader2, Send, Sparkles, User, X } from "lucide-react"
+import { Check, Loader2, Sparkles, X } from "lucide-react"
 import { uid } from "@/lib/id"
 import {
   ASSISTANT_HISTORY_LIMIT,
@@ -16,14 +16,17 @@ import { appendAssistantDebugEntry } from "@/lib/assistant-debug"
 import { buildAssistantHistory } from "@/lib/assistant-history"
 import { AssistantDebugPanel } from "@/components/assistant-debug-panel"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { cn } from "@/lib/utils"
-
-// AI : shared chat bubble styling so live streaming matches completed messages.
-const USER_AVATAR_CLASS = "border-border bg-secondary"
-const ASSISTANT_AVATAR_CLASS = "border-sky-400/40 bg-sky-500/25"
-const USER_BUBBLE_CLASS = "border-border bg-secondary/70"
-const ASSISTANT_BUBBLE_CLASS = "border-sky-500/35 bg-sky-500/20"
+import {
+  Chat,
+  ChatBubble,
+  ChatBubbleAvatar,
+  ChatBubbleContent,
+  ChatHeader,
+  ChatInput,
+  ChatList,
+  ChatMessage,
+  ChatTypingIndicator,
+} from "@/components/ui/chat"
 
 export type AssistantChatMessage<TProposal> = {
   id: string
@@ -248,9 +251,25 @@ export function AssistantChat<TProposal>({
   const loadingText =
     typeof loadingLabel === "function" ? loadingLabel(loadingPhase) : loadingLabel
 
+  const starterFooter =
+    messages.length <= 1 && !loading ? (
+      <div className="flex flex-wrap gap-1.5 px-3 pt-2">
+        {starters.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => void send(s)}
+            className="rounded-full border border-border bg-secondary/40 px-2.5 py-1 font-mono text-[9px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+    ) : null
+
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-border px-4 py-3">
+    <Chat className="h-full">
+      <ChatHeader>
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <Sparkles className="h-4 w-4 shrink-0 text-primary" />
@@ -259,39 +278,20 @@ export function AssistantChat<TProposal>({
           {headerActions}
         </div>
         <p className="mt-1 font-mono text-[10px] text-muted-foreground">{subtitle}</p>
-      </div>
+      </ChatHeader>
 
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-        <div className="space-y-4 p-4">
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              className={cn("flex gap-2", m.role === "user" ? "flex-row-reverse" : "flex-row")}
-            >
-              <div
-                className={cn(
-                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border",
-                  m.role === "user" ? USER_AVATAR_CLASS : ASSISTANT_AVATAR_CLASS,
-                )}
-              >
-                {m.role === "user" ? (
-                  <User className="h-3.5 w-3.5 text-muted-foreground" />
-                ) : (
-                  <Bot className="h-3.5 w-3.5 text-sky-300" />
-                )}
-              </div>
-              <div
-                className={cn(
-                  "min-w-0 max-w-[92%] rounded-lg border px-3 py-2",
-                  m.role === "user" ? USER_BUBBLE_CLASS : ASSISTANT_BUBBLE_CLASS,
-                )}
-              >
-                <p className="text-xs leading-relaxed whitespace-pre-wrap">{m.content}</p>
+      <ChatList>
+        {messages.map((m) => {
+          const variant = m.role === "user" ? "user" : "assistant"
+          return (
+            <ChatMessage key={m.id} variant={variant}>
+              <ChatBubbleAvatar variant={variant} />
+              <ChatBubble variant={variant}>
+                <ChatBubbleContent>{m.content}</ChatBubbleContent>
                 {m.proposal && (
                   <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3">
                     {renderProposal(m)}
                     {m.status === "pending" && (
-                      // AI : todo — approve/reject settle animations (checkmark flash, slide-out)
                       <div className="mt-3 flex gap-2">
                         <Button
                           size="sm"
@@ -331,116 +331,67 @@ export function AssistantChat<TProposal>({
                     showCopyButton={false}
                   />
                 )}
-              </div>
-            </div>
-          ))}
+              </ChatBubble>
+            </ChatMessage>
+          )
+        })}
 
-          {loading && (
-            <div className="flex gap-2 flex-row">
-              <div
-                className={cn(
-                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border",
-                  ASSISTANT_AVATAR_CLASS,
-                )}
-              >
-                <Bot className="h-3.5 w-3.5 text-sky-300" />
-              </div>
-              <div
-                className={cn(
-                  "min-w-0 max-w-[92%] space-y-3 rounded-lg border px-3 py-2",
-                  ASSISTANT_BUBBLE_CLASS,
-                )}
-              >
-                {showDebug && (debugTrace.length > 0 || liveThinking) ? (
-                  <AssistantDebugPanel
-                    entries={debugTrace}
-                    liveThinking={liveThinking}
-                    thinkingActive={loadingPhase === "thinking"}
-                    className="border-sky-400/25 bg-sky-950/35"
-                    showCopyButton={false}
-                  />
-                ) : liveThinking ? (
-                  <div>
-                    <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-sky-200/70">
-                      Thinking
-                    </p>
-                    <p className="max-h-40 overflow-y-auto font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-foreground/80">
-                      {liveThinking}
-                      {loadingPhase === "thinking" && (
-                        <span className="inline-block animate-pulse text-sky-300">▍</span>
-                      )}
-                    </p>
-                  </div>
-                ) : null}
-                {liveResponse && (
-                  <p className="text-xs leading-relaxed whitespace-pre-wrap">
-                    {liveResponse}
-                    <span className="inline-block animate-pulse text-sky-300">▍</span>
+        {loading && (
+          <ChatMessage variant="assistant">
+            <ChatBubbleAvatar variant="assistant" />
+            <ChatBubble variant="assistant" className="space-y-3">
+              {showDebug && (debugTrace.length > 0 || liveThinking) ? (
+                <AssistantDebugPanel
+                  entries={debugTrace}
+                  liveThinking={liveThinking}
+                  thinkingActive={loadingPhase === "thinking"}
+                  className="border-sky-400/25 bg-sky-950/35"
+                  showCopyButton={false}
+                />
+              ) : liveThinking ? (
+                <div>
+                  <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-sky-200/70">
+                    Thinking
                   </p>
-                )}
-                <div className="flex items-center gap-2 font-mono text-[10px] text-sky-200/70">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  {loadingText}
+                  <p className="max-h-40 overflow-y-auto font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-foreground/80">
+                    {liveThinking}
+                    {loadingPhase === "thinking" && (
+                      <span className="inline-block animate-pulse text-sky-300">▍</span>
+                    )}
+                  </p>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {error && (
-            <div className="space-y-2 px-2">
-              <p className="font-mono text-[10px] text-destructive">{error}</p>
-              {showDebug && errorDebugTrace.length > 0 && (
-                <AssistantDebugPanel entries={errorDebugTrace} showCopyButton={false} />
+              ) : null}
+              {liveResponse && (
+                <p className="text-xs leading-relaxed whitespace-pre-wrap">
+                  {liveResponse}
+                  <span className="inline-block animate-pulse text-sky-300">▍</span>
+                </p>
               )}
-            </div>
-          )}
+              <ChatTypingIndicator label={loadingText} />
+            </ChatBubble>
+          </ChatMessage>
+        )}
 
-          <div ref={bottomRef} />
-        </div>
-      </div>
+        {error && (
+          <div className="space-y-2 px-2">
+            <p className="font-mono text-[10px] text-destructive">{error}</p>
+            {showDebug && errorDebugTrace.length > 0 && (
+              <AssistantDebugPanel entries={errorDebugTrace} showCopyButton={false} />
+            )}
+          </div>
+        )}
 
-      {messages.length <= 1 && !loading && (
-        <div className="flex flex-wrap gap-1.5 border-t border-border px-3 py-2">
-          {starters.map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => void send(s)}
-              className="rounded-full border border-border bg-secondary/40 px-2.5 py-1 font-mono text-[9px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      )}
+        <div ref={bottomRef} />
+      </ChatList>
 
-      <div className="border-t border-border p-3">
-        <div className="flex gap-2">
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault()
-                void send(input)
-              }
-            }}
-            placeholder={placeholder}
-            className="min-h-10 resize-none text-xs"
-            rows={2}
-            disabled={loading}
-          />
-          <Button
-            size="icon"
-            className="h-10 w-10 shrink-0"
-            disabled={!input.trim() || loading}
-            onClick={() => void send(input)}
-            aria-label="Send"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-    </div>
+      <ChatInput
+        value={input}
+        onChange={setInput}
+        onSend={() => void send(input)}
+        placeholder={placeholder}
+        disabled={loading}
+        footer={starterFooter}
+      />
+    </Chat>
   )
 }

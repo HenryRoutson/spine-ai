@@ -3,9 +3,9 @@
 // AI : project-level documentation panel — content is prepended to every assistant/agent prompt
 // AI : so the model always sees the rules/constraints before proposing changes.
 
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic"
-import { Save, Eye, Pencil, Columns2 } from "lucide-react"
+import { Save, Eye, Pencil, Columns2, Maximize2, X } from "lucide-react"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { MarkdownView } from "@/components/highlight"
@@ -16,6 +16,11 @@ import { ResizableSplit } from "@/components/resizable-split"
 import { docsEditorSplit } from "@/lib/layout-split-settings"
 import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
+
+const NOTES_EDITOR_CLASS =
+  "h-full min-h-0 w-full resize-none bg-black p-5 font-mono text-xs leading-relaxed text-white placeholder:text-neutral-500 focus:outline-none"
+const NOTES_PREVIEW_CLASS = "min-h-0 flex-1 overflow-auto bg-black p-5 text-white"
+const NOTES_EMPTY_CLASS = "font-mono text-xs text-neutral-500"
 
 const MermaidView = dynamic(
   () => import("@/components/mermaid-view").then((m) => ({ default: m.MermaidView })),
@@ -38,7 +43,7 @@ Write anything the agent must always respect — these constraints are injected 
 
 export function Documentation() {
   const { documentation, setDocumentation, modules, models } = useStore()
-  const pipelineMermaid = useMemo(() => derivePipelineMermaid(modules, models), [modules, models])
+  const pipelineMermaid = useMemo(() => derivePipelineMermaid(modules, models, "dark"), [modules, models])
 
   // AI : local draft — only persisted on explicit save (avoids a PUT on every keystroke)
   const [draft, setDraft] = useState(documentation)
@@ -56,6 +61,26 @@ export function Documentation() {
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
     savedTimerRef.current = setTimeout(() => setSaved(false), 2000)
   }, [draft, setDocumentation])
+
+  const [graphFullscreen, setGraphFullscreen] = useState(false)
+  const closeGraphFullscreen = useCallback(() => setGraphFullscreen(false), [])
+
+  useEffect(() => {
+    if (!graphFullscreen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeGraphFullscreen()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [graphFullscreen, closeGraphFullscreen])
+
+  useEffect(() => {
+    if (!graphFullscreen) return
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = ""
+    }
+  }, [graphFullscreen])
 
   return (
     <div className="flex h-full flex-col">
@@ -105,12 +130,51 @@ export function Documentation() {
       </div>
 
       {modules.length > 0 && (
-        <div className="shrink-0 border-b border-border px-5 py-4">
-          <div className="mb-2 flex items-baseline justify-between gap-3">
-            <h2 className="font-mono text-xs font-medium text-foreground">Pipeline structure</h2>
-            <span className="font-mono text-[10px] text-muted-foreground">derived · mermaid</span>
+        <div className="shrink-0 border-b border-neutral-800 bg-black px-5 py-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-baseline gap-3">
+              <h2 className="font-mono text-xs font-medium text-white">Pipeline structure</h2>
+              <span className="font-mono text-[10px] text-neutral-500">derived · mermaid</span>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 shrink-0 gap-1.5 border-neutral-700 bg-black font-mono text-[10px] text-white hover:bg-neutral-900 hover:text-white"
+              onClick={() => setGraphFullscreen(true)}
+              title="View pipeline graph full screen"
+            >
+              <Maximize2 className="h-3 w-3" />
+              full screen
+            </Button>
           </div>
-          <MermaidView chart={pipelineMermaid} />
+          <div className="overflow-x-auto rounded-lg border border-neutral-800 bg-black p-4">
+            <MermaidView chart={pipelineMermaid} />
+          </div>
+        </div>
+      )}
+
+      {graphFullscreen && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black">
+          <div className="flex shrink-0 items-center gap-3 border-b border-neutral-800 px-4 py-2.5">
+            <div className="min-w-0">
+              <p className="truncate font-mono text-xs text-white">Pipeline structure</p>
+              <p className="font-mono text-[10px] text-neutral-500">derived · mermaid · Esc to close</p>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="ml-auto h-8 w-8 text-neutral-400 hover:bg-neutral-900 hover:text-white"
+              onClick={closeGraphFullscreen}
+              title="Close full screen"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-8">
+            <MermaidView chart={pipelineMermaid} className="w-full max-w-[min(100%,1400px)]" />
+          </div>
         </div>
       )}
 
@@ -126,7 +190,7 @@ export function Documentation() {
             maxLeading={docsEditorSplit.max}
             leading={
               <textarea
-                className="h-full min-h-0 w-full resize-none bg-background p-5 font-mono text-xs leading-relaxed text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+                className={NOTES_EDITOR_CLASS}
                 placeholder={PLACEHOLDER}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
@@ -134,11 +198,11 @@ export function Documentation() {
               />
             }
             trailing={
-              <div className="min-h-0 flex-1 overflow-auto p-5">
+              <div className={NOTES_PREVIEW_CLASS}>
                 {draft.trim() ? (
-                  <MarkdownView md={draft} />
+                  <MarkdownView md={draft} inverted />
                 ) : (
-                  <p className="font-mono text-xs text-muted-foreground/50">Nothing to preview yet.</p>
+                  <p className={NOTES_EMPTY_CLASS}>Nothing to preview yet.</p>
                 )}
               </div>
             }
@@ -147,7 +211,7 @@ export function Documentation() {
           <>
             {tab === "edit" && (
               <textarea
-                className="min-h-0 flex-1 resize-none bg-background p-5 font-mono text-xs leading-relaxed text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+                className={cn(NOTES_EDITOR_CLASS, "min-h-0 flex-1")}
                 placeholder={PLACEHOLDER}
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
@@ -155,11 +219,11 @@ export function Documentation() {
               />
             )}
             {tab === "preview" && (
-              <div className="min-h-0 flex-1 overflow-auto p-5">
+              <div className={cn(NOTES_PREVIEW_CLASS, "flex-1")}>
                 {draft.trim() ? (
-                  <MarkdownView md={draft} />
+                  <MarkdownView md={draft} inverted />
                 ) : (
-                  <p className="font-mono text-xs text-muted-foreground/50">Nothing to preview yet.</p>
+                  <p className={NOTES_EMPTY_CLASS}>Nothing to preview yet.</p>
                 )}
               </div>
             )}

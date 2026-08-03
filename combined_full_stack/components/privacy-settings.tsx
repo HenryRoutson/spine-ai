@@ -5,12 +5,20 @@ import { useEffect, useState } from "react"
 import { createClient } from "@/utils/supabase/client"
 import { LEGAL, LEGAL_ROUTES } from "@shared/legal/site"
 import { LegalFooterLinks } from "@/lib/legal/chrome"
+import { PrivacyMarketingSkeleton } from "@/components/account-panel-skeletons"
 import { Switch } from "@/components/ui/switch"
 import { isDemoMode } from "@/lib/demo-mode"
+import {
+  fetchSettingsAccount,
+  patchSettingsAccountMarketingOptIn,
+} from "@/lib/warm-settings-data"
+import { readSettingsAccountSnapshot } from "@/lib/settings-account-snapshot-cache"
 
 export function PrivacySettings() {
-  const [marketingOptIn, setMarketingOptIn] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [marketingOptIn, setMarketingOptIn] = useState(
+    () => readSettingsAccountSnapshot()?.marketingOptIn ?? false,
+  )
+  const [loading, setLoading] = useState(() => readSettingsAccountSnapshot() == null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -18,11 +26,8 @@ export function PrivacySettings() {
       setLoading(false)
       return
     }
-    void createClient()
-      .then((supabase) => supabase.auth.getUser())
-      .then(({ data }) => {
-        setMarketingOptIn(data.user?.user_metadata?.marketing_opt_in === true)
-      })
+    void fetchSettingsAccount()
+      .then((account) => setMarketingOptIn(account.marketingOptIn))
       .finally(() => setLoading(false))
   }, [])
 
@@ -34,7 +39,10 @@ export function PrivacySettings() {
       const { error } = await supabase.auth.updateUser({
         data: { marketing_opt_in: checked },
       })
-      if (!error) setMarketingOptIn(checked)
+      if (!error) {
+        setMarketingOptIn(checked)
+        patchSettingsAccountMarketingOptIn(checked)
+      }
     } finally {
       setSaving(false)
     }
@@ -50,10 +58,13 @@ export function PrivacySettings() {
       </div>
       <div className="space-y-4 px-4 py-3">
         <LegalFooterLinks linkClassName="text-xs text-primary underline-offset-2 hover:underline" />
+        {loading ? (
+          <PrivacyMarketingSkeleton />
+        ) : (
         <label className="flex cursor-pointer items-start gap-3">
           <Switch
             checked={marketingOptIn}
-            disabled={loading || saving || isDemoMode()}
+            disabled={saving || isDemoMode()}
             onCheckedChange={(checked) => void toggleMarketing(!!checked)}
             className="mt-0.5"
           />
@@ -64,6 +75,7 @@ export function PrivacySettings() {
             </span>
           </span>
         </label>
+        )}
         <p className="text-xs leading-relaxed text-muted-foreground">
           To access, export, correct, or delete your data, email{" "}
           <a href={`mailto:${LEGAL.contactEmail}`} className="text-primary underline underline-offset-2">

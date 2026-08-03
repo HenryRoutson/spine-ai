@@ -54,10 +54,14 @@ import {
 import { mostRecentlyOpenedProject } from "@/lib/project-active"
 import { dedupeDocsNewestByName } from "@/lib/project-docs"
 import { readStateSnapshot, seedProjectInStateSnapshot, writeStateSnapshot } from "@/lib/state-snapshot-cache"
+import { readBillingSnapshot, writeBillingSnapshot } from "@/lib/billing-snapshot-cache"
 import { readEarningsSnapshot, writeEarningsSnapshot } from "@/lib/earnings-snapshot-cache"
+import { warmMarketplaceListings } from "@/lib/warm-run-data"
+import { warmSettingsAccount, warmSettingsTeams } from "@/lib/warm-settings-data"
 import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
 import { setDemoMode } from "@/lib/demo-mode"
 import { NoProjectsPage } from "@/components/no-projects-page"
+import { ProjectPickerSkeleton, StoreShellSkeleton } from "@/components/store-shell-skeletons"
 
 export type StoreMode = "workspace" | "picker" | "demo"
 
@@ -314,6 +318,7 @@ export function StoreProvider({
   const pendingSaveRef = useRef<{ id: string; body: string } | null>(null)
   const hydratedRef = useRef(false)
   const prefetchCache = useRef(new Map<string, PrefetchEntry>())
+  const billingFetchRef = useRef<Promise<void> | null>(null)
   const earningsFetchRef = useRef<Promise<void> | null>(null)
   // AI : ignore in-flight /api/state responses that started before a delete switched projects.
   const stateLoadGenRef = useRef(0)
@@ -335,15 +340,27 @@ export function StoreProvider({
   }, [mode, state?.projects])
 
   const refreshBilling = useCallback(async () => {
-    if (mode === "demo") {
-      setBillingAccount(DEMO_BILLING)
-      return
+    if (billingFetchRef.current) return billingFetchRef.current
+    const run = (async () => {
+      if (mode === "demo") {
+        setBillingAccount(DEMO_BILLING)
+        writeBillingSnapshot(DEMO_BILLING)
+        return
+      }
+      const data = await apiJson<BillingAccountView>(API_ROUTES.billing)
+      const next = {
+        ...data,
+        creditHistory: data.creditHistory ?? [],
+      }
+      setBillingAccount(next)
+      writeBillingSnapshot(next)
+    })()
+    billingFetchRef.current = run
+    try {
+      await run
+    } finally {
+      billingFetchRef.current = null
     }
-    const data = await apiJson<BillingAccountView>(API_ROUTES.billing)
-    setBillingAccount({
-      ...data,
-      creditHistory: data.creditHistory ?? [],
-    })
   }, [mode])
 
   const refreshEarnings = useCallback(async () => {
@@ -506,6 +523,8 @@ export function StoreProvider({
     if (mode === "demo") return
     const snapshot = readStateSnapshot()
     if (snapshot) setState(snapshot)
+    const billing = readBillingSnapshot()
+    if (billing) setBillingAccount(billing)
     const earnings = readEarningsSnapshot()
     if (earnings) setEarningsAccount(earnings)
   }, [mode])
@@ -534,8 +553,12 @@ export function StoreProvider({
     if (mode === "workspace" && hydratedRef.current && scopedProjectId && !instant) setProjectLoading(true)
     setStateSyncing(true)
 
-    // AI : warm earnings in parallel with /api/state — tab open should not wait on project hydrate.
+    // AI : warm billing + earnings + settings + run in parallel with /api/state — account tabs should not wait on project hydrate.
+    refreshBilling().catch(console.error)
     refreshEarnings().catch(console.error)
+    warmSettingsTeams().catch(console.error)
+    warmSettingsAccount().catch(console.error)
+    warmMarketplaceListings().catch(console.error)
     loadProjectState(scopedProjectId)
       .then((data) => {
         if (!alive || loadGen !== stateLoadGenRef.current) return
@@ -1273,11 +1296,7 @@ export function StoreProvider({
 
   if (mode === "picker") {
     if (!state || !pickerValue) {
-      return (
-        <div className="flex h-dvh items-center justify-center bg-background">
-          <p className="font-mono text-xs text-muted-foreground">loading projects…</p>
-        </div>
-      )
+      return <ProjectPickerSkeleton />
     }
     return (
       <>
@@ -1292,9 +1311,7 @@ export function StoreProvider({
     return (
       <>
         {saveErrorBanner}
-        <div className="flex h-dvh items-center justify-center bg-background">
-          <p className="font-mono text-xs text-muted-foreground">loading store…</p>
-        </div>
+        <StoreShellSkeleton />
       </>
     )
   }
@@ -1320,11 +1337,7 @@ export function StoreProvider({
   }
 
   if (!state || !project || !value) {
-    return (
-      <div className="flex h-dvh items-center justify-center bg-background">
-        <p className="font-mono text-xs text-muted-foreground">loading store…</p>
-      </div>
-    )
+    return <StoreShellSkeleton />
   }
 
   return (

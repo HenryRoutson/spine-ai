@@ -100,19 +100,29 @@ export function InferenceCollapsibleSection({
   )
 }
 
-export function GoToLoggingButton({ onClick, className }: { onClick: () => void; className?: string }) {
+export function GoToLoggingButton({
+  onClick,
+  className,
+  variant = "full",
+}: {
+  onClick: () => void
+  className?: string
+  variant?: "full" | "inline"
+}) {
+  const inline = variant === "inline"
   return (
     <Button
+      variant={inline ? "outline" : "default"}
+      size={inline ? "sm" : "default"}
       className={cn(
-        "w-full gap-1.5",
-        "animate-in fade-in slide-in-from-bottom-2 duration-500",
-        "motion-safe:animate-[pulse_2s_ease-in-out_infinite] motion-safe:ring-2 motion-safe:ring-primary/30",
+        "gap-1.5",
+        inline ? "bg-transparent" : "w-full animate-in fade-in slide-in-from-bottom-2 duration-500 motion-safe:animate-[pulse_2s_ease-in-out_infinite] motion-safe:ring-2 motion-safe:ring-primary/30",
         className,
       )}
       onClick={onClick}
     >
       <ScrollText className="h-3.5 w-3.5" />
-      Go to logging
+      {inline ? "Open Logging tab" : "Go to logging"}
     </Button>
   )
 }

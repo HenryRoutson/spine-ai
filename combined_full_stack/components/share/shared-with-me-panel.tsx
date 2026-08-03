@@ -20,7 +20,7 @@ type SharedWithMePanelProps = {
 }
 
 export function SharedWithMePanel({ onRun }: SharedWithMePanelProps) {
-  const [entries, setEntries] = useState<SharedWithMeEntry[]>([])
+  const [entries, setEntries] = useState<SharedWithMeEntry[]>(() => readSharedWithMe())
   const [addInput, setAddInput] = useState("")
   const [addError, setAddError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)

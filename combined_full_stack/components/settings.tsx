@@ -61,6 +61,10 @@ import { OPEN_LLM_PROVIDERS_EVENT, SCROLL_SETTINGS_SECTION_EVENT } from "@/lib/s
 import { isDemoMode } from "@/lib/demo-mode"
 import { DEMO_ACCOUNT_EMAIL } from "@/lib/demo-constants"
 import { clearWorkspaceClientSession } from "@/lib/clear-workspace-client-session"
+import { SettingsAccountRowSkeleton } from "@/components/account-panel-skeletons"
+import { readSettingsAccountSnapshot } from "@/lib/settings-account-snapshot-cache"
+import { fetchSettingsAccount } from "@/lib/warm-settings-data"
+import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 
 // AI : vscode-style preview colors — mirror public/json-viewer.html theme "vscode"
 function VscodeSyntaxPreview({ json }: { json: string }) {
@@ -116,9 +120,13 @@ const SETTINGS_SECTIONS = [
 ] as const
 
 export function Settings() {
+  useMarkPrimarySectionReady("settings")
   const shell = useOptionalAppShell()
   const { model, setModel } = useWorkspaceModel()
-  const [email, setEmail] = useState<string | null>(null)
+  const [email, setEmail] = useState<string | null>(() => readSettingsAccountSnapshot()?.email ?? null)
+  const [emailLoading, setEmailLoading] = useState(
+    () => readSettingsAccountSnapshot() == null && !isDemoMode(),
+  )
   const [defaultView, setDefaultView] = useState<JsonViewerHumanViewId>(DEFAULT_JSON_VIEWER_HUMAN_VIEW)
   const [syntaxTheme, setSyntaxTheme] = useState<JsonViewerSyntaxThemeId>(DEFAULT_JSON_VIEWER_SYNTAX_THEME)
   const [hideServerLogs, setHideServerLogs] = useState(DEFAULT_HIDE_SERVER_LOGS)
@@ -134,12 +142,12 @@ export function Settings() {
   useEffect(() => {
     if (isDemoMode()) {
       setEmail(DEMO_ACCOUNT_EMAIL)
+      setEmailLoading(false)
       return
     }
-    void createClient()
-      .then((supabase) => supabase.auth.getUser())
-      .then(({ data }) => setEmail(data.user?.email ?? null))
-      .catch(() => setEmail(null))
+    void fetchSettingsAccount()
+      .then((account) => setEmail(account.email))
+      .finally(() => setEmailLoading(false))
   }, [])
 
   useEffect(() => {
@@ -257,8 +265,11 @@ export function Settings() {
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Account</h3>
             </div>
+            {emailLoading ? (
+              <SettingsAccountRowSkeleton />
+            ) : (
             <div className="flex items-center justify-between gap-3 px-4 py-3">
-              <span className="font-mono text-xs text-muted-foreground">{email ?? "…"}</span>
+              <span className="font-mono text-xs text-muted-foreground">{email ?? "—"}</span>
               {isDemoMode() ? (
                 <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                   Preview account
@@ -282,6 +293,7 @@ export function Settings() {
                 </Button>
               )}
             </div>
+            )}
           </section>
 
           <section id="settings-model" className="rounded-lg border border-border bg-card">

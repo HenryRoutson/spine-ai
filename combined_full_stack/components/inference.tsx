@@ -652,7 +652,19 @@ export function Inference() {
                 )}
 
                 {run.phase === "running" && (
-                  <InferenceStepTracePanel
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/25 bg-primary/5 px-3 py-2">
+                      <p className="font-mono text-[10px] uppercase tracking-wider text-primary">
+                        Live step logs
+                      </p>
+                      {run.run?.id ? (
+                        <GoToLoggingButton
+                          variant="inline"
+                          onClick={() => openLogging(run.run!.id)}
+                        />
+                      ) : null}
+                    </div>
+                    <InferenceStepTracePanel
                     modules={modules}
                     phase={run.phase}
                     stepStates={run.stepStates}
@@ -665,6 +677,7 @@ export function Inference() {
                     models={models}
                     inputDocs={run.inputDocs}
                   />
+                  </div>
                 )}
               </InferenceRunSection>
 
@@ -746,6 +759,7 @@ export function Inference() {
                       inputDocs={lastRunInputDocs}
                       footer={
                         <GoToLoggingButton
+                          variant="inline"
                           className="mt-4"
                           onClick={() => openLogging(run.run!.id)}
                         />

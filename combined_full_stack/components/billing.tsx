@@ -5,13 +5,18 @@ import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { formatCents } from "@/lib/format"
-import { useMemo, useState, useEffect, useCallback } from "react"
+import { useMemo, useState, useEffect, useCallback, useRef } from "react"
 import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts"
 import { useWorkspaceBilling } from "@/lib/use-workspace-billing"
 import type { BillingAccountView } from "@/lib/store"
 import { billingSeries, totalSaved, totalUsageFromRuns } from "@/lib/billing"
 import { redirectToCheckout } from "@/lib/stripe-client"
 import { STRIPE_ENABLED } from "@/lib/stripe-enabled"
+import {
+  BillingBalanceSkeleton,
+  BillingKeysListSkeleton,
+  BillingStatsSkeleton,
+} from "@/components/account-panel-skeletons"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import {
@@ -24,7 +29,15 @@ import {
 } from "@/components/ui/chart"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { CreditCard, KeyRound, Loader2, TrendingDown, TrendingUp } from "lucide-react"
+import { CreditCard, KeyRound, Loader2, Play, TrendingDown, TrendingUp } from "lucide-react"
+import { isSharedRun } from "@/lib/shared-link-types"
+import type { PipelineRun } from "@/lib/types"
+import {
+  readBillingKeysSnapshot,
+  writeBillingKeysSnapshot,
+  type BillingKeySnapshot,
+} from "@/lib/billing-keys-snapshot-cache"
+import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 
 // AI : de-mocked — series keys come from the real billing aggregation (one line per model
 // AI : + the doc-parse service), so new models show up without touching this file.
@@ -36,7 +49,17 @@ function chartYMaxCents(peakCents: number): number {
   return +(peakCents * 1.2).toFixed(4)
 }
 
-type BillingScope = "all" | "project"
+type BillingScope = "all" | "project" | "shared"
+
+function runsForBillingScope(
+  scope: BillingScope,
+  billingRuns: PipelineRun[],
+  projectRuns: PipelineRun[],
+): PipelineRun[] {
+  if (scope === "project") return projectRuns
+  if (scope === "shared") return billingRuns.filter((run) => isSharedRun(run))
+  return billingRuns
+}
 
 function creditHistoryLabel(source: BillingAccountView["creditHistory"][number]["source"]): string {
   if (source === "invoice") return "Subscription renewal"
@@ -51,19 +74,29 @@ function formatCreditWhen(iso: string): string {
 }
 
 export function Billing() {
+  useMarkPrimarySectionReady("billing")
   const { runs, billingRuns, project, billingAccount, refreshBilling } = useWorkspaceBilling()
   const [scope, setScope] = useState<BillingScope>(project ? "all" : "all")
   const [checkoutKey, setCheckoutKey] = useState<string | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
-  const [billingKeys, setBillingKeys] = useState<
-    { id: string; label: string; keyPrefix: string; createdAt: number }[]
-  >([])
+  const [billingKeys, setBillingKeys] = useState<BillingKeySnapshot[]>(
+    () => readBillingKeysSnapshot() ?? [],
+  )
   const [billingKeysBusy, setBillingKeysBusy] = useState(false)
   const [newBillingKey, setNewBillingKey] = useState<string | null>(null)
+  const billingKeysFetchRef = useRef<Promise<void> | null>(null)
 
-  const scopedRuns = scope === "all" ? billingRuns : runs
+  const scopedRuns = useMemo(
+    () => runsForBillingScope(scope, billingRuns, runs),
+    [scope, billingRuns, runs],
+  )
   const billing = useMemo(() => billingSeries(scopedRuns), [scopedRuns])
-  const scopeLabel = scope === "all" || !project ? "All projects" : project.name
+  const scopeLabel =
+    scope === "shared"
+      ? "Run shared pipelines"
+      : scope === "project" && project
+        ? project.name
+        : "All projects"
 
   async function startCheckout(mode: "payment" | "subscription", amountCents?: number) {
     const key = mode === "subscription" ? "subscription" : `topup:${amountCents}`
@@ -86,14 +119,26 @@ export function Billing() {
   }
 
   const loadBillingKeys = useCallback(async () => {
-    setBillingKeysBusy(true)
+    if (billingKeysFetchRef.current) return billingKeysFetchRef.current
+    const cached = readBillingKeysSnapshot()
+    if (cached) setBillingKeys(cached)
+    const run = (async () => {
+      setBillingKeysBusy(!cached?.length)
+      try {
+        const data = await apiJson<{ keys: BillingKeySnapshot[] }>(API_ROUTES.billingKeys)
+        setBillingKeys(data.keys)
+        writeBillingKeysSnapshot(data.keys)
+      } catch {
+        if (!cached) setBillingKeys([])
+      } finally {
+        setBillingKeysBusy(false)
+      }
+    })()
+    billingKeysFetchRef.current = run
     try {
-      const data = await apiJson<{ keys: typeof billingKeys }>(API_ROUTES.billingKeys)
-      setBillingKeys(data.keys)
-    } catch {
-      setBillingKeys([])
+      await run
     } finally {
-      setBillingKeysBusy(false)
+      billingKeysFetchRef.current = null
     }
   }, [])
 
@@ -177,7 +222,7 @@ export function Billing() {
         description={`Credit for pipeline runs — subscribe or top up here. Share/API earnings live in the separate Earnings tab. You need at least ${formatCents(minRunBalanceCents)} credit to start a run.`}
       />
 
-      {billingAccount && (
+      {billingAccount ? (
         <div className="relative z-10 shrink-0 border-b border-border bg-card px-5 py-4">
           {banner && (
             <p className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 font-mono text-xs text-destructive">
@@ -258,12 +303,18 @@ export function Billing() {
             </p>
           )}
         </div>
+      ) : (
+        <BillingBalanceSkeleton />
       )}
 
-      <div className="shrink-0 grid grid-cols-2 gap-px border-b border-border bg-border">
-        <Stat label="Total spend" value={formatCents(usageCents)} />
-        <Stat label="Cache savings" value={formatCents(savedCents)} sub="vs no caching" good />
-      </div>
+      {billingAccount ? (
+        <div className="shrink-0 grid grid-cols-2 gap-px border-b border-border bg-border">
+          <Stat label="Total spend" value={formatCents(usageCents)} />
+          <Stat label="Cache savings" value={formatCents(savedCents)} sub="vs no caching" good />
+        </div>
+      ) : (
+        <BillingStatsSkeleton />
+      )}
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         <div className="rounded-lg border border-border bg-card p-4">
@@ -286,17 +337,27 @@ export function Billing() {
                   All projects
                 </Button>
                 {project ? (
+                  <Button
+                    type="button"
+                    variant={scope === "project" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-7 max-w-[10rem] truncate px-2.5 font-mono text-[10px]"
+                    title={project.name}
+                    onClick={() => setScope("project")}
+                  >
+                    This project
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
-                  variant={scope === "project" ? "secondary" : "ghost"}
+                  variant={scope === "shared" ? "secondary" : "ghost"}
                   size="sm"
-                  className="h-7 max-w-[10rem] truncate px-2.5 font-mono text-[10px]"
-                  title={project.name}
-                  onClick={() => setScope("project")}
+                  className="h-7 gap-1 px-2.5 font-mono text-[10px]"
+                  onClick={() => setScope("shared")}
                 >
-                  This project
+                  <Play className="h-3 w-3 shrink-0" />
+                  Run shared pipelines
                 </Button>
-                ) : null}
               </div>
               {hasRuns && (
                 <Badge variant="outline" className="gap-1 font-mono text-[10px] text-primary">
@@ -368,7 +429,9 @@ export function Billing() {
             <p className="py-12 text-center font-mono text-xs text-muted-foreground">
               {scope === "project"
                 ? "No runs for this project yet — run a pipeline to see daily cost breakdown."
-                : "No runs yet — run a pipeline to see daily cost breakdown."}
+                : scope === "shared"
+                  ? "No shared pipeline runs yet — run a shared link to see attribution here."
+                  : "No runs yet — run a pipeline to see daily cost breakdown."}
             </p>
           )}
         </div>
@@ -429,7 +492,9 @@ export function Billing() {
               <code className="block truncate font-mono text-[10px]">{newBillingKey}</code>
             </div>
           )}
-          {billingKeys.length ? (
+          {billingKeysBusy && !billingKeys.length ? (
+            <BillingKeysListSkeleton />
+          ) : billingKeys.length ? (
             <ul className="divide-y divide-border">
               {billingKeys.map((k) => (
                 <li key={k.id} className="flex items-center gap-3 px-4 py-2.5 font-mono text-xs">

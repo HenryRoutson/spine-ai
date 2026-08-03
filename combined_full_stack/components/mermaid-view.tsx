@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect, useId, useRef, useState } from "react"
-import { useTheme } from "next-themes"
 import { loadMermaidRuntime } from "@/lib/mermaid-runtime"
 import { cn } from "@/lib/utils"
+
+const MONO_FONT = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
 
 type MermaidViewProps = {
   chart: string
@@ -14,7 +15,6 @@ type MermaidViewProps = {
 export function MermaidView({ chart, className }: MermaidViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const renderId = useId().replace(/:/g, "")
-  const { resolvedTheme } = useTheme()
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -31,9 +31,10 @@ export function MermaidView({ chart, className }: MermaidViewProps) {
         const mermaid = await loadMermaidRuntime()
         mermaid.initialize({
           startOnLoad: false,
-          theme: resolvedTheme === "dark" ? "dark" : "default",
+          theme: "base",
+          fontFamily: MONO_FONT,
           securityLevel: "strict",
-          flowchart: { htmlLabels: true, curve: "basis" },
+          flowchart: { htmlLabels: true, curve: "basis", padding: 20, nodeSpacing: 50, rankSpacing: 60 },
         })
         const { svg } = await mermaid.render(`pipeline-mermaid-${renderId}`, chart)
         if (!cancelled && containerRef.current) {
@@ -51,7 +52,7 @@ export function MermaidView({ chart, className }: MermaidViewProps) {
     return () => {
       cancelled = true
     }
-  }, [chart, renderId, resolvedTheme])
+  }, [chart, renderId])
 
   if (!chart.trim()) return null
 
@@ -59,7 +60,7 @@ export function MermaidView({ chart, className }: MermaidViewProps) {
     <div className={cn("min-w-0", className)}>
       <div
         ref={containerRef}
-        className="overflow-x-auto [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full"
+        className="overflow-x-auto py-1 font-mono [&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-w-full [&_svg_.edgeLabel]:font-mono [&_svg_.edgeLabel]:text-[10px] [&_svg_.label]:font-mono [&_svg_.nodeLabel]:font-mono [&_svg_text]:font-mono"
         aria-label="Pipeline structure diagram"
       />
       {error && (

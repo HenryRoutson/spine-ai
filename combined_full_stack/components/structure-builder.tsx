@@ -9,8 +9,10 @@ import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useAppShell } from "@/lib/app-shell"
+import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 import { useStore, uid } from "@/lib/store"
 import { StructureCodeView } from "@/components/structure-code-view"
+import { EntityRail, EntityRailItem, EntityRailSection } from "@/components/entity-rail"
 import { ResizableSplit } from "@/components/resizable-split"
 import {
   readStructureSidebarWidth,
@@ -34,6 +36,7 @@ type EditorTarget =
 type StructureView = "structures" | "code"
 
 export function StructureBuilder() {
+  useMarkPrimarySectionReady("build")
   const { models, setModels, typeAliases, setTypeAliases, project } = useStore()
   const teamReadOnly = !!project?.teamReadOnly
   const { focusStructureId, clearFocusStructure } = useAppShell()
@@ -155,124 +158,110 @@ export function StructureBuilder() {
             minLeading={STRUCTURE_SIDEBAR_MIN}
             maxLeading={STRUCTURE_SIDEBAR_MAX}
             leading={
-              <aside className="flex min-h-0 flex-col overflow-hidden">
-                <div className="space-y-1 px-2 pt-2">
-                  <div className="flex items-center justify-between px-1 py-1">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      Structs
-                    </span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 w-full justify-start gap-1.5 bg-transparent font-mono text-[10px]"
-                    onClick={addStruct}
-                    disabled={teamReadOnly}
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Add struct
-                  </Button>
-                </div>
-                <div className="max-h-[40%] overflow-y-auto px-2 pb-2">
+              <EntityRail className="w-full">
+                <EntityRailSection
+                  title="Structs in project"
+                  action={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-1.5 font-mono text-[9px]"
+                      onClick={addStruct}
+                      disabled={teamReadOnly}
+                    >
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  }
+                  className="max-h-[45%]"
+                >
                   {models.length === 0 && (
-                    <p className="px-2 py-2 text-center font-mono text-[10px] text-muted-foreground">
+                    <p className="px-1 py-2 text-center font-mono text-[10px] text-muted-foreground">
                       no structs yet
                     </p>
                   )}
                   {models.map((m) => (
-                    <button
+                    <EntityRailItem
                       key={m.id}
+                      active={view === "structures" && target.kind === "struct" && m.id === selectedStructId}
                       onClick={() => {
                         setTarget({ kind: "struct", id: m.id })
                         setView("structures")
                       }}
-                      className={cn(
-                        "group mb-1 flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left transition-colors",
-                        view === "structures" && target.kind === "struct" && m.id === selectedStructId
-                          ? "bg-secondary"
-                          : "hover:bg-secondary/50",
-                      )}
                     >
-                      <div className="min-w-0">
-                        <p className="break-all font-mono text-xs text-foreground">{m.name}</p>
-                        <p className="font-mono text-[10px] text-muted-foreground">
-                          {m.fields.length} fields
-                        </p>
+                      <div className="flex w-full items-center justify-between gap-1">
+                        <div className="min-w-0">
+                          <p className="break-all font-mono text-xs text-foreground">{m.name}</p>
+                          <p className="font-mono text-[10px] text-muted-foreground">{m.fields.length} fields</p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-0.5">
+                          {m.auto && <Sparkles className="h-3 w-3 text-chart-3" />}
+                          {m.sourceDocId && (
+                            <Badge variant="outline" className="h-4 px-1 font-mono text-[8px]">
+                              doc
+                            </Badge>
+                          )}
+                          {isLockedStructureModel(m) && (
+                            <Lock className="h-3 w-3 text-muted-foreground" />
+                          )}
+                        </div>
                       </div>
-                      {m.auto && <Sparkles className="h-3 w-3 shrink-0 text-chart-3" />}
-                      {m.sourceDocId && (
-                        <Badge variant="outline" className="h-4 shrink-0 px-1 font-mono text-[8px]">
-                          doc
-                        </Badge>
-                      )}
-                      {isLockedStructureModel(m) && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
-                    </button>
+                    </EntityRailItem>
                   ))}
-                </div>
+                </EntityRailSection>
 
-                <div className="border-t border-border px-2 py-2">
-                  <div className="flex items-center justify-between px-1 py-1">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      Types
-                    </span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mb-2 h-7 w-full justify-start gap-1.5 bg-transparent font-mono text-[10px]"
-                    onClick={addType}
-                    disabled={teamReadOnly}
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Add type
-                  </Button>
-                  <div className="max-h-[40%] overflow-y-auto">
-                    {typeAliases.length === 0 && (
-                      <p className="px-2 py-2 text-center font-mono text-[10px] text-muted-foreground">
-                        no types yet — add quote_id_t, list[int], etc.
-                      </p>
-                    )}
-                    {typeAliases.map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => {
-                          setTarget({ kind: "type", id: t.id })
-                          setView("structures")
-                        }}
-                        className={cn(
-                          "mb-1 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors",
-                          view === "structures" && target.kind === "type" && t.id === selectedTypeId
-                            ? "bg-secondary"
-                            : "hover:bg-secondary/50",
-                        )}
-                      >
+                <EntityRailSection
+                  title="Type aliases"
+                  action={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 px-1.5 font-mono text-[9px]"
+                      onClick={addType}
+                      disabled={teamReadOnly}
+                    >
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  }
+                  className="min-h-0 flex-1"
+                >
+                  {typeAliases.length === 0 && (
+                    <p className="px-1 py-2 text-center font-mono text-[10px] text-muted-foreground">
+                      no types yet
+                    </p>
+                  )}
+                  {typeAliases.map((t) => (
+                    <EntityRailItem
+                      key={t.id}
+                      active={view === "structures" && target.kind === "type" && t.id === selectedTypeId}
+                      onClick={() => {
+                        setTarget({ kind: "type", id: t.id })
+                        setView("structures")
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
                         <Braces className="h-3 w-3 shrink-0 text-muted-foreground" />
                         <div className="min-w-0">
                           <p className="truncate font-mono text-xs text-foreground">{t.name}</p>
                           <p className="truncate font-mono text-[10px] text-muted-foreground">type alias</p>
                         </div>
-                        {isLockedTypeAlias(t) && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                        {isLockedTypeAlias(t) && <Lock className="ml-auto h-3 w-3 shrink-0 text-muted-foreground" />}
+                      </div>
+                    </EntityRailItem>
+                  ))}
+                </EntityRailSection>
 
-                {/* AI : code is project-wide (all structs/types), not tied to one selected struct */}
-                <div className="mt-auto border-t border-border px-2 py-2">
-                  <button
-                    type="button"
-                    onClick={() => setView("code")}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors",
-                      view === "code" ? "bg-secondary" : "hover:bg-secondary/50",
-                    )}
-                  >
-                    <Code2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0">
-                      <p className="font-mono text-xs text-foreground">Code</p>
-                      <p className="font-mono text-[10px] text-muted-foreground">Python · TS · Rust</p>
+                <div className="mt-auto border-t border-border/60 p-1.5">
+                  <EntityRailItem active={view === "code"} onClick={() => setView("code")}>
+                    <div className="flex items-center gap-2">
+                      <Code2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <div>
+                        <p className="font-mono text-xs text-foreground">Code preview</p>
+                        <p className="font-mono text-[10px] text-muted-foreground">Python · TS · Rust</p>
+                      </div>
                     </div>
-                  </button>
+                  </EntityRailItem>
                 </div>
-              </aside>
+              </EntityRail>
             }
             trailing={
               <>

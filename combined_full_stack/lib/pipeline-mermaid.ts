@@ -2,6 +2,8 @@ import { combineGroupAt, segmentPipeline } from "@/lib/pipeline-layout"
 import { formatModuleSpineIn, formatModuleSpineOut } from "@/lib/spine-type"
 import { ModuleKind, type PipelineModule, type StructureModel } from "@/lib/types"
 
+export type PipelineMermaidTheme = "light" | "dark"
+
 // AI : escape labels for mermaid flowchart node text — derived live from pipeline modules.
 function mermaidEscape(text: string): string {
   return text.replace(/"/g, "'").replace(/\[/g, "(").replace(/\]/g, ")")
@@ -24,8 +26,10 @@ function stepIoLine(m: PipelineModule, models: StructureModel[]): string {
 
 function stepNodeLabel(m: PipelineModule, stepNum: number, models: StructureModel[]): string {
   const kind = m.kind.replace(/-/g, " ")
-  return `${stepNum}. ${m.label}<br/>${kind} · ${stepIoLine(m, models)}`
+  return `${stepNum}. ${m.label}<br/><small>${kind} · ${stepIoLine(m, models)}</small>`
 }
+
+const MONO_FONT = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
 
 function defineNode(
   modules: PipelineModule[],
@@ -35,13 +39,67 @@ function defineNode(
 ): string {
   const id = nodeId(modules, m.id)
   const label = mermaidEscape(stepNodeLabel(m, stepNum, models))
-  return `  ${id}["${label}"]`
+  return `  ${id}["${label}"]:::step`
+}
+
+function themeFrontmatter(theme: PipelineMermaidTheme): string[] {
+  const vars =
+    theme === "dark"
+      ? [
+          `    fontFamily: '${MONO_FONT}'`,
+          "    background: 'transparent'",
+          "    primaryColor: '#000000'",
+          "    primaryTextColor: '#ffffff'",
+          "    primaryBorderColor: '#ffffff'",
+          "    lineColor: '#a3a3a3'",
+          "    secondaryColor: '#171717'",
+          "    tertiaryColor: '#262626'",
+          "    edgeLabelBackground: '#000000'",
+          "    edgeLabelText: '#ffffff'",
+        ]
+      : [
+          `    fontFamily: '${MONO_FONT}'`,
+          "    background: 'transparent'",
+          "    primaryColor: '#ffffff'",
+          "    primaryTextColor: '#000000'",
+          "    primaryBorderColor: '#000000'",
+          "    lineColor: '#525252'",
+          "    secondaryColor: '#f5f5f5'",
+          "    tertiaryColor: '#e5e5e5'",
+          "    edgeLabelBackground: '#ffffff'",
+          "    edgeLabelText: '#000000'",
+        ]
+
+  return ["---", "config:", "  theme: base", "  themeVariables:", ...vars, "---"]
+}
+
+function themeClassDefs(theme: PipelineMermaidTheme): string[] {
+  if (theme === "dark") {
+    return [
+      "classDef step fill:#000000,stroke:#ffffff,stroke-width:2px,color:#ffffff,rx:6px,ry:6px",
+      "classDef empty fill:#171717,stroke:#737373,stroke-width:2px,color:#d4d4d4,rx:6px,ry:6px",
+    ]
+  }
+
+  return [
+    "classDef step fill:#ffffff,stroke:#000000,stroke-width:2px,color:#000000,rx:6px,ry:6px",
+    "classDef empty fill:#f5f5f5,stroke:#737373,stroke-width:2px,color:#525252,rx:6px,ry:6px",
+  ]
 }
 
 // AI : flowchart LR mirrors the pipeline canvas — spine plus dashed side feeds into combine steps.
-export function derivePipelineMermaid(modules: PipelineModule[], models: StructureModel[]): string {
+export function derivePipelineMermaid(
+  modules: PipelineModule[],
+  models: StructureModel[],
+  theme: PipelineMermaidTheme = "light",
+): string {
   if (!modules.length) {
-    return 'flowchart LR\n  empty["No pipeline steps yet"]'
+    return [
+      ...themeFrontmatter(theme),
+      "flowchart LR",
+      ...themeClassDefs(theme),
+      '  empty["No pipeline steps yet"]:::empty',
+    ].join("\n")
   }
 
   const segments = segmentPipeline(modules)
@@ -71,12 +129,18 @@ export function derivePipelineMermaid(modules: PipelineModule[], models: Structu
     const sideTail = parseNid ?? inputNid
 
     if (parseNid) edges.push(`  ${inputNid} --> ${parseNid}`)
-    edges.push(`  ${sideTail} -. side input .-> ${combineNid}`)
+    edges.push(`  ${sideTail} -. "side input" .-> ${combineNid}`)
     if (prevMainId) edges.push(`  ${prevMainId} --> ${combineNid}`)
     prevMainId = combineNid
   }
 
-  return ["flowchart LR", ...nodeDefs, ...edges].join("\n")
+  return [
+    ...themeFrontmatter(theme),
+    "flowchart LR",
+    ...themeClassDefs(theme),
+    ...nodeDefs,
+    ...edges,
+  ].join("\n")
 }
 
 // AI : sanity check for combine side feeds when building the graph.

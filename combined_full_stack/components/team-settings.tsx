@@ -5,21 +5,22 @@ import { Check, Copy, Loader2, UserMinus, UserPlus, Users } from "lucide-react"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson } from "@/lib/api-client"
 import { readActiveTeamId, writeActiveTeamId } from "@/lib/active-team-session"
+import { readTeamsSnapshot } from "@/lib/teams-snapshot-cache"
+import { fetchTeams } from "@/lib/warm-settings-data"
 import { useOptionalStore } from "@/lib/store"
 import type { TeamView, team_id_string, team_invite_token_string } from "@/lib/team-types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { TeamSettingsSkeleton } from "@/components/account-panel-skeletons"
 import { isDemoMode } from "@/lib/demo-mode"
-
-type TeamsResponse = { teams: TeamView[] };
 
 export function TeamSettings() {
   const store = useOptionalStore()
   const project = store?.project
-  const [teams, setTeams] = useState<TeamView[]>([])
+  const [teams, setTeams] = useState<TeamView[]>(() => readTeamsSnapshot() ?? [])
   const [activeTeamId, setActiveTeamId] = useState<team_id_string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => readTeamsSnapshot() == null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [newTeamName, setNewTeamName] = useState("")
@@ -28,16 +29,18 @@ export function TeamSettings() {
   const [copiedToken, setCopiedToken] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    setLoading(true)
+    const cached = readTeamsSnapshot()
+    if (cached) setTeams(cached)
+    setLoading(!cached)
     setError(null)
     try {
-      const body = await apiJson<TeamsResponse>(API_ROUTES.teams)
-      setTeams(body.teams)
+      const next = await fetchTeams()
+      setTeams(next)
       const stored = readActiveTeamId()
-      if (stored && body.teams.some((t) => t.id === stored)) setActiveTeamId(stored)
-      else if (body.teams.length === 1) setActiveTeamId(body.teams[0]!.id)
+      if (stored && next.some((t) => t.id === stored)) setActiveTeamId(stored)
+      else if (next.length === 1) setActiveTeamId(next[0]!.id)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load teams")
+      if (!cached) setError(err instanceof Error ? err.message : "Failed to load teams")
     } finally {
       setLoading(false)
     }
@@ -191,10 +194,7 @@ export function TeamSettings() {
       <div className="flex flex-col gap-4 px-4 py-3">
         {error && <p className="text-xs text-destructive">{error}</p>}
         {loading ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Loading teams…
-          </div>
+          <TeamSettingsSkeleton />
         ) : (
           <>
             {teams.length > 0 && (

@@ -53,7 +53,7 @@ export function ProjectAssistantDockPanel() {
   const displayChats = mergeWithGhosts(chats)
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
+    <div className="flex h-full min-h-0 flex-col border-l border-border bg-background shadow-xl">
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Agent</p>
         <div className="flex items-center gap-1">

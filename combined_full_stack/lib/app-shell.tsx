@@ -3,9 +3,20 @@
 // AI : shell navigation — lets Inference/Logging jump to Documents and focus a stored hash.
 
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react"
+import {
+  BUILDER_AREAS,
+  CONSUMER_AREAS,
+  defaultWindowForArea,
+  isBuildStep,
+  windowToArea,
+  type AppArea,
+} from "@/lib/app-nav-config"
 import { openLlmProvidersSettings, scrollToSettingsSection } from "@/lib/settings-nav"
 import type { SharedRunDocScope } from "@/lib/shared-run-doc-scope"
 import type { DocId, StructureModelId } from "@/lib/types"
+
+export type { AppArea } from "@/lib/app-nav-config"
+export { windowToArea, isBuildStep } from "@/lib/app-nav-config"
 
 export type AppWindowId =
   | "structure"
@@ -24,6 +35,7 @@ export type AppWindowId =
 interface AppShellState {
   activeWindow: AppWindowId
   setActiveWindow: (window: AppWindowId) => void
+  setActiveArea: (area: AppArea, consumer?: boolean) => void
   focusDocId: DocId | null
   openDocuments: (docId?: DocId) => void
   clearFocusDoc: () => void
@@ -105,11 +117,17 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
     window.setTimeout(() => scrollToSettingsSection(sectionId), 50)
   }, [])
 
+  const setActiveArea = useCallback((area: AppArea, consumer = false) => {
+    const areas = consumer ? CONSUMER_AREAS : BUILDER_AREAS
+    setActiveWindow(defaultWindowForArea(area, areas))
+  }, [])
+
   return (
     <AppShellContext.Provider
       value={{
         activeWindow,
         setActiveWindow,
+        setActiveArea,
         focusDocId,
         openDocuments,
         clearFocusDoc,

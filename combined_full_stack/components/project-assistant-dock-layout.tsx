@@ -14,6 +14,7 @@ type ProjectAssistantDockLayoutProps = {
   children: ReactNode
 }
 
+// AI : agent slides in from the right — pushes page content, does not overlay it.
 export function ProjectAssistantDockLayout({ children }: ProjectAssistantDockLayoutProps) {
   const { open: assistantOpen } = useProjectAssistant()
   const {

@@ -517,10 +517,66 @@ const markdownComponents: Components = {
   td: ({ children }) => <td className="border border-border px-2 py-1 text-muted-foreground">{children}</td>,
 }
 
-export function MarkdownView({ md }: { md: string }) {
+const invertedMarkdownComponents: Components = {
+  h1: ({ children }) => <h1 className="mb-2 text-base font-semibold text-white">{children}</h1>,
+  h2: ({ children }) => <h2 className="mb-1.5 mt-4 text-sm font-semibold text-white">{children}</h2>,
+  h3: ({ children }) => <h3 className="mb-1 mt-3 text-sm font-medium text-white">{children}</h3>,
+  h4: ({ children }) => <h4 className="mb-1 mt-2 text-xs font-medium text-white">{children}</h4>,
+  p: ({ children }) => <p className="mb-2 text-neutral-300">{children}</p>,
+  strong: ({ children }) => <strong className="font-medium text-white">{children}</strong>,
+  ul: ({ children }) => <ul className="mb-2 list-disc space-y-1 pl-5 text-neutral-300">{children}</ul>,
+  ol: ({ children }) => <ol className="mb-2 list-decimal space-y-1 pl-5 text-neutral-300">{children}</ol>,
+  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+  blockquote: ({ children }) => (
+    <blockquote className="mb-2 border-l-2 border-neutral-500 pl-3 text-neutral-400">{children}</blockquote>
+  ),
+  hr: () => <hr className="my-4 border-neutral-700" />,
+  a: ({ href, children }) =>
+    isSafeMarkdownHref(href) ? (
+      <a href={href} className="text-white underline-offset-2 hover:underline" target="_blank" rel="noreferrer noopener">
+        {children}
+      </a>
+    ) : (
+      <span className="text-neutral-400">{children}</span>
+    ),
+  img: ({ src, alt }) => {
+    const srcStr = typeof src === "string" ? src : undefined
+    return isSafeImageSrc(srcStr) ? (
+      // eslint-disable-next-line @next/next/no-img-element -- markdown user content; src allowlisted above
+      <img src={srcStr} alt={alt ?? ""} className="my-2 max-w-full rounded border border-neutral-700" loading="lazy" />
+    ) : null
+  },
+  code: ({ className, children }) =>
+    className ? (
+      <code className="font-mono text-[11px] text-white">{children}</code>
+    ) : (
+      <code className="rounded bg-neutral-900 px-1 font-mono text-[11px] text-white">{children}</code>
+    ),
+  pre: ({ children }) => (
+    <pre className="mb-2 overflow-x-auto rounded border border-neutral-700 bg-neutral-900 p-2 font-mono text-[11px] text-white">
+      {children}
+    </pre>
+  ),
+  table: ({ children }) => (
+    <div className="mb-3 overflow-x-auto">
+      <table className="w-full border-collapse text-[11px]">{children}</table>
+    </div>
+  ),
+  thead: ({ children }) => <thead className="bg-neutral-900">{children}</thead>,
+  th: ({ children }) => (
+    <th className="border border-neutral-700 px-2 py-1 text-left font-medium text-white">{children}</th>
+  ),
+  td: ({ children }) => <td className="border border-neutral-700 px-2 py-1 text-neutral-300">{children}</td>,
+}
+
+export function MarkdownView({ md, inverted = false }: { md: string; inverted?: boolean }) {
   return (
-    <div className="text-xs leading-relaxed text-foreground">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]} components={markdownComponents}>
+    <div className={cn("text-xs leading-relaxed", inverted ? "text-white" : "text-foreground")}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeSanitize]}
+        components={inverted ? invertedMarkdownComponents : markdownComponents}
+      >
         {md}
       </ReactMarkdown>
     </div>
