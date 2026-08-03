@@ -17,7 +17,6 @@ import { buildAssistantHistory } from "@/lib/assistant-history"
 import { AssistantDebugPanel } from "@/components/assistant-debug-panel"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 // AI : shared chat bubble styling so live streaming matches completed messages.
@@ -262,7 +261,7 @@ export function AssistantChat<TProposal>({
         <p className="mt-1 font-mono text-[10px] text-muted-foreground">{subtitle}</p>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div className="space-y-4 p-4">
           {messages.map((m) => (
             <div
@@ -398,7 +397,7 @@ export function AssistantChat<TProposal>({
 
           <div ref={bottomRef} />
         </div>
-      </ScrollArea>
+      </div>
 
       {messages.length <= 1 && !loading && (
         <div className="flex flex-wrap gap-1.5 border-t border-border px-3 py-2">

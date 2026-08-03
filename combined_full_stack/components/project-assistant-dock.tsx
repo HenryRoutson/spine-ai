@@ -94,7 +94,7 @@ export function ProjectAssistantDockPanel() {
       </div>
 
       {historyOpen && (
-        <div className="max-h-48 overflow-y-auto border-b border-border bg-secondary/20 px-2 py-2">
+        <div className="app-scrollbar max-h-48 overflow-y-auto border-b border-border bg-secondary/20 px-2 py-2">
           <p className="mb-2 px-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
             Previous chats
           </p>
