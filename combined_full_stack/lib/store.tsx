@@ -53,7 +53,7 @@ import {
 } from "@/lib/active-project-session"
 import { mostRecentlyOpenedProject } from "@/lib/project-active"
 import { dedupeDocsNewestByName } from "@/lib/project-docs"
-import { readStateSnapshot, writeStateSnapshot } from "@/lib/state-snapshot-cache"
+import { readStateSnapshot, seedProjectInStateSnapshot, writeStateSnapshot } from "@/lib/state-snapshot-cache"
 import { readEarningsSnapshot, writeEarningsSnapshot } from "@/lib/earnings-snapshot-cache"
 import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
 import { setDemoMode } from "@/lib/demo-mode"
@@ -646,16 +646,7 @@ export function StoreProvider({
         if (mode === "picker") {
           // AI : seed session snapshot before full reload — otherwise workspace hydrates without
           // AI : the new row, clears activeProjectId, and lands on the consumer shell.
-          const snapshot = readStateSnapshot()
-          writeStateSnapshot({
-            projects: snapshot?.projects.some((p) => p.id === fresh.id)
-              ? (snapshot?.projects ?? [stamped])
-              : [stamped, ...(snapshot?.projects ?? [])],
-            docs: snapshot?.docs ?? [],
-            runs: snapshot?.runs ?? [],
-            allRuns: snapshot?.allRuns ?? [],
-            modelOptions: snapshot?.modelOptions ?? [],
-          })
+          seedProjectInStateSnapshot(stamped)
           openProject(fresh.id as ProjectId)
           return fresh
         }
@@ -729,14 +720,20 @@ export function StoreProvider({
 
       const applyLocalDelete = () => {
         let nextActiveId: string | undefined
+        let emptied = false
         setState((prev) => {
           if (!prev) return prev
           const nextProjects = prev.projects.filter((p) => p.id !== id)
+          emptied = nextProjects.length === 0
           if (activeProjectId === id) nextActiveId = mostRecentlyOpenedProject(nextProjects)?.id
           return { ...prev, projects: nextProjects }
         })
         stateLoadGenRef.current += 1
         if (nextActiveId) selectActiveProject(nextActiveId)
+        else if (emptied) {
+          setActiveProjectId("")
+          clearActiveProjectSession()
+        }
       }
 
       if (mode === "demo") {
@@ -1274,15 +1271,6 @@ export function StoreProvider({
     </div>
   ) : null
 
-  if (mode === "demo" && loadError && !state) {
-    return (
-      <div className="flex h-dvh flex-col items-center justify-center gap-2 bg-background px-6 text-center">
-        <p className="font-mono text-xs text-muted-foreground">preview unavailable</p>
-        <p className="max-w-sm text-[11px] text-muted-foreground">{loadError}</p>
-      </div>
-    )
-  }
-
   if (mode === "picker") {
     if (!state || !pickerValue) {
       return (
@@ -1300,7 +1288,7 @@ export function StoreProvider({
   }
 
   // AI : opening a project not yet in state — keep loading, don't flash the consumer shell.
-  if (mode === "workspace" && state && !project && (activeProjectId || projectLoading)) {
+  if (mode === "workspace" && state && !project && (activeProjectId || projectLoading || stateSyncing)) {
     return (
       <>
         {saveErrorBanner}
@@ -1312,21 +1300,17 @@ export function StoreProvider({
   }
 
   // AI : zero projects — picker UI only; AppShellLayout tabs call useStore() and must not mount here.
-  if (mode === "workspace" && state && migratedProjects.length === 0 && !projectLoading && !stateSyncing) {
+  if (mode === "workspace" && state && migratedProjects.length === 0 && !projectLoading) {
     return (
       <>
         {saveErrorBanner}
-        <NoProjectsPage
-          syncing={stateSyncing}
-          onCreateBlank={addProject}
-          onCloneTemplate={cloneFromTemplate}
-        />
+        <NoProjectsPage onCreateBlank={addProject} onCloneTemplate={cloneFromTemplate} />
       </>
     )
   }
 
   // AI : no active project — consumer shell (shared links + billing); builder tabs need openProject().
-  if (mode === "workspace" && state && !project && consumerValue) {
+  if (mode === "workspace" && state && !project && consumerValue && !stateSyncing) {
     return (
       <>
         {saveErrorBanner}

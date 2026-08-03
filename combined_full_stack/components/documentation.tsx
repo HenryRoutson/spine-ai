@@ -3,16 +3,24 @@
 // AI : project-level documentation panel — content is prepended to every assistant/agent prompt
 // AI : so the model always sees the rules/constraints before proposing changes.
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
+import dynamic from "next/dynamic"
 import { Save, Eye, Pencil, Columns2 } from "lucide-react"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { MarkdownView } from "@/components/highlight"
+import { PanelLoading } from "@/components/panel-loading"
 import { useStore } from "@/lib/store"
+import { derivePipelineMermaid } from "@/lib/pipeline-mermaid"
 import { ResizableSplit } from "@/components/resizable-split"
 import { docsEditorSplit } from "@/lib/layout-split-settings"
 import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
+
+const MermaidView = dynamic(
+  () => import("@/components/mermaid-view").then((m) => ({ default: m.MermaidView })),
+  { ssr: false, loading: () => <PanelLoading label="loading pipeline graph…" /> },
+)
 
 type TabId = "edit" | "preview" | "split"
 
@@ -29,7 +37,8 @@ Write anything the agent must always respect — these constraints are injected 
 `
 
 export function Documentation() {
-  const { documentation, setDocumentation } = useStore()
+  const { documentation, setDocumentation, modules, models } = useStore()
+  const pipelineMermaid = useMemo(() => derivePipelineMermaid(modules, models), [modules, models])
 
   // AI : local draft — only persisted on explicit save (avoids a PUT on every keystroke)
   const [draft, setDraft] = useState(documentation)
@@ -94,6 +103,16 @@ export function Documentation() {
           <span className="ml-auto font-mono text-[10px] text-muted-foreground">unsaved</span>
         )}
       </div>
+
+      {modules.length > 0 && (
+        <div className="shrink-0 border-b border-border px-5 py-4">
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <h2 className="font-mono text-xs font-medium text-foreground">Pipeline structure</h2>
+            <span className="font-mono text-[10px] text-muted-foreground">derived · mermaid</span>
+          </div>
+          <MermaidView chart={pipelineMermaid} />
+        </div>
+      )}
 
       {/* panels */}
       <div className="flex min-h-0 flex-1 overflow-hidden">

@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { openProjectInWorkspace } from "@/lib/active-project-session"
+import { seedProjectInStateSnapshot } from "@/lib/state-snapshot-cache"
 import { formatCents } from "@/lib/format"
 import type { MarketplaceListingCard, MarketplaceListingDetail } from "@/lib/marketplace-types"
 import type { Project, ProjectId } from "@/lib/types"
@@ -88,6 +89,7 @@ export function MarketplaceBrowsePanel({
         API_ROUTES.marketplaceClone(id),
         { method: "POST", headers: JSON_HEADERS },
       )
+      seedProjectInStateSnapshot(body.project)
       openProjectInWorkspace(body.project.id as ProjectId)
     } catch (e) {
       setActionError((e as Error).message)

@@ -11,24 +11,13 @@ import type { ProjectId } from "@/lib/types"
 // AI : standalone zero-projects page — rendered by StoreProvider INSTEAD of the app shell,
 // AI : so none of the sub tabs (pipeline / structure / docs / …) exist until a project does.
 export function NoProjectsPage({
-  syncing = false,
   onCreateBlank,
   onCloneTemplate,
 }: {
-  syncing?: boolean
   onCreateBlank: () => Promise<unknown>
   onCloneTemplate: (templateId: ProjectId) => Promise<unknown>
 }) {
   const [busy, setBusy] = useState<string | null>(null)
-
-  if (syncing) {
-    return (
-      <div className="flex h-dvh flex-col items-center justify-center gap-2 bg-background px-6">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <p className="font-mono text-xs text-muted-foreground">loading projects…</p>
-      </div>
-    )
-  }
 
   async function handleCreateBlank() {
     setBusy("blank")

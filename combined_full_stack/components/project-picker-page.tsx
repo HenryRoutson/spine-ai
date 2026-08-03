@@ -29,9 +29,8 @@ import {
 import { MarketplaceBrowsePanel } from "@/components/share/marketplace-browse-panel"
 import { SpineLogoBox } from "@/components/spine-mark"
 import { LEGAL } from "@shared/legal/site"
+import { LANDING_PAGE_URL } from "@/lib/app-nav-config"
 import type { Project, ProjectId } from "@/lib/types"
-
-const LANDING_PAGE_URL = "https://www.spine-ai.dev/"
 
 export function ProjectPickerPage() {
   const router = useRouter()
@@ -205,6 +204,14 @@ export function ProjectPickerPage() {
               <span className="font-mono text-[10px] text-muted-foreground">({projects.length})</span>
             </div>
             <ul className="divide-y divide-border rounded-lg border border-border bg-card">
+              {displayProjects.length === 0 ? (
+                <li className="px-4 py-8 text-center">
+                  <p className="text-sm text-muted-foreground">No projects yet.</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Create a blank project or clone an example template below.
+                  </p>
+                </li>
+              ) : null}
               {displayProjects.map((p) => {
                 const deleting = isDeleting(p.id)
                 const exiting = isExiting(p.id)

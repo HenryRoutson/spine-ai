@@ -4,7 +4,6 @@ import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { typesInvalidForUi } from "@/lib/structure-validity-ui"
 import type { AppWindowId } from "@/lib/app-shell"
 import type { PipelineModule, StructureModel, TypeAlias } from "@/lib/types"
-import { cn } from "@/lib/utils"
 
 export type WorkspaceValidityIssue = "types" | "pipeline"
 
@@ -62,24 +61,6 @@ export function workspaceNavTabTitle(
   return tabId === "pipeline"
     ? "Fix pipeline validation errors"
     : "Fix pipeline errors before running"
-}
-
-export function workspaceNavTabButtonClass(
-  isActive: boolean,
-  issue: WorkspaceValidityIssue | null,
-  disabled: boolean,
-): string {
-  if (!issue) {
-    return isActive
-      ? "bg-secondary text-foreground"
-      : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground"
-  }
-  return cn(
-    disabled && "cursor-not-allowed",
-    isActive
-      ? "bg-destructive/10 text-destructive"
-      : "text-destructive hover:bg-destructive/10 hover:text-destructive",
-  )
 }
 
 export function workspaceNavTabIconClass(

@@ -16,6 +16,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
+import type { AppNavItem } from "@/lib/app-nav-config"
 import type { AppWindowId } from "@/lib/app-shell"
 import {
   workspaceNavTabDisabled,
@@ -25,17 +26,8 @@ import {
   type WorkspaceValidity,
 } from "@/lib/workspace-validity-ui"
 
-type NavIcon = React.ComponentType<{ className?: string }>
-
-export type AppSidebarItem = {
-  id: AppWindowId
-  label: string
-  hint: string
-  icon: NavIcon
-}
-
 type AppSidebarProps = {
-  items: AppSidebarItem[]
+  items: AppNavItem[]
   activeWindow: AppWindowId
   onSelect: (id: AppWindowId) => void
   validity?: WorkspaceValidity

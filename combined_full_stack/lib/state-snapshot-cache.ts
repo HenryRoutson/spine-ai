@@ -54,3 +54,18 @@ export function clearStateSnapshot(): void {
     /* ignore */
   }
 }
+
+// AI : insert a freshly created project before workspace navigation — avoids consumer-shell flash on reload.
+export function seedProjectInStateSnapshot(fresh: Project): void {
+  const stamped = { ...fresh, lastOpenedAt: Date.now() }
+  const snapshot = readStateSnapshot()
+  writeStateSnapshot({
+    projects: snapshot?.projects.some((p) => p.id === fresh.id)
+      ? (snapshot?.projects ?? [stamped])
+      : [stamped, ...(snapshot?.projects ?? [])],
+    docs: snapshot?.docs ?? [],
+    runs: snapshot?.runs ?? [],
+    allRuns: snapshot?.allRuns ?? [],
+    modelOptions: snapshot?.modelOptions ?? [],
+  })
+}

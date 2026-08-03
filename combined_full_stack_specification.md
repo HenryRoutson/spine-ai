@@ -518,6 +518,7 @@ although i can filter down file names to contains certain things like
 marking criteria might always contain "marking guide" in their name,
 there is nothing stopping me from passing in a  "marking guide"  and a "homework sheet" which do not match. You need to have the option to only upload files after another input step when you can further filter down what files fit a format. You could do this both with pydantic format, where you check if the marking schema matches with the homework schema, but with extra marking fields. You could also do it with names where you parse the name into different values and check if those values equal. like marking_guide_SPLIT_grade10.txt and homework_SPLIT_james_miller_SPLIT_grade10.txt. However, this is janky and could lead to very long names, although names still do need to be unique. There is probably some approach with metadata or some derived data. How do i approach this? How do i error early rather than waiting for an error later? You shouldn't be blocking one file upload before another, but checking that they're compatible after both are uploaded. You should be clearly displaying the variables that are conflicting in the UI. rather than a generic 'these are not compatible', you should see something like 'MATCH assignment names, MISMATCH assignment questions, MISMATCH assignment year'. please ensure you're using dynamic pydantic schemas to be able to parse not just variables, but also how structures might change. i'm not sure how this is going to be put in the pipeline. this is a different type of error than assert, and it should come back to the user differently.
 
+There should be a derived graph of the structure of the pipeline which is a mermaid file which should be rendered in the documentation, it should be derived from the pipeline. 
 
 # history and merging changes 
 
@@ -599,3 +600,592 @@ need to start off the UI with a
 - builder section (for non technical)
 - consumer (for ppl not developing)
 Starting a project, you start with a single prompt, and then give feedback on what was built to ensure that you're improving the agent's single prompt ability.
+
+
+---
+
+# Codebase UI hierarchy (`combined_full_stack/`)
+
+This section maps how pages nest inside each other, from the **consumer** (run-only) view through the **pipeline creator** (builder) view. File paths are relative to `combined_full_stack/`.
+
+References:
+- [shadcn/ui components](https://ui.shadcn.com/docs/components)
+- Chat-specific kits: see `chadcn_components.md` (shadcn-chat, Prompt Kit, assistant-ui, etc.)
+
+## Top-level routes
+
+| Route | Component | Mode | Purpose |
+|-------|-----------|------|---------|
+| `/` | `app/page.tsx` → `AppShellLayout` | `workspace` or **consumer** | Main app shell — builder if user has projects, consumer if not |
+| `/projects` | `app/projects/page.tsx` → `ProjectPickerPage` | `picker` | Project gallery — no active project loaded |
+| `/run/[id]` | `app/run/[id]/page.tsx` → `SharedRunViewer` | standalone | Public/shared link runner (no sidebar) |
+| `/demo` | `app/demo/page.tsx` → `AppShellLayout` (`embed`) | `demo` | Embedded preview of builder tabs |
+| `/login` | `app/login/page.tsx` | — | Sign in / sign up |
+| `/privacy`, `/terms`, `/cookies`, `/accessibility` | legal pages | — | Static legal content |
+
+## Shell architecture
+
+All in-app navigation (except `/run/[id]` and `/login`) flows through:
+
+```
+RootLayout (app/layout.tsx)
+└── StoreProvider (mode: workspace | picker | demo)
+    └── AppShellProvider
+        └── AppShellLayout
+            ├── ConsumerShellLayout   ← no builder store (consumer)
+            └── BuilderShellLayout    ← active project loaded
+```
+
+`AppShellLayout` picks consumer vs builder based on whether `useOptionalStore()` returns a builder context (`lib/store.tsx`).
+
+---
+
+## Navigation model — current problem & refactor target
+
+### What feels wrong today
+
+The app stacks **up to four navigation layers**, many using the same visual pattern (vertical list, `bg-secondary` selected row, mono labels, icon + text). Page-local lists read as a second “main menu” beside the real one.
+
+```
+┌─────────────┬──────────────────┬─────────────────────┬──────────────┐
+│ L1 App      │ L2 Page list     │ L3 Main canvas      │ L4 Inspector │
+│ AppSidebar  │ (looks like L1!) │                     │ / Agent dock │
+│ 11 equal    │ struct list      │ PipelineCanvas      │              │
+│ tabs        │ run list         │ StructureExcelEditor│              │
+│             │ test list        │ Inference run UI    │              │
+│             │ settings nav     │                     │              │
+└─────────────┴──────────────────┴─────────────────────┴──────────────┘
+         ↑                              ↑
+    "Workspace"                   Horizontal pill tabs
+    Structures 01                 (Share: Publish | Shared | …)
+    Pipeline 02
+    …
+```
+
+| Layer | What it is | Where | Problem |
+|-------|------------|-------|---------|
+| **L0** | Mode | Route: `/` consumer vs `/projects` vs `/run/[id]` | OK — separate routes |
+| **L1** | App sections | `AppSidebar` (`components/app-sidebar.tsx`) | **11 flat peers** — workflow steps (01–05) sit next to ops tools (Logging, Cache, Documents, Billing) with identical weight |
+| **L2** | Page entity list | Left `ResizableSplit` inside tab | **Visually clones L1** — struct list, run list, test list, inference setups, settings sections all look like app nav |
+| **L2b** | Page sections | Horizontal pills under `WindowHeader` | **Third nav metaphor** — Share Publish/Shared/Marketplace/Activity competes with sidebar |
+| **L3** | Primary work area | Canvas / editor / run UI | Correct — should dominate visually |
+| **L4** | Detail / tools | Right inspector, agent dock, doc viewer | **Fourth column** — pipeline inspector + agent dock both feel like “another sidebar” |
+
+Concrete collisions:
+
+1. **Structure** — `AppSidebar` “Structures” + left struct/type list (`structure-builder.tsx`) = two sidebars, same selected-row styling.
+2. **Pipeline** — app “Pipeline” tab + right **Inspector** panel = user must infer inspector is step config, not app navigation.
+3. **Logging** — app “Logging” + left run list + inner pipeline canvas split = three columns of lists.
+4. **Settings** — header button opens a page that **adds its own left nav** (`SETTINGS_SECTIONS`) while `AppSidebar` stays visible.
+5. **Share** — app “Share” + horizontal section tabs + (in publish) Link/API/Marketplace sub-tabs = nav inside nav.
+6. **Agent dock** — `ProjectAssistantDockLayout` trailing pane uses same full-height column pattern as page sidebars.
+
+`WindowHeader` step labels (`01 / Structure`, `05 / Share`) imply a **linear workflow**, but the sidebar presents everything as **parallel destinations** — the mental model and the UI disagree.
+
+### Target: one job per navigation level
+
+**Rule:** each level must look and behave differently. Only **L1** uses the app chrome sidebar. Everything inside a page uses inset panels, top bars, or inspectors — never a second `SidebarMenu`.
+
+#### L0 — Mode (routes, not tabs)
+
+| Mode | Route | Shell |
+|------|-------|-------|
+| Run (consumer) | `/` | Minimal chrome — no project |
+| Build (picker) | `/projects` | Full-page gallery, no app sidebar |
+| Build (workspace) | `/` with active project | Builder shell below |
+| Shared link only | `/run/[id]` | Standalone runner |
+
+#### L1 — App areas (max 5 groups, not 11 items)
+
+Collapse the flat list into **grouped top-level areas**. Workflow steps live **inside Build**, not as siblings of Billing.
+
+```
+Consumer (/):
+  Run          → shared links, marketplace browse, active shared run
+  Account      → billing, settings
+
+Builder (/ + project):
+  Build        → linear sub-flow: Structure → Pipeline → Testing → Inference  (the "creator" view)
+  Deploy       → Share, Earnings, marketplace publish, deployment activity
+  Observe      → Logging, Cache
+  Library      → Documents, project Docs (markdown rules)
+  Account      → Billing, Settings
+```
+
+**Implementation options for L1 (pick one in refactor):**
+
+| Option | L1 control | Pros |
+|--------|------------|------|
+| **A. Top primary tabs** | Horizontal bar under header: Build \| Deploy \| Observe \| Library \| Account | Workflow sub-steps sit under Build only; no confusion with entity lists |
+| **B. Grouped sidebar** | `SidebarGroup` per area; Build children indented | Keeps sidebar; must visually indent + label groups (“Build”, “Operate”) |
+| **C. Build-only sidebar** | Sidebar only on Build route; other areas are separate routes `/logging`, etc. | Clearest separation; more routing work |
+
+Recommended: **A (top tabs) + B styling for Build sub-steps** — matches `WindowHeader` step numbers.
+
+#### L2 — Page-local navigation (entity lists & sections)
+
+**Must not use `Sidebar` / `SidebarMenuButton`.** Use a distinct pattern:
+
+| Pattern | Use for | Visual treatment |
+|---------|---------|------------------|
+| **Entity rail** | Struct list, run list, test file list, setup list | Narrow (~200px), `bg-muted/30`, section title “Structs in project”, no icons matching app nav |
+| **Section tabs** | Share publish modes, Docs edit/preview | shadcn **Tabs** under page title, full width |
+| **Inspector drawer** | Pipeline step fields, logging step IO | Right panel, labeled “Step inspector”, collapsible; default closed on small screens |
+| **Stepper** | Build workflow 01→04 | Horizontal stepper in Build header; clicking jumps sub-view without changing L1 |
+
+Map current L2 → target:
+
+| Current | Target pattern |
+|---------|----------------|
+| Structure struct/type list | Entity rail (left, muted) |
+| Pipeline inspector | Inspector drawer (right, labeled) |
+| Logging run picker | Entity rail |
+| Testing test file list | Entity rail |
+| Inference setup list | Entity rail |
+| Settings `SETTINGS_SECTIONS` | Section tabs or anchor list inside **Account** page — hide app sidebar on Account OR replace L1 content entirely |
+| Share horizontal pills | Section tabs (only nav on that page) |
+
+#### L3 — Primary canvas (hero)
+
+Always the largest pane. This is the only region that should feel “main”:
+
+- Structure field grid / type editor
+- Pipeline canvas (vertical step chain)
+- Test editor body
+- Inference run panel
+- Logging run detail (IO, charts)
+- Share publish forms
+
+#### L4 — Overlays & docks (ephemeral)
+
+Not navigation. Slide over or dock without looking like L1/L2:
+
+| Surface | Target |
+|---------|--------|
+| Agent | Bottom sheet or right **Sheet** / drawer, not `ResizableSplit` column |
+| Doc viewer | Modal / full-screen **Dialog** or drawer |
+| Diagnosis hub | **Popover** or compact panel from header |
+| Running jobs | Header dropdown only |
+
+### Target layout (builder — Build area)
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Header: logo · project selector · running jobs · agent · settings · feedback│
+├──────────────────────────────────────────────────────────────────────────┤
+│ L1:  [ Build ]  [ Deploy ]  [ Observe ]  [ Library ]  [ Account ]         │
+├──────────────────────────────────────────────────────────────────────────┤
+│ L2 (Build only):  01 Structure ── 02 Pipeline ── 03 Testing ── 04 Inference │  ← stepper
+├────────────┬─────────────────────────────────────────────┬─────────────────┤
+│ Entity     │ L3 Canvas / editor                          │ Inspector       │
+│ rail       │                                             │ (Pipeline only, │
+│ (optional) │                                             │  collapsible)   │
+│ ~200px     │                                             │                 │
+│ muted bg   │                                             │                 │
+└────────────┴─────────────────────────────────────────────┴─────────────────┘
+```
+
+When **L1 ≠ Build**, drop the stepper and entity rail unless that area needs a list (e.g. Observe → run list rail is OK).
+
+### Target layout (consumer)
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Header: logo · "run shared pipelines" · settings · feedback               │
+├──────────────────────────────────────────────────────────────────────────┤
+│ L1:  [ Run ]  [ Account ]                                                │
+├──────────────────────────────────────────────────────────────────────────┤
+│ L2 (Run):  [ Shared with me ]  [ Marketplace ]     ← Tabs, not sidebar   │
+├──────────────────────────────────────────────────────────────────────────┤
+│ L3: SharedWithMePanel / MarketplaceBrowsePanel / SharedRunPanel (full)   │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+No left app sidebar in consumer mode — L1 is top tabs only.
+
+### Refactor checklist (files)
+
+| Step | Action | Files |
+|------|--------|-------|
+| 1 | Extract nav config into grouped areas | `lib/app-nav-config.ts` → add `APP_AREAS`, `BUILD_STEPS` |
+| 2 | Replace flat `AppSidebar` with L1 top tabs OR grouped sidebar | `app-shell-layout.tsx`, new `app-top-nav.tsx` |
+| 3 | Add Build stepper component wired to `activeWindow` for structure/pipeline/testing/inference only | new `build-workflow-stepper.tsx` |
+| 4 | Restyle page entity lists — no `SidebarMenuButton` | `structure-builder.tsx`, `logging/run-picker-column.tsx`, `testing.tsx`, `inference.tsx`, `settings.tsx` |
+| 5 | Pipeline inspector → collapsible right drawer with title | `pipeline-builder.tsx`, `inspector-collapsible-section.tsx` |
+| 6 | Share — keep section tabs, remove duplicate nav feel | `share/share-page.tsx` |
+| 7 | Settings — full-page Account view; optional: hide L1 when settings open | `settings.tsx`, `app-shell-layout.tsx` |
+| 8 | Agent dock → Sheet/drawer | `project-assistant-dock-layout.tsx` |
+| 9 | Consumer — remove sidebar, use top tabs | `ConsumerShellLayout` in `app-shell-layout.tsx` |
+| 10 | Persist `activeWindow` under area + step in URL query or path | `lib/app-shell.tsx` |
+
+### State model (for refactor)
+
+```ts
+// Target — separate "area" from "view" and "selection"
+type AppArea = "build" | "deploy" | "observe" | "library" | "account"
+type BuildStep = "structure" | "pipeline" | "testing" | "inference"
+type AppShellState = {
+  area: AppArea
+  buildStep?: BuildStep        // only when area === "build"
+  view?: AppWindowId           // deploy/observe/library/account detail
+  selection?: string           // entity id: structId, runId, testDocId, linkId
+}
+```
+
+Today everything is flattened into `activeWindow: AppWindowId` (`lib/app-shell.tsx`), which encourages treating Logging and Structure as the same class of navigation.
+
+### Graduated complexity alignment
+
+From § graduated complexity — three audiences should map cleanly to L0/L1:
+
+| Audience | L0 mode | L1 default | Build stepper |
+|----------|---------|------------|---------------|
+| Consumer | Run | Run → Shared with me | hidden |
+| Builder (non-technical) | Build workspace | Build → Inference (run first) | collapsed to “Run pipeline” + “Edit pipeline” |
+| Builder (developer) | Build workspace | Build → Structure | full 01–04 stepper |
+
+Document this in UI copy: consumer never sees Structure/Pipeline tabs; developers see full Build flow under one L1 tab.
+
+---
+
+## 1. Consumer view (run shared pipelines)
+
+> **Nav note:** See [Navigation model](#navigation-model--current-problem--refactor-target) — consumer should use **top tabs (Run | Account)**, not a left sidebar that mirrors page lists.
+
+Users with **no projects** (or who cleared active project) land in consumer mode at `/`.
+
+```
+/  (ConsumerShellLayout)
+├── AppSidebar — tabs: Shared with me, Billing
+├── Header — logo, "run shared pipelines", Settings, Feedback
+└── Main (activeWindow)
+    ├── share → SharePage (consumer variant)
+    │   ├── section: Shared with me
+    │   │   └── SharedWithMePanel → paste link / saved links → openSharedRun()
+    │   ├── section: Marketplace
+    │   │   └── MarketplaceBrowsePanel → clone/browse templates
+    │   └── [full-screen override] SharedLinkRunner (when activeSharedLinkId set)
+    │       └── SharedRunPanel
+    │           ├── InferenceInputSlot (per input step)
+    │           ├── HumanReviewPanel (human-review steps)
+    │           ├── InferenceStepTracePanel
+    │           └── InferenceRunOutputs
+    ├── billing → Billing
+    └── settings → Settings
+        ├── TeamSettings
+        ├── Account / sign out
+        ├── ModelSelector
+        ├── LlmProvidersSettingsPage
+        ├── JSON reader / syntax prefs
+        ├── Logging / pipeline / inference toggles
+        ├── Color scheme
+        └── PrivacySettings
+```
+
+**Standalone shared run** (`/run/[id]`):
+
+```
+SharedRunViewer
+├── Header — sign in/out, open in workspace
+└── SharedRunPanel (same run UI as above)
+    └── LazyDocViewer (document preview overlay)
+```
+
+Consumer sidebar items are defined in `CONSUMER_WINDOWS` inside `components/app-shell-layout.tsx`.
+
+---
+
+## 2. Project selection (pre-workspace)
+
+Before entering the builder, users pick or create a project at `/projects`:
+
+```
+/projects  (ProjectPickerPage)
+├── Header — logo, "build pipelines", Back to run → /
+└── Body
+    ├── CTA — "Just want to run?" → /
+    ├── Your pipelines — project list (open / rename / clone / delete)
+    ├── ExampleTemplateGrid — bundled example projects
+    ├── BlankProjectButton — new empty project
+    └── MarketplaceBrowsePanel — clone from marketplace
+```
+
+If a signed-in user has **zero projects**, `StoreProvider` renders `NoProjectsPage` instead of the shell (same template/blank CTAs, no tabs).
+
+Opening a project sets `activeProjectId` in session and navigates to `/` → **BuilderShellLayout**.
+
+---
+
+## 3. Pipeline creator / builder view
+
+> **Nav note:** This section describes **current** nesting. Target IA collapses 11 sidebar items into 5 areas + a Build stepper; page sidebars become **entity rails** with distinct styling. See [Navigation model](#navigation-model--current-problem--refactor-target).
+
+Once a project is active, `/` renders the full builder shell:
+
+```
+/  (BuilderShellLayout)
+├── AppSidebar — 11 tabs (see below)
+├── Header
+│   ├── ProjectSelector (dropdown: switch / rename / delete / all projects / new)
+│   ├── RunningJobsHub
+│   ├── ProjectAssistantDockToggle
+│   ├── DiagnosisAgentHub
+│   └── FeedbackButton
+├── ProjectAssistantDockLayout
+│   ├── Main tab content (activeWindow)
+│   └── ProjectAssistantDockPanel (optional trailing pane)
+│       ├── Chat history list
+│       └── ProjectAssistant → AssistantChat
+└── LazyDocViewer (global document overlay)
+```
+
+### Builder sidebar tabs → root components
+
+| Tab | `activeWindow` | Root component | Step |
+|-----|----------------|----------------|------|
+| Structures | `structure` | `StructureBuilder` | 01 |
+| Pipeline | `pipeline` | `PipelineBuilder` | 02 |
+| Testing | `testing` | `Testing` | 03 |
+| Inference | `inference` | `Inference` | 04 |
+| Share | `share` | `SharePage` (builder variant) | 05 |
+| Earnings | `earnings` | `Earnings` | — |
+| Logging | `logging` | `Logging` | 07 |
+| Cache | `cache` | `Cache` | 08 |
+| Documents | `documents` | `Documents` | 09 |
+| Docs | `docs` | `Documentation` | 10 |
+| Billing | `billing` | `Billing` | 11 |
+| Settings | `settings` | `Settings` | header only |
+
+---
+
+### 3.1 Structure tab (pipeline data models)
+
+```
+StructureBuilder
+├── WindowHeader
+├── ResizableSplit
+│   ├── Sidebar (structs + types list)
+│   │   ├── Struct list → select struct
+│   │   ├── Type alias list → select type
+│   │   └── "Code" view toggle
+│   └── Main panel (view mode)
+│       ├── view: structures + struct selected
+│       │   └── StructureExcelEditor
+│       │       ├── Field rows (name, type, optional, deterministic, examples)
+│       │       ├── StructureFieldTypeEditor → TypeExprEditor / TypeBuilderPanel
+│       │       ├── StructureFieldRefPicker
+│       │       └── FieldExamplesEditorDialog
+│       ├── view: structures + type selected
+│       │   └── StructureTypeAliasEditor → TypeExprEditor
+│       └── view: code
+│           └── StructureCodeView (Pydantic / TS / Rust / Go / BAML preview)
+```
+
+### 3.2 Pipeline tab (step composition)
+
+```
+PipelineBuilder
+├── WindowHeader + metrics bar (avg cost/time, cache count)
+├── PipelineExportDialog
+├── ResizableSplit
+│   ├── PipelineCanvas (visual step chain)
+│   │   ├── PipelineNode per step (input, LLM, parallel LLM, code, group-by, human review, output, …)
+│   │   ├── Insert slots (AddStepMenu)
+│   │   └── PipelineSummaryBox (AI summary)
+│   └── Inspector sidebar
+│       └── InspectorCollapsibleSection → PipelineModuleFields
+│           ├── shared.tsx — PipelineField, StructureModelSelect, IoMismatchFieldFix
+│           ├── input-fields.tsx — InputModuleFields (file types, default doc)
+│           ├── llm-fields.tsx — LlmModuleFields (prompt, model, schema)
+│           ├── code-fields.tsx — CodeModuleFields → CustomCodeEditor
+│           └── list-ops-fields.tsx — ListOpsModuleFields (group-by / merge)
+```
+
+Step kinds map to `lib/types` `ModuleKind` and `MODULE_META` icons.
+
+### 3.3 Testing tab
+
+```
+Testing
+├── WindowHeader
+├── ResizableSplit
+│   ├── Test file list (*_testing.json docs)
+│   └── TestFileEditor (testing-editor.tsx)
+│       ├── Per-step expected outputs
+│       ├── Input doc assignments
+│       └── Run / parallel stale-test actions
+├── TestResults (verdict after run)
+└── GoToLoggingButton → logging tab
+```
+
+### 3.4 Inference tab
+
+```
+Inference
+├── WindowHeader
+├── ResizableSplit (setup sidebar | run panel)
+│   ├── Setup list (*_inference.json) + InferenceSetupEditor
+│   ├── InferenceRunPresetMenu (load test/setup presets)
+│   └── Run panel
+│       ├── InferenceInputSlot (per input module)
+│       ├── InputCompatPanel
+│       ├── RunWithStopButton
+│       ├── HumanReviewPanel
+│       ├── InferenceStepTracePanel → InferenceStepRow
+│       ├── InferenceRunOutputs
+│       ├── TestResults (when linked test)
+│       ├── RunNotesPad
+│       └── ErrorBanner / RunErrorSummary
+```
+
+### 3.5 Share tab (builder — publish & monetize)
+
+```
+SharePage (builder)
+├── Sections: Publish | Shared with me | Marketplace | Activity
+├── Publish (when pipeline valid)
+│   ├── Publish tabs: Link | API | Marketplace
+│   │   ├── ShareLinkForm (+ SharePricingFields, ShareDefaultFiles, ShareFundingPicker)
+│   │   ├── HostApiForm
+│   │   └── MarketplacePublishForm
+│   └── DeploymentsList → DeploymentMonitor
+├── Shared with me → SharedWithMePanel → SharedLinkRunner
+├── Marketplace → MarketplaceBrowsePanel
+└── Activity → DeploymentActivityPage
+```
+
+### 3.6 Logging tab
+
+```
+Logging
+├── ResizableSplit (run list | detail)
+│   ├── RunPickerColumn (search, errors-only filter)
+│   └── Selected run detail
+│       ├── ResizableSplit (pipeline canvas | step detail)
+│       │   ├── PipelineCanvas (with step status overlay)
+│       │   └── PipelineInspector → PipelineModuleFields (view mode)
+│       ├── IoSection / IoPager
+│       ├── LlmCallDistribution
+│       ├── StepProfiling
+│       ├── StepFailuresSection
+│       ├── LlmRetryGridSection
+│       ├── StepServerLogsSection
+│       ├── RunNotesEditor
+│       ├── TestResults (for test runs)
+│       └── IsolatedErrorActions → DiagnosisAgentHub
+├── CompareModal
+└── PopupModal (enlarged IO / JSON)
+```
+
+### 3.7 Other builder tabs (summary)
+
+| Tab | Key child components |
+|-----|---------------------|
+| **Cache** | cache list + `JsonPreviewPanel`, `IoPager`, search toggles |
+| **Documents** | upload zone, `DocProjectPicker`, file list, `PreviewBlockedDialog` |
+| **Docs** | markdown editor + preview (`Documentation`) |
+| **Billing** | balance, `Chart` (usage over time), checkout, API keys |
+| **Earnings** | creator balance, withdraw to billing |
+| **Settings** | `SETTINGS_SECTIONS` nav + `TeamSettings`, `PrivacySettings`, toggles |
+
+### 3.8 Global builder overlays (not tabs)
+
+| Overlay | Component | Trigger |
+|---------|-----------|---------|
+| Project agent dock | `ProjectAssistantDockLayout` + `AssistantChat` | Header "Agent" button |
+| Diagnosis agents | `DiagnosisAgentHub` | Header hub / auto on failed runs |
+| Running jobs | `RunningJobsHub` | Header — in-flight runs |
+| Document viewer | `LazyDocViewer` | Click doc links anywhere |
+| A/B testing | `AbTesting` | Spec'd; component exists, not yet wired to a tab |
+
+---
+
+## 4. shadcn/ui component mapping
+
+### 4.1 Installed primitives (`components/ui/`)
+
+These [shadcn/ui](https://ui.shadcn.com/docs/components) components are already in the repo:
+
+| shadcn component | Used for |
+|------------------|----------|
+| **Sidebar** | `AppSidebar`, `SidebarProvider`, mobile nav |
+| **Button** | Actions everywhere |
+| **Input** | Search, rename, form fields, link paste |
+| **Textarea** | Prompts, chat input, run notes, docs editor |
+| **Label** | Form labels (login, share forms, host API) |
+| **Select** | Field types, test editor, list-ops, code language |
+| **Switch** | Toggles (optional fields, settings, privacy) |
+| **Badge** | Status chips, step labels, deployment tags |
+| **Tabs** | `SchemaJsonEditor`, export dialog file tabs |
+| **Dropdown Menu** | Project selector, model selector, add-step menu, presets |
+| **Tooltip** | Pipeline builder hints, testing tooltips |
+| **Scroll Area** | Inference, logging, documents, cache lists |
+| **Separator** | Sidebar internals |
+| **Sheet** | Mobile sidebar drawer |
+| **Skeleton** | Sidebar loading states |
+| **Progress** | Run progress, step trace |
+| **Slider** | (available; resizable splits are custom) |
+| **Table** | (available; structure editor uses custom grid) |
+| **Card** | (available; share publish uses custom bordered sections) |
+| **Chart** | Billing usage area chart |
+| **Sonner** | Toast notifications |
+
+### 4.2 Recommended shadcn components to add
+
+| shadcn component | Where to use | Replaces / improves |
+|------------------|--------------|---------------------|
+| [**Dialog**](https://ui.shadcn.com/docs/components/dialog) | `FieldExamplesEditorDialog`, `CompareModal`, `PipelineExportDialog`, `PreviewBlockedDialog` | Custom modal markup |
+| [**Alert Dialog**](https://ui.shadcn.com/docs/components/alert-dialog) | Delete project, delete step, withdraw earnings | `window.confirm` patterns |
+| [**Alert**](https://ui.shadcn.com/docs/components/alert) | `ErrorBanner`, validation banners in Structure/Pipeline | Custom destructive divs |
+| [**Popover**](https://ui.shadcn.com/docs/components/popover) | `InferenceInputPickerPopup`, structure ref picker | Custom positioned panels |
+| [**Command**](https://ui.shadcn.com/docs/components/command) | Project selector search, document picker, add-step palette | Long dropdown lists |
+| [**Combobox**](https://ui.shadcn.com/docs/components/combobox) | `ModelSelector`, structure model select | Dropdown-only model pick |
+| [**Accordion**](https://ui.shadcn.com/docs/components/accordion) | `InspectorCollapsibleSection`, logging step detail | Custom collapsible |
+| [**Collapsible**](https://ui.shadcn.com/docs/components/collapsible) | Settings sections, diagnosis debug | Custom expand/collapse |
+| [**Resizable**](https://ui.shadcn.com/docs/components/resizable) | All `ResizableSplit` panes | Custom drag-handle splits |
+| [**Drawer**](https://ui.shadcn.com/docs/components/drawer) | Mobile doc viewer, agent dock on small screens | Full-width overlays |
+| [**Empty**](https://ui.shadcn.com/docs/components/empty) | No projects, no tests, no runs | Plain text placeholders |
+| [**Field**](https://ui.shadcn.com/docs/components/field) | Share forms, host API, login | Ad-hoc label+input stacks |
+| [**Checkbox**](https://ui.shadcn.com/docs/components/checkbox) | Cache search field toggles, bulk select | Custom buttons |
+| [**Radio Group**](https://ui.shadcn.com/docs/components/radio-group) | `ShareFundingPicker`, billing scope | Custom button groups |
+| [**Pagination**](https://ui.shadcn.com/docs/components/pagination) | Deployment activity, long run lists | Scroll-only lists |
+| [**Breadcrumb**](https://ui.shadcn.com/docs/components/breadcrumb) | `SharedLinkRunner` back nav, settings depth | Plain back buttons |
+| [**Spinner**](https://ui.shadcn.com/docs/components/spinner) | `Loader2` lucide usage | Inconsistent loading icons |
+| [**Toast**](https://ui.shadcn.com/docs/components/toast) | Copy feedback, save confirmations | Inline "copied" state |
+| [**Data Table**](https://ui.shadcn.com/docs/components/data-table) | `StructureExcelEditor`, deployment activity | Hand-rolled tables |
+| [**Calendar**](https://ui.shadcn.com/docs/components/calendar) + **Date Picker** | Activity filters, billing date range | Not yet implemented |
+
+### 4.3 Chat / AI UI mapping (`chadcn_components.md`)
+
+Current chat UIs are custom (`AssistantChat`, `ProjectAssistant`, diagnosis agents). Mapping to community kits:
+
+| App surface | Current component | Recommended kit / shadcn mapping |
+|-------------|-------------------|----------------------------------|
+| Project agent dock | `AssistantChat` + `ProjectAssistant` | [**shadcn-chat**](https://ui.shadcn.com/) `Chat`, `ChatList`, `ChatBubble`, `ChatInput` — or [**Prompt Kit**](https://ui.shadcn.com/) `PromptInput`, `MessageThread` |
+| Structure assistant | (via structure API) | `Message` + `ChatInput` from **chat-components** (markdown, copy, edit actions) |
+| Pipeline assistant | (via pipeline API) | Same as above; add `GenerationStatus` for streaming |
+| Human review step | `HumanReviewPanel` | **assistant-ui** `Thread` + `Composer` (file attach, voice) |
+| Diagnosis agents | `DiagnosisAgentHub` | **assistant-ui** `AssistantPopover` for inline debug |
+| Shared run chat-until-resolution | `HumanReviewPanel` in `SharedRunPanel` | **shadcn-chat** `ChatList` with auto-scroll ([Message Scroller](https://ui.shadcn.com/docs/components)) |
+| Model picker in chat | `ModelSelector` | **Prompt Kit** `ModelSelector` or shadcn **Combobox** |
+
+New shadcn primitives relevant to chat (from [components index](https://ui.shadcn.com/docs/components)):
+- **Message**, **Message Scroller**, **Bubble**, **Attachment** — replace custom bubble classes in `assistant-chat.tsx`
+- **Kbd** — keyboard shortcuts in chat input (send, stop generation)
+
+### 4.4 Per-area quick reference
+
+| UI area | Primary shadcn (installed) | Add next |
+|---------|---------------------------|----------|
+| App shell / nav | Sidebar, Button, Dropdown Menu, Tooltip | Breadcrumb, Drawer (mobile) |
+| Structure editor | Button, Badge, Switch, Select | Data Table, Dialog, Popover, Field |
+| Pipeline canvas | Badge, Button, Dropdown Menu, Tooltip | Resizable, Command (add step), Alert |
+| Pipeline inspector | Input, Textarea, Switch, Select | Accordion, Field |
+| Inference / shared run | Button, Badge, Scroll Area, Progress | Alert, Dialog, Empty |
+| Testing | Button, Badge, Scroll Area, Textarea, Tooltip, Select | Data Table, Alert |
+| Logging | Button, Badge, Input, Scroll Area | Dialog, Accordion, Tabs |
+| Share / marketplace | Button, Input, Label, Badge | Field, Radio Group, Card, Empty |
+| Billing / earnings | Button, Badge, Chart | Alert, Dialog (confirm withdraw) |
+| Settings | Button, Switch | Tabs, Accordion, Field |
+| Login | Button, Input, Label | Card, Alert (errors) |
+| Chat / agents | Button, Textarea | Message, Message Scroller, Bubble (shadcn); or kits from `chadcn_components.md` |
