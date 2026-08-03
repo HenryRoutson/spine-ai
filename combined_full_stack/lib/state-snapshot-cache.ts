@@ -44,3 +44,13 @@ export function writeStateSnapshot(state: CachedServerState): void {
     /* quota — memory cache still helps client navigations */
   }
 }
+
+export function clearStateSnapshot(): void {
+  memorySnapshot = null
+  if (typeof window === "undefined") return
+  try {
+    sessionStorage.removeItem(KEY)
+  } catch {
+    /* ignore */
+  }
+}

@@ -1,3 +1,4 @@
+import { isMergeModuleKind } from "@/lib/module-kinds";
 import { CustomCodeLanguage } from "@/lib/types";
 import type { CustomCodeEntry, PipelineModule } from "@/lib/types";
 export type ParsedCustomCodeEntry = { language: CustomCodeLanguage; code: string };
@@ -68,7 +69,7 @@ type LegacyCustomCodeModule = PipelineModule & { codeLanguage?: CustomCodeLangua
 
 export function customCodeEntriesForModule(m: PipelineModule): ParsedCustomCodeEntry[] {
   const legacy = m as LegacyCustomCodeModule;
-  if (m.kind === "custom-code") {
+  if (m.kind === "custom-code" || m.kind === "chunk" || isMergeModuleKind(m.kind)) {
     const fromList = normalizeCustomCodeFallbackList(m.fallbackList).map(parseCustomCodeEntry).filter(
       (e): e is ParsedCustomCodeEntry => e !== null,
     );

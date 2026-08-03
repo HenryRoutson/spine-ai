@@ -55,6 +55,15 @@ export function ProjectPickerPage() {
 
   const handleOpen = useCallback((id: ProjectId) => openProject(id), [openProject])
 
+  async function handleCreateBlank() {
+    setBusy("blank")
+    try {
+      await addProject()
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function handleCloneTemplate(templateId: ProjectId) {
     setBusy(templateId)
     try {
@@ -152,7 +161,7 @@ export function ProjectPickerPage() {
                 )}
                 Refresh docs
               </Button>
-              <Button size="sm" onClick={addProject} disabled={busy === "blank"}>
+              <Button size="sm" onClick={() => void handleCreateBlank()} disabled={busy === "blank"}>
                 {busy === "blank" ? (
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 ) : (

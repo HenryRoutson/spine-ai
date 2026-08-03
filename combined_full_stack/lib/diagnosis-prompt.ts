@@ -27,6 +27,7 @@ export function buildDiagnosisUserPrompt(
   userMessage: string,
 ): string {
   const errorJson = runErrorLogJsonObject(run, project.modules, { includePipeline: true })
+  const pipelineAtRun = errorJson.pipelineAtRun ?? []
   const errorText = runErrorLogText(run, { includePipeline: true })
   const modelsJson = JSON.stringify(
     project.models.map((m) => ({
@@ -48,8 +49,8 @@ export function buildDiagnosisUserPrompt(
 Structure models:
 ${modelsJson}
 
-Pipeline at run time (${errorJson.pipelineAtRun.length} steps):
-${JSON.stringify(errorJson.pipelineAtRun, null, 2)}
+Pipeline at run time (${pipelineAtRun.length} steps):
+${JSON.stringify(pipelineAtRun, null, 2)}
 
 Error-only log (text):
 ${errorText}

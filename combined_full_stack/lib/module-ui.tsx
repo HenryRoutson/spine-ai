@@ -4,6 +4,8 @@ import {
   FileInput,
   FileOutput,
   FileText,
+  Scissors,
+  Layers,
   Merge,
   Shuffle,
   Sparkle,
@@ -19,17 +21,19 @@ import { MODULE_META, type ModuleKind, type RunStepKind } from "@/lib/types"
 
 // AI : batch llm is a 2×2 sparkle grid so it reads as "many calls" vs single Sparkle.
 export function BatchSparkleIcon({ className }: { className?: string }) {
+  // AI : explicit size-* on each svg so parent menus can't force size-4 on lucide children.
+  const sparkle = "size-[calc(50%-1px)] shrink-0"
   return (
     <span
       className={cn(
-        "inline-grid grid-cols-2 gap-px leading-none [&_svg]:size-[42%]",
+        "inline-grid shrink-0 grid-cols-2 place-items-center gap-px leading-none",
         className,
       )}
     >
-      <Sparkle />
-      <Sparkle />
-      <Sparkle />
-      <Sparkle />
+      <Sparkle className={sparkle} />
+      <Sparkle className={sparkle} />
+      <Sparkle className={sparkle} />
+      <Sparkle className={sparkle} />
     </span>
   )
 }
@@ -42,6 +46,8 @@ export const KIND_ICON: Record<ModuleKind, ModuleIcon> = {
   "llm-batch": BatchSparkleIcon,
   quote: Link2,
   transform: Shuffle,
+  chunk: Scissors,
+  "merge": Layers,
   combine: Merge,
   "custom-code": Code2,
   assert: ShieldCheck,
@@ -55,11 +61,43 @@ export const KIND_COLOR: Record<ModuleKind, string> = {
   "llm-batch": "text-primary",
   quote: "text-chart-2",
   transform: "text-chart-3",
+  chunk: "text-chart-1",
+  "merge": "text-chart-1",
   combine: "text-chart-3",
   "custom-code": "text-chart-1",
   assert: "text-chart-2",
   "human-review": "text-chart-1",
   output: "text-output",
+}
+
+// AI : bordered icon chip per step kind — used in insert-step menus and similar pickers.
+export const KIND_SURFACE: Record<ModuleKind, string> = {
+  input: "border-chart-2/40 bg-chart-2/10",
+  llm: "border-primary/40 bg-primary/10",
+  "llm-batch": "border-primary/40 bg-primary/10",
+  quote: "border-chart-2/40 bg-chart-2/10",
+  transform: "border-chart-3/40 bg-chart-3/10",
+  chunk: "border-chart-1/40 bg-chart-1/10",
+  merge: "border-chart-1/40 bg-chart-1/10",
+  combine: "border-chart-3/40 bg-chart-3/10",
+  "custom-code": "border-chart-1/40 bg-chart-1/10",
+  assert: "border-chart-2/40 bg-chart-2/10",
+  "human-review": "border-chart-1/40 bg-chart-1/10",
+  output: "border-output/40 bg-output/10",
+}
+
+export function KindMenuItemIcon({ kind }: { kind: ModuleKind }) {
+  const Icon = KIND_ICON[kind]
+  return (
+    <span
+      className={cn(
+        "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border",
+        KIND_SURFACE[kind],
+      )}
+    >
+      <Icon className={cn("h-3.5 w-3.5 shrink-0", KIND_COLOR[kind])} />
+    </span>
+  )
 }
 
 const LEGACY_KIND_ICON: Partial<Record<RunStepKind, ModuleIcon>> = {

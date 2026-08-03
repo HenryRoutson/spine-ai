@@ -73,6 +73,8 @@ type AssistantChatProps<TProposal> = {
   onMessagesChange?: React.Dispatch<React.SetStateAction<AssistantChatMessage<TProposal>[]>>
   /** AI : mirrors in-flight stream for conversation copy while loading */
   onStreamingDraftChange?: React.Dispatch<React.SetStateAction<AssistantStreamingDraft | null>>
+  /** AI : survives panel close — parent can track busy state for header affordance */
+  onLoadingChange?: (loading: boolean) => void
   /** AI : actions tied to the active agent instance (e.g. copy conversation) */
   headerActions?: ReactNode
 }
@@ -92,6 +94,7 @@ export function AssistantChat<TProposal>({
   messages: controlledMessages,
   onMessagesChange,
   onStreamingDraftChange,
+  onLoadingChange,
   headerActions,
 }: AssistantChatProps<TProposal>) {
   const [internalMessages, setInternalMessages] = useState<AssistantChatMessage<TProposal>[]>([
@@ -100,7 +103,11 @@ export function AssistantChat<TProposal>({
   const messages = controlledMessages ?? internalMessages
   const setMessages = onMessagesChange ?? setInternalMessages
   const [input, setInput] = useState("")
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoadingState] = useState(false)
+  const setLoading = (value: boolean) => {
+    setLoadingState(value)
+    onLoadingChange?.(value)
+  }
   const [loadingPhase, setLoadingPhase] = useState<AssistantLoadingPhase>("thinking")
   const [liveThinking, setLiveThinking] = useState("")
   const [liveResponse, setLiveResponse] = useState("")
@@ -322,6 +329,7 @@ export function AssistantChat<TProposal>({
                   <AssistantDebugPanel
                     entries={m.debugTrace}
                     className="mt-3 border-sky-400/25 bg-sky-950/35"
+                    showCopyButton={false}
                   />
                 )}
               </div>
@@ -350,6 +358,7 @@ export function AssistantChat<TProposal>({
                     liveThinking={liveThinking}
                     thinkingActive={loadingPhase === "thinking"}
                     className="border-sky-400/25 bg-sky-950/35"
+                    showCopyButton={false}
                   />
                 ) : liveThinking ? (
                   <div>
@@ -382,7 +391,7 @@ export function AssistantChat<TProposal>({
             <div className="space-y-2 px-2">
               <p className="font-mono text-[10px] text-destructive">{error}</p>
               {showDebug && errorDebugTrace.length > 0 && (
-                <AssistantDebugPanel entries={errorDebugTrace} />
+                <AssistantDebugPanel entries={errorDebugTrace} showCopyButton={false} />
               )}
             </div>
           )}

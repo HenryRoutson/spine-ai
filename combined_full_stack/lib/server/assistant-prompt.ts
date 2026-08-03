@@ -90,6 +90,27 @@ export function buildStructureRulesPromptBlock(): string {
 - When answering questions without schema changes, set models to null.`;
 }
 
+/** AI : maps server validation messages to fixes — shown when proposal materialization fails. */
+export function buildPipelineValidationErrorsPromptBlock(): string {
+  return `How pipeline validation works (your proposal is checked before the user approves):
+1. The server materializes your modules array into real steps (auto-inserts Parse-to-structure, Link Quotes, combine side inputs).
+2. It walks the linear spine left-to-right and flags I/O mismatches, missing notes, duplicate labels, and compile errors.
+3. If invalid, you receive the exact error text and must return a FULL replacement modules array (modulePatch null) — up to 2 automatic retries.
+
+Validation error messages and how to fix them:
+- "input expects Foo, upstream emits Bar" — wrong structure name between adjacent steps; align structureIn with the previous step's structureOut item type.
+- "input expects list[Foo], upstream emits Foo" — previous step emits a single object but this step needs a list; set previous structureOut to list[Foo] or insert custom-code that returns an array.
+- "input expects Foo, upstream emits list[Bar]" — downstream wants single but upstream emits list; use custom-code fold, transform with a list[model] field, or set this step's structureIn to match the list item type and keep list output.
+- "list[Foo] → Bar needs a list field…" — bare transform cannot fold a list into a single object; add list[model] field on Bar or use custom-code.
+- "references missing structure …" — structureIn/structureOut names a model not in your models array.
+- "annotation / purpose is required" — set note on input, combine, llm, and llm-batch steps.
+- "input description is required" — set inputDescription on every step.
+- "code does not compile" — custom-code must be a TypeScript arrow expression, not Python.
+- "pipeline state has no …" on combine — no upstream step has emitted that structure name yet; add an earlier step with that structureOut label chain.
+
+Before returning modules, mentally verify spineExpects/spineEmits on each adjacent pair in the current pipeline JSON.`;
+}
+
 /** AI : spine typing — the #1 source of invalid pipelines; explain without task-specific hardcoding. */
 export function buildLinearIoPromptBlock(): string {
   return `Linear spine I/O (CRITICAL — validate mentally before returning modules):
@@ -147,6 +168,74 @@ export function buildMultiDocumentWorkflowPromptBlock(): string {
 - Reference: Batch LLM Example seed (Wrap → List → llm-batch → Unwrap); homework grader Student Submissions (list[Document] input).`;
 }
 
+/** AI : two (or more) document KINDS — combine merges pipeline state with a new upload. */
+export function buildCombineInputsPromptBlock(): string {
+  return `Combine Inputs — multiple document KINDS (not many files of the same kind):
+Use combine when the task needs TWO OR MORE DIFFERENT inputs that play different roles — e.g. policy + expense report, marking schema + student homework, contract + amendment. Do NOT use combine for "hundreds of receipts" — use one input with list[Document] instead.
+
+How combine works at runtime:
+1. Earlier steps run on the linear spine and accumulate pipeline state keyed by step label (e.g. "Parse Policy Table" → list[TableRow]).
+2. A side input step uploads the second document (Document on the spine).
+3. combine reads structureIn from pipeline state (must already exist — an upstream step must have emitted that structure) plus the side Document, and outputs a merged auto-generated structure.
+
+How to emit combine in your modules array:
+- structureIn (REQUIRED): structure NAME already produced upstream (e.g. TableRow, RubricQuestion) — what combine pulls from pipeline state, NOT list[TableRow].
+- structureOut: optional — server auto-generates the combine output model; do NOT add auto:true combine structs to models unless they already exist in the project.
+- note + inputDescription on combine: describe the MERGED payload (pipeline state fields + side document), not just the side file.
+
+Side document input — pick ONE pattern:
+A) Explicit side input (preferred when filenames matter): emit a full input step immediately before combine with its own label, note, inputType, inputNameContains, inputDescription, structureOut Document. Then emit combine. Do NOT rely on auto-insert in this case.
+B) Auto side input: emit ONLY the combine step — server auto-inserts a generic Document Input before it. Put inputType / inputNameContains / inputMinCount on the combine spec — they apply to the auto-inserted side input.
+
+Never duplicate side inputs: if the module before combine is already kind input, do NOT also rely on pattern B.
+
+Typical two-document spine (Expense Report Auditor pattern):
+  1. Input "Policy" (structureOut Document) → custom-code/llm → list[TableRow] on spine (stored in state)
+  2. Input "Expense Report" (structureOut Document, inputNameContains expense_report)
+  3. combine (structureIn: TableRow) → merged AuditInput
+  4. custom-code or llm on merged object → output
+
+Homework grader pattern (schema + many student files):
+  1. Input marking schema → processing → list[RubricQuestion] in state
+  2. Input student submissions (structureOut list[Document], inputMinCount 1+)
+  3. combine (structureIn: RubricQuestion) → custom-code assemble → llm-batch per gradable row
+
+Validation errors specific to combine:
+- "pipeline state has no Foo" — no upstream step emitted structure Foo; add processing after the first input before combine.
+- "pipeline state expects Foo, spine carries Bar" — structureIn does not match what upstream actually stored.
+
+Create separate test documents per input slot (match inputNameContains). Reference seeds: Expense Report Auditor, Homework Grader.`;
+}
+
+/** AI : when one llm call is wrong — complements llm-batch / map-reduce blocks. */
+export function buildLlmCallStrategyPromptBlock(): string {
+  return `Single llm vs llm-batch vs multi-step (do NOT default to one big LLM call):
+Runtime llm and llm-batch steps validate each response against the target structure's Zod schema (derived from your pydantic fields). Smaller, repeated structured calls are more reliable than one call over huge raw text.
+
+Avoid a SINGLE llm call when:
+- The user uploads MANY files of the same kind → list[Document] input + llm-batch (one structured call per file).
+- The document is long (contracts, logs, books) → custom-code chunk/split → list[Chunk] → llm-batch → optional reduce — the whole doc will not fit context.
+- Each row/line/student needs its own extraction or grade → llm-batch; never "in one prompt, loop over all files".
+- Output is a table of many rows → end pipeline at list[Row] → output (CSV/XLSX export is built-in); do not ask one llm to emit a giant CSV string.
+- Two document types must be read together → process first doc on spine, combine with second doc, THEN llm on the compact merged object — not one llm with both raw files pasted in.
+
+A SINGLE llm call fits when:
+- One short document or a small merged JSON after combine/custom-code.
+- One classification, rewrite, or extraction on a single upstream object already on the spine.
+- Final synthesis on aggregated fields (summary over ≤ few dozen short strings), often after batch + custom-code fold.
+
+Map-reduce shape: split/map (llm-batch or custom-code list) → optional reduce (custom-code or one small llm) → output.`;
+}
+
+/** AI : agent structuring phase uses Zod — tell the model its JSON is validated. */
+export function buildAssistantStructuredResponsePromptBlock(): string {
+  return `Your JSON response format (enforced by Zod):
+- The structuring phase uses llmStreamStructured with assistantResponseSchema (Zod). The server appends JSON Schema from this Zod schema to your prompt; replies are parsed and safeParse'd — invalid JSON or schema errors retry automatically (same as pipeline validation retries).
+- modules/modulePatch entries are validated per-step (required notes, combine structureIn, input structureOut rules, llm-batch structureIn shape).
+- Set unused sections to null (not omitted). message is always a string.
+- Pipeline llm steps at runtime also use Zod schemas built from structure models — design fields the model can fill reliably; use llm-batch when one call cannot see all items.`;
+}
+
 export function buildPipelineRulesPromptBlock(globalModel: ModelId): string {
   return `Pipeline rules:
 - Pipelines are strictly linear. Each step must consume ONLY the previous step's output — never an earlier structure with the same model name. combine is the exception: it reads pipeline state (by structure name) plus the document input immediately before it.
@@ -156,10 +245,14 @@ ${buildLinearIoPromptBlock()}
 
 ${buildMultiDocumentWorkflowPromptBlock()}
 
+${buildCombineInputsPromptBlock()}
+
+${buildLlmCallStrategyPromptBlock()}
+
 - Input steps: set inputType from supported types; optional inputNameContains so only matching filenames fill that slot (useful with multiple inputs).
 - Any step may set inputDescription — before the step runs, a guard LLM rejects input that doesn't match. inputDescription MUST describe what the step RECEIVES as input (the upstream data), not what it produces. For export/output steps (e.g. "Export CSV", "Generate Report"), describe the upstream structured data fields, not the output file format.
 - input, combine, and llm/llm-batch steps MUST set note (Annotation / purpose) — a short human-readable description of what the step does or what document/data it handles. Never leave note empty on those kinds.
-- combine steps merge pipeline state with a new document — emit ONLY the combine step; a Document Input is auto-inserted before it.
+- combine: see Combine Inputs rules above — structureIn is required; side input is explicit input step OR auto-inserted when combine stands alone.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
 - Non-JSON inputs with a typed structureOut get a locked "Parse to structure" LLM step auto-inserted after the input — do NOT emit it yourself.
 - transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically, or use custom-code.
@@ -218,7 +311,7 @@ export function isGreenfieldProject(project: Project, history: ChatTurn[] = []):
 /** AI : one user-message shape for landing + in-app greenfield design — keep in sync with buildFewShotPromptBlock. */
 export function buildGreenfieldPipelineUserMessage(task: string): string {
   const trimmed = task.trim();
-  return `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / llm-batch / transform / custom-code / combine as needed), and output step(s). Name structures clearly. Walk the linear spine chain before returning modules — adjacent steps must match single vs list types.
+  return `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / llm-batch / transform / custom-code / combine as needed), and output step(s). Name structures clearly. Walk the linear spine chain before returning modules — adjacent steps must match single vs list types. Use combine (not one giant llm) when two different document kinds must merge; use llm-batch (not one llm) when many files or rows need the same extraction.
 
 If the goal is a spreadsheet/CSV/Excel of extracted rows, end at list[Row] → output — do NOT add custom-code that folds rows into a CSV string (lists are already CSV/XLSX-exportable in the UI).
 
@@ -264,11 +357,10 @@ Spine: list[Document] → list[ReceiptRow] → output
       "kind": "input",
       "label": "Receipt Uploads",
       "note": "Many receipt files uploaded into one slot.",
-      "structureOut": "Document",
+      "structureOut": "list[Document]",
       "inputType": "text",
       "inputNameContains": "receipt",
       "inputMinCount": 2,
-      "structureOut": "list[ChunkItem]",
       "inputDescription": "Plain-text receipt files — one upload per receipt"
     },
     {
@@ -351,8 +443,7 @@ Spine: Document → list[TextChunk] → list[ChunkSummary] → CombinedReport �
       "label": "Split Lines",
       "note": "Document → list[TextChunk] before llm-batch.",
       "structureIn": "Document",
-      "structureOut": "TextChunk",
-      "structureOut": "list[ChunkItem]",
+      "structureOut": "list[TextChunk]",
       "code": "(doc) => doc.content.split('\\\\n').filter(l => l.trim()).map((line, i) => ({ id: String(i + 1), text: line.trim() }))",
       "inputDescription": "Single Document with newline-separated checklist lines"
     },
@@ -389,13 +480,118 @@ Spine: Document → list[TextChunk] → list[ChunkSummary] → CombinedReport �
   "message": "Single doc split into chunks, batch summarized, folded into one report."
 }
 
-Key patterns both examples demonstrate:
+Example 3 — two document kinds → combine → single audit llm (NOT one llm over both raw files)
+Task: "Check expense line items against a policy table"
+Spine: Document → list[TableRow] (state) + side Document → combine → MergedTables → llm → output
+{
+  "projectNameUpdate": "Expense Auditor",
+  "models": [
+    {
+      "name": "TableRow",
+      "description": "One parsed policy table row.",
+      "fields": [
+        { "name": "row_id", "type": "text", "optional": false, "description": "Row id" },
+        { "name": "cells_json", "type": "text", "optional": false, "description": "Row JSON" }
+      ]
+    },
+    {
+      "name": "MergedTables",
+      "description": "Policy rows plus expense table JSON for one audit llm call.",
+      "fields": [
+        { "name": "table_a_json", "type": "json", "optional": false, "description": "Policy rows JSON" },
+        { "name": "table_b_json", "type": "json", "optional": false, "description": "Expense lines JSON" }
+      ]
+    },
+    {
+      "name": "ComplianceFlag",
+      "description": "One line audit result.",
+      "fields": [
+        { "name": "line_id", "type": "text", "optional": false, "description": "Line id" },
+        { "name": "compliant", "type": "bool", "optional": false, "description": "Within policy" },
+        { "name": "issue", "type": "text", "optional": true, "description": "Violation text" }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "kind": "input",
+      "label": "Expense Policy",
+      "note": "Markdown policy limits table.",
+      "structureOut": "Document",
+      "inputType": "text",
+      "inputNameContains": "policy",
+      "inputDescription": "Markdown table of category limits and approval rules"
+    },
+    {
+      "kind": "custom-code",
+      "label": "Parse Policy Table",
+      "note": "Document → list[TableRow] stored in pipeline state.",
+      "structureIn": "Document",
+      "structureOut": "list[TableRow]",
+      "code": "(doc) => doc.content.split('\\\\n').filter(l => l.trim()).map((line, i) => ({ row_id: String(i + 1), cells_json: JSON.stringify({ raw: line }) }))",
+      "inputDescription": "Policy Document markdown text"
+    },
+    {
+      "kind": "input",
+      "label": "Expense Report",
+      "note": "Employee expense report markdown table.",
+      "structureOut": "Document",
+      "inputType": "text",
+      "inputNameContains": "expense_report",
+      "inputDescription": "Submitted expense report as markdown line items"
+    },
+    {
+      "kind": "combine",
+      "label": "Combine Inputs",
+      "note": "Merge parsed policy rows (pipeline state) with expense report document.",
+      "structureIn": "TableRow",
+      "inputDescription": "TableRow list from Parse Policy Table plus expense report Document"
+    },
+    {
+      "kind": "custom-code",
+      "label": "Merge Tables",
+      "note": "Combine output → compact JSON for one audit llm.",
+      "structureIn": "TableRow",
+      "structureOut": "MergedTables",
+      "code": "(combined) => ({ table_a_json: JSON.stringify(combined.policy_rows ?? []), table_b_json: JSON.stringify(combined.expense_report?.content ?? '') })",
+      "inputDescription": "Combined audit input — policy rows and expense report"
+    },
+    {
+      "kind": "llm",
+      "label": "Audit Lines",
+      "note": "Single llm on small merged JSON — appropriate after combine, not on raw uploads.",
+      "structureIn": "MergedTables",
+      "structureOut": "ComplianceFlag",
+      "prompt": "table_a_json is policy limits; table_b_json is expense lines. Output one ComplianceFlag per expense line.",
+      "inputDescription": "MergedTables with table_a_json and table_b_json"
+    },
+    {
+      "kind": "output",
+      "label": "Compliance Output",
+      "structureIn": "ComplianceFlag",
+      "structureOut": "ComplianceFlag",
+      "inputDescription": "ComplianceFlag rows from audit"
+    }
+  ],
+  "typeAliases": null,
+  "docs": [
+    { "name": "expense_policy.md", "type": "text", "content": "| category | limit |\\\\n| meals | 50 |" },
+    { "name": "expense_report_jan.md", "type": "text", "content": "| line | amount |\\\\n| lunch | 45 |" }
+  ],
+  "documentationUpdate": "# Expense Auditor\\n\\nPolicy parse → combine with report → merge → single audit llm per merged JSON.",
+  "modulePatch": null,
+  "message": "Two inputs via combine; audit uses one llm only after merge — not on raw files."
+}
+
+Key patterns all examples demonstrate:
 - Input structureOut is always Document (never a parsed model).
 - llm-batch follows a list-emitting step (input with list[Document], or custom-code with list[Row]).
 - Tabular spreadsheet goals end at list[Row] → output — do NOT custom-code fold rows into a CSV/Excel string (the UI already exports lists as CSV/XLSX).
 - list → single non-tabular object (joined prose report, ranked summary) uses custom-code fold (not a bare transform).
 - custom-code code is TypeScript arrow syntax — never Python.
-- Every structureIn/structureOut name is defined in models.`;
+- Every structureIn/structureOut name is defined in models.
+- Two document kinds: first input + spine processing → explicit side input → combine (structureIn = state structure) — see Example 3.
+- One llm over merged compact JSON is fine AFTER combine; never one llm over many raw uploads — use llm-batch instead.`;
 }
 
 export function buildProjectAssistantSystemPrompt(globalModel: ModelId, projectName: string): string {
@@ -422,7 +618,11 @@ ${buildInputTypesPromptBlock()}
 
 ${buildStructureRulesPromptBlock()}
 
+${buildAssistantStructuredResponsePromptBlock()}
+
 ${buildPipelineRulesPromptBlock(globalModel)}
+
+${buildPipelineValidationErrorsPromptBlock()}
 
 ${buildProjectDocumentationRulesPromptBlock()}
 

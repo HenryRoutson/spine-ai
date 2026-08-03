@@ -30,6 +30,8 @@ type ProjectAssistantSession = {
   setMessages: React.Dispatch<React.SetStateAction<AssistantChatMessage<ProjectProposal>[]>>
   streamingDraft: AssistantStreamingDraft | null
   setStreamingDraft: React.Dispatch<React.SetStateAction<AssistantStreamingDraft | null>>
+  assistantBusy: boolean
+  setAssistantBusy: (busy: boolean) => void
   chats: AssistantChatSummary[]
   activeChatId: string | null
   chatsLoading: boolean
@@ -117,6 +119,7 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
   const [streamingDraftByChat, setStreamingDraftByChat] = useState<
     Record<string, AssistantStreamingDraft | null>
   >({})
+  const [assistantBusyByChat, setAssistantBusyByChat] = useState<Record<string, boolean>>({})
   const [chatsByProject, setChatsByProject] = useState<Record<string, AssistantChatSummary[]>>({})
   const [activeChatByProject, setActiveChatByProject] = useState<Record<string, string>>({})
   const [loadingByProject, setLoadingByProject] = useState<Record<string, boolean>>({})
@@ -376,6 +379,12 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
         delete next[chatId]
         return next
       })
+      setAssistantBusyByChat((prev) => {
+        if (!(chatId in prev)) return prev
+        const next = { ...prev }
+        delete next[chatId]
+        return next
+      })
       setChatsByProject((prev) => ({ ...prev, [projectId]: remaining }))
 
       if (!wasActive) return
@@ -444,6 +453,20 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
             return { ...prev, [chatId]: next }
           })
         },
+        assistantBusy: activeChatId ? (assistantBusyByChat[activeChatId] ?? false) : false,
+        setAssistantBusy: (busy) => {
+          const chatId = activeChatByProjectRef.current[projectId]
+          if (!chatId) return
+          setAssistantBusyByChat((prev) => {
+            if (!busy && !(chatId in prev)) return prev
+            if (!busy) {
+              const next = { ...prev }
+              delete next[chatId]
+              return next
+            }
+            return { ...prev, [chatId]: true }
+          })
+        },
         chats: chatsByProject[projectId] ?? [],
         activeChatId,
         chatsLoading: loadingByProject[projectId] ?? !loadStarted.current.has(projectId),
@@ -452,7 +475,7 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
         deleteChat: (chatId) => deleteChat(projectId, chatId, initialMessage),
       }
     },
-    [activeChatByProject, chatsByProject, deleteChat, loadingByProject, messagesByChat, newChat, persistMessages, selectChat, streamingDraftByChat],
+    [activeChatByProject, assistantBusyByChat, chatsByProject, deleteChat, loadingByProject, messagesByChat, newChat, persistMessages, selectChat, streamingDraftByChat],
   )
 
   useEffect(() => {

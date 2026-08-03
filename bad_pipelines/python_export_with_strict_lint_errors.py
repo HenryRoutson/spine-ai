@@ -249,7 +249,7 @@ async def step_Flatten_Sections(input: GraderWork, _state: PipelineState) -> lis
 
 
 async def step_Grade_Each_Section(input: list[GradableSection], _state: PipelineState) -> list[SectionGrade]:
-    """Grade Each Section · Kind: Batch LLM · List of GradableSection objects — student_label, question body, max_score, and criteria · Model: deepseek-v3 · Cached: true"""
+    """Grade Each Section · Kind: Batch LLM · List of GradableSection objects — student_label, question body, max_score, and criteria · Model: deepseek-v4 · Cached: true"""
     # One structured LLM call per list item → SectionGrade[]
     items = input
     def prompt_for(item: Any) -> str:

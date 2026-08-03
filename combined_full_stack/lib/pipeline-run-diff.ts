@@ -1,11 +1,17 @@
-import { ModuleKind } from "@/lib/types"
+import { LegacyModuleKind, ModuleKind } from "@/lib/types"
 import type { PipelineModule, RunStep } from "@/lib/types"
+
+function moduleKindFromRunStep(kind: RunStep["kind"]): ModuleKind {
+  if (kind === LegacyModuleKind.DocToText) return ModuleKind.Input
+  if (kind === LegacyModuleKind.ListMerge) return ModuleKind.Merge
+  return kind
+}
 
 // AI : rebuild the pipeline shape a run executed against — step order + labels/kinds at run time.
 export function modulesFromRunSteps(steps: RunStep[]): PipelineModule[] {
   return steps.map((step) => ({
     id: step.moduleId,
-    kind: step.kind === "doc-to-text" ? ModuleKind.Input : step.kind,
+    kind: moduleKindFromRunStep(step.kind),
     label: step.label,
     note: step.label,
     cached: true,

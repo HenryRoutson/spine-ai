@@ -18,6 +18,7 @@ import {
   pyCustomCodeCall,
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsPy } from "./pipeline_export_setup";
+import { isMergeModuleKind } from "@/lib/list-ops-steps";
 import { MODULE_META } from "./types";
 import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
@@ -39,13 +40,33 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
   const castOut = (expr: string): string =>
     inPy === outPy ? `return ${expr}` : `return cast(${outPy}, cast(object, ${expr}))`;
 
+  if (isMergeModuleKind(m.kind) || m.kind === "chunk" || m.kind === "custom-code") {
+    const custom = primaryExportCustomCode(m);
+    const fallbacks = customCodeEntriesForModule(m);
+    if (custom?.language === "python") {
+      const lines = inlinePythonCustomCode(custom.code, outPy).split("\n");
+      if (fallbacks.length > 1) {
+        lines.unshift(`# ${fallbacks.length} fallback implementations — first shown`);
+      }
+      return lines.join("\n");
+    }
+    if (custom?.language === "typescript") {
+      return [
+        `# TypeScript custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
+        ...custom.code.split("\n").map((line) => `# ${line}`),
+        castOut("input"),
+      ].join("\n");
+    }
+    return ["# Passthrough — no custom code configured", castOut("input")].join("\n");
+  }
+
   switch (m.kind) {
     case "input":
       return generateInputStepBodyPy(m, outPy);
     case "llm": {
       // AI : TODO export — replace schema placeholder with generated JSON Schema from outStructureId.
       const prompt = m.prompt ?? "Process the input.";
-      const model = m.model ?? "deepseek-v3";
+      const model = m.model ?? "deepseek-v4";
       return [
         `# Structured LLM call → ${outName ?? outPy}${stepEmitsList(m) ? "[]" : ""}`,
         `_model = ${exportStringLiteral(model)}`,
@@ -89,25 +110,6 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
         `# Reshape ${inName ?? "input"} → ${outName ?? outPy}${stepEmitsList(m) ? " (list)" : ""}`,
         castOut("input"),
       ].join("\n");
-    }
-    case "custom-code": {
-      const custom = primaryExportCustomCode(m);
-      const fallbacks = customCodeEntriesForModule(m);
-      if (custom?.language === "python") {
-        const lines = inlinePythonCustomCode(custom.code, outPy).split("\n");
-        if (fallbacks.length > 1) {
-          lines.unshift(`# ${fallbacks.length} fallback implementations — first shown`);
-        }
-        return lines.join("\n");
-      }
-      if (custom?.language === "typescript") {
-        return [
-          `# TypeScript custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
-          ...custom.code.split("\n").map((line) => `# ${line}`),
-          castOut("input"),
-        ].join("\n");
-      }
-      return ["# Passthrough — no custom code configured", castOut("input")].join("\n");
     }
     case "assert": {
       const entries = assertEntriesForModule(m);

@@ -14,6 +14,7 @@ import {
 } from "@/lib/inference-input-core";
 import { BUILTIN_DOCUMENT_ID, isBuiltinDocumentModel, stripSharedModels, withSharedModels } from "./builtin_models";
 import { migrateCustomCodeModule } from "@/lib/custom_code_entries";
+import { migrateListMergeModule, syncListOpsStepModule } from "@/lib/list-ops-steps";
 import { resolveModuleNote } from "@/lib/pipeline-module-factory";
 import { usesPassthroughStructure, isLlmKind } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
@@ -397,7 +398,9 @@ export function migrateProjectModules(project: Project): Project {
   const folded = foldDocToTextSteps(project.modules);
   const quoted = syncManagedPipelineSteps(folded, models);
   const placed = syncAssertPlacement(quoted);
-  const migrated = placed.map(migrateCustomCodeModule);
+  const migrated = placed.map((m) =>
+    syncListOpsStepModule(migrateListMergeModule(migrateCustomCodeModule(m)), models),
+  );
   // AI : cache is always on — normalize legacy projects that disabled it per step.
   const withCache = migrated.map((m) => (m.cached ? m : { ...m, cached: true }));
   const normalized = normalizePassthroughStructureIds(withCache);

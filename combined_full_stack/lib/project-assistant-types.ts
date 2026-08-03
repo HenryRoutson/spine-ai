@@ -21,7 +21,7 @@ export type ProjectProposal = {
   documentation: string
   projectName?: string
   // AI : which parts changed — used to apply only deltas on approve
-  changed: {
+  changed: { // TODO should be reccusive? remove duplication
     modules: boolean
     models: boolean
     typeAliases: boolean
@@ -32,7 +32,7 @@ export type ProjectProposal = {
 }
 
 export const PROJECT_ASSISTANT_INITIAL_MESSAGE =
-  "Describe what you want to build — I can propose structure models, reusable type aliases, pipeline steps, and inference test documents in one shot. Approve to apply everything."
+  "Describe what you want to build. I'll propose structures, pipeline steps (with correct list/single spine wiring), and sample test documents. Approve to apply — invalid pipelines are caught and retried automatically before you see them."
 
 export const PROJECT_ASSISTANT_STARTERS = [
   "Set up structures, type aliases, pipeline, and sample test documents from scratch",

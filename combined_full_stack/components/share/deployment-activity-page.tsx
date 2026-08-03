@@ -23,7 +23,7 @@ import { useAppShell } from "@/lib/app-shell"
 import { runBilledCents, runTotalMs } from "@/lib/run-metrics"
 import type { SharedLinkRecord } from "@/lib/shared-link-types"
 import { timeAgo } from "@/lib/time-ago"
-import { useStore } from "@/lib/store"
+import { useWorkspaceBilling } from "@/lib/use-workspace-billing"
 import type { PipelineRun } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
@@ -46,7 +46,7 @@ export function DeploymentActivityPage({
   projectId: string
   initialFilter?: ActivityFilter
 }) {
-  const { billingRuns } = useStore()
+  const { billingRuns } = useWorkspaceBilling()
   const { openLogging } = useAppShell()
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<ActivityFilter>(initialFilter)

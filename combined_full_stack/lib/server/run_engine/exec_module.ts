@@ -1,5 +1,6 @@
 import { assertNever } from "@/lib/assert";
 import { ModuleKind, type PipelineModule } from "../types";
+import { isMergeModuleKind } from "@/lib/list-ops-steps";
 import type { ExecResult, RunCtx, RunLogger } from "./engine_types";
 import { execInputStep } from "./steps/input";
 import { execLlmStep } from "./steps/llm";
@@ -26,6 +27,8 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
     case ModuleKind.Transform:
       return execTransformStep(m, ctx, log);
     case ModuleKind.CustomCode:
+    case ModuleKind.Chunk:
+    case ModuleKind.Merge:
       return execCustomCodeStep(m, ctx, log);
     case ModuleKind.LlmBatch:
       return execLlmBatchStep(m, ctx, log);
@@ -38,6 +41,7 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
     case ModuleKind.HumanReview:
       return execHumanReviewStep(m, ctx, log);
     default: {
+      if (isMergeModuleKind(m.kind)) return execCustomCodeStep(m, ctx, log);
       const unreachable: never = m.kind;
       return assertNever(unreachable, `unknown module kind: ${(m as PipelineModule).kind}`);
     }

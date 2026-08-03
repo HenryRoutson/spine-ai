@@ -17,6 +17,7 @@ import {
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsRust } from "./pipeline_export_setup";
 import { pipelineStateRustType } from "./pipeline_state";
+import { isMergeModuleKind } from "@/lib/list-ops-steps";
 import { MODULE_META } from "./types";
 import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
@@ -35,12 +36,32 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
   const outName = modelName(project, m.outStructureId);
   const inName = modelName(project, m.inStructureId);
 
+  if (isMergeModuleKind(m.kind) || m.kind === "chunk" || m.kind === "custom-code") {
+    const custom = primaryExportCustomCode(m);
+    const fallbacks = customCodeEntriesForModule(m);
+    if (custom) {
+      return [
+        commentForeignCode(
+          custom.code,
+          `${custom.language === "python" ? "Python" : "TypeScript"} custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
+        ),
+        `let out: ${outRust} = serde_json::from_value(serde_json::to_value(&input)?)?;`,
+        "Ok(out)",
+      ].join("\n");
+    }
+    return [
+      "// Passthrough — no custom code configured",
+      `let out: ${outRust} = serde_json::from_value(serde_json::to_value(&input)?)?;`,
+      "Ok(out)",
+    ].join("\n");
+  }
+
   switch (m.kind) {
     case "input":
       return generateInputStepBodyRust(m, outRust);
     case "llm": {
       const prompt = m.prompt ?? "Process the input.";
-      const model = m.model ?? "deepseek-v3";
+      const model = m.model ?? "deepseek-v4";
       return [
         `// Structured LLM call → ${outName ?? outRust}${stepEmitsList(m) ? "[]" : ""}`,
         `let _model = ${exportStringLiteral(model)};`,
@@ -89,26 +110,6 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
       }
       return [
         `// Reshape ${inName ?? "input"} → ${outName ?? outRust}${stepEmitsList(m) ? " (list)" : ""}`,
-        `let out: ${outRust} = serde_json::from_value(serde_json::to_value(&input)?)?;`,
-        "Ok(out)",
-      ].join("\n");
-    }
-    case "custom-code": {
-      const custom = primaryExportCustomCode(m);
-      const fallbacks = customCodeEntriesForModule(m);
-      if (custom) {
-        const lines = [
-          commentForeignCode(
-            custom.code,
-            `${custom.language === "python" ? "Python" : "TypeScript"} custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
-          ),
-          `let out: ${outRust} = serde_json::from_value(serde_json::to_value(&input)?)?;`,
-          "Ok(out)",
-        ];
-        return lines.join("\n");
-      }
-      return [
-        "// Passthrough — no custom code configured",
         `let out: ${outRust} = serde_json::from_value(serde_json::to_value(&input)?)?;`,
         "Ok(out)",
       ].join("\n");

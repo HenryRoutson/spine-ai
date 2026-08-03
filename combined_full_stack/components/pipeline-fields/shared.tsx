@@ -1,11 +1,13 @@
 "use client"
 
 // AI : primitives shared across all pipeline field sub-components.
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
+import { ChevronDown } from "lucide-react"
 import { llmSchemaJson } from "@/lib/structure"
 import { isLlmKind } from "@/lib/module-kinds"
 import { llmStepEmitsList } from "@/lib/spine-type"
 import { cn } from "@/lib/utils"
+import { INSPECTOR_SECTION_BORDER_CLASS, INSPECTOR_SECTION_TITLE_CLASS, WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import {
   type PipelineModule,
   type StructureModel,
@@ -52,28 +54,46 @@ export function PipelineField({
   hint,
   hintTone = "warning",
   children,
+  defaultOpen = true,
 }: {
   label: string
   hint?: string
   hintTone?: "warning" | "error"
   children: React.ReactNode
+  defaultOpen?: boolean
 }) {
+  const [open, setOpen] = useState(defaultOpen)
+
   return (
-    <div className="mb-3 min-w-0">
-      <label className="mb-1.5 block font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-        {label}
-      </label>
-      {hint && (
-        <p
+    <div className={cn("min-w-0 rounded-lg border bg-card/50", INSPECTOR_SECTION_BORDER_CLASS)}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-muted/30"
+      >
+        <span className={INSPECTOR_SECTION_TITLE_CLASS}>{label}</span>
+        <ChevronDown
           className={cn(
-            "mb-1.5 font-mono text-[10px]",
-            hintTone === "error" ? "text-destructive" : "WARNING_TEXT_CLASS",
+            "h-3.5 w-3.5 shrink-0 text-neutral-400 transition-transform",
+            open && "rotate-180",
           )}
-        >
-          {hint}
-        </p>
-      )}
-      {children}
+        />
+      </button>
+      {open ? (
+        <div className={cn("border-t px-3 pb-3 pt-2", INSPECTOR_SECTION_BORDER_CLASS)}>
+          {hint && (
+            <p
+              className={cn(
+                "mb-1.5 font-mono text-[10px]",
+                hintTone === "error" ? "text-destructive" : "WARNING_TEXT_CLASS",
+              )}
+            >
+              {hint}
+            </p>
+          )}
+          {children}
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -10,6 +10,7 @@ import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { AUTO_STRUCTURE_PARSE_EXPLAINER, isAutoStructureParseStep } from "@/lib/structure-parse-steps"
 import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds"
 import { formatModuleSpineIn, formatModuleSpineOut } from "@/lib/spine-type"
+import { isMergeModuleKind } from "@/lib/list-ops-steps"
 import { MODULE_META } from "@/lib/types"
 import type {
   PipelineModule,
@@ -41,6 +42,8 @@ import {
 import { InputModuleFields } from "@/components/pipeline-fields/input-fields"
 import { LlmModuleFields } from "@/components/pipeline-fields/llm-fields"
 import { CodeModuleFields } from "@/components/pipeline-fields/code-fields"
+import { ListOpsModuleFields } from "@/components/pipeline-fields/list-ops-fields"
+import { InspectorCollapsibleSection } from "@/components/inspector-collapsible-section"
 
 export { useLlmSchemaPreview } from "@/components/pipeline-fields/shared"
 
@@ -81,8 +84,10 @@ export function PipelineModuleFields({
 
   if (isAutoQuoteStep(selected)) {
     return (
-      <>
-        <p className="mb-3 font-mono text-[10px] leading-relaxed text-muted-foreground">{AUTO_QUOTE_EXPLAINER}</p>
+      <div className="space-y-3">
+        <InspectorCollapsibleSection title="Overview">
+          <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">{AUTO_QUOTE_EXPLAINER}</p>
+        </InspectorCollapsibleSection>
         <PipelineField label="Structure">
           {edit ? (
             <p className="rounded-md border border-chart-2/30 bg-chart-2/5 px-2.5 py-2 font-mono text-xs">
@@ -104,16 +109,18 @@ export function PipelineModuleFields({
             </StaticValue>
           )}
         </PipelineField>
-      </>
+      </div>
     )
   }
 
   if (isAutoStructureParseStep(selected)) {
     return (
-      <>
-        <p className="mb-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
-          {AUTO_STRUCTURE_PARSE_EXPLAINER}
-        </p>
+      <div className="space-y-3">
+        <InspectorCollapsibleSection title="Overview">
+          <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
+            {AUTO_STRUCTURE_PARSE_EXPLAINER}
+          </p>
+        </InspectorCollapsibleSection>
         <PipelineField label="Structure">
           <StaticValue mono>
             <StructureLink models={models} structureId={selected.inStructureId} />
@@ -129,30 +136,42 @@ export function PipelineModuleFields({
           hasNoPromptWarning={!!hasNoPromptWarning}
           llmSchemaPreview={llmSchemaPreview}
         />
-      </>
+      </div>
     )
   }
 
-  return (
-    <>
-      <p className="mb-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
-        {MODULE_META[selected.kind].description}
+  const invalidMessages = (invalidIssues ?? (invalid ? [invalid] : []))
+    .filter((issue) => issue.kind !== "io-mismatch" && issue.kind !== "cardinality-mismatch")
+    .map((issue, i) => (
+      <p key={i} className="font-mono text-[10px] leading-relaxed text-destructive">
+        {invalidStepMessage(issue, models, modules)}
       </p>
-      {(invalidIssues ?? (invalid ? [invalid] : []))
-        .filter((issue) => issue.kind !== "io-mismatch" && issue.kind !== "cardinality-mismatch")
-        .map((issue, i) => (
-          <p key={i} className="mb-3 font-mono text-[10px] leading-relaxed text-destructive">
-            {invalidStepMessage(issue, models, modules)}
+    ))
+  const warningMessages =
+    selected.kind !== "input" && warnings?.length
+      ? warningStepMessages(warnings, models, modules).map((msg, i) => (
+          <p key={i} className={cn("font-mono text-[10px] leading-relaxed", WARNING_TEXT_CLASS)}>
+            {msg}
           </p>
-        ))}
-      {selected.kind !== "input" && warnings?.length ? (
-        <div className="mb-3 space-y-1">
-          {warningStepMessages(warnings, models, modules).map((msg, i) => (
-            <p key={i} className={cn("font-mono text-[10px] leading-relaxed", WARNING_TEXT_CLASS)}>
-              {msg}
+        ))
+      : []
+  const hasOverview =
+    Boolean(MODULE_META[selected.kind].description) ||
+    invalidMessages.length > 0 ||
+    warningMessages.length > 0
+
+  return (
+    <div className="space-y-3">
+      {hasOverview ? (
+        <InspectorCollapsibleSection title="Overview">
+          <div className="space-y-2">
+            <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
+              {MODULE_META[selected.kind].description}
             </p>
-          ))}
-        </div>
+            {invalidMessages}
+            {warningMessages.length > 0 ? <div className="space-y-1">{warningMessages}</div> : null}
+          </div>
+        </InspectorCollapsibleSection>
       ) : null}
 
       <PipelineField label="Label">
@@ -359,6 +378,15 @@ export function PipelineModuleFields({
           onUpdate={onUpdate}
         />
       )}
-    </>
+
+      {(selected.kind === "chunk" || selected.kind === "merge" || isMergeModuleKind(selected.kind)) && (
+        <ListOpsModuleFields
+          selected={selected}
+          models={models}
+          edit={!!edit}
+          onUpdate={onUpdate}
+        />
+      )}
+    </div>
   )
 }

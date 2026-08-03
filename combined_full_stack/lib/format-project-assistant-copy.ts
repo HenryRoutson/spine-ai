@@ -68,7 +68,14 @@ export function formatProjectAssistantConversation(
       conversation.push({ human: msg.content })
       continue
     }
-    conversation.push(agentTurnFromMessage(msg))
+    if (msg.role === "assistant") {
+      const hasPayload =
+        msg.content.trim().length > 0 ||
+        msg.proposal != null ||
+        (msg.debugTrace?.length ?? 0) > 0
+      if (hasPayload) conversation.push(agentTurnFromMessage(msg))
+      continue
+    }
   }
 
   if (streamingDraft) {

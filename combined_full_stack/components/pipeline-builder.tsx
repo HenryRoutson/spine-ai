@@ -28,7 +28,7 @@ import {
 } from "@/lib/structure-parse-steps"
 import { moduleMetrics } from "@/lib/billing"
 import { managedPipelinePairIds } from "@/lib/pipeline-layout"
-import { KIND_COLOR, KIND_ICON } from "@/lib/module-ui"
+import { KindMenuItemIcon } from "@/lib/module-ui"
 import { makeModule } from "@/lib/pipeline-module-factory"
 import { MODULE_META, ModuleKind, type PipelineModule, type ModuleId } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
@@ -39,7 +39,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { formatCostCents, formatSecondsShort } from "@/lib/format"
 import { runBilledCents, runTotalMs } from "@/lib/run-metrics"
-import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
+import { WARNING_TEXT_CLASS, INSPECTOR_SECTION_BORDER_CLASS, INSPECTOR_SECTION_TITLE_CLASS } from "@/lib/ui-classes"
 import { cn } from "@/lib/utils"
 import {
   DropdownMenu,
@@ -52,10 +52,12 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"
+import { syncListOpsStepModule } from "@/lib/list-ops-steps"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { copyTextToClipboard } from "@/lib/clipboard"
 import { PipelineExportDialog } from "@/components/pipeline-export-dialog"
 import { ResizableSplit } from "@/components/resizable-split"
+import { InspectorCollapsibleSection } from "@/components/inspector-collapsible-section"
 import {
   PIPELINE_CANVAS_MAX,
   PIPELINE_CANVAS_MIN,
@@ -111,6 +113,9 @@ export function PipelineBuilder() {
       const updated = { ...m, ...patch }
       if (updated.kind === "output" && patch.inStructureId) {
         updated.outStructureId = patch.inStructureId
+      }
+      if (updated.kind === ModuleKind.Chunk || updated.kind === ModuleKind.Merge) {
+        return syncListOpsStepModule(updated, models)
       }
       return updated
     })
@@ -289,83 +294,86 @@ export function PipelineBuilder() {
           }
           trailing={
             <aside className="flex min-h-0 flex-col overflow-hidden">
-              <div className="border-b border-border px-3 py-2">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Inspector
-                </span>
-              </div>
-
-              {selected ? (
-                <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      {MODULE_META[selected.kind].label}
-                    </span>
-                    {isAutoQuoteStep(selected) ? (
-                      <AutoQuoteLockTooltip />
-                    ) : isAutoStructureParseStep(selected) ? (
-                      <AutoStructureParseLockTooltip />
-                    ) : editingBlocked ? null : (
-                      <div className="flex items-center gap-1">
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, -1)}>
-                          <ArrowUp className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, 1)}>
-                          <ArrowDown className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={() => remove(selected.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+              <InspectorCollapsibleSection title="Inspector" variant="panel" fill>
+                {selected ? (
+                  <div className="space-y-3">
+                    <div
+                      className={cn(
+                        "flex items-center justify-between rounded-lg border bg-card/50 px-3 py-2",
+                        INSPECTOR_SECTION_BORDER_CLASS,
+                      )}
+                    >
+                      <span className={INSPECTOR_SECTION_TITLE_CLASS}>
+                        {MODULE_META[selected.kind].label}
+                      </span>
+                      {isAutoQuoteStep(selected) ? (
+                        <AutoQuoteLockTooltip />
+                      ) : isAutoStructureParseStep(selected) ? (
+                        <AutoStructureParseLockTooltip />
+                      ) : editingBlocked ? null : (
+                        <div className="flex items-center gap-1">
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, -1)}>
+                            <ArrowUp className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, 1)}>
+                            <ArrowDown className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                            onClick={() => remove(selected.id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    <PipelineModuleFields
+                      module={selected}
+                      models={models}
+                      typeAliases={typeAliases}
+                      modules={modules}
+                      mode={editingBlocked ? "view" : "edit"}
+                      globalModel={globalModel}
+                      invalid={invalidForModule(invalid, selected.id)}
+                      invalidIssues={invalidIssuesForModule(invalid, selected.id)}
+                      warnings={warnings.get(selected.id)}
+                      ioMismatchFix={ioMismatchInspectorFix(selected.id as ModuleId, modules, invalid, models)}
+                      onUpdate={editingBlocked ? undefined : (patch) => update(selected.id, patch)}
+                      onFixIoMismatch={
+                        editingBlocked ? undefined : (mismatchModuleId, kind) => fixIoMismatch(mismatchModuleId, kind)
+                      }
+                    />
+                    {!isAutoQuoteStep(selected) && !isAutoStructureParseStep(selected) && (
+                      <InspectorCollapsibleSection title="Performance">
+                        <div className="grid grid-cols-2 gap-2">
+                          <Stat
+                            label="avg latency"
+                            value={
+                              metrics.has(selected.id) ? `${metrics.get(selected.id)!.avgMs}ms` : "—"
+                            }
+                          />
+                          <Stat
+                            label="avg cost"
+                            value={
+                              metrics.has(selected.id)
+                                ? formatCostCents(metrics.get(selected.id)!.avgCostCents)
+                                : "—"
+                            }
+                          />
+                        </div>
+                      </InspectorCollapsibleSection>
                     )}
                   </div>
-                  <PipelineModuleFields
-                    module={selected}
-                    models={models}
-                    typeAliases={typeAliases}
-                    modules={modules}
-                    mode={editingBlocked ? "view" : "edit"}
-                    globalModel={globalModel}
-                    invalid={invalidForModule(invalid, selected.id)}
-                    invalidIssues={invalidIssuesForModule(invalid, selected.id)}
-                    warnings={warnings.get(selected.id)}
-                    ioMismatchFix={ioMismatchInspectorFix(selected.id as ModuleId, modules, invalid, models)}
-                    onUpdate={editingBlocked ? undefined : (patch) => update(selected.id, patch)}
-                    onFixIoMismatch={
-                      editingBlocked ? undefined : (mismatchModuleId, kind) => fixIoMismatch(mismatchModuleId, kind)
-                    }
-                  />
-                  {!isAutoQuoteStep(selected) && !isAutoStructureParseStep(selected) && (
-                    <div className="mt-4 grid grid-cols-2 gap-2">
-                      <Stat
-                        label="avg latency"
-                        value={
-                          metrics.has(selected.id) ? `${metrics.get(selected.id)!.avgMs}ms` : "—"
-                        }
-                      />
-                      <Stat
-                        label="avg cost"
-                        value={
-                          metrics.has(selected.id)
-                            ? formatCostCents(metrics.get(selected.id)!.avgCostCents)
-                            : "—"
-                        }
-                      />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-1 items-center justify-center p-6 text-center">
-                  <p className="text-xs text-muted-foreground">
-                    Add a module and select it to configure.
-                  </p>
-                </div>
-              )}
+                ) : (
+                  <div className="flex min-h-48 items-center justify-center text-center">
+                    <p className="text-xs text-muted-foreground">
+                      Add a module and select it to configure.
+                    </p>
+                  </div>
+                )}
+              </InspectorCollapsibleSection>
             </aside>
           }
         />
@@ -468,22 +476,23 @@ function AddStepMenu({
         <Plus className={variant === "slot" ? "h-3 w-3" : "h-3.5 w-3.5"} />
         {variant === "button" && <span>Add step</span>}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="center" className="min-w-52">
+      <DropdownMenuContent align="center" className="min-w-56 p-1.5">
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="font-mono text-[10px] text-muted-foreground">
+          <DropdownMenuLabel className="px-1 font-mono text-[10px] text-muted-foreground">
             Insert step
           </DropdownMenuLabel>
         </DropdownMenuGroup>
-        <DropdownMenuGroup>
-          {USER_ADDABLE_MODULE_KINDS.map((k) => {
-            const Icon = KIND_ICON[k]
-            return (
-              <DropdownMenuItem key={k} onClick={() => onInsert(k, insertAt)} className="gap-2">
-                <Icon className={cn("h-3.5 w-3.5", KIND_COLOR[k])} />
-                <span>{MODULE_META[k].label}</span>
-              </DropdownMenuItem>
-            )
-          })}
+        <DropdownMenuGroup className="space-y-0.5">
+          {USER_ADDABLE_MODULE_KINDS.map((k) => (
+            <DropdownMenuItem
+              key={k}
+              onClick={() => onInsert(k, insertAt)}
+              className="gap-3 px-2 py-2"
+            >
+              <KindMenuItemIcon kind={k} />
+              <span className="min-w-0 flex-1 truncate">{MODULE_META[k].label}</span>
+            </DropdownMenuItem>
+          ))}
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -492,7 +501,7 @@ function AddStepMenu({
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-border px-3 py-2">
+    <div className={cn("rounded-md border px-3 py-2", INSPECTOR_SECTION_BORDER_CLASS)}>
       <p className="font-mono text-[10px] text-muted-foreground">{label}</p>
       <p className="font-mono text-sm">{value}</p>
     </div>

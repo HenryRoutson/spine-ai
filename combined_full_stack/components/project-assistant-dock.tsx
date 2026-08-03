@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { History, Plus, Sparkles, X } from "lucide-react"
+import { History, Loader2, Plus, Sparkles, X } from "lucide-react"
 import { ProjectAssistant } from "@/components/project-assistant"
 import { Button } from "@/components/ui/button"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils"
 export function ProjectAssistantDock() {
   const { open, toggle } = useProjectAssistant()
   const { project } = useStore()
-  const { chats, activeChatId, chatsLoading, selectChat, newChat, deleteChat } =
+  const { chats, activeChatId, chatsLoading, assistantBusy, selectChat, newChat, deleteChat } =
     useProjectAssistantSession(project.id, PROJECT_ASSISTANT_INITIAL_MESSAGE)
   const [historyOpen, setHistoryOpen] = useState(false)
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<AssistantChatSummary>()
@@ -35,15 +35,24 @@ export function ProjectAssistantDock() {
         variant={open ? "secondary" : "outline"}
         onClick={toggle}
         aria-label="Agent"
-        title="Agent"
-        className="shrink-0 font-mono text-[11px]"
+        title={assistantBusy && !open ? "Agent (running in background)" : "Agent"}
+        className="relative shrink-0 font-mono text-[11px]"
       >
-        <Sparkles className="h-3.5 w-3.5" />
+        {assistantBusy ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : (
+          <Sparkles className="h-3.5 w-3.5" />
+        )}
         Agent
       </Button>
 
-      {open && (
-        <div className="fixed inset-y-0 right-0 z-50 flex w-full sm:max-w-md flex-col border-l border-border bg-background shadow-xl">
+      <div
+        className={cn(
+          "fixed inset-y-0 right-0 z-50 flex w-full sm:max-w-md flex-col border-l border-border bg-background shadow-xl",
+          !open && "hidden",
+        )}
+        aria-hidden={!open}
+      >
           <div className="flex items-center justify-between border-b border-border px-3 py-2">
             <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
               Agent
@@ -157,8 +166,7 @@ export function ProjectAssistantDock() {
           <div className={cn("min-h-0 flex-1")}>
             <ProjectAssistant />
           </div>
-        </div>
-      )}
+      </div>
     </>
   )
 }

@@ -28,6 +28,7 @@ import { createPipelineModule } from "@/lib/pipeline-module-factory";
 import { migrateModuleSpineTypes, patchSpineOutList } from "./spine_types";
 import { stepEmitsList } from "./type_expr";
 import { uid } from "@/lib/id";
+import { inputTypesAreAllJsonNative } from "@/lib/inference-input-core";
 import { USER_ADDABLE_MODULE_KINDS, stepRequiresNote } from "@/lib/module-kinds";
 import { attachAssistantUsage } from "./assistant_billing";
 import { isUnnamedProjectName } from "@/lib/project-assistant-types";
@@ -56,14 +57,31 @@ const moduleSpecSchema = z
     kind: z.enum(MODULE_KINDS),
     label: z.string(),
     note: z.string().optional(),
-    structureIn: z.string().optional(),
-    structureOut: z.string().optional(),
-    inputType: z.enum(INPUT_TYPE_VALUES as [string, ...string[]]).optional(),
-    inputNameContains: z.string().optional(),
+    structureIn: z
+      .string()
+      .optional()
+      .describe(
+        "Structure name the step reads — combine: pipeline-state structure from an earlier step (required, not list[...])",
+      ),
+    structureOut: z
+      .string()
+      .optional()
+      .describe("Structure name emitted onto spine — prefix list[...] when step emits multiple items (input multi-upload, llm-batch upstream, custom-code map)"),
+    inputType: z
+      .enum(INPUT_TYPE_VALUES as [string, ...string[]])
+      .optional()
+      .describe("input steps: upload type; on combine-only specs: applies to auto-inserted side Document input"),
+    inputNameContains: z
+      .string()
+      .optional()
+      .describe("filename substring for this input slot — on combine-only specs: applies to auto-inserted side input"),
     inputDescription: z.string().optional(),
     checkInputDescription: z.boolean().optional(),
     prompt: z.string().optional(),
-    code: z.string().optional(),
+    code: z
+      .string()
+      .optional()
+      .describe("custom-code only — TypeScript arrow expression e.g. (rows) => rows.map(...)"),
     model: z.string().optional(),
     inputMinCount: z.number().int().min(1).optional(),
   })
@@ -74,6 +92,47 @@ const moduleSpecSchema = z
         message: "note is required for input, combine, and llm steps",
         path: ["note"],
       });
+    }
+    if (spec.kind === ModuleKind.Input && spec.structureOut?.trim()) {
+      const hint = parseStructureHint(spec.structureOut);
+      const jsonNative =
+        spec.inputType != null && inputTypesAreAllJsonNative([spec.inputType as InputType]);
+      if (hint && !jsonNative && hint.name.toLowerCase() !== "document") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "non-JSON input steps must structureOut Document or list[Document] — typed parsing belongs in a later llm/custom-code step",
+          path: ["structureOut"],
+        });
+      }
+    }
+    if (spec.kind === ModuleKind.LlmBatch && spec.structureIn?.trim()) {
+      const inHint = parseStructureHint(spec.structureIn);
+      if (inHint?.isList) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "llm-batch structureIn is the list ITEM type (e.g. Document), not list[Document]",
+          path: ["structureIn"],
+        });
+      }
+    }
+    if (spec.kind === ModuleKind.Combine) {
+      if (!spec.structureIn?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "combine requires structureIn — pipeline-state structure from an earlier step (not list[...])",
+          path: ["structureIn"],
+        });
+      }
+      const inHint = parseStructureHint(spec.structureIn);
+      if (inHint?.isList) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "combine structureIn is the state structure name (e.g. TableRow), not list[TableRow]",
+          path: ["structureIn"],
+        });
+      }
     }
   });
 
@@ -106,11 +165,20 @@ const docSpecSchema = z.object({
 });
 
 const assistantResponseSchema = z.object({
-  message: z.string(),
+  message: z.string().describe("Short user-facing summary — not a design doc"),
   // AI : full replacement wins when non-null; use modulePatch for targeted edits to 1–3 steps.
-  modules: z.array(moduleSpecSchema).nullable(),
-  modulePatch: z.array(modulePatchEntrySchema).nullable(),
-  models: z.array(modelSpecSchema).nullable(),
+  modules: z
+    .array(moduleSpecSchema)
+    .nullable()
+    .describe("FULL pipeline replacement when restructuring; null when using modulePatch or no pipeline change"),
+  modulePatch: z
+    .array(modulePatchEntrySchema)
+    .nullable()
+    .describe("Targeted edits by 0-based step index — null when modules is non-null or on validation-fix retries"),
+  models: z
+    .array(modelSpecSchema)
+    .nullable()
+    .describe("FULL structure models array when changing schemas; null when unchanged"),
   typeAliases: z.array(typeAliasSpecSchema).nullable(),
   docs: z.array(docSpecSchema).nullable(),
   // AI : full replacement markdown for project.documentation when pipeline/models change.
@@ -220,22 +288,29 @@ function expandModuleSpecs(
   const out: PipelineModule[] = [];
   for (const spec of specs) {
     if (spec.kind === "combine") {
-      out.push(
-        {
-          ...makeModuleFromSpec(
+      // AI : skip auto side input when agent already emitted an input step immediately before combine.
+      const sideInputPresent = out[out.length - 1]?.kind === ModuleKind.Input;
+      if (!sideInputPresent) {
+        out.push(
+          makeModuleFromSpec(
             {
               kind: ModuleKind.Input,
-              label: "Document Input",
-              structureOut: spec.structureIn ?? spec.structureOut,
-              note: spec.inputDescription?.trim() || `Side document for "${spec.label}"`,
+              label: spec.label?.trim() ? `${spec.label} Document` : "Document Input",
+              note: spec.note?.trim() || `Side document for "${spec.label}"`,
+              structureOut: "Document",
+              inputType: (spec.inputType as InputType | undefined) ?? InputType.Text,
+              inputNameContains: spec.inputNameContains,
+              inputMinCount: spec.inputMinCount,
+              inputDescription:
+                spec.inputDescription?.trim() ||
+                `Document for combine side slot "${spec.label}"`,
             },
             models,
             globalModel,
           ),
-          label: "Document Input",
-        },
-        makeModuleFromSpec(spec, models, globalModel),
-      );
+        );
+      }
+      out.push(makeModuleFromSpec(spec, models, globalModel));
       continue;
     }
     out.push(makeModuleFromSpec(spec, models, globalModel));
@@ -312,8 +387,8 @@ function buildThinkingSystemPrompt(hasValidationErrors: boolean): string {
   return `You are the Agent for "Spine" — structures, pipeline steps, and inference test documents.
 
 ${hasValidationErrors
-    ? "The live project has pipeline validation errors — focus on diagnosing and fixing those I/O mismatches. Do not propose a greenfield architecture."
-    : "Reason step-by-step: required structures, linear data flow, chunking/map-reduce if inputs may exceed context or the user mentions many/hundreds of files, whether input steps need list[structureOut] (Emit list output), which test documents to synthesize, and edge cases."}
+    ? "The live project has pipeline validation errors — diagnose each listed mismatch (structure name vs list[structure] cardinality). Plan exact structureOut/list[...] fixes per step. Do not propose a greenfield architecture."
+    : "Reason step-by-step: (1) structures needed, (2) linear spine chain with single vs list at each hop, (3) many same-kind files → list[Document] + llm-batch (NOT one llm), (4) two different doc kinds → combine after first doc is processed on spine, (5) synthetic test docs. Flag where validation would fail if list-ness is wrong."}
 Plain text only — no JSON, no markdown headings. Be concise (roughly 150–300 words).`;
 }
 

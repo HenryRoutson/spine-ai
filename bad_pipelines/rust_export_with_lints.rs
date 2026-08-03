@@ -392,7 +392,7 @@ async fn step_Flatten_Sections(input: GraderWork, state: &mut PipelineState) -> 
 /// Grade Each Section
 /// Kind: Batch LLM
 /// List of GradableSection objects — student_label, question body, max_score, and criteria
-/// Model: deepseek-v3
+/// Model: deepseek-v4
 /// Cached: true
 async fn step_Grade_Each_Section(input: Vec<GradableSection>, state: &mut PipelineState) -> anyhow::Result<Vec<SectionGrade>> {
     // One structured LLM call per list item → SectionGrade

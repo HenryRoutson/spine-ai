@@ -18,6 +18,7 @@ import {
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsGo, type ExportRuntimeNeeds } from "./pipeline_export_setup";
 import { pipelineStateGoType } from "./pipeline_state";
+import { isMergeModuleKind } from "@/lib/list-ops-steps";
 import { MODULE_META } from "./types";
 import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
@@ -56,12 +57,38 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
   const inName = modelName(project, m.inStructureId);
   const zero = goZeroValue(outGo);
 
+  if (isMergeModuleKind(m.kind) || m.kind === "chunk" || m.kind === "custom-code") {
+    const custom = primaryExportCustomCode(m);
+    const fallbacks = customCodeEntriesForModule(m);
+    const passthrough = [
+      `b, err := json.Marshal(input)`,
+      `if err != nil {`,
+      `\treturn ${zero}, err`,
+      `}`,
+      `var out ${outGo}`,
+      `if err := json.Unmarshal(b, &out); err != nil {`,
+      `\treturn ${zero}, err`,
+      `}`,
+      `return out, nil`,
+    ];
+    if (custom) {
+      return [
+        commentForeignCode(
+          custom.code,
+          `${custom.language === "python" ? "Python" : "TypeScript"} custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
+        ),
+        ...passthrough,
+      ].join("\n");
+    }
+    return ["// Passthrough — no custom code configured", ...passthrough].join("\n");
+  }
+
   switch (m.kind) {
     case "input":
       return generateInputStepBodyGo(m, outGo);
     case "llm": {
       const prompt = m.prompt ?? "Process the input.";
-      const model = m.model ?? "deepseek-v3";
+      const model = m.model ?? "deepseek-v4";
       return [
         `// Structured LLM call → ${outName ?? outGo}${stepEmitsList(m) ? "[]" : ""}`,
         `_ = ${exportStringLiteral(model)}`,
@@ -154,31 +181,6 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         `// Reshape ${inName ?? "input"} → ${outName ?? outGo}${stepEmitsList(m) ? " (list)" : ""}`,
         ...passthrough,
       ].join("\n");
-    }
-    case "custom-code": {
-      const custom = primaryExportCustomCode(m);
-      const fallbacks = customCodeEntriesForModule(m);
-      const passthrough = [
-        `b, err := json.Marshal(input)`,
-        `if err != nil {`,
-        `\treturn ${zero}, err`,
-        `}`,
-        `var out ${outGo}`,
-        `if err := json.Unmarshal(b, &out); err != nil {`,
-        `\treturn ${zero}, err`,
-        `}`,
-        `return out, nil`,
-      ];
-      if (custom) {
-        return [
-          commentForeignCode(
-            custom.code,
-            `${custom.language === "python" ? "Python" : "TypeScript"} custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
-          ),
-          ...passthrough,
-        ].join("\n");
-      }
-      return ["// Passthrough — no custom code configured", ...passthrough].join("\n");
     }
     case "assert": {
       const entries = assertEntriesForModule(m);

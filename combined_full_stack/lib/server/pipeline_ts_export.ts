@@ -17,6 +17,7 @@ import {
   prepareExportProject,
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsTs } from "./pipeline_export_setup";
+import { isMergeModuleKind } from "@/lib/list-ops-steps";
 import { MODULE_META } from "./types";
 import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
@@ -28,6 +29,26 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
   const outName = modelName(project, m.outStructureId);
   const inName = modelName(project, m.inStructureId);
 
+  if (isMergeModuleKind(m.kind) || m.kind === "chunk" || m.kind === "custom-code") {
+    const custom = primaryExportCustomCode(m);
+    const fallbacks = customCodeEntriesForModule(m);
+    if (custom?.language === "typescript") {
+      const lines = [generateCustomCodeStepBodyTs(custom.code, inTs, outTs)];
+      if (fallbacks.length > 1) {
+        lines.unshift(`// ${fallbacks.length} fallback implementations — first shown`);
+      }
+      return lines.join("\n");
+    }
+    if (custom?.language === "python") {
+      return [
+        `// Python custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
+        `// ${custom.code.split("\n").join("\n// ")}`,
+        `return input as unknown as ${outTs};`,
+      ].join("\n");
+    }
+    return [`// Passthrough — no custom code configured`, `return input as unknown as ${outTs};`].join("\n");
+  }
+
   switch (m.kind) {
     case "input":
       return generateInputStepBodyTs(m, outTs);
@@ -37,7 +58,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
       const model = m.model ?? "/* global default model */";
       return [
         `// Structured LLM call → ${outName ?? outTs}${stepEmitsList(m) ? "[]" : ""}`,
-        `const _model = ${typeof model === "string" && model.startsWith("/*") ? `"deepseek-v3"` : JSON.stringify(model)};`,
+        `const _model = ${typeof model === "string" && model.startsWith("/*") ? `"deepseek-v4"` : JSON.stringify(model)};`,
         `void _model;`,
         `const userPrompt = ${JSON.stringify(prompt)} + "\\n\\nINPUT DATA:\\n" + JSON.stringify(input, null, 2);`,
         `const schema = /* JSON schema for ${outName ?? "output"} */ {};`,
@@ -74,25 +95,6 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
         `// Reshape ${inName ?? "input"} → ${outName ?? outTs}${stepEmitsList(m) ? " (list)" : ""}`,
         `return input as unknown as ${outTs};`,
       ].join("\n");
-    }
-    case "custom-code": {
-      const custom = primaryExportCustomCode(m);
-      const fallbacks = customCodeEntriesForModule(m);
-      if (custom?.language === "typescript") {
-        const lines = [generateCustomCodeStepBodyTs(custom.code, inTs, outTs)];
-        if (fallbacks.length > 1) {
-          lines.unshift(`// ${fallbacks.length} fallback implementations — first shown`);
-        }
-        return lines.join("\n");
-      }
-      if (custom?.language === "python") {
-        return [
-          `// Python custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
-          `// ${custom.code.split("\n").join("\n// ")}`,
-          `return input as unknown as ${outTs};`,
-        ].join("\n");
-      }
-      return [`// Passthrough — no custom code configured`, `return input as unknown as ${outTs};`].join("\n");
     }
     case "assert": {
       const entries = assertEntriesForModule(m);

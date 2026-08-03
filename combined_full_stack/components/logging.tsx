@@ -630,11 +630,6 @@ export function Logging() {
                         }
                         trailing={
                           <aside className="flex min-h-0 flex-col overflow-hidden">
-                            <div className="border-b border-border px-4 py-2">
-                              <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                                Inspector
-                              </span>
-                            </div>
                             <PipelineInspector
                               module={selectedPipelineModule}
                               models={models}

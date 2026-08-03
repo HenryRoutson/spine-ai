@@ -3,6 +3,11 @@ import { makeCustomCodeEntry } from "@/lib/custom_code_entries"
 import { DEFAULT_ASSERT_TS } from "@/lib/assert_steps"
 import { DEFAULT_LLM_STEP_COST_LIMIT_CENTS } from "@/lib/llm-cost-limit"
 import { CustomCodeLanguage, InputType, ModuleKind, MODULE_META } from "@/lib/types"
+import {
+  DEFAULT_CHUNK_SIZE,
+  resolveMergePolicy,
+  syncListOpsStepModule,
+} from "@/lib/list-ops-steps"
 import { uid } from "@/lib/id"
 import { isLlmKind, stepRequiresNote, usesPassthroughStructure } from "@/lib/module-kinds"
 import { migrateModuleSpineTypes, patchSpineOutList } from "@/lib/server/spine_types"
@@ -26,6 +31,11 @@ export type ModuleFactoryOpts = {
   fallbackList?: CustomCodeEntry[]
   model?: ModelId
   costLimitCents?: number
+  chunkSize?: number
+  chunkOverlap?: number
+  chunkTextField?: string
+  mergePolicy?: import("@/lib/types").MergePolicy
+  mergeCustom?: string
 }
 
 // AI : fallback when legacy data omits note on steps that require it.
@@ -56,13 +66,13 @@ export function createPipelineModule(
   const spineList =
     opts.outType != null
       ? opts.outType.kind === "list"
-      : opts.emitsList ?? false
+      : opts.emitsList ?? (kind === ModuleKind.Chunk ? true : false)
   const outType =
     opts.outType ??
     (outStructureId
       ? patchSpineOutList({ outStructureId } as PipelineModule, spineList).outType
       : undefined)
-  return migrateModuleSpineTypes({
+  const base = migrateModuleSpineTypes({
     id: opts.id ?? uid<ModuleId>(),
     kind,
     label: opts.label ?? MODULE_META[kind].label,
@@ -87,9 +97,18 @@ export function createPipelineModule(
         : kind === ModuleKind.Assert
           ? (opts.fallbackList ?? [makeCustomCodeEntry(CustomCodeLanguage.TypeScript, DEFAULT_ASSERT_TS)])
           : undefined,
+    chunkSize: kind === ModuleKind.Chunk ? (opts.chunkSize ?? DEFAULT_CHUNK_SIZE) : undefined,
+    chunkOverlap: kind === ModuleKind.Chunk ? (opts.chunkOverlap ?? 0) : undefined,
+    chunkTextField: kind === ModuleKind.Chunk ? opts.chunkTextField : undefined,
+    mergePolicy: kind === ModuleKind.Merge ? (opts.mergePolicy ?? resolveMergePolicy({ kind } as PipelineModule)) : undefined,
+    mergeCustom: kind === ModuleKind.Merge ? opts.mergeCustom : undefined,
     model: isLlm ? opts.model ?? globalModel : undefined,
     costLimitCents: isLlm ? opts.costLimitCents ?? DEFAULT_LLM_STEP_COST_LIMIT_CENTS : undefined,
   })
+  if (kind === ModuleKind.Chunk || kind === ModuleKind.Merge) {
+    return syncListOpsStepModule(base, models)
+  }
+  return base
 }
 
 export function makeModule(

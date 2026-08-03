@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
 import { authErrorMessage, type AuthMode } from "@/utils/supabase/auth_messages";
 import { LEGAL } from "@shared/legal/site";
+import { sanitizeRedirectPath } from "@/utils/sanitize_redirect";
 
 export type AuthActionState = { error?: string; notice?: string } | null;
 
@@ -29,13 +30,15 @@ export async function authAction(
   const mode = formData.get("mode") as AuthMode;
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
+  const nextRaw = formData.get("next");
+  const nextPath = nextRaw ? sanitizeRedirectPath(String(nextRaw)) : "/projects";
   const supabase = await createClient();
 
   if (mode === "sign-in") {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: authErrorMessage(error, mode) };
     revalidatePath("/", "layout");
-    redirect("/");
+    redirect(nextPath);
   }
 
   const consentError = signupConsentError(formData);
@@ -60,7 +63,7 @@ export async function authAction(
   }
   if (data.session) {
     revalidatePath("/", "layout");
-    redirect("/");
+    redirect(nextPath);
   }
   return {
     notice: "Account created — check your email for a confirmation link, then sign in.",

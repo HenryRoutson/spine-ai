@@ -1,4 +1,4 @@
-import { ModuleKind } from "@/lib/types"
+import { LegacyModuleKind, ModuleKind } from "@/lib/types"
 import type { RunStepKind } from "@/lib/types"
 
 // AI : kinds users can add in the builder / pipeline assistant (quote is auto-managed).
@@ -7,6 +7,8 @@ export const USER_ADDABLE_MODULE_KINDS = [
   ModuleKind.Llm,
   ModuleKind.LlmBatch,
   ModuleKind.Transform,
+  ModuleKind.Chunk,
+  ModuleKind.Merge,
   ModuleKind.Combine,
   ModuleKind.CustomCode,
   ModuleKind.Assert,
@@ -24,6 +26,11 @@ export const LLM_KINDS: ModuleKind[] = [ModuleKind.Llm, ModuleKind.LlmBatch]
 
 export function isLlmKind(kind: ModuleKind): boolean {
   return LLM_KINDS.includes(kind)
+}
+
+// AI : merge step + legacy list-merge kind string on run logs / migrated modules.
+export function isMergeModuleKind(kind: string): boolean {
+  return kind === ModuleKind.Merge || kind === LegacyModuleKind.ListMerge
 }
 
 // AI : input/combine/llm steps expose Annotation / purpose — must be non-empty when the pipeline is valid.

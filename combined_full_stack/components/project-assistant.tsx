@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo } from "react"
-import { Check, AlertTriangle, FileText, BookOpen, Braces } from "lucide-react"
+import { useMemo, useRef, useState } from "react"
+import { Check, AlertTriangle, Copy, FileText, BookOpen, Braces } from "lucide-react"
 import { MultiLangReadonlyCodeViewer, type MultiLangCodeSource } from "@/components/code-viewer"
 import { allModelsToBaml, allModelsToDts, allModelsToGo, allModelsToPydantic, allModelsToRust } from "@/lib/pydantic"
 import { API_ROUTES } from "@/lib/api-routes"
@@ -12,7 +12,11 @@ import { useStore } from "@/lib/store"
 import { MODULE_META } from "@/lib/types"
 import { AssistantChat, type AssistantChatMessage } from "@/components/assistant-chat"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { docLabelDisplay } from "@/lib/project-docs"
+import { formatProjectAssistantConversation } from "@/lib/format-project-assistant-copy"
+import { copyTextToClipboard } from "@/lib/clipboard"
+import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { useProjectAssistantSession } from "@/lib/project-assistant-context"
 import {
   PROJECT_ASSISTANT_INITIAL_MESSAGE,
@@ -40,10 +44,22 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
     refresh,
     refreshBilling,
   } = useStore()
-  const { messages, setMessages, activeChatId, setStreamingDraft } = useProjectAssistantSession(
-    project.id,
-    PROJECT_ASSISTANT_INITIAL_MESSAGE,
+  const { messages, setMessages, activeChatId, setStreamingDraft, streamingDraft, setAssistantBusy } =
+    useProjectAssistantSession(project.id, PROJECT_ASSISTANT_INITIAL_MESSAGE)
+  const [conversationCopied, setConversationCopied] = useState(false)
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const conversationCopyText = useMemo(
+    () => formatProjectAssistantConversation(messages, streamingDraft),
+    [messages, streamingDraft],
   )
+
+  async function copyConversation() {
+    await copyTextToClipboard(conversationCopyText)
+    setConversationCopied(true)
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+    copyTimerRef.current = setTimeout(() => setConversationCopied(false), COPY_FEEDBACK_MS)
+  }
 
   async function applyProposal(proposal: ProjectProposal) {
     if (proposal.changed.name && proposal.projectName) {
@@ -73,6 +89,23 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
         title="Agent"
         subtitle={`${modules.length} steps · ${models.length} models · ${typeAliases.length} types · ${docs.length} docs`}
         showDebug
+        headerActions={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 font-mono text-[9px]"
+            onClick={() => void copyConversation()}
+            title="Copy full conversation (human + agent + debug)"
+          >
+            {conversationCopied ? (
+              <Check className="h-3 w-3" />
+            ) : (
+              <Copy className="h-3 w-3" />
+            )}
+            {conversationCopied ? "Copied" : "Copy"}
+          </Button>
+        }
         initialMessage={PROJECT_ASSISTANT_INITIAL_MESSAGE}
         starters={PROJECT_ASSISTANT_STARTERS}
         placeholder="Describe structures, pipeline, and test documents…"
@@ -86,6 +119,7 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
         messages={messages}
         onMessagesChange={setMessages}
         onStreamingDraftChange={setStreamingDraft}
+        onLoadingChange={setAssistantBusy}
         onApprove={async (msg) => {
           if (!msg.proposal) return
           await applyProposal(msg.proposal)

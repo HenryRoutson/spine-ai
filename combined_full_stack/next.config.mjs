@@ -1,8 +1,13 @@
+import { config as loadEnv } from "dotenv"
 import path from "path"
 import { fileURLToPath } from "url"
 
 // AI : repo root — shared/legal lives outside this app dir; Turbopack blocks parent imports otherwise.
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+// AI : Next.js only auto-loads .env* inside this app dir — repo-wide secrets live one level up.
+loadEnv({ path: path.join(__dirname, ".env.local") })
+loadEnv({ path: path.join(__dirname, "../.env") })
 
 // AI : bridge SUPABASE_* → NEXT_PUBLIC_* so Vercel builds inline client config even when
 // AI : only the non-prefixed names are set in the dashboard.

@@ -21,7 +21,7 @@ function catalogRow(
 
 export const MODEL_CATALOG: ModelCatalogEntry[] = [
   catalogRow("qwen-2.5-72b", "Qwen 2.5 72B", "qwen/qwen-2.5-72b-instruct" as OpenRouterSlug),
-  catalogRow("deepseek-v3", "DeepSeek V3", DEEPSEEK_SLUG as OpenRouterSlug),
+  catalogRow("deepseek-v4", "DeepSeek V4", DEEPSEEK_SLUG as OpenRouterSlug),
   catalogRow("glm-5.2", "GLM 5.2", "z-ai/glm-5.2" as OpenRouterSlug),
   catalogRow("gpt-5-mini", "GPT-5 mini", "openai/gpt-4o-mini" as OpenRouterSlug),
   catalogRow("claude-opus-4.6", "Claude Opus 4.6", "anthropic/claude-opus-4.1" as OpenRouterSlug),
@@ -32,6 +32,7 @@ export const MODEL_CATALOG: ModelCatalogEntry[] = [
 // AI : legacy persisted ids — map to current catalog entry without breaking old projects.
 const LEGACY_MODEL_IDS: Record<string, ModelId> = {
   "glm-4-plus": "glm-5.2",
+  "deepseek-v3": "deepseek-v4",
 };
 
 export function resolveModelId(modelId: ModelId | undefined): ModelId {

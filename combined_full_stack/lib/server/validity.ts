@@ -13,6 +13,7 @@ import type {
   StructureModelId,
   TypeAlias,
 } from "./types";
+import { isMergeModuleKind } from "@/lib/list-ops-steps";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
 import { usesPassthroughStructure, isLlmKind, stepRequiresNote } from "@/lib/module-kinds";
@@ -172,7 +173,7 @@ function stepAcceptsSpineType(
   if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review" || m.kind === "quote") return true;
   if (!cardinalityMismatch(expected, actual)) return false;
   // AI : custom-code / coded transform steps reshape list↔object at runtime — spine item type still matches.
-  if (m.kind === "custom-code" || (m.kind === "transform" && !!m.code?.trim())) return true;
+  if (m.kind === "custom-code" || m.kind === "chunk" || isMergeModuleKind(m.kind) || (m.kind === "transform" && !!m.code?.trim())) return true;
   // AI : bare transform auto-wraps list[T] into { listField: T[] } when the output structure has a matching list field.
   if (bareTransformCanAutoWrapList(m, actual, models)) return true;
   return false;
@@ -286,6 +287,8 @@ function computeCodeCompileInvalid(modules: PipelineModule[]): InvalidMap {
   for (const m of modules) {
     const isCodeStep =
       m.kind === "custom-code" ||
+      m.kind === "chunk" ||
+      isMergeModuleKind(m.kind) ||
       m.kind === "assert" ||
       (m.kind === "transform" && !!m.code?.trim());
     if (!isCodeStep) continue;

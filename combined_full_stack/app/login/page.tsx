@@ -15,6 +15,8 @@ import { SignupConsents } from "@/components/signup-consents"
 import { LegalFooterLinks } from "@/lib/legal/chrome"
 import { SpineLogoBox } from "@/components/spine-mark"
 import { LEGAL } from "@/lib/shared/legal/site"
+import { clearWorkspaceClientSession } from "@/lib/clear-workspace-client-session"
+import { sanitizeRedirectPath } from "@/utils/sanitize_redirect"
 
 // type OAuthProvider = "github" | "google"
 
@@ -39,6 +41,7 @@ import { LEGAL } from "@/lib/shared/legal/site"
 
 export default function LoginPage() {
   const [mode, setMode] = useState<AuthMode>("sign-in")
+  const [nextPath, setNextPath] = useState("/projects")
   const [state, formAction, pending] = useActionState<AuthActionState, FormData>(
     authAction,
     null,
@@ -47,9 +50,12 @@ export default function LoginPage() {
   // const [oauthBusy, setOauthBusy] = useState<OAuthProvider | null>(null)
 
   useEffect(() => {
+    clearWorkspaceClientSession()
     const params = new URLSearchParams(window.location.search)
     if (params.get("error") === "auth")
       setUrlError("Sign in failed — please try again.")
+    const next = params.get("next")
+    setNextPath(next ? sanitizeRedirectPath(next) : "/projects")
   }, [])
 
   // async function signInWithOAuth(provider: OAuthProvider) {
@@ -111,6 +117,7 @@ export default function LoginPage() {
 
         <form action={formAction} className="flex flex-col gap-3">
           <input type="hidden" name="mode" value={mode} />
+          <input type="hidden" name="next" value={nextPath} />
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="email" className="text-xs">Email</Label>
             <Input

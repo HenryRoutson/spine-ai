@@ -670,7 +670,7 @@ PROMPT:
       "outStructureId": "m_grade",
       "inputDescription": "List of GradableSection objects — student_label, question body, max_score, and criteria",
       "prompt": "Apply criteria literally and deterministically. Score MUST equal the exact sum of rubric components listed in criteria — use only point values explicitly named in criteria (no rounding, no extra credit, no in-between scores). Score is an integer from 0 to max_score inclusive. Copy max_score from input unchanged. Set correct=true iff score equals max_score; never set correct=true when score is below max_score. Copy student_label and section_id exactly from input. When correct is false, mistake_explanation must cite the rubric clause applied and state the student's wrong value vs the required value. When correct is true, mistake_explanation must be an empty string.",
-      "model": "deepseek-v3",
+      "model": "deepseek-v4",
       "cached": true,
       "outIsList": true,
       "avgMs": 2400,
@@ -1043,7 +1043,7 @@ async function step_Flatten_Sections(input: GraderWork, state: PipelineState): P
  * Grade Each Section
  * @kind Batch LLM
  * List of GradableSection objects — student_label, question body, max_score, and criteria
- * @model deepseek-v3
+ * @model deepseek-v4
  * @cached true
  */
 async function step_Grade_Each_Section(input: GradableSection[], state: PipelineState): Promise<SectionGrade[]> {

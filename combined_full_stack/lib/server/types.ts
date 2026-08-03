@@ -4,7 +4,7 @@
 // AI : TODO bug — known drift vs the v2 frontend stub to reconcile at merge time:
 // AI :   - frontend ModuleKind/MODULE_META lack "llm-batch" (any Record<ModuleKind,…> in
 // AI :     frontend COMPONENTS will fail to typecheck once these types land),
-// AI :   - frontend DEFAULT_MODEL is "qwen-2.5-72b" (backend: "deepseek-v3"),
+// AI :   - frontend DEFAULT_MODEL is "qwen-2.5-72b" (backend: "deepseek-v4"),
 // AI :   - frontend MODEL_CATALOG may drift from backend until merge.
 
 import type { TypeExpr } from "./type_expr";
@@ -128,6 +128,8 @@ export enum ModuleKind {
   Quote = "quote", // AI : deterministic — resolve LLM quote strings → source-linked spans
   Transform = "transform",
   Combine = "combine",
+  Chunk = "chunk", // AI : split text / document into list chunks (generated TS)
+  Merge = "merge", // AI : recursive structural merge — dict deep, list concat/union/dedupe, per-path rules
   CustomCode = "custom-code",
   Assert = "assert", // AI : validate pipeline state — passthrough spine; code reads step["Label"] keys
   HumanReview = "human-review", // AI : pause in Inference — operator approves or rejects before continuing
@@ -138,6 +140,47 @@ export enum CustomCodeLanguage {
   TypeScript = "typescript",
   Python = "python",
 }
+
+// AI : structural merge strategies — mirror atomic_code/merger/merger.py wire values.
+export enum MergeListStrategy {
+  Concat = "concat",
+  ConcatDedupe = "concat_dedupe",
+  ConcatAssertNoDuplicates = "concat_assert_no_duplicates",
+  Union = "union",
+  Intersect = "intersect",
+  Replace = "replace",
+  Prepend = "prepend",
+}
+
+export enum MergeDictStrategy {
+  Deep = "deep",
+  Shallow = "shallow",
+  Replace = "replace",
+}
+
+export enum MergeScalarStrategy {
+  Last = "last",
+  First = "first",
+  Error = "error",
+}
+
+export type MergeLayerPolicy = {
+  list?: MergeListStrategy;
+  dict?: MergeDictStrategy;
+  scalar?: MergeScalarStrategy;
+  // AI : property on list items for union/intersect/dedupe — e.g. "id" for user records.
+  itemKey?: string;
+};
+
+export type MergePolicyRule = {
+  path: string;
+  policy: MergeLayerPolicy;
+};
+
+export type MergePolicy = {
+  default?: MergeLayerPolicy;
+  rules?: MergePolicyRule[];
+};
 
 // AI : one language key per entry — e.g. { "typescript": "(input) => input" } or { "python": "..." }.
 export type CustomCodeEntry = { typescript?: string; python?: string };
@@ -151,10 +194,11 @@ export enum DocParseMode {
 // AI : legacy run logs may still reference folded doc-to-text steps.
 export enum LegacyModuleKind {
   DocToText = "doc-to-text",
+  ListMerge = "list-merge", // AI : migrated to ModuleKind.Merge on project sync
 }
 export type RunStepKind = ModuleKind | LegacyModuleKind;
 
-export interface PipelineModule {
+export interface PipelineModule { // TODO this is bad, it contains multiple possible kinds of modules!!! TODO refactor.
   id: ModuleId;
   kind: ModuleKind;
   label: string;
@@ -180,6 +224,11 @@ export interface PipelineModule {
   fallbackList?: CustomCodeEntry[]; // AI : custom-code — ordered attempts, first is primary
   model?: ModelId; // per-step model override
   costLimitCents?: number; // AI : per-llm-step spend cap — defaults to $1 when unset
+  chunkSize?: number; // chunk step — max characters per chunk
+  chunkOverlap?: number; // chunk step — overlap between consecutive chunks
+  chunkTextField?: string; // chunk step — field on input object to split (default content)
+  mergePolicy?: MergePolicy; // merge step — recursive structural policy
+  mergeCustom?: string; // merge step — optional custom TS (input) => … overrides policy
   useOcr?: boolean; // input only — vision OCR when PDF/image is accepted (built-in parser when off)
   cached: boolean;
   // AI : pipeline-managed step — auto-inserted Link Quotes; locked in the builder UI.
@@ -523,15 +572,15 @@ export interface TokenUsage {
 
 // AI : live pricing — hydrated via GET /api/state → modelOptions (see openrouter_models.ts).
 
-// AI : default to DeepSeek V3 — cheap Chinese model, maps to deepseek/deepseek-chat, fast + reliable
+// AI : default to DeepSeek V4 — cheap Chinese model, maps to deepseek/deepseek-chat, fast + reliable
 // AI : for large structured outputs (qwen-2.5-72b on OpenRouter is markedly slower here).
-export const DEFAULT_MODEL: ModelId = "openrouter:deepseek-v3";
+export const DEFAULT_MODEL: ModelId = "openrouter:deepseek-v4";
 
 // AI : default vision model for input OCR — Gemini reads images/PDFs/handwriting well.
 export const DEFAULT_VISION_DOC_PARSE_MODEL: ModelId = "gemini-3-flash";
 
-// AI : input-description guard — DeepSeek V3 is reliable on OpenRouter (gemini-2-flash-lite slug 404s).
-export const DEFAULT_INPUT_CHECK_MODEL: ModelId = "deepseek-v3";
+// AI : input-description guard — DeepSeek V4 is reliable on OpenRouter (gemini-2-flash-lite slug 404s).
+export const DEFAULT_INPUT_CHECK_MODEL: ModelId = "deepseek-v4";
 
 export const DOC_PARSE_MODES: { value: DocParseMode; label: string; hint: string }[] = [
   { value: DocParseMode.Parser, label: "Built-in parser", hint: "PDF.js text extract at upload — stored in docs.content" },
@@ -582,6 +631,14 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     description: "Deterministic reshape — list→object wrap needs a list field on the output structure, or custom TS code",
   },
   [ModuleKind.Combine]: { label: "Combine Inputs", description: "Merge a new input with the pipeline state" },
+  [ModuleKind.Chunk]: {
+    label: "Chunk",
+    description: "Split document text into a list of chunks — size, overlap, and source field are configurable",
+  },
+  [ModuleKind.Merge]: {
+    label: "Merge",
+    description: "Fold values with recursive structural merge — deep dicts, list concat/union/dedupe, per-path rules",
+  },
   [ModuleKind.CustomCode]: {
     label: "Custom Code",
     description: "TypeScript or Python (input) => output with ordered fallbacks on failure",

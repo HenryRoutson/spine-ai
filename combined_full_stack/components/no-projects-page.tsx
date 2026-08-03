@@ -15,7 +15,7 @@ export function NoProjectsPage({
   onCloneTemplate,
 }: {
   syncing?: boolean
-  onCreateBlank: () => void
+  onCreateBlank: () => Promise<unknown>
   onCloneTemplate: (templateId: ProjectId) => Promise<unknown>
 }) {
   const { templates, loading } = useProjectTemplates()
@@ -28,6 +28,15 @@ export function NoProjectsPage({
         <p className="font-mono text-xs text-muted-foreground">loading projects…</p>
       </div>
     )
+  }
+
+  async function handleCreateBlank() {
+    setBusy("blank")
+    try {
+      await onCreateBlank()
+    } finally {
+      setBusy(null)
+    }
   }
 
   async function handleClone(templateId: ProjectId) {
@@ -49,14 +58,7 @@ export function NoProjectsPage({
             You deleted your last project. Start from a blank pipeline, or clone an example
             template.
           </p>
-          <Button
-            className="mt-4"
-            onClick={() => {
-              setBusy("blank")
-              onCreateBlank()
-            }}
-            disabled={busy === "blank"}
-          >
+          <Button className="mt-4" onClick={() => void handleCreateBlank()} disabled={busy === "blank"}>
             {busy === "blank" ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
             ) : (

@@ -58,7 +58,7 @@ Built as **Next.js + Supabase + OpenRouter**, with a **CLI** so agents and CI ca
 - **Human review** — bool / chat / single text (spec’d; inference UX incomplete)  
 - **Output** — JSON, Excel-style views, export  
 
-Default model: **DeepSeek V3** via OpenRouter — cheap, fast, good enough when context is small.
+Default model: **DeepSeek V4** via OpenRouter — cheap, fast, good enough when context is small.
 
 ---
 

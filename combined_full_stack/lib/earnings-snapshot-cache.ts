@@ -44,3 +44,13 @@ export function writeEarningsSnapshot(account: EarningsAccountSnapshot): void {
     /* quota — memory cache still helps tab revisits */
   }
 }
+
+export function clearEarningsSnapshot(): void {
+  memorySnapshot = null
+  if (typeof window === "undefined") return
+  try {
+    sessionStorage.removeItem(KEY)
+  } catch {
+    /* ignore */
+  }
+}

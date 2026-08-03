@@ -89,6 +89,7 @@ type AssistantDebugPanelProps = {
   liveThinking?: string
   thinkingActive?: boolean
   className?: string
+  showCopyButton?: boolean
 }
 
 export function AssistantDebugPanel({
@@ -96,6 +97,7 @@ export function AssistantDebugPanel({
   liveThinking,
   thinkingActive = false,
   className,
+  showCopyButton = true,
 }: AssistantDebugPanelProps) {
   const [copied, setCopied] = useState(false)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -122,16 +124,18 @@ export function AssistantDebugPanel({
     <div className={cn("rounded-lg border border-border/60 bg-secondary/20 px-3 py-2", className)}>
       <div className="mb-2 flex items-center justify-between gap-2">
         <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Debug trace</p>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-6 gap-1 px-2 font-mono text-[9px]"
-          onClick={() => void copyAll()}
-        >
-          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-          {copied ? "Copied" : "Copy all"}
-        </Button>
+        {showCopyButton && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 gap-1 px-2 font-mono text-[9px]"
+            onClick={() => void copyAll()}
+          >
+            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+            {copied ? "Copied" : "Copy all"}
+          </Button>
+        )}
       </div>
       <div className="max-h-64 space-y-3 overflow-y-auto">
         {showLiveThinking && (

@@ -11,7 +11,7 @@ const MARKUP = 1.4;
 
 const CATALOG = [
   { id: "qwen-2.5-72b", slug: "qwen/qwen-2.5-72b-instruct" },
-  { id: "deepseek-v3", slug: "deepseek/deepseek-chat" },
+  { id: "deepseek-v4", slug: "deepseek/deepseek-chat" },
   { id: "glm-5.2", slug: "z-ai/glm-5.2" },
   { id: "gpt-5-mini", slug: "openai/gpt-4o-mini" },
   { id: "claude-opus-4.6", slug: "anthropic/claude-opus-4.1" },

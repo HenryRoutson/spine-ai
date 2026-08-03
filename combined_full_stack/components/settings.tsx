@@ -60,6 +60,7 @@ import { useOptionalAppShell } from "@/lib/app-shell"
 import { OPEN_LLM_PROVIDERS_EVENT, SCROLL_SETTINGS_SECTION_EVENT } from "@/lib/settings-nav"
 import { isDemoMode } from "@/lib/demo-mode"
 import { DEMO_ACCOUNT_EMAIL } from "@/lib/demo-constants"
+import { clearWorkspaceClientSession } from "@/lib/clear-workspace-client-session"
 
 // AI : vscode-style preview colors — mirror public/json-viewer.html theme "vscode"
 function VscodeSyntaxPreview({ json }: { json: string }) {
@@ -269,7 +270,10 @@ export function Settings() {
                   onClick={() => {
                     void createClient()
                       .then((supabase) => supabase.auth.signOut())
-                      .then(() => (window.location.href = "/login"))
+                      .then(() => {
+                        clearWorkspaceClientSession()
+                        window.location.href = "/login"
+                      })
                   }}
                   className="gap-1.5 text-xs"
                 >

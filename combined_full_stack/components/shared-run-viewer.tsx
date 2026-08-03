@@ -11,6 +11,7 @@ import { DocViewerProvider } from "@/lib/doc-viewer"
 import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
 import { fetchSharedLink } from "@/lib/shared-run-client"
 import { useSupabaseSession } from "@/lib/use-supabase-session"
+import { clearWorkspaceClientSession } from "@/lib/clear-workspace-client-session"
 import { openSharedLinkInWorkspace } from "@/lib/open-shared-in-workspace"
 import { addSharedWithMe } from "@/lib/shared-with-me"
 import { viewerFundsSharedRun } from "@/lib/shared-link-funding"
@@ -77,7 +78,10 @@ function SharedRunContent({ link, linkId }: { link: SharedLinkPublicView; linkId
                   variant="outline"
                   size="sm"
                   className="h-7 gap-1.5 text-xs"
-                  onClick={() => void signOut().then(() => (window.location.href = "/login"))}
+                  onClick={() => void signOut().then(() => {
+                    clearWorkspaceClientSession()
+                    window.location.href = "/login"
+                  })}
                 >
                   <LogOut className="h-3.5 w-3.5" />
                   Sign out

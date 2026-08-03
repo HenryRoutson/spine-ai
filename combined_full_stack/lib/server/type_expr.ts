@@ -207,6 +207,7 @@ export function stepEmitsList(m: PipelineModule | undefined): boolean {
   if (!m) return false;
   if (m.outType) return isListRoot(m.outType);
   if (m.kind === "llm-batch") return true;
+  if (m.kind === "chunk") return true;
   return !!(m as PipelineModule & { outIsList?: boolean }).outIsList;
 }
 

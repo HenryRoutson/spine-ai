@@ -21,7 +21,7 @@ import {
 
 // AI : demo_outline §3 — every "LLL environment" runs for real on a cheap model first;
 // AI : if none work the benchmark falls back to a single Sonnet call.
-export const BENCH_CHEAP_MODEL: ModelId = DEFAULT_MODEL; // deepseek-v3
+export const BENCH_CHEAP_MODEL: ModelId = DEFAULT_MODEL; // deepseek-v4
 export const BENCH_FALLBACK_MODEL: ModelId = "sonnet-4.7";
 
 // AI : benchmark runs 3 environments × several calls — truncate the doc to stay demo-fast.

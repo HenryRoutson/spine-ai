@@ -57,6 +57,7 @@ import { readStateSnapshot, writeStateSnapshot } from "@/lib/state-snapshot-cach
 import { readEarningsSnapshot, writeEarningsSnapshot } from "@/lib/earnings-snapshot-cache"
 import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
 import { setDemoMode } from "@/lib/demo-mode"
+import { NoProjectsPage } from "@/components/no-projects-page"
 
 export type StoreMode = "workspace" | "picker" | "demo"
 
@@ -145,7 +146,7 @@ interface StoreState {
   projects: Project[]
   activeProjectId: string
   setActiveProjectId: (id: string) => void
-  addProject: () => void
+  addProject: () => Promise<Project>
   cloneFromTemplate: (templateId: string) => Promise<Project>
   cloneProject: (projectId: string) => Promise<Project>
   resyncExamples: () => Promise<number>
@@ -212,7 +213,7 @@ interface StoreState {
 
 export interface ProjectPickerStoreState {
   projects: Project[]
-  addProject: () => void
+  addProject: () => Promise<Project>
   cloneFromTemplate: (templateId: string) => Promise<Project>
   cloneProject: (projectId: string) => Promise<Project>
   resyncExamples: () => Promise<number>
@@ -236,7 +237,7 @@ export interface ConsumerStoreState {
   setModel: (m: string) => void
   modelOptions: ModelOptionPublic[]
   openProject: (id: ProjectId) => void
-  addProject: () => void
+  addProject: () => Promise<Project>
   cloneFromTemplate: (templateId: string) => Promise<Project>
   saveError: string | null
   clearSaveError: () => void
@@ -676,11 +677,7 @@ export function StoreProvider({
       })
   }, [mode, openProject, refresh, selectActiveProject])
 
-  const addProject = useCallback(() => {
-    void postNewProject({}).catch((err) =>
-      setSaveError(err instanceof Error ? err.message : "Failed to create project"),
-    )
-  }, [postNewProject])
+  const addProject = useCallback(() => postNewProject({}), [postNewProject])
 
   const cloneFromTemplate = useCallback(
     (templateId: string) => postNewProject({ templateId }),
@@ -1310,6 +1307,20 @@ export function StoreProvider({
         <div className="flex h-dvh items-center justify-center bg-background">
           <p className="font-mono text-xs text-muted-foreground">loading store…</p>
         </div>
+      </>
+    )
+  }
+
+  // AI : zero projects — picker UI only; AppShellLayout tabs call useStore() and must not mount here.
+  if (mode === "workspace" && state && migratedProjects.length === 0 && !projectLoading && !stateSyncing) {
+    return (
+      <>
+        {saveErrorBanner}
+        <NoProjectsPage
+          syncing={stateSyncing}
+          onCreateBlank={addProject}
+          onCloneTemplate={cloneFromTemplate}
+        />
       </>
     )
   }

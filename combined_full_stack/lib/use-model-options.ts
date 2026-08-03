@@ -24,7 +24,7 @@ export function modelLabel(id?: string): string {
 }
 
 export function normalizeModelRef(id: string | undefined, defaultProviderId = "openrouter"): string {
-  if (!id) return formatRoutedModel(defaultProviderId, "deepseek-v3")
+  if (!id) return formatRoutedModel(defaultProviderId, "deepseek-v4")
   const parsed = parseRoutedModel(id)
   return formatRoutedModel(parsed.providerId, parsed.modelId)
 }

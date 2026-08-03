@@ -55,6 +55,15 @@ export function Projects() {
     [setActiveProjectId, setActiveWindow],
   )
 
+  async function handleCreateBlank() {
+    setBusy("blank")
+    try {
+      await addProject()
+    } finally {
+      setBusy(null)
+    }
+  }
+
   async function handleCloneTemplate(templateId: ProjectId) {
     setBusy(templateId)
     try {
@@ -108,8 +117,13 @@ export function Projects() {
               {busy === "resync" ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="mr-1.5 h-3.5 w-3.5" />}
               Refresh docs
             </Button>
-            <Button size="sm" onClick={addProject}>
-              <Plus className="mr-1.5 h-3.5 w-3.5" /> Blank project
+            <Button size="sm" onClick={() => void handleCreateBlank()} disabled={busy === "blank"}>
+              {busy === "blank" ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+              )}
+              Blank project
             </Button>
           </div>
         }
