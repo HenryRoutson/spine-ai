@@ -44,16 +44,6 @@ function defineSplit(def: SplitDef) {
   }
 }
 
-export const navSplit = defineSplit({
-  keySuffix: "nav-width",
-  defaultWidth: 176,
-  min: 56,
-  max: 280,
-})
-
-// AI : below this width the tab rail is icon-only — no labels or hint numbers.
-export const NAV_ICON_ONLY_MAX_WIDTH = 128 as pixel_width
-
 export const structureSidebarSplit = defineSplit({
   keySuffix: "structure-sidebar-width",
   defaultWidth: 224,

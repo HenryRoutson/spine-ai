@@ -25,18 +25,11 @@ import {
   Users,
   Wallet,
 } from "lucide-react"
-import { ResizableSplit } from "@/components/resizable-split"
-import { navSplit, NAV_ICON_ONLY_MAX_WIDTH } from "@/lib/layout-split-settings"
-import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
+import { AppSidebar } from "@/components/app-sidebar"
 import { cn } from "@/lib/utils"
 import { useConsumerStore, useOptionalConsumerStore, useOptionalStore, useStore } from "@/lib/store"
 import {
   computeWorkspaceValidity,
-  workspaceNavTabButtonClass,
-  workspaceNavTabDisabled,
-  workspaceNavTabIconClass,
-  workspaceNavTabIssue,
-  workspaceNavTabTitle,
 } from "@/lib/workspace-validity-ui"
 import { createClient } from "@/utils/supabase/client"
 import { useAppShell, type AppWindowId } from "@/lib/app-shell"
@@ -61,6 +54,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
@@ -375,7 +370,6 @@ export function AppShellLayout({ variant = "default" }: { variant?: "default" | 
 
 function ConsumerShellLayout({ variant = "default" }: { variant?: "default" | "embed" }) {
   const embed = variant === "embed"
-  const router = useRouter()
   const { activeWindow, setActiveWindow } = useAppShell()
   const { stateSyncing } = useConsumerStore()
   const consumerTabs = useMemo(() => new Set<WindowId>(["share", "billing", "settings"]), [])
@@ -387,109 +381,56 @@ function ConsumerShellLayout({ variant = "default" }: { variant?: "default" | "e
     else if (!consumerTabs.has(activeWindow)) setActiveWindow("share")
   }, [activeWindow, consumerTabs, setActiveWindow])
 
-  const { width: navWidth, setWidth: setNavWidth, commitWidth: commitNavWidth } =
-    usePersistedLeadingWidth(navSplit)
-  const showNavLabels = navWidth > NAV_ICON_ONLY_MAX_WIDTH
-
   return (
-    <div className="flex h-dvh flex-col bg-background text-foreground">
-      <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
-        <div className="flex items-center gap-3">
-          <a
-            href={LANDING_PAGE_URL}
-            title="Back to landing page"
-            className="flex items-center gap-2.5 rounded-md transition-opacity hover:opacity-80"
-          >
-            <SpineLogoBox />
-            <div className="hidden leading-tight sm:block">
-              <h1 className="text-sm font-semibold tracking-tight">{LEGAL.productName}</h1>
-            </div>
-          </a>
-          <div className="mx-1 h-6 w-px bg-border" />
-          <span className="font-mono text-[11px] text-muted-foreground">run shared pipelines</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <HeaderSettingsButton
-            active={activeWindow === "settings"}
-            onClick={() => setActiveWindow("settings")}
-          />
-          {!embed ? <FeedbackButton /> : null}
-        </div>
-      </header>
-
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <ResizableSplit
-          className="min-h-0 flex-1"
-          leadingWidth={navWidth}
-          onLeadingWidthChange={setNavWidth}
-          onLeadingWidthCommit={commitNavWidth}
-          minLeading={navSplit.min}
-          maxLeading={navSplit.max}
-          leading={
-            <nav
-              className={cn(
-                "flex h-full flex-col gap-1 overflow-x-hidden overflow-y-auto py-3",
-                showNavLabels ? "items-stretch px-2" : "items-center px-0.5",
-              )}
-            >
-              {CONSUMER_WINDOWS.map((w) => {
-                const Icon = w.icon
-                const isActive = activeWindow === w.id
-                return (
-                  <button
-                    key={w.id}
-                    type="button"
-                    onClick={() => setActiveWindow(w.id)}
-                    title={w.label}
-                    className={cn(
-                      "group flex items-center rounded-md text-sm transition-colors",
-                      showNavLabels
-                        ? "min-h-0 justify-start gap-3 px-2.5 py-2"
-                        : "h-10 w-10 shrink-0 justify-center p-0",
-                      workspaceNavTabButtonClass(isActive, null, false),
-                    )}
-                  >
-                    <Icon className={cn("h-4 w-4 shrink-0", workspaceNavTabIconClass(isActive, null))} />
-                    {showNavLabels ? (
-                      <>
-                        <span className="min-w-0 flex-1 break-words text-left">{w.label}</span>
-                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{w.hint}</span>
-                      </>
-                    ) : null}
-                  </button>
-                )
-              })}
-              <div className="mt-auto border-t border-border pt-2">
-                <button
-                  type="button"
-                  onClick={() => router.push("/projects")}
-                  title="Build your own pipelines"
-                  className={cn(
-                    "group flex w-full items-center rounded-md text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-                    showNavLabels ? "gap-3 px-2.5 py-2" : "h-10 justify-center p-0",
-                  )}
-                >
-                  <LayoutGrid className="h-4 w-4 shrink-0" />
-                  {showNavLabels ? <span className="text-left">Build pipelines…</span> : null}
-                </button>
-              </div>
-            </nav>
-          }
-          trailing={
-            <main className="relative min-w-0 flex-1 overflow-hidden" id="main-content">
-              {stateSyncing ? (
-                <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center bg-background/40 pt-16 backdrop-blur-[1px]">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : null}
-              {activeWindow === "share" && <Share />}
-              {activeWindow === "billing" && <Billing />}
-              {activeWindow === "settings" && <SettingsPanel />}
-            </main>
-          }
+    <TooltipProvider delay={200}>
+      <SidebarProvider className="min-h-svh">
+        <AppSidebar
+          items={CONSUMER_WINDOWS}
+          activeWindow={activeWindow}
+          onSelect={setActiveWindow}
+          groupLabel="Shared runs"
+          consumerFooter
         />
-      </div>
-    </div>
+        <SidebarInset className="flex min-h-svh flex-col overflow-hidden">
+          <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <SidebarTrigger className="md:hidden" />
+              <a
+                href={LANDING_PAGE_URL}
+                title="Back to landing page"
+                className="flex items-center gap-2.5 rounded-md transition-opacity hover:opacity-80"
+              >
+                <SpineLogoBox />
+                <div className="hidden leading-tight sm:block">
+                  <h1 className="text-sm font-semibold tracking-tight">{LEGAL.productName}</h1>
+                </div>
+              </a>
+              <div className="mx-1 h-6 w-px bg-border" />
+              <span className="font-mono text-[11px] text-muted-foreground">run shared pipelines</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <SidebarTrigger className="hidden md:flex" />
+              <HeaderSettingsButton
+                active={activeWindow === "settings"}
+                onClick={() => setActiveWindow("settings")}
+              />
+              {!embed ? <FeedbackButton /> : null}
+            </div>
+          </header>
+
+          <main className="relative min-h-0 flex-1 overflow-hidden" id="main-content">
+            {stateSyncing ? (
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center bg-background/40 pt-16 backdrop-blur-[1px]">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : null}
+            {activeWindow === "share" && <Share />}
+            {activeWindow === "billing" && <Billing />}
+            {activeWindow === "settings" && <SettingsPanel />}
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+    </TooltipProvider>
   )
 }
 
@@ -513,9 +454,6 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
     else if (params.has("session_id") || params.has("canceled")) setActiveWindow("billing")
   }, [setActiveWindow])
 
-  const { width: navWidth, setWidth: setNavWidth, commitWidth: commitNavWidth } =
-    usePersistedLeadingWidth(navSplit)
-  const showNavLabels = navWidth > NAV_ICON_ONLY_MAX_WIDTH
   const previewOnly = isPreviewOnly()
 
   const builderMain = (
@@ -539,120 +477,75 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
   )
 
   return (
-    <div className="flex h-dvh flex-col bg-background text-foreground">
-      {previewOnly ? (
-        <p className="border-b border-border bg-muted/30 px-4 py-1.5 text-center font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-          Preview — explore tabs freely · sign in to run pipelines
-        </p>
-      ) : null}
-      <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
-        <div className="flex items-center gap-3">
-          {embed ? (
-            <div className="flex items-center gap-2.5 rounded-md">
-              <SpineLogoBox />
-              <div className="hidden leading-tight sm:block">
-                <h1 className="text-sm font-semibold tracking-tight">{LEGAL.productName}</h1>
-              </div>
-            </div>
-          ) : (
-          <a
-            href={LANDING_PAGE_URL}
-            title="Back to landing page"
-            className="flex items-center gap-2.5 rounded-md transition-opacity hover:opacity-80"
-          >
-            <SpineLogoBox />
-            <div className="hidden leading-tight sm:block">
-              <h1 className="text-sm font-semibold tracking-tight">{LEGAL.productName}</h1>
-            </div>
-          </a>
-          )}
-          <div className="mx-1 h-6 w-px bg-border" />
-          <ProjectSelector embed={embed} />
-        </div>
-        <div className="flex items-center gap-2">
-          <HeaderSettingsButton
-            active={activeWindow === "settings"}
-            onClick={() => setActiveWindow("settings")}
-          />
-          {!embed && (
-            <>
-              <RunningJobsHub />
-              <ProjectAssistantDockToggle />
-              <DiagnosisAgentHub />
-              <FeedbackButton />
-            </>
-          )}
-        </div>
-      </header>
-
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <ResizableSplit
-          className="min-h-0 flex-1"
-          leadingWidth={navWidth}
-          onLeadingWidthChange={setNavWidth}
-          onLeadingWidthCommit={commitNavWidth}
-          minLeading={navSplit.min}
-          maxLeading={navSplit.max}
-          leading={
-            <nav
-              className={cn(
-                "flex h-full flex-col gap-1 overflow-x-hidden overflow-y-auto py-3",
-                showNavLabels ? "items-stretch px-2" : "items-center px-0.5",
-              )}
-            >
-              {WINDOWS.map((w) => {
-                const Icon = w.icon
-                const isActive = activeWindow === w.id
-                const issue = workspaceNavTabIssue(w.id, validity)
-                const disabled = workspaceNavTabDisabled(w.id, validity)
-                return (
-                  <button
-                    key={w.id}
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => {
-                      if (disabled) return
-                      setActiveWindow(w.id)
-                    }}
-                    title={workspaceNavTabTitle(w.id, w.label, validity)}
-                    className={cn(
-                      "group flex items-center rounded-md text-sm transition-colors",
-                      showNavLabels
-                        ? "min-h-0 justify-start gap-3 px-2.5 py-2"
-                        : "h-10 w-10 shrink-0 justify-center p-0",
-                      workspaceNavTabButtonClass(isActive, issue, disabled),
-                    )}
-                  >
-                    <Icon
-                      className={cn(
-                        "h-4 w-4 shrink-0",
-                        workspaceNavTabIconClass(isActive, issue),
-                      )}
-                    />
-                    {showNavLabels ? (
-                      <>
-                        <span className="min-w-0 flex-1 break-words text-left">{w.label}</span>
-                        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{w.hint}</span>
-                      </>
-                    ) : null}
-                  </button>
-                )
-              })}
-            </nav>
-          }
-          trailing={builderMain}
+    <TooltipProvider delay={200}>
+      <SidebarProvider className="min-h-svh">
+        <AppSidebar
+          items={WINDOWS}
+          activeWindow={activeWindow}
+          onSelect={setActiveWindow}
+          validity={validity}
         />
-      </div>
+        <SidebarInset className="flex min-h-svh flex-col overflow-hidden">
+          {previewOnly ? (
+            <p className="border-b border-border bg-muted/30 px-4 py-1.5 text-center font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+              Preview — explore tabs freely · sign in to run pipelines
+            </p>
+          ) : null}
+          <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
+            <div className="flex items-center gap-2">
+              <SidebarTrigger className="md:hidden" />
+              {embed ? (
+                <div className="flex items-center gap-2.5 rounded-md">
+                  <SpineLogoBox />
+                  <div className="hidden leading-tight sm:block">
+                    <h1 className="text-sm font-semibold tracking-tight">{LEGAL.productName}</h1>
+                  </div>
+                </div>
+              ) : (
+                <a
+                  href={LANDING_PAGE_URL}
+                  title="Back to landing page"
+                  className="flex items-center gap-2.5 rounded-md transition-opacity hover:opacity-80"
+                >
+                  <SpineLogoBox />
+                  <div className="hidden leading-tight sm:block">
+                    <h1 className="text-sm font-semibold tracking-tight">{LEGAL.productName}</h1>
+                  </div>
+                </a>
+              )}
+              <div className="mx-1 h-6 w-px bg-border" />
+              <ProjectSelector embed={embed} />
+            </div>
+            <div className="flex items-center gap-2">
+              <SidebarTrigger className="hidden md:flex" />
+              <HeaderSettingsButton
+                active={activeWindow === "settings"}
+                onClick={() => setActiveWindow("settings")}
+              />
+              {!embed && (
+                <>
+                  <RunningJobsHub />
+                  <ProjectAssistantDockToggle />
+                  <DiagnosisAgentHub />
+                  <FeedbackButton />
+                </>
+              )}
+            </div>
+          </header>
 
-      <SharedRunDocScopeProvider scope={sharedRunDocScopeForViewer}>
-        <LazyDocViewer />
-      </SharedRunDocScopeProvider>
-      {!previewOnly ? (
-        <>
-          <ActivityTracker />
-          {SESSION_REPLAY_ENABLED ? <SessionReplayRecorder /> : null}
-        </>
-      ) : null}
-    </div>
+          <div className="flex min-h-0 flex-1 overflow-hidden">{builderMain}</div>
+
+          <SharedRunDocScopeProvider scope={sharedRunDocScopeForViewer}>
+            <LazyDocViewer />
+          </SharedRunDocScopeProvider>
+          {!previewOnly ? (
+            <>
+              <ActivityTracker />
+              {SESSION_REPLAY_ENABLED ? <SessionReplayRecorder /> : null}
+            </>
+          ) : null}
+        </SidebarInset>
+      </SidebarProvider>
+    </TooltipProvider>
   )
 }

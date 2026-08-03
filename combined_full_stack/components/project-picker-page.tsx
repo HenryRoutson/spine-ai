@@ -9,7 +9,6 @@ import {
   Loader2,
   Pencil,
   Play,
-  Plus,
   RefreshCw,
   Store,
 } from "lucide-react"
@@ -18,13 +17,15 @@ import { clearActiveProjectSession } from "@/lib/active-project-session"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { timeAgo } from "@/lib/time-ago"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
-import { useProjectTemplates } from "@/lib/use-project-templates"
+import {
+  BlankProjectButton,
+  ExampleTemplateGrid,
+} from "@/components/project-workspace-sections"
 import { MarketplaceBrowsePanel } from "@/components/share/marketplace-browse-panel"
 import { SpineLogoBox } from "@/components/spine-mark"
 import { LEGAL } from "@shared/legal/site"
@@ -45,7 +46,6 @@ export function ProjectPickerPage() {
     openProject,
     syncing,
   } = useStorePicker()
-  const { templates, loading: loadingTemplates } = useProjectTemplates()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
   const [busy, setBusy] = useState<string | null>(null)
@@ -161,14 +161,10 @@ export function ProjectPickerPage() {
                 )}
                 Refresh docs
               </Button>
-              <Button size="sm" onClick={() => void handleCreateBlank()} disabled={busy === "blank"}>
-                {busy === "blank" ? (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                Blank project
-              </Button>
+              <BlankProjectButton
+                busy={busy === "blank"}
+                onClick={() => void handleCreateBlank()}
+              />
             </div>
           }
         />
@@ -312,36 +308,11 @@ export function ProjectPickerPage() {
             <p className="mb-3 text-xs text-muted-foreground">
               Example templates are read-only until you clone them into your workspace.
             </p>
-            {loadingTemplates && templates.length === 0 ? (
-              <p className="font-mono text-[11px] text-muted-foreground">Loading templates…</p>
-            ) : (
-              <ul className="grid gap-3 sm:grid-cols-2">
-                {templates.map((t) => (
-                  <li key={t.id} className="rounded-lg border border-border bg-card p-4">
-                    <div className="mb-2 flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{t.name}</p>
-                        <p className="font-mono text-[10px] text-muted-foreground">{t.kind}</p>
-                      </div>
-                      <Badge variant="outline" className="shrink-0 font-mono text-[9px]">
-                        {t.moduleCount} steps
-                      </Badge>
-                    </div>
-                    <p className="mb-3 font-mono text-[10px] text-muted-foreground">
-                      {t.inputCount} input slot{t.inputCount === 1 ? "" : "s"}
-                    </p>
-                    <Button size="sm" onClick={() => void handleCloneTemplate(t.id)} disabled={busy === t.id}>
-                      {busy === t.id ? (
-                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Copy className="mr-1.5 h-3.5 w-3.5" />
-                      )}
-                      Clone &amp; open
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <ExampleTemplateGrid
+              busyId={busy}
+              onClone={(id) => void handleCloneTemplate(id)}
+              cloneLabel="Clone & open"
+            />
           </section>
         </div>
       </div>

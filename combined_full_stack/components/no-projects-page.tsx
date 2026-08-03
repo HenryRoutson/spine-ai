@@ -1,10 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { Copy, FolderKanban, Loader2, Plus } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { useProjectTemplates } from "@/lib/use-project-templates"
+import { Copy, FolderKanban, Loader2 } from "lucide-react"
+import {
+  BlankProjectButton,
+  ExampleTemplateGrid,
+} from "@/components/project-workspace-sections"
 import type { ProjectId } from "@/lib/types"
 
 // AI : standalone zero-projects page — rendered by StoreProvider INSTEAD of the app shell,
@@ -18,7 +19,6 @@ export function NoProjectsPage({
   onCreateBlank: () => Promise<unknown>
   onCloneTemplate: (templateId: ProjectId) => Promise<unknown>
 }) {
-  const { templates, loading } = useProjectTemplates()
   const [busy, setBusy] = useState<string | null>(null)
 
   if (syncing) {
@@ -58,50 +58,21 @@ export function NoProjectsPage({
             You deleted your last project. Start from a blank pipeline, or clone an example
             template.
           </p>
-          <Button className="mt-4" onClick={() => void handleCreateBlank()} disabled={busy === "blank"}>
-            {busy === "blank" ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-            )}
-            Blank project
-          </Button>
+          <BlankProjectButton
+            className="mt-4"
+            busy={busy === "blank"}
+            onClick={() => void handleCreateBlank()}
+          />
         </div>
 
         <div className="mb-3 flex items-center gap-2">
           <Copy className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold">Example templates</h2>
         </div>
-        {loading && templates.length === 0 ? (
-          <p className="font-mono text-[11px] text-muted-foreground">Loading templates…</p>
-        ) : (
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {templates.map((t) => (
-              <li key={t.id} className="rounded-lg border border-border bg-card p-4">
-                <div className="mb-2 flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{t.name}</p>
-                    <p className="font-mono text-[10px] text-muted-foreground">{t.kind}</p>
-                  </div>
-                  <Badge variant="outline" className="shrink-0 font-mono text-[9px]">
-                    {t.moduleCount} steps
-                  </Badge>
-                </div>
-                <p className="mb-3 font-mono text-[10px] text-muted-foreground">
-                  {t.inputCount} input slot{t.inputCount === 1 ? "" : "s"}
-                </p>
-                <Button size="sm" onClick={() => void handleClone(t.id)} disabled={busy === t.id}>
-                  {busy === t.id ? (
-                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Copy className="mr-1.5 h-3.5 w-3.5" />
-                  )}
-                  Clone
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <ExampleTemplateGrid
+          busyId={busy}
+          onClone={(id) => void handleClone(id)}
+        />
       </div>
     </div>
   )
