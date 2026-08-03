@@ -131,6 +131,13 @@ export const settingsNavSplit = defineSplit({
   max: 320,
 })
 
+export const assistantDockSplit = defineSplit({
+  keySuffix: "assistant-dock-width",
+  defaultWidth: 448,
+  min: 320,
+  max: 720,
+})
+
 export function useLayoutSplitWidth(read: () => pixel_width): pixel_width {
   return useBrowserPrefEvent(LAYOUT_SPLIT_SETTINGS_CHANGED_EVENT, read)
 }

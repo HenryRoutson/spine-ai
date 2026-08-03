@@ -26,7 +26,7 @@ import {
   Wallet,
 } from "lucide-react"
 import { ResizableSplit } from "@/components/resizable-split"
-import { navSplit, NAV_ICON_ONLY_MAX_WIDTH } from "@/lib/layout-split-settings"
+import { assistantDockSplit, navSplit, NAV_ICON_ONLY_MAX_WIDTH } from "@/lib/layout-split-settings"
 import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
 import { useConsumerStore, useOptionalConsumerStore, useOptionalStore, useStore } from "@/lib/store"
@@ -40,13 +40,14 @@ import {
 } from "@/lib/workspace-validity-ui"
 import { createClient } from "@/utils/supabase/client"
 import { useAppShell, type AppWindowId } from "@/lib/app-shell"
+import { useProjectAssistant } from "@/lib/project-assistant-context"
 import { useSyncProjectDocStructures } from "@/lib/use-sync-project-doc-structures"
 import { LazyDocViewer } from "@/components/lazy-doc-viewer"
 import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
 import { PanelLoading } from "@/components/panel-loading"
 import { Earnings } from "@/components/earnings"
 import { FeedbackButton } from "@/components/feedback-button"
-import { ProjectAssistantDock } from "@/components/project-assistant-dock"
+import { ProjectAssistantDockPanel, ProjectAssistantDockToggle } from "@/components/project-assistant-dock"
 import { DiagnosisAgentHub } from "@/components/diagnosis-agents/diagnosis-agent-hub"
 import { RunningJobsHub } from "@/components/running-jobs-hub"
 import {
@@ -514,8 +515,32 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
 
   const { width: navWidth, setWidth: setNavWidth, commitWidth: commitNavWidth } =
     usePersistedLeadingWidth(navSplit)
+  const { open: assistantOpen } = useProjectAssistant()
+  const {
+    width: assistantWidth,
+    setWidth: setAssistantWidth,
+    commitWidth: commitAssistantWidth,
+  } = usePersistedLeadingWidth(assistantDockSplit)
   const showNavLabels = navWidth > NAV_ICON_ONLY_MAX_WIDTH
   const previewOnly = isPreviewOnly()
+
+  const builderMain = (
+    <main className="relative min-w-0 flex-1 overflow-hidden" id="main-content">
+      {projectLoading && <ProjectSwitchOverlay projectName={project.name} />}
+      {activeWindow === "structure" && <StructureBuilder />}
+      {activeWindow === "pipeline" && <PipelineBuilder />}
+      {activeWindow === "testing" && <Testing />}
+      {activeWindow === "inference" && <Inference />}
+      {activeWindow === "share" && <Share />}
+      {activeWindow === "earnings" && <Earnings />}
+      {activeWindow === "logging" && <Logging />}
+      {activeWindow === "cache" && <Cache />}
+      {activeWindow === "documents" && <Documents />}
+      {activeWindow === "docs" && <DocumentationPanel />}
+      {activeWindow === "billing" && <Billing />}
+      {activeWindow === "settings" && <SettingsPanel />}
+    </main>
+  )
 
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
@@ -556,7 +581,7 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
           {!embed && (
             <>
               <RunningJobsHub />
-              <ProjectAssistantDock />
+              <ProjectAssistantDockToggle />
               <DiagnosisAgentHub />
               <FeedbackButton />
             </>
@@ -620,21 +645,21 @@ function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "em
             </nav>
           }
           trailing={
-            <main className="relative min-w-0 flex-1 overflow-hidden" id="main-content">
-              {projectLoading && <ProjectSwitchOverlay projectName={project.name} />}
-              {activeWindow === "structure" && <StructureBuilder />}
-              {activeWindow === "pipeline" && <PipelineBuilder />}
-              {activeWindow === "testing" && <Testing />}
-              {activeWindow === "inference" && <Inference />}
-              {activeWindow === "share" && <Share />}
-              {activeWindow === "earnings" && <Earnings />}
-              {activeWindow === "logging" && <Logging />}
-              {activeWindow === "cache" && <Cache />}
-              {activeWindow === "documents" && <Documents />}
-              {activeWindow === "docs" && <DocumentationPanel />}
-              {activeWindow === "billing" && <Billing />}
-              {activeWindow === "settings" && <SettingsPanel />}
-            </main>
+            assistantOpen ? (
+              <ResizableSplit
+                className="min-h-0 flex-1"
+                fixedSide="trailing"
+                leadingWidth={assistantWidth}
+                onLeadingWidthChange={setAssistantWidth}
+                onLeadingWidthCommit={commitAssistantWidth}
+                minLeading={assistantDockSplit.min}
+                maxLeading={assistantDockSplit.max}
+                leading={builderMain}
+                trailing={<ProjectAssistantDockPanel />}
+              />
+            ) : (
+              builderMain
+            )
           }
         />
       </div>

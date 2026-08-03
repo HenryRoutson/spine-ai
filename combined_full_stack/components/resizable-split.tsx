@@ -15,6 +15,8 @@ export type ResizableSplitProps = {
   onLeadingWidthCommit?: (width: pixel_width) => void
   minLeading?: pixel_width
   maxLeading?: pixel_width
+  // AI : "trailing" fixes the right pane width (e.g. assistant dock); default is left sidebar.
+  fixedSide?: "leading" | "trailing"
   className?: string
 }
 
@@ -31,6 +33,7 @@ export function ResizableSplit({
   onLeadingWidthCommit,
   minLeading = 180,
   maxLeading = 720,
+  fixedSide = "leading",
   className,
 }: ResizableSplitProps) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -54,11 +57,13 @@ export function ResizableSplit({
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (!dragging.current || !containerRef.current) return
       const rect = containerRef.current.getBoundingClientRect()
-      const next = clampWidth(e.clientX - rect.left)
+      const raw =
+        fixedSide === "trailing" ? rect.right - e.clientX : e.clientX - rect.left
+      const next = clampWidth(raw)
       latestWidth.current = next
       onLeadingWidthChange(next)
     },
-    [clampWidth, onLeadingWidthChange],
+    [clampWidth, fixedSide, onLeadingWidthChange],
   )
 
   const endDrag = useCallback(
@@ -72,28 +77,52 @@ export function ResizableSplit({
     [onLeadingWidthCommit],
   )
 
+  const separator = (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-valuenow={leadingWidth}
+      aria-valuemin={minLeading}
+      aria-valuemax={maxLeading}
+      tabIndex={0}
+      title="Drag to resize"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      className="group relative z-10 w-1.5 shrink-0 cursor-col-resize touch-none border-x border-border/60 bg-border/20 hover:bg-primary/25 active:bg-primary/40"
+    >
+      <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
+    </div>
+  )
+
+  const fixedPane = (
+    <div className="flex min-h-0 shrink-0 flex-col overflow-hidden" style={{ width: leadingWidth }}>
+      {fixedSide === "trailing" ? trailing : leading}
+    </div>
+  )
+
+  const flexPane = (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      {fixedSide === "trailing" ? leading : trailing}
+    </div>
+  )
+
   return (
     <div ref={containerRef} className={cn("flex min-h-0 min-w-0", className)}>
-      <div className="flex min-h-0 shrink-0 flex-col overflow-hidden" style={{ width: leadingWidth }}>
-        {leading}
-      </div>
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-valuenow={leadingWidth}
-        aria-valuemin={minLeading}
-        aria-valuemax={maxLeading}
-        tabIndex={0}
-        title="Drag to resize"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        className="group relative z-10 w-1.5 shrink-0 cursor-col-resize touch-none border-x border-border/60 bg-border/20 hover:bg-primary/25 active:bg-primary/40"
-      >
-        <div className="absolute inset-y-0 -left-1.5 -right-1.5" />
-      </div>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">{trailing}</div>
+      {fixedSide === "trailing" ? (
+        <>
+          {flexPane}
+          {separator}
+          {fixedPane}
+        </>
+      ) : (
+        <>
+          {fixedPane}
+          {separator}
+          {flexPane}
+        </>
+      )}
     </div>
   )
 }
