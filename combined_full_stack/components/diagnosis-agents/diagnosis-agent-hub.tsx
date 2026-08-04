@@ -58,25 +58,29 @@ export function DiagnosisAgentHub() {
     [sessions, activeSessionId],
   )
 
+  const showHub = sessions.length > 0
+
   return (
     <>
-      <Button
-        type="button"
-        size="sm"
-        variant={open ? "secondary" : "outline"}
-        onClick={toggle}
-        aria-label="Diagnosis agents"
-        title="Diagnosis agents"
-        className="relative shrink-0 font-mono text-[11px]"
-      >
-        <Bot className="h-3.5 w-3.5" />
-        Diagnosis
-        {runningCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] text-destructive-foreground">
-            {runningCount}
-          </span>
-        )}
-      </Button>
+      {showHub && (
+        <Button
+          type="button"
+          size="sm"
+          variant={open ? "secondary" : "outline"}
+          onClick={toggle}
+          aria-label="Diagnosis agents"
+          title="Diagnosis agents"
+          className="relative shrink-0 font-mono text-[11px]"
+        >
+          <Bot className="h-3.5 w-3.5" />
+          Diagnosis
+          {runningCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] text-destructive-foreground">
+              {runningCount}
+            </span>
+          )}
+        </Button>
+      )}
 
       {open && (
         <div className="fixed inset-y-0 right-0 z-[55] flex w-full sm:max-w-lg flex-col border-l border-border bg-background shadow-xl">

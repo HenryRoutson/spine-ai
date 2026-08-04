@@ -6,6 +6,7 @@ import { useStore } from "@/lib/store"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { PromptText } from "@/components/highlight"
 import { JsonViewerEmbed } from "@/components/json-viewer"
@@ -179,16 +180,29 @@ export function Logging() {
                   className="h-8 pl-8 font-mono text-xs"
                 />
               </div>
-              <Button
-                type="button"
-                variant={errorsOnly ? "secondary" : "outline"}
-                size="sm"
-                className="h-7 w-full gap-1.5 font-mono text-[10px]"
-                onClick={() => setErrorsOnly((v) => !v)}
+              <label
+                className={cn(
+                  "flex cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 transition-colors",
+                  errorsOnly
+                    ? "border-destructive/40 bg-destructive/5"
+                    : "border-border bg-muted/20",
+                )}
               >
-                <AlertTriangle className="h-3 w-3" />
-                {errorsOnly ? "Showing errors only" : "Errors only"}
-              </Button>
+                <span
+                  className={cn(
+                    "flex items-center gap-1.5 font-mono text-[10px]",
+                    errorsOnly ? "text-destructive" : "text-muted-foreground",
+                  )}
+                >
+                  <AlertTriangle className="h-3 w-3 shrink-0" />
+                  Errors only
+                </span>
+                <Switch
+                  size="sm"
+                  checked={errorsOnly}
+                  onCheckedChange={(checked) => setErrorsOnly(!!checked)}
+                />
+              </label>
             </div>
             <ScrollArea className="min-h-0 flex-1">
               {filtered.length === 0 ? (

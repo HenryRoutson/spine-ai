@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import type { PipelineRun, RunStep } from "@/lib/types"
 import { formatCostCents, formatMs } from "@/lib/llm-distribution"
 import {
@@ -10,134 +11,106 @@ import {
   runStepSignature,
   type StepMeanStats,
 } from "@/lib/step-profiling"
-import { CHART_AXIS, CHART_STAT, useStatusPalette } from "@/lib/chart-colors"
-import type { StatusPalette } from "@/lib/color-scheme"
-
-// AI : fixed cell width — rigid grid; value row + plot + label row baked into padding.
-const STEP_W = 40
-const PLOT_H = 96
-const PAD = { t: 12, r: 4, b: 36, l: 24 }
-
-function barColor(failed: number, palette: StatusPalette): { fill: string; stroke: string } {
-  return failed > 0 ? { fill: palette.err, stroke: palette.errStroke } : { fill: palette.ok, stroke: palette.okStroke }
-}
+import { useStatusPalette } from "@/lib/chart-colors"
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart"
 
 function truncateLabel(label: string, max = 12): string {
   return label.length <= max ? label : `${label.slice(0, max - 1)}…`
 }
 
-function StepMetricBarChart({
+function StepMetricAreaChart({
   title,
   stats,
   value,
   format,
-  barFill,
-  barStroke,
+  color,
   palette,
 }: {
   title: string
   stats: StepMeanStats[]
   value: (step: StepMeanStats) => number
   format: (n: number) => string
-  barFill?: string
-  barStroke?: string
-  palette: StatusPalette
+  color?: string
+  palette: { ok: string; err: string; retry: string }
 }) {
-  const maxVal = Math.max(...stats.map(value), 0.01)
-  const plotW = stats.length * STEP_W
-  const w = PAD.l + plotW + PAD.r
-  const h = PAD.t + PLOT_H + PAD.b
-  const plotX = PAD.l
-  const plotTop = PAD.t
-  const baselineY = plotTop + PLOT_H
+  const chartData = stats.map((step, i) => ({
+    step: String(i + 1),
+    label: truncateLabel(step.label),
+    value: Math.max(0, value(step)),
+  }))
+  const maxVal = Math.max(...chartData.map((d) => d.value), 0.01)
+  const yMax = +(maxVal * 1.1).toFixed(6)
+  const hasFailed = stats.some((s) => s.failed > 0)
+  const strokeColor = color ?? (hasFailed ? palette.err : palette.ok)
+
+  const chartConfig: ChartConfig = {
+    value: { label: title, color: strokeColor },
+  }
 
   return (
     <div className="min-w-0 rounded border border-border bg-background p-1.5">
       <div className="mb-1 flex items-baseline justify-between gap-1">
         <p className="truncate font-mono text-[9px] font-medium uppercase tracking-wide text-foreground">{title}</p>
-        <span className="shrink-0 font-mono text-[8px] text-muted-foreground">{format(maxVal)}</span>
-      </div>
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full text-border" aria-hidden preserveAspectRatio="xMinYMin meet">
-        <rect
-          x={plotX}
-          y={plotTop}
-          width={plotW}
-          height={PLOT_H}
-          className="fill-muted/15"
-          stroke={CHART_AXIS}
-          strokeWidth={1}
-        />
-
-        <line x1={plotX} y1={baselineY} x2={plotX + plotW} y2={baselineY} stroke={CHART_AXIS} strokeWidth={1.25} />
-        <line x1={plotX} y1={plotTop} x2={plotX} y2={baselineY} stroke={CHART_AXIS} strokeWidth={1} />
-
-        <text x={plotX - 4} y={baselineY + 3} fill={CHART_STAT} fontSize={8} fontFamily="ui-monospace, monospace" textAnchor="end">
-          0
-        </text>
-        <text x={plotX - 4} y={plotTop + 8} fill={CHART_STAT} fontSize={8} fontFamily="ui-monospace, monospace" textAnchor="end">
+        <span className="shrink-0 font-mono text-xs font-medium tabular-nums text-muted-foreground">
           {format(maxVal)}
-        </text>
-
-        {stats.map((step, i) => {
-          const barX = plotX + STEP_W * i
-          const v = value(step)
-          const barH = v > 0 ? (v / maxVal) * PLOT_H : 0
-          const color =
-            barFill && barStroke
-              ? { fill: barFill, stroke: barStroke }
-              : barColor(step.failed, palette)
-          const centerX = barX + STEP_W / 2
-          const valueY = v > 0 ? baselineY - barH - 3 : baselineY - 3
-
-          return (
-            <g key={step.moduleId}>
-              {v > 0 && (
-                <>
-                  <rect x={barX} y={baselineY - barH} width={STEP_W} height={barH} fill={color.fill} />
-                  <line
-                    x1={barX}
-                    y1={baselineY - barH}
-                    x2={barX + STEP_W}
-                    y2={baselineY - barH}
-                    stroke={color.stroke}
-                    strokeWidth={1}
-                  />
-                </>
-              )}
-              <text
-                x={centerX}
-                y={valueY}
-                fill={CHART_STAT}
-                fontSize={7}
-                fontFamily="ui-monospace, monospace"
-                textAnchor="middle"
-              >
-                {format(v)}
-              </text>
-              <text
-                x={centerX}
-                y={baselineY + 12}
-                fill={CHART_STAT}
-                fontSize={7}
-                fontFamily="ui-monospace, monospace"
-                textAnchor="middle"
-              >
-                {i + 1}
-              </text>
-              <text
-                x={centerX}
-                y={baselineY + 24}
-                fill={CHART_STAT}
-                fontSize={6}
-                fontFamily="ui-monospace, monospace"
-                textAnchor="middle"
-              >
-                {truncateLabel(step.label)}
-              </text>
-            </g>
-          )
-        })}
-      </svg>
+        </span>
+      </div>
+      <ChartContainer config={chartConfig} className="aspect-[2/1] w-full min-h-[112px]">
+        <AreaChart
+          accessibilityLayer
+          data={chartData}
+          margin={{ left: 4, right: 8, top: 4, bottom: 22 }}
+        >
+          <CartesianGrid vertical={false} />
+          <YAxis hide domain={[0, yMax]} />
+          <XAxis
+            dataKey="step"
+            tickLine={false}
+            axisLine={false}
+            tickMargin={6}
+            className="font-mono text-[8px]"
+            tickFormatter={(v) => String(v)}
+            label={{
+              value: "Step",
+              position: "insideBottom",
+              offset: -14,
+              style: {
+                fontSize: 9,
+                fontFamily: "ui-monospace, monospace",
+                textAnchor: "middle",
+                fill: "var(--muted-foreground)",
+              },
+            }}
+          />
+          <ChartTooltip
+            cursor={false}
+            content={
+              <ChartTooltipContent
+                labelFormatter={(_, payload) => {
+                  const p = payload?.[0]?.payload as { step?: string; label?: string } | undefined
+                  return p ? `Step ${p.step}: ${p.label}` : undefined
+                }}
+                formatter={(v) => format(Number(v))}
+              />
+            }
+          />
+          <Area
+            dataKey="value"
+            type="linear"
+            baseValue={0}
+            fill="var(--color-value)"
+            fillOpacity={0.4}
+            stroke="var(--color-value)"
+            strokeWidth={1.5}
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ChartContainer>
     </div>
   )
 }
@@ -186,33 +159,32 @@ export function StepProfiling({
       </div>
 
       <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-3">
-        <StepMetricBarChart
+        <StepMetricAreaChart
           title="Mean latency"
           stats={stats}
           value={(s) => s.meanMs}
           format={formatMs}
           palette={palette}
         />
-        <StepMetricBarChart
+        <StepMetricAreaChart
           title="Mean cost"
           stats={stats}
           value={(s) => s.meanCostCents}
           format={formatCostCents}
           palette={palette}
         />
-        <StepMetricBarChart
+        <StepMetricAreaChart
           title="Description Validation cost"
           stats={stats}
           value={(s) => s.meanDescriptionCheckCostCents}
           format={formatCostCents}
-          barFill={palette.retry}
-          barStroke={palette.retryStroke}
+          color={palette.retry}
           palette={palette}
         />
       </div>
 
       <p className="mt-2 font-mono text-[9px] text-muted-foreground/70">
-        Connected bars = steps in order ·{" "}
+        Steps in pipeline order ·{" "}
         <span className={palette.okText}>ok</span>
         {" · "}
         <span className={palette.errText}>any failed</span>

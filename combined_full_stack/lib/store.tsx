@@ -57,7 +57,7 @@ import {
   readActiveProjectSession,
   writeActiveProjectSession,
 } from "@/lib/active-project-session"
-import { navigateToBuildWorkspace } from "@/lib/app-mode-nav"
+import { navigateToBuildWorkspace, navigateToProjectPicker } from "@/lib/app-mode-nav"
 import { registerStoreNavigationBridge } from "@/lib/store-navigation-bridge"
 import { mostRecentlyOpenedProject } from "@/lib/project-active"
 import { dedupeDocsNewestByName } from "@/lib/project-docs"
@@ -531,7 +531,14 @@ export function StoreProvider({
       if (res.status === 404) {
         clearProjectStateCache(projectId)
         pruneStaleProjectFromAccountCache(projectId)
-        if (readActiveProjectSession() === projectId) clearActiveProjectSession()
+        const wasActiveSession = readActiveProjectSession() === projectId
+        if (wasActiveSession) clearActiveProjectSession()
+        setState((prev) => {
+          if (!prev?.projects.some((p) => p.id === projectId)) return prev
+          return { ...prev, projects: prev.projects.filter((p) => p.id !== projectId) }
+        })
+        setActiveProjectId((current) => (current === projectId ? "" : current))
+        if (wasActiveSession) navigateToProjectPicker()
         return [] as PipelineRun[]
       }
       if (!res.ok) {
@@ -652,9 +659,12 @@ export function StoreProvider({
       if (mode === StoreMode.Workspace) {
         const resolved =
           projectId && visibleProjects.some((p) => p.id === projectId) ? projectId : ""
+        const hadUnknownProject = !!projectId && !resolved
         setActiveProjectId(resolved)
         if (resolved) writeActiveProjectSession(resolved as ProjectId)
         else clearActiveProjectSession()
+        // AI : stale session pointed at a deleted/missing project — builder shell would skeleton forever.
+        if (hadUnknownProject) navigateToProjectPicker()
       }
       if (mode === StoreMode.Demo && projectId && visibleProjects.some((p) => p.id === projectId)) {
         setActiveProjectId(projectId)
@@ -843,11 +853,10 @@ export function StoreProvider({
         if (alive) setLoadError(err instanceof Error ? err.message : "Failed to load store")
       })
       .finally(() => {
-        if (alive && loadGen === stateLoadGenRef.current) {
-          setProjectLoading(false)
-          setStateSyncing(false)
-          hydratedRef.current = true
-        }
+        if (!alive) return
+        setProjectLoading(false)
+        setStateSyncing(false)
+        if (loadGen === stateLoadGenRef.current) hydratedRef.current = true
       })
 
     return () => {
@@ -916,6 +925,15 @@ export function StoreProvider({
     () => migratedProjects.find((p) => p.id === activeProjectId),
     [migratedProjects, activeProjectId],
   )
+
+  // AI : activeProjectId can outlive a deleted project — leave builder shell before WarmShellSlot skeletons stick.
+  useEffect(() => {
+    if (mode !== StoreMode.Workspace || !state || projectLoading || stateSyncing) return
+    if (!activeProjectId || project) return
+    setActiveProjectId("")
+    clearActiveProjectSession()
+    navigateToProjectPicker()
+  }, [mode, state, projectLoading, stateSyncing, activeProjectId, project])
 
   // AI : optimistic local update + debounced PUT (builders patch on every keystroke).
   const patchProject = useCallback(

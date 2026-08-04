@@ -1,7 +1,8 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { AppPrimaryNav, type AppPrimarySection } from "@/components/app-primary-nav"
+import { AppPrimaryNav } from "@/components/app-primary-nav"
+import { AppPrimarySection } from "@/lib/app-primary-section-labels"
 import { SpineLogoBox } from "@/components/spine-mark"
 import { LANDING_PAGE_URL } from "@/lib/app-nav-config"
 import { AppMode } from "@/lib/app-mode-nav"
@@ -52,7 +53,7 @@ export function AppChromeHeader({
 
       <AppPrimaryNav value={primarySection} onChange={onPrimarySectionChange} openingSection={openingSection} />
 
-      {mode === AppMode.Build && projectSlot ? (
+      {primarySection === AppPrimarySection.Build && projectSlot ? (
         <>
           <div className="h-6 w-px shrink-0 bg-border" />
           {projectSlot}

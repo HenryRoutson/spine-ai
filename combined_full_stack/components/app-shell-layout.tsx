@@ -252,7 +252,7 @@ export function AppShellLayout({ variant = "default" }: { variant?: "default" | 
 }
 
 function AppShellLayoutInner({ variant = "default" }: { variant?: "default" | "embed" }) {
-  const { shellKind } = useAppShellKind()
+  const { shellKind, navigateToProjectPicker } = useAppShellKind()
   const builder = useOptionalStore()
   const consumer = useOptionalConsumerStore()
   const picker = useContext(ProjectPickerContext)
@@ -274,6 +274,14 @@ function AppShellLayoutInner({ variant = "default" }: { variant?: "default" | "e
   useEffect(() => {
     prefetchShellPanels()
   }, [])
+
+  // AI : builder shell with no active project (failed/missing load) — recover instead of infinite skeleton.
+  useEffect(() => {
+    if (shellKind !== AppShellKind.Builder) return
+    if (builder) return
+    if (!consumer && !picker) return
+    navigateToProjectPicker()
+  }, [shellKind, builder, consumer, picker, navigateToProjectPicker])
 
   const showConsumer = shellKind === AppShellKind.Consumer
   const showBuilder = shellKind === AppShellKind.Builder

@@ -1,13 +1,11 @@
 "use client"
 
-import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts"
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts"
 import { formatCents } from "@/lib/format"
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
   type ChartConfig,
 } from "@/components/ui/chart"
 
@@ -60,17 +58,19 @@ export function BillingSpendChart({
 
   return (
     <ChartContainer config={chartConfig} className="aspect-[3/1] w-full">
-      <AreaChart data={chartData} margin={{ left: 4, right: 8, top: 8 }}>
-        <defs>
-          {series.map((s) => (
-            <linearGradient key={s.key} id={`fill-${s.key}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={s.color} stopOpacity={0.5} />
-              <stop offset="95%" stopColor={s.color} stopOpacity={0.05} />
-            </linearGradient>
-          ))}
-        </defs>
-        <CartesianGrid vertical={false} stroke="var(--border)" />
-        <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={8} className="text-[10px]" />
+      <AreaChart
+        accessibilityLayer
+        data={chartData}
+        margin={{ left: 12, right: 12 }}
+      >
+        <CartesianGrid vertical={false} />
+        <XAxis
+          dataKey="day"
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          className="text-[10px]"
+        />
         <YAxis
           tickLine={false}
           axisLine={false}
@@ -81,36 +81,20 @@ export function BillingSpendChart({
           tickFormatter={(v) => formatCents(v)}
         />
         <ChartTooltip
+          cursor={false}
           content={<ChartTooltipContent formatter={(value) => formatCents(Number(value))} />}
         />
-        <ChartLegend content={<ChartLegendContent />} />
         {series.map((s) => (
           <Area
             key={s.key}
             dataKey={s.key}
-            type="monotone"
-            stackId="1"
-            stroke={s.color}
-            fill={`url(#fill-${s.key})`}
-            strokeWidth={1.5}
-            dot={(props) => {
-              const { cx, cy, value } = props
-              if (cx == null || cy == null || !value || Number(value) <= 0) return null
-              return (
-                <circle
-                  cx={cx}
-                  cy={cy}
-                  r={3.5}
-                  fill={s.color}
-                  stroke="var(--background)"
-                  strokeWidth={1.5}
-                />
-              )
-            }}
-            activeDot={{ r: 5, stroke: "var(--background)", strokeWidth: 1.5 }}
+            type="natural"
+            stackId="a"
+            fill={`var(--color-${s.key})`}
+            fillOpacity={0.4}
+            stroke={`var(--color-${s.key})`}
           />
         ))}
-        <ReferenceLine y={0} stroke="#fff" strokeWidth={1.5} ifOverflow="visible" />
       </AreaChart>
     </ChartContainer>
   )
