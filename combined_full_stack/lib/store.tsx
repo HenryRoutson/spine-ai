@@ -65,9 +65,16 @@ import { readStateSnapshot, seedProjectInStateSnapshot, writeStateSnapshot } fro
 import { queueBackgroundProjectPrefetches } from "@/lib/background-project-prefetch"
 import {
   clearProjectStateCache,
+  readAccountStateCache,
+  readBillingRunsCache,
+  readProjectRunsCache,
   readProjectStateCache,
+  writeAccountStateCache,
+  writeBillingRunsCache,
+  writeProjectRunsCache,
   writeProjectStateCache,
 } from "@/lib/project-state-cache"
+import { readStateStream, type StateStreamChunk } from "@/lib/state-stream"
 import { readBillingSnapshot, writeBillingSnapshot } from "@/lib/billing-snapshot-cache"
 import { readEarningsSnapshot, writeEarningsSnapshot } from "@/lib/earnings-snapshot-cache"
 import { warmMarketplaceListings } from "@/lib/warm-run-data"
@@ -152,10 +159,19 @@ const DEMO_EARNINGS: EarningsAccountView = {
   totalWithdrawnCents: 0,
 }
 
-async function fetchStateOnce(route: string): Promise<ServerState> {
-  const res = await fetch(route, { credentials: "same-origin" })
-  if (!res.ok) throw new Error(formatApiError(route, res, await readApiErrorBody(res)))
-  return res.json() as Promise<ServerState>
+async function fetchStateStream(
+  route: string,
+  onChunk?: (chunk: StateStreamChunk) => void,
+  signal?: AbortSignal,
+): Promise<ServerState> {
+  const chunk = await readStateStream(route, { onChunk }, signal)
+  return {
+    projects: chunk.projects ?? [],
+    docs: chunk.docs ?? [],
+    runs: chunk.runs ?? [],
+    allRuns: [],
+    modelOptions: chunk.modelOptions ?? [],
+  }
 }
 
 interface ServerState {
@@ -222,6 +238,8 @@ interface StoreState {
   setInferenceInputDocIds: (docs: Partial<Record<ModuleId, DocId | DocId[]>>) => void
   // billing — run history for spend charts (project-scoped + account-wide)
   billingRuns: PipelineRun[]
+  refreshBillingRuns: () => Promise<PipelineRun[]>
+  hydrateRunDetail: (runId: PipelineRun["id"]) => Promise<void>
   billingAccount: BillingAccountView | null
   refreshBilling: (opts?: AccountRefreshOpts) => Promise<void>
   earningsAccount: EarningsAccountView | null
@@ -255,6 +273,7 @@ export interface ProjectPickerStoreState {
 export interface ConsumerStoreState {
   projects: Project[]
   billingRuns: PipelineRun[]
+  refreshBillingRuns: () => Promise<PipelineRun[]>
   billingAccount: BillingAccountView | null
   refreshBilling: (opts?: AccountRefreshOpts) => Promise<void>
   earningsAccount: EarningsAccountView | null
@@ -271,8 +290,8 @@ export interface ConsumerStoreState {
 }
 
 type PrefetchEntry = {
-  promise: Promise<ServerState>
-  data?: ServerState
+  promise: Promise<PipelineRun[]>
+  data?: PipelineRun[]
 }
 
 // AI : shared pure computation for auto-inferring structures immediately after any doc upload.
@@ -380,26 +399,32 @@ export function StoreProvider({
         billingLastOkAtRef.current = Date.now()
         return
       }
-      const res = await fetch(API_ROUTES.billing, { credentials: FETCH_CREDENTIALS })
-      if (res.status === 429) {
-        const retryAfterSec = Number(res.headers.get("Retry-After"))
-        billingRateLimitedUntilRef.current =
-          Date.now() +
-          (Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec * 1000 : 60_000)
-        return
+      try {
+        const res = await fetch(API_ROUTES.billing, { credentials: FETCH_CREDENTIALS })
+        if (res.status === 429) {
+          const retryAfterSec = Number(res.headers.get("Retry-After"))
+          billingRateLimitedUntilRef.current =
+            Date.now() +
+            (Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec * 1000 : 60_000)
+          return
+        }
+        if (res.status === 503) return
+        if (!res.ok) {
+          const body = await readApiErrorBody(res)
+          console.error(formatApiError(API_ROUTES.billing, res, body))
+          return
+        }
+        const data = (await res.json()) as BillingAccountView
+        const next = {
+          ...data,
+          creditHistory: data.creditHistory ?? [],
+        }
+        setBillingAccount(next)
+        writeBillingSnapshot(next)
+        billingLastOkAtRef.current = Date.now()
+      } catch (err) {
+        console.error("refreshBilling failed:", err)
       }
-      if (!res.ok) {
-        const body = await readApiErrorBody(res)
-        throw new Error(formatApiError(API_ROUTES.billing, res, body))
-      }
-      const data = (await res.json()) as BillingAccountView
-      const next = {
-        ...data,
-        creditHistory: data.creditHistory ?? [],
-      }
-      setBillingAccount(next)
-      writeBillingSnapshot(next)
-      billingLastOkAtRef.current = Date.now()
     })()
     billingFetchRef.current = run
     try {
@@ -435,61 +460,112 @@ export function StoreProvider({
     }
   }, [mode])
 
-  const fetchState = useCallback(async (projectId: string) => {
-    const params = new URLSearchParams()
-    if (projectId) params.set("projectId", projectId)
-    if (mode === "demo" && typeof window !== "undefined") {
-      const qs = new URLSearchParams(window.location.search)
-      const buildId = qs.get("buildId")
-      if (buildId) params.set("buildId", buildId)
-      // AI : SECURITY — forward signed landing-build access token to /api/demo/state.
-      const accessToken = qs.get("accessToken")
-      if (accessToken) params.set("accessToken", accessToken)
+  const fetchState = useCallback(
+    async (projectId: string, onChunk?: (chunk: StateStreamChunk) => void, signal?: AbortSignal) => {
+      const params = new URLSearchParams()
+      if (projectId) params.set("projectId", projectId)
+      if (mode === "demo" && typeof window !== "undefined") {
+        const qs = new URLSearchParams(window.location.search)
+        const buildId = qs.get("buildId")
+        if (buildId) params.set("buildId", buildId)
+        // AI : SECURITY — forward signed landing-build access token to /api/demo/state.
+        const accessToken = qs.get("accessToken")
+        if (accessToken) params.set("accessToken", accessToken)
+      }
+      const q = params.toString() ? `?${params}` : ""
+      const route = mode === "demo" ? API_ROUTES.demoState : API_ROUTES.state
+      return fetchStateStream(`${route}${q}`, onChunk, signal)
+    },
+    [mode],
+  )
+
+  const fetchProjectRuns = useCallback(
+    async (projectId: string) => {
+      if (mode === "demo") return [] as PipelineRun[]
+      const data = await apiJson<{ runs: PipelineRun[] }>(
+        `${API_ROUTES.runs}?projectId=${encodeURIComponent(projectId)}`,
+      )
+      writeProjectRunsCache(projectId, data.runs)
+      return data.runs
+    },
+    [mode],
+  )
+
+  const refreshBillingRuns = useCallback(async () => {
+    if (mode === "demo") return [] as PipelineRun[]
+    const cached = readBillingRunsCache()
+    if (cached) {
+      setState((prev) => (prev ? { ...prev, allRuns: cached } : prev))
+      return cached
     }
-    const q = params.toString() ? `?${params}` : ""
-    const route = mode === "demo" ? API_ROUTES.demoState : API_ROUTES.state
-    return fetchStateOnce(`${route}${q}`)
+    const data = await apiJson<{ runs: PipelineRun[] }>(API_ROUTES.runsAccount)
+    writeBillingRunsCache(data.runs)
+    setState((prev) => (prev ? { ...prev, allRuns: data.runs } : prev))
+    return data.runs
   }, [mode])
 
   const loadProjectState = useCallback(
-    async (projectId: string) => {
-      const persisted = projectId ? readProjectStateCache(projectId) : null
-      if (persisted) return persisted
+    async (projectId: string, onChunk?: (chunk: StateStreamChunk) => void, signal?: AbortSignal) => {
+      const account = readAccountStateCache()
+      const cachedRuns = projectId ? readProjectRunsCache(projectId) : null
+      if (account && !projectId) {
+        return { ...account, runs: [], allRuns: readBillingRunsCache() ?? [] }
+      }
 
-      const cached = projectId ? prefetchCache.current.get(projectId) : undefined
-      if (cached?.data) {
-        writeProjectStateCache(projectId, cached.data)
-        return cached.data
+      if (account && cachedRuns) {
+        return {
+          ...account,
+          runs: cachedRuns.runs,
+          allRuns: readBillingRunsCache() ?? [],
+        }
       }
-      if (cached?.promise) {
-        const data = await cached.promise
-        writeProjectStateCache(projectId, data)
-        return data
+
+      if (account && projectId) {
+        const runs = await fetchProjectRuns(projectId)
+        return { ...account, runs, allRuns: readBillingRunsCache() ?? [] }
       }
-      const data = await fetchState(projectId)
-      if (projectId) writeProjectStateCache(projectId, data)
+
+      const prefetched = projectId ? prefetchCache.current.get(projectId) : undefined
+      if (prefetched?.data) {
+        const accountData = account ?? readAccountStateCache()
+        if (accountData) {
+          return { ...accountData, runs: prefetched.data, allRuns: readBillingRunsCache() ?? [] }
+        }
+      }
+      if (prefetched?.promise) {
+        const runs = await prefetched.promise
+        const accountData = account ?? readAccountStateCache()
+        if (accountData) {
+          return { ...accountData, runs, allRuns: readBillingRunsCache() ?? [] }
+        }
+      }
+
+      const data = await fetchState(projectId, onChunk, signal)
+      writeAccountStateCache({
+        projects: data.projects,
+        docs: data.docs,
+        modelOptions: data.modelOptions,
+      })
+      if (projectId) writeProjectRunsCache(projectId, data.runs)
       return data
     },
-    [fetchState],
+    [fetchState, fetchProjectRuns],
   )
 
   const prefetchProject = useCallback(
     (projectId: string) => {
       if (!projectId || projectId === activeProjectId) return
-      if (readProjectStateCache(projectId)) return
+      if (readProjectRunsCache(projectId)) return
       if (prefetchCache.current.has(projectId)) return
       const entry: PrefetchEntry = {
-        promise: undefined!,
+        promise: fetchProjectRuns(projectId).then((runs) => {
+          entry.data = runs
+          return runs
+        }),
       }
-      // AI : warm /api/state on hover — kept in project-state-cache for instant reopen.
-      entry.promise = fetchState(projectId).then((data) => {
-        entry.data = data
-        writeProjectStateCache(projectId, data)
-        return data
-      })
       prefetchCache.current.set(projectId, entry)
     },
-    [activeProjectId, fetchState],
+    [activeProjectId, fetchProjectRuns],
   )
 
   const applyState = useCallback(
@@ -508,7 +584,12 @@ export function StoreProvider({
           if (!p.lastOpenedAt || local.lastOpenedAt > p.lastOpenedAt) return { ...p, lastOpenedAt: local.lastOpenedAt }
           return p
         })
-        return { ...data, projects: mergedProjects, docs: dedupeDocsNewestByName(data.docs) }
+        return {
+          ...data,
+          projects: mergedProjects,
+          docs: dedupeDocsNewestByName(data.docs),
+          allRuns: data.allRuns.length ? data.allRuns : (prev?.allRuns ?? []),
+        }
       })
       // AI : workspace — only auto-open a project when sessionStorage says so (returning builders).
       if (mode === "workspace") {
@@ -653,15 +734,30 @@ export function StoreProvider({
 
     let alive = true
 
-    void loadProjectState(scopedProjectId)
+    void loadProjectState(
+      scopedProjectId,
+      (chunk) => {
+        if (!alive || loadGen !== stateLoadGenRef.current) return
+        setState((prev) => ({
+          projects: chunk.projects ?? prev?.projects ?? [],
+          docs: chunk.docs ? dedupeDocsNewestByName(chunk.docs) : (prev?.docs ?? []),
+          runs: chunk.runs ?? prev?.runs ?? [],
+          allRuns: prev?.allRuns ?? [],
+          modelOptions: chunk.modelOptions ?? prev?.modelOptions ?? [],
+        }))
+        if (chunk.projects && isInitialHydrate) setStateSyncing(false)
+        if (chunk.runs) setProjectLoading(false)
+      },
+    )
       .then((data) => {
         if (!alive || loadGen !== stateLoadGenRef.current) return
         applyState(data, scopedProjectId)
         if (!prefetchedAllProjectsRef.current && data.projects.length) {
           prefetchedAllProjectsRef.current = true
           const otherIds = data.projects.map((p) => p.id).filter((id) => id !== scopedProjectId)
-          queueBackgroundProjectPrefetches(otherIds, fetchState)
+          queueBackgroundProjectPrefetches(otherIds, fetchProjectRuns)
         }
+        refreshBillingRuns().catch(console.error)
       })
       .catch((err) => {
         if (alive) setLoadError(err instanceof Error ? err.message : "Failed to load store")
@@ -680,12 +776,22 @@ export function StoreProvider({
     // AI : refetch on project switch so runs/docs re-scope; cache makes switches instant.
   }, [activeProjectId, mode]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // AI : apply cached project state before paint when switching from the dropdown.
+  // AI : apply cached project runs before paint when switching from the dropdown.
   useLayoutEffect(() => {
     if (mode !== "workspace" || !activeProjectId) return
     const cached = readProjectStateCache(activeProjectId)
-    if (!cached) return
-    applyState(cached, activeProjectId)
+    if (cached) {
+      applyState(cached, activeProjectId)
+      setProjectLoading(false)
+      return
+    }
+    const account = readAccountStateCache()
+    const runs = readProjectRunsCache(activeProjectId)
+    if (!account || !runs) return
+    applyState(
+      { ...account, runs: runs.runs, allRuns: readBillingRunsCache() ?? [] },
+      activeProjectId,
+    )
     setProjectLoading(false)
   }, [activeProjectId, mode, applyState])
 
@@ -1072,6 +1178,20 @@ export function StoreProvider({
   }, [])
 
   // AI : mirror server runs locally — upsert so Testing can attach test verdict on an existing row.
+  const hydrateRunDetail = useCallback(async (runId: PipelineRun["id"]) => {
+    if (mode === "demo") return
+    const { run } = await apiJson<{ run: PipelineRun }>(API_ROUTES.run(runId))
+    setState((prev) => {
+      if (!prev) return prev
+      const patch = (r: PipelineRun) => (r.id === runId ? run : r)
+      return {
+        ...prev,
+        runs: prev.runs.some((r) => r.id === runId) ? prev.runs.map(patch) : prev.runs,
+        allRuns: prev.allRuns.some((r) => r.id === runId) ? prev.allRuns.map(patch) : prev.allRuns,
+      }
+    })
+  }, [mode])
+
   const addRun = useCallback((r: PipelineRun) => {
     setState((prev) => {
       if (!prev) return prev
@@ -1253,6 +1373,8 @@ export function StoreProvider({
       inferenceInputDocIds: inferenceInputsByProject[project.id] ?? {},
       setInferenceInputDocIds: boundSetInferenceInputDocIds,
       billingRuns,
+      refreshBillingRuns,
+      hydrateRunDetail,
       billingAccount,
       refreshBilling,
       earningsAccount,
@@ -1288,6 +1410,8 @@ export function StoreProvider({
     inferenceInputsByProject,
     boundSetInferenceInputDocIds,
     billingRuns,
+    refreshBillingRuns,
+    hydrateRunDetail,
     billingAccount,
     refreshBilling,
     earningsAccount,
@@ -1313,6 +1437,7 @@ export function StoreProvider({
     return {
       projects: migratedProjects,
       billingRuns,
+      refreshBillingRuns,
       billingAccount,
       refreshBilling,
       earningsAccount,
@@ -1331,6 +1456,7 @@ export function StoreProvider({
     state,
     migratedProjects,
     billingRuns,
+    refreshBillingRuns,
     billingAccount,
     refreshBilling,
     earningsAccount,

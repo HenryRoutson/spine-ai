@@ -23,6 +23,7 @@ import {
   type user_id_string,
 } from "./require_auth";
 import { recordBillingFlow, recordSignupCredit, type billing_flow_type } from "./billing_flow";
+import { isUpstreamFetchError, storeErrorMessage } from "./errors";
 import { freeCreditCentsAt } from "./free_credit_schedule";
 import { logger } from "./server_logger";
 import { getStripe } from "./stripe_client";
@@ -239,44 +240,50 @@ async function billingDbWrite() {
 }
 
 async function loadSupabaseAccount(userId: BillingUserKey): Promise<BillingAccount | null> {
-  const db = await billingDb();
-  const { data, error } = await db
-    .from("billing_accounts")
-    .select("balance_cents, total_billed_cents, total_usage_cents, subscribed, credited_sessions")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (error) {
-    if (!isMissingBillingTable(error)) console.error("billing_accounts:", error.message);
-    // AI : migration 008 not applied yet — read without total_usage_cents.
-    if ((error.message ?? "").includes("total_usage_cents")) {
-      const legacy = await db
-        .from("billing_accounts")
-        .select("balance_cents, total_billed_cents, subscribed, credited_sessions")
-        .eq("user_id", userId)
-        .maybeSingle();
-      if (legacy.error) {
-        if (!isMissingBillingTable(legacy.error)) console.error("billing_accounts:", legacy.error.message);
-        return null;
+  try {
+    const db = await billingDb();
+    const { data, error } = await db
+      .from("billing_accounts")
+      .select("balance_cents, total_billed_cents, total_usage_cents, subscribed, credited_sessions")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) {
+      if (!isMissingBillingTable(error)) console.error("billing_accounts:", error.message);
+      // AI : migration 008 not applied yet — read without total_usage_cents.
+      if ((error.message ?? "").includes("total_usage_cents")) {
+        const legacy = await db
+          .from("billing_accounts")
+          .select("balance_cents, total_billed_cents, subscribed, credited_sessions")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (legacy.error) {
+          if (!isMissingBillingTable(legacy.error)) console.error("billing_accounts:", legacy.error.message);
+          return null;
+        }
+        if (!legacy.data) return null;
+        return {
+          balanceCents: Number(legacy.data.balance_cents),
+          totalBilledCents: Number(legacy.data.total_billed_cents),
+          totalUsageCents: 0,
+          subscribed: legacy.data.subscribed,
+          creditedSessions: legacy.data.credited_sessions ?? [],
+        };
       }
-      if (!legacy.data) return null;
-      return {
-        balanceCents: Number(legacy.data.balance_cents),
-        totalBilledCents: Number(legacy.data.total_billed_cents),
-        totalUsageCents: 0,
-        subscribed: legacy.data.subscribed,
-        creditedSessions: legacy.data.credited_sessions ?? [],
-      };
+      return null;
     }
+    if (!data) return null;
+    return {
+      balanceCents: Number(data.balance_cents),
+      totalBilledCents: Number(data.total_billed_cents),
+      totalUsageCents: Number(data.total_usage_cents ?? 0),
+      subscribed: data.subscribed,
+      creditedSessions: data.credited_sessions ?? [],
+    };
+  } catch (err) {
+    if (isUpstreamFetchError(err)) throw err;
+    console.error("loadSupabaseAccount:", storeErrorMessage(err));
     return null;
   }
-  if (!data) return null;
-  return {
-    balanceCents: Number(data.balance_cents),
-    totalBilledCents: Number(data.total_billed_cents),
-    totalUsageCents: Number(data.total_usage_cents ?? 0),
-    subscribed: data.subscribed,
-    creditedSessions: data.credited_sessions ?? [],
-  };
 }
 
 async function saveSupabaseAccount(userId: BillingUserKey, account: BillingAccount): Promise<void> {
@@ -552,25 +559,30 @@ export function verifyStripeWebhookPayload(body: string, signature: string | nul
 
 // AI : paid credit ledger for Billing tab — RLS-scoped read via service role after auth gate.
 export async function loadBillingCreditHistory(key: BillingUserKey): Promise<BillingCreditHistoryEntry[]> {
-  const admin = await createAdminClient();
-  if (admin) {
-    const { data, error } = await admin
-      .from("billing_credit_ledger")
-      .select("credit_key, amount_cents, source, created_at")
-      .eq("user_id", key)
-      .order("created_at", { ascending: false })
-      .limit(100);
-    if (!error && data) {
-      return data.map((row) => ({
-        creditKey: row.credit_key as string,
-        amountCents: Number(row.amount_cents),
-        source: row.source as BillingCreditHistoryEntry["source"],
-        createdAt: row.created_at as string,
-      }));
+  try {
+    const admin = await createAdminClient();
+    if (admin) {
+      const { data, error } = await admin
+        .from("billing_credit_ledger")
+        .select("credit_key, amount_cents, source, created_at")
+        .eq("user_id", key)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (!error && data) {
+        return data.map((row) => ({
+          creditKey: row.credit_key as string,
+          amountCents: Number(row.amount_cents),
+          source: row.source as BillingCreditHistoryEntry["source"],
+          createdAt: row.created_at as string,
+        }));
+      }
+      if (error && !isMissingCreditLedgerTable(error)) {
+        billLog.warn(`loadBillingCreditHistory failed`, { key, error: error.message });
+      }
     }
-    if (error && !isMissingCreditLedgerTable(error)) {
-      billLog.warn(`loadBillingCreditHistory failed`, { key, error: error.message });
-    }
+  } catch (err) {
+    if (!isUpstreamFetchError(err)) throw err;
+    billLog.warn(`loadBillingCreditHistory upstream fetch failed`, { key });
   }
   return [];
 }

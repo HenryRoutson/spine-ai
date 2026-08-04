@@ -52,3 +52,9 @@ export function finalizeRunMetrics(
     billedCents: sumStepBilledCents(steps),
   }
 }
+
+// AI : slim list rows from GET /api/state omit heavy step payloads — hydrate via GET /api/runs/:id.
+export function isSlimPipelineRun(run: PipelineRun): boolean {
+  if (!run.steps.length) return false
+  return run.steps.every((s) => !s.outputJson && !(s.llmCalls?.length) && !(s.serverLogs?.length))
+}

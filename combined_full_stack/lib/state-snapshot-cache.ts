@@ -36,10 +36,12 @@ export function readStateSnapshot(): CachedServerState | null {
 }
 
 export function writeStateSnapshot(state: CachedServerState): void {
+  // AI : omit account-wide billing runs from sessionStorage — reload lazily via GET /api/runs?scope=account.
+  const { allRuns: _billingRuns, ...persisted } = state
   memorySnapshot = state
   if (typeof window === "undefined") return
   try {
-    sessionStorage.setItem(KEY, JSON.stringify(state))
+    sessionStorage.setItem(KEY, JSON.stringify({ ...persisted, allRuns: [] }))
   } catch {
     /* quota — memory cache still helps client navigations */
   }

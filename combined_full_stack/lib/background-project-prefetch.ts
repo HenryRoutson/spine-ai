@@ -1,8 +1,8 @@
 import {
-  readProjectStateCache,
-  writeProjectStateCache,
-  type CachedServerState,
+  readProjectRunsCache,
+  writeProjectRunsCache,
 } from "@/lib/project-state-cache"
+import type { PipelineRun } from "@/lib/types"
 
 export type BackgroundPrefetchProgress = {
   done: number
@@ -29,12 +29,12 @@ export function getBackgroundPrefetchProgress(): BackgroundPrefetchProgress {
   return progress
 }
 
-// AI : load non-active projects one at a time so the open project keeps bandwidth.
+// AI : prefetch slim project runs only — account slice is already hydrated once.
 export function queueBackgroundProjectPrefetches(
   projectIds: readonly string[],
-  fetchState: (projectId: string) => Promise<CachedServerState>,
+  fetchProjectRuns: (projectId: string) => Promise<PipelineRun[]>,
 ): void {
-  const pending = projectIds.filter((id) => id && !readProjectStateCache(id))
+  const pending = projectIds.filter((id) => id && !readProjectRunsCache(id))
   const key = pending.join(",")
   if (!pending.length) {
     if (progress.active) {
@@ -52,8 +52,8 @@ export function queueBackgroundProjectPrefetches(
   void (async () => {
     for (const projectId of pending) {
       try {
-        const data = await fetchState(projectId)
-        writeProjectStateCache(projectId, data)
+        const runs = await fetchProjectRuns(projectId)
+        writeProjectRunsCache(projectId, runs)
       } catch {
         // AI : skip failed background prefetches — hover/open will retry.
       }

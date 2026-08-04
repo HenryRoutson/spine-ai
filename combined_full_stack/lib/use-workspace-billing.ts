@@ -11,6 +11,7 @@ export function useWorkspaceBilling() {
   return {
     billingAccount: source.billingAccount,
     refreshBilling: source.refreshBilling,
+    refreshBillingRuns: source.refreshBillingRuns,
     billingRuns: source.billingRuns,
     runs: builder?.runs ?? [],
     project: builder?.project ?? null,

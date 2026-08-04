@@ -71,7 +71,11 @@ function formatCreditWhen(iso: string): string {
 
 export function Billing() {
   useMarkPrimarySectionReady("billing")
-  const { runs, billingRuns, project, billingAccount, refreshBilling } = useWorkspaceBilling()
+  const { runs, billingRuns, project, billingAccount, refreshBilling, refreshBillingRuns } = useWorkspaceBilling()
+
+  useEffect(() => {
+    void refreshBillingRuns().catch(console.error)
+  }, [refreshBillingRuns])
   const [scope, setScope] = useState<BillingScope>(project ? "all" : "all")
   const [checkoutKey, setCheckoutKey] = useState<string | null>(null)
   const [banner, setBanner] = useState<string | null>(null)

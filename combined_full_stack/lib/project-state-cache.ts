@@ -1,21 +1,31 @@
 import type { DocRef, ModelOptionPublic, PipelineRun, Project } from "@/lib/types"
 
-// AI : per-project /api/state responses — kept in memory for instant project switches.
-export type CachedServerState = {
+// AI : account-wide slice — one copy shared across all project switches.
+export type AccountStateSlice = {
   projects: Project[]
   docs: DocRef[]
-  runs: PipelineRun[]
-  allRuns: PipelineRun[]
   modelOptions: ModelOptionPublic[]
 }
 
-type ProjectStateCacheEntry = {
-  data: CachedServerState
+// AI : per-project runs only — background prefetch no longer duplicates projects/docs/allRuns.
+export type ProjectRunsSlice = {
+  runs: PipelineRun[]
+}
+
+export type CachedServerState = AccountStateSlice & {
+  runs: PipelineRun[]
+  allRuns: PipelineRun[]
+}
+
+type CacheEntry<T> = {
+  data: T
   fetchedAt: number
   bytes: number
 }
 
-const projectStateById = new Map<string, ProjectStateCacheEntry>()
+let accountSlice: CacheEntry<AccountStateSlice> | null = null
+let billingRunsCache: CacheEntry<PipelineRun[]> | null = null
+const projectRunsById = new Map<string, CacheEntry<ProjectRunsSlice>>()
 const cacheListeners = new Set<() => void>()
 let cacheRevision = 0
 
@@ -56,29 +66,45 @@ export type ProjectStateCacheStat = {
 }
 
 export function getProjectStateCacheStats(): ProjectStateCacheStat[] {
-  return [...projectStateById.entries()].map(([projectId, entry]) => ({
+  const docCount = accountSlice?.data.docs.length ?? 0
+  return [...projectRunsById.entries()].map(([projectId, entry]) => ({
     projectId,
     bytes: entry.bytes,
     fetchedAt: entry.fetchedAt,
-    docCount: entry.data.docs.length,
+    docCount,
     runCount: entry.data.runs.length,
   }))
 }
 
 export function getProjectStateCacheTotalBytes(): number {
-  let total = 0
-  for (const entry of projectStateById.values()) total += entry.bytes
+  let total = accountSlice?.bytes ?? 0
+  total += billingRunsCache?.bytes ?? 0
+  for (const entry of projectRunsById.values()) total += entry.bytes
   return total
 }
 
-export function readProjectStateCache(projectId: string): CachedServerState | null {
-  if (!projectId) return null
-  return projectStateById.get(projectId)?.data ?? null
+export function readAccountStateCache(): AccountStateSlice | null {
+  return accountSlice?.data ?? null
 }
 
-export function writeProjectStateCache(projectId: string, data: CachedServerState): void {
+export function writeAccountStateCache(data: AccountStateSlice): void {
+  accountSlice = {
+    data,
+    fetchedAt: Date.now(),
+    bytes: estimateJsonBytes(data),
+  }
+  notifyCacheListeners()
+}
+
+export function readProjectRunsCache(projectId: string): ProjectRunsSlice | null {
+  if (!projectId) return null
+  return projectRunsById.get(projectId)?.data ?? null
+}
+
+export function writeProjectRunsCache(projectId: string, runs: PipelineRun[]): void {
   if (!projectId) return
-  projectStateById.set(projectId, {
+  const data = { runs }
+  projectRunsById.set(projectId, {
     data,
     fetchedAt: Date.now(),
     bytes: estimateJsonBytes(data),
@@ -86,12 +112,46 @@ export function writeProjectStateCache(projectId: string, data: CachedServerStat
   notifyCacheListeners()
 }
 
-export function clearProjectStateCache(projectId: string): void {
-  if (!projectId) return
-  projectStateById.delete(projectId)
+export function readBillingRunsCache(): PipelineRun[] | null {
+  return billingRunsCache?.data ?? null
+}
+
+export function writeBillingRunsCache(runs: PipelineRun[]): void {
+  billingRunsCache = {
+    data: runs,
+    fetchedAt: Date.now(),
+    bytes: estimateJsonBytes(runs),
+  }
   notifyCacheListeners()
 }
 
+export function readProjectStateCache(projectId: string): CachedServerState | null {
+  const account = readAccountStateCache()
+  if (!account) return null
+  const projectRuns = projectId ? readProjectRunsCache(projectId) : null
+  const billingRuns = readBillingRunsCache()
+  return {
+    ...account,
+    runs: projectRuns?.runs ?? [],
+    allRuns: billingRuns ?? [],
+  }
+}
+
+export function writeProjectStateCache(projectId: string, data: CachedServerState): void {
+  writeAccountStateCache({
+    projects: data.projects,
+    docs: data.docs,
+    modelOptions: data.modelOptions,
+  })
+  if (projectId) writeProjectRunsCache(projectId, data.runs)
+  if (data.allRuns.length) writeBillingRunsCache(data.allRuns)
+}
+
+export function clearProjectStateCache(projectId: string): void {
+  if (!projectId) return
+  projectRunsById.delete(projectId)
+  notifyCacheListeners()
+}
 
 export function warmProjectPrefetches(
   projectIds: readonly string[],

@@ -2,6 +2,7 @@ import {
   FEEDBACK_CREDIT_CENTS,
   NEW_ACCOUNT_BALANCE_CENTS,
 } from "@/lib/billing_config";
+import { isUpstreamFetchError } from "./errors";
 import { createAdminClient } from "./supabase_admin";
 
 export type free_credit_kind = "signup" | "feedback";
@@ -21,21 +22,26 @@ export async function freeCreditCentsAt(
   kind: free_credit_kind,
   at: Date = new Date(),
 ): Promise<number> {
-  const admin = await createAdminClient();
-  if (!admin) return FALLBACK_CENTS[kind];
+  try {
+    const admin = await createAdminClient();
+    if (!admin) return FALLBACK_CENTS[kind];
 
-  const { data, error } = await admin.rpc("free_credit_cents_at", {
-    p_kind: kind,
-    p_at: at.toISOString(),
-  });
-  if (error) {
-    if (!isMissingFreeCreditSchedule(error)) {
-      console.warn("free_credit_cents_at rpc failed:", error.message);
+    const { data, error } = await admin.rpc("free_credit_cents_at", {
+      p_kind: kind,
+      p_at: at.toISOString(),
+    });
+    if (error) {
+      if (!isMissingFreeCreditSchedule(error)) {
+        console.warn("free_credit_cents_at rpc failed:", error.message);
+      }
+      return FALLBACK_CENTS[kind];
     }
+    const cents = Number(data);
+    return cents > 0 ? cents : FALLBACK_CENTS[kind];
+  } catch (err) {
+    if (!isUpstreamFetchError(err)) throw err;
     return FALLBACK_CENTS[kind];
   }
-  const cents = Number(data);
-  return cents > 0 ? cents : FALLBACK_CENTS[kind];
 }
 
 export async function loadFreeCreditAmounts(): Promise<{

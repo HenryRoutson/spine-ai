@@ -18,7 +18,7 @@ import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { quotesFromJson, QuoteLinks } from "@/components/quote-links"
 import { formatCostCents, formatSecondsShort } from "@/lib/format"
 import { timeAgo } from "@/lib/time-ago"
-import { runBilledCents, runSavedCents, runTotalMs } from "@/lib/run-metrics"
+import { runBilledCents, runSavedCents, runTotalMs, isSlimPipelineRun } from "@/lib/run-metrics"
 import { useStatusPalette } from "@/lib/chart-colors"
 import { isSharedRun } from "@/lib/shared-link-types"
 import { ResizableSplit } from "@/components/resizable-split"
@@ -41,7 +41,7 @@ import { Search, GitCompareArrows, Zap, Copy, Check, AlertTriangle, Bot } from "
 import { resolveRunInputDocIds, runInputDocsSummary } from "@/lib/inference-input"
 import { stepIoLabels } from "@/lib/module-kinds"
 import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
-import type { DocRef, ModuleId, PipelineRun, RunStepStatus } from "@/lib/types"
+import type { DocRef, ModuleId, PipelineRun, RunId, RunStepStatus } from "@/lib/types"
 import { runLogText } from "@/lib/run-log-text"
 import { runLogJson } from "@/lib/run-log-json"
 import { copyTextToClipboard } from "@/lib/clipboard"
@@ -59,7 +59,7 @@ import { LlmRetryGridSection } from "@/components/logging/llm-retry-grid"
 
 export function Logging() {
   const palette = useStatusPalette()
-  const { runs, billingRuns, docs, modules, models, project, typeAliases, model: globalModel } = useStore()
+  const { runs, billingRuns, docs, modules, models, project, typeAliases, model: globalModel, hydrateRunDetail } = useStore()
   const { focusRunId, clearFocusRun, setSharedRunDocScope } = useAppShell()
   const [query, setQuery] = useState("")
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
@@ -113,6 +113,11 @@ export function Logging() {
   }, [runs, query, errorsOnly])
 
   const active = runs.find((r) => r.id === selectedRun) ?? billingRuns.find((r) => r.id === selectedRun) ?? null
+
+  useEffect(() => {
+    if (!selectedRun || !active || !isSlimPipelineRun(active)) return
+    void hydrateRunDetail(selectedRun as RunId).catch(console.error)
+  }, [selectedRun, active, hydrateRunDetail])
 
   useEffect(() => {
     if (active && isSharedRun(active) && active.sharedLinkId) {

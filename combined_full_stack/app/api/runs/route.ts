@@ -34,8 +34,35 @@ import {
 import { RunSource, type DocId, type DocRef, type ModelId, type ModuleId, type ProjectId } from "@/lib/server/types";
 import { UnknownModelError, parseOptionalRequestModel } from "@/lib/server/model_catalog";
 import { ensureModelOptionsFresh } from "@/lib/server/openrouter_models";
+import { slimPipelineRuns } from "@/lib/server/state_payload";
 
 const apiLog = logger("api:runs");
+
+// AI : slim run lists — project-scoped for prefetch, account-scoped for billing (lazy).
+export async function GET(req: NextRequest) {
+  const ctx = await requireAuthStore("read");
+  if (ctx instanceof NextResponse) return ctx;
+  const { store } = ctx;
+
+  const scope = req.nextUrl.searchParams.get("scope");
+  const projectId = req.nextUrl.searchParams.get("projectId") as ProjectId | null;
+
+  if (scope === "account") {
+    apiLog.debug(`GET /api/runs account`, { count: store.runs().length });
+    return NextResponse.json({ runs: slimPipelineRuns(store.runs()) });
+  }
+
+  if (!projectId) {
+    return apiError("projectId or scope=account required", HTTP.BAD_REQUEST);
+  }
+  if (!store.project(projectId)) {
+    return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
+  }
+
+  const runs = slimPipelineRuns(store.runs(projectId));
+  apiLog.debug(`GET /api/runs project`, { projectId, count: runs.length });
+  return NextResponse.json({ runs });
+}
 
 // AI : todo §8 — after() keeps the pipeline alive once the response is sent (Vercel
 // AI : freezes plain dangling promises); maxDuration is the Fluid-compute ceiling.

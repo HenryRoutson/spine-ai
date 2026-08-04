@@ -7,6 +7,7 @@ import {
   getProjectStateCacheRevision,
   getProjectStateCacheStats,
   getProjectStateCacheTotalBytes,
+  readBillingRunsCache,
   subscribeProjectStateCache,
 } from "@/lib/project-state-cache"
 import { subscribeBackgroundPrefetch, getBackgroundPrefetchProgress } from "@/lib/background-project-prefetch"
@@ -33,6 +34,7 @@ export function SettingsDataCache() {
 
   const stats = getProjectStateCacheStats()
   const totalBytes = getProjectStateCacheTotalBytes()
+  const billingRunCount = readBillingRunsCache()?.length ?? 0
   const projectCount = builder?.projects.length ?? 0
   const namesById = new Map<string, string>((builder?.projects ?? []).map((p) => [String(p.id), p.name]))
   const sorted = [...stats].sort((a, b) => b.bytes - a.bytes)
@@ -43,12 +45,12 @@ export function SettingsDataCache() {
       <div className="border-b border-border px-4 py-3">
         <h3 className="text-sm font-semibold">Project data cache</h3>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          JSON from <span className="font-mono">/api/state</span> kept in memory for instant project switches.
+          Account data and per-project runs kept in memory for instant switches. Billing runs load separately.
           {warming ? " Other projects are still warming in the background." : null}
         </p>
       </div>
       <div className="space-y-3 px-4 py-3">
-        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <div>
             <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Cached</dt>
             <dd className="font-mono text-sm">{sorted.length}</dd>
@@ -66,6 +68,10 @@ export function SettingsDataCache() {
             <dd className="font-mono text-sm">
               {sorted.length ? formatDataBytes(Math.round(totalBytes / sorted.length)) : "—"}
             </dd>
+          </div>
+          <div>
+            <dt className="text-[10px] uppercase tracking-wide text-muted-foreground">Billing runs</dt>
+            <dd className="font-mono text-sm">{billingRunCount || "—"}</dd>
           </div>
         </dl>
         {sorted.length ? (

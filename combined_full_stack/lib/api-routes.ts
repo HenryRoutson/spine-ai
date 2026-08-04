@@ -20,6 +20,7 @@ export const API_ROUTES = {
     `/api/docs/${id}/text${layer === "vision" ? "?layer=vision" : ""}`,
   docFile: (id: string) => `/api/docs/${id}/file`,
   runs: "/api/runs",
+  runsAccount: "/api/runs?scope=account",
   run: (id: string) => `/api/runs/${id}`,
   runProgress: (id: string) => `/api/runs/${id}/progress`,
   runClientStep: (id: string) => `/api/runs/${id}/client-step`,
