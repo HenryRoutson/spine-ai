@@ -15,6 +15,7 @@ import {
   wrapPrimarySectionChange,
 } from "@/lib/primary-section-opening"
 import { AppMode, navigateToBuildMode, navigateToRunMode } from "@/lib/app-mode-nav"
+import { CONSUMER_NAV_ITEMS } from "@/lib/app-nav-config"
 import { AppShellKind, useAppShellKind } from "@/lib/app-shell-kind"
 import { ProjectPickerContext, useConsumerStore, useOptionalConsumerStore, useOptionalStore, useStore } from "@/lib/store"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
@@ -78,6 +79,14 @@ const Documents = dynamic(() => import("@/components/documents").then((m) => ({ 
 const Billing = dynamic(() => import("@/components/billing").then((m) => ({ default: m.Billing })), {
   loading: () => <BillingPanelSkeleton /> },
 )
+const ProjectBilling = dynamic(
+  () => import("@/components/project-billing").then((m) => ({ default: m.ProjectBilling })),
+  { loading: () => <BillingPanelSkeleton variant="project" /> },
+)
+const ProjectSettings = dynamic(
+  () => import("@/components/project-settings").then((m) => ({ default: m.ProjectSettings })),
+  { loading: () => <PanelLoading label="loading project settings…" /> },
+)
 const SettingsPanel = dynamic(() => import("@/components/settings").then((m) => ({ default: m.Settings })), {
   loading: () => <SettingsPanelSkeleton /> },
 )
@@ -119,6 +128,8 @@ const BUILDER_PANEL_IDS: AppWindowId[] = [
   "cache",
   "documents",
   "docs",
+  "project-billing",
+  "project-settings",
   "billing",
   "settings",
 ]
@@ -145,6 +156,10 @@ function renderWindowPanel(windowId: AppWindowId): ReactNode {
       return <Documents />
     case "docs":
       return <DocumentationPanel />
+    case "project-billing":
+      return <ProjectBilling />
+    case "project-settings":
+      return <ProjectSettings />
     case "billing":
       return <Billing />
     case "settings":
@@ -301,6 +316,8 @@ function ConsumerShellLayoutInner({ variant = "default" }: { variant?: "default"
   const { activeWindow, setActiveWindow } = useAppShell()
   const { stateSyncing } = useConsumerStore()
   const consumerWindow = useMemo(() => resolveConsumerWindow(activeWindow), [activeWindow])
+  const showWorkspaceNav =
+    !isAccountWindow(consumerWindow) && CONSUMER_NAV_ITEMS.length > 1
   const primarySection = resolvePrimarySection(AppMode.Run, consumerWindow)
   const { openingSection, beginOpening } = usePrimarySectionOpening()
   useSyncPrimarySectionReady(primarySection)
@@ -351,6 +368,13 @@ function ConsumerShellLayoutInner({ variant = "default" }: { variant?: "default"
             <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center bg-background/40 pt-16 backdrop-blur-[1px]">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
+          ) : null}
+          {showWorkspaceNav ? (
+            <AppWindowNav
+              activeWindow={consumerWindow}
+              onSelect={setActiveWindow}
+              items={CONSUMER_NAV_ITEMS}
+            />
           ) : null}
           <div className="flex min-h-0 flex-1 flex-col">
             <CachedShellWindowPanels

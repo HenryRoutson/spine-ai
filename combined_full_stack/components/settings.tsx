@@ -6,8 +6,6 @@ import { createClient } from "@/utils/supabase/client"
 import { useWorkspaceModel } from "@/lib/use-workspace-model"
 import { ModelSelector } from "@/components/model-selector"
 import { Button } from "@/components/ui/button"
-import { WindowHeader } from "@/components/window-header"
-import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { JsonHighlight } from "@/components/highlight"
 import { ResizableSplit } from "@/components/resizable-split"
 import { settingsNavSplit } from "@/lib/layout-split-settings"
@@ -66,8 +64,13 @@ import { SettingsAccountRowSkeleton } from "@/components/account-panel-skeletons
 import { readSettingsAccountSnapshot } from "@/lib/settings-account-snapshot-cache"
 import { fetchSettingsAccount } from "@/lib/warm-settings-data"
 import { SettingsDataCache } from "@/components/settings-data-cache"
-import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
+import {
+  DEFAULT_QUICK_PROJECT_DELETE,
+  readQuickProjectDelete,
+  writeQuickProjectDelete,
+} from "@/lib/project-delete-settings"
 import { AppPrimarySection } from "@/lib/app-primary-section-labels"
+import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 
 // AI : vscode-style preview colors — mirror public/json-viewer.html theme "vscode"
 function VscodeSyntaxPreview({ json }: { json: string }) {
@@ -120,6 +123,7 @@ const SETTINGS_SECTIONS = [
   { id: "settings-inference", label: "Inference" },
   { id: "settings-colors", label: "Status colours" },
   { id: "settings-data-cache", label: "Data cache" },
+  { id: "settings-projects", label: "Projects" },
   { id: "settings-privacy", label: "Privacy" },
 ] as const
 
@@ -139,6 +143,7 @@ export function Settings() {
   const [inferenceOutputStepsOnly, setInferenceOutputStepsOnly] = useState(DEFAULT_INFERENCE_OUTPUT_STEPS_ONLY)
   const [allowDuplicateRuns, setAllowDuplicateRuns] = useState(DEFAULT_ALLOW_DUPLICATE_RUNS)
   const [colorScheme, setColorScheme] = useState<ColorSchemeId>(DEFAULT_COLOR_SCHEME)
+  const [quickProjectDelete, setQuickProjectDelete] = useState(DEFAULT_QUICK_PROJECT_DELETE)
   const [llmProvidersOpen, setLlmProvidersOpen] = useState(false)
   const { width: navWidth, setWidth: setNavWidth, commitWidth: commitNavWidth } =
     usePersistedLeadingWidth(settingsNavSplit)
@@ -163,6 +168,7 @@ export function Settings() {
     setInferenceOutputStepsOnly(readInferenceOutputStepsOnly())
     setAllowDuplicateRuns(readAllowDuplicateRuns())
     setColorScheme(readColorScheme())
+    setQuickProjectDelete(readQuickProjectDelete())
   }, [])
 
   useEffect(() => {
@@ -227,15 +233,14 @@ export function Settings() {
     setColorScheme(scheme)
   }
 
-  const settingsPanel = windowPanelHeader("settings")
+  function pickQuickProjectDelete(enabled: boolean) {
+    writeQuickProjectDelete(enabled)
+    setQuickProjectDelete(enabled)
+  }
+
 
   return (
     <div className="flex h-full flex-col">
-      <WindowHeader
-        step={settingsPanel.step}
-        title={settingsPanel.title}
-        description={settingsPanel.description}
-      />
       <ResizableSplit
         className="min-h-0 flex-1"
         leadingWidth={navWidth}
@@ -512,6 +517,29 @@ export function Settings() {
           </section>
 
           <SettingsDataCache />
+
+          <section id="settings-projects" className="rounded-lg border border-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+              <h3 className="text-sm font-semibold">Projects</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                How projects appear in lists and where deletion is allowed.
+              </p>
+            </div>
+            <label className="flex cursor-pointer items-start gap-3 px-4 py-3">
+              <Switch
+                checked={quickProjectDelete}
+                onCheckedChange={(checked) => pickQuickProjectDelete(!!checked)}
+                className="mt-0.5"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">Quick delete from project lists</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  When on, delete buttons appear on the project picker and switcher. When off, delete only from each
+                  project&apos;s Settings tab (Library → Settings).
+                </span>
+              </span>
+            </label>
+          </section>
 
           <div id="settings-privacy">
             <PrivacySettings />

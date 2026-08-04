@@ -95,6 +95,44 @@ export type AccountRefreshOpts = { force?: boolean }
 // AI : client coalesce — billing tier is 20/min; many surfaces call refreshBilling on mount/hover/run.
 const BILLING_REFRESH_MIN_MS = 5_000
 
+// AI : sessionStorage can outlive a deleted project — never prefetch runs for unknown ids.
+function workspaceActiveProjectFromSession(): string {
+  const id = readActiveProjectSession()
+  if (!id) return ""
+  const account = readAccountStateCache()
+  if (account && !account.projects.some((p) => p.id === id)) {
+    clearActiveProjectSession()
+    return ""
+  }
+  return id
+}
+
+function accountKnowsProject(projectId: string, account: ReturnType<typeof readAccountStateCache>): boolean {
+  return !!projectId && account?.projects.some((p) => p.id === projectId)
+}
+
+function upsertProjectInAccountCache(project: Project): void {
+  const account = readAccountStateCache()
+  const projects = account?.projects.some((p) => p.id === project.id)
+    ? account.projects.map((p) => (p.id === project.id ? project : p))
+    : [project, ...(account?.projects ?? [])]
+  writeAccountStateCache({
+    projects,
+    docs: account?.docs ?? [],
+    modelOptions: account?.modelOptions ?? [],
+  })
+}
+
+function pruneStaleProjectFromAccountCache(projectId: string): void {
+  const account = readAccountStateCache()
+  if (!account?.projects.some((p) => p.id === projectId)) return
+  writeAccountStateCache({
+    projects: account.projects.filter((p) => p.id !== projectId),
+    docs: account.docs,
+    modelOptions: account.modelOptions,
+  })
+}
+
 // AI : PUT /api/projects/[id] — id is in the URL; createdAt is immutable server-side.
 function serializeProjectPutBody(p: Project): string {
   return JSON.stringify({
@@ -352,7 +390,7 @@ export function StoreProvider({
       }
       return DEMO_DEFAULT_PROJECT_ID
     }
-    return mode === StoreMode.Workspace ? (readActiveProjectSession() ?? "") : ""
+    return mode === StoreMode.Workspace ? workspaceActiveProjectFromSession() : ""
   })
   const [model, setModel] = useState<string>(DEFAULT_MODEL)
   const [projectLoading, setProjectLoading] = useState(false)
@@ -486,9 +524,21 @@ export function StoreProvider({
   const fetchProjectRuns = useCallback(
     async (projectId: string) => {
       if (mode === StoreMode.Demo) return [] as PipelineRun[]
-      const data = await apiJson<{ runs: PipelineRun[] }>(
-        `${API_ROUTES.runs}?projectId=${encodeURIComponent(projectId)}`,
-      )
+      const account = readAccountStateCache()
+      if (!accountKnowsProject(projectId, account)) return [] as PipelineRun[]
+      const url = `${API_ROUTES.runs}?projectId=${encodeURIComponent(projectId)}`
+      const res = await fetch(url, { credentials: FETCH_CREDENTIALS })
+      if (res.status === 404) {
+        clearProjectStateCache(projectId)
+        pruneStaleProjectFromAccountCache(projectId)
+        if (readActiveProjectSession() === projectId) clearActiveProjectSession()
+        return [] as PipelineRun[]
+      }
+      if (!res.ok) {
+        const body = await readApiErrorBody(res)
+        throw new Error(formatApiError(url, res, body))
+      }
+      const data = (await res.json()) as { runs: PipelineRun[] }
       writeProjectRunsCache(projectId, data.runs)
       return data.runs
     },
@@ -516,17 +566,19 @@ export function StoreProvider({
         return { ...account, runs: [], allRuns: readBillingRunsCache() ?? [] }
       }
 
-      if (account && cachedRuns) {
-        return {
-          ...account,
-          runs: cachedRuns.runs,
-          allRuns: readBillingRunsCache() ?? [],
+      if (account && projectId && accountKnowsProject(projectId, account)) {
+        if (cachedRuns) {
+          return {
+            ...account,
+            runs: cachedRuns.runs,
+            allRuns: readBillingRunsCache() ?? [],
+          }
         }
-      }
-
-      if (account && projectId) {
-        const runs = await fetchProjectRuns(projectId)
-        return { ...account, runs, allRuns: readBillingRunsCache() ?? [] }
+        // AI : paint from account cache immediately — hydrate runs in the background.
+        void fetchProjectRuns(projectId)
+          .then((runs) => onChunk?.({ runs }))
+          .catch(console.error)
+        return { ...account, runs: [], allRuns: readBillingRunsCache() ?? [] }
       }
 
       const prefetched = projectId ? prefetchCache.current.get(projectId) : undefined
@@ -559,6 +611,7 @@ export function StoreProvider({
   const prefetchProject = useCallback(
     (projectId: string) => {
       if (!projectId || projectId === activeProjectId) return
+      if (!accountKnowsProject(projectId, readAccountStateCache())) return
       if (readProjectRunsCache(projectId)) return
       if (prefetchCache.current.has(projectId)) return
       const entry: PrefetchEntry = {
@@ -640,9 +693,19 @@ export function StoreProvider({
   )
 
   const selectActiveProject = useCallback(
-    (id: string) => {
+    (id: string, opts?: { skipPersist?: boolean }) => {
       if (id === activeProjectId) return
-      stampProjectOpened(id)
+      if (opts?.skipPersist) {
+        setState((prev) => {
+          if (!prev) return prev
+          const current = prev.projects.find((p) => p.id === id)
+          if (!current) return prev
+          const next = { ...current, lastOpenedAt: Date.now() }
+          return { ...prev, projects: prev.projects.map((p) => (p.id === id ? next : p)) }
+        })
+      } else {
+        stampProjectOpened(id)
+      }
       writeActiveProjectSession(id as ProjectId)
       setActiveProjectId(id)
     },
@@ -677,7 +740,20 @@ export function StoreProvider({
   useLayoutEffect(() => {
     if (mode === StoreMode.Demo) return
     const snapshot = readStateSnapshot()
-    if (snapshot) setState(snapshot)
+    if (snapshot) {
+      setState(snapshot)
+      writeAccountStateCache({
+        projects: snapshot.projects,
+        docs: snapshot.docs,
+        modelOptions: snapshot.modelOptions,
+      })
+      const sessionProjectId = readActiveProjectSession()
+      if (sessionProjectId && snapshot.runs.length) {
+        writeProjectRunsCache(sessionProjectId, snapshot.runs)
+      }
+      setStateSyncing(false)
+      hydratedRef.current = true
+    }
     const billing = readBillingSnapshot()
     if (billing) setBillingAccount(billing)
     const earnings = readEarningsSnapshot()
@@ -713,10 +789,10 @@ export function StoreProvider({
       return
     }
 
-    const cached = scopedProjectId ? readProjectStateCache(scopedProjectId) : null
+    const cached = readProjectStateCache(scopedProjectId)
     const instant = !!cached
 
-    if (instant && scopedProjectId) {
+    if (instant) {
       applyState(cached, scopedProjectId)
       setProjectLoading(false)
       if (isInitialHydrate) {
@@ -749,7 +825,7 @@ export function StoreProvider({
           allRuns: prev?.allRuns ?? [],
           modelOptions: chunk.modelOptions ?? prev?.modelOptions ?? [],
         }))
-        if (chunk.projects && isInitialHydrate) setStateSyncing(false)
+        if (chunk.projects) setStateSyncing(false)
         if (chunk.runs) setProjectLoading(false)
       },
     )
@@ -884,10 +960,16 @@ export function StoreProvider({
     })
       .then(async (fresh) => {
         const stamped = { ...fresh, lastOpenedAt: Date.now() }
+        // AI : keep account cache + session snapshot in sync before project-switch effects run.
+        seedProjectInStateSnapshot(stamped)
+        upsertProjectInAccountCache(stamped)
         if (mode === StoreMode.Picker) {
-          // AI : seed session snapshot before workspace open — otherwise hydrate misses the new row.
-          seedProjectInStateSnapshot(stamped)
-          selectActiveProject(fresh.id)
+          setState((prev) => {
+            if (!prev) return prev
+            if (prev.projects.some((p) => p.id === fresh.id)) return prev
+            return { ...prev, projects: [stamped, ...prev.projects] }
+          })
+          selectActiveProject(fresh.id, { skipPersist: true })
           navigateToBuildWorkspace(fresh.id as ProjectId)
           return fresh
         }
@@ -898,7 +980,7 @@ export function StoreProvider({
           return { ...prev, projects: [stamped, ...prev.projects] }
         })
         setProjectLoading(true)
-        selectActiveProject(fresh.id)
+        selectActiveProject(fresh.id, { skipPersist: true })
         // AI : workspace create (e.g. NoProjectsPage) must enter builder shell — session alone leaves consumer/run UI.
         navigateToBuildWorkspace(fresh.id as ProjectId)
         // AI : clone may ingest/rename bundled seed docs server-side — reload docs + backfilled seedDocNames.
@@ -1561,7 +1643,7 @@ export function StoreProvider({
   }
 
   // AI : opening a project not yet in state — keep loading, don't flash the consumer shell.
-  if (mode === StoreMode.Workspace && !project && (activeProjectId || projectLoading || stateSyncing)) {
+  if (mode === StoreMode.Workspace && !project && activeProjectId && (projectLoading || stateSyncing)) {
     return (
       <>
         {saveErrorBanner}

@@ -3,8 +3,6 @@
 // AI : TODO (spec) — prompt context-length profiling grid per subcomponent (documents, JSON blocks, system text).
 import { useMemo, useState, useEffect } from "react"
 import { useStore } from "@/lib/store"
-import { WindowHeader } from "@/components/window-header"
-import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -162,7 +160,6 @@ export function Logging() {
 
   return (
     <div className="flex h-full flex-col">
-      <WindowHeader {...windowPanelHeader("logging")} />
       <ResizableSplit
         className="min-h-0 flex-1"
         leadingWidth={sidebarWidth}

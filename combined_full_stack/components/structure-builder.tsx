@@ -5,8 +5,6 @@ import { useEffect, useMemo, useState } from "react"
 import { Plus, Code2, Sparkles, Lock, Braces } from "lucide-react"
 import { StructureExcelEditor } from "@/components/structure-excel-editor"
 import { StructureTypeAliasEditor, TypeAliasTextSync } from "@/components/structure-type-alias-editor"
-import { WindowHeader } from "@/components/window-header"
-import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useAppShell } from "@/lib/app-shell"
@@ -134,16 +132,8 @@ export function StructureBuilder() {
     setTypeAliases((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
   }
 
-  const structurePanel = windowPanelHeader("structure")
-
   return (
     <div className="flex h-full flex-col">
-      <WindowHeader
-        step={structurePanel.step}
-        title={structurePanel.title}
-        description={structurePanel.description}
-      />
-
       {teamReadOnly && (
         <div className="border-b border-border bg-muted/40 px-4 py-2.5">
           <p className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">

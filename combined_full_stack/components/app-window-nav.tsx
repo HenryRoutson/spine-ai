@@ -1,7 +1,7 @@
 "use client"
 
 import { AlertTriangle } from "lucide-react"
-import { BUILDER_WORKSPACE_NAV_ITEMS } from "@/lib/app-nav-config"
+import { BUILDER_WORKSPACE_NAV_ITEMS, CONSUMER_NAV_ITEMS, type AppNavItem } from "@/lib/app-nav-config"
 import type { AppWindowId } from "@/lib/app-shell"
 import {
   workspaceNavTabDisabled,
@@ -16,16 +16,17 @@ type AppWindowNavProps = {
   activeWindow: AppWindowId
   onSelect: (window: AppWindowId) => void
   validity?: WorkspaceValidity
+  items?: AppNavItem[]
 }
 
 // AI : flat numbered horizontal workspace tabs — replaces area + sub-nav layers.
-export function AppWindowNav({ activeWindow, onSelect, validity }: AppWindowNavProps) {
+export function AppWindowNav({ activeWindow, onSelect, validity, items = BUILDER_WORKSPACE_NAV_ITEMS }: AppWindowNavProps) {
   return (
     <nav
       aria-label="Workspace"
       className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border/60 bg-muted/15 px-4 py-2"
     >
-      {BUILDER_WORKSPACE_NAV_ITEMS.map((item) => {
+      {items.map((item) => {
         const Icon = item.icon
         const active = activeWindow === item.id
         const issue = validity ? workspaceNavTabIssue(item.id, validity) : null

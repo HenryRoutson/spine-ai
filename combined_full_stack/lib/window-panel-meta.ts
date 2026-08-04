@@ -10,12 +10,14 @@ export enum AppWindowStepLabel {
   Share = "05 / Share",
   Logging = "06 / Logging",
   Documents = "08 / Documents",
-  Docs = "· / Docs",
-  Billing = "11 / Billing",
-  Settings = "11 / Settings",
+  Docs = "10 / Docs",
+  ProjectBilling = "11 / Billing",
+  ProjectSettings = "12 / Settings",
+  Billing = "· / Billing",
+  Settings = "· / Settings",
   Earnings = "Earnings",
   Cache = "cache",
-  SharedWithMe = "Shared with me",
+  Run = "01 / Run",
   ProjectPicker = "Project",
   AbTest = "03 / A/B Test",
   LlmProviders = "Settings / LLM providers",
@@ -30,13 +32,16 @@ export enum AppWindowTitle {
   Logging = "Run History",
   Documents = "Document Store",
   Docs = "Documentation",
-  Billing = "LLM credit & spend",
+  ProjectBilling = "Project spend",
+  ProjectSettings = "Project settings",
+  Billing = "Account billing",
   Settings = "Settings",
   Earnings = "Earnings account",
   Cache = "Step cache",
 }
 
 export enum ShareTabLabel {
+  MyPipelines = "My pipelines",
   SharedWithMe = "Shared with me",
   Marketplace = "Marketplace",
   Publish = "Publish",
@@ -44,6 +49,7 @@ export enum ShareTabLabel {
 }
 
 export enum ShareSection {
+  MyPipelines = "my-pipelines",
   Publish = "publish",
   Shared = "shared",
   Marketplace = "marketplace",
@@ -63,9 +69,9 @@ export interface WindowHeaderCopy {
 }
 
 export const CONSUMER_RUN_PANEL_HEADER: WindowHeaderCopy = {
-  step: AppWindowStepLabel.SharedWithMe,
+  step: AppWindowStepLabel.Run,
   title: AppPrimarySectionTitle.Run,
-  description: "Paste a link someone shared with you, browse the marketplace, or top up in Billing.",
+  description: "Run your own pipelines, open shared links, or browse the marketplace.",
 }
 
 export const PROJECT_PICKER_PANEL_HEADER: WindowHeaderCopy = {
@@ -137,10 +143,20 @@ const BUILDER_WINDOW_HEADERS: Record<AppWindowId, WindowHeaderCopy> = {
     title: AppWindowTitle.Docs,
     description: "Project rules and context — prepended to every agent prompt to prevent regressions.",
   },
+  "project-billing": {
+    step: AppWindowStepLabel.ProjectBilling,
+    title: AppWindowTitle.ProjectBilling,
+    description: "LLM spend for this pipeline only — credit balance and top-ups live in account Billing.",
+  },
+  "project-settings": {
+    step: AppWindowStepLabel.ProjectSettings,
+    title: AppWindowTitle.ProjectSettings,
+    description: "Rename, review, or permanently delete this project.",
+  },
   billing: {
     step: AppWindowStepLabel.Billing,
     title: AppWindowTitle.Billing,
-    description: "Credit for pipeline runs — subscribe or top up here.",
+    description: "Credit balance, top-ups, and spend across all projects.",
   },
   settings: {
     step: AppWindowStepLabel.Settings,

@@ -19,7 +19,6 @@ import {
   usePrimarySectionOpening,
   wrapPrimarySectionChange,
 } from "@/lib/primary-section-opening"
-import { PROJECT_PICKER_PANEL_HEADER } from "@/lib/window-panel-meta"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,6 +33,11 @@ import {
 } from "@/components/project-workspace-sections"
 import { MarketplaceBrowsePanel } from "@/components/share/marketplace-browse-panel"
 import { warmProjectPrefetches } from "@/lib/project-state-cache"
+import {
+  PROJECT_DELETE_SETTINGS_CHANGED_EVENT,
+  readQuickProjectDelete,
+} from "@/lib/project-delete-settings"
+import { useBrowserPrefEvent } from "@/lib/use-browser-pref-event"
 import type { Project, ProjectId } from "@/lib/types"
 
 export function ProjectPickerPage() {
@@ -57,6 +61,7 @@ export function ProjectPickerPage() {
   const { openingSection, beginOpening, markSectionReady } = usePrimarySectionOpening()
   const { activeWindow, setActiveWindow } = useAppShell()
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
+  const quickDelete = useBrowserPrefEvent(PROJECT_DELETE_SETTINGS_CHANGED_EVENT, readQuickProjectDelete)
   const displayProjects = mergeWithGhosts(projects)
 
   useEffect(() => {
@@ -141,6 +146,12 @@ export function ProjectPickerPage() {
               navigateToRunMode()
               return
             }
+            if (section === AppPrimarySection.Billing || section === AppPrimarySection.Settings) {
+              setActiveWindow(section)
+              navigateToRunMode()
+              markSectionReady(section)
+              return
+            }
             navigateToRunMode()
             handlePrimarySectionChange(
               section,
@@ -164,7 +175,6 @@ export function ProjectPickerPage() {
 
       <div className="flex min-h-0 flex-1 flex-col">
         <WindowHeader
-          {...PROJECT_PICKER_PANEL_HEADER}
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <Button
@@ -290,13 +300,15 @@ export function ProjectPickerPage() {
                           <Copy className="h-3.5 w-3.5" />
                         )}
                       </Button>
-                      <DeleteButton
-                        variant="ghost"
-                        size="icon-sm"
-                        deleting={deleting}
-                        label={`Delete ${p.name}`}
-                        onClick={() => void runDelete(p, projects, () => deleteProject(p.id))}
-                      />
+                      {quickDelete ? (
+                        <DeleteButton
+                          variant="ghost"
+                          size="icon-sm"
+                          deleting={deleting}
+                          label={`Delete ${p.name}`}
+                          onClick={() => void runDelete(p, projects, () => deleteProject(p.id))}
+                        />
+                      ) : null}
                     </div>
                   </AnimatedRemovalItem>
                 )

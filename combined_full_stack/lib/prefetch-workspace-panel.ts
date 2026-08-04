@@ -37,6 +37,12 @@ export function prefetchWorkspacePanel(windowId: AppWindowId): void {
     case "docs":
       void import("@/components/documentation")
       break
+    case "project-billing":
+      void import("@/components/project-billing")
+      break
+    case "project-settings":
+      void import("@/components/project-settings")
+      break
     case "billing":
       void import("@/components/billing")
       break
@@ -59,6 +65,8 @@ const BUILDER_PANEL_ORDER: AppWindowId[] = [
   "cache",
   "documents",
   "docs",
+  "project-billing",
+  "project-settings",
 ]
 
 // AI : warm the visible tab first, then stagger the rest so chunks don't compete on the wire.

@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { Check, ChevronDown, LayoutGrid, Loader2, Pencil, Plus } from "lucide-react"
+import { Check, ChevronDown, LayoutGrid, Loader2, Pencil, Plus, Settings2 } from "lucide-react"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,12 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { navigateToProjectPicker } from "@/lib/app-mode-nav"
+import {
+  PROJECT_DELETE_SETTINGS_CHANGED_EVENT,
+  readQuickProjectDelete,
+} from "@/lib/project-delete-settings"
+import { useBrowserPrefEvent } from "@/lib/use-browser-pref-event"
+import { useAppShell } from "@/lib/app-shell"
 import { warmProjectPrefetches } from "@/lib/project-state-cache"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
 import { useStore } from "@/lib/store"
@@ -76,9 +82,11 @@ function ProjectRenameInput({
 export function ProjectSelector({ embed = false }: { embed?: boolean }) {
   const { projects, project, setActiveProjectId, prefetchProject, addProject, renameProject, deleteProject } =
     useStore()
+  const { setActiveWindow } = useAppShell()
   const [editing, setEditing] = useState<{ id: string; initialName: string } | null>(null)
   const [addingProject, setAddingProject] = useState(false)
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
+  const quickDelete = useBrowserPrefEvent(PROJECT_DELETE_SETTINGS_CHANGED_EVENT, readQuickProjectDelete)
   const displayProjects = mergeWithGhosts(projects)
 
   function startRename(id: string, name: string) {
@@ -101,6 +109,10 @@ export function ProjectSelector({ embed = false }: { embed?: boolean }) {
 
   function handleAllProjects() {
     navigateToProjectPicker()
+  }
+
+  function handleProjectSettings() {
+    setActiveWindow("project-settings")
   }
 
   function warmAllProjects() {
@@ -179,19 +191,21 @@ export function ProjectSelector({ embed = false }: { embed?: boolean }) {
                         >
                           <Pencil className="h-3 w-3" />
                         </Button>
-                        <DeleteButton
-                          type="button"
-                          size="icon"
-                          variant="ghost"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                          deleting={isDeleting(p.id)}
-                          label={`Delete ${p.name}`}
-                          onClick={(e: React.MouseEvent) => {
-                            e.stopPropagation()
-                            e.preventDefault()
-                            void runDelete(p, projects, () => deleteProject(p.id))
-                          }}
-                        />
+                        {quickDelete ? (
+                          <DeleteButton
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                            deleting={isDeleting(p.id)}
+                            label={`Delete ${p.name}`}
+                            onClick={(e: React.MouseEvent) => {
+                              e.stopPropagation()
+                              e.preventDefault()
+                              void runDelete(p, projects, () => deleteProject(p.id))
+                            }}
+                          />
+                        ) : null}
                       </>
                     )}
                     {p.id === project.id && <Check className="h-3.5 w-3.5 text-primary" />}
@@ -201,6 +215,15 @@ export function ProjectSelector({ embed = false }: { embed?: boolean }) {
             ),
           )}
         </DropdownMenuGroup>
+        {!embed ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleProjectSettings} className="gap-2 text-xs">
+              <Settings2 className="h-3.5 w-3.5" />
+              Project settings…
+            </DropdownMenuItem>
+          </>
+        ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
       {!embed ? (

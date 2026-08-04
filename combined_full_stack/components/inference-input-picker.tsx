@@ -17,7 +17,7 @@ import {
   Ban,
   TriangleAlert,
 } from "lucide-react"
-import { useStore } from "@/lib/store"
+import { useOptionalStore } from "@/lib/store"
 import { useDocViewer } from "@/lib/doc-viewer"
 import {
   passableDocsForInputModule,
@@ -37,7 +37,14 @@ import { isPreviewOnly } from "@/lib/demo-mode"
 import { cn } from "@/lib/utils"
 import { timeAgo } from "@/lib/time-ago"
 import { DocLabel } from "@/lib/types"
-import type { DocId, DocRef, InputType, PipelineModule } from "@/lib/types"
+import type { DocId, DocRef, InputType, PipelineModule, Project, StructureModel } from "@/lib/types"
+
+export type InferencePickerSource = {
+  docs: DocRef[]
+  project: Project
+  models: StructureModel[]
+  addDoc: (file: File, label: DocLabel, projectId?: string) => Promise<DocRef>
+}
 
 const TYPE_ICON: Record<InputType, typeof FileText> = {
   pdf: FileText,
@@ -54,13 +61,20 @@ export function InferenceInputPickerPopup({
   selectedDocIds = [],
   onSelect,
   onClose,
+  source,
 }: {
   inputModule: PipelineModule
   selectedDocIds?: DocId[]
   onSelect: (doc: DocRef) => void
   onClose: () => void
+  source?: InferencePickerSource
 }) {
-  const { docs, project, models, addDoc } = useStore()
+  const store = useOptionalStore()
+  const docs = source?.docs ?? store?.docs ?? []
+  const workspaceProject = source?.project ?? store?.project
+  const models = source?.models ?? store?.models ?? []
+  const workspaceAddDoc = source?.addDoc ?? store?.addDoc
+  const pickerReady = workspaceProject != null && workspaceAddDoc != null
   const { open } = useDocViewer()
   const fileRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState("")
@@ -69,12 +83,16 @@ export function InferenceInputPickerPopup({
   const [previewBlockedOpen, setPreviewBlockedOpen] = useState(false)
 
   const passable = useMemo(
-    () => passableDocsForInputModule(docs, project, inputModule),
-    [docs, project, inputModule],
+    () =>
+      pickerReady
+        ? passableDocsForInputModule(docs, workspaceProject, inputModule)
+        : [],
+    [docs, workspaceProject, inputModule, pickerReady],
   )
   const excluded = useMemo(
-    () => excludedDocsForInputModule(docs, project, inputModule),
-    [docs, project, inputModule],
+    () =>
+      pickerReady ? excludedDocsForInputModule(docs, workspaceProject, inputModule) : [],
+    [docs, workspaceProject, inputModule, pickerReady],
   )
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -94,7 +112,7 @@ export function InferenceInputPickerPopup({
   const nameRestriction = inputNameRestrictionLabel(inputModule)
 
   async function ingest(files: FileList | null) {
-    if (!files?.length) return
+    if (!files?.length || !pickerReady) return
     if (isPreviewOnly()) {
       setPreviewBlockedOpen(true)
       return
@@ -107,8 +125,8 @@ export function InferenceInputPickerPopup({
     }
     setUploading(true)
     try {
-      const doc = await addDoc(files[0], DocLabel.Inference, project.id)
-      if (passableDocsForInputModule([doc], project, inputModule).some((d) => d.id === doc.id)) {
+      const doc = await workspaceAddDoc(files[0], DocLabel.Inference, workspaceProject.id)
+      if (passableDocsForInputModule([doc], workspaceProject, inputModule).some((d) => d.id === doc.id)) {
         onSelect(doc)
       }
     } catch (e) {
@@ -123,6 +141,8 @@ export function InferenceInputPickerPopup({
       setUploading(false)
     }
   }
+
+  if (!pickerReady) return null
 
   return (
     <>

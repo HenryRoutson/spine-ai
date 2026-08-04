@@ -7,7 +7,6 @@ import { STRATEGY_META, type Strategy } from "@/lib/types"
 // AI : type-only — erased at compile time, no server code reaches the client bundle.
 import type { BenchmarkOutcome, JudgeVerdict } from "@/lib/strategies"
 import { WindowHeader } from "@/components/window-header"
-import { AB_TEST_PANEL_HEADER } from "@/lib/window-panel-meta"
 import { RunWithStopButton } from "@/components/run-with-stop-button"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
@@ -86,7 +85,6 @@ export function AbTesting() {
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        {...AB_TEST_PANEL_HEADER}
         actions={
           <RunWithStopButton
             running={running}

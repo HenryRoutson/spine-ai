@@ -24,7 +24,6 @@ import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { WindowHeader } from "@/components/window-header"
-import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -350,14 +349,10 @@ export function Inference() {
     ? `${run.run.status === "ok" ? "Completed" : "Failed"} · ${timeAgo(run.run.startedAt)} · ${run.run.id}`
     : undefined
 
-  const inferencePanel = windowPanelHeader("inference")
 
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step={inferencePanel.step}
-        title={inferencePanel.title}
-        description={inferencePanel.description}
         actions={
           <div className="flex items-center gap-2">
             <Button size="sm" className="h-8" onClick={() => void createBlankSetup()} disabled={creatingSetup}>

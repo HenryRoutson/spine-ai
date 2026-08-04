@@ -7,8 +7,6 @@ import { JSON_HEADERS } from "@/lib/api-client"
 import { formatCents } from "@/lib/format"
 import { useWorkspaceBilling } from "@/lib/use-workspace-billing"
 import { useWorkspaceEarnings } from "@/lib/use-workspace-earnings"
-import { WindowHeader } from "@/components/window-header"
-import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { Button } from "@/components/ui/button"
 import { useAppShell } from "@/lib/app-shell"
 
@@ -41,8 +39,6 @@ export function Earnings() {
 
   return (
     <div className="flex h-full flex-col">
-      <WindowHeader {...windowPanelHeader("earnings")} />
-
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
         <div className="mx-auto max-w-2xl space-y-4">
           {banner && (

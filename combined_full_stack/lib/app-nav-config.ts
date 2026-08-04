@@ -15,10 +15,11 @@ import {
   Eye,
   Library,
   UserCircle,
+  Settings2,
 } from "lucide-react"
 import { SpineNavIcon } from "@/components/spine-mark"
 import type { AppWindowId } from "@/lib/app-shell"
-import { ShareTabLabel } from "@/lib/window-panel-meta"
+import { AppPrimarySectionTitle } from "@/lib/app-primary-section-labels"
 
 // AI : marketing site lives on a separate deploy from the app
 export const LANDING_PAGE_URL = "https://www.spine-ai.dev/"
@@ -98,7 +99,7 @@ export const BUILDER_AREAS: AppAreaConfig[] = [
     id: AppArea.Library,
     label: "Library",
     icon: Library,
-    windows: ["documents", "docs"],
+    windows: ["documents", "docs", "project-billing", "project-settings"],
     defaultWindow: "documents",
   },
   {
@@ -139,9 +140,11 @@ export const AREA_SUB_NAV: Partial<Record<AppArea, AppNavItem[]>> = {
   [AppArea.Library]: [
     { id: "documents", label: "Documents", hint: "09", icon: Files },
     { id: "docs", label: "Docs", hint: "10", icon: BookOpen },
+    { id: "project-billing", label: "Billing", hint: "11", icon: CreditCard },
+    { id: "project-settings", label: "Settings", hint: "12", icon: Settings2 },
   ],
   [AppArea.Account]: [
-    { id: "billing", label: "Billing", hint: "11", icon: CreditCard },
+    { id: "billing", label: "Billing", hint: "", icon: CreditCard },
     { id: "settings", label: "Settings", hint: "", icon: UserCircle },
   ],
 }
@@ -158,12 +161,13 @@ export const BUILDER_NAV_ITEMS: AppNavItem[] = [
   { id: "cache", label: "Cache", hint: "08", icon: Database },
   { id: "documents", label: "Documents", hint: "09", icon: Files },
   { id: "docs", label: "Docs", hint: "10", icon: BookOpen },
-  { id: "billing", label: "Billing", hint: "11", icon: CreditCard },
+  { id: "project-billing", label: "Billing", hint: "11", icon: CreditCard },
+  { id: "project-settings", label: "Settings", hint: "12", icon: Settings2 },
 ]
 
 export const ACCOUNT_WINDOW_IDS = new Set<AppWindowId>(["billing", "settings"])
 
-// AI : builder horizontal nav — billing lives in L0 primary nav only.
+// AI : workspace tabs include project-billing (11); account billing/settings are L0 only.
 export const BUILDER_WORKSPACE_NAV_ITEMS: AppNavItem[] = BUILDER_NAV_ITEMS.filter(
   (item) => !ACCOUNT_WINDOW_IDS.has(item.id),
 )
@@ -173,8 +177,7 @@ export function isAccountWindow(window: AppWindowId): boolean {
 }
 
 export const CONSUMER_NAV_ITEMS: AppNavItem[] = [
-  { id: "share", label: ShareTabLabel.SharedWithMe, hint: "01", icon: Users },
-  { id: "billing", label: "Billing", hint: "02", icon: CreditCard },
+  { id: "share", label: AppPrimarySectionTitle.Run, hint: "01", icon: Users },
 ]
 
 export function windowToArea(window: AppWindowId, consumer = false): AppArea {
@@ -196,6 +199,8 @@ export function windowToArea(window: AppWindowId, consumer = false): AppArea {
       return AppArea.Observe
     case "documents":
     case "docs":
+    case "project-billing":
+    case "project-settings":
       return AppArea.Library
     default:
       return AppArea.Account

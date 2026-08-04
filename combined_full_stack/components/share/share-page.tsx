@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlertTriangle, Boxes, Globe, ScrollText, Store, Users, Zap } from "lucide-react"
+import { AlertTriangle, Boxes, Globe, ScrollText, Store, Users, Workflow, Zap } from "lucide-react"
 import {
   DeploymentActivityPage,
   type ActivityFilter,
@@ -10,10 +10,11 @@ import { DeploymentsList } from "@/components/share/deployments-list"
 import { HostApiForm } from "@/components/share/host-api-form"
 import { MarketplaceBrowsePanel } from "@/components/share/marketplace-browse-panel"
 import { MarketplacePublishForm } from "@/components/share/marketplace-publish-form"
+import { MyPipelinesPanel } from "@/components/share/my-pipelines-panel"
+import { OwnPipelineRunner } from "@/components/share/own-pipeline-runner"
 import { ShareLinkForm } from "@/components/share/share-link-form"
 import { SharedLinkRunner } from "@/components/share/shared-link-runner"
 import { SharedWithMePanel } from "@/components/share/shared-with-me-panel"
-import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useOptionalStore } from "@/lib/store"
@@ -22,27 +23,28 @@ import { consumePendingSharedRun } from "@/lib/pending-shared-run"
 import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import {
-  CONSUMER_RUN_PANEL_HEADER,
   PublishTab,
   ShareSection,
   ShareTabLabel,
-  windowPanelHeader,
 } from "@/lib/window-panel-meta"
 import { AppPrimarySection } from "@/lib/app-primary-section-labels"
+import type { ProjectId } from "@/lib/types"
 
 export function SharePage() {
   useMarkPrimarySectionReady(AppPrimarySection.Run)
   const builder = useOptionalStore()
-  const sharePanel = windowPanelHeader("share")
   const isConsumer = !builder
   const { setActiveWindow, activeSharedLinkId, openSharedRun } = useAppShell()
   const { typesInvalid, pipelineInvalid, runTabsBlocked } = builder
     ? computeWorkspaceValidity(builder.modules, builder.models, builder.typeAliases)
     : { typesInvalid: false, pipelineInvalid: false, runTabsBlocked: false }
-  const [section, setSection] = useState<ShareSection>(isConsumer ? ShareSection.Shared : ShareSection.Publish)
+  const [section, setSection] = useState<ShareSection>(
+    isConsumer ? ShareSection.MyPipelines : ShareSection.Publish,
+  )
   const [tab, setTab] = useState<PublishTab>(PublishTab.Link)
   const [refreshToken, setRefreshToken] = useState(0)
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>(null)
+  const [activeOwnProjectId, setActiveOwnProjectId] = useState<ProjectId | null>(null)
 
   useEffect(() => {
     const pending = consumePendingSharedRun()
@@ -56,12 +58,33 @@ export function SharePage() {
     return <SharedLinkRunner linkId={activeSharedLinkId} />
   }
 
+  if (activeOwnProjectId) {
+    return (
+      <OwnPipelineRunner
+        projectId={activeOwnProjectId}
+        onBack={() => setActiveOwnProjectId(null)}
+      />
+    )
+  }
+
   if (isConsumer) {
     return (
       <div className="flex h-full flex-col">
-        <WindowHeader {...CONSUMER_RUN_PANEL_HEADER} />
         <div className="border-b border-border px-5">
           <div className="mx-auto flex max-w-6xl gap-1 py-2">
+            <button
+              type="button"
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                section === ShareSection.MyPipelines
+                  ? "bg-secondary text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              onClick={() => setSection(ShareSection.MyPipelines)}
+            >
+              <Workflow className="h-3.5 w-3.5" />
+              {ShareTabLabel.MyPipelines}
+            </button>
             <button
               type="button"
               className={cn(
@@ -93,9 +116,13 @@ export function SharePage() {
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {section === ShareSection.Marketplace ? (
             <MarketplaceBrowsePanel />
-          ) : (
+          ) : section === ShareSection.Shared ? (
             <div className="mx-auto max-w-2xl">
               <SharedWithMePanel onRun={openSharedRun} />
+            </div>
+          ) : (
+            <div className="mx-auto max-w-2xl">
+              <MyPipelinesPanel onRun={setActiveOwnProjectId} />
             </div>
           )}
         </div>
@@ -107,12 +134,6 @@ export function SharePage() {
 
   return (
     <div className="flex h-full flex-col">
-      <WindowHeader
-        step={sharePanel.step}
-        title={sharePanel.title}
-        description={sharePanel.description}
-      />
-
       <div className="border-b border-border px-5">
         <div className="mx-auto flex max-w-6xl gap-1 py-2">
           <button
@@ -127,6 +148,19 @@ export function SharePage() {
           >
             <Globe className="h-3.5 w-3.5" />
             Publish
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              section === ShareSection.MyPipelines
+                ? "bg-secondary text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => setSection(ShareSection.MyPipelines)}
+          >
+            <Workflow className="h-3.5 w-3.5" />
+            {ShareTabLabel.MyPipelines}
           </button>
           <button
             type="button"
@@ -181,6 +215,10 @@ export function SharePage() {
         ) : section === ShareSection.Shared ? (
           <div className="mx-auto max-w-2xl">
             <SharedWithMePanel onRun={openSharedRun} />
+          </div>
+        ) : section === ShareSection.MyPipelines ? (
+          <div className="mx-auto max-w-2xl">
+            <MyPipelinesPanel onRun={setActiveOwnProjectId} />
           </div>
         ) : publishBlocked ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">

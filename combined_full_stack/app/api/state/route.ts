@@ -26,7 +26,6 @@ export async function GET(req: NextRequest) {
   const project = resolveActiveProject(projects, projectId);
   const docs = docsForActiveProject(projects, store.docs(), project?.id ?? null);
   const runs = slimPipelineRuns(store.runs(project?.id));
-  const modelOptions = toPublicModelOptions(await getModelOptions());
 
   apiLog.debug(`GET /api/state`, {
     projectId,
@@ -38,12 +37,14 @@ export async function GET(req: NextRequest) {
 
   const encoder = new TextEncoder();
   const bodyStream = new ReadableStream({
-    start(controller) {
+    async start(controller) {
       const push = (payload: unknown) => {
         controller.enqueue(encoder.encode(`${JSON.stringify(payload)}\n`));
       };
       try {
+        // AI : projects first — client can paint the shell before OpenRouter model pricing resolves.
         push({ type: STATE_STREAM_EVENT.PROJECTS, projects });
+        const modelOptions = toPublicModelOptions(await getModelOptions());
         push({ type: STATE_STREAM_EVENT.MODEL_OPTIONS, modelOptions });
         push({ type: STATE_STREAM_EVENT.DOCS, docs });
         push({ type: STATE_STREAM_EVENT.RUNS, runs });

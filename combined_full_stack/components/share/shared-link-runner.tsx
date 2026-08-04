@@ -48,7 +48,7 @@ export function SharedLinkRunner({ linkId }: { linkId: string }) {
       <div className="flex h-full flex-col items-center justify-center p-8">
         <ErrorBanner text={loadError} />
         <Button variant="outline" size="sm" className="mt-4" onClick={clearSharedRun}>
-          Back to Shared with me
+          Back to Run
         </Button>
       </div>
     )
@@ -67,7 +67,7 @@ export function SharedLinkRunner({ linkId }: { linkId: string }) {
       <div className="flex items-center gap-2 border-b border-border px-5 py-3">
         <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2" onClick={clearSharedRun}>
           <ArrowLeft className="h-3.5 w-3.5" />
-          Shared with me
+          Run
         </Button>
         <Share2 className="h-4 w-4 text-primary" />
         <div className="min-w-0 flex-1">

@@ -608,7 +608,10 @@ export class SupabaseStore implements Store {
 
   // AI : await all queued writes; routes call this once before (or right after) responding.
   async flush(): Promise<void> {
-    await this.dropConcurrentlyDeletedProjects();
+    const onlyNewProjects =
+      this.pendingProjectUpserts.size > 0 &&
+      [...this.pendingProjectUpserts.keys()].every((id) => this.createdProjectIds.has(id));
+    if (!onlyNewProjects) await this.dropConcurrentlyDeletedProjects();
     const projectUpserts = [...this.pendingProjectUpserts.values()];
     this.pendingProjectUpserts.clear();
     const results = await Promise.all([...projectUpserts, ...this.pendingRest]);

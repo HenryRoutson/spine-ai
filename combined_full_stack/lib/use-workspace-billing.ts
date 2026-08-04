@@ -15,5 +15,6 @@ export function useWorkspaceBilling() {
     billingRuns: source.billingRuns,
     runs: builder?.runs ?? [],
     project: builder?.project ?? null,
+    projects: source.projects ?? [],
   }
 }

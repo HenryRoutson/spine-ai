@@ -29,6 +29,8 @@ export type AppWindowId =
   | "cache"
   | "documents"
   | "docs"
+  | "project-billing"
+  | "project-settings"
   | "billing"
   | "settings"
 

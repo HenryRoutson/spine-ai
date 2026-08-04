@@ -6,8 +6,6 @@ import { useDocViewer } from "@/lib/doc-viewer"
 import { useAppShell } from "@/lib/app-shell"
 import { docLabelDisplay, docsForProject } from "@/lib/project-docs"
 import { DocProjectPicker } from "@/components/doc-project-picker"
-import { WindowHeader } from "@/components/window-header"
-import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -125,16 +123,9 @@ export function Documents() {
 
   const displayDocs = mergeWithGhosts(filtered)
 
-  const documentsPanel = windowPanelHeader("documents")
 
   return (
     <div className="flex h-full flex-col">
-      <WindowHeader
-        step={documentsPanel.step}
-        title={documentsPanel.title}
-        description={`Content-addressed storage for ${project.name}. Uploads default to this pipeline — share to others from each row.`}
-      />
-
       <div className="grid grid-cols-3 gap-px border-b border-border bg-border">
         <Stat label="Documents" value={String(projectDocs.length)} />
         <Stat label="Total size" value={`${(totalKb / 1024).toFixed(1)} MB`} />

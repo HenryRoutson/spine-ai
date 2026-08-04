@@ -32,7 +32,6 @@ import {
 import { GoToLoggingButton } from "@/components/inference/inference-run-chrome"
 import { RunStopButton, RunWithStopButton } from "@/components/run-with-stop-button"
 import { WindowHeader } from "@/components/window-header"
-import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -824,14 +823,10 @@ function staleLoadFailedContent(content: string): string | null {
     }
   }
 
-  const testingPanel = windowPanelHeader("testing")
 
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step={testingPanel.step}
-        title={testingPanel.title}
-        description={`Pin exact per-step outputs in *_testing.json files, then run to pinpoint where ${project.name} goes wrong.`}
         actions={
           <>
             <RunWithStopButton

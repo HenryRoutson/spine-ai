@@ -8,8 +8,8 @@ export enum AppPrimarySection {
 
 // AI : L0 nav copy — single source for Run / Build / Billing / Settings titles.
 export enum AppPrimarySectionTitle {
-  Run = "Run shared pipelines",
-  Build = "Build pipelines",
+  Run = "Run",
+  Build = "Build",
   Billing = "Billing",
   Settings = "Settings",
 }
@@ -21,7 +21,7 @@ export const APP_PRIMARY_SECTION_NAV: Record<
   [AppPrimarySection.Run]: {
     label: AppPrimarySectionTitle.Run,
     shortLabel: "Run",
-    title: "Run pipelines someone shared with you",
+    title: "Run your pipelines and shared links",
   },
   [AppPrimarySection.Build]: {
     label: AppPrimarySectionTitle.Build,

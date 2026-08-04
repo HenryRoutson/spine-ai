@@ -1,7 +1,46 @@
 "use client"
 
+import { useEffect, useState, type ReactNode } from "react"
+import { Loader2 } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { SpineLogoBox } from "@/components/spine-mark"
+
+const SKELETON_HINT_DELAY_MS = 2000
+
+function useShowAfterDelay(delayMs: number) {
+  const [show, setShow] = useState(false)
+  useEffect(() => {
+    const id = window.setTimeout(() => setShow(true), delayMs)
+    return () => window.clearTimeout(id)
+  }, [delayMs])
+  return show
+}
+
+function DelayedLoadingHint({ message }: { message: string }) {
+  const show = useShowAfterDelay(SKELETON_HINT_DELAY_MS)
+  if (!show) return null
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="pointer-events-none absolute inset-x-0 bottom-10 z-10 flex justify-center px-4"
+    >
+      <div className="flex items-center gap-2 rounded-md border border-border bg-background/95 px-3 py-2 shadow-sm backdrop-blur-sm">
+        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+        <span className="font-mono text-[11px] text-muted-foreground">{message}</span>
+      </div>
+    </div>
+  )
+}
+
+function ShellSkeletonFrame({ message, children }: { message: string; children: ReactNode }) {
+  return (
+    <div className="relative flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+      {children}
+      <DelayedLoadingHint message={message} />
+    </div>
+  )
+}
 
 function AppChromeHeaderSkeleton({ showProjectSlot = false }: { showProjectSlot?: boolean }) {
   return (
@@ -30,22 +69,12 @@ function AppChromeHeaderSkeleton({ showProjectSlot = false }: { showProjectSlot?
 }
 
 function WindowHeaderSkeleton({ actionCount = 2 }: { actionCount?: number }) {
+  if (actionCount <= 0) return null
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-3.5">
-      <div className="min-w-0 space-y-2">
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-3 w-14" />
-          <Skeleton className="h-4 w-32" />
-        </div>
-        <Skeleton className="h-3 w-64 max-w-full" />
-      </div>
-      {actionCount > 0 ? (
-        <div className="flex shrink-0 items-center gap-2">
-          {Array.from({ length: actionCount }).map((_, i) => (
-            <Skeleton key={i} className="h-8 w-28" />
-          ))}
-        </div>
-      ) : null}
+    <div className="flex items-center justify-end gap-2 border-b border-border px-5 py-2">
+      {Array.from({ length: actionCount }).map((_, i) => (
+        <Skeleton key={i} className="h-8 w-28" />
+      ))}
     </div>
   )
 }
@@ -100,7 +129,7 @@ function StructurePanelSkeleton() {
 
 export function ProjectPickerSkeleton() {
   return (
-    <div className="flex h-dvh flex-col bg-background text-foreground">
+    <ShellSkeletonFrame message="Loading projects…">
       <AppChromeHeaderSkeleton />
       <div className="flex min-h-0 flex-1 flex-col">
         <WindowHeaderSkeleton actionCount={2} />
@@ -121,14 +150,14 @@ export function ProjectPickerSkeleton() {
           </div>
         </div>
       </div>
-    </div>
+    </ShellSkeletonFrame>
   )
 }
 
 export function StoreShellSkeleton({ variant = "builder" }: { variant?: "builder" | "minimal" }) {
   if (variant === "minimal") {
     return (
-      <div className="flex h-dvh flex-col bg-background">
+      <ShellSkeletonFrame message="Loading workspace…">
         <AppChromeHeaderSkeleton showProjectSlot />
         <div className="flex min-h-0 flex-1 items-center justify-center p-5">
           <div className="w-full max-w-md space-y-3">
@@ -137,20 +166,19 @@ export function StoreShellSkeleton({ variant = "builder" }: { variant?: "builder
             <Skeleton className="h-48 w-full rounded-lg" />
           </div>
         </div>
-      </div>
+      </ShellSkeletonFrame>
     )
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background">
+    <ShellSkeletonFrame message="Loading workspace…">
       <AppChromeHeaderSkeleton showProjectSlot />
       <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
         <WorkspaceNavSkeleton />
         <div className="flex min-h-0 flex-1 flex-col">
-          <WindowHeaderSkeleton actionCount={1} />
           <StructurePanelSkeleton />
         </div>
       </main>
-    </div>
+    </ShellSkeletonFrame>
   )
 }

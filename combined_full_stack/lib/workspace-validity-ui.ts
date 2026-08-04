@@ -1,9 +1,11 @@
 // AI : combined Structure → Pipeline → run-tab validity for sidebar nav + tab gates.
 // AI : TODO (spec) — billing waterfall: red-disable Pipeline/Inference/Testing when balance below floor; unblock after top-up.
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
-import { typesInvalidForUi } from "@/lib/structure-validity-ui"
+import { migrateProjectModules } from "@/lib/quote-steps"
+import { structureIssueMessagesForUi, typesInvalidForUi } from "@/lib/structure-validity-ui"
+import { formatInvalidMapErrors } from "@/lib/validity"
 import type { AppWindowId } from "@/lib/app-shell"
-import type { PipelineModule, StructureModel, TypeAlias } from "@/lib/types"
+import type { PipelineModule, Project, StructureModel, TypeAlias } from "@/lib/types"
 
 export type WorkspaceValidityIssue = "types" | "pipeline"
 
@@ -69,4 +71,32 @@ export function workspaceNavTabIconClass(
 ): string {
   if (issue) return "text-destructive"
   return isActive ? "text-primary" : "text-muted-foreground"
+}
+
+// AI : short list-row copy — first structure or pipeline issue blocking a run.
+export function projectRunBlockReason(project: Project): string | null {
+  const migrated = migrateProjectModules(project)
+  const modules = migrated.modules
+  const models = migrated.models
+  const typeAliases = project.typeAliases ?? []
+
+  const structureMsgs = structureIssueMessagesForUi(models, typeAliases)
+  if (structureMsgs.length > 0) return structureMsgs[0]
+
+  const invalid = computeInvalidForUi(modules, models, typeAliases)
+  if (invalid.size === 0) return null
+
+  const formatted = formatInvalidMapErrors(invalid, modules, models)
+  const firstLine = formatted.split("\n").find((line) => line.trim())
+  return firstLine?.replace(/^- /, "") ?? "Pipeline validation errors"
+}
+
+export function projectRunBlocked(project: Project): boolean {
+  const migrated = migrateProjectModules(project)
+  return computeWorkspaceValidity(
+    migrated.modules,
+    migrated.models,
+    project.typeAliases ?? [],
+    !!project.teamReadOnly,
+  ).runTabsBlocked
 }

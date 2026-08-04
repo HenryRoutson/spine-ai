@@ -20,7 +20,11 @@ const storeLog = logger("app-store");
 // AI : one JsonStore per server process, stashed on globalThis — route handlers are
 // AI : bundled separately in dev, so a plain module-level singleton is not enough, and
 // AI : two independent stores would clobber each other's store.json on flush.
-type StoreSlot = { __forgeStore?: Promise<JsonStore> };
+type StoreSlot = {
+  __forgeStore?: Promise<JsonStore>;
+  __forgeLocalStore?: Promise<Store>;
+  __forgeUserStores?: Map<user_id_string, Promise<Store>>;
+};
 
 function getJsonStore(): Promise<JsonStore> {
   const g = globalThis as StoreSlot;
@@ -29,9 +33,38 @@ function getJsonStore(): Promise<JsonStore> {
 }
 
 async function getLocalStore(): Promise<Store> {
-  const store = await getJsonStore();
-  await ensureSeeded(store);
-  return store;
+  const g = globalThis as StoreSlot;
+  g.__forgeLocalStore ??= (async () => {
+    const store = await getJsonStore();
+    await ensureSeeded(store);
+    return store;
+  })();
+  return g.__forgeLocalStore;
+}
+
+// AI : warm lambdas reuse one hydrated SupabaseStore per user — avoids reloading every row on each API call.
+function getCachedUserStore(userId: user_id_string, open: () => Promise<Store>): Promise<Store> {
+  const g = globalThis as StoreSlot;
+  g.__forgeUserStores ??= new Map();
+  let pending = g.__forgeUserStores.get(userId);
+  if (!pending) {
+    pending = open().catch((err) => {
+      g.__forgeUserStores?.delete(userId);
+      throw err;
+    });
+    g.__forgeUserStores.set(userId, pending);
+  }
+  return pending;
+}
+
+async function openSupabaseUserStore(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: user_id_string,
+): Promise<Store> {
+  return getCachedUserStore(userId, async () => {
+    const store = await openUserStore(supabase, userId);
+    return hydrateUserStore(store);
+  });
 }
 
 async function hydrateUserStore(store: Store): Promise<Store> {
@@ -51,20 +84,20 @@ export async function getStore(): Promise<Store> {
     const supabase = await createClient();
     const { data } = await supabase.auth.getClaims();
     if (!data?.claims?.sub) throw new Error(AUTH_SIGN_IN_REQUIRED);
-    storeLog.info(`authenticated user — SupabaseStore`, { sub: data.claims.sub });
-    const store = await openUserStore(supabase, data.claims.sub as user_id_string);
-    return hydrateUserStore(store);
+    const userId = data.claims.sub as user_id_string;
+    storeLog.info(`authenticated user — SupabaseStore`, { sub: userId });
+    return openSupabaseUserStore(supabase, userId);
   }
 
   try {
     const supabase = await createClient();
     const { data } = await supabase.auth.getClaims();
     if (data?.claims?.sub) {
-      storeLog.info(`authenticated user — trying SupabaseStore`, { sub: data.claims.sub });
+      const userId = data.claims.sub as user_id_string;
+      storeLog.info(`authenticated user — trying SupabaseStore`, { sub: userId });
       try {
-        const store = await openUserStore(supabase, data.claims.sub as user_id_string);
         storeLog.info(`using SupabaseStore`);
-        return hydrateUserStore(store);
+        return openSupabaseUserStore(supabase, userId);
       } catch (err) {
         storeLog.error(`SupabaseStore failed`, { error: storeErrorMessage(err, "Store load failed") });
         if (!isMissingSchemaError(err)) throw err;
