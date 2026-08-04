@@ -1,7 +1,8 @@
 "use client"
 
 import { Hammer, Play } from "lucide-react"
-import type { AppMode } from "@/lib/app-mode-nav"
+import { AppMode } from "@/lib/app-mode-nav"
+import { APP_PRIMARY_SECTION_NAV, AppPrimarySection } from "@/lib/app-primary-section-labels"
 import { cn } from "@/lib/utils"
 
 type AppModeSelectorProps = {
@@ -22,20 +23,16 @@ export function AppModeSelector({ value, onChange, className }: AppModeSelectorP
       )}
     >
       <ModeButton
-        active={value === "run"}
-        onClick={() => onChange("run")}
+        active={value === AppMode.Run}
+        onClick={() => onChange(AppMode.Run)}
         icon={Play}
-        label="Run shared pipelines"
-        shortLabel="Run"
-        title="Run pipelines someone shared with you"
+        {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Run]}
       />
       <ModeButton
-        active={value === "build"}
-        onClick={() => onChange("build")}
+        active={value === AppMode.Build}
+        onClick={() => onChange(AppMode.Build)}
         icon={Hammer}
-        label="Build pipelines"
-        shortLabel="Build"
-        title="Create and edit your own pipelines"
+        {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Build]}
       />
     </div>
   )

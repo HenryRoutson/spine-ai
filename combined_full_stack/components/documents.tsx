@@ -7,6 +7,7 @@ import { useAppShell } from "@/lib/app-shell"
 import { docLabelDisplay, docsForProject } from "@/lib/project-docs"
 import { DocProjectPicker } from "@/components/doc-project-picker"
 import { WindowHeader } from "@/components/window-header"
+import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -124,11 +125,13 @@ export function Documents() {
 
   const displayDocs = mergeWithGhosts(filtered)
 
+  const documentsPanel = windowPanelHeader("documents")
+
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="08 / Documents"
-        title="Document Store"
+        step={documentsPanel.step}
+        title={documentsPanel.title}
         description={`Content-addressed storage for ${project.name}. Uploads default to this pipeline — share to others from each row.`}
       />
 

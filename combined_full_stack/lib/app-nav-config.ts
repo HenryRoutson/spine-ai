@@ -18,15 +18,28 @@ import {
 } from "lucide-react"
 import { SpineNavIcon } from "@/components/spine-mark"
 import type { AppWindowId } from "@/lib/app-shell"
+import { ShareTabLabel } from "@/lib/window-panel-meta"
 
 // AI : marketing site lives on a separate deploy from the app
 export const LANDING_PAGE_URL = "https://www.spine-ai.dev/"
 
 type NavIcon = React.ComponentType<{ className?: string }>
 
-export type AppArea = "build" | "deploy" | "observe" | "library" | "account" | "run"
+export enum AppArea {
+  Build = "build",
+  Deploy = "deploy",
+  Observe = "observe",
+  Library = "library",
+  Account = "account",
+  Run = "run",
+}
 
-export type BuildStepId = "structure" | "pipeline" | "testing" | "inference"
+export enum BuildStepId {
+  Structure = "structure",
+  Pipeline = "pipeline",
+  Testing = "testing",
+  Inference = "inference",
+}
 
 export type AppNavItem = {
   id: AppWindowId
@@ -51,45 +64,45 @@ export type BuildStepConfig = {
 }
 
 export const BUILD_STEPS: BuildStepConfig[] = [
-  { id: "structure", label: "Structure", hint: "01", icon: Boxes },
-  { id: "pipeline", label: "Pipeline", hint: "02", icon: SpineNavIcon },
-  { id: "testing", label: "Testing", hint: "03", icon: SquareCheck },
-  { id: "inference", label: "Inference", hint: "04", icon: Play },
+  { id: BuildStepId.Structure, label: "Structure", hint: "01", icon: Boxes },
+  { id: BuildStepId.Pipeline, label: "Pipeline", hint: "02", icon: SpineNavIcon },
+  { id: BuildStepId.Testing, label: "Testing", hint: "03", icon: SquareCheck },
+  { id: BuildStepId.Inference, label: "Inference", hint: "04", icon: Play },
 ]
 
 export const BUILD_STEP_IDS = new Set<BuildStepId>(BUILD_STEPS.map((s) => s.id))
 
 export const BUILDER_AREAS: AppAreaConfig[] = [
   {
-    id: "build",
+    id: AppArea.Build,
     label: "Build",
     icon: Hammer,
-    windows: ["structure", "pipeline", "testing", "inference"],
-    defaultWindow: "structure",
+    windows: [BuildStepId.Structure, BuildStepId.Pipeline, BuildStepId.Testing, BuildStepId.Inference],
+    defaultWindow: BuildStepId.Structure,
   },
   {
-    id: "deploy",
+    id: AppArea.Deploy,
     label: "Deploy",
     icon: Rocket,
     windows: ["share", "earnings"],
     defaultWindow: "share",
   },
   {
-    id: "observe",
+    id: AppArea.Observe,
     label: "Observe",
     icon: Eye,
     windows: ["logging", "cache"],
     defaultWindow: "logging",
   },
   {
-    id: "library",
+    id: AppArea.Library,
     label: "Library",
     icon: Library,
     windows: ["documents", "docs"],
     defaultWindow: "documents",
   },
   {
-    id: "account",
+    id: AppArea.Account,
     label: "Account",
     icon: UserCircle,
     windows: ["billing", "settings"],
@@ -99,14 +112,14 @@ export const BUILDER_AREAS: AppAreaConfig[] = [
 
 export const CONSUMER_AREAS: AppAreaConfig[] = [
   {
-    id: "run",
+    id: AppArea.Run,
     label: "Run",
     icon: Users,
     windows: ["share"],
     defaultWindow: "share",
   },
   {
-    id: "account",
+    id: AppArea.Account,
     label: "Account",
     icon: UserCircle,
     windows: ["billing", "settings"],
@@ -115,19 +128,19 @@ export const CONSUMER_AREAS: AppAreaConfig[] = [
 ]
 
 export const AREA_SUB_NAV: Partial<Record<AppArea, AppNavItem[]>> = {
-  deploy: [
+  [AppArea.Deploy]: [
     { id: "share", label: "Share", hint: "05", icon: SquareArrowUp },
     { id: "earnings", label: "Earnings", hint: "06", icon: Wallet },
   ],
-  observe: [
+  [AppArea.Observe]: [
     { id: "logging", label: "Logging", hint: "07", icon: ScrollText },
     { id: "cache", label: "Cache", hint: "08", icon: Database },
   ],
-  library: [
+  [AppArea.Library]: [
     { id: "documents", label: "Documents", hint: "09", icon: Files },
     { id: "docs", label: "Docs", hint: "10", icon: BookOpen },
   ],
-  account: [
+  [AppArea.Account]: [
     { id: "billing", label: "Billing", hint: "11", icon: CreditCard },
     { id: "settings", label: "Settings", hint: "", icon: UserCircle },
   ],
@@ -160,32 +173,32 @@ export function isAccountWindow(window: AppWindowId): boolean {
 }
 
 export const CONSUMER_NAV_ITEMS: AppNavItem[] = [
-  { id: "share", label: "Shared with me", hint: "01", icon: Users },
+  { id: "share", label: ShareTabLabel.SharedWithMe, hint: "01", icon: Users },
   { id: "billing", label: "Billing", hint: "02", icon: CreditCard },
 ]
 
 export function windowToArea(window: AppWindowId, consumer = false): AppArea {
   if (consumer) {
-    if (window === "share") return "run"
-    return "account"
+    if (window === "share") return AppArea.Run
+    return AppArea.Account
   }
   switch (window) {
-    case "structure":
-    case "pipeline":
-    case "testing":
-    case "inference":
-      return "build"
+    case BuildStepId.Structure:
+    case BuildStepId.Pipeline:
+    case BuildStepId.Testing:
+    case BuildStepId.Inference:
+      return AppArea.Build
     case "share":
     case "earnings":
-      return "deploy"
+      return AppArea.Deploy
     case "logging":
     case "cache":
-      return "observe"
+      return AppArea.Observe
     case "documents":
     case "docs":
-      return "library"
+      return AppArea.Library
     default:
-      return "account"
+      return AppArea.Account
   }
 }
 
@@ -204,5 +217,5 @@ export function defaultWindowForArea(
   area: AppArea,
   areas: AppAreaConfig[] = BUILDER_AREAS,
 ): AppWindowId {
-  return areas.find((a) => a.id === area)?.defaultWindow ?? "structure"
+  return areas.find((a) => a.id === area)?.defaultWindow ?? BuildStepId.Structure
 }

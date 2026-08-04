@@ -84,7 +84,11 @@ import { setDemoMode } from "@/lib/demo-mode"
 import { NoProjectsPage } from "@/components/no-projects-page"
 import { ProjectPickerSkeleton, StoreShellSkeleton } from "@/components/store-shell-skeletons"
 
-export type StoreMode = "workspace" | "picker" | "demo"
+export enum StoreMode {
+  Workspace = "workspace",
+  Picker = "picker",
+  Demo = "demo",
+}
 
 export type AccountRefreshOpts = { force?: boolean }
 
@@ -330,7 +334,7 @@ export { ProjectPickerContext }
 
 export function StoreProvider({
   children,
-  mode = "workspace",
+  mode = StoreMode.Workspace,
 }: {
   children: ReactNode
   mode?: StoreMode
@@ -341,14 +345,14 @@ export function StoreProvider({
   const [billingAccount, setBillingAccount] = useState<BillingAccountView | null>(null)
   const [earningsAccount, setEarningsAccount] = useState<EarningsAccountView | null>(null)
   const [activeProjectId, setActiveProjectId] = useState<string>(() => {
-    if (mode === "demo") {
+    if (mode === StoreMode.Demo) {
       if (typeof window !== "undefined") {
         const buildId = new URLSearchParams(window.location.search).get("buildId")
         if (buildId) return buildId
       }
       return DEMO_DEFAULT_PROJECT_ID
     }
-    return mode === "workspace" ? (readActiveProjectSession() ?? "") : ""
+    return mode === StoreMode.Workspace ? (readActiveProjectSession() ?? "") : ""
   })
   const [model, setModel] = useState<string>(DEFAULT_MODEL)
   const [projectLoading, setProjectLoading] = useState(false)
@@ -374,7 +378,7 @@ export function StoreProvider({
   const clearSaveError = useCallback(() => setSaveError(null), [])
 
   const persistProject = useCallback(async (id: string, body: string) => {
-    if (mode === "demo") return
+    if (mode === StoreMode.Demo) return
     const readOnly = state?.projects.find((p) => p.id === id)?.teamReadOnly
     if (readOnly) return
     const result = await apiPut(API_ROUTES.project(id), body)
@@ -393,7 +397,7 @@ export function StoreProvider({
     if (!force && now - billingLastOkAtRef.current < BILLING_REFRESH_MIN_MS) return
 
     const run = (async () => {
-      if (mode === "demo") {
+      if (mode === StoreMode.Demo) {
         setBillingAccount(DEMO_BILLING)
         writeBillingSnapshot(DEMO_BILLING)
         billingLastOkAtRef.current = Date.now()
@@ -438,7 +442,7 @@ export function StoreProvider({
     const force = opts?.force === true
     if (!force && earningsFetchRef.current) return earningsFetchRef.current
     const run = (async () => {
-      if (mode === "demo") {
+      if (mode === StoreMode.Demo) {
         setEarningsAccount(DEMO_EARNINGS)
         writeEarningsSnapshot(DEMO_EARNINGS)
         return
@@ -464,7 +468,7 @@ export function StoreProvider({
     async (projectId: string, onChunk?: (chunk: StateStreamChunk) => void, signal?: AbortSignal) => {
       const params = new URLSearchParams()
       if (projectId) params.set("projectId", projectId)
-      if (mode === "demo" && typeof window !== "undefined") {
+      if (mode === StoreMode.Demo && typeof window !== "undefined") {
         const qs = new URLSearchParams(window.location.search)
         const buildId = qs.get("buildId")
         if (buildId) params.set("buildId", buildId)
@@ -473,7 +477,7 @@ export function StoreProvider({
         if (accessToken) params.set("accessToken", accessToken)
       }
       const q = params.toString() ? `?${params}` : ""
-      const route = mode === "demo" ? API_ROUTES.demoState : API_ROUTES.state
+      const route = mode === StoreMode.Demo ? API_ROUTES.demoState : API_ROUTES.state
       return fetchStateStream(`${route}${q}`, onChunk, signal)
     },
     [mode],
@@ -481,7 +485,7 @@ export function StoreProvider({
 
   const fetchProjectRuns = useCallback(
     async (projectId: string) => {
-      if (mode === "demo") return [] as PipelineRun[]
+      if (mode === StoreMode.Demo) return [] as PipelineRun[]
       const data = await apiJson<{ runs: PipelineRun[] }>(
         `${API_ROUTES.runs}?projectId=${encodeURIComponent(projectId)}`,
       )
@@ -492,7 +496,7 @@ export function StoreProvider({
   )
 
   const refreshBillingRuns = useCallback(async () => {
-    if (mode === "demo") return [] as PipelineRun[]
+    if (mode === StoreMode.Demo) return [] as PipelineRun[]
     const cached = readBillingRunsCache()
     if (cached) {
       setState((prev) => (prev ? { ...prev, allRuns: cached } : prev))
@@ -592,17 +596,17 @@ export function StoreProvider({
         }
       })
       // AI : workspace — only auto-open a project when sessionStorage says so (returning builders).
-      if (mode === "workspace") {
+      if (mode === StoreMode.Workspace) {
         const resolved =
           projectId && visibleProjects.some((p) => p.id === projectId) ? projectId : ""
         setActiveProjectId(resolved)
         if (resolved) writeActiveProjectSession(resolved as ProjectId)
         else clearActiveProjectSession()
       }
-      if (mode === "demo" && projectId && visibleProjects.some((p) => p.id === projectId)) {
+      if (mode === StoreMode.Demo && projectId && visibleProjects.some((p) => p.id === projectId)) {
         setActiveProjectId(projectId)
       }
-      if (mode === "demo") {
+      if (mode === StoreMode.Demo) {
         const fromApi =
           "activeProjectId" in data && typeof data.activeProjectId === "string"
             ? (data.activeProjectId as string)
@@ -671,7 +675,7 @@ export function StoreProvider({
   }, [selectActiveProject])
 
   useLayoutEffect(() => {
-    if (mode === "demo") return
+    if (mode === StoreMode.Demo) return
     const snapshot = readStateSnapshot()
     if (snapshot) setState(snapshot)
     const billing = readBillingSnapshot()
@@ -681,13 +685,13 @@ export function StoreProvider({
   }, [mode])
 
   useLayoutEffect(() => {
-    if (mode !== "demo") return
+    if (mode !== StoreMode.Demo) return
     setDemoMode(true)
     return () => setDemoMode(false)
   }, [mode])
 
   useEffect(() => {
-    if (mode === "picker") clearActiveProjectSession()
+    if (mode === StoreMode.Picker) clearActiveProjectSession()
   }, [mode])
 
   const refresh = useCallback(async (projectId = activeProjectId) => {
@@ -699,11 +703,11 @@ export function StoreProvider({
   useEffect(() => {
     stateLoadGenRef.current += 1
     const loadGen = stateLoadGenRef.current
-    const scopedProjectId = mode === "picker" ? "" : activeProjectId
+    const scopedProjectId = mode === StoreMode.Picker ? "" : activeProjectId
     const isInitialHydrate = !hydratedRef.current
 
     // AI : project picker already has the list — skip another /api/state round-trip.
-    if (mode === "workspace" && scopedProjectId === "" && hydratedRef.current && state) {
+    if (mode === StoreMode.Workspace && scopedProjectId === "" && hydratedRef.current && state) {
       setProjectLoading(false)
       setStateSyncing(false)
       return
@@ -720,7 +724,7 @@ export function StoreProvider({
         hydratedRef.current = true
       }
     } else {
-      if (mode === "workspace" && hydratedRef.current && scopedProjectId) setProjectLoading(true)
+      if (mode === StoreMode.Workspace && hydratedRef.current && scopedProjectId) setProjectLoading(true)
       if (isInitialHydrate) setStateSyncing(true)
     }
 
@@ -880,7 +884,7 @@ export function StoreProvider({
     })
       .then(async (fresh) => {
         const stamped = { ...fresh, lastOpenedAt: Date.now() }
-        if (mode === "picker") {
+        if (mode === StoreMode.Picker) {
           // AI : seed session snapshot before workspace open — otherwise hydrate misses the new row.
           seedProjectInStateSnapshot(stamped)
           selectActiveProject(fresh.id)
@@ -895,6 +899,8 @@ export function StoreProvider({
         })
         setProjectLoading(true)
         selectActiveProject(fresh.id)
+        // AI : workspace create (e.g. NoProjectsPage) must enter builder shell — session alone leaves consumer/run UI.
+        navigateToBuildWorkspace(fresh.id as ProjectId)
         // AI : clone may ingest/rename bundled seed docs server-side — reload docs + backfilled seedDocNames.
         await refresh(fresh.id)
         return fresh
@@ -974,7 +980,7 @@ export function StoreProvider({
         }
       }
 
-      if (mode === "demo") {
+      if (mode === StoreMode.Demo) {
         applyLocalDelete()
         return Promise.resolve()
       }
@@ -1179,7 +1185,7 @@ export function StoreProvider({
 
   // AI : mirror server runs locally — upsert so Testing can attach test verdict on an existing row.
   const hydrateRunDetail = useCallback(async (runId: PipelineRun["id"]) => {
-    if (mode === "demo") return
+    if (mode === StoreMode.Demo) return
     const { run } = await apiJson<{ run: PipelineRun }>(API_ROUTES.run(runId))
     setState((prev) => {
       if (!prev) return prev
@@ -1533,7 +1539,7 @@ export function StoreProvider({
     </div>
   ) : null
 
-  if (mode === "picker") {
+  if (mode === StoreMode.Picker) {
     if (!state || !pickerValue) {
       return <ProjectPickerSkeleton />
     }
@@ -1555,7 +1561,7 @@ export function StoreProvider({
   }
 
   // AI : opening a project not yet in state — keep loading, don't flash the consumer shell.
-  if (mode === "workspace" && !project && (activeProjectId || projectLoading || stateSyncing)) {
+  if (mode === StoreMode.Workspace && !project && (activeProjectId || projectLoading || stateSyncing)) {
     return (
       <>
         {saveErrorBanner}
@@ -1565,7 +1571,7 @@ export function StoreProvider({
   }
 
   // AI : zero projects — picker UI only; AppShellLayout tabs call useStore() and must not mount here.
-  if (mode === "workspace" && migratedProjects.length === 0 && !projectLoading) {
+  if (mode === StoreMode.Workspace && migratedProjects.length === 0 && !projectLoading) {
     return (
       <>
         {saveErrorBanner}

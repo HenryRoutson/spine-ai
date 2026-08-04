@@ -32,6 +32,7 @@ import { KindMenuItemIcon } from "@/lib/module-ui"
 import { makeModule } from "@/lib/pipeline-module-factory"
 import { MODULE_META, ModuleKind, type PipelineModule, type ModuleId } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
+import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { PipelineCanvas } from "@/components/pipeline-canvas"
 import { PipelineSummaryBox } from "@/components/pipeline-summary-box"
 import { PipelineModuleFields } from "@/components/pipeline-module-fields"
@@ -180,13 +181,15 @@ export function PipelineBuilder() {
   const invalidMap = invalid
   const warningMap = warnings
 
+  const pipelinePanel = windowPanelHeader("pipeline")
+
   return (
     <TooltipProvider delay={200}>
       <div className="flex h-full flex-col">
         <WindowHeader
-          step="02 / Pipeline"
-          title="Linear Pipeline"
-          description="Each step declares its input and output model. Mismatched I/O is flagged — there is no explicit validation step."
+          step={pipelinePanel.step}
+          title={pipelinePanel.title}
+          description={pipelinePanel.description}
           actions={
             <div className="flex items-center gap-3 font-mono text-[11px]">
               <Button

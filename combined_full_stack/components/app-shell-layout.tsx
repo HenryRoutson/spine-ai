@@ -14,8 +14,8 @@ import {
   usePrimarySectionOpening,
   wrapPrimarySectionChange,
 } from "@/lib/primary-section-opening"
-import { navigateToBuildMode, navigateToRunMode } from "@/lib/app-mode-nav"
-import { useAppShellKind } from "@/lib/app-shell-kind"
+import { AppMode, navigateToBuildMode, navigateToRunMode } from "@/lib/app-mode-nav"
+import { AppShellKind, useAppShellKind } from "@/lib/app-shell-kind"
 import { ProjectPickerContext, useConsumerStore, useOptionalConsumerStore, useOptionalStore, useStore } from "@/lib/store"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { useAppShell, type AppWindowId } from "@/lib/app-shell"
@@ -24,7 +24,7 @@ import { LazyDocViewer } from "@/components/lazy-doc-viewer"
 import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
 import { ProjectPickerPage } from "@/components/project-picker-page"
 import { ProjectPickerSkeleton, StoreShellSkeleton } from "@/components/store-shell-skeletons"
-import type { AppPrimarySection } from "@/components/app-primary-nav"
+import { AppPrimarySection } from "@/lib/app-primary-section-labels"
 import { PanelLoading } from "@/components/panel-loading"
 import {
   BillingPanelSkeleton,
@@ -243,16 +243,16 @@ function AppShellLayoutInner({ variant = "default" }: { variant?: "default" | "e
   const picker = useContext(ProjectPickerContext)
 
   const [warmShells, setWarmShells] = useState(() => ({
-    consumer: shellKind === "consumer",
-    builder: shellKind === "builder",
-    picker: shellKind === "picker",
+    consumer: shellKind === AppShellKind.Consumer,
+    builder: shellKind === AppShellKind.Builder,
+    picker: shellKind === AppShellKind.Picker,
   }))
 
   useEffect(() => {
     setWarmShells((prev) => ({
-      consumer: prev.consumer || shellKind === "consumer",
-      builder: prev.builder || shellKind === "builder",
-      picker: prev.picker || shellKind === "picker",
+      consumer: prev.consumer || shellKind === AppShellKind.Consumer,
+      builder: prev.builder || shellKind === AppShellKind.Builder,
+      picker: prev.picker || shellKind === AppShellKind.Picker,
     }))
   }, [shellKind])
 
@@ -260,9 +260,9 @@ function AppShellLayoutInner({ variant = "default" }: { variant?: "default" | "e
     prefetchShellPanels()
   }, [])
 
-  const showConsumer = shellKind === "consumer"
-  const showBuilder = shellKind === "builder"
-  const showPicker = shellKind === "picker"
+  const showConsumer = shellKind === AppShellKind.Consumer
+  const showBuilder = shellKind === AppShellKind.Builder
+  const showPicker = shellKind === AppShellKind.Picker
 
   return (
     <>
@@ -301,7 +301,7 @@ function ConsumerShellLayoutInner({ variant = "default" }: { variant?: "default"
   const { activeWindow, setActiveWindow } = useAppShell()
   const { stateSyncing } = useConsumerStore()
   const consumerWindow = useMemo(() => resolveConsumerWindow(activeWindow), [activeWindow])
-  const primarySection = resolvePrimarySection("run", consumerWindow)
+  const primarySection = resolvePrimarySection(AppMode.Run, consumerWindow)
   const { openingSection, beginOpening } = usePrimarySectionOpening()
   useSyncPrimarySectionReady(primarySection)
 
@@ -310,7 +310,7 @@ function ConsumerShellLayoutInner({ variant = "default" }: { variant?: "default"
       wrapPrimarySectionChange(section, primarySection, beginOpening, () => {
         handlePrimarySectionChange(
           section,
-          "run",
+          AppMode.Run,
           consumerWindow,
           setActiveWindow,
           navigateToRunMode,
@@ -338,7 +338,7 @@ function ConsumerShellLayoutInner({ variant = "default" }: { variant?: "default"
     <TooltipProvider delay={200}>
       <div className="flex h-dvh flex-col overflow-hidden bg-background">
         <AppChromeHeader
-          mode="run"
+          mode={AppMode.Run}
           primarySection={primarySection}
           openingSection={openingSection}
           onPrimarySectionChange={onPrimarySectionChange}
@@ -379,7 +379,7 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
     () => computeWorkspaceValidity(modules, models, typeAliases, !!project?.teamReadOnly),
     [modules, models, typeAliases, project?.teamReadOnly],
   )
-  const primarySection = resolvePrimarySection("build", activeWindow)
+  const primarySection = resolvePrimarySection(AppMode.Build, activeWindow)
   const showWorkspaceNav = !isAccountWindow(activeWindow)
   const { openingSection, beginOpening } = usePrimarySectionOpening()
   useSyncPrimarySectionReady(primarySection)
@@ -389,7 +389,7 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
       wrapPrimarySectionChange(section, primarySection, beginOpening, () => {
         handlePrimarySectionChange(
           section,
-          "build",
+          AppMode.Build,
           activeWindow,
           setActiveWindow,
           navigateToRunMode,
@@ -431,7 +431,7 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
           </p>
         ) : null}
         <AppChromeHeader
-          mode="build"
+          mode={AppMode.Build}
           primarySection={primarySection}
           openingSection={openingSection}
           onPrimarySectionChange={onPrimarySectionChange}

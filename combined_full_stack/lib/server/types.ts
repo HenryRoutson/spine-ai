@@ -68,13 +68,13 @@ export type StructureFieldDef = Pick<
   "id" | "name" | "type" | "optional" | "description" | "examples" | "negativeExamples" | "ref" | "minItems" | "typeExpr" | "deterministic" | "testTolerance"
 >;
 
-export type TolerantFieldPath = {
+export interface TolerantFieldPath {
   path: string;
   tolerance: number;
-};
+}
 
 // AI : meta-type — JSON-serializable shape used to define StructureModel entries in seeds / assistants
-export type StructureDef = {
+export interface StructureDef {
   id: StructureModelId;
   name: string;
   description: string;
@@ -164,26 +164,26 @@ export enum MergeScalarStrategy {
   Error = "error",
 }
 
-export type MergeLayerPolicy = {
+export interface MergeLayerPolicy {
   list?: MergeListStrategy;
   dict?: MergeDictStrategy;
   scalar?: MergeScalarStrategy;
   // AI : property on list items for union/intersect/dedupe — e.g. "id" for user records.
   itemKey?: string;
-};
+}
 
-export type MergePolicyRule = {
+export interface MergePolicyRule {
   path: string;
   policy: MergeLayerPolicy;
 };
 
-export type MergePolicy = {
+export interface MergePolicy {
   default?: MergeLayerPolicy;
   rules?: MergePolicyRule[];
 };
 
 // AI : one language key per entry — e.g. { "typescript": "(input) => input" } or { "python": "..." }.
-export type CustomCodeEntry = { typescript?: string; python?: string };
+export interface CustomCodeEntry { typescript?: string; python?: string };
 
 // AI : input — built-in PDF/text parser at upload vs OpenRouter vision OCR (handwriting, scans).
 export enum DocParseMode {
@@ -241,26 +241,54 @@ export interface PipelineModule { // TODO this is bad, it contains multiple poss
 type step_label_string = string;
 type doc_name_string = string;
 
-export type InputCompatNormalize = "lower-trim" | "question-id" | "question-id-set";
+export enum InputCompatNormalize {
+  LowerTrim = "lower-trim",
+  QuestionId = "question-id",
+  QuestionIdSet = "question-id-set",
+}
 
-export type InputCompatExtractor =
-  | { kind: "json-path"; path: string; normalize?: InputCompatNormalize }
-  | { kind: "text-regex"; pattern: string; group?: number; flags?: string; normalize?: InputCompatNormalize }
-  | { kind: "question-ids-text" };
+export enum InputCompatExtractorKind {
+  JsonPath = "json-path",
+  TextRegex = "text-regex",
+  QuestionIdsText = "question-ids-text",
+}
 
-export type InputCompatCompare = "equal" | "set-equal";
+export interface JsonPathExtractor {
+  kind: InputCompatExtractorKind.JsonPath;
+  path: string;
+  normalize?: InputCompatNormalize;
+}
 
-export type InputCompatKey = {
+export interface TextRegexExtractor {
+  kind: InputCompatExtractorKind.TextRegex;
+  pattern: string;
+  group?: number;
+  flags?: string;
+  normalize?: InputCompatNormalize;
+}
+
+export interface QuestionIdsTextExtractor {
+  kind: InputCompatExtractorKind.QuestionIdsText;
+}
+
+export type InputCompatExtractor = JsonPathExtractor | TextRegexExtractor | QuestionIdsTextExtractor;
+
+export enum InputCompatCompare {
+  Equal = "equal",
+  SetEqual = "set-equal",
+}
+
+export interface InputCompatKey {
   label: string;
   upstream: InputCompatExtractor;
   local: InputCompatExtractor;
   compare?: InputCompatCompare;
-};
+}
 
-export type InputCompatWith = {
+export interface InputCompatWith {
   moduleId: ModuleId;
   keys: InputCompatKey[];
-};
+}
 
 // AI : a named, pre-selected inference run — input step label → bundled doc name(s).
 // AI : optional per-preset golden outputs let assert steps pass on non-default inputs.

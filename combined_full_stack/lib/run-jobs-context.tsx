@@ -13,7 +13,7 @@ import {
 import { uid } from "@/lib/id"
 import type { StepUiState } from "@/lib/run-engine"
 import type { ModuleId, RunJobId } from "@/lib/types"
-import type { RegisterRunJobOpts, TrackedRunJob, TrackedRunJobStatus } from "@/lib/run-jobs-types"
+import { type RegisterRunJobOpts, type TrackedRunJob, RunJobSource, TrackedRunJobStatus } from "@/lib/run-jobs-types"
 
 type RunJobsContextValue = {
   open: boolean
@@ -84,14 +84,14 @@ export function RunJobsProvider({ children }: { children: ReactNode }) {
         source: opts.source,
         label: opts.label,
         projectId: opts.projectId,
-        status: "running",
+        status: TrackedRunJobStatus.Running,
         stepStates: new Map(),
         progressPct: 0,
         activeStepLabel: null,
         startedAt: Date.now(),
         testDocName: opts.testDocName,
       },
-      ...prev.filter((j) => j.status === "running"),
+      ...prev.filter((j) => j.status === TrackedRunJobStatus.Running),
     ])
     setOpen(true)
     return trackId
@@ -108,7 +108,7 @@ export function RunJobsProvider({ children }: { children: ReactNode }) {
     ) => {
       setJobs((prev) => {
         const cur = prev.find((j) => j.id === trackId)
-        if (!cur || cur.status !== "running") return prev
+        if (!cur || cur.status !== TrackedRunJobStatus.Running) return prev
         return patchJob(prev, trackId, {
           stepStates: patch.stepStates ?? cur.stepStates,
           progressPct: patch.progressPct ?? cur.progressPct,
@@ -125,7 +125,7 @@ export function RunJobsProvider({ children }: { children: ReactNode }) {
       cancelByTrackId.current.delete(trackId)
       setJobs((prev) => {
         const cur = prev.find((j) => j.id === trackId)
-        if (!cur || cur.status !== "running") return prev
+        if (!cur || cur.status !== TrackedRunJobStatus.Running) return prev
         return patchJob(prev, trackId, {
           status,
           finishedAt: Date.now(),
@@ -139,14 +139,14 @@ export function RunJobsProvider({ children }: { children: ReactNode }) {
 
   const completeJob = useCallback(
     (trackId: string, patch?: { runId?: string }) => {
-      finishJob(trackId, "done", { progressPct: 100, activeStepLabel: null, runId: patch?.runId })
+      finishJob(trackId, TrackedRunJobStatus.Done, { progressPct: 100, activeStepLabel: null, runId: patch?.runId })
     },
     [finishJob],
   )
 
   const failJob = useCallback(
     (trackId: string, errorMessage: string) => {
-      finishJob(trackId, "error", { errorMessage, activeStepLabel: null })
+      finishJob(trackId, TrackedRunJobStatus.Error, { errorMessage, activeStepLabel: null })
     },
     [finishJob],
   )
@@ -154,7 +154,7 @@ export function RunJobsProvider({ children }: { children: ReactNode }) {
   const stopJob = useCallback(
     (trackId: string) => {
       cancelByTrackId.current.get(trackId)?.()
-      finishJob(trackId, "stopped", { errorMessage: "Stopped", activeStepLabel: null })
+      finishJob(trackId, TrackedRunJobStatus.Stopped, { errorMessage: "Stopped", activeStepLabel: null })
     },
     [finishJob],
   )
@@ -168,17 +168,17 @@ export function RunJobsProvider({ children }: { children: ReactNode }) {
     [clearRetainTimer],
   )
 
-  const runningCount = useMemo(() => jobs.filter((j) => j.status === "running").length, [jobs])
+  const runningCount = useMemo(() => jobs.filter((j) => j.status === TrackedRunJobStatus.Running).length, [jobs])
 
   const runningInferenceForProject = useCallback(
     (projectId: string) =>
-      jobs.find((j) => j.status === "running" && j.source === "inference" && j.projectId === projectId) ?? null,
+      jobs.find((j) => j.status === TrackedRunJobStatus.Running && j.source === RunJobSource.Inference && j.projectId === projectId) ?? null,
     [jobs],
   )
 
   const runningTestsForProject = useCallback(
     (projectId: string) =>
-      jobs.filter((j) => j.status === "running" && j.source === "testing" && j.projectId === projectId),
+      jobs.filter((j) => j.status === TrackedRunJobStatus.Running && j.source === RunJobSource.Testing && j.projectId === projectId),
     [jobs],
   )
 

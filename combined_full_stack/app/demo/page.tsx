@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
-import { StoreProvider } from "@/lib/store";
+import { useEffect, useLayoutEffect } from "react";
+import { clearWorkspaceClientSession } from "@/lib/clear-workspace-client-session";
+import { StoreProvider, StoreMode } from "@/lib/store";
 import { DocViewerProvider } from "@/lib/doc-viewer";
 import { AppShellProvider } from "@/lib/app-shell";
 import { ProjectAssistantProvider } from "@/lib/project-assistant-context";
@@ -12,6 +13,11 @@ import { setPreviewOnly } from "@/lib/demo-mode";
 
 // AI : public preview route — embed=1 sizing; preview=1 disables runs; buildId loads landing-built pipeline.
 export default function DemoPage() {
+  useLayoutEffect(() => {
+    // AI : isolate landing iframe from a signed-in workspace tab in the same browser.
+    clearWorkspaceClientSession();
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     setPreviewOnly(params.get("preview") === "1");
@@ -19,18 +25,18 @@ export default function DemoPage() {
   }, []);
 
   return (
-    <StoreProvider mode="demo">
-      <DocViewerProvider>
-        <AppShellProvider>
-          <ProjectAssistantProvider>
-            <DiagnosisAgentProvider>
-              <AppShellKindProvider>
+    <AppShellKindProvider>
+      <StoreProvider mode={StoreMode.Demo}>
+        <DocViewerProvider>
+          <AppShellProvider>
+            <ProjectAssistantProvider>
+              <DiagnosisAgentProvider>
                 <AppShellLayout variant="embed" />
-              </AppShellKindProvider>
-            </DiagnosisAgentProvider>
-          </ProjectAssistantProvider>
-        </AppShellProvider>
-      </DocViewerProvider>
-    </StoreProvider>
+              </DiagnosisAgentProvider>
+            </ProjectAssistantProvider>
+          </AppShellProvider>
+        </DocViewerProvider>
+      </StoreProvider>
+    </AppShellKindProvider>
   );
 }

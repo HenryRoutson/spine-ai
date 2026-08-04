@@ -2,6 +2,12 @@
 let demoMode = false;
 let previewOnly = false;
 
+export function isDemoRoute(): boolean {
+  if (typeof window === "undefined") return false;
+  const path = window.location.pathname;
+  return path === "/demo" || path.startsWith("/demo/");
+}
+
 export function setDemoMode(next: boolean): void {
   demoMode = next;
 }

@@ -23,7 +23,7 @@ export function BackgroundPrefetchBar() {
   const pct = Math.round((done / total) * 100)
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 border-t border-border/60 bg-background/90 px-3 py-1.5 backdrop-blur-sm">
+    <div className="shrink-0 border-t border-border/60 bg-background/90 px-3 py-1.5 backdrop-blur-sm">
       <div className="flex items-center gap-3">
         <p className="shrink-0 font-mono text-[10px] text-muted-foreground">
           warming {done}/{total} projects

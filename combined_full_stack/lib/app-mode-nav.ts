@@ -1,4 +1,5 @@
 import { clearActiveProjectSession } from "@/lib/active-project-session"
+import { isDemoRoute } from "@/lib/demo-mode"
 import type { ProjectId } from "@/lib/types"
 
 type AppModeNavApi = {
@@ -20,6 +21,7 @@ export function navigateToRunMode(): void {
     api.navigateToRunMode()
     return
   }
+  if (isDemoRoute()) return
   clearActiveProjectSession()
   window.location.assign("/")
 }
@@ -29,6 +31,7 @@ export function navigateToBuildMode(): void {
     api.navigateToBuildMode()
     return
   }
+  if (isDemoRoute()) return
   window.location.assign("/projects")
 }
 
@@ -37,6 +40,7 @@ export function navigateToProjectPicker(): void {
     api.navigateToProjectPicker()
     return
   }
+  if (isDemoRoute()) return
   window.location.assign("/projects")
 }
 
@@ -45,7 +49,11 @@ export function navigateToBuildWorkspace(projectId: ProjectId): void {
     api.openBuildWorkspace(projectId)
     return
   }
+  if (isDemoRoute()) return
   window.location.assign("/")
 }
 
-export type AppMode = "run" | "build"
+export enum AppMode {
+  Run = "run",
+  Build = "build",
+}

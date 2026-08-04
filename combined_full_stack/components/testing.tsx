@@ -32,6 +32,7 @@ import {
 import { GoToLoggingButton } from "@/components/inference/inference-run-chrome"
 import { RunStopButton, RunWithStopButton } from "@/components/run-with-stop-button"
 import { WindowHeader } from "@/components/window-header"
+import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -42,6 +43,7 @@ import { API_ROUTES } from "@/lib/api-routes"
 import { evaluateTestReport } from "@/lib/testing-evaluate"
 import { useAppShell } from "@/lib/app-shell"
 import { useRunJobs } from "@/lib/run-jobs-context"
+import { RunJobSource } from "@/lib/run-jobs-types"
 import { activeStepLabelFromStepStates, progressPctFromStepStates } from "@/lib/run-jobs-progress"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
@@ -311,7 +313,7 @@ function staleLoadFailedContent(content: string): string | null {
   const beginTestJob = useCallback(
     (docName: doc_name_string) => {
       const trackId = runJobs.registerJob({
-        source: "testing",
+        source: RunJobSource.Testing,
         label: docName,
         projectId: project.id,
         testDocName: docName,
@@ -822,11 +824,13 @@ function staleLoadFailedContent(content: string): string | null {
     }
   }
 
+  const testingPanel = windowPanelHeader("testing")
+
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="03 / Testing"
-        title="Pipeline Tests"
+        step={testingPanel.step}
+        title={testingPanel.title}
         description={`Pin exact per-step outputs in *_testing.json files, then run to pinpoint where ${project.name} goes wrong.`}
         actions={
           <>

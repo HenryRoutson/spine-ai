@@ -25,8 +25,10 @@ import { activeStepLabelFromStepStates, progressPctFromStepStates } from "@/lib/
 import { isRunAbortedError, useCancellableRun } from "@/lib/use-cancellable-run"
 import type { DocId, JobLogEntry, ModuleId, PipelineModule, PipelineRun, ProjectId, RunJobId } from "@/lib/types"
 import type { ClientStepSpec } from "@/lib/run-types"
+import { RunJobSource } from "@/lib/run-jobs-types"
+import { RunPhase } from "@/lib/run-phase"
 
-export type InferencePhase = "idle" | "running" | "done"
+export { RunPhase as InferencePhase } from "@/lib/run-phase"
 
 type UseInferenceRunProgressArgs = {
   projectId: ProjectId
@@ -63,7 +65,7 @@ export function useInferenceRunProgress({
   flushPendingSave,
   projectLlmProviders,
 }: UseInferenceRunProgressArgs) {
-  const [phase, setPhase] = useState<InferencePhase>("idle")
+  const [phase, setPhase] = useState<RunPhase>(RunPhase.Idle)
   const [stepStates, setStepStates] = useState<Map<ModuleId, StepUiState>>(new Map())
   const [run, setRun] = useState<PipelineRun | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -91,7 +93,7 @@ export function useInferenceRunProgress({
   }, [runNotes])
 
   useEffect(() => {
-    if (phase !== "running") return
+    if (phase !== RunPhase.Running) return
     logEndRef.current?.scrollIntoView({ behavior: "auto" })
   }, [debugLogs.length, phase])
 
@@ -105,7 +107,7 @@ export function useInferenceRunProgress({
     if (tracked) {
       activeTrackIdRef.current = tracked.id
       activeJobIdRef.current = tracked.jobId
-      setPhase("running")
+      setPhase(RunPhase.Running)
       setStepStates(new Map(tracked.stepStates))
       stepStatesRef.current = new Map(tracked.stepStates)
       setError(null)
@@ -116,7 +118,7 @@ export function useInferenceRunProgress({
   }, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useRunNotesFlushOnLeave(
-    phase === "done" ? run?.id : undefined,
+    phase === RunPhase.Done ? run?.id : undefined,
     runNotes,
     run?.notes,
     updateRunNotes,
@@ -130,7 +132,7 @@ export function useInferenceRunProgress({
     activeJobGenRef.current++
     activeJobIdRef.current = null
     activeTrackIdRef.current = null
-    setPhase("idle")
+    setPhase(RunPhase.Idle)
     setStepStates(new Map())
     setRun(null)
     setError(null)
@@ -152,7 +154,7 @@ export function useInferenceRunProgress({
       return
     }
     if (prevConfigKeyRef.current === configResetKey) return
-    if (phase === "running") {
+    if (phase === RunPhase.Running) {
       configChangedDuringRunRef.current = true
       prevConfigKeyRef.current = configResetKey
       return
@@ -162,7 +164,7 @@ export function useInferenceRunProgress({
   }, [configResetKey, phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (phase !== "done" || !configChangedDuringRunRef.current) return
+    if (phase !== RunPhase.Done || !configChangedDuringRunRef.current) return
     configChangedDuringRunRef.current = false
     resetRunState()
   }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -175,19 +177,19 @@ export function useInferenceRunProgress({
     const byModule = inputDocsByModuleFromAssignment(inputModules, inputDocs)
     const [primary, ...rest] = orderedIds
     invariant(primary, "start() called without primary input doc despite allInputsReady")
-    if (phase === "done") {
+    if (phase === RunPhase.Done) {
       setRunNotes("")
       runNotesRef.current = ""
     }
     const signal = cancellable.begin()
     const trackId = runJobs.registerJob({
-      source: "inference",
+      source: RunJobSource.Inference,
       label: "Pipeline run",
       projectId,
       cancel: () => cancellable.stop(),
     })
     activeTrackIdRef.current = trackId
-    setPhase("running")
+    setPhase(RunPhase.Running)
     setError(null)
     setRun(null)
     setStepStates(new Map())
@@ -250,13 +252,13 @@ export function useInferenceRunProgress({
       if (jobGen !== activeJobGenRef.current || !mountedRef.current) return
       setRun(withNotes)
       setDeduped(!!deduped)
-      setPhase("done")
+      setPhase(RunPhase.Done)
     } catch (e) {
       if (isRunAbortedError(e)) {
         if (activeTrackIdRef.current) runJobs.stopJob(activeTrackIdRef.current)
         activeTrackIdRef.current = null
         if (jobGen !== activeJobGenRef.current || !mountedRef.current) return
-        setPhase("idle")
+        setPhase(RunPhase.Idle)
         return
       }
       if (activeTrackIdRef.current) runJobs.failJob(activeTrackIdRef.current, (e as Error).message)
@@ -264,7 +266,7 @@ export function useInferenceRunProgress({
       if (jobGen !== activeJobGenRef.current || !mountedRef.current) return
       if (isRunBillingError(e)) refreshBilling({ force: true }).catch(console.error)
       setError((e as Error).message)
-      setPhase("idle")
+      setPhase(RunPhase.Idle)
     } finally {
       cancellable.clear()
     }
@@ -276,7 +278,7 @@ export function useInferenceRunProgress({
     activeTrackIdRef.current = null
     activeJobGenRef.current++
     activeJobIdRef.current = null
-    setPhase("idle")
+    setPhase(RunPhase.Idle)
     setPendingHumanReview(null)
     humanReviewResolveRef.current = null
   }
@@ -308,7 +310,7 @@ export function useInferenceRunProgress({
   }, [stepStates, modules])
   const moduleIds = useMemo(() => modules.map((m) => m.id), [modules])
   const logsByModule = useMemo(() => {
-    if (phase === "done" && run) {
+    if (phase === RunPhase.Done && run) {
       const fromRun = logsByModuleFromRun(run, moduleIds)
       if ([...fromRun.values()].some((logs) => logs.length > 0)) return fromRun
     }

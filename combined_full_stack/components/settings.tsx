@@ -7,6 +7,7 @@ import { useWorkspaceModel } from "@/lib/use-workspace-model"
 import { ModelSelector } from "@/components/model-selector"
 import { Button } from "@/components/ui/button"
 import { WindowHeader } from "@/components/window-header"
+import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { JsonHighlight } from "@/components/highlight"
 import { ResizableSplit } from "@/components/resizable-split"
 import { settingsNavSplit } from "@/lib/layout-split-settings"
@@ -66,6 +67,7 @@ import { readSettingsAccountSnapshot } from "@/lib/settings-account-snapshot-cac
 import { fetchSettingsAccount } from "@/lib/warm-settings-data"
 import { SettingsDataCache } from "@/components/settings-data-cache"
 import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
+import { AppPrimarySection } from "@/lib/app-primary-section-labels"
 
 // AI : vscode-style preview colors — mirror public/json-viewer.html theme "vscode"
 function VscodeSyntaxPreview({ json }: { json: string }) {
@@ -122,7 +124,7 @@ const SETTINGS_SECTIONS = [
 ] as const
 
 export function Settings() {
-  useMarkPrimarySectionReady("settings")
+  useMarkPrimarySectionReady(AppPrimarySection.Settings)
   const shell = useOptionalAppShell()
   const { model, setModel } = useWorkspaceModel()
   const [email, setEmail] = useState<string | null>(() => readSettingsAccountSnapshot()?.email ?? null)
@@ -225,12 +227,14 @@ export function Settings() {
     setColorScheme(scheme)
   }
 
+  const settingsPanel = windowPanelHeader("settings")
+
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="11 / Settings"
-        title="Settings"
-        description="App preferences — stored locally in your browser."
+        step={settingsPanel.step}
+        title={settingsPanel.title}
+        description={settingsPanel.description}
       />
       <ResizableSplit
         className="min-h-0 flex-1"

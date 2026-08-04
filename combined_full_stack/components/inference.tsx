@@ -24,6 +24,7 @@ import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { WindowHeader } from "@/components/window-header"
+import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -349,12 +350,14 @@ export function Inference() {
     ? `${run.run.status === "ok" ? "Completed" : "Failed"} · ${timeAgo(run.run.startedAt)} · ${run.run.id}`
     : undefined
 
+  const inferencePanel = windowPanelHeader("inference")
+
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="04 / Inference"
-        title="Run Pipeline"
-        description="Save named input setups, then run the pipeline. Final output appears when the run finishes."
+        step={inferencePanel.step}
+        title={inferencePanel.title}
+        description={inferencePanel.description}
         actions={
           <div className="flex items-center gap-2">
             <Button size="sm" className="h-8" onClick={() => void createBlankSetup()} disabled={creatingSetup}>

@@ -21,21 +21,26 @@ import { useAppShell } from "@/lib/app-shell"
 import { consumePendingSharedRun } from "@/lib/pending-shared-run"
 import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
-
-type ShareSection = "publish" | "shared" | "marketplace" | "activity"
-
-type PublishTab = "link" | "api" | "marketplace"
+import {
+  CONSUMER_RUN_PANEL_HEADER,
+  PublishTab,
+  ShareSection,
+  ShareTabLabel,
+  windowPanelHeader,
+} from "@/lib/window-panel-meta"
+import { AppPrimarySection } from "@/lib/app-primary-section-labels"
 
 export function SharePage() {
-  useMarkPrimarySectionReady("run")
+  useMarkPrimarySectionReady(AppPrimarySection.Run)
   const builder = useOptionalStore()
+  const sharePanel = windowPanelHeader("share")
   const isConsumer = !builder
   const { setActiveWindow, activeSharedLinkId, openSharedRun } = useAppShell()
   const { typesInvalid, pipelineInvalid, runTabsBlocked } = builder
     ? computeWorkspaceValidity(builder.modules, builder.models, builder.typeAliases)
     : { typesInvalid: false, pipelineInvalid: false, runTabsBlocked: false }
-  const [section, setSection] = useState<ShareSection>(isConsumer ? "shared" : "publish")
-  const [tab, setTab] = useState<PublishTab>("link")
+  const [section, setSection] = useState<ShareSection>(isConsumer ? ShareSection.Shared : ShareSection.Publish)
+  const [tab, setTab] = useState<PublishTab>(PublishTab.Link)
   const [refreshToken, setRefreshToken] = useState(0)
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>(null)
 
@@ -43,7 +48,7 @@ export function SharePage() {
     const pending = consumePendingSharedRun()
     if (pending) {
       openSharedRun(pending)
-      setSection("shared")
+      setSection(ShareSection.Shared)
     }
   }, [openSharedRun])
 
@@ -54,35 +59,31 @@ export function SharePage() {
   if (isConsumer) {
     return (
       <div className="flex h-full flex-col">
-        <WindowHeader
-          step="Shared with me"
-          title="Run shared pipelines"
-          description="Paste a link someone shared with you, browse the marketplace, or top up in Billing."
-        />
+        <WindowHeader {...CONSUMER_RUN_PANEL_HEADER} />
         <div className="border-b border-border px-5">
           <div className="mx-auto flex max-w-6xl gap-1 py-2">
             <button
               type="button"
               className={cn(
                 "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                section === "shared"
+                section === ShareSection.Shared
                   ? "bg-secondary text-foreground"
                   : "text-muted-foreground hover:text-foreground",
               )}
-              onClick={() => setSection("shared")}
+              onClick={() => setSection(ShareSection.Shared)}
             >
               <Users className="h-3.5 w-3.5" />
-              Shared with me
+              {ShareTabLabel.SharedWithMe}
             </button>
             <button
               type="button"
               className={cn(
                 "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                section === "marketplace"
+                section === ShareSection.Marketplace
                   ? "bg-secondary text-foreground"
                   : "text-muted-foreground hover:text-foreground",
               )}
-              onClick={() => setSection("marketplace")}
+              onClick={() => setSection(ShareSection.Marketplace)}
             >
               <Store className="h-3.5 w-3.5" />
               Marketplace
@@ -90,7 +91,7 @@ export function SharePage() {
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          {section === "marketplace" ? (
+          {section === ShareSection.Marketplace ? (
             <MarketplaceBrowsePanel />
           ) : (
             <div className="mx-auto max-w-2xl">
@@ -107,9 +108,9 @@ export function SharePage() {
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="05 / Share"
-        title="Share & Monetize"
-        description="Publish run links, APIs, or marketplace copies — viewer billing uses the Billing tab."
+        step={sharePanel.step}
+        title={sharePanel.title}
+        description={sharePanel.description}
       />
 
       <div className="border-b border-border px-5">
@@ -118,11 +119,11 @@ export function SharePage() {
             type="button"
             className={cn(
               "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              section === "publish"
+              section === ShareSection.Publish
                 ? "bg-secondary text-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
-            onClick={() => setSection("publish")}
+            onClick={() => setSection(ShareSection.Publish)}
           >
             <Globe className="h-3.5 w-3.5" />
             Publish
@@ -131,24 +132,24 @@ export function SharePage() {
             type="button"
             className={cn(
               "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              section === "shared"
+              section === ShareSection.Shared
                 ? "bg-secondary text-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
-            onClick={() => setSection("shared")}
+            onClick={() => setSection(ShareSection.Shared)}
           >
             <Users className="h-3.5 w-3.5" />
-            Shared with me
+            {ShareTabLabel.SharedWithMe}
           </button>
           <button
             type="button"
             className={cn(
               "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              section === "marketplace"
+              section === ShareSection.Marketplace
                 ? "bg-secondary text-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
-            onClick={() => setSection("marketplace")}
+            onClick={() => setSection(ShareSection.Marketplace)}
           >
             <Store className="h-3.5 w-3.5" />
             Marketplace
@@ -157,13 +158,13 @@ export function SharePage() {
             type="button"
             className={cn(
               "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-              section === "activity"
+              section === ShareSection.Activity
                 ? "bg-secondary text-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
             onClick={() => {
               setActivityFilter(null)
-              setSection("activity")
+              setSection(ShareSection.Activity)
             }}
           >
             <ScrollText className="h-3.5 w-3.5" />
@@ -173,11 +174,11 @@ export function SharePage() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        {section === "activity" ? (
+        {section === ShareSection.Activity ? (
           <DeploymentActivityPage projectId={builder.project.id} initialFilter={activityFilter} />
-        ) : section === "marketplace" ? (
+        ) : section === ShareSection.Marketplace ? (
           <MarketplaceBrowsePanel />
-        ) : section === "shared" ? (
+        ) : section === ShareSection.Shared ? (
           <div className="mx-auto max-w-2xl">
             <SharedWithMePanel onRun={openSharedRun} />
           </div>
@@ -203,11 +204,11 @@ export function SharePage() {
                 You can still browse the marketplace or run shared links.
               </p>
               <div className="mt-1 flex justify-center gap-2">
-                <Button variant="link" size="sm" onClick={() => setSection("marketplace")}>
+                <Button variant="link" size="sm" onClick={() => setSection(ShareSection.Marketplace)}>
                   Open Marketplace
                 </Button>
-                <Button variant="link" size="sm" onClick={() => setSection("shared")}>
-                  Shared with me
+                <Button variant="link" size="sm" onClick={() => setSection(ShareSection.Shared)}>
+                  {ShareTabLabel.SharedWithMe}
                 </Button>
               </div>
             </div>
@@ -221,11 +222,11 @@ export function SharePage() {
                     type="button"
                     className={cn(
                       "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors",
-                      tab === "link"
+                      tab === PublishTab.Link
                         ? "bg-background text-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground",
                     )}
-                    onClick={() => setTab("link")}
+                    onClick={() => setTab(PublishTab.Link)}
                   >
                     <Globe className="h-3.5 w-3.5" />
                     Link
@@ -234,11 +235,11 @@ export function SharePage() {
                     type="button"
                     className={cn(
                       "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors",
-                      tab === "api"
+                      tab === PublishTab.Api
                         ? "bg-background text-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground",
                     )}
-                    onClick={() => setTab("api")}
+                    onClick={() => setTab(PublishTab.Api)}
                   >
                     <Zap className="h-3.5 w-3.5" />
                     API
@@ -247,25 +248,25 @@ export function SharePage() {
                     type="button"
                     className={cn(
                       "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors",
-                      tab === "marketplace"
+                      tab === PublishTab.Marketplace
                         ? "bg-background text-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground",
                     )}
-                    onClick={() => setTab("marketplace")}
+                    onClick={() => setTab(PublishTab.Marketplace)}
                   >
                     <Store className="h-3.5 w-3.5" />
                     Marketplace
                   </button>
                 </div>
 
-                {tab === "link" ? (
+                {tab === PublishTab.Link ? (
                   <ShareLinkForm
                     project={builder.project}
                     docs={builder.docs}
                     inferenceInputDocIds={builder.inferenceInputDocIds}
                     onCreated={() => setRefreshToken((n) => n + 1)}
                   />
-                ) : tab === "api" ? (
+                ) : tab === PublishTab.Api ? (
                   <HostApiForm
                     project={builder.project}
                     docs={builder.docs}
@@ -286,7 +287,7 @@ export function SharePage() {
                   refreshToken={refreshToken}
                   onViewActivity={(filter) => {
                     setActivityFilter(filter)
-                    setSection("activity")
+                    setSection(ShareSection.Activity)
                   }}
                 />
               </section>

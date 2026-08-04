@@ -2,9 +2,17 @@
 import type { StepUiState } from "@/lib/run-engine"
 import type { ModuleId, ProjectId, RunJobId } from "@/lib/types"
 
-export type RunJobSource = "inference" | "testing"
+export enum RunJobSource {
+  Inference = "inference",
+  Testing = "testing",
+}
 
-export type TrackedRunJobStatus = "running" | "done" | "error" | "stopped"
+export enum TrackedRunJobStatus {
+  Running = "running",
+  Done = "done",
+  Error = "error",
+  Stopped = "stopped",
+}
 
 export type TrackedRunJob = {
   id: string

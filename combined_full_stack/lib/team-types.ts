@@ -3,7 +3,11 @@
 export type team_id_string = string & { __brand: "team_id" };
 export type team_invite_token_string = string & { __brand: "team_invite_token" };
 
-export type TeamRole = "owner" | "admin" | "member";
+export enum TeamRole {
+  Owner = "owner",
+  Admin = "admin",
+  Member = "member",
+}
 
 export type TeamMemberView = {
   userId: string;
@@ -15,7 +19,7 @@ export type TeamMemberView = {
 export type TeamInviteView = {
   token: team_invite_token_string;
   email: string;
-  role: Exclude<TeamRole, "owner">;
+  role: Exclude<TeamRole, TeamRole.Owner>;
   createdAt: string;
   expiresAt: string;
 };

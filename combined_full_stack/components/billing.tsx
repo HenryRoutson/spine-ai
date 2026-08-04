@@ -19,10 +19,12 @@ import {
 } from "@/components/account-panel-skeletons"
 import { Skeleton } from "@/components/ui/skeleton"
 import { WindowHeader } from "@/components/window-header"
+import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { Button } from "@/components/ui/button"
 import { type ChartConfig } from "@/components/ui/chart"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { AppPrimarySectionTitle } from "@/lib/app-primary-section-labels"
 import { CreditCard, KeyRound, Loader2, Play, TrendingDown, TrendingUp } from "lucide-react"
 import { isSharedRun } from "@/lib/shared-link-types"
 import type { PipelineRun } from "@/lib/types"
@@ -32,6 +34,7 @@ import {
   type BillingKeySnapshot,
 } from "@/lib/billing-keys-snapshot-cache"
 import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
+import { AppPrimarySection } from "@/lib/app-primary-section-labels"
 
 const BillingSpendChart = dynamic(
   () => import("@/components/billing-spend-chart").then((m) => ({ default: m.BillingSpendChart })),
@@ -70,7 +73,7 @@ function formatCreditWhen(iso: string): string {
 }
 
 export function Billing() {
-  useMarkPrimarySectionReady("billing")
+  useMarkPrimarySectionReady(AppPrimarySection.Billing)
   const { runs, billingRuns, project, billingAccount, refreshBilling, refreshBillingRuns } = useWorkspaceBilling()
 
   useEffect(() => {
@@ -93,7 +96,7 @@ export function Billing() {
   const billing = useMemo(() => billingSeries(scopedRuns), [scopedRuns])
   const scopeLabel =
     scope === "shared"
-      ? "Run shared pipelines"
+      ? AppPrimarySectionTitle.Run
       : scope === "project" && project
         ? project.name
         : "All projects"
@@ -204,12 +207,14 @@ export function Billing() {
   const minRunBalanceCents = billingAccount?.minRunBalanceCents ?? MIN_RUN_BALANCE_CENTS
   const canRun = billingAccount ? billingAccount.balanceCents >= minRunBalanceCents : false
 
+  const billingPanel = windowPanelHeader("billing")
+
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="11 / Billing"
-        title="LLM credit & spend"
-        description={`Credit for pipeline runs — subscribe or top up here. Share/API earnings live in the separate Earnings tab. You need at least ${formatCents(minRunBalanceCents)} credit to start a run.`}
+        step={billingPanel.step}
+        title={billingPanel.title}
+        description={`${billingPanel.description} Share/API earnings live in the separate Earnings tab. You need at least ${formatCents(minRunBalanceCents)} credit to start a run.`}
       />
 
       {billingAccount ? (
@@ -351,7 +356,7 @@ export function Billing() {
                   onClick={() => setScope("shared")}
                 >
                   <Play className="h-3 w-3 shrink-0" />
-                  Run shared pipelines
+                  {AppPrimarySectionTitle.Run}
                 </Button>
               </div>
               {hasRuns && (

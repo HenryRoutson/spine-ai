@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useStore } from "@/lib/store"
 import { WindowHeader } from "@/components/window-header"
+import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { ResizableSplit } from "@/components/resizable-split"
 import { cacheListSplit } from "@/lib/layout-split-settings"
 import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
@@ -154,12 +155,14 @@ export function Cache() {
 
   const detailQuotes = detail?.outputJson ? quotesFromJson(detail.outputJson) : []
 
+  const cachePanel = windowPanelHeader("cache")
+
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="cache"
-        title="Step cache"
-        description="Disk-cached pipeline steps — search entries and see reuse counts."
+        step={cachePanel.step}
+        title={cachePanel.title}
+        description={cachePanel.description}
         actions={
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="gap-1 font-mono text-[10px]">

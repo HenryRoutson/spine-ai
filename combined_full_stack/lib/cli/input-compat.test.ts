@@ -4,7 +4,12 @@ import { join } from "node:path"
 import { evaluateCompatKey, evaluateInputCompat, inputCompatHasMismatch } from "@/lib/input-compat"
 import type { InputDocsAssignment } from "@/lib/inference-input-core"
 import type { DocRef, PipelineModule } from "@/lib/types"
-import { InputType } from "@/lib/types"
+import {
+  InputCompatCompare,
+  InputCompatExtractorKind,
+  InputCompatNormalize,
+  InputType,
+} from "@/lib/types"
 
 const HW_DIR = join(process.cwd(), "documents/homework_grader")
 
@@ -15,25 +20,29 @@ describe("input-compat", () => {
   it("matches jordan homework against the bundled marking schema", () => {
     const title = evaluateCompatKey(schemaContent, jordanContent, {
       label: "assignment title",
-      upstream: { kind: "json-path", path: "assignment_title", normalize: "lower-trim" },
+      upstream: {
+        kind: InputCompatExtractorKind.JsonPath,
+        path: "assignment_title",
+        normalize: InputCompatNormalize.LowerTrim,
+      },
       local: {
-        kind: "text-regex",
+        kind: InputCompatExtractorKind.TextRegex,
         pattern: "^#\\s*(.+?)\\s+—\\s+Student",
         group: 1,
-        normalize: "lower-trim",
+        normalize: InputCompatNormalize.LowerTrim,
       },
     })
     expect(title.status).toBe("match")
 
     const questions = evaluateCompatKey(schemaContent, jordanContent, {
       label: "question IDs",
-      compare: "set-equal",
+      compare: InputCompatCompare.SetEqual,
       upstream: {
-        kind: "json-path",
+        kind: InputCompatExtractorKind.JsonPath,
         path: "sections[].questions[].question_id",
-        normalize: "question-id-set",
+        normalize: InputCompatNormalize.QuestionIdSet,
       },
-      local: { kind: "question-ids-text" },
+      local: { kind: InputCompatExtractorKind.QuestionIdsText },
     })
     expect(questions.status).toBe("match")
   })
@@ -42,12 +51,16 @@ describe("input-compat", () => {
     const wrongStudent = jordanContent.replace("Homework 7", "Homework 99")
     const title = evaluateCompatKey(schemaContent, wrongStudent, {
       label: "assignment title",
-      upstream: { kind: "json-path", path: "assignment_title", normalize: "lower-trim" },
+      upstream: {
+        kind: InputCompatExtractorKind.JsonPath,
+        path: "assignment_title",
+        normalize: InputCompatNormalize.LowerTrim,
+      },
       local: {
-        kind: "text-regex",
+        kind: InputCompatExtractorKind.TextRegex,
         pattern: "^#\\s*(.+?)\\s+—\\s+Student",
         group: 1,
-        normalize: "lower-trim",
+        normalize: InputCompatNormalize.LowerTrim,
       },
     })
     expect(title.status).toBe("mismatch")
@@ -63,23 +76,27 @@ describe("input-compat", () => {
         keys: [
           {
             label: "assignment title",
-            upstream: { kind: "json-path", path: "assignment_title", normalize: "lower-trim" },
+            upstream: {
+              kind: InputCompatExtractorKind.JsonPath,
+              path: "assignment_title",
+              normalize: InputCompatNormalize.LowerTrim,
+            },
             local: {
-              kind: "text-regex",
+              kind: InputCompatExtractorKind.TextRegex,
               pattern: "^#\\s*(.+?)\\s+—\\s+Student",
               group: 1,
-              normalize: "lower-trim",
+              normalize: InputCompatNormalize.LowerTrim,
             },
           },
           {
             label: "question IDs",
-            compare: "set-equal",
+            compare: InputCompatCompare.SetEqual,
             upstream: {
-              kind: "json-path",
+              kind: InputCompatExtractorKind.JsonPath,
               path: "sections[].questions[].question_id",
-              normalize: "question-id-set",
+              normalize: InputCompatNormalize.QuestionIdSet,
             },
-            local: { kind: "question-ids-text" },
+            local: { kind: InputCompatExtractorKind.QuestionIdsText },
           },
         ],
       },

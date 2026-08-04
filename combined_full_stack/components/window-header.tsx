@@ -1,16 +1,12 @@
 import type { ReactNode } from "react"
+import type { AppWindowStepLabel, WindowHeaderCopy } from "@/lib/window-panel-meta"
 
 export function WindowHeader({
   step,
   title,
   description,
   actions,
-}: {
-  step: string
-  title: string
-  description: string
-  actions?: ReactNode
-}) {
+}: WindowHeaderCopy & { actions?: ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-3.5">
       <div className="min-w-0">

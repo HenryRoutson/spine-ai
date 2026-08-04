@@ -2,6 +2,10 @@
 
 import { Skeleton } from "@/components/ui/skeleton"
 import { WindowHeader } from "@/components/window-header"
+import {
+  CONSUMER_RUN_PANEL_HEADER,
+  windowPanelHeader,
+} from "@/lib/window-panel-meta"
 import { cn } from "@/lib/utils"
 
 function CardSectionSkeleton({
@@ -74,12 +78,13 @@ export function BillingKeysListSkeleton({ rows = 2 }: { rows?: number }) {
 }
 
 export function BillingPanelSkeleton() {
+  const billing = windowPanelHeader("billing")
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="11 / Billing"
-        title="LLM credit & spend"
-        description="Credit for pipeline runs — subscribe or top up here."
+        step={billing.step}
+        title={billing.title}
+        description={billing.description}
       />
       <BillingBalanceSkeleton />
       <BillingStatsSkeleton />
@@ -125,12 +130,13 @@ export function TeamSettingsSkeleton() {
 }
 
 export function SettingsPanelSkeleton() {
+  const settings = windowPanelHeader("settings")
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="11 / Settings"
-        title="Settings"
-        description="App preferences — stored locally in your browser."
+        step={settings.step}
+        title={settings.title}
+        description={settings.description}
       />
       <div className="flex min-h-0 flex-1">
         <div className="hidden w-44 shrink-0 space-y-1 border-r border-border p-2 sm:block">
@@ -217,11 +223,7 @@ export function SharedWithMeSkeleton() {
 export function RunPanelSkeleton() {
   return (
     <div className="flex h-full flex-col">
-      <WindowHeader
-        step="Shared with me"
-        title="Run shared pipelines"
-        description="Paste a link someone shared with you, browse the marketplace, or top up in Billing."
-      />
+      <WindowHeader {...CONSUMER_RUN_PANEL_HEADER} />
       <div className="border-b border-border px-5">
         <div className="mx-auto flex max-w-6xl gap-2 py-2">
           <Skeleton className="h-8 w-32" />

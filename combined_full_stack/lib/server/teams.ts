@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { uid } from "@/lib/id";
-import type { TeamInviteView, TeamMemberView, TeamRole, TeamView, team_id_string, team_invite_token_string } from "@/lib/team-types";
+import { TeamRole, type TeamInviteView, type TeamMemberView, type TeamView, type team_id_string, type team_invite_token_string } from "@/lib/team-types";
 import type { ProjectId } from "@/lib/types";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "./supabase_admin";
@@ -26,7 +26,7 @@ type StoredTeam = {
   invites: Array<{
     token: team_invite_token_string;
     email: string;
-    role: "admin" | "member";
+    role: Exclude<TeamRole, TeamRole.Owner>;
     invitedBy: user_id_string;
     createdAt: string;
     expiresAt: string;
@@ -187,7 +187,7 @@ async function listSupabaseTeamsForUser(userId: user_id_string): Promise<TeamVie
       pendingInvites = (invites ?? []).map((i) => ({
         token: i.token as team_invite_token_string,
         email: i.email,
-        role: i.role as "admin" | "member",
+        role: i.role as Exclude<TeamRole, TeamRole.Owner>,
         createdAt: i.created_at,
         expiresAt: i.expires_at,
       }));
@@ -229,7 +229,7 @@ export async function createTeam(userId: user_id_string, name: string): Promise<
       createdBy: userId,
       billingOwnerId: userId,
       createdAt: new Date().toISOString(),
-      members: [{ userId, role: "owner", joinedAt: new Date().toISOString() }],
+      members: [{ userId, role: TeamRole.Owner, joinedAt: new Date().toISOString() }],
       invites: [],
     };
     teams.push(team);
@@ -266,7 +266,7 @@ export async function inviteTeamMember(
   userId: user_id_string,
   teamId: team_id_string,
   email: string,
-  role: "admin" | "member",
+  role: Exclude<TeamRole, TeamRole.Owner>,
 ): Promise<TeamInviteView> {
   const normalized = email.trim().toLowerCase();
   if (!normalized.includes("@")) throw new Error("Valid email is required.");

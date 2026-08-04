@@ -1,13 +1,16 @@
 import { docsForInputModule, type InputDocsAssignment } from "@/lib/inference-input-core"
 import type {
   DocRef,
-  InputCompatCompare,
   InputCompatExtractor,
   InputCompatKey,
-  InputCompatNormalize,
   InputCompatWith,
   ModuleId,
   PipelineModule,
+} from "@/lib/types"
+import {
+  InputCompatCompare,
+  InputCompatExtractorKind,
+  InputCompatNormalize,
 } from "@/lib/types"
 
 export type InputCompatKeyStatus = "match" | "mismatch" | "missing"
@@ -33,20 +36,20 @@ type compat_scalar = string
 type compat_set = string[]
 
 function compatNormalize(extractor: InputCompatExtractor): InputCompatNormalize | undefined {
-  if (extractor.kind === "question-ids-text") return "question-id-set"
+  if (extractor.kind === InputCompatExtractorKind.QuestionIdsText) return InputCompatNormalize.QuestionIdSet
   return extractor.normalize
 }
 
 function normalizeScalar(value: string, normalize?: InputCompatNormalize): compat_scalar {
   const s = value.trim()
-  if (normalize === "lower-trim") return s.toLowerCase()
-  if (normalize === "question-id") return s.trim().toUpperCase()
+  if (normalize === InputCompatNormalize.LowerTrim) return s.toLowerCase()
+  if (normalize === InputCompatNormalize.QuestionId) return s.trim().toUpperCase()
   return s
 }
 
 function normalizeSet(values: string[], normalize?: InputCompatNormalize): compat_set {
   const mapped = values.map((v) => normalizeScalar(v, normalize)).filter(Boolean)
-  if (normalize === "question-id-set") {
+  if (normalize === InputCompatNormalize.QuestionIdSet) {
     return [...new Set(mapped.map((v) => v.toUpperCase()))].sort()
   }
   return [...new Set(mapped)].sort()
@@ -113,12 +116,12 @@ function extractCompatValues(
   content: string,
   extractor: InputCompatExtractor,
 ): string[] | null {
-  if (extractor.kind === "json-path") {
+  if (extractor.kind === InputCompatExtractorKind.JsonPath) {
     const parsed = parseJsonContent(content)
     if (parsed == null) return null
     return extractJsonPath(parsed, extractor.path)
   }
-  if (extractor.kind === "text-regex") {
+  if (extractor.kind === InputCompatExtractorKind.TextRegex) {
     const flags = extractor.flags ?? "m"
     const re = new RegExp(extractor.pattern, flags)
     const m = content.match(re)
@@ -127,7 +130,7 @@ function extractCompatValues(
     const raw = m[group]
     return raw != null ? [raw] : []
   }
-  if (extractor.kind === "question-ids-text") {
+  if (extractor.kind === InputCompatExtractorKind.QuestionIdsText) {
     return extractQuestionIdsFromText(content)
   }
   return null
@@ -141,7 +144,7 @@ function compareExtracted(
   localNorm: InputCompatExtractor,
 ): InputCompatKeyStatus {
   if (!upstream.length || !local.length) return "missing"
-  if (compare === "set-equal") {
+  if (compare === InputCompatCompare.SetEqual) {
     const a = normalizeSet(upstream, compatNormalize(upstreamNorm))
     const b = normalizeSet(local, compatNormalize(localNorm))
     return a.length === b.length && a.every((v, i) => v === b[i]) ? "match" : "mismatch"
@@ -153,7 +156,7 @@ function compareExtracted(
 
 function formatCompatValue(values: string[], extractor: InputCompatExtractor): string {
   const norm = compatNormalize(extractor)
-  if (extractor.kind === "question-ids-text" || norm === "question-id-set") {
+  if (extractor.kind === InputCompatExtractorKind.QuestionIdsText || norm === InputCompatNormalize.QuestionIdSet) {
     return normalizeSet(values, norm).join(", ") || "—"
   }
   return values[0] != null ? normalizeScalar(values[0], norm) : "—"
@@ -166,7 +169,7 @@ export function evaluateCompatKey(
 ): InputCompatKeyResult {
   const upstreamVals = extractCompatValues(upstreamContent, key.upstream)
   const localVals = extractCompatValues(localContent, key.local)
-  const compare = key.compare ?? "equal"
+  const compare = key.compare ?? InputCompatCompare.Equal
   const status =
     upstreamVals == null || localVals == null
       ? "missing"

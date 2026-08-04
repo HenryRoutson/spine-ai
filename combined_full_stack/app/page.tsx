@@ -1,6 +1,6 @@
 "use client"
 
-import { StoreProvider } from "@/lib/store"
+import { StoreProvider, StoreMode } from "@/lib/store"
 import { DocViewerProvider } from "@/lib/doc-viewer"
 import { AppShellProvider } from "@/lib/app-shell"
 import { ProjectAssistantProvider } from "@/lib/project-assistant-context"
@@ -11,20 +11,20 @@ import { AppShellLayout } from "@/components/app-shell-layout"
 
 export default function Page() {
   return (
-    <StoreProvider mode="workspace">
-      <DocViewerProvider>
-        <AppShellProvider>
-          <ProjectAssistantProvider>
-            <DiagnosisAgentProvider>
-              <RunJobsProvider>
-                <AppShellKindProvider>
+    <AppShellKindProvider>
+      <StoreProvider mode={StoreMode.Workspace}>
+        <DocViewerProvider>
+          <AppShellProvider>
+            <ProjectAssistantProvider>
+              <DiagnosisAgentProvider>
+                <RunJobsProvider>
                   <AppShellLayout />
-                </AppShellKindProvider>
-              </RunJobsProvider>
-            </DiagnosisAgentProvider>
-          </ProjectAssistantProvider>
-        </AppShellProvider>
-      </DocViewerProvider>
-    </StoreProvider>
+                </RunJobsProvider>
+              </DiagnosisAgentProvider>
+            </ProjectAssistantProvider>
+          </AppShellProvider>
+        </DocViewerProvider>
+      </StoreProvider>
+    </AppShellKindProvider>
   )
 }

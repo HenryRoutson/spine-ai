@@ -6,10 +6,12 @@ import { Plus, Code2, Sparkles, Lock, Braces } from "lucide-react"
 import { StructureExcelEditor } from "@/components/structure-excel-editor"
 import { StructureTypeAliasEditor, TypeAliasTextSync } from "@/components/structure-type-alias-editor"
 import { WindowHeader } from "@/components/window-header"
+import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useAppShell } from "@/lib/app-shell"
 import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
+import { AppPrimarySection } from "@/lib/app-primary-section-labels"
 import { useStore, uid } from "@/lib/store"
 import { StructureCodeView } from "@/components/structure-code-view"
 import { EntityRail, EntityRailItem, EntityRailSection } from "@/components/entity-rail"
@@ -36,7 +38,7 @@ type EditorTarget =
 type StructureView = "structures" | "code"
 
 export function StructureBuilder() {
-  useMarkPrimarySectionReady("build")
+  useMarkPrimarySectionReady(AppPrimarySection.Build)
   const { models, setModels, typeAliases, setTypeAliases, project } = useStore()
   const teamReadOnly = !!project?.teamReadOnly
   const { focusStructureId, clearFocusStructure } = useAppShell()
@@ -132,12 +134,14 @@ export function StructureBuilder() {
     setTypeAliases((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
   }
 
+  const structurePanel = windowPanelHeader("structure")
+
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="01 / Structure"
-        title="Structures"
-        description="Define the pydantic models your LLM must output to. Schema validation is implicit on every step's I/O."
+        step={structurePanel.step}
+        title={structurePanel.title}
+        description={structurePanel.description}
       />
 
       {teamReadOnly && (
@@ -158,7 +162,7 @@ export function StructureBuilder() {
             minLeading={STRUCTURE_SIDEBAR_MIN}
             maxLeading={STRUCTURE_SIDEBAR_MAX}
             leading={
-              <EntityRail className="w-full">
+              <EntityRail className="min-h-0 w-full flex-1">
                 <EntityRailSection
                   title="Structs in project"
                   action={
@@ -172,7 +176,7 @@ export function StructureBuilder() {
                       <Plus className="h-3 w-3" />
                     </Button>
                   }
-                  className="max-h-[45%]"
+                  className="max-h-[45%] shrink-0"
                 >
                   {models.length === 0 && (
                     <p className="px-1 py-2 text-center font-mono text-[10px] text-muted-foreground">
@@ -250,7 +254,7 @@ export function StructureBuilder() {
                   ))}
                 </EntityRailSection>
 
-                <div className="mt-auto border-t border-border/60 p-1.5">
+                <div className="shrink-0 border-t border-border/60 p-1.5">
                   <EntityRailItem active={view === "code"} onClick={() => setView("code")}>
                     <div className="flex items-center gap-2">
                       <Code2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />

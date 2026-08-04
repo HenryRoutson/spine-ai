@@ -23,7 +23,9 @@ import {
 import { cacheUploadFileText, fetchSharedRunDocText } from "@/lib/shared-run-doc-cache"
 import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 
-export type SharedInferencePhase = "idle" | "running" | "done"
+import { RunPhase } from "@/lib/run-phase"
+
+export { RunPhase as SharedInferencePhase } from "@/lib/run-phase"
 
 type SharedRunAuth = {
   isAuthenticated: boolean
@@ -43,7 +45,7 @@ export function useSharedInferenceRun(
   const [inputDocs, setInputDocs] = useState<InputDocsAssignment>({})
   const [uploadingModule, setUploadingModule] = useState<ModuleId | null>(null)
   const [viewerName, setViewerName] = useState("")
-  const [phase, setPhase] = useState<SharedInferencePhase>("idle")
+  const [phase, setPhase] = useState<RunPhase>(RunPhase.Idle)
   const [stepStates, setStepStates] = useState<Map<ModuleId, StepUiState>>(new Map())
   const [run, setRun] = useState<PipelineRun | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -106,7 +108,7 @@ export function useSharedInferenceRun(
 
   function reset() {
     activeJobGenRef.current++
-    setPhase("idle")
+    setPhase(RunPhase.Idle)
     setStepStates(new Map())
     setRun(null)
     setError(null)
@@ -131,7 +133,7 @@ export function useSharedInferenceRun(
       return
     }
     const jobGen = ++activeJobGenRef.current
-    setPhase("running")
+    setPhase(RunPhase.Running)
     setError(null)
     setRun(null)
     setStepStates(new Map())
@@ -169,12 +171,12 @@ export function useSharedInferenceRun(
       )
       if (jobGen !== activeJobGenRef.current) return
       setRun(finished)
-      setPhase("done")
+      setPhase(RunPhase.Done)
       onRunComplete?.()
     } catch (e) {
       if (jobGen !== activeJobGenRef.current) return
       setError((e as Error).message)
-      setPhase("idle")
+      setPhase(RunPhase.Idle)
     }
   }
 

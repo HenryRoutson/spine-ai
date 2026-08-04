@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { WindowHeader } from "@/components/window-header"
+import { LLM_PROVIDERS_PANEL_HEADER } from "@/lib/window-panel-meta"
 import { CodeErrorHistory, CODE_ERROR_NS } from "@/components/code-error-history"
 import { recordCodeError } from "@/lib/code-error-history"
 import {
@@ -364,9 +365,7 @@ export function LlmProvidersSettingsPage({ onClose }: { onClose: () => void }) {
   return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col bg-background">
       <WindowHeader
-        step="Settings / LLM providers"
-        title="LLM providers"
-        description="TypeScript runtime for Spine inference — optional export snippets for other languages."
+        {...LLM_PROVIDERS_PANEL_HEADER}
         actions={
           <Button
             type="button"

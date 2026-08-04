@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import dynamic from "next/dynamic"
 import { Save, Eye, Pencil, Columns2, Maximize2, X } from "lucide-react"
 import { WindowHeader } from "@/components/window-header"
+import { windowPanelHeader } from "@/lib/window-panel-meta"
 import { Button } from "@/components/ui/button"
 import { MarkdownView } from "@/components/highlight"
 import { PanelLoading } from "@/components/panel-loading"
@@ -85,9 +86,7 @@ export function Documentation() {
   return (
     <div className="flex h-full flex-col">
       <WindowHeader
-        step="· / Docs"
-        title="Documentation"
-        description="Project rules and context — prepended to every agent prompt to prevent regressions."
+        {...windowPanelHeader("docs")}
         actions={
           <Button
             size="sm"

@@ -1,12 +1,12 @@
-import type { AppPrimarySection } from "@/components/app-primary-nav"
-import type { AppMode } from "@/lib/app-mode-nav"
+import { AppPrimarySection } from "@/lib/app-primary-section-labels"
+import { AppMode } from "@/lib/app-mode-nav"
 import { isAccountWindow } from "@/lib/app-nav-config"
 import type { AppWindowId } from "@/lib/app-shell"
 
 export function resolvePrimarySection(mode: AppMode, activeWindow: AppWindowId): AppPrimarySection {
-  if (activeWindow === "billing") return "billing"
-  if (activeWindow === "settings") return "settings"
-  return mode
+  if (activeWindow === "billing") return AppPrimarySection.Billing
+  if (activeWindow === "settings") return AppPrimarySection.Settings
+  return mode === AppMode.Run ? AppPrimarySection.Run : AppPrimarySection.Build
 }
 
 export function handlePrimarySectionChange(
@@ -17,16 +17,16 @@ export function handlePrimarySectionChange(
   navigateToRun: () => void,
   navigateToBuild: () => void,
 ): void {
-  if (section === "run") {
-    if (mode === "run" && isAccountWindow(activeWindow)) setActiveWindow("share")
+  if (section === AppPrimarySection.Run) {
+    if (mode === AppMode.Run && isAccountWindow(activeWindow)) setActiveWindow("share")
     else {
       navigateToRun()
-      if (mode === "build") setActiveWindow("share")
+      if (mode === AppMode.Build) setActiveWindow("share")
     }
     return
   }
-  if (section === "build") {
-    if (mode === "build") {
+  if (section === AppPrimarySection.Build) {
+    if (mode === AppMode.Build) {
       if (isAccountWindow(activeWindow)) setActiveWindow("structure")
     } else {
       navigateToBuild()

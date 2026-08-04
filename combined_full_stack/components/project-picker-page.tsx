@@ -11,13 +11,15 @@ import {
 } from "lucide-react"
 import { useStorePicker } from "@/lib/store"
 import { AppChromeHeader } from "@/components/app-chrome-header"
-import { navigateToBuildMode, navigateToRunMode } from "@/lib/app-mode-nav"
+import { AppMode, navigateToBuildMode, navigateToRunMode } from "@/lib/app-mode-nav"
+import { AppPrimarySection } from "@/lib/app-primary-section-labels"
 import { handlePrimarySectionChange } from "@/lib/app-primary-section"
 import { useAppShell } from "@/lib/app-shell"
 import {
   usePrimarySectionOpening,
   wrapPrimarySectionChange,
 } from "@/lib/primary-section-opening"
+import { PROJECT_PICKER_PANEL_HEADER } from "@/lib/window-panel-meta"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -125,24 +127,24 @@ export function ProjectPickerPage() {
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
       <AppChromeHeader
-        mode="build"
-        primarySection="build"
+        mode={AppMode.Build}
+        primarySection={AppPrimarySection.Build}
         openingSection={openingSection}
         onPrimarySectionChange={(section) => {
-          wrapPrimarySectionChange(section, "build", beginOpening, () => {
-            if (section === "build") {
+          wrapPrimarySectionChange(section, AppPrimarySection.Build, beginOpening, () => {
+            if (section === AppPrimarySection.Build) {
               navigateToBuildMode()
-              markSectionReady("build")
+              markSectionReady(AppPrimarySection.Build)
               return
             }
-            if (section === "run") {
+            if (section === AppPrimarySection.Run) {
               navigateToRunMode()
               return
             }
             navigateToRunMode()
             handlePrimarySectionChange(
               section,
-              "run",
+              AppMode.Run,
               activeWindow,
               setActiveWindow,
               navigateToRunMode,
@@ -162,9 +164,7 @@ export function ProjectPickerPage() {
 
       <div className="flex min-h-0 flex-1 flex-col">
         <WindowHeader
-          step="Project"
-          title="Choose a project"
-          description="Pick a pipeline to open, or create a new one below."
+          {...PROJECT_PICKER_PANEL_HEADER}
           actions={
             <div className="flex flex-wrap items-center gap-2">
               <Button

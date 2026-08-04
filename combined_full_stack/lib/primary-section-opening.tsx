@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
-import type { AppPrimarySection } from "@/components/app-primary-nav"
+import type { AppPrimarySection } from "@/lib/app-primary-section-labels"
 
 type PrimarySectionOpeningContextValue = {
   openingSection: AppPrimarySection | null

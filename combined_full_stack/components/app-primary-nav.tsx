@@ -1,6 +1,7 @@
 "use client"
 
 import { CreditCard, Hammer, Loader2, Play, Settings } from "lucide-react"
+import { APP_PRIMARY_SECTION_NAV, AppPrimarySection } from "@/lib/app-primary-section-labels"
 import { prefetchBillingPanel } from "@/lib/prefetch-billing-panel"
 import { prefetchBuildPanel } from "@/lib/prefetch-build-panel"
 import { prefetchRunPanel } from "@/lib/prefetch-run-panel"
@@ -9,7 +10,7 @@ import { useOptionalConsumerStore, useOptionalStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { useCallback, useEffect } from "react"
 
-export type AppPrimarySection = "run" | "build" | "billing" | "settings"
+export { AppPrimarySection } from "@/lib/app-primary-section-labels"
 
 type AppPrimaryNavProps = {
   value: AppPrimarySection
@@ -39,44 +40,36 @@ export function AppPrimaryNav({ value, onChange, openingSection = null, classNam
       )}
     >
       <PrimaryButton
-        active={value === "run"}
-        loading={openingSection === "run"}
-        onClick={() => onChange("run")}
+        active={value === AppPrimarySection.Run}
+        loading={openingSection === AppPrimarySection.Run}
+        onClick={() => onChange(AppPrimarySection.Run)}
         onWarm={warmRun}
         icon={Play}
-        label="Run shared pipelines"
-        shortLabel="Run"
-        title="Run pipelines someone shared with you"
+        {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Run]}
       />
       <PrimaryButton
-        active={value === "build"}
-        loading={openingSection === "build"}
-        onClick={() => onChange("build")}
+        active={value === AppPrimarySection.Build}
+        loading={openingSection === AppPrimarySection.Build}
+        onClick={() => onChange(AppPrimarySection.Build)}
         onWarm={warmBuild}
         icon={Hammer}
-        label="Build pipelines"
-        shortLabel="Build"
-        title="Create and edit your own pipelines"
+        {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Build]}
       />
       <PrimaryButton
-        active={value === "billing"}
-        loading={openingSection === "billing"}
-        onClick={() => onChange("billing")}
+        active={value === AppPrimarySection.Billing}
+        loading={openingSection === AppPrimarySection.Billing}
+        onClick={() => onChange(AppPrimarySection.Billing)}
         onWarm={warmBilling}
         icon={CreditCard}
-        label="Billing"
-        shortLabel="Billing"
-        title="Usage, credits, and cost attribution"
+        {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Billing]}
       />
       <PrimaryButton
-        active={value === "settings"}
-        loading={openingSection === "settings"}
-        onClick={() => onChange("settings")}
+        active={value === AppPrimarySection.Settings}
+        loading={openingSection === AppPrimarySection.Settings}
+        onClick={() => onChange(AppPrimarySection.Settings)}
         onWarm={warmSettings}
         icon={Settings}
-        label="Settings"
-        shortLabel="Settings"
-        title="Account and workspace settings"
+        {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Settings]}
       />
     </div>
   )

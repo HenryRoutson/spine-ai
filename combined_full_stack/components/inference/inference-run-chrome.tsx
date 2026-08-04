@@ -22,7 +22,7 @@ import type { ClientStepSpec } from "@/lib/run-types"
 import type { PipelineModule } from "@/lib/types"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 
-type InferencePhase = "idle" | "running" | "done"
+import { RunPhase } from "@/lib/run-phase"
 
 export function InferenceRunSection({
   title,
@@ -72,7 +72,7 @@ export function InferenceCollapsibleSection({
   children,
 }: {
   title: string
-  phase: InferencePhase
+  phase: RunPhase
   collapseOnRun?: boolean
   collapseOnDone?: boolean
   children: React.ReactNode
@@ -80,9 +80,9 @@ export function InferenceCollapsibleSection({
   const [open, setOpen] = useState(true)
 
   useEffect(() => {
-    if (phase === "idle") setOpen(true)
-    else if (phase === "running" && collapseOnRun) setOpen(false)
-    else if (phase === "done" && collapseOnDone) setOpen(false)
+    if (phase === RunPhase.Idle) setOpen(true)
+    else if (phase === RunPhase.Running && collapseOnRun) setOpen(false)
+    else if (phase === RunPhase.Done && collapseOnDone) setOpen(false)
   }, [phase, collapseOnRun, collapseOnDone])
 
   return (

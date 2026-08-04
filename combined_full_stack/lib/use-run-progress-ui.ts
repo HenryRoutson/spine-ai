@@ -8,11 +8,11 @@ import type { StepUiState } from "@/lib/run-engine"
 import type { ModuleId, PipelineModule, PipelineRun } from "@/lib/types"
 import type { ClientStepSpec } from "@/lib/run-types"
 
-export type RunProgressPhase = "idle" | "running" | "done"
+import { RunPhase } from "@/lib/run-phase"
 
 type UseRunProgressUiArgs = {
   modules: PipelineModule[]
-  phase: RunProgressPhase
+  phase: RunPhase
   stepStates: Map<ModuleId, StepUiState>
   run: PipelineRun | null
   pendingHumanReview: ClientStepSpec | null
@@ -26,8 +26,8 @@ export function useRunProgressUi({
   pendingHumanReview,
 }: UseRunProgressUiArgs) {
   const progressPct = useMemo(() => {
-    if (phase === "idle") return 0
-    if (phase === "done") return 100
+    if (phase === RunPhase.Idle) return 0
+    if (phase === RunPhase.Done) return 100
     const done = modules.filter((m) => {
       const s = stepStates.get(m.id)?.status
       return s !== undefined && s !== "idle" && s !== "running"
@@ -53,14 +53,14 @@ export function useRunProgressUi({
     return hints
   }, [stepStates, modules])
 
-  const waitPhrase = useCyclingWaitPhrase(phase === "running", runningHints)
+  const waitPhrase = useCyclingWaitPhrase(phase === RunPhase.Running, runningHints)
   const runErr = useMemo(() => (run ? pipelineRunError(run) : null), [run])
   const runErrorDisplay = useMemo(() => (run ? formatRunErrorForDisplay(run) : null), [run])
-  const runButtonBusy = phase === "running" && !pendingHumanReview
+  const runButtonBusy = phase === RunPhase.Running && !pendingHumanReview
   const runButtonLabel =
     pendingHumanReview != null
       ? "Waiting for your review…"
-      : phase === "running"
+      : phase === RunPhase.Running
         ? `${waitPhrase}…`
         : "Run pipeline"
 

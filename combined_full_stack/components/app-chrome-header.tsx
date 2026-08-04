@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import { AppPrimaryNav, type AppPrimarySection } from "@/components/app-primary-nav"
 import { SpineLogoBox } from "@/components/spine-mark"
 import { LANDING_PAGE_URL } from "@/lib/app-nav-config"
-import type { AppMode } from "@/lib/app-mode-nav"
+import { AppMode } from "@/lib/app-mode-nav"
 import { LEGAL } from "@shared/legal/site"
 
 type AppChromeHeaderProps = {
@@ -52,7 +52,7 @@ export function AppChromeHeader({
 
       <AppPrimaryNav value={primarySection} onChange={onPrimarySectionChange} openingSection={openingSection} />
 
-      {mode === "build" && projectSlot ? (
+      {mode === AppMode.Build && projectSlot ? (
         <>
           <div className="h-6 w-px shrink-0 bg-border" />
           {projectSlot}

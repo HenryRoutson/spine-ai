@@ -12,10 +12,15 @@ import {
 import { usePathname, useRouter } from "next/navigation"
 import { registerAppModeNavApi } from "@/lib/app-mode-nav"
 import { clearActiveProjectSession, readActiveProjectSession } from "@/lib/active-project-session"
+import { isDemoRoute } from "@/lib/demo-mode"
 import { getStoreNavigationBridge } from "@/lib/store-navigation-bridge"
 import type { ProjectId } from "@/lib/types"
 
-export type AppShellKind = "consumer" | "builder" | "picker"
+export enum AppShellKind {
+  Consumer = "consumer",
+  Builder = "builder",
+  Picker = "picker",
+}
 
 type AppShellKindContextValue = {
   shellKind: AppShellKind
@@ -29,34 +34,37 @@ type AppShellKindContextValue = {
 const AppShellKindContext = createContext<AppShellKindContextValue | null>(null)
 
 function resolveShellKindFromSession(): AppShellKind {
-  if (typeof window === "undefined") return "consumer"
-  if (readActiveProjectSession()) return "builder"
-  return "consumer"
+  if (typeof window === "undefined") return AppShellKind.Consumer
+  if (readActiveProjectSession()) return AppShellKind.Builder
+  return AppShellKind.Consumer
 }
 
 export function AppShellKindProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [shellKind, setShellKind] = useState<AppShellKind>("consumer")
+  const [shellKind, setShellKind] = useState<AppShellKind>(AppShellKind.Consumer)
   const [hydrated, setHydrated] = useState(false)
 
   useLayoutEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const shellParam = params.get("shell")
     const windowParam = params.get("window")
-    let next: AppShellKind =
-      pathname.startsWith("/projects") || shellParam === "picker"
-        ? "picker"
+    const demoRoute = pathname.startsWith("/demo")
+    let next: AppShellKind = demoRoute
+      ? AppShellKind.Builder
+      : pathname.startsWith("/projects") || shellParam === "picker"
+        ? AppShellKind.Picker
         : resolveShellKindFromSession()
 
     if (windowParam === "billing" || windowParam === "settings") {
-      if (next === "picker") next = "consumer"
+      if (next === AppShellKind.Picker) next = AppShellKind.Consumer
     }
 
     setShellKind(next)
     setHydrated(true)
 
-    if (shellParam || pathname.startsWith("/projects")) {
+    // AI : leaving /demo for / requires auth — shell switches on /demo must not change the route.
+    if (!demoRoute && (shellParam || pathname.startsWith("/projects"))) {
       router.replace("/", { scroll: false })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -65,8 +73,8 @@ export function AppShellKindProvider({ children }: { children: ReactNode }) {
     const nav = getStoreNavigationBridge()
     nav?.leaveBuilder()
     clearActiveProjectSession()
-    setShellKind("consumer")
-    router.replace("/", { scroll: false })
+    setShellKind(AppShellKind.Consumer)
+    if (!isDemoRoute()) router.replace("/", { scroll: false })
   }, [router])
 
   const navigateToBuildMode = useCallback(() => {
@@ -74,29 +82,29 @@ export function AppShellKindProvider({ children }: { children: ReactNode }) {
     if (sessionId) {
       const nav = getStoreNavigationBridge()
       nav?.enterBuilder(sessionId)
-      setShellKind("builder")
-      router.replace("/", { scroll: false })
+      setShellKind(AppShellKind.Builder)
+      if (!isDemoRoute()) router.replace("/", { scroll: false })
       return
     }
     const nav = getStoreNavigationBridge()
     nav?.enterPicker()
-    setShellKind("picker")
-    router.replace("/", { scroll: false })
+    setShellKind(AppShellKind.Picker)
+    if (!isDemoRoute()) router.replace("/", { scroll: false })
   }, [router])
 
   const navigateToProjectPicker = useCallback(() => {
     const nav = getStoreNavigationBridge()
     nav?.enterPicker()
-    setShellKind("picker")
-    router.replace("/", { scroll: false })
+    setShellKind(AppShellKind.Picker)
+    if (!isDemoRoute()) router.replace("/", { scroll: false })
   }, [router])
 
   const openBuildWorkspace = useCallback(
     (projectId: ProjectId) => {
       const nav = getStoreNavigationBridge()
       nav?.enterBuilder(projectId)
-      setShellKind("builder")
-      router.replace("/", { scroll: false })
+      setShellKind(AppShellKind.Builder)
+      if (!isDemoRoute()) router.replace("/", { scroll: false })
     },
     [router],
   )
