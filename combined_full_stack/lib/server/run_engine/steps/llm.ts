@@ -1,4 +1,5 @@
 import { llmStructured } from "../../llm";
+import { deferBrowserLlmIfNeeded } from "../defer_browser_llm";
 // AI : TODO (spec) — dynamicOutputSchema: LLM emits variable structure at runtime then validate (homework grader).
 import {
   hasQuoteField,
@@ -8,18 +9,9 @@ import {
 } from "../../structure";
 import { stepEmitsList } from "../../type_expr";
 import type { PipelineModule } from "../../types";
-import { materializeHints, modelById, sourceDocumentBlock } from "../helpers";
+import { llmCallBudget, materializeHints, modelById, sourceDocumentBlock } from "../helpers";
 import { requireLinearInput } from "../context";
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types";
-
-function llmCallBudget(ctx: RunCtx, stepLabel: string) {
-  if (ctx.stepCostLimitCents == null || ctx.stepBaseCents == null) return {};
-  return {
-    costLimitCents: ctx.stepCostLimitCents,
-    stepBaseCents: ctx.stepBaseCents,
-    stepLabel,
-  };
-}
 
 export async function execLlmStep(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   const { project } = ctx;
@@ -36,6 +28,22 @@ export async function execLlmStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
   const schema = llmSchema(out, project.models, stepEmitsList(m), project.typeAliases ?? []);
   const prompt = structuredLlmPrompt(userPrompt, schema);
   log.debug(`llm prompt built`, { promptChars: prompt.length, hasQuoteField: hasQuoteField(out, project.models) });
+
+  deferBrowserLlmIfNeeded(
+    stepModel,
+    ({ providerId, providerModel }) => ({
+      providerId,
+      providerModel,
+      prompts: [prompt],
+      jsonMode: true,
+      useBatch: false,
+      inputPreview: prompt,
+    }),
+    log,
+    "llm — deferring to browser provider",
+    { moduleId: m.id },
+  );
+
   ctx.reportSub?.({ label: "LLM call", current: 0, total: 1 });
   ctx.stepLlmCalls = [];
   const raw = await llmStructured(

@@ -2,7 +2,7 @@
 
 // AI : TODO (spec) — git-like branching, merge, and revision history for project collaboration (spec § history).
 import dynamic from "next/dynamic"
-import { useCallback, useEffect, useMemo, type ReactNode } from "react"
+import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { Loader2 } from "lucide-react"
 import { AppChromeHeader } from "@/components/app-chrome-header"
 import { AppWindowNav } from "@/components/app-window-nav"
@@ -15,12 +15,16 @@ import {
   wrapPrimarySectionChange,
 } from "@/lib/primary-section-opening"
 import { navigateToBuildMode, navigateToRunMode } from "@/lib/app-mode-nav"
-import { useConsumerStore, useOptionalConsumerStore, useOptionalStore, useStore } from "@/lib/store"
+import { useAppShellKind } from "@/lib/app-shell-kind"
+import { ProjectPickerContext, useConsumerStore, useOptionalConsumerStore, useOptionalStore, useStore } from "@/lib/store"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { useAppShell, type AppWindowId } from "@/lib/app-shell"
 import { useSyncProjectDocStructures } from "@/lib/use-sync-project-doc-structures"
 import { LazyDocViewer } from "@/components/lazy-doc-viewer"
 import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
+import { ProjectPickerPage } from "@/components/project-picker-page"
+import { ProjectPickerSkeleton, StoreShellSkeleton } from "@/components/store-shell-skeletons"
+import type { AppPrimarySection } from "@/components/app-primary-nav"
 import { PanelLoading } from "@/components/panel-loading"
 import {
   BillingPanelSkeleton,
@@ -38,6 +42,11 @@ import { isPreviewOnly } from "@/lib/demo-mode"
 import { ActivityTracker } from "@/components/activity-tracker"
 import { SessionReplayRecorder } from "@/components/session-replay-recorder"
 import { SESSION_REPLAY_ENABLED } from "@/lib/session-replay-enabled"
+import { prefetchShellPanels } from "@/lib/prefetch-shell-panels"
+import { prefetchBillingPanel } from "@/lib/prefetch-billing-panel"
+import { prefetchBuilderWorkspacePanels, prefetchWorkspacePanel } from "@/lib/prefetch-workspace-panel"
+import { BackgroundPrefetchBar } from "@/components/background-prefetch-bar"
+import { cn } from "@/lib/utils"
 
 // AI : code-split heavy tabs — only Structure ships on first paint.
 const StructureBuilder = dynamic(
@@ -94,77 +103,196 @@ function resolveConsumerWindow(window: AppWindowId): AppWindowId {
   return CONSUMER_WINDOW_IDS.has(window) ? window : "share"
 }
 
-function ShellWindowContent({
-  activeWindow,
-  mode = "builder",
-}: {
-  activeWindow: AppWindowId
-  mode?: "builder" | "consumer"
-}) {
-  const windowId = mode === "consumer" ? resolveConsumerWindow(activeWindow) : activeWindow
+const CONSUMER_PANEL_IDS: AppWindowId[] = ["share", "billing", "settings"]
 
-  let content: ReactNode
+// AI : primary-nav account tabs stay mounted so Billing/Settings open instantly after prefetch.
+const EAGER_ACCOUNT_PANEL_IDS: AppWindowId[] = ["billing", "settings"]
+
+const BUILDER_PANEL_IDS: AppWindowId[] = [
+  "structure",
+  "pipeline",
+  "testing",
+  "inference",
+  "share",
+  "earnings",
+  "logging",
+  "cache",
+  "documents",
+  "docs",
+  "billing",
+  "settings",
+]
+
+function renderWindowPanel(windowId: AppWindowId): ReactNode {
   switch (windowId) {
     case "structure":
-      content = <StructureBuilder />
-      break
+      return <StructureBuilder />
     case "pipeline":
-      content = <PipelineBuilder />
-      break
+      return <PipelineBuilder />
     case "testing":
-      content = <Testing />
-      break
+      return <Testing />
     case "inference":
-      content = <Inference />
-      break
+      return <Inference />
     case "share":
-      content = <Share />
-      break
+      return <Share />
     case "earnings":
-      content = <Earnings />
-      break
+      return <Earnings />
     case "logging":
-      content = <Logging />
-      break
+      return <Logging />
     case "cache":
-      content = <Cache />
-      break
+      return <Cache />
     case "documents":
-      content = <Documents />
-      break
+      return <Documents />
     case "docs":
-      content = <DocumentationPanel />
-      break
+      return <DocumentationPanel />
     case "billing":
-      content = <Billing />
-      break
+      return <Billing />
     case "settings":
-      content = <SettingsPanel />
-      break
+      return <SettingsPanel />
     default:
-      content = null
+      return null
   }
-
-  return <div className="flex h-full min-h-0 flex-1 flex-col">{content}</div>
 }
 
-export function AppShellLayout({ variant = "default" }: { variant?: "default" | "embed" }) {
-  const builder = useOptionalStore()
-  const consumer = useOptionalConsumerStore()
-  if (!builder && consumer) return <ConsumerShellLayout variant={variant} />
-  if (builder) return <BuilderShellLayout variant={variant} />
+// AI : keep every visited panel mounted — switching tabs only toggles visibility.
+function CachedShellWindowPanels({
+  activeWindow,
+  panelIds,
+  eagerPanelIds = [],
+}: {
+  activeWindow: AppWindowId
+  panelIds: AppWindowId[]
+  eagerPanelIds?: AppWindowId[]
+}) {
+  const [mounted, setMounted] = useState<Set<AppWindowId>>(
+    () => new Set([activeWindow, ...eagerPanelIds]),
+  )
+
+  useEffect(() => {
+    setMounted((prev) => {
+      if (prev.has(activeWindow)) return prev
+      const next = new Set(prev)
+      next.add(activeWindow)
+      return next
+    })
+  }, [activeWindow])
+
   return (
-    <div className="flex h-dvh items-center justify-center bg-background">
-      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-    </div>
+    <>
+      {panelIds
+        .filter((windowId) => mounted.has(windowId))
+        .map((windowId) => (
+          <div
+            key={windowId}
+            className={cn(
+              "flex h-full min-h-0 flex-1 flex-col",
+              windowId !== activeWindow && "hidden",
+            )}
+            aria-hidden={windowId !== activeWindow}
+          >
+            {renderWindowPanel(windowId)}
+          </div>
+        ))}
+    </>
   )
 }
 
-function ConsumerShellLayout({ variant = "default" }: { variant?: "default" | "embed" }) {
+function WarmShellSlot({
+  warm,
+  ready,
+  show,
+  skeleton,
+  children,
+}: {
+  warm: boolean
+  ready: boolean
+  show: boolean
+  skeleton: ReactNode
+  children: ReactNode
+}) {
+  if (warm && ready) {
+    return (
+      <div className={cn("h-dvh", !show && "hidden")} aria-hidden={!show}>
+        {children}
+      </div>
+    )
+  }
+  if (show) return <>{skeleton}</>
+  return null
+}
+
+function useSyncPrimarySectionReady(section: AppPrimarySection) {
+  const { markSectionReady } = usePrimarySectionOpening()
+  useLayoutEffect(() => {
+    markSectionReady(section)
+  }, [section, markSectionReady])
+}
+
+export function AppShellLayout({ variant = "default" }: { variant?: "default" | "embed" }) {
   return (
     <PrimarySectionOpeningProvider>
-      <ConsumerShellLayoutInner variant={variant} />
+      <AppShellLayoutInner variant={variant} />
     </PrimarySectionOpeningProvider>
+  )
+}
+
+function AppShellLayoutInner({ variant = "default" }: { variant?: "default" | "embed" }) {
+  const { shellKind } = useAppShellKind()
+  const builder = useOptionalStore()
+  const consumer = useOptionalConsumerStore()
+  const picker = useContext(ProjectPickerContext)
+
+  const [warmShells, setWarmShells] = useState(() => ({
+    consumer: shellKind === "consumer",
+    builder: shellKind === "builder",
+    picker: shellKind === "picker",
+  }))
+
+  useEffect(() => {
+    setWarmShells((prev) => ({
+      consumer: prev.consumer || shellKind === "consumer",
+      builder: prev.builder || shellKind === "builder",
+      picker: prev.picker || shellKind === "picker",
+    }))
+  }, [shellKind])
+
+  useEffect(() => {
+    prefetchShellPanels()
+  }, [])
+
+  const showConsumer = shellKind === "consumer"
+  const showBuilder = shellKind === "builder"
+  const showPicker = shellKind === "picker"
+
+  return (
+    <>
+      <WarmShellSlot
+        warm={warmShells.consumer}
+        ready={!!consumer}
+        show={showConsumer}
+        skeleton={<StoreShellSkeleton />}
+      >
+        <ConsumerShellLayoutInner variant={variant} />
+      </WarmShellSlot>
+
+      <WarmShellSlot
+        warm={warmShells.builder}
+        ready={!!builder}
+        show={showBuilder}
+        skeleton={<StoreShellSkeleton />}
+      >
+        <BuilderShellLayoutInner variant={variant} />
+      </WarmShellSlot>
+
+      <WarmShellSlot
+        warm={warmShells.picker}
+        ready={!!picker}
+        show={showPicker}
+        skeleton={<ProjectPickerSkeleton />}
+      >
+        <ProjectPickerPage />
+      </WarmShellSlot>
+    </>
   )
 }
 
@@ -175,6 +303,7 @@ function ConsumerShellLayoutInner({ variant = "default" }: { variant?: "default"
   const consumerWindow = useMemo(() => resolveConsumerWindow(activeWindow), [activeWindow])
   const primarySection = resolvePrimarySection("run", consumerWindow)
   const { openingSection, beginOpening } = usePrimarySectionOpening()
+  useSyncPrimarySectionReady(primarySection)
 
   const onPrimarySectionChange = useCallback(
     (section: Parameters<typeof handlePrimarySectionChange>[0]) => {
@@ -201,6 +330,10 @@ function ConsumerShellLayoutInner({ variant = "default" }: { variant?: "default"
     else if (!CONSUMER_WINDOW_IDS.has(activeWindow)) setActiveWindow("share")
   }, [activeWindow, setActiveWindow])
 
+  useEffect(() => {
+    prefetchBillingPanel()
+  }, [])
+
   return (
     <TooltipProvider delay={200}>
       <div className="flex h-dvh flex-col overflow-hidden bg-background">
@@ -220,19 +353,15 @@ function ConsumerShellLayoutInner({ variant = "default" }: { variant?: "default"
             </div>
           ) : null}
           <div className="flex min-h-0 flex-1 flex-col">
-            <ShellWindowContent activeWindow={consumerWindow} mode="consumer" />
+            <CachedShellWindowPanels
+              activeWindow={consumerWindow}
+              panelIds={CONSUMER_PANEL_IDS}
+              eagerPanelIds={EAGER_ACCOUNT_PANEL_IDS}
+            />
           </div>
         </main>
       </div>
     </TooltipProvider>
-  )
-}
-
-function BuilderShellLayout({ variant = "default" }: { variant?: "default" | "embed" }) {
-  return (
-    <PrimarySectionOpeningProvider>
-      <BuilderShellLayoutInner variant={variant} />
-    </PrimarySectionOpeningProvider>
   )
 }
 
@@ -253,6 +382,7 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
   const primarySection = resolvePrimarySection("build", activeWindow)
   const showWorkspaceNav = !isAccountWindow(activeWindow)
   const { openingSection, beginOpening } = usePrimarySectionOpening()
+  useSyncPrimarySectionReady(primarySection)
 
   const onPrimarySectionChange = useCallback(
     (section: Parameters<typeof handlePrimarySectionChange>[0]) => {
@@ -275,6 +405,20 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
     if (params.has("teamInvite")) setActiveWindow("settings")
     else if (params.has("session_id") || params.has("canceled")) setActiveWindow("billing")
   }, [setActiveWindow])
+
+  const warmedAllPanelsRef = useRef(false)
+
+  useEffect(() => {
+    prefetchBillingPanel()
+  }, [])
+
+  useEffect(() => {
+    prefetchWorkspacePanel(activeWindow)
+    if (!warmedAllPanelsRef.current) {
+      warmedAllPanelsRef.current = true
+      prefetchBuilderWorkspacePanels(activeWindow)
+    }
+  }, [activeWindow])
 
   const previewOnly = isPreviewOnly()
 
@@ -317,16 +461,26 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
           <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden" id="main-content">
             {projectLoading && <ProjectSwitchOverlay projectName={project.name} />}
             <div className="flex min-h-0 flex-1 flex-col">
-              <ShellWindowContent activeWindow={activeWindow} mode="builder" />
+              <CachedShellWindowPanels
+                activeWindow={activeWindow}
+                panelIds={BUILDER_PANEL_IDS}
+                eagerPanelIds={EAGER_ACCOUNT_PANEL_IDS}
+              />
             </div>
+            <BackgroundPrefetchBar />
           </main>
         ) : (
           <ProjectAssistantDockLayout>
             <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden" id="main-content">
               {projectLoading && <ProjectSwitchOverlay projectName={project.name} />}
               <div className="flex min-h-0 flex-1 flex-col">
-                <ShellWindowContent activeWindow={activeWindow} mode="builder" />
+                <CachedShellWindowPanels
+                activeWindow={activeWindow}
+                panelIds={BUILDER_PANEL_IDS}
+                eagerPanelIds={EAGER_ACCOUNT_PANEL_IDS}
+              />
               </div>
+              <BackgroundPrefetchBar />
             </main>
           </ProjectAssistantDockLayout>
         )}

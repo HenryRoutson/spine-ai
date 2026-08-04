@@ -1,7 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
-import type { AppPrimarySection } from "@/components/app-primary-nav"
+import { useCallback, useEffect, useState } from "react"
 import {
   Copy,
   FolderKanban,
@@ -13,7 +12,12 @@ import {
 import { useStorePicker } from "@/lib/store"
 import { AppChromeHeader } from "@/components/app-chrome-header"
 import { navigateToBuildMode, navigateToRunMode } from "@/lib/app-mode-nav"
-import { wrapPrimarySectionChange } from "@/lib/primary-section-opening"
+import { handlePrimarySectionChange } from "@/lib/app-primary-section"
+import { useAppShell } from "@/lib/app-shell"
+import {
+  usePrimarySectionOpening,
+  wrapPrimarySectionChange,
+} from "@/lib/primary-section-opening"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,7 +31,7 @@ import {
   ExampleTemplateGrid,
 } from "@/components/project-workspace-sections"
 import { MarketplaceBrowsePanel } from "@/components/share/marketplace-browse-panel"
-import { StoreShellSkeleton } from "@/components/store-shell-skeletons"
+import { warmProjectPrefetches } from "@/lib/project-state-cache"
 import type { Project, ProjectId } from "@/lib/types"
 
 export function ProjectPickerPage() {
@@ -40,28 +44,29 @@ export function ProjectPickerPage() {
     cloneProject,
     resyncExamples,
     openProject,
+    prefetchProject,
     syncing,
   } = useStorePicker()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
   const [busy, setBusy] = useState<string | null>(null)
   const [openingId, setOpeningId] = useState<ProjectId | null>(null)
-  const [openingShell, setOpeningShell] = useState(false)
   const [resyncMsg, setResyncMsg] = useState<string | null>(null)
-  const [openingSection, setOpeningSection] = useState<AppPrimarySection | null>(null)
+  const { openingSection, beginOpening, markSectionReady } = usePrimarySectionOpening()
+  const { activeWindow, setActiveWindow } = useAppShell()
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
   const displayProjects = mergeWithGhosts(projects)
 
+  useEffect(() => {
+    warmProjectPrefetches(
+      projects.map((p) => p.id),
+      prefetchProject,
+    )
+  }, [projects, prefetchProject])
+
   const handleOpen = useCallback(
-    async (id: ProjectId) => {
+    (id: ProjectId) => {
       setOpeningId(id)
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-      })
-      setOpeningShell(true)
-      await new Promise<void>((resolve) => {
-        requestAnimationFrame(() => resolve())
-      })
       openProject(id)
     },
     [openProject],
@@ -117,10 +122,6 @@ export function ProjectPickerPage() {
     setEditingId(null)
   }
 
-  if (openingShell) {
-    return <StoreShellSkeleton />
-  }
-
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
       <AppChromeHeader
@@ -128,11 +129,25 @@ export function ProjectPickerPage() {
         primarySection="build"
         openingSection={openingSection}
         onPrimarySectionChange={(section) => {
-          wrapPrimarySectionChange(section, "build", setOpeningSection, () => {
-            if (section === "run") navigateToRunMode()
-            else if (section === "build") navigateToBuildMode()
-            else if (section === "billing") window.location.assign("/?window=billing")
-            else window.location.assign("/?window=settings")
+          wrapPrimarySectionChange(section, "build", beginOpening, () => {
+            if (section === "build") {
+              navigateToBuildMode()
+              markSectionReady("build")
+              return
+            }
+            if (section === "run") {
+              navigateToRunMode()
+              return
+            }
+            navigateToRunMode()
+            handlePrimarySectionChange(
+              section,
+              "run",
+              activeWindow,
+              setActiveWindow,
+              navigateToRunMode,
+              navigateToBuildMode,
+            )
           })
         }}
         trailing={
@@ -205,6 +220,7 @@ export function ProjectPickerPage() {
                     itemId={p.id}
                     isExiting={exiting}
                     className={cn("flex flex-wrap items-center gap-3 px-4 py-3", deleting && "opacity-60")}
+                    onMouseEnter={() => prefetchProject(p.id)}
                   >
                     <div className="min-w-0 flex-1">
                       {editingId === p.id ? (

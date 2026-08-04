@@ -499,6 +499,34 @@ function llmStructuredStubPy(): string[] {
   ];
 }
 
+export function generateCustomLlmProviderExportFiles(project: Project): PipelineSetupFile[] {
+  const providers = project.llmProviders ?? [];
+  const files: PipelineSetupFile[] = [];
+  for (const p of providers) {
+    assertNoSecretValuesInExport(p.code);
+    files.push({
+      filename: `providers/${p.id}_provider.ts`,
+      content: `${p.code.trim()}\n`,
+      mime: "text/typescript",
+    });
+    if (p.exportCode) {
+      for (const [lang, snippet] of Object.entries(p.exportCode)) {
+        const trimmed = snippet?.trim();
+        if (!trimmed) continue;
+        assertNoSecretValuesInExport(trimmed);
+        const ext =
+          lang === "python" ? "py" : lang === "rust" ? "rs" : lang === "go" ? "go" : lang === "baml" ? "baml" : "txt";
+        files.push({
+          filename: `providers/${p.id}_provider.${ext}`,
+          content: `${trimmed}\n`,
+          mime: "text/plain",
+        });
+      }
+    }
+  }
+  return files;
+}
+
 export function generatePipelineSetupFiles(project: Project): PipelineSetupFile[] {
   // AI : TODO export — add run_example.ts / run_example.py that load .env and read input docs.
   // AI : TODO export — Supabase bundle: migrations SQL, RLS policies, runs/docs/cache tables for exported app persistence.
@@ -515,6 +543,7 @@ export function generatePipelineSetupFiles(project: Project): PipelineSetupFile[
     { filename: ".env.example", content: envExample, mime: "text/plain" },
     { filename: "SETUP.md", content: setupMd, mime: "text/markdown" },
     { filename: "requirements.txt", content: requirements, mime: "text/plain" },
+    ...generateCustomLlmProviderExportFiles(project),
   ];
 }
 

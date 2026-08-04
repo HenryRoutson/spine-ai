@@ -1,4 +1,5 @@
 // AI : client-safe run progress / job DTOs — no server imports (fs, Supabase, etc.).
+import type { LlmClientStepSpec } from "@/lib/llm-client-step";
 import type {
   ModuleId,
   ModuleKind,
@@ -54,6 +55,7 @@ export type ClientStepSpec = {
   input: unknown;
   pipelineState?: PipelineState;
   expectedOutputs?: Record<string, unknown>;
+  llmClient?: LlmClientStepSpec;
 };
 
 export interface RunJob {

@@ -6,6 +6,7 @@ import { DocViewerProvider } from "@/lib/doc-viewer";
 import { AppShellProvider } from "@/lib/app-shell";
 import { ProjectAssistantProvider } from "@/lib/project-assistant-context";
 import { DiagnosisAgentProvider } from "@/lib/diagnosis-agent-context";
+import { AppShellKindProvider } from "@/lib/app-shell-kind";
 import { AppShellLayout } from "@/components/app-shell-layout";
 import { setPreviewOnly } from "@/lib/demo-mode";
 
@@ -23,7 +24,9 @@ export default function DemoPage() {
         <AppShellProvider>
           <ProjectAssistantProvider>
             <DiagnosisAgentProvider>
-              <AppShellLayout variant="embed" />
+              <AppShellKindProvider>
+                <AppShellLayout variant="embed" />
+              </AppShellKindProvider>
             </DiagnosisAgentProvider>
           </ProjectAssistantProvider>
         </AppShellProvider>

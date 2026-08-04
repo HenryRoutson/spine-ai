@@ -19,12 +19,15 @@ import { CodeErrorHistory, CODE_ERROR_NS } from "@/components/code-error-history
 import { recordCodeError } from "@/lib/code-error-history"
 import {
   defaultCustomProviderDraft,
+  listCustomLlmProviders,
+  mergeCustomLlmProviders,
   removeCustomLlmProvider,
   type CustomLlmProviderDef,
   type CustomLlmProviderExportCode,
   upsertCustomLlmProvider,
   useCustomLlmProviders,
 } from "@/lib/custom-llm-providers"
+import { useOptionalStore } from "@/lib/store"
 import { customProviderTemplate, openRouterProviderSamples } from "@/lib/llm-provider-samples"
 import { validateCustomLlmProviderCode } from "@/lib/llm-provider-validate"
 import { OPENROUTER_PROVIDER_ID } from "@/lib/types"
@@ -64,10 +67,12 @@ function CustomProviderEditor({
   initial,
   onSaved,
   onDeleted,
+  onPersistProject,
 }: {
   initial: CustomLlmProviderDef;
   onSaved: (def: CustomLlmProviderDef) => void;
   onDeleted?: () => void;
+  onPersistProject?: (providers: CustomLlmProviderDef[]) => void;
 }) {
   const [draft, setDraft] = useState(initial);
   const [codeTab, setCodeTab] = useState<ProviderCodeTab>("runtime");
@@ -115,6 +120,7 @@ function CustomProviderEditor({
       exportCode: pruneExportCode(draft.exportCode),
     };
     upsertCustomLlmProvider(def);
+    onPersistProject?.(mergeCustomLlmProviders(undefined, listCustomLlmProviders()));
     onSaved(def);
   }
 
@@ -199,7 +205,15 @@ function CustomProviderEditor({
 }
 
 export function LlmProvidersSettingsPanel() {
-  const customProviders = useCustomLlmProviders();
+  const builder = useOptionalStore();
+  const project = builder?.project;
+  const customProviders = useCustomLlmProviders(project?.llmProviders);
+  const persistProjectProviders = useCallback(
+    (providers: CustomLlmProviderDef[]) => {
+      builder?.patchProject({ llmProviders: providers });
+    },
+    [builder],
+  );
   const [selectedId, setSelectedId] = useState<string>(OPENROUTER_PROVIDER_ID);
   const [draftNew, setDraftNew] = useState<CustomLlmProviderDef | null>(null);
 
@@ -262,6 +276,7 @@ export function LlmProvidersSettingsPanel() {
               setDraftNew(null);
               setSelectedId(def.id);
             }}
+            onPersistProject={persistProjectProviders}
           />
         ) : selectedId === OPENROUTER_PROVIDER_ID ? (
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -281,8 +296,14 @@ export function LlmProvidersSettingsPanel() {
           <CustomProviderEditor
             initial={selectedCustom}
             onSaved={() => setSelectedId(selectedCustom.id)}
+            onPersistProject={persistProjectProviders}
             onDeleted={() => {
               removeCustomLlmProvider(selectedCustom.id);
+              persistProjectProviders(
+                mergeCustomLlmProviders(project?.llmProviders, listCustomLlmProviders()).filter(
+                  (p) => p.id !== selectedCustom.id,
+                ),
+              );
               setSelectedId(OPENROUTER_PROVIDER_ID);
             }}
           />
@@ -295,7 +316,8 @@ export function LlmProvidersSettingsPanel() {
 }
 
 export function LlmProvidersSettingsSummary({ onOpen }: { onOpen: () => void }) {
-  const customProviders = useCustomLlmProviders();
+  const project = useOptionalStore()?.project;
+  const customProviders = useCustomLlmProviders(project?.llmProviders);
   const customCount = customProviders.length;
 
   return (

@@ -1,3 +1,4 @@
+import type { LlmClientStepSpec } from "@/lib/llm-client-step";
 import type { ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
 import type {
   DocId,
@@ -43,6 +44,7 @@ export type RunCheckpoint = {
     input: unknown;
     pipelineState?: import("../run-types").PipelineState;
     expectedOutputs?: Record<string, unknown>;
+    llmClient?: LlmClientStepSpec;
   };
   expectedOutputs?: Record<string, unknown>;
 };
@@ -60,6 +62,12 @@ export class ClientStepPendingError extends Error {
     readonly pipelineState?: import("../run-types").PipelineState,
   ) {
     super("client code step pending");
+  }
+}
+
+export class LlmClientStepPendingError extends Error {
+  constructor(readonly llmClient: LlmClientStepSpec) {
+    super("browser LLM provider step pending");
   }
 }
 

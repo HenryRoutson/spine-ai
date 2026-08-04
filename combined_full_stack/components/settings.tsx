@@ -64,6 +64,7 @@ import { clearWorkspaceClientSession } from "@/lib/clear-workspace-client-sessio
 import { SettingsAccountRowSkeleton } from "@/components/account-panel-skeletons"
 import { readSettingsAccountSnapshot } from "@/lib/settings-account-snapshot-cache"
 import { fetchSettingsAccount } from "@/lib/warm-settings-data"
+import { SettingsDataCache } from "@/components/settings-data-cache"
 import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 
 // AI : vscode-style preview colors — mirror public/json-viewer.html theme "vscode"
@@ -116,6 +117,7 @@ const SETTINGS_SECTIONS = [
   { id: "settings-pipeline", label: "Pipeline" },
   { id: "settings-inference", label: "Inference" },
   { id: "settings-colors", label: "Status colours" },
+  { id: "settings-data-cache", label: "Data cache" },
   { id: "settings-privacy", label: "Privacy" },
 ] as const
 
@@ -504,6 +506,8 @@ export function Settings() {
               })}
             </div>
           </section>
+
+          <SettingsDataCache />
 
           <div id="settings-privacy">
             <PrivacySettings />

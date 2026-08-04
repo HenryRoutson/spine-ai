@@ -1,18 +1,51 @@
-import { clearActiveProjectSession, openProjectInWorkspace } from "@/lib/active-project-session"
+import { clearActiveProjectSession } from "@/lib/active-project-session"
 import type { ProjectId } from "@/lib/types"
 
-export type AppMode = "run" | "build"
+type AppModeNavApi = {
+  navigateToRunMode: () => void
+  navigateToBuildMode: () => void
+  navigateToProjectPicker: () => void
+  openBuildWorkspace: (projectId: ProjectId) => void
+}
 
-// AI : full navigation on mode switch — store remounts cleanly (session + provider tree).
+let api: AppModeNavApi | null = null
+
+export function registerAppModeNavApi(next: AppModeNavApi | null): void {
+  api = next
+}
+
+// AI : client-side shell switches — no full document reload (store + panels stay warm).
 export function navigateToRunMode(): void {
+  if (api) {
+    api.navigateToRunMode()
+    return
+  }
   clearActiveProjectSession()
   window.location.assign("/")
 }
 
 export function navigateToBuildMode(): void {
+  if (api) {
+    api.navigateToBuildMode()
+    return
+  }
+  window.location.assign("/projects")
+}
+
+export function navigateToProjectPicker(): void {
+  if (api) {
+    api.navigateToProjectPicker()
+    return
+  }
   window.location.assign("/projects")
 }
 
 export function navigateToBuildWorkspace(projectId: ProjectId): void {
-  openProjectInWorkspace(projectId)
+  if (api) {
+    api.openBuildWorkspace(projectId)
+    return
+  }
+  window.location.assign("/")
 }
+
+export type AppMode = "run" | "build"

@@ -102,6 +102,7 @@ export function useInferenceRun({
     updateRunNotes,
     refreshBilling,
     flushPendingSave,
+    projectLlmProviders: project.llmProviders,
   })
 
   resetRunOnSwitchRef.current = progress.resetRunState

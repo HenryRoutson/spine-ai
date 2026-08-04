@@ -1,6 +1,6 @@
 "use client"
 
-// AI : TODO (spec) — show count of duplicate runs skipped by fingerprint when allowDuplicateRuns is false.
+import type { AccountRefreshOpts } from "@/lib/store"
 import { invariant } from "@/lib/assert"
 import { useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -40,9 +40,10 @@ type UseInferenceRunProgressArgs = {
   runs: PipelineRun[]
   addRun: (r: PipelineRun) => void
   updateRunNotes: (runId: PipelineRun["id"], notes: string | undefined) => Promise<void>
-  refreshBilling: () => Promise<void>
+  refreshBilling: (opts?: AccountRefreshOpts) => Promise<void>
   resetInputs?: () => void
   flushPendingSave?: () => Promise<void>
+  projectLlmProviders?: import("@/lib/custom-llm-providers").CustomLlmProviderDef[]
 }
 
 export function useInferenceRunProgress({
@@ -60,6 +61,7 @@ export function useInferenceRunProgress({
   refreshBilling,
   resetInputs,
   flushPendingSave,
+  projectLlmProviders,
 }: UseInferenceRunProgressArgs) {
   const [phase, setPhase] = useState<InferencePhase>("idle")
   const [stepStates, setStepStates] = useState<Map<ModuleId, StepUiState>>(new Map())
@@ -234,6 +236,7 @@ export function useInferenceRunProgress({
             humanReviewResolveRef.current = resolve
           })
         },
+        projectLlmProviders,
       })
       const notes = runNotesRef.current.trim() || undefined
       const withNotes = notes ? { ...finished, notes } : finished
@@ -259,7 +262,7 @@ export function useInferenceRunProgress({
       if (activeTrackIdRef.current) runJobs.failJob(activeTrackIdRef.current, (e as Error).message)
       activeTrackIdRef.current = null
       if (jobGen !== activeJobGenRef.current || !mountedRef.current) return
-      if (isRunBillingError(e)) refreshBilling().catch(console.error)
+      if (isRunBillingError(e)) refreshBilling({ force: true }).catch(console.error)
       setError((e as Error).message)
       setPhase("idle")
     } finally {

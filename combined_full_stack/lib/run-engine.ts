@@ -10,6 +10,9 @@ import {
   type CustomCodeAttemptFailure,
 } from "@/lib/custom_code"
 import { CODE_ERROR_NS, recordCodeError } from "@/lib/code-error-history"
+import { getCustomLlmProvider, type CustomLlmProviderDef } from "@/lib/custom-llm-providers"
+import type { LlmClientStepSpec } from "@/lib/llm-client-step"
+import { runBrowserLlmPrompts } from "@/lib/llm-provider-runtime"
 import { readApiErrorBody, formatApiError, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { RATE_LIMITS } from "@/lib/rate_limit_config"
@@ -206,6 +209,8 @@ export interface AwaitRunCallbacks {
   onLogs?: (logs: JobLogEntry[], newLines: JobLogEntry[]) => void
   // AI : human-review steps pause until the operator approves or rejects in Inference.
   onHumanReview?: (spec: ClientStepSpec) => Promise<"approved" | "rejected">
+  // AI : custom LLM providers persisted on the project (merged with localStorage at runtime).
+  projectLlmProviders?: import("@/lib/custom-llm-providers").CustomLlmProviderDef[]
   signal?: AbortSignal
 }
 
@@ -266,13 +271,55 @@ function clientStepSubmitError(kind: string, err: unknown, stepLabel?: string): 
 }
 
 // AI : shared poll loop for dev runs and shared-link runs — handles browser client steps + human review.
+async function submitBrowserLlmClientStep(
+  moduleId: ModuleId,
+  label: string,
+  llmClient: LlmClientStepSpec,
+  projectLlmProviders: CustomLlmProviderDef[] | undefined,
+  submitClientStep: (payload: ClientStepSubmitPayload) => Promise<void>,
+): Promise<void> {
+  const clientLogs: JobLogEntry[] = []
+  const tag = "llm-provider"
+  try {
+    const output = await runBrowserLlmPrompts(llmClient, projectLlmProviders)
+    clientLogs.push({
+      at: Date.now(),
+      level: JobLogLevel.Info,
+      tag,
+      line: `${tag} ${llmClient.providerId} completed (${llmClient.prompts.length} prompt(s))`,
+      moduleId,
+    })
+    await submitClientStep({ output, clientLogs })
+  } catch (err) {
+    const message = (err as Error).message
+    recordCodeError(
+      getCustomLlmProvider(llmClient.providerId)?.code ?? `provider:${llmClient.providerId}`,
+      message,
+      CODE_ERROR_NS.llmProvider,
+    )
+    clientLogs.push({
+      at: Date.now(),
+      level: JobLogLevel.Error,
+      tag,
+      line: `${tag} ${llmClient.providerId} failed: ${message}`,
+      moduleId,
+    })
+    await submitClientStep({
+      error: [`${tag} step (${label}) failed: ${message}`, `UI location: Inference → Run Pipeline → LLM (${label})`].join(
+        "\n",
+      ),
+      clientLogs,
+    })
+  }
+}
+
 export async function awaitJobCompletion(
   poll: () => Promise<RunJob>,
   submitClientStep: (payload: ClientStepSubmitPayload) => Promise<void>,
   callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
   intervalMs = DEFAULT_POLL_INTERVAL_MS,
 ): Promise<AwaitRunResult> {
-  const { onStep, onLogs, onHumanReview, signal } =
+  const { onStep, onLogs, onHumanReview, projectLlmProviders, signal } =
     typeof callbacks === "function" ? { onStep: callbacks } : callbacks
   let seenLogs = 0
   let clientStepBusy = false
@@ -315,8 +362,26 @@ export async function awaitJobCompletion(
       throw new Error("This pipeline requires human review, which is not available on this page")
     }
     if (
+      job.clientStep?.llmClient &&
+      !job.run &&
+      !job.error &&
+      !clientStepBusy &&
+      clientStepSubmittedFor !== job.clientStep.moduleId
+    ) {
+      const { moduleId, label, llmClient } = job.clientStep
+      clientStepBusy = true
+      try {
+        await submitBrowserLlmClientStep(moduleId, label, llmClient, projectLlmProviders, submitClientStep)
+        clientStepSubmittedFor = moduleId
+      } finally {
+        clientStepBusy = false
+      }
+      continue
+    }
+    if (
       job.clientStep &&
       job.clientStep.kind !== "human-review" &&
+      !job.clientStep.llmClient &&
       !job.run &&
       !job.error &&
       !clientStepBusy &&

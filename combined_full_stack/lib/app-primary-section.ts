@@ -19,7 +19,10 @@ export function handlePrimarySectionChange(
 ): void {
   if (section === "run") {
     if (mode === "run" && isAccountWindow(activeWindow)) setActiveWindow("share")
-    else navigateToRun()
+    else {
+      navigateToRun()
+      if (mode === "build") setActiveWindow("share")
+    }
     return
   }
   if (section === "build") {

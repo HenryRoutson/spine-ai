@@ -257,10 +257,6 @@ export function Inference() {
     [setupStates, applySetupInputs],
   )
 
-  useEffect(() => {
-    refreshBilling().catch(console.error)
-  }, [refreshBilling])
-
   async function createBlankSetup() {
     setActionError(null)
     setCreatingSetup(true)

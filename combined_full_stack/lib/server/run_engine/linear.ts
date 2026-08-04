@@ -4,7 +4,7 @@ import { compactPreview } from "@/lib/text-preview";
 import { inputTypeLabel } from "../../inference-input";
 import { assertInputMatchesDescription, InputDescriptionRejectedError, shouldCheckInputDescription } from "../input_description_check";
 import { collectLogsDuring, withStepModuleContext } from "../job_log_sink";
-import { ClientStepPendingError, HumanReviewPendingError, PipelinePausedError } from "../run_checkpoint";
+import { ClientStepPendingError, HumanReviewPendingError, LlmClientStepPendingError, PipelinePausedError } from "../run_checkpoint";
 import { expectedOutputsForRun } from "../seed";
 import { stepCacheKey } from "../run_fingerprint";
 import { readStepCache, writeStepCache } from "../step_cache";
@@ -221,6 +221,29 @@ export async function runLinearStepsFrom(
                 input: err.input,
                 pipelineState: err.pipelineState,
                 expectedOutputs: golden,
+              },
+            });
+          }
+          if (err instanceof LlmClientStepPendingError) {
+            throw new PipelinePausedError({
+              runId,
+              projectId,
+              cacheOwnerId,
+              inputDocId,
+              inputDocIds: fingerprintInputDocIds,
+              fingerprintInputDocIds,
+              model,
+              stepIndex: i,
+              startedAt,
+              steps: [...steps],
+              ctx: serializeCtx(ctx),
+              expectedOutputs: runGolden(),
+              clientStep: {
+                moduleId: m.id,
+                label: m.label,
+                kind: m.kind,
+                input: null,
+                llmClient: err.llmClient,
               },
             });
           }

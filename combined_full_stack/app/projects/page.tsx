@@ -1,12 +1,6 @@
 "use client"
 
-import { StoreProvider } from "@/lib/store"
-import { ProjectPickerPage } from "@/components/project-picker-page"
+import HomePage from "../page"
 
-export default function ProjectsRoutePage() {
-  return (
-    <StoreProvider mode="picker">
-      <ProjectPickerPage />
-    </StoreProvider>
-  )
-}
+// AI : same workspace shell as / — AppShellKindProvider reads /projects and switches to picker client-side.
+export default HomePage

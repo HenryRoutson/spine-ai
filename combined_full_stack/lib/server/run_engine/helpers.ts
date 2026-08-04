@@ -97,6 +97,15 @@ export function recordStepModel(m: PipelineModule, globalModel: ModelId): ModelI
   return undefined;
 }
 
+export function llmCallBudget(ctx: RunCtx, stepLabel: string) {
+  if (ctx.stepCostLimitCents == null || ctx.stepBaseCents == null) return {};
+  return {
+    costLimitCents: ctx.stepCostLimitCents,
+    stepBaseCents: ctx.stepBaseCents,
+    stepLabel,
+  };
+}
+
 export function applyModuleSideEffects(m: PipelineModule, ctx: RunCtx, store: import("../store").Store, log: RunLogger): void {
   if (m.kind !== "input") return;
   const docIds = ctx.inputByModule.get(m.id) ?? [];

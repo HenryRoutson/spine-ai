@@ -283,6 +283,7 @@ export interface Project {
   seedDocNames?: string[]; // AI : filenames from seeds/*.json — scopes inference inputs to this project
   expectedOutputs?: Record<string, unknown>; // AI : golden step outputs keyed by step label — assert steps compare at run time
   inferencePresets?: InferencePreset[]; // AI : legacy seed examples — prefer *_inference.json setup files in Documents
+  llmProviders?: import("@/lib/custom-llm-providers").CustomLlmProviderDef[]; // AI : user-authored browser LLM providers
   createdAt?: number; // AI : ms since epoch — set when blank/cloned; templates from seeds/*.json omit this
   lastOpenedAt?: number; // AI : ms since epoch — updated when user opens/switches to this project
   documentation?: string; // AI : freeform markdown — prepended to every agent/assistant prompt call to prevent regressions

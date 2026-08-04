@@ -44,7 +44,7 @@ import { persistArtifacts, persistCustomCodeArtifacts } from "./artifacts";
 import { restoreCtx } from "./context";
 import { createWriteLive } from "./live";
 import { runLinearStepsFrom } from "./linear";
-import { buildAssertResult, buildClientResult, buildHumanReviewResult, failedStepResult } from "./results";
+import { buildAssertResult, buildClientResult, buildHumanReviewResult, buildLlmClientResult, failedStepResult } from "./results";
 import type { ClientStepResume, RunCtx, RunOptions } from "./engine_types";
 
 export async function runPipeline(
@@ -277,7 +277,9 @@ export async function resumeRunPipeline(
             ? buildAssertResult(clientStep.output)
             : m.kind === "human-review"
               ? buildHumanReviewResult(clientStep.output)
-              : buildClientResult(m, project, ctx, clientStep.output);
+              : checkpoint.clientStep.llmClient
+                ? buildLlmClientResult(m, project, clientStep.output, checkpoint.clientStep.llmClient)
+                : buildClientResult(m, project, ctx, clientStep.output);
         const validationStructId = usesPassthroughStructure(m.kind) ? m.inStructureId : m.outStructureId;
         const out = modelById(project.models, validationStructId);
         if (out) {

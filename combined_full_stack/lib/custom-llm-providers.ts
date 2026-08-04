@@ -43,6 +43,17 @@ export function listCustomLlmProviders(): CustomLlmProviderDef[] {
   return readAll();
 }
 
+// AI : project store wins over localStorage when both define the same id.
+export function mergeCustomLlmProviders(
+  projectProviders?: CustomLlmProviderDef[],
+  localProviders?: CustomLlmProviderDef[],
+): CustomLlmProviderDef[] {
+  const byId = new Map<string, CustomLlmProviderDef>();
+  for (const p of localProviders ?? readAll()) byId.set(p.id, p);
+  for (const p of projectProviders ?? []) byId.set(p.id, p);
+  return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export function getCustomLlmProvider(id: string): CustomLlmProviderDef | undefined {
   return readAll().find((p) => p.id === id);
 }
@@ -78,9 +89,12 @@ export function customProviderExportSnippet(
   return customProviderTemplate(language, def.id);
 }
 
-export function useCustomLlmProviders(): CustomLlmProviderDef[] {
+export function useCustomLlmProviders(projectProviders?: CustomLlmProviderDef[]): CustomLlmProviderDef[] {
   const [providers, setProviders] = useState<CustomLlmProviderDef[]>([]);
-  const refresh = useCallback(() => setProviders(readAll()), []);
+  const refresh = useCallback(
+    () => setProviders(mergeCustomLlmProviders(projectProviders)),
+    [projectProviders],
+  );
   useEffect(() => {
     refresh();
     window.addEventListener("forge:custom-llm-providers", refresh);

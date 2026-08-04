@@ -30,7 +30,7 @@ export function Earnings() {
       })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error ?? "Withdraw failed")
-      await Promise.all([refreshEarnings(), refreshBilling()])
+      await Promise.all([refreshEarnings({ force: true }), refreshBilling({ force: true })])
     } catch (e) {
       setBanner((e as Error).message)
     } finally {

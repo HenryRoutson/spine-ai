@@ -2,11 +2,12 @@
 
 import { CreditCard, Hammer, Loader2, Play, Settings } from "lucide-react"
 import { prefetchBillingPanel } from "@/lib/prefetch-billing-panel"
+import { prefetchBuildPanel } from "@/lib/prefetch-build-panel"
 import { prefetchRunPanel } from "@/lib/prefetch-run-panel"
 import { prefetchSettingsPanel } from "@/lib/prefetch-settings-panel"
 import { useOptionalConsumerStore, useOptionalStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
-import { useCallback } from "react"
+import { useCallback, useEffect } from "react"
 
 export type AppPrimarySection = "run" | "build" | "billing" | "settings"
 
@@ -20,8 +21,13 @@ type AppPrimaryNavProps = {
 // AI : L0 — Run, Build, Billing, and Settings at the same level (spec navigation model).
 export function AppPrimaryNav({ value, onChange, openingSection = null, className }: AppPrimaryNavProps) {
   const warmRun = useWarmRun()
+  const warmBuild = useWarmBuild()
   const warmBilling = useWarmBilling()
   const warmSettings = useWarmSettings()
+
+  useEffect(() => {
+    prefetchBillingPanel()
+  }, [])
 
   return (
     <div
@@ -46,6 +52,7 @@ export function AppPrimaryNav({ value, onChange, openingSection = null, classNam
         active={value === "build"}
         loading={openingSection === "build"}
         onClick={() => onChange("build")}
+        onWarm={warmBuild}
         icon={Hammer}
         label="Build pipelines"
         shortLabel="Build"
@@ -119,6 +126,12 @@ function PrimaryButton({
       <span className="hidden sm:inline">{label}</span>
     </button>
   )
+}
+
+function useWarmBuild() {
+  return useCallback(() => {
+    prefetchBuildPanel()
+  }, [])
 }
 
 function useWarmRun() {

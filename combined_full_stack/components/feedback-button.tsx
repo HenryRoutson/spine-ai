@@ -53,7 +53,7 @@ export function FeedbackButton() {
       setSent(true)
       if (data.creditedCents && data.creditedCents > 0) {
         setCreditNote(`+${formatCents(data.creditedCents)} credit`)
-        void refreshBilling()
+        void refreshBilling({ force: true })
       } else if (data.creditsRemainingToday === 0) {
         setCreditNote("Thanks — daily credit limit reached")
       }

@@ -21,6 +21,7 @@ export {
   getLlmProvider,
   resolveProviderForModel,
   clearLlmProviderCache,
+  isServerLlmProvider,
   DEFAULT_LLM_PROVIDER_ID as DEFAULT_PROVIDER_ID,
 } from "./registry";
 

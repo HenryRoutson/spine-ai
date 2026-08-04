@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { useOptionalAppShell } from "@/lib/app-shell"
 import { useCustomLlmProviders } from "@/lib/custom-llm-providers"
+import { useOptionalStore } from "@/lib/store"
 import {
   catalogLabel,
   formatRoutedModel,
@@ -82,8 +83,9 @@ export function ModelSelector({
   size?: "sm" | "xs"
 }) {
   const shell = useOptionalAppShell()
+  const project = useOptionalStore()?.project
   const catalog = useModelOptions()
-  const customProviders = useCustomLlmProviders()
+  const customProviders = useCustomLlmProviders(project?.llmProviders)
 
   const providerIds = useMemo(
     () => [OPENROUTER_PROVIDER_ID, ...customProviders.map((p) => p.id)],

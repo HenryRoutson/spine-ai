@@ -10,6 +10,7 @@ import {
   type WorkspaceValidity,
 } from "@/lib/workspace-validity-ui"
 import { cn } from "@/lib/utils"
+import { prefetchWorkspacePanel } from "@/lib/prefetch-workspace-panel"
 
 type AppWindowNavProps = {
   activeWindow: AppWindowId
@@ -37,6 +38,8 @@ export function AppWindowNav({ activeWindow, onSelect, validity }: AppWindowNavP
             type="button"
             title={title}
             disabled={disabled}
+            onMouseEnter={() => prefetchWorkspacePanel(item.id)}
+            onFocus={() => prefetchWorkspacePanel(item.id)}
             onClick={() => {
               if (disabled) return
               onSelect(item.id)

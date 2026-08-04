@@ -78,3 +78,8 @@ export function resolveProviderForModel(modelId: ModelId | undefined): {
 export function clearLlmProviderCache(): void {
   instances.clear();
 }
+
+export function isServerLlmProvider(id: LlmProviderId): boolean {
+  registerBuiltins();
+  return factories.has(id);
+}

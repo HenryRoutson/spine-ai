@@ -284,6 +284,7 @@ export const projectPatchSchema = z
     seedDocNames: z.array(z.string().max(256)).max(200).optional(),
     expectedOutputs: z.record(z.string().max(256), jsonSizeBounded(100_000)).optional(),
     inferencePresets: z.array(jsonSizeBounded(50_000)).max(50).optional(),
+    llmProviders: z.array(jsonSizeBounded(100_000)).max(20).optional(),
     documentation: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS).optional(),
   })
   .strict();

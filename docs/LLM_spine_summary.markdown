@@ -80,7 +80,7 @@ The repo `combined_full_stack/` is a working product skeleton, not a slide deck.
 | Export to Python / TS / Rust / Go / BAML | 🟡 partial |
 | 12+ seed projects (legal eval, homework grader, expense auditor, etc.) | ✅ |
 | Landing demo + session replay (rrweb) | 🟡 reliability work ongoing |
-| Custom LLM providers (enterprise / KPMG-style internal APIs) | 🟡 modular provider layer started |
+| Custom LLM providers (enterprise / KPMG-style internal APIs) | ✅ browser runtime + project persist + export |
 | CLI + validation test suite | 🟡 growing |
 
 **Flagship demo pipeline — Homework Grader:** Ingest marking guide + student work → derive **dynamic marking schema** per section/question → grade each section in **parallel** → assemble results. Shows why one LLM call cannot work for arbitrary worksheets.

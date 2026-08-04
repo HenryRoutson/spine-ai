@@ -43,22 +43,30 @@ export function ExampleTemplateGrid({
   }
 
   return (
-    <ul className="grid gap-3 sm:grid-cols-2">
+    <ul className="flex flex-col gap-3">
       {templates.map((t) => (
-        <li key={t.id} className="rounded-lg border border-border bg-card p-4">
-          <div className="mb-2 flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{t.name}</p>
+        <li
+          key={t.id}
+          className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-4"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-semibold leading-snug">{t.name}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
               <p className="font-mono text-[10px] text-muted-foreground">{t.kind}</p>
+              <Badge variant="outline" className="font-mono text-[9px]">
+                {t.moduleCount} steps
+              </Badge>
+              <p className="font-mono text-[10px] text-muted-foreground">
+                {t.inputCount} input slot{t.inputCount === 1 ? "" : "s"}
+              </p>
             </div>
-            <Badge variant="outline" className="shrink-0 font-mono text-[9px]">
-              {t.moduleCount} steps
-            </Badge>
           </div>
-          <p className="mb-3 font-mono text-[10px] text-muted-foreground">
-            {t.inputCount} input slot{t.inputCount === 1 ? "" : "s"}
-          </p>
-          <Button size="sm" onClick={() => onClone(t.id)} disabled={busyId === t.id}>
+          <Button
+            size="sm"
+            className="shrink-0"
+            onClick={() => onClone(t.id)}
+            disabled={busyId === t.id}
+          >
             {busyId === t.id ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
             ) : (

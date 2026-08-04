@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -61,7 +62,7 @@ export function useOptionalPrimarySectionOpening() {
 // AI : panels call this on mount so the matching primary-nav tab stops spinning.
 export function useMarkPrimarySectionReady(section: AppPrimarySection) {
   const ctx = useOptionalPrimarySectionOpening()
-  useEffect(() => {
+  useLayoutEffect(() => {
     ctx?.markSectionReady(section)
   }, [ctx, section])
 }

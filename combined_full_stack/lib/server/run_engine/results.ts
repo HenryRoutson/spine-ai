@@ -110,6 +110,25 @@ export function buildClientResult(m: PipelineModule, project: { models: import("
   };
 }
 
+export function buildLlmClientResult(
+  m: PipelineModule,
+  project: { models: import("../types").StructureModel[] },
+  value: unknown,
+  llmClient?: import("@/lib/llm-client-step").LlmClientStepSpec,
+): ExecResult {
+  const out = modelById(project.models, m.outStructureId);
+  const count = Array.isArray(value) ? value.length : 1;
+  const providerLabel = llmClient ? `${llmClient.providerId}:${llmClient.providerModel}` : "browser provider";
+  return {
+    value,
+    preview: `${count} ${out?.name ?? "item"}(s) via ${providerLabel}`,
+    json: JSON.stringify(value, null, 2),
+    inputPreview: llmClient?.inputPreview,
+    inputPreviewItems: llmClient?.inputPreviewItems,
+    llmCalls: [],
+  };
+}
+
 export function applyInputCacheSideEffects(m: PipelineModule, cached: StepCacheArtifact, ctx: RunCtx): void {
   if (m.kind !== "input" || !inputUsesVisionOcr(m)) return;
   const v = cached.value;

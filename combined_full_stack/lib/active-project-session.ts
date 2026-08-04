@@ -1,4 +1,5 @@
 import { appStorageKey } from "@/lib/storage-keys"
+import { navigateToBuildWorkspace } from "@/lib/app-mode-nav"
 import type { ProjectId } from "@/lib/types"
 
 const KEY = appStorageKey("active-project-id")
@@ -23,5 +24,5 @@ export function clearActiveProjectSession(): void {
 
 export function openProjectInWorkspace(id: ProjectId): void {
   writeActiveProjectSession(id)
-  window.location.assign("/")
+  navigateToBuildWorkspace(id)
 }

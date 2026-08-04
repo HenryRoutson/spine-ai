@@ -6,7 +6,7 @@ import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { formatCents } from "@/lib/format"
 import { useMemo, useState, useEffect, useCallback, useRef } from "react"
-import { Area, AreaChart, CartesianGrid, ReferenceLine, XAxis, YAxis } from "recharts"
+import dynamic from "next/dynamic"
 import { useWorkspaceBilling } from "@/lib/use-workspace-billing"
 import type { BillingAccountView } from "@/lib/store"
 import { billingSeries, totalSaved, totalUsageFromRuns } from "@/lib/billing"
@@ -17,16 +17,10 @@ import {
   BillingKeysListSkeleton,
   BillingStatsSkeleton,
 } from "@/components/account-panel-skeletons"
+import { Skeleton } from "@/components/ui/skeleton"
 import { WindowHeader } from "@/components/window-header"
 import { Button } from "@/components/ui/button"
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
-  type ChartConfig,
-} from "@/components/ui/chart"
+import { type ChartConfig } from "@/components/ui/chart"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { CreditCard, KeyRound, Loader2, Play, TrendingDown, TrendingUp } from "lucide-react"
@@ -39,15 +33,17 @@ import {
 } from "@/lib/billing-keys-snapshot-cache"
 import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 
+const BillingSpendChart = dynamic(
+  () => import("@/components/billing-spend-chart").then((m) => ({ default: m.BillingSpendChart })),
+  {
+    loading: () => <Skeleton className="aspect-[3/1] w-full" />,
+    ssr: false,
+  },
+)
+
 // AI : de-mocked — series keys come from the real billing aggregation (one line per model
 // AI : + the doc-parse service), so new models show up without touching this file.
 const CHART_COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-4)", "var(--chart-3)", "var(--chart-5)"]
-
-// AI : pad peak daily spend (cents) so stacked areas aren't clipped.
-function chartYMaxCents(peakCents: number): number {
-  if (peakCents <= 0) return 100
-  return +(peakCents * 1.2).toFixed(4)
-}
 
 type BillingScope = "all" | "project" | "shared"
 
@@ -189,16 +185,6 @@ export function Billing() {
     return t
   }, [billing, series])
 
-  const yMaxCents = useMemo(() => {
-    let peak = 0
-    for (const point of chartData) {
-      let dayTotal = 0
-      for (const s of series) dayTotal += Number(point[s.key] ?? 0)
-      peak = Math.max(peak, dayTotal)
-    }
-    return chartYMaxCents(peak)
-  }, [chartData, series])
-
   const grand = Object.values(totals).reduce((a, b) => a + b, 0)
   const usageFromRunsCents = useMemo(() => totalUsageFromRuns(scopedRuns), [scopedRuns])
   // AI : step-level billing aggregate is canonical; run.billedCents can lag on legacy rows.
@@ -287,7 +273,12 @@ export function Billing() {
                   })}
                 </>
               )}
-              <Button type="button" variant="ghost" size="sm" onClick={() => refreshBilling().catch(console.error)}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => refreshBilling({ force: true }).catch(console.error)}
+              >
                 Refresh
               </Button>
             </div>
@@ -366,74 +357,13 @@ export function Billing() {
               )}
             </div>
           </div>
-          {hasRuns ? (
-            <ChartContainer config={chartConfig} className="aspect-[3/1] w-full">
-              <AreaChart data={chartData} margin={{ left: 4, right: 8, top: 8 }}>
-                <defs>
-                  {series.map((s) => (
-                    <linearGradient key={s.key} id={`fill-${s.key}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={s.color} stopOpacity={0.5} />
-                      <stop offset="95%" stopColor={s.color} stopOpacity={0.05} />
-                    </linearGradient>
-                  ))}
-                </defs>
-                <CartesianGrid vertical={false} stroke="var(--border)" />
-                <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={8} className="text-[10px]" />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                  width={40}
-                  className="text-[10px]"
-                  domain={[0, yMaxCents]}
-                  tickFormatter={(v) => formatCents(v)}
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      formatter={(value) => formatCents(Number(value))}
-                    />
-                  }
-                />
-                <ChartLegend content={<ChartLegendContent />} />
-                {series.map((s) => (
-                  <Area
-                    key={s.key}
-                    dataKey={s.key}
-                    type="monotone"
-                    stackId="1"
-                    stroke={s.color}
-                    fill={`url(#fill-${s.key})`}
-                    strokeWidth={1.5}
-                    dot={(props) => {
-                      const { cx, cy, value } = props
-                      if (cx == null || cy == null || !value || Number(value) <= 0) return null
-                      return (
-                        <circle
-                          cx={cx}
-                          cy={cy}
-                          r={3.5}
-                          fill={s.color}
-                          stroke="var(--background)"
-                          strokeWidth={1.5}
-                        />
-                      )
-                    }}
-                    activeDot={{ r: 5, stroke: "var(--background)", strokeWidth: 1.5 }}
-                  />
-                ))}
-                <ReferenceLine y={0} stroke="#fff" strokeWidth={1.5} ifOverflow="visible" />
-              </AreaChart>
-            </ChartContainer>
-          ) : (
-            <p className="py-12 text-center font-mono text-xs text-muted-foreground">
-              {scope === "project"
-                ? "No runs for this project yet — run a pipeline to see daily cost breakdown."
-                : scope === "shared"
-                  ? "No shared pipeline runs yet — run a shared link to see attribution here."
-                  : "No runs yet — run a pipeline to see daily cost breakdown."}
-            </p>
-          )}
+          <BillingSpendChart
+            chartData={chartData}
+            series={series}
+            chartConfig={chartConfig}
+            hasRuns={hasRuns}
+            scope={scope}
+          />
         </div>
 
         <div className="mt-4 rounded-lg border border-border">
