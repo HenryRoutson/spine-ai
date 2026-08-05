@@ -46,15 +46,22 @@ function resolveLayer(raw: MergeLayerPolicy | undefined): ResolvedLayerPolicy {
 }
 
 function itemKeyFn(keyPath: string): KeyFn {
+  const parts = keyPath.split(".").filter(Boolean);
   return (item: unknown) => {
-    if (item && typeof item === "object" && !Array.isArray(item)) {
-      const value = (item as Record<string, unknown>)[keyPath];
-      if (value === undefined || value === null) {
+    let cur: unknown = item;
+    for (const part of parts) {
+      if (!cur || typeof cur !== "object" || Array.isArray(cur) || !(part in (cur as object))) {
         throw new TypeError(`itemKey "${keyPath}" missing on ${JSON.stringify(item)}`);
       }
-      return value as ComparisonKey;
+      cur = (cur as Record<string, unknown>)[part];
     }
-    throw new TypeError(`itemKey "${keyPath}" requires object list items`);
+    if (cur === undefined || cur === null) {
+      throw new TypeError(`itemKey "${keyPath}" missing on ${JSON.stringify(item)}`);
+    }
+    if (typeof cur === "object") {
+      throw new TypeError(`itemKey "${keyPath}" must be a scalar, got ${JSON.stringify(cur)}`);
+    }
+    return cur as ComparisonKey;
   };
 }
 
@@ -125,7 +132,7 @@ function mergePair(
     return mergeDicts(left, right, resolver, path, layer);
   }
   if (Array.isArray(left) && Array.isArray(right)) {
-    return mergeLists(left, right, layer, path);
+    return mergeLists(left, right, resolver, path, layer);
   }
   if (isScalar(left) && isScalar(right)) {
     return mergeScalars(left, right, layer);
@@ -164,26 +171,72 @@ function mergeDicts(
   return out;
 }
 
-function mergeLists(left: unknown[], right: unknown[], layer: ResolvedLayerPolicy, path: Path): unknown[] {
+function mergeLists(
+  left: unknown[],
+  right: unknown[],
+  resolver: MergePolicyResolver,
+  path: Path,
+  layer: ResolvedLayerPolicy,
+): unknown[] {
   const strategy = layer.list;
 
   if (strategy === MergeListStrategy.Replace) return [...right];
   if (strategy === MergeListStrategy.Prepend) return [...right, ...left];
   if (strategy === MergeListStrategy.Concat) return [...left, ...right];
+  if (strategy === MergeListStrategy.Zip) return zipMergeLists(left, right, resolver, path);
   if (strategy === MergeListStrategy.ConcatDedupe) {
-    return dedupePreserveOrder([...left, ...right], layer.keyFn);
+    return dedupeMergeOrder([...left, ...right], layer.keyFn, resolver, path);
   }
   if (strategy === MergeListStrategy.ConcatAssertNoDuplicates) {
     return assertNoDuplicates([...left, ...right], layer.keyFn, path);
   }
   if (strategy === MergeListStrategy.Union) {
-    return setOpLists(left, right, layer.keyFn, "union");
+    return setOpLists(left, right, layer.keyFn, resolver, path, "union");
+  }
+  if (strategy === MergeListStrategy.UnionAssert) {
+    return assertUnionNoOverlap(left, right, layer.keyFn, path);
   }
   if (strategy === MergeListStrategy.Intersect) {
-    return setOpLists(left, right, layer.keyFn, "intersect");
+    return setOpLists(left, right, layer.keyFn, resolver, path, "intersect");
+  }
+  if (strategy === MergeListStrategy.IntersectAssert) {
+    return assertIntersectSubset(left, right, layer.keyFn, path);
+  }
+  if (strategy === MergeListStrategy.ReplaceAssert) {
+    return assertReplaceEmptyLeft(left, right, path);
+  }
+  if (strategy === MergeListStrategy.PrependAssert) {
+    return assertPrependEmptyRight(left, right, path);
   }
 
   throw new Error(`unknown list strategy: ${strategy}`);
+}
+
+function pathForListItem(path: Path, ck: ComparisonKey, index: number): Path {
+  // AI : prefer stable identity so rules like users.*.roles / users.alice.roles work
+  if (typeof ck === "string" || typeof ck === "number") return [...path, ck];
+  return [...path, index];
+}
+
+function zipMergeLists(
+  left: unknown[],
+  right: unknown[],
+  resolver: MergePolicyResolver,
+  path: Path,
+): unknown[] {
+  const n = Math.max(left.length, right.length);
+  const out: unknown[] = [];
+  for (let i = 0; i < n; i++) {
+    const child: Path = [...path, i];
+    if (i < left.length && i < right.length) {
+      out.push(mergePair(left[i], right[i], resolver, child));
+    } else if (i < left.length) {
+      out.push(left[i]);
+    } else {
+      out.push(right[i]);
+    }
+  }
+  return out;
 }
 
 function mergeScalars(left: unknown, right: unknown, layer: ResolvedLayerPolicy): unknown {
@@ -196,8 +249,11 @@ function setOpLists(
   left: unknown[],
   right: unknown[],
   keyFn: KeyFn | undefined,
+  resolver: MergePolicyResolver,
+  path: Path,
   op: "union" | "intersect",
 ): unknown[] {
+  // AI : matching keys recursively merge so nested path policies still apply
   const leftKeys = left.map((item) => comparisonKey(item, keyFn));
   const rightKeys = right.map((item) => comparisonKey(item, keyFn));
   const leftSet = new Set(leftKeys);
@@ -220,8 +276,27 @@ function setOpLists(
   }
 
   const keyToItem = new Map<ComparisonKey, unknown>();
-  for (let i = 0; i < left.length; i++) keyToItem.set(leftKeys[i]!, left[i]);
-  for (let i = 0; i < right.length; i++) keyToItem.set(rightKeys[i]!, right[i]);
+  const keyIndex = new Map<ComparisonKey, number>();
+  for (let i = 0; i < left.length; i++) {
+    const ck = leftKeys[i]!;
+    if (!keyToItem.has(ck)) {
+      keyToItem.set(ck, left[i]);
+      keyIndex.set(ck, i);
+    } else {
+      const child = pathForListItem(path, ck, keyIndex.get(ck)!);
+      keyToItem.set(ck, mergePair(keyToItem.get(ck), left[i], resolver, child));
+    }
+  }
+  for (let i = 0; i < right.length; i++) {
+    const ck = rightKeys[i]!;
+    if (!keyToItem.has(ck)) {
+      keyToItem.set(ck, right[i]);
+      keyIndex.set(ck, left.length + i);
+    } else {
+      const child = pathForListItem(path, ck, keyIndex.get(ck)!);
+      keyToItem.set(ck, mergePair(keyToItem.get(ck), right[i], resolver, child));
+    }
+  }
 
   return orderedKeys.map((k) => keyToItem.get(k)!);
 }
@@ -242,13 +317,23 @@ function unionKeyOrder(
   return out;
 }
 
-function dedupePreserveOrder(items: unknown[], keyFn: KeyFn | undefined): unknown[] {
-  const seen = new Set<ComparisonKey>();
+function dedupeMergeOrder(
+  items: unknown[],
+  keyFn: KeyFn | undefined,
+  resolver: MergePolicyResolver,
+  path: Path,
+): unknown[] {
+  const seen = new Map<ComparisonKey, number>();
   const out: unknown[] = [];
   for (const item of items) {
     const ck = comparisonKey(item, keyFn);
-    if (seen.has(ck)) continue;
-    seen.add(ck);
+    if (seen.has(ck)) {
+      const idx = seen.get(ck)!;
+      const child = pathForListItem(path, ck, idx);
+      out[idx] = mergePair(out[idx], item, resolver, child);
+      continue;
+    }
+    seen.set(ck, out.length);
     out.push(item);
   }
   return out;
@@ -266,6 +351,61 @@ function assertNoDuplicates(items: unknown[], keyFn: KeyFn | undefined, path: Pa
     out.push(item);
   }
   return out;
+}
+
+function assertUnionNoOverlap(
+  left: unknown[],
+  right: unknown[],
+  keyFn: KeyFn | undefined,
+  path: Path,
+): unknown[] {
+  const leftKeys = left.map((item) => comparisonKey(item, keyFn));
+  const leftSet = new Set(leftKeys);
+  for (let i = 0; i < right.length; i++) {
+    const ck = comparisonKey(right[i]!, keyFn);
+    if (leftSet.has(ck)) {
+      throw new TypeError(
+        `union key overlap at path ${pathLabel(path)} (key=${String(ck)})`,
+      );
+    }
+  }
+  return [...left, ...right];
+}
+
+function assertIntersectSubset(
+  left: unknown[],
+  right: unknown[],
+  keyFn: KeyFn | undefined,
+  path: Path,
+): unknown[] {
+  const rightSet = new Set(right.map((item) => comparisonKey(item, keyFn)));
+  for (const item of left) {
+    const ck = comparisonKey(item, keyFn);
+    if (!rightSet.has(ck)) {
+      throw new TypeError(
+        `intersect: left item not in right at path ${pathLabel(path)} (key=${String(ck)})`,
+      );
+    }
+  }
+  return left;
+}
+
+function assertReplaceEmptyLeft(left: unknown[], right: unknown[], path: Path): unknown[] {
+  if (left.length) {
+    throw new TypeError(
+      `replace assert: left list must be empty at path ${pathLabel(path)} (got ${left.length} items)`,
+    );
+  }
+  return [...right];
+}
+
+function assertPrependEmptyRight(left: unknown[], right: unknown[], path: Path): unknown[] {
+  if (right.length) {
+    throw new TypeError(
+      `prepend assert: right list must be empty at path ${pathLabel(path)} (got ${right.length} items)`,
+    );
+  }
+  return [...left];
 }
 
 function comparisonKey(item: unknown, keyFn: KeyFn | undefined): ComparisonKey {
@@ -298,24 +438,30 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 function patternMatchDepth(pattern: string, path: Path): number | null {
   const patternParts = pattern.split(".").filter(Boolean);
   if (!patternParts.length) return path.length ? null : 0;
-
-  if (patternParts[0] === "**") {
-    const suffix = patternParts.slice(1);
-    if (!suffix.length) return path.length;
-    let best: number | null = null;
-    for (let start = 0; start <= path.length; start++) {
-      if (suffixMatch(suffix, path.slice(start))) {
-        const depth = start + suffix.length;
-        if (best === null || depth > best) best = depth;
-      }
-    }
-    return best;
-  }
-
+  if (patternParts.includes("**")) return globstarMatchDepth(patternParts, path);
   if (patternParts.length > path.length) return null;
   const offset = path.length - patternParts.length;
   if (suffixMatch(patternParts, path.slice(offset))) return patternParts.length;
   return null;
+}
+
+function globstarMatchDepth(pattern: string[], path: Path): number | null {
+  return globstarMatchFrom(pattern, path, 0, 0);
+}
+
+function globstarMatchFrom(pattern: string[], path: Path, pi: number, si: number): number | null {
+  if (pi === pattern.length) return si === path.length ? path.length : null;
+  if (pattern[pi] === "**") {
+    let best: number | null = null;
+    for (let span = si; span <= path.length; span++) {
+      const depth = globstarMatchFrom(pattern, path, pi + 1, span);
+      if (depth !== null && (best === null || depth > best)) best = depth;
+    }
+    return best;
+  }
+  if (si >= path.length) return null;
+  if (pattern[pi] !== "*" && String(pattern[pi]) !== String(path[si])) return null;
+  return globstarMatchFrom(pattern, path, pi + 1, si + 1);
 }
 
 function suffixMatch(pattern: string[], path: Path): boolean {
@@ -379,10 +525,15 @@ function mergePairSource(): string {
     if (s === "replace") return [...right];
     if (s === "prepend") return [...right, ...left];
     if (s === "concat") return [...left, ...right];
-    if (s === "concat_dedupe") return __dedupe([...left, ...right], layer.keyFn);
+    if (s === "zip") return __zipMerge(left, right, resolver, path);
+    if (s === "concat_dedupe") return __dedupeMerge([...left, ...right], layer.keyFn, resolver, path);
     if (s === "concat_assert_no_duplicates") return __assertNoDupes([...left, ...right], layer.keyFn, path);
-    if (s === "union") return __setOp(left, right, layer.keyFn, "union");
-    if (s === "intersect") return __setOp(left, right, layer.keyFn, "intersect");
+    if (s === "union") return __setOp(left, right, layer.keyFn, resolver, path, "union");
+    if (s === "union_assert") return __assertUnionNoOverlap(left, right, layer.keyFn, path);
+    if (s === "intersect") return __setOp(left, right, layer.keyFn, resolver, path, "intersect");
+    if (s === "intersect_assert") return __assertIntersectSubset(left, right, layer.keyFn, path);
+    if (s === "replace_assert") return __assertReplaceEmptyLeft(left, right, path);
+    if (s === "prepend_assert") return __assertPrependEmptyRight(left, right, path);
     throw new Error("unknown list strategy: " + s);
   }
   if (isScalar(left) && isScalar(right)) {
@@ -403,7 +554,7 @@ function policyResolverSource(): string {
       list: def.list ?? "concat",
       dict: def.dict ?? "deep",
       scalar: def.scalar ?? "last",
-      keyFn: def.itemKey ? (item) => item[def.itemKey] : undefined,
+      keyFn: def.itemKey ? __itemKeyFn(def.itemKey) : undefined,
     };
     this.rules = (policy?.rules ?? []).map((r) => ({
       pattern: r.path,
@@ -411,7 +562,7 @@ function policyResolverSource(): string {
         list: r.policy?.list ?? this.default.list,
         dict: r.policy?.dict ?? this.default.dict,
         scalar: r.policy?.scalar ?? this.default.scalar,
-        keyFn: r.policy?.itemKey ? (item) => item[r.policy.itemKey] : undefined,
+        keyFn: r.policy?.itemKey ? __itemKeyFn(r.policy.itemKey) : undefined,
       },
     }));
   }
@@ -429,17 +580,46 @@ function policyResolverSource(): string {
 // AI : helper fns referenced by generated mergePair source — appended in buildMergeTypeScript wrapper.
 export function mergeRuntimeHelpers(): string {
   return `
+function __itemKeyFn(keyPath) {
+  const parts = String(keyPath).split(".").filter(Boolean);
+  return (item) => {
+    let cur = item;
+    for (const part of parts) {
+      if (!cur || typeof cur !== "object" || !(part in cur)) throw new TypeError("itemKey \\"" + keyPath + "\\" missing");
+      cur = cur[part];
+    }
+    if (cur == null) throw new TypeError("itemKey \\"" + keyPath + "\\" missing");
+    return cur;
+  };
+}
 function __cmpKey(item, keyFn) {
   if (keyFn) return keyFn(item);
   if (item == null || typeof item === "string" || typeof item === "number" || typeof item === "boolean") return item;
   return JSON.stringify(item);
 }
-function __dedupe(items, keyFn) {
-  const seen = new Set(), out = [];
+function __pathForItem(path, ck, index) {
+  if (typeof ck === "string" || typeof ck === "number") return [...path, ck];
+  return [...path, index];
+}
+function __zipMerge(left, right, resolver, path) {
+  const n = Math.max(left.length, right.length), out = [];
+  for (let i = 0; i < n; i++) {
+    const child = [...path, i];
+    if (i < left.length && i < right.length) out.push(__mergePair(left[i], right[i], resolver, child));
+    else out.push(i < left.length ? left[i] : right[i]);
+  }
+  return out;
+}
+function __dedupeMerge(items, keyFn, resolver, path) {
+  const seen = new Map(), out = [];
   for (const item of items) {
     const k = __cmpKey(item, keyFn);
-    if (seen.has(k)) continue;
-    seen.add(k);
+    if (seen.has(k)) {
+      const idx = seen.get(k);
+      out[idx] = __mergePair(out[idx], item, resolver, __pathForItem(path, k, idx));
+      continue;
+    }
+    seen.set(k, out.length);
     out.push(item);
   }
   return out;
@@ -455,7 +635,7 @@ function __assertNoDupes(items, keyFn, path) {
   }
   return out;
 }
-function __setOp(left, right, keyFn, op) {
+function __setOp(left, right, keyFn, resolver, path, op) {
   const lk = left.map((i) => __cmpKey(i, keyFn)), rk = right.map((i) => __cmpKey(i, keyFn));
   const ls = new Set(lk), rs = new Set(rk);
   const wanted = op === "union" ? new Set([...ls, ...rs]) : new Set([...lk].filter((k) => rs.has(k)));
@@ -464,10 +644,47 @@ function __setOp(left, right, keyFn, op) {
   for (const k of [...lk, ...rk]) {
     if (wanted.has(k) && !seen.has(k)) { seen.add(k); order.push(k); }
   }
-  const map = new Map();
-  left.forEach((item, i) => map.set(lk[i], item));
-  right.forEach((item, i) => map.set(rk[i], item));
+  const map = new Map(), idx = new Map();
+  left.forEach((item, i) => {
+    const k = lk[i];
+    if (!map.has(k)) { map.set(k, item); idx.set(k, i); }
+    else map.set(k, __mergePair(map.get(k), item, resolver, __pathForItem(path, k, idx.get(k))));
+  });
+  right.forEach((item, i) => {
+    const k = rk[i];
+    if (!map.has(k)) { map.set(k, item); idx.set(k, left.length + i); }
+    else map.set(k, __mergePair(map.get(k), item, resolver, __pathForItem(path, k, idx.get(k))));
+  });
   return order.map((k) => map.get(k));
+}
+function __assertUnionNoOverlap(left, right, keyFn, path) {
+  const lk = left.map((i) => __cmpKey(i, keyFn));
+  const ls = new Set(lk);
+  const label = path.length ? path.join(".") : "<root>";
+  for (const item of right) {
+    const k = __cmpKey(item, keyFn);
+    if (ls.has(k)) throw new TypeError("union key overlap at path " + label + " (key=" + String(k) + ")");
+  }
+  return [...left, ...right];
+}
+function __assertIntersectSubset(left, right, keyFn, path) {
+  const rs = new Set(right.map((i) => __cmpKey(i, keyFn)));
+  const label = path.length ? path.join(".") : "<root>";
+  for (const item of left) {
+    const k = __cmpKey(item, keyFn);
+    if (!rs.has(k)) throw new TypeError("intersect: left item not in right at path " + label + " (key=" + String(k) + ")");
+  }
+  return left;
+}
+function __assertReplaceEmptyLeft(left, right, path) {
+  const label = path.length ? path.join(".") : "<root>";
+  if (left.length) throw new TypeError("replace assert: left list must be empty at path " + label + " (got " + left.length + " items)");
+  return [...right];
+}
+function __assertPrependEmptyRight(left, right, path) {
+  const label = path.length ? path.join(".") : "<root>";
+  if (right.length) throw new TypeError("prepend assert: right list must be empty at path " + label + " (got " + right.length + " items)");
+  return [...left];
 }
 function __suffixMatch(pattern, path) {
   if (pattern.length !== path.length) return false;
@@ -476,21 +693,24 @@ function __suffixMatch(pattern, path) {
   }
   return true;
 }
-function __patternDepth(pattern, path) {
-  const parts = pattern.split(".").filter(Boolean);
-  if (!parts.length) return path.length ? null : 0;
-  if (parts[0] === "**") {
-    const suffix = parts.slice(1);
-    if (!suffix.length) return path.length;
+function __globstarFrom(pattern, path, pi, si) {
+  if (pi === pattern.length) return si === path.length ? path.length : null;
+  if (pattern[pi] === "**") {
     let best = null;
-    for (let start = 0; start <= path.length; start++) {
-      if (__suffixMatch(suffix, path.slice(start))) {
-        const d = start + suffix.length;
-        if (best == null || d > best) best = d;
-      }
+    for (let span = si; span <= path.length; span++) {
+      const d = __globstarFrom(pattern, path, pi + 1, span);
+      if (d != null && (best == null || d > best)) best = d;
     }
     return best;
   }
+  if (si >= path.length) return null;
+  if (pattern[pi] !== "*" && String(pattern[pi]) !== String(path[si])) return null;
+  return __globstarFrom(pattern, path, pi + 1, si + 1);
+}
+function __patternDepth(pattern, path) {
+  const parts = pattern.split(".").filter(Boolean);
+  if (!parts.length) return path.length ? null : 0;
+  if (parts.includes("**")) return __globstarFrom(parts, path, 0, 0);
   if (parts.length > path.length) return null;
   const offset = path.length - parts.length;
   return __suffixMatch(parts, path.slice(offset)) ? parts.length : null;

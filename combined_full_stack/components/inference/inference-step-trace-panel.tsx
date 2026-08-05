@@ -1,16 +1,17 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import type { RefObject } from "react"
+import type { ReactNode, RefObject } from "react"
 import { ChevronDown, Copy, Check } from "lucide-react"
 import { runErrorLogText, runHasErrors } from "@/lib/run-error-log"
+import { DiagnosisRunLink } from "@/components/diagnosis-agents/diagnosis-run-link"
 import { runLogText } from "@/lib/run-log-text"
 import { runLogJson } from "@/lib/run-log-json"
 import { copyTextToClipboard } from "@/lib/clipboard"
 import { Progress } from "@/components/ui/progress"
 import { segmentPipeline, mergeCombineSegmentStatus } from "@/lib/pipeline-layout"
 import type { StepUiState } from "@/lib/run-engine"
-import type { JobLogEntry, ModuleId, PipelineModule, PipelineRun } from "@/lib/types"
+import type { DocRef, JobLogEntry, ModuleId, PipelineModule, PipelineRun, StructureModel } from "@/lib/types"
 import {
   InferenceStepRow,
   stepDescriptionMeta,
@@ -19,7 +20,82 @@ import { moduleInputDescription } from "@/components/step-input-description"
 import { CyclingWaitPhrase } from "@/components/inference/inference-run-chrome"
 import { docsForInputModule } from "@/lib/inference-input"
 import { cn } from "@/lib/utils"
-import type { DocRef, StructureModel } from "@/lib/types"
+import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
+import type { CodeExecUiState } from "@/lib/code-exec-ui"
+
+type StepTracePanelCtx = {
+  run: PipelineRun | null
+  showStepIo: boolean
+  ioCompact: boolean
+  collapseLogs: boolean
+  logsByModule?: Map<ModuleId, JobLogEntry[]>
+  codeExecByModule?: Map<ModuleId, CodeExecUiState>
+  docs: DocRef[]
+  models: StructureModel[]
+  inputDocs: Partial<Record<ModuleId, DocRef | DocRef[]>>
+}
+
+function bindInferenceStepRow(
+  module: PipelineModule,
+  stepUi: StepUiState | undefined,
+  ctx: StepTracePanelCtx,
+  opts?: { nested?: boolean; isInputStep?: boolean; isOutputStep?: boolean },
+) {
+  const desc = stepDescriptionMeta(module.id, ctx.run, stepUi)
+  const isInputStep = opts?.isInputStep ?? module.kind === "input"
+  return {
+    label: module.label,
+    state: stepUi?.status ?? ("idle" as const),
+    sub: stepUi?.sub,
+    nested: opts?.nested,
+    isInputStep: opts?.isInputStep,
+    isOutputStep: opts?.isOutputStep ?? module.kind === "output",
+    module,
+    codeExec: ctx.codeExecByModule?.get(module.id),
+    showStepIo: ctx.showStepIo,
+    ioCompact: ctx.ioCompact,
+    outputPreview: stepUi?.outputPreview,
+    runStep: ctx.run?.steps.find((s) => s.moduleId === module.id),
+    runId: ctx.run?.id,
+    assignedInputDocs: isInputStep ? docsForInputModule(ctx.inputDocs, module.id) : [],
+    docs: ctx.docs,
+    models: ctx.models,
+    inputDescription: moduleInputDescription(module),
+    inputDescriptionCheck: desc.check,
+    descriptionCheckLlmCalls: desc.descriptionCheckLlmCalls,
+    descriptionCheckCostCents: desc.descriptionCheckCostCents,
+    serverLogs: ctx.logsByModule?.get(module.id) ?? [],
+    forceCollapsedLogs: ctx.collapseLogs,
+  }
+}
+
+function CopyTraceButton({
+  label,
+  copied,
+  onCopy,
+  tone = "muted",
+}: {
+  label: string
+  copied: boolean
+  onCopy: () => void | Promise<void>
+  tone?: "muted" | "destructive"
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => void onCopy()}
+      className={cn(
+        "inline-flex items-center gap-1 font-mono text-[10px]",
+        tone === "destructive"
+          ? "text-destructive hover:text-destructive/80"
+          : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      {copied ? "copied" : label}
+    </button>
+  )
+}
 
 export function InferenceStepTracePanel({
   modules,
@@ -34,6 +110,7 @@ export function InferenceStepTracePanel({
   docs,
   models,
   inputDocs,
+  codeExecByModule,
 }: {
   modules: PipelineModule[]
   phase: "idle" | "running" | "done"
@@ -43,15 +120,14 @@ export function InferenceStepTracePanel({
   waitPhrase: string
   logsByModule?: Map<ModuleId, JobLogEntry[]>
   logEndRef?: RefObject<HTMLDivElement | null>
-  footer?: React.ReactNode
+  footer?: ReactNode
   docs: DocRef[]
   models: StructureModel[]
   inputDocs: Partial<Record<ModuleId, DocRef | DocRef[]>>
+  codeExecByModule?: Map<ModuleId, CodeExecUiState>
 }) {
   const [stepsExpanded, setStepsExpanded] = useState(true)
-  const [logCopied, setLogCopied] = useState(false)
-  const [jsonCopied, setJsonCopied] = useState(false)
-  const [errorCopied, setErrorCopied] = useState(false)
+  const [copiedKey, setCopiedKey] = useState<"errors" | "json" | "log" | null>(null)
   // AI : show input/output viz while running and again after done when trace is expanded.
   const showStepIo = stepsExpanded && (phase === "running" || phase === "done")
   const ioCompact = phase === "running"
@@ -65,6 +141,22 @@ export function InferenceStepTracePanel({
   if (phase !== "running" && phase !== "done") return null
 
   const collapseLogs = phase === "done"
+  const stepCtx: StepTracePanelCtx = {
+    run,
+    showStepIo,
+    ioCompact,
+    collapseLogs,
+    logsByModule,
+    codeExecByModule,
+    docs,
+    models,
+    inputDocs,
+  }
+
+  function markCopied(key: typeof copiedKey) {
+    setCopiedKey(key)
+    setTimeout(() => setCopiedKey(null), COPY_FEEDBACK_MS)
+  }
 
   return (
     <div className="rounded-lg border border-border p-4">
@@ -82,44 +174,34 @@ export function InferenceStepTracePanel({
         <div className="flex items-center gap-2">
           {phase === "done" && run && (
             <>
+              {runHasErrors(run) && <DiagnosisRunLink runId={run.id} />}
               {runHasErrors(run) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void copyTextToClipboard(runErrorLogText(run))
-                    setErrorCopied(true)
-                    setTimeout(() => setErrorCopied(false), 2000)
+                <CopyTraceButton
+                  label="copy_errors"
+                  copied={copiedKey === "errors"}
+                  tone="destructive"
+                  onCopy={async () => {
+                    await copyTextToClipboard(runErrorLogText(run))
+                    markCopied("errors")
                   }}
-                  className="inline-flex items-center gap-1 font-mono text-[10px] text-destructive hover:text-destructive/80"
-                >
-                  {errorCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                  {errorCopied ? "copied" : "copy_errors"}
-                </button>
+                />
               )}
-              <button
-                type="button"
-                onClick={async () => {
+              <CopyTraceButton
+                label="copy_json"
+                copied={copiedKey === "json"}
+                onCopy={async () => {
                   await copyTextToClipboard(await runLogJson(run, docs))
-                  setJsonCopied(true)
-                  setTimeout(() => setJsonCopied(false), 2000)
+                  markCopied("json")
                 }}
-                className="inline-flex items-center gap-1 font-mono text-[10px] text-muted-foreground hover:text-foreground"
-              >
-                {jsonCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                {jsonCopied ? "copied" : "copy_json"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void copyTextToClipboard(runLogText(run))
-                  setLogCopied(true)
-                  setTimeout(() => setLogCopied(false), 2000)
+              />
+              <CopyTraceButton
+                label="copy_log"
+                copied={copiedKey === "log"}
+                onCopy={async () => {
+                  await copyTextToClipboard(runLogText(run))
+                  markCopied("log")
                 }}
-                className="inline-flex items-center gap-1 font-mono text-[10px] text-muted-foreground hover:text-foreground"
-              >
-                {logCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                {logCopied ? "copied" : "copy_log"}
-              </button>
+              />
             </>
           )}
           <span className="font-mono text-[11px] text-primary">{progressPct}%</span>
@@ -139,91 +221,29 @@ export function InferenceStepTracePanel({
             const parseState = parseUi?.status ?? "idle"
             const sideState = seg.parse ? mergeCombineSegmentStatus(parseState, inputState) : inputState
             const state = mergeCombineSegmentStatus(combineUi?.status ?? "idle", sideState)
-            const combineDesc = stepDescriptionMeta(seg.combine.id, run, combineUi)
-            const inputDesc = stepDescriptionMeta(seg.input.id, run, inputUi)
-            const parseDesc = seg.parse ? stepDescriptionMeta(seg.parse.id, run, parseUi) : undefined
             return (
               <div key={seg.combine.id} className="space-y-1">
                 <InferenceStepRow
-                  label={seg.combine.label}
+                  {...bindInferenceStepRow(seg.combine, combineUi, stepCtx)}
                   state={state}
-                  sub={combineUi?.sub}
-                  showStepIo={showStepIo}
-                  ioCompact={ioCompact}
-                  outputPreview={combineUi?.outputPreview}
-                  runStep={run?.steps.find((s) => s.moduleId === seg.combine.id)}
-                  inputDescription={moduleInputDescription(seg.combine)}
-                  inputDescriptionCheck={combineDesc.check}
-                  descriptionCheckLlmCalls={combineDesc.descriptionCheckLlmCalls}
-                  descriptionCheckCostCents={combineDesc.descriptionCheckCostCents}
-                  serverLogs={logsByModule?.get(seg.combine.id) ?? []}
-                  forceCollapsedLogs={collapseLogs}
                 />
                 <InferenceStepRow
-                  label={seg.input.label}
-                  state={inputState}
-                  sub={inputUi?.sub}
-                  nested
-                  isInputStep
-                  showStepIo={showStepIo}
-                  ioCompact={ioCompact}
-                  outputPreview={inputUi?.outputPreview}
-                  runStep={run?.steps.find((s) => s.moduleId === seg.input.id)}
-                  assignedInputDocs={docsForInputModule(inputDocs, seg.input.id)}
-                  docs={docs}
-                  models={models}
-                  inputDescription={moduleInputDescription(seg.input)}
-                  inputDescriptionCheck={inputDesc.check}
-                  descriptionCheckLlmCalls={inputDesc.descriptionCheckLlmCalls}
-                  descriptionCheckCostCents={inputDesc.descriptionCheckCostCents}
-                  serverLogs={logsByModule?.get(seg.input.id) ?? []}
-                  forceCollapsedLogs={collapseLogs}
+                  {...bindInferenceStepRow(seg.input, inputUi, stepCtx, { nested: true, isInputStep: true })}
                 />
                 {seg.parse && (
                   <InferenceStepRow
-                    label={seg.parse.label}
-                    state={parseState}
-                    sub={parseUi?.sub}
-                    nested
-                    showStepIo={showStepIo}
-                    ioCompact={ioCompact}
-                    outputPreview={parseUi?.outputPreview}
-                    runStep={run?.steps.find((s) => s.moduleId === seg.parse!.id)}
-                    inputDescription={moduleInputDescription(seg.parse)}
-                    inputDescriptionCheck={parseDesc?.check}
-                    descriptionCheckLlmCalls={parseDesc?.descriptionCheckLlmCalls}
-                    descriptionCheckCostCents={parseDesc?.descriptionCheckCostCents}
-                    serverLogs={logsByModule?.get(seg.parse.id) ?? []}
-                    forceCollapsedLogs={collapseLogs}
+                    {...bindInferenceStepRow(seg.parse, parseUi, stepCtx, { nested: true })}
                   />
                 )}
               </div>
             )
           }
-          const moduleUi = stepStates.get(seg.module.id)
-          const moduleDesc = stepDescriptionMeta(seg.module.id, run, moduleUi)
-          const isInputStep = seg.module.kind === "input"
           return (
             <InferenceStepRow
               key={seg.module.id}
-              label={seg.module.label}
-              state={moduleUi?.status ?? "idle"}
-              sub={moduleUi?.sub}
-              isOutputStep={seg.module.kind === "output"}
-              isInputStep={isInputStep}
-              showStepIo={showStepIo}
-              ioCompact={ioCompact}
-              outputPreview={moduleUi?.outputPreview}
-              runStep={run?.steps.find((s) => s.moduleId === seg.module.id)}
-              assignedInputDocs={isInputStep ? docsForInputModule(inputDocs, seg.module.id) : []}
-              docs={docs}
-              models={models}
-              inputDescription={moduleInputDescription(seg.module)}
-              inputDescriptionCheck={moduleDesc.check}
-              descriptionCheckLlmCalls={moduleDesc.descriptionCheckLlmCalls}
-              descriptionCheckCostCents={moduleDesc.descriptionCheckCostCents}
-              serverLogs={logsByModule?.get(seg.module.id) ?? []}
-              forceCollapsedLogs={collapseLogs}
+              {...bindInferenceStepRow(seg.module, stepStates.get(seg.module.id), stepCtx, {
+                isInputStep: seg.module.kind === "input",
+              })}
             />
           )
         })}

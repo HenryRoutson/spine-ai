@@ -15,7 +15,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
 } from "react"
 import { confidentialUploadWarning } from "@/lib/confidential-upload"
 import { uid } from "@/lib/id"
@@ -131,6 +133,26 @@ function pruneStaleProjectFromAccountCache(projectId: string): void {
     docs: account.docs,
     modelOptions: account.modelOptions,
   })
+}
+
+// AI : session/account cache can outlive a deleted or never-persisted project — evict everywhere.
+function evictStaleProject(
+  projectId: string,
+  setState: Dispatch<SetStateAction<ServerState | null>>,
+  setActiveProjectId: Dispatch<SetStateAction<string>>,
+  clearSaveError?: () => void,
+): void {
+  clearProjectStateCache(projectId)
+  pruneStaleProjectFromAccountCache(projectId)
+  const wasActiveSession = readActiveProjectSession() === projectId
+  if (wasActiveSession) clearActiveProjectSession()
+  setState((prev) => {
+    if (!prev?.projects.some((p) => p.id === projectId)) return prev
+    return { ...prev, projects: prev.projects.filter((p) => p.id !== projectId) }
+  })
+  setActiveProjectId((current) => (current === projectId ? "" : current))
+  clearSaveError?.()
+  if (wasActiveSession) navigateToProjectPicker()
 }
 
 // AI : PUT /api/projects/[id] — id is in the URL; createdAt is immutable server-side.
@@ -421,11 +443,20 @@ export function StoreProvider({
     if (readOnly) return
     const result = await apiPut(API_ROUTES.project(id), body)
     if (!result.ok) {
+      if (result.status === 404) {
+        if (pendingSaveRef.current?.id === id) {
+          if (saveTimer.current) clearTimeout(saveTimer.current)
+          saveTimer.current = null
+          pendingSaveRef.current = null
+        }
+        evictStaleProject(id, setState, setActiveProjectId, clearSaveError)
+        return
+      }
       setSaveError(result.error)
       return
     }
     setSaveError(null)
-  }, [mode, state?.projects])
+  }, [mode, state?.projects, clearSaveError])
 
   const refreshBilling = useCallback(async (opts?: AccountRefreshOpts) => {
     const force = opts?.force === true
@@ -529,16 +560,7 @@ export function StoreProvider({
       const url = `${API_ROUTES.runs}?projectId=${encodeURIComponent(projectId)}`
       const res = await fetch(url, { credentials: FETCH_CREDENTIALS })
       if (res.status === 404) {
-        clearProjectStateCache(projectId)
-        pruneStaleProjectFromAccountCache(projectId)
-        const wasActiveSession = readActiveProjectSession() === projectId
-        if (wasActiveSession) clearActiveProjectSession()
-        setState((prev) => {
-          if (!prev?.projects.some((p) => p.id === projectId)) return prev
-          return { ...prev, projects: prev.projects.filter((p) => p.id !== projectId) }
-        })
-        setActiveProjectId((current) => (current === projectId ? "" : current))
-        if (wasActiveSession) navigateToProjectPicker()
+        evictStaleProject(projectId, setState, setActiveProjectId)
         return [] as PipelineRun[]
       }
       if (!res.ok) {
@@ -574,18 +596,21 @@ export function StoreProvider({
       }
 
       if (account && projectId && accountKnowsProject(projectId, account)) {
-        if (cachedRuns) {
-          return {
-            ...account,
-            runs: cachedRuns.runs,
-            allRuns: readBillingRunsCache() ?? [],
-          }
-        }
-        // AI : paint from account cache immediately — hydrate runs in the background.
-        void fetchProjectRuns(projectId)
-          .then((runs) => onChunk?.({ runs }))
-          .catch(console.error)
-        return { ...account, runs: [], allRuns: readBillingRunsCache() ?? [] }
+        // AI : paint from cache immediately, but always reconcile with server — sessionStorage can outlive deleted projects.
+        onChunk?.({
+          projects: account.projects,
+          docs: account.docs,
+          modelOptions: account.modelOptions,
+          runs: cachedRuns?.runs ?? [],
+        })
+        const data = await fetchState(projectId, onChunk, signal)
+        writeAccountStateCache({
+          projects: data.projects,
+          docs: data.docs,
+          modelOptions: data.modelOptions,
+        })
+        writeProjectRunsCache(projectId, data.runs)
+        return { ...data, allRuns: readBillingRunsCache() ?? [] }
       }
 
       const prefetched = projectId ? prefetchCache.current.get(projectId) : undefined
@@ -664,7 +689,16 @@ export function StoreProvider({
         if (resolved) writeActiveProjectSession(resolved as ProjectId)
         else clearActiveProjectSession()
         // AI : stale session pointed at a deleted/missing project — builder shell would skeleton forever.
-        if (hadUnknownProject) navigateToProjectPicker()
+        if (hadUnknownProject) {
+          clearProjectStateCache(projectId)
+          pruneStaleProjectFromAccountCache(projectId)
+          if (pendingSaveRef.current?.id === projectId) {
+            if (saveTimer.current) clearTimeout(saveTimer.current)
+            saveTimer.current = null
+            pendingSaveRef.current = null
+          }
+          navigateToProjectPicker()
+        }
       }
       if (mode === StoreMode.Demo && projectId && visibleProjects.some((p) => p.id === projectId)) {
         setActiveProjectId(projectId)

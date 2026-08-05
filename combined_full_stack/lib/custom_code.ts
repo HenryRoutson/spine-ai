@@ -7,10 +7,17 @@
 // AI : Python uses Pyodide in-browser; signature `def transform(input, state=None):`.
 
 import { invariant } from "@/lib/assert";
-import type { ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
-import type { CustomCodeLanguage } from "@/lib/types";
+import { customCodeEntriesForModule, type ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
+import { ModuleKind, type CustomCodeLanguage, type PipelineModule } from "@/lib/types";
 import type { PipelineState } from "@/lib/run-types";
-import { wrapAssertCode } from "@/lib/assert_steps";
+import { assertEntriesForModule, wrapAssertCode } from "@/lib/assert_steps";
+import {
+  createForgeTrace,
+  instrumentCodeLines,
+  makeAsyncFunctionSource,
+  type CodeTraceEvent,
+  type ForgeTraceFn,
+} from "@/lib/custom_code_trace";
 
 export type { CustomCodeLanguage, CustomCodeEntry } from "@/lib/types";
 export type { ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
@@ -106,6 +113,21 @@ export function compileCustomFn(code: string): CustomFn {
   return fn as CustomFn;
 }
 
+export type CustomCodeTraceOpts = {
+  onTrace?: (event: CodeTraceEvent) => void;
+};
+
+// AI : traced compile — __forgeTrace is injected per source line for inference step preview.
+function compileTracedCustomFn(code: string, onTrace: (event: CodeTraceEvent) => void): CustomFn {
+  const traceFn = createForgeTrace(onTrace);
+  const src = makeAsyncFunctionSource(buildCustomFnSource(code));
+  const fn = new Function("__forgeTrace", `return ${src}`)(traceFn);
+  invariant(typeof fn === "function", "custom code must evaluate to a function (input) => output");
+  const wrapped = fn as CustomFn & { __forgeTrace?: ReturnType<typeof createForgeTrace> };
+  wrapped.__forgeTrace = traceFn;
+  return wrapped;
+}
+
 // AI : SECURITY — syntax-only validation. Constructing a Function parses the body and throws on
 // AI : SyntaxError, but never executes it. Safe to run on the server (no RCE from user pipelines).
 // AI : TODO security — expression-form code can still pass syntax while doing harm in the browser at
@@ -142,14 +164,25 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): P
   ]);
 }
 
-export async function runCustomFn(code: string, input: unknown, state?: PipelineState): Promise<unknown> {
-  const fn = compileCustomFn(code);
-  const result = fn.length >= 2 ? fn(input, state ?? {}) : fn(input);
-  const settled = result instanceof Promise ? await withTimeout(result, CUSTOM_CODE_TIMEOUT_MS, "custom code") : result;
-  if (settled === undefined) {
-    throw new Error("custom code returned undefined — add a trailing (input) => output arrow or an explicit return");
+export async function runCustomFn(
+  code: string,
+  input: unknown,
+  state?: PipelineState,
+  opts?: CustomCodeTraceOpts,
+): Promise<unknown> {
+  const fn = opts?.onTrace ? compileTracedCustomFn(code, opts.onTrace) : compileCustomFn(code);
+  const trace: ForgeTraceFn | undefined =
+    "__forgeTrace" in fn ? (fn as CustomFn & { __forgeTrace?: ForgeTraceFn }).__forgeTrace : undefined;
+  try {
+    const result = fn.length >= 2 ? fn(input, state ?? {}) : fn(input);
+    const settled = result instanceof Promise ? await withTimeout(result, CUSTOM_CODE_TIMEOUT_MS, "custom code") : result;
+    if (settled === undefined) {
+      throw new Error("custom code returned undefined — add a trailing (input) => output arrow or an explicit return");
+    }
+    return settled;
+  } finally {
+    trace?.finish();
   }
-  return settled;
 }
 
 type PyodideLike = {
@@ -201,22 +234,25 @@ async function runCustomEntry(
   entry: ParsedCustomCodeEntry,
   input: unknown,
   state?: PipelineState,
+  opts?: CustomCodeTraceOpts,
 ): Promise<unknown> {
   if (entry.language === "python") return runPythonFn(entry.code, input, state);
-  return runCustomFn(entry.code, input, state);
+  const code = opts?.onTrace ? instrumentCodeLines(entry.code) : entry.code;
+  return runCustomFn(code, input, state, opts);
 }
 
 export async function runCustomCodeWithFallbacks(
   entries: ParsedCustomCodeEntry[],
   input: unknown,
   state?: PipelineState,
+  opts?: CustomCodeTraceOpts,
 ): Promise<CustomCodeRunResult> {
   if (!entries.length) throw new Error("custom code step has no code entries");
   const failures: CustomCodeAttemptFailure[] = [];
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i]!;
     try {
-      const output = await runCustomEntry(entry, input, state);
+      const output = await runCustomEntry(entry, input, state, opts);
       return { output, attemptIndex: i, language: entry.language, failures };
     } catch (err) {
       failures.push({
@@ -237,14 +273,19 @@ export async function runAssertWithFallbacks(
   input: unknown,
   state?: PipelineState,
   expectedOutputs?: import("@/lib/assert_steps").ExpectedOutputsMap,
+  opts?: CustomCodeTraceOpts,
 ): Promise<CustomCodeRunResult> {
   if (!entries.length) throw new Error("assert step has no code entries");
   const failures: CustomCodeAttemptFailure[] = [];
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i]!;
-    const wrapped = { ...entry, code: wrapAssertCode(entry.code, entry.language, expectedOutputs ?? {}) };
+    const userCode = opts?.onTrace && entry.language !== "python" ? instrumentCodeLines(entry.code) : entry.code;
+    const wrapped = { ...entry, code: wrapAssertCode(userCode, entry.language, expectedOutputs ?? {}) };
     try {
-      const result = await runCustomEntry(wrapped, input, state);
+      const result =
+        entry.language === "python"
+          ? await runPythonFn(wrapped.code, input, state)
+          : await runCustomFn(wrapped.code, input, state, opts);
       if (result === false) throw new Error("assert returned false");
       invariant(result === true || result === input, "assert must return true or pass input through unchanged");
       return { output: input, attemptIndex: i, language: entry.language, failures };
@@ -263,5 +304,16 @@ export async function runAssertWithFallbacks(
 }
 
 export function isUserCodeStep(kind: string, code?: string): boolean {
-  return kind === "custom-code" || kind === "assert" || (kind === "transform" && !!code?.trim());
+  return (
+    kind === ModuleKind.CustomCode ||
+    kind === ModuleKind.Assert ||
+    (kind === ModuleKind.Transform && !!code?.trim())
+  );
+}
+
+export function firstUserCodeEntry(module: PipelineModule): ParsedCustomCodeEntry | undefined {
+  if (!isUserCodeStep(module.kind, module.code)) return undefined;
+  const entries =
+    module.kind === ModuleKind.Assert ? assertEntriesForModule(module) : customCodeEntriesForModule(module);
+  return entries[0];
 }

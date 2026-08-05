@@ -1,6 +1,7 @@
 import type { CustomCodeEntry, ModelId, ModuleId, PipelineModule, StructureModel, StructureModelId } from "@/lib/types"
 import { makeCustomCodeEntry } from "@/lib/custom_code_entries"
 import { DEFAULT_ASSERT_TS } from "@/lib/assert_steps"
+import { DEFAULT_EXAMPLE_SELECT_PROMPT } from "@/lib/example-select"
 import { DEFAULT_LLM_STEP_COST_LIMIT_CENTS } from "@/lib/llm-cost-limit"
 import { CustomCodeLanguage, InputType, ModuleKind, MODULE_META } from "@/lib/types"
 import {
@@ -66,7 +67,8 @@ export function createPipelineModule(
   const spineList =
     opts.outType != null
       ? opts.outType.kind === "list"
-      : opts.emitsList ?? (kind === ModuleKind.Chunk ? true : false)
+      : opts.emitsList ??
+        (kind === ModuleKind.Chunk || kind === ModuleKind.ExampleSelect ? true : false)
   const outType =
     opts.outType ??
     (outStructureId
@@ -90,7 +92,9 @@ export function createPipelineModule(
     inStructureId: kind !== ModuleKind.Input ? opts.inStructureId ?? defaultModel : undefined,
     outStructureId,
     ...(outType ? { outType } : {}),
-    prompt: isLlm ? opts.prompt ?? "" : undefined,
+    prompt: isLlm
+      ? opts.prompt ?? (kind === ModuleKind.ExampleSelect ? DEFAULT_EXAMPLE_SELECT_PROMPT : "")
+      : undefined,
     fallbackList:
       kind === ModuleKind.CustomCode
         ? (opts.fallbackList ?? [makeCustomCodeEntry(CustomCodeLanguage.TypeScript, opts.code ?? "(input) => input")])
@@ -106,7 +110,7 @@ export function createPipelineModule(
     costLimitCents: isLlm ? opts.costLimitCents ?? DEFAULT_LLM_STEP_COST_LIMIT_CENTS : undefined,
   })
   if (kind === ModuleKind.Chunk || kind === ModuleKind.Merge) {
-    return syncListOpsStepModule(base, models)
+    return syncListOpsStepModule(base, models).module
   }
   return base
 }

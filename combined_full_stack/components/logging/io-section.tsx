@@ -15,6 +15,8 @@ export function IoSection({
   docLink,
   bodyClickable,
   className,
+  anchorId,
+  headerExtra,
 }: {
   title: string
   qualifier: "input" | "output" | "error"
@@ -24,6 +26,8 @@ export function IoSection({
   docLink?: { docId: DocId; mode: DocViewMode; label: string }
   bodyClickable?: boolean
   className?: string
+  anchorId?: string
+  headerExtra?: React.ReactNode
 }) {
   const { open } = useDocViewer()
   const clickable = bodyClickable !== false && !!docLink
@@ -34,13 +38,14 @@ export function IoSection({
   }
 
   return (
-    <div className={cn("mt-2 pl-7", className)}>
+    <div id={anchorId} className={cn("mt-2 scroll-mt-4 pl-7", className)}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
           {title}{" "}
           <span className="normal-case text-muted-foreground/70">({qualifier})</span>
         </span>
         <div className="flex shrink-0 items-center gap-2">
+          {headerExtra}
           {summary &&
             (docLink ? (
               <button

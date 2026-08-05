@@ -5,7 +5,7 @@ import {
   MergeListStrategy,
   MergeScalarStrategy,
 } from "@/lib/types"
-import type { MergePolicy, PipelineModule, StructureModel } from "@/lib/types"
+import type { MergeLayerPolicy, MergePolicyRule, PipelineModule, StructureModel } from "@/lib/types"
 import {
   defaultLayerPolicy,
   isMergeModuleKind,
@@ -16,10 +16,13 @@ import {
   MERGE_SCALAR_STRATEGY_LABELS,
   mergeUsesCustomCode,
   resolveMergePolicy,
+  DEFAULT_CHUNK_SIZE,
+  DEFAULT_CHUNK_TEXT_FIELD,
 } from "@/lib/list-ops-steps"
 import { PipelineField, StaticValue } from "@/components/pipeline-fields/shared"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button"
 import {
   Select,
   SelectContent,
@@ -27,16 +30,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  DEFAULT_CHUNK_SIZE,
-  DEFAULT_CHUNK_TEXT_FIELD,
-} from "@/lib/list-ops-steps"
 
 type ListOpsModuleFieldsProps = {
   selected: PipelineModule
   models: StructureModel[]
   edit: boolean
   onUpdate?: (patch: Partial<PipelineModule>) => void
+}
+
+const EMPTY_RULE_POLICY: MergeLayerPolicy = {
+  list: MergeListStrategy.Concat,
+  dict: MergeDictStrategy.Deep,
+  scalar: MergeScalarStrategy.Last,
 }
 
 export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOpsModuleFieldsProps) {
@@ -100,6 +105,7 @@ export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOp
     const custom = mergeUsesCustomCode(selected)
     const presetId =
       MERGE_PRESETS.find((p) => JSON.stringify(p.policy) === JSON.stringify(policy))?.id ?? "custom"
+    const rules = policy.rules ?? []
 
     const patchDefault = (patch: Partial<typeof layer>) => {
       onUpdate?.({
@@ -109,6 +115,24 @@ export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOp
         },
         mergeCustom: undefined,
       })
+    }
+
+    const setRules = (next: MergePolicyRule[]) => {
+      onUpdate?.({
+        mergePolicy: { ...policy, rules: next },
+        mergeCustom: undefined,
+      })
+    }
+
+    const patchRule = (index: number, patch: Partial<MergePolicyRule>) => {
+      const next = rules.map((r, i) => {
+        if (i !== index) return r
+        return {
+          path: patch.path ?? r.path,
+          policy: patch.policy ? { ...r.policy, ...patch.policy } : r.policy,
+        }
+      })
+      setRules(next)
     }
 
     return (
@@ -148,7 +172,10 @@ export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOp
 
         {!custom && (
           <>
-            <PipelineField label="List strategy" hint="How to merge arrays at each layer">
+            <PipelineField
+              label="Default list strategy"
+              hint="Fallback for every array — union/zip recurse into matching items"
+            >
               {edit ? (
                 <Select
                   value={layer.list ?? MergeListStrategy.Concat}
@@ -170,7 +197,7 @@ export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOp
               )}
             </PipelineField>
 
-            <PipelineField label="Dict strategy" hint="How to merge objects at each layer">
+            <PipelineField label="Default dict strategy" hint="Fallback for every object">
               {edit ? (
                 <Select
                   value={layer.dict ?? MergeDictStrategy.Deep}
@@ -192,7 +219,7 @@ export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOp
               )}
             </PipelineField>
 
-            <PipelineField label="Scalar strategy" hint="Conflicting primitives at the same path">
+            <PipelineField label="Default scalar strategy" hint="Conflicting primitives at the same path">
               {edit ? (
                 <Select
                   value={layer.scalar ?? MergeScalarStrategy.Last}
@@ -217,8 +244,8 @@ export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOp
             </PipelineField>
 
             <PipelineField
-              label="List item key"
-              hint='Property for union/intersect/dedupe on object rows — e.g. "id"'
+              label="Default list item key"
+              hint='For union/intersect/dedupe — e.g. "id" or dotted "meta.id"'
             >
               {edit ? (
                 <Input
@@ -235,28 +262,34 @@ export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOp
             </PipelineField>
 
             <PipelineField
-              label="Path rules (JSON)"
-              hint='Per-path overrides — e.g. [{"path":"tags","policy":{"list":"concat_dedupe"}}]'
+              label="Path rules"
+              hint="Per-layer overrides — * = one segment, ** = any depth. e.g. users.*.roles, *.*.meta.k"
             >
-              {edit ? (
-                <Textarea
-                  value={JSON.stringify(policy.rules ?? [], null, 2)}
-                  onChange={(e) => {
-                    try {
-                      const rules = JSON.parse(e.target.value) as MergePolicy["rules"]
-                      onUpdate?.({ mergePolicy: { ...policy, rules }, mergeCustom: undefined })
-                    } catch {
-                      // AI : ignore parse errors while typing
+              <div className="flex flex-col gap-2">
+                {rules.length === 0 && !edit && <StaticValue>—</StaticValue>}
+                {rules.map((rule, index) => (
+                  <MergePathRuleRow
+                    key={`${rule.path}-${index}`}
+                    rule={rule}
+                    edit={edit}
+                    onChange={(patch) => patchRule(index, patch)}
+                    onRemove={() => setRules(rules.filter((_, i) => i !== index))}
+                  />
+                ))}
+                {edit && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 self-start text-xs"
+                    onClick={() =>
+                      setRules([...rules, { path: "*", policy: { ...EMPTY_RULE_POLICY } }])
                     }
-                  }}
-                  className="min-h-24 font-mono text-[11px]"
-                  spellCheck={false}
-                />
-              ) : (
-                <pre className="font-mono text-[10px] whitespace-pre-wrap text-muted-foreground">
-                  {JSON.stringify(policy.rules ?? [], null, 2)}
-                </pre>
-              )}
+                  >
+                    Add path rule
+                  </Button>
+                )}
+              </div>
             </PipelineField>
           </>
         )}
@@ -286,6 +319,97 @@ export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOp
   }
 
   return null
+}
+
+function MergePathRuleRow({
+  rule,
+  edit,
+  onChange,
+  onRemove,
+}: {
+  rule: MergePolicyRule
+  edit: boolean
+  onChange: (patch: Partial<MergePolicyRule>) => void
+  onRemove: () => void
+}) {
+  const p = rule.policy
+  if (!edit) {
+    return (
+      <pre className="rounded-md border border-border/60 bg-secondary/20 px-2 py-1.5 font-mono text-[10px] text-muted-foreground">
+        {rule.path}: list={p.list ?? "—"} dict={p.dict ?? "—"} scalar={p.scalar ?? "—"}
+        {p.itemKey ? ` key=${p.itemKey}` : ""}
+      </pre>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md border border-border/60 bg-secondary/15 p-2">
+      <div className="flex items-center gap-1.5">
+        <Input
+          value={rule.path}
+          onChange={(e) => onChange({ path: e.target.value })}
+          placeholder="users.*.roles"
+          className="h-7 flex-1 font-mono text-[11px]"
+        />
+        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onRemove}>
+          Remove
+        </Button>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        <Select
+          value={p.list ?? MergeListStrategy.Concat}
+          onValueChange={(v) => onChange({ policy: { list: v as MergeListStrategy } })}
+        >
+          <SelectTrigger className="h-7 text-[11px]">
+            <SelectValue placeholder="List" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.values(MergeListStrategy).map((s) => (
+              <SelectItem key={s} value={s} className="text-xs">
+                {MERGE_LIST_STRATEGY_LABELS[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={p.dict ?? MergeDictStrategy.Deep}
+          onValueChange={(v) => onChange({ policy: { dict: v as MergeDictStrategy } })}
+        >
+          <SelectTrigger className="h-7 text-[11px]">
+            <SelectValue placeholder="Dict" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.values(MergeDictStrategy).map((s) => (
+              <SelectItem key={s} value={s} className="text-xs">
+                {MERGE_DICT_STRATEGY_LABELS[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={p.scalar ?? MergeScalarStrategy.Last}
+          onValueChange={(v) => onChange({ policy: { scalar: v as MergeScalarStrategy } })}
+        >
+          <SelectTrigger className="h-7 text-[11px]">
+            <SelectValue placeholder="Scalar" />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.values(MergeScalarStrategy).map((s) => (
+              <SelectItem key={s} value={s} className="text-xs">
+                {MERGE_SCALAR_STRATEGY_LABELS[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          value={p.itemKey ?? ""}
+          onChange={(e) => onChange({ policy: { itemKey: e.target.value.trim() || undefined } })}
+          placeholder="itemKey"
+          className="h-7 font-mono text-[11px]"
+        />
+      </div>
+    </div>
+  )
 }
 
 function GeneratedCodePreview({ code }: { code: string }) {

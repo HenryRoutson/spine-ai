@@ -6,6 +6,7 @@ import {
   FileText,
   Scissors,
   Layers,
+  ListFilter,
   Merge,
   Shuffle,
   Sparkle,
@@ -17,7 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { MODULE_META, type ModuleKind, type RunStepKind } from "@/lib/types"
+import { MODULE_META, ModuleKind, type RunStepKind } from "@/lib/types"
 
 // AI : batch llm is a 2×2 sparkle grid so it reads as "many calls" vs single Sparkle.
 export function BatchSparkleIcon({ className }: { className?: string }) {
@@ -41,49 +42,52 @@ export function BatchSparkleIcon({ className }: { className?: string }) {
 export type ModuleIcon = LucideIcon | typeof BatchSparkleIcon
 
 export const KIND_ICON: Record<ModuleKind, ModuleIcon> = {
-  input: FileInput,
-  llm: Sparkle,
-  "llm-batch": BatchSparkleIcon,
-  quote: Link2,
-  transform: Shuffle,
-  chunk: Scissors,
-  "merge": Layers,
-  combine: Merge,
-  "custom-code": Code2,
-  assert: ShieldCheck,
-  "human-review": UserCheck,
-  output: FileOutput,
+  [ModuleKind.Input]: FileInput,
+  [ModuleKind.Llm]: Sparkle,
+  [ModuleKind.LlmBatch]: BatchSparkleIcon,
+  [ModuleKind.ExampleSelect]: ListFilter,
+  [ModuleKind.Quote]: Link2,
+  [ModuleKind.Transform]: Shuffle,
+  [ModuleKind.Chunk]: Scissors,
+  [ModuleKind.Merge]: Layers,
+  [ModuleKind.Combine]: Merge,
+  [ModuleKind.CustomCode]: Code2,
+  [ModuleKind.Assert]: ShieldCheck,
+  [ModuleKind.HumanReview]: UserCheck,
+  [ModuleKind.Output]: FileOutput,
 }
 
 export const KIND_COLOR: Record<ModuleKind, string> = {
-  input: "text-chart-2",
-  llm: "text-primary",
-  "llm-batch": "text-primary",
-  quote: "text-chart-2",
-  transform: "text-chart-3",
-  chunk: "text-chart-1",
-  "merge": "text-chart-1",
-  combine: "text-chart-3",
-  "custom-code": "text-chart-1",
-  assert: "text-chart-2",
-  "human-review": "text-chart-1",
-  output: "text-output",
+  [ModuleKind.Input]: "text-chart-2",
+  [ModuleKind.Llm]: "text-primary",
+  [ModuleKind.LlmBatch]: "text-primary",
+  [ModuleKind.ExampleSelect]: "text-chart-3",
+  [ModuleKind.Quote]: "text-chart-2",
+  [ModuleKind.Transform]: "text-chart-3",
+  [ModuleKind.Chunk]: "text-chart-1",
+  [ModuleKind.Merge]: "text-chart-1",
+  [ModuleKind.Combine]: "text-chart-3",
+  [ModuleKind.CustomCode]: "text-chart-1",
+  [ModuleKind.Assert]: "text-chart-2",
+  [ModuleKind.HumanReview]: "text-chart-1",
+  [ModuleKind.Output]: "text-output",
 }
 
 // AI : bordered icon chip per step kind — used in insert-step menus and similar pickers.
 export const KIND_SURFACE: Record<ModuleKind, string> = {
-  input: "border-chart-2/40 bg-chart-2/10",
-  llm: "border-primary/40 bg-primary/10",
-  "llm-batch": "border-primary/40 bg-primary/10",
-  quote: "border-chart-2/40 bg-chart-2/10",
-  transform: "border-chart-3/40 bg-chart-3/10",
-  chunk: "border-chart-1/40 bg-chart-1/10",
-  merge: "border-chart-1/40 bg-chart-1/10",
-  combine: "border-chart-3/40 bg-chart-3/10",
-  "custom-code": "border-chart-1/40 bg-chart-1/10",
-  assert: "border-chart-2/40 bg-chart-2/10",
-  "human-review": "border-chart-1/40 bg-chart-1/10",
-  output: "border-output/40 bg-output/10",
+  [ModuleKind.Input]: "border-chart-2/40 bg-chart-2/10",
+  [ModuleKind.Llm]: "border-primary/40 bg-primary/10",
+  [ModuleKind.LlmBatch]: "border-primary/40 bg-primary/10",
+  [ModuleKind.ExampleSelect]: "border-chart-3/40 bg-chart-3/10",
+  [ModuleKind.Quote]: "border-chart-2/40 bg-chart-2/10",
+  [ModuleKind.Transform]: "border-chart-3/40 bg-chart-3/10",
+  [ModuleKind.Chunk]: "border-chart-1/40 bg-chart-1/10",
+  [ModuleKind.Merge]: "border-chart-1/40 bg-chart-1/10",
+  [ModuleKind.Combine]: "border-chart-3/40 bg-chart-3/10",
+  [ModuleKind.CustomCode]: "border-chart-1/40 bg-chart-1/10",
+  [ModuleKind.Assert]: "border-chart-2/40 bg-chart-2/10",
+  [ModuleKind.HumanReview]: "border-chart-1/40 bg-chart-1/10",
+  [ModuleKind.Output]: "border-output/40 bg-output/10",
 }
 
 export function KindMenuItemIcon({ kind }: { kind: ModuleKind }) {

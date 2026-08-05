@@ -1,10 +1,25 @@
+import { isLlmKind } from "@/lib/module-kinds"
 import { FailureKind, LlmCallStatus, RunStepStatus } from "@/lib/types"
 import type { LlmCallRecord, RunFailureRecord, RunStep } from "@/lib/types"
 import { formatCostCents, formatMs } from "@/lib/format"
 
-export type MetricField = "inputChars" | "outputChars" | "latencyMs"
+export enum MetricField {
+  InputChars = "inputChars",
+  OutputChars = "outputChars",
+  LatencyMs = "latencyMs",
+}
 
-export type LlmCallDisplayStatus = LlmCallRecord["status"] | "retried"
+export const METRIC_FIELDS = [
+  MetricField.InputChars,
+  MetricField.OutputChars,
+  MetricField.LatencyMs,
+] as const satisfies readonly MetricField[]
+
+export enum LlmCallDisplayStatus {
+  Ok = "ok",
+  Error = "error",
+  Retried = "retried",
+}
 
 export type LlmCallSummary = {
   ok: number
@@ -72,7 +87,7 @@ export function failuresFromLlmCalls(
       kind: call.failureKind!,
       detail: call.failureDetail ?? (call.httpStatus ? `HTTP ${call.httpStatus}` : ""),
       attempt: call.attempt,
-      recovered: display === "retried",
+      recovered: display === LlmCallDisplayStatus.Retried,
     }))
 }
 
@@ -86,18 +101,18 @@ export function displayStatusesForCalls(
   stepSucceeded: boolean,
 ): LlmCallDisplayStatus[] {
   return calls.map((call, i) => {
-    if (call.status === LlmCallStatus.Ok) return LlmCallStatus.Ok
+    if (call.status === LlmCallStatus.Ok) return LlmCallDisplayStatus.Ok
     const recovered = stepSucceeded && calls.slice(i + 1).some((c) => c.status === LlmCallStatus.Ok)
-    return recovered ? "retried" : LlmCallStatus.Error
+    return recovered ? LlmCallDisplayStatus.Retried : LlmCallDisplayStatus.Error
   })
 }
 
 export function summarizeLlmCalls(calls: LlmCallRecord[], stepSucceeded = true): LlmCallSummary {
   const displayStatuses = displayStatusesForCalls(calls, stepSucceeded)
   return {
-    ok: displayStatuses.filter((s) => s === "ok").length,
-    retried: displayStatuses.filter((s) => s === "retried").length,
-    failed: displayStatuses.filter((s) => s === "error").length,
+    ok: displayStatuses.filter((s) => s === LlmCallDisplayStatus.Ok).length,
+    retried: displayStatuses.filter((s) => s === LlmCallDisplayStatus.Retried).length,
+    failed: displayStatuses.filter((s) => s === LlmCallDisplayStatus.Error).length,
     displayStatuses,
   }
 }
@@ -170,15 +185,15 @@ export function formatChars(n: number): string {
 export { formatCents, formatCostCents, formatUsdFromCents, formatMs } from "@/lib/format"
 
 const METRIC_FORMAT: Record<MetricField, (n: number) => string> = {
-  inputChars: formatChars,
-  outputChars: formatChars,
-  latencyMs: formatMs,
+  [MetricField.InputChars]: formatChars,
+  [MetricField.OutputChars]: formatChars,
+  [MetricField.LatencyMs]: formatMs,
 }
 
 const METRIC_AXIS: Record<MetricField, string> = {
-  inputChars: "chars",
-  outputChars: "chars",
-  latencyMs: "latency",
+  [MetricField.InputChars]: "chars",
+  [MetricField.OutputChars]: "chars",
+  [MetricField.LatencyMs]: "latency",
 }
 
 export function formatMetric(field: MetricField, n: number): string {
@@ -192,7 +207,7 @@ export function metricAxisLabel(field: MetricField): string {
 // AI : older runs without per-call telemetry — synthesize one point from step previews.
 export function llmCallsFromStep(step: RunStep): LlmCallRecord[] {
   if (step.llmCalls?.length) return step.llmCalls
-  if (step.kind !== "llm" && step.kind !== "llm-batch") return []
+  if (!isLlmKind(step.kind)) return []
   const failed = step.status === RunStepStatus.Error
   return [
     {

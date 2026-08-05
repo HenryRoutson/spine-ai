@@ -11,13 +11,29 @@ You receive:
 - Error-only log excerpts (failed steps, validation messages, server warnings/errors)
 - Optional test assertion failures
 
+## Platform conventions (read before diagnosing)
+
+### Assert steps — \`assertEqual(step("Label"), "Label")\`
+- The second argument is **not** a literal string to compare against.
+- When the second argument is a string, it is a **golden-fixture key**: runtime resolves it via \`expected(label)\` from the run's \`expectedOutputs\` map (seed fixtures / inferencePresets keyed by input documents).
+- \`step("Normalize Case")\` reads that step's output from pipeline \`state\` (prior step outputs keyed by label).
+- So \`assertEqual(step("Normalize Case"), "Normalize Case")\` means: compare Normalize Case output to the golden JSON for that label — **not** to the step name string.
+- If an assert step fails but the upstream custom-code step succeeded, suspect **wrong golden for this run's input docs** (missing or mismatched inferencePreset) before rewriting the assertion.
+
+### Custom-code steps — browser compilation
+- User TypeScript is wrapped by \`buildCustomFnSource\` into \`(input, state) => output\` and compiled with \`new Function\` in the browser (with optional line tracing).
+- Expression-form arrows like \`(doc) => ({ description: ... })\` are valid; a syntax error at compile time is usually a **wrapper/tracing bug**, not missing parens on the parameter.
+- Traced runs inject \`await __forgeTrace(n)\` and async-wrap the compiled fn — failures like \`Unexpected token '}'\` or \`await is only valid in async functions\` point to the compile wrapper, not the user's transform logic.
+- Distinguish **compile-time** errors (SyntaxError during custom code setup) from **runtime** errors (thrown inside the function body).
+
 Your job:
 1. Explain the most likely root cause in plain language
 2. Point to the specific pipeline step(s) responsible
-3. Suggest concrete fixes (prompt edits, structure changes, input checks, code fixes)
+3. Suggest concrete fixes (prompt edits, structure changes, input checks, code fixes, inferencePreset / golden fixture alignment)
 4. Note if the failure looks transient (provider/rate limit) vs structural
 
 Do NOT propose unrelated refactors. Stay scoped to the provided error context.
+Do NOT tell users to replace \`assertEqual(step("X"), "X")\` with a hard-coded object unless you have confirmed the golden map is wrong — that pattern is intentional.
 Write concise markdown with sections: ## Root cause, ## Evidence, ## Recommended fix.`
 }
 
@@ -44,7 +60,29 @@ export function buildDiagnosisUserPrompt(
     2,
   )
 
+  const defaultGoldenKeys = project.expectedOutputs ? Object.keys(project.expectedOutputs) : []
+  const presetLines =
+    project.inferencePresets?.map((p) => {
+      const docNames = Object.values(p.inputs).flatMap((v) => (Array.isArray(v) ? v : [v]))
+      const goldenKeys = p.expectedOutputs ? Object.keys(p.expectedOutputs) : []
+      return `- ${p.name}: inputs [${docNames.join(", ")}] → golden keys [${goldenKeys.join(", ")}]`
+    }) ?? []
+  const goldenContext =
+    defaultGoldenKeys.length || presetLines.length
+      ? [
+          "",
+          "Assert golden fixtures (see system prompt — assertEqual second string arg resolves here):",
+          defaultGoldenKeys.length
+            ? `- Project default golden step labels: ${defaultGoldenKeys.join(", ")}`
+            : "",
+          presetLines.length ? `- inferencePresets (matched by sorted input doc names at run time):\n${presetLines.join("\n")}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n")
+      : ""
+
   return `Project: ${project.name} (${project.id})
+${goldenContext}
 
 Structure models:
 ${modelsJson}

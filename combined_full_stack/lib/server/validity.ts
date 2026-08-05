@@ -13,6 +13,7 @@ import type {
   StructureModelId,
   TypeAlias,
 } from "./types";
+import { ModuleKind } from "./types";
 import { isMergeModuleKind } from "@/lib/list-ops-steps";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
@@ -53,7 +54,8 @@ import {
   migrateProjectModules,
 } from "./validity-sync";
 import {
-  type InvalidKind,
+  InvalidKind,
+  PipelineWarningKind,
   type InvalidStep,
   type InvalidMap,
   type PipelineWarning,
@@ -68,7 +70,7 @@ import {
   structureIssueMessage,
 } from "@/lib/structure-validity";
 import {
-  type IoMismatchFixKind,
+  IoMismatchFixKind,
   type IoMismatchFixHint,
   type IoMismatchInspectorFix,
   ioMismatchFixHints,
@@ -93,7 +95,8 @@ export {
   syncAssertPlacement,
   migrateProjectModules,
 } from "./validity-sync";
-export type { InvalidKind, InvalidStep, InvalidMap, PipelineWarning } from "./validity-types";
+export { InvalidKind, PipelineWarningKind } from "./validity-types";
+export type { InvalidStep, InvalidMap, PipelineWarning } from "./validity-types";
 export {
   invalidForModule,
   invalidIssuesForModule,
@@ -101,7 +104,8 @@ export {
   prevModuleId,
 } from "./validity-types";
 export { invalidStepMessage, warningStepMessage, warningStepMessages } from "./validity-messages";
-export type { IoMismatchFixKind, IoMismatchFixHint, IoMismatchInspectorFix } from "./validity-inspect";
+export { IoMismatchFixKind } from "./validity-inspect";
+export type { IoMismatchFixHint, IoMismatchInspectorFix } from "./validity-inspect";
 export {
   ioMismatchFixHints,
   ioMismatchAtModuleIndex,
@@ -131,7 +135,7 @@ function spineMismatchIssue(
   if (cardinalityMismatch(expected, actual)) {
     return {
       moduleId,
-      kind: "cardinality-mismatch",
+      kind: InvalidKind.CardinalityMismatch,
       expectsType,
       upstreamType,
       expects: expected.kind === "ref" ? expected.modelId : expected.kind === "list" && expected.item.kind === "ref" ? expected.item.modelId : undefined,
@@ -140,7 +144,7 @@ function spineMismatchIssue(
   }
   return {
     moduleId,
-    kind: "io-mismatch",
+    kind: InvalidKind.IoMismatch,
     expectsType,
     upstreamType,
     expects: expected.kind === "ref" ? expected.modelId : expected.kind === "list" && expected.item.kind === "ref" ? expected.item.modelId : undefined,
@@ -154,7 +158,7 @@ function bareTransformCanAutoWrapList(
   models: StructureModel[],
 ): boolean {
   // AI : TODO (linter-first) — encode auto-wrap as explicit generated transform signature, not TS heuristic.
-  if (m.kind !== "transform" || m.code?.trim() || stepEmitsList(m)) return false;
+  if (m.kind !== ModuleKind.Transform || m.code?.trim() || stepEmitsList(m)) return false;
   if (actual.kind !== "list" || actual.item.kind !== "ref") return false;
   const out = models.find((x) => x.id === m.outStructureId);
   if (!out) return false;
@@ -170,10 +174,10 @@ function stepAcceptsSpineType(
   // AI : TODO (linter-first) — delete when spine compat is cargo/pyright on generated orchestrator only.
   if (typeExprEqual(expected, actual)) return true;
   // AI : passthrough steps read pipeline state by label — spine type at this index is not their contract.
-  if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review" || m.kind === "quote") return true;
+  if (m.kind === ModuleKind.Output || m.kind === ModuleKind.Assert || m.kind === ModuleKind.HumanReview || m.kind === ModuleKind.Quote) return true;
   if (!cardinalityMismatch(expected, actual)) return false;
   // AI : custom-code / coded transform steps reshape list↔object at runtime — spine item type still matches.
-  if (m.kind === "custom-code" || m.kind === "chunk" || isMergeModuleKind(m.kind) || (m.kind === "transform" && !!m.code?.trim())) return true;
+  if (m.kind === ModuleKind.CustomCode || m.kind === ModuleKind.Chunk || isMergeModuleKind(m.kind) || (m.kind === ModuleKind.Transform && !!m.code?.trim())) return true;
   // AI : bare transform auto-wraps list[T] into { listField: T[] } when the output structure has a matching list field.
   if (bareTransformCanAutoWrapList(m, actual, models)) return true;
   return false;
@@ -190,13 +194,13 @@ export function transformListWrapInvalid(
   prev: PipelineModule | undefined,
   models: StructureModel[],
 ): InvalidStep | undefined {
-  if (m.kind !== "transform" || m.code?.trim() || stepEmitsList(m) || !stepEmitsList(prev)) return undefined;
+  if (m.kind !== ModuleKind.Transform || m.code?.trim() || stepEmitsList(m) || !stepEmitsList(prev)) return undefined;
   const out = models.find((x) => x.id === m.outStructureId);
   if (!out) return undefined;
   // AI : same in/out unwraps only when the upstream list has exactly one item — checked as a warning.
   if (m.inStructureId === m.outStructureId) return undefined;
   if (listFieldsForWrap(out).length > 0) return undefined;
-  return { moduleId: m.id, kind: "transform-list-wrap", expects: m.inStructureId, upstreamEmits: m.outStructureId };
+  return { moduleId: m.id, kind: InvalidKind.TransformListWrap, expects: m.inStructureId, upstreamEmits: m.outStructureId };
 }
 
 function computeLabelInvalid(modules: PipelineModule[]): InvalidMap {
@@ -205,7 +209,7 @@ function computeLabelInvalid(modules: PipelineModule[]): InvalidMap {
   for (const m of modules) {
     const label = m.label.trim();
     if (!label) {
-      pushInvalid(invalid, { moduleId: m.id, kind: "empty-label" });
+      pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.EmptyLabel });
       continue;
     }
     if (skipDuplicateLabelCheck(m)) continue;
@@ -215,7 +219,7 @@ function computeLabelInvalid(modules: PipelineModule[]): InvalidMap {
   }
   for (const ids of byLabel.values()) {
     if (ids.length < 2) continue;
-    for (const id of ids) pushInvalid(invalid, { moduleId: id, kind: "duplicate-label" });
+    for (const id of ids) pushInvalid(invalid, { moduleId: id, kind: InvalidKind.DuplicateLabel });
   }
   return invalid;
 }
@@ -233,9 +237,9 @@ function computeStateKeyInvalid(modules: PipelineModule[]): InvalidMap {
   const invalid: InvalidMap = new Map();
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i]!;
-    if (m.kind !== "assert" && m.kind !== "custom-code" && m.kind !== "transform") continue;
+    if (m.kind !== ModuleKind.Assert && m.kind !== ModuleKind.CustomCode && m.kind !== ModuleKind.Transform) continue;
     const entries =
-      m.kind === "assert"
+      m.kind === ModuleKind.Assert
         ? assertEntriesForModule(m).map((e) => e.code)
         : customCodeEntriesForModule(m).map((e) => e.code);
     const code = entries.join("\n") || m.code || "";
@@ -243,7 +247,7 @@ function computeStateKeyInvalid(modules: PipelineModule[]): InvalidMap {
     const scope = labelsInScope(modules, i);
     for (const label of parseAssertReferencedLabels(code)) {
       if (!scope.has(label)) {
-        pushInvalid(invalid, { moduleId: m.id, kind: "state-key-missing", missingLabel: label });
+        pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.StateKeyMissing, missingLabel: label });
       }
     }
   }
@@ -260,7 +264,7 @@ function computeMissingStructureInvalid(
   for (const m of modules) {
     for (const sid of [m.inStructureId, m.outStructureId]) {
       if (sid && !modelIds.has(sid)) {
-        pushInvalid(invalid, { moduleId: m.id, kind: "missing-structure", expects: sid });
+        pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.MissingStructure, expects: sid });
       }
     }
   }
@@ -273,10 +277,10 @@ function computeJsonInputMismatchInvalid(
 ): InvalidMap {
   const invalid: InvalidMap = new Map();
   for (const m of modules) {
-    if (m.kind !== "input" || !inputModuleTypesAreAllJsonNative(m)) continue;
+    if (m.kind !== ModuleKind.Input || !inputModuleTypesAreAllJsonNative(m)) continue;
     const out = models.find((x) => x.id === m.outStructureId);
     if (isBuiltinDocumentModel(out)) {
-      pushInvalid(invalid, { moduleId: m.id, kind: "json-input-mismatch" });
+      pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.JsonInputMismatch });
     }
   }
   return invalid;
@@ -286,26 +290,26 @@ function computeCodeCompileInvalid(modules: PipelineModule[]): InvalidMap {
   const invalid: InvalidMap = new Map();
   for (const m of modules) {
     const isCodeStep =
-      m.kind === "custom-code" ||
-      m.kind === "chunk" ||
+      m.kind === ModuleKind.CustomCode ||
+      m.kind === ModuleKind.Chunk ||
       isMergeModuleKind(m.kind) ||
-      m.kind === "assert" ||
-      (m.kind === "transform" && !!m.code?.trim());
+      m.kind === ModuleKind.Assert ||
+      (m.kind === ModuleKind.Transform && !!m.code?.trim());
     if (!isCodeStep) continue;
 
     const entries =
-      m.kind === "assert"
+      m.kind === ModuleKind.Assert
         ? assertEntriesForModule(m)
         : customCodeEntriesForModule(m);
     if (!entries.length) {
-      if (m.kind === "custom-code") {
-        pushInvalid(invalid, { moduleId: m.id, kind: "code-compile-error", compileError: "no code entries" });
+      if (m.kind === ModuleKind.CustomCode) {
+        pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.CodeCompileError, compileError: "no code entries" });
       }
       continue;
     }
     for (const entry of entries) {
-      const err = tryCompileCustomCodeEntry(entry, { assert: m.kind === "assert" });
-      if (err) pushInvalid(invalid, { moduleId: m.id, kind: "code-compile-error", compileError: err });
+      const err = tryCompileCustomCodeEntry(entry, { assert: m.kind === ModuleKind.Assert });
+      if (err) pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.CodeCompileError, compileError: err });
     }
     // AI : struct field examples validated via computeStructureIssues (invalid-field-example).
   }
@@ -418,7 +422,7 @@ function computeStructureFieldInvalid(
       const message = structureIssueMessage(issue, allModels);
       const anchor = modules[0];
       if (anchor) {
-        pushInvalid(invalid, { moduleId: anchor.id, kind: "structure-field", structureMessage: message });
+        pushInvalid(invalid, { moduleId: anchor.id, kind: InvalidKind.StructureField, structureMessage: message });
       }
       continue;
     }
@@ -427,7 +431,7 @@ function computeStructureFieldInvalid(
     const message = structureIssueMessage(issue, allModels);
     const moduleIds = modulesAffectedByStructure(issue.modelId, modules, allModels);
     for (const moduleId of moduleIds) {
-      pushInvalid(invalid, { moduleId, kind: "structure-field", structureMessage: message });
+      pushInvalid(invalid, { moduleId, kind: InvalidKind.StructureField, structureMessage: message });
     }
   }
   return invalid;
@@ -438,8 +442,53 @@ function computeInputDescriptionInvalid(modules: PipelineModule[]): InvalidMap {
   for (const m of modules) {
     if (isAutoQuoteStep(m) || isAutoStructureParseStep(m)) continue;
     if (m.inputDescription?.trim()) continue;
-    pushInvalid(invalid, { moduleId: m.id, kind: "missing-input-description" });
+    pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.MissingInputDescription });
   }
+  return invalid;
+}
+
+function computeExampleSelectInvalid(modules: PipelineModule[]): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (let i = 0; i < modules.length; i++) {
+    const m = modules[i]!;
+    if (m.kind !== ModuleKind.ExampleSelect) continue;
+    const label = m.exampleContextLabel?.trim();
+    if (!label) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: "context step label is required — prior step output fills {description}",
+      });
+      continue;
+    }
+    if (!labelsInScope(modules, i).has(label)) {
+      pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.StateKeyMissing, missingLabel: label });
+    }
+  }
+  return invalid;
+}
+
+function computeMissingCombineBeforeInputInvalid(modules: PipelineModule[]): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  let needsCombineForNextInput = false;
+
+  for (let i = 0; i < modules.length; i++) {
+    const m = modules[i]!;
+    if (m.kind === ModuleKind.Input) {
+      if (needsCombineForNextInput && !inputFeedsCombine(modules, i)) {
+        pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.MissingCombineBeforeInput });
+      }
+      continue;
+    }
+    if (m.kind === ModuleKind.Combine) {
+      needsCombineForNextInput = false;
+      continue;
+    }
+    if (m.kind === ModuleKind.Assert || m.kind === ModuleKind.HumanReview) continue;
+    const hadInput = modules.slice(0, i).some((x) => x.kind === ModuleKind.Input);
+    if (hadInput) needsCombineForNextInput = true;
+  }
+
   return invalid;
 }
 
@@ -448,7 +497,7 @@ function computeNoteInvalid(modules: PipelineModule[]): InvalidMap {
   for (const m of modules) {
     if (!stepRequiresNote(m.kind)) continue;
     if (m.note.trim()) continue;
-    pushInvalid(invalid, { moduleId: m.id, kind: "missing-note" });
+    pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.MissingNote });
   }
   return invalid;
 }
@@ -467,6 +516,16 @@ export function computeInvalid(
     list.push(...issues);
     invalid.set(moduleId, list);
   }
+  for (const [moduleId, issues] of computeExampleSelectInvalid(modules)) {
+    const list = invalid.get(moduleId) ?? [];
+    list.push(...issues);
+    invalid.set(moduleId, list);
+  }
+  for (const [moduleId, issues] of computeMissingCombineBeforeInputInvalid(modules)) {
+    const list = invalid.get(moduleId) ?? [];
+    list.push(...issues);
+    invalid.set(moduleId, list);
+  }
   if (opts?.requireInputDescriptions) {
     for (const [moduleId, issues] of computeInputDescriptionInvalid(modules)) {
       const list = invalid.get(moduleId) ?? [];
@@ -476,10 +535,10 @@ export function computeInvalid(
   }
   for (const m of modules) {
     if (usesPassthroughStructure(m.kind)) {
-      if (!m.inStructureId) pushInvalid(invalid, { moduleId: m.id, kind: "no-output" });
+      if (!m.inStructureId) pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.NoOutput });
       continue;
     }
-    if (!m.outStructureId) pushInvalid(invalid, { moduleId: m.id, kind: "no-output" });
+    if (!m.outStructureId) pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.NoOutput });
   }
 
   let flowType: TypeExpr | undefined;
@@ -490,7 +549,7 @@ export function computeInvalid(
     const m = modules[i]!;
     const prev = i > 0 ? modules[i - 1] : undefined;
 
-    if (m.kind === "input") {
+    if (m.kind === ModuleKind.Input) {
       if (inputFeedsCombine(modules, i)) continue;
       const outType = stepSpineOutType(m);
       if (m.outStructureId) {
@@ -501,12 +560,12 @@ export function computeInvalid(
       continue;
     }
 
-    if (m.kind === "combine") {
+    if (m.kind === ModuleKind.Combine) {
       if (m.inStructureId && !byModel.has(m.inStructureId)) {
         const spineUpstream = flowId && flowId !== m.inStructureId ? flowId : undefined;
         pushInvalid(invalid, {
           moduleId: m.id,
-          kind: "io-mismatch",
+          kind: InvalidKind.IoMismatch,
           expects: m.inStructureId,
           upstreamEmits: spineUpstream,
           expectsType: modelName(models, m.inStructureId),
@@ -526,7 +585,7 @@ export function computeInvalid(
     if (isCombineSideParseStep(modules, i)) continue;
 
     if (usesPassthroughStructure(m.kind)) {
-      if (invalidIssuesForModule(invalid, m.id).some((x) => x.kind === "no-output")) continue;
+      if (invalidIssuesForModule(invalid, m.id).some((x) => x.kind === InvalidKind.NoOutput)) continue;
       const expected = stepSpineInType(m);
       const upstreamType = (prev && stepSpineOutType(prev)) ?? flowType;
       if (!expected || !upstreamType || !stepAcceptsSpineType(m, expected, upstreamType, models)) {
@@ -535,7 +594,7 @@ export function computeInvalid(
         } else {
           pushInvalid(invalid, {
             moduleId: m.id,
-            kind: "io-mismatch",
+            kind: InvalidKind.IoMismatch,
             expects: m.inStructureId,
             upstreamEmits: stepEmits(prev) ?? flowId,
             expectsType: expected ? formatTypeExpr(expected, models) : modelName(models, m.inStructureId),
@@ -549,7 +608,7 @@ export function computeInvalid(
       continue;
     }
 
-    if (!m.inStructureId || invalidIssuesForModule(invalid, m.id).some((x) => x.kind === "no-output")) continue;
+    if (!m.inStructureId || invalidIssuesForModule(invalid, m.id).some((x) => x.kind === InvalidKind.NoOutput)) continue;
 
     const expected = stepSpineInType(m);
     const upstreamType = (prev && stepSpineOutType(prev)) ?? flowType;
@@ -559,7 +618,7 @@ export function computeInvalid(
       } else {
         pushInvalid(invalid, {
           moduleId: m.id,
-          kind: "io-mismatch",
+          kind: InvalidKind.IoMismatch,
           expects: m.inStructureId,
           upstreamEmits: stepEmits(prev) ?? flowId,
           expectsType: expected ? formatTypeExpr(expected, models) : modelName(models, m.inStructureId),
@@ -628,11 +687,11 @@ function computeUnusedOutputInvalid(modules: PipelineModule[]): InvalidMap {
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i]!;
     const emitted = stepEmits(m);
-    if (!emitted || m.kind === "input" || usesPassthroughStructure(m.kind)) continue;
+    if (!emitted || m.kind === ModuleKind.Input || usesPassthroughStructure(m.kind)) continue;
     // AI : a combine consumes the previous step's output as its newDocument regardless of inStructureId.
-    if (modules[i + 1]?.kind === "combine") continue;
+    if (modules[i + 1]?.kind === ModuleKind.Combine) continue;
     const used = modules.slice(i + 1).some((down) => down.inStructureId === emitted);
-    if (!used) pushInvalid(invalid, { moduleId: m.id, kind: "unused-output", expects: emitted });
+    if (!used) pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.UnusedOutput, expects: emitted });
   }
   return invalid;
 }
@@ -644,15 +703,15 @@ function computeDuplicateIoStructInvalid(modules: PipelineModule[]): InvalidMap 
 
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i];
-    if (m.kind === "input" && m.outStructureId) {
+    if (m.kind === ModuleKind.Input && m.outStructureId) {
       if (inputFeedsCombine(modules, i)) continue;
       if (spineInputStructs.has(m.outStructureId)) {
-        pushInvalid(invalid, { moduleId: m.id, kind: "duplicate-input-struct", expects: m.outStructureId });
+        pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.DuplicateInputStruct, expects: m.outStructureId });
       } else {
         spineInputStructs.add(m.outStructureId);
       }
     }
-    if (m.kind === "output" && m.inStructureId) {
+    if (m.kind === ModuleKind.Output && m.inStructureId) {
       const ids = outputByStruct.get(m.inStructureId) ?? [];
       ids.push(m.id);
       outputByStruct.set(m.inStructureId, ids);
@@ -661,7 +720,7 @@ function computeDuplicateIoStructInvalid(modules: PipelineModule[]): InvalidMap 
 
   for (const ids of outputByStruct.values()) {
     if (ids.length < 2) continue;
-    for (const id of ids) pushInvalid(invalid, { moduleId: id, kind: "duplicate-output-struct" });
+    for (const id of ids) pushInvalid(invalid, { moduleId: id, kind: InvalidKind.DuplicateOutputStruct });
   }
 
   return invalid;
@@ -683,17 +742,17 @@ export function computeWarnings(
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i];
     if (isLlmKind(m.kind) && !m.prompt?.trim()) {
-      add(m.id, { moduleId: m.id, kind: "no-prompt" });
+      add(m.id, { moduleId: m.id, kind: PipelineWarningKind.NoPrompt });
     }
-    if (m.kind === "quote" && !isAutoQuoteStep(m) && m.outStructureId) {
+    if (m.kind === ModuleKind.Quote && !isAutoQuoteStep(m) && m.outStructureId) {
       const out = models.find((x) => x.id === m.outStructureId);
       if (out && !hasQuoteField(out, models)) {
-        add(m.id, { moduleId: m.id, kind: "quote-no-fields" });
+        add(m.id, { moduleId: m.id, kind: PipelineWarningKind.QuoteNoFields });
       }
     }
     const prev = i > 0 ? modules[i - 1] : undefined;
     if (
-      m.kind === "transform" &&
+      m.kind === ModuleKind.Transform &&
       !m.code?.trim() &&
       !stepEmitsList(m) &&
       stepEmitsList(prev) &&
@@ -702,7 +761,7 @@ export function computeWarnings(
     ) {
       const out = models.find((x) => x.id === m.outStructureId);
       if (out && listFieldsForWrap(out).length === 0) {
-        add(m.id, { moduleId: m.id, kind: "transform-multi-list" });
+        add(m.id, { moduleId: m.id, kind: PipelineWarningKind.TransformMultiList });
       }
     }
   }
@@ -739,7 +798,7 @@ export function formatPipelineValidationErrors(
 
 // AI : A/B strategies use the pipeline's own LLM prompt — not a hardcoded legal brief.
 export function pipelineTaskPrompt(modules: PipelineModule[]): string {
-  const outMod = [...modules].reverse().find((m) => m.kind === "output");
+  const outMod = [...modules].reverse().find((m) => m.kind === ModuleKind.Output);
   const targetId = outMod?.inStructureId;
   if (targetId) {
     const direct = modules.find(
@@ -785,5 +844,5 @@ export function canRunStep(
   if (!isPipelineValid(modules, models, typeAliases)) return false;
   const m = modules.find((x) => x.id === moduleId);
   if (!m) return false;
-  return m.cached || m.kind === "input" || hasInput;
+  return m.cached || m.kind === ModuleKind.Input || hasInput;
 }

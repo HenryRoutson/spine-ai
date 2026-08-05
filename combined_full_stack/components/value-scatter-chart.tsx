@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { buildValueScatter, normalCurvePoints, type LlmCallDisplayStatus, type MetricScatter } from "@/lib/llm-distribution"
+import { buildValueScatter, LlmCallDisplayStatus, normalCurvePoints, type MetricScatter } from "@/lib/llm-distribution"
 
 const W = 280
 const H = 108
@@ -129,11 +129,11 @@ export function ValueScatterChart({
           const cx = xScale(xMin, xMax, pt.x)
           const cy = yScale(pt.y, plotH)
           const fill =
-            pt.status === "ok" ? palette.ok : pt.status === "retried" ? palette.retry : palette.err
+            pt.status === LlmCallDisplayStatus.Ok ? palette.ok : pt.status === LlmCallDisplayStatus.Retried ? palette.retry : palette.err
           const stroke =
-            pt.status === "ok"
+            pt.status === LlmCallDisplayStatus.Ok
               ? palette.okStroke
-              : pt.status === "retried"
+              : pt.status === LlmCallDisplayStatus.Retried
                 ? palette.retryStroke
                 : palette.errStroke
           return (

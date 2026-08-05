@@ -4,6 +4,7 @@
 import { useMemo, useState } from "react"
 import { ChevronDown } from "lucide-react"
 import { llmSchemaJson } from "@/lib/structure"
+import { isExampleSelectKind } from "@/lib/example-select"
 import { isLlmKind } from "@/lib/module-kinds"
 import { llmStepEmitsList } from "@/lib/spine-type"
 import { cn } from "@/lib/utils"
@@ -41,7 +42,7 @@ export function useLlmSchemaPreview(
   typeAliases: TypeAlias[] = [],
 ) {
   return useMemo(() => {
-    if (!selected || !isLlmKind(selected.kind) || !selected.outStructureId) return null
+    if (!selected || !isLlmKind(selected.kind) || isExampleSelectKind(selected.kind) || !selected.outStructureId) return null
     const out = models.find((m) => m.id === selected.outStructureId)
     if (!out) return null
     const isList = llmStepEmitsList(selected)

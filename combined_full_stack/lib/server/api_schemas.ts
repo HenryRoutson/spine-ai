@@ -7,6 +7,9 @@ import { TOPUP_OPTIONS_CENTS, FEEDBACK_MIN_CHARS } from "@/lib/billing_config";
 import {
   DocLabel,
   InputType,
+  MergeDictStrategy,
+  MergeListStrategy,
+  MergeScalarStrategy,
   ModuleKind,
   StrategyKind,
   type MarketplaceListingId,
@@ -113,6 +116,33 @@ const customCodeEntryPatchSchema = z
   })
   .strict();
 
+// AI : merge layer — shared by default + path rules on MergePolicy
+const mergeLayerPolicyPatchSchema = z
+  .object({
+    list: z.nativeEnum(MergeListStrategy).optional(),
+    dict: z.nativeEnum(MergeDictStrategy).optional(),
+    scalar: z.nativeEnum(MergeScalarStrategy).optional(),
+    itemKey: z.string().max(200).optional(),
+  })
+  .strict();
+
+const mergePolicyPatchSchema = z
+  .object({
+    default: mergeLayerPolicyPatchSchema.optional(),
+    rules: z
+      .array(
+        z
+          .object({
+            path: z.string().max(512),
+            policy: mergeLayerPolicyPatchSchema,
+          })
+          .strict(),
+      )
+      .max(100)
+      .optional(),
+  })
+  .strict();
+
 const pipelineModulePatchSchema = z
   .object({
     id: z.string().max(128),
@@ -179,6 +209,18 @@ const pipelineModulePatchSchema = z
     fallbackList: z.array(customCodeEntryPatchSchema).max(20).optional(),
     model: z.string().max(128).optional(),
     costLimitCents: z.number().min(0).max(1_000_000).optional(),
+    // AI : chunk — allowlisted on PUT so .strict() does not reject builder saves
+    chunkSize: z.number().int().min(1).max(1_000_000).optional(),
+    chunkOverlap: z.number().int().min(0).max(1_000_000).optional(),
+    chunkTextField: z.string().max(512).optional(),
+    // AI : merge — recursive structural policy (+ optional custom TS override)
+    mergePolicy: mergePolicyPatchSchema.optional(),
+    mergeCustom: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
+    // AI : example-select — allowlisted on PUT so .strict() does not reject builder saves
+    exampleContextLabel: z.string().max(200).optional(),
+    exampleContextField: z.string().max(512).optional(),
+    exampleReasonField: z.string().max(200).optional(),
+    examplePreFilterMax: z.number().int().min(1).max(10_000).optional(),
     useOcr: z.boolean().optional(),
     cached: z.boolean().optional(),
     auto: z.boolean().optional(),

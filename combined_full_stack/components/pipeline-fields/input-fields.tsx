@@ -25,9 +25,10 @@ import {
 } from "@/lib/structure-parse-steps"
 import { isBuiltinDocumentModel, withSharedModels } from "@/lib/structure"
 import {
+  InvalidKind,
+  IoMismatchFixKind,
   warningStepMessages,
   type InvalidStep,
-  type IoMismatchFixKind,
   type IoMismatchInspectorFix,
   type PipelineWarning,
 } from "@/lib/validity"
@@ -289,16 +290,16 @@ export function InputModuleFields({
       <PipelineField
         label="I/O model"
         hint={
-          invalid?.kind === "no-output" ? "required — defines the structure this file is loaded into" : undefined
+          invalid?.kind === InvalidKind.NoOutput ? "required — defines the structure this file is loaded into" : undefined
         }
-        hintTone={invalid?.kind === "no-output" ? "error" : "warning"}
+        hintTone={invalid?.kind === InvalidKind.NoOutput ? "error" : "warning"}
       >
         {edit ? (
           <StructureModelSelect
             models={models}
             value={targetStructureId}
             onValueChange={(v) => onUpdate!({ outStructureId: v })}
-            invalid={invalid?.kind === "no-output"}
+            invalid={invalid?.kind === InvalidKind.NoOutput}
           />
         ) : (
           <StaticValue mono>
@@ -306,7 +307,7 @@ export function InputModuleFields({
           </StaticValue>
         )}
         <IoMismatchFieldFix
-          fix={ioMismatchFix?.kind === "align-upstream" ? ioMismatchFix : undefined}
+          fix={ioMismatchFix?.kind === IoMismatchFixKind.AlignUpstream ? ioMismatchFix : undefined}
           edit={!!edit}
           onFix={onFixIoMismatch}
         />

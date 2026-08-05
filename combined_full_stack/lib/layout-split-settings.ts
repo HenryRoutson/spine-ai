@@ -51,11 +51,12 @@ export const structureSidebarSplit = defineSplit({
   max: 420,
 })
 
-export const pipelineCanvasSplit = defineSplit({
-  keySuffix: "pipeline-canvas-width",
-  defaultWidth: 640,
-  min: 360,
-  max: 960,
+// AI : right inspector pane width — canvas flexes; fixedSide="trailing" on the pipeline split.
+export const pipelineInspectorSplit = defineSplit({
+  keySuffix: "pipeline-inspector-width",
+  defaultWidth: 280,
+  min: 220,
+  max: 420,
 })
 
 export const testingSidebarSplit = defineSplit({

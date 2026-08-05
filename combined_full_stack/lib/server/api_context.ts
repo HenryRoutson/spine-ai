@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
 import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate_limit";
 import { type RateLimitKey, type RateLimitTier } from "@/lib/rate_limit_config";
+import { createClient } from "@/utils/supabase/server";
 import { HTTP } from "./api-errors";
 import { getStore } from "./app_store";
 import { BillingError } from "./billing_account";
 import { storeErrorMessage } from "./errors";
+import { SupabaseStore } from "./supabase_store";
 import {
   isAuthSession,
   isLocalDevMode,
@@ -79,7 +81,15 @@ export async function requireAuthStore(
   const limited = await enforceUserRateLimit(auth.userId, tier);
   if (limited) return limited;
   try {
-    return { auth, store: await getStore() };
+    const supabase = await createClient();
+    // AI : validate + refresh JWT before writes — getSession() alone leaves stale tokens on warm SupabaseStore flush.
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) {
+      return apiError(AUTH_SIGN_IN_REQUIRED, HTTP.UNAUTHORIZED);
+    }
+    const store = await getStore();
+    if (store instanceof SupabaseStore) store.rebindDb(supabase);
+    return { auth, store };
   } catch (err) {
     return storeAuthError(err);
   }

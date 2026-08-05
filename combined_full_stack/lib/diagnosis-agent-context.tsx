@@ -16,7 +16,7 @@ import { defaultDiagnosisMessage } from "@/lib/diagnosis-prompt"
 import { readDiagnosisStream } from "@/lib/diagnosis-stream-read"
 import { runHasErrors } from "@/lib/run-error-log"
 import type { DiagnosisAgentSession, DiagnosisSpawnOptions } from "@/lib/diagnosis-types"
-import type { ModelId } from "@/lib/types"
+import type { ModelId, RunId } from "@/lib/types"
 
 type DiagnosisAgentContextValue = {
   open: boolean
@@ -25,6 +25,8 @@ type DiagnosisAgentContextValue = {
   sessions: DiagnosisAgentSession[]
   activeSessionId: string | null
   setActiveSessionId: (id: string | null) => void
+  sessionForRun: (runId: RunId | string) => DiagnosisAgentSession | undefined
+  openDiagnosisForRun: (runId: RunId | string) => void
   spawnDiagnosis: (opts: DiagnosisSpawnOptions, model: ModelId) => string
   maybeAutoDiagnose: (opts: DiagnosisSpawnOptions, model: ModelId) => void
   totalCostCents: number
@@ -136,6 +138,18 @@ export function DiagnosisAgentProvider({ children }: { children: ReactNode }) {
     [spawnDiagnosis],
   )
 
+  const sessionForRun = useCallback(
+    (runId: RunId | string) => sessionsRef.current.find((s) => s.runId === runId),
+    [],
+  )
+
+  const openDiagnosisForRun = useCallback((runId: RunId | string) => {
+    const session = sessionsRef.current.find((s) => s.runId === runId)
+    if (!session) return
+    setActiveSessionId(session.id)
+    setOpen(true)
+  }, [])
+
   const totalCostCents = useMemo(
     () => sessions.reduce((sum, s) => sum + s.costCents, 0),
     [sessions],
@@ -153,6 +167,8 @@ export function DiagnosisAgentProvider({ children }: { children: ReactNode }) {
       sessions,
       activeSessionId,
       setActiveSessionId,
+      sessionForRun,
+      openDiagnosisForRun,
       spawnDiagnosis,
       maybeAutoDiagnose,
       totalCostCents,
@@ -163,6 +179,8 @@ export function DiagnosisAgentProvider({ children }: { children: ReactNode }) {
       toggle,
       sessions,
       activeSessionId,
+      sessionForRun,
+      openDiagnosisForRun,
       spawnDiagnosis,
       maybeAutoDiagnose,
       totalCostCents,

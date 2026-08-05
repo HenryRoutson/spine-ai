@@ -1,12 +1,12 @@
 """
 Recursive structural merger with per-path layer policies.
 
-Path rules use dot segments; ``*`` matches any single segment (dict key or list index).
-Examples: ``tags``, ``users.*.roles``, ``**`` (all nodes).
+Path rules use dot segments; ``*`` matches any single segment (dict key, list index,
+or keyed list-item identity). Examples: ``tags``, ``users.*.roles``, ``**`` (all nodes).
 
-List strategies that dedupe or union convert elements to comparison keys:
-  - hashable items are used directly (lists become tuples only for set membership checks)
-  - unhashable items (dicts, nested lists) require ``key=`` on the rule or default policy
+Keyed list strategies (union / intersect / concat_dedupe) recursively merge matching
+elements so nested policies still apply. ``zip`` merges by index. Unhashable items need
+``key=`` / ``item_key=`` (dotted paths ok, e.g. ``meta.id``).
 """
 
 from __future__ import annotations
@@ -25,9 +25,15 @@ class ListStrategy(str, Enum):
     CONCAT_DEDUPE = "concat_dedupe"
     CONCAT_ASSERT_NO_DUPLICATES = "concat_assert_no_duplicates"
     UNION = "union"
+    UNION_ASSERT = "union_assert"
     INTERSECT = "intersect"
+    INTERSECT_ASSERT = "intersect_assert"
     REPLACE = "replace"
+    REPLACE_ASSERT = "replace_assert"
     PREPEND = "prepend"
+    PREPEND_ASSERT = "prepend_assert"
+    # AI : pairwise deep-merge by index; leftover items from the longer list are kept
+    ZIP = "zip"
 
 
 class DictStrategy(str, Enum):
@@ -98,7 +104,7 @@ def _merge_pair(left: Any, right: Any, policy: MergePolicy, path: Path) -> Any:
     if isinstance(left, Mapping) and isinstance(right, Mapping):
         return _merge_dicts(left, right, policy, path, layer)
     if isinstance(left, list) and isinstance(right, list):
-        return _merge_lists(left, right, layer, path)
+        return _merge_lists(left, right, policy, path, layer)
     if _is_scalar(left) and _is_scalar(right):
         return _merge_scalars(left, right, layer)
     if type(left) is type(right):
@@ -137,32 +143,78 @@ def _merge_dicts(
     return out
 
 
-def _merge_lists(left: list[Any], right: list[Any], layer: LayerPolicy, path: Path) -> list[Any]:
+def _merge_lists(
+    left: list[Any],
+    right: list[Any],
+    policy: MergePolicy,
+    path: Path,
+    layer: LayerPolicy,
+) -> list[Any]:
     strategy = layer.list
 
     if strategy is ListStrategy.REPLACE:
         return list(right)
 
     if strategy is ListStrategy.PREPEND:
-        combined = list(right) + list(left)
-        return combined
+        return list(right) + list(left)
 
     if strategy is ListStrategy.CONCAT:
         return list(left) + list(right)
 
+    if strategy is ListStrategy.ZIP:
+        return _zip_merge_lists(left, right, policy, path)
+
     if strategy is ListStrategy.CONCAT_DEDUPE:
-        return _dedupe_preserve_order(list(left) + list(right), layer.key)
+        return _dedupe_merge_order(list(left) + list(right), layer.key, policy, path)
 
     if strategy is ListStrategy.CONCAT_ASSERT_NO_DUPLICATES:
         return _assert_no_duplicates(list(left) + list(right), layer.key, path)
 
     if strategy is ListStrategy.UNION:
-        return _set_op_lists(left, right, layer.key, op="union")
+        return _set_op_lists(left, right, layer.key, policy, path, op="union")
+
+    if strategy is ListStrategy.UNION_ASSERT:
+        return _assert_union_no_overlap(left, right, layer.key, path)
 
     if strategy is ListStrategy.INTERSECT:
-        return _set_op_lists(left, right, layer.key, op="intersect")
+        return _set_op_lists(left, right, layer.key, policy, path, op="intersect")
+
+    if strategy is ListStrategy.INTERSECT_ASSERT:
+        return _assert_intersect_subset(left, right, layer.key, path)
+
+    if strategy is ListStrategy.REPLACE_ASSERT:
+        return _assert_replace_empty_left(left, right, path)
+
+    if strategy is ListStrategy.PREPEND_ASSERT:
+        return _assert_prepend_empty_right(left, right, path)
 
     raise ValueError(f"unknown list strategy: {strategy}")
+
+
+def _path_for_list_item(path: Path, ck: ComparisonKey, index: int) -> Path:
+    # AI : prefer stable identity in the path so rules like users.*.roles / users.alice.roles work
+    if isinstance(ck, (str, int)) and not isinstance(ck, bool):
+        return (*path, ck)
+    return (*path, index)
+
+
+def _zip_merge_lists(
+    left: list[Any],
+    right: list[Any],
+    policy: MergePolicy,
+    path: Path,
+) -> list[Any]:
+    n = max(len(left), len(right))
+    out: list[Any] = []
+    for i in range(n):
+        child = (*path, i)
+        if i < len(left) and i < len(right):
+            out.append(_merge_pair(left[i], right[i], policy, child))
+        elif i < len(left):
+            out.append(left[i])
+        else:
+            out.append(right[i])
+    return out
 
 
 def _merge_scalars(left: Any, right: Any, layer: LayerPolicy) -> Any:
@@ -177,10 +229,12 @@ def _set_op_lists(
     left: list[Any],
     right: list[Any],
     key_fn: KeyFn | None,
+    policy: MergePolicy,
+    path: Path,
     *,
     op: str,
 ) -> list[Any]:
-    # AI : union/intersect use set logic on comparison keys; output order follows first operand then new items from second
+    # AI : union/intersect on keys; matching items are recursively merged (not first-wins)
     left_keys: list[ComparisonKey] = [_comparison_key(item, key_fn) for item in left]
     right_keys: list[ComparisonKey] = [_comparison_key(item, key_fn) for item in right]
 
@@ -199,10 +253,21 @@ def _set_op_lists(
         raise ValueError(op)
 
     key_to_item: dict[ComparisonKey, Any] = {}
-    for item, ck in zip(left, left_keys, strict=True):
-        key_to_item.setdefault(ck, item)
-    for item, ck in zip(right, right_keys, strict=True):
-        key_to_item.setdefault(ck, item)
+    key_index: dict[ComparisonKey, int] = {}
+    for i, (item, ck) in enumerate(zip(left, left_keys, strict=True)):
+        if ck not in key_to_item:
+            key_to_item[ck] = item
+            key_index[ck] = i
+        else:
+            child = _path_for_list_item(path, ck, key_index[ck])
+            key_to_item[ck] = _merge_pair(key_to_item[ck], item, policy, child)
+    for i, (item, ck) in enumerate(zip(right, right_keys, strict=True)):
+        if ck not in key_to_item:
+            key_to_item[ck] = item
+            key_index[ck] = len(left) + i
+        else:
+            child = _path_for_list_item(path, ck, key_index[ck])
+            key_to_item[ck] = _merge_pair(key_to_item[ck], item, policy, child)
 
     return [key_to_item[ck] for ck in ordered_keys]
 
@@ -221,14 +286,23 @@ def _union_key_order(
     return out
 
 
-def _dedupe_preserve_order(items: list[Any], key_fn: KeyFn | None) -> list[Any]:
-    seen: set[ComparisonKey] = set()
+def _dedupe_merge_order(
+    items: list[Any],
+    key_fn: KeyFn | None,
+    policy: MergePolicy,
+    path: Path,
+) -> list[Any]:
+    # AI : same key → recursive merge into the first occurrence (policies apply inside)
+    seen: dict[ComparisonKey, int] = {}
     out: list[Any] = []
     for item in items:
         ck = _comparison_key(item, key_fn)
         if ck in seen:
+            idx = seen[ck]
+            child = _path_for_list_item(path, ck, idx)
+            out[idx] = _merge_pair(out[idx], item, policy, child)
             continue
-        seen.add(ck)
+        seen[ck] = len(out)
         out.append(item)
     return out
 
@@ -245,6 +319,57 @@ def _assert_no_duplicates(items: list[Any], key_fn: KeyFn | None, path: Path) ->
         seen.add(ck)
         out.append(item)
     return out
+
+
+def _assert_union_no_overlap(
+    left: list[Any],
+    right: list[Any],
+    key_fn: KeyFn | None,
+    path: Path,
+) -> list[Any]:
+    left_keys = [_comparison_key(item, key_fn) for item in left]
+    left_set = set(left_keys)
+    for item in right:
+        ck = _comparison_key(item, key_fn)
+        if ck in left_set:
+            raise TypeError(
+                f"union key overlap at path {_path_label(path)} (key={ck!r})"
+            )
+    return list(left) + list(right)
+
+
+def _assert_intersect_subset(
+    left: list[Any],
+    right: list[Any],
+    key_fn: KeyFn | None,
+    path: Path,
+) -> list[Any]:
+    right_set = {_comparison_key(item, key_fn) for item in right}
+    for item in left:
+        ck = _comparison_key(item, key_fn)
+        if ck not in right_set:
+            raise TypeError(
+                f"intersect: left item not in right at path {_path_label(path)} (key={ck!r})"
+            )
+    return list(left)
+
+
+def _assert_replace_empty_left(left: list[Any], right: list[Any], path: Path) -> list[Any]:
+    if left:
+        raise TypeError(
+            f"replace assert: left list must be empty at path {_path_label(path)} "
+            f"(got {len(left)} items)"
+        )
+    return list(right)
+
+
+def _assert_prepend_empty_right(left: list[Any], right: list[Any], path: Path) -> list[Any]:
+    if right:
+        raise TypeError(
+            f"prepend assert: right list must be empty at path {_path_label(path)} "
+            f"(got {len(right)} items)"
+        )
+    return list(left)
 
 
 def _comparison_key(item: Any, key_fn: KeyFn | None) -> ComparisonKey:
@@ -271,28 +396,46 @@ def _is_scalar(value: Any) -> bool:
 
 
 def _pattern_match_depth(pattern: str, path: Path) -> int | None:
+    # AI : ``*`` = one segment; ``**`` = any span (leading, mid, or trailing)
     pattern_parts = tuple(p for p in pattern.split(".") if p)
     if not pattern_parts:
         return 0 if not path else None
-
-    if pattern_parts[0] == "**":
-        suffix = pattern_parts[1:]
-        if not suffix:
-            return len(path)
-        best: int | None = None
-        for start in range(len(path) + 1):
-            if _suffix_match(suffix, path[start:]):
-                depth = start + len(suffix)
-                if best is None or depth > best:
-                    best = depth
-        return best
-
+    if "**" in pattern_parts:
+        return _globstar_match_depth(pattern_parts, path)
     if len(pattern_parts) > len(path):
         return None
     offset = len(path) - len(pattern_parts)
     if _suffix_match(pattern_parts, path[offset:]):
         return len(pattern_parts)
     return None
+
+
+def _globstar_match_depth(pattern: Sequence[str], path: Path) -> int | None:
+    # AI : find longest match of pattern against path with ** spanning zero+ segments
+    best = _globstar_match_from(pattern, path, 0, 0)
+    return best
+
+
+def _globstar_match_from(
+    pattern: Sequence[str],
+    path: Path,
+    pi: int,
+    si: int,
+) -> int | None:
+    if pi == len(pattern):
+        return len(path) if si == len(path) else None
+    if pattern[pi] == "**":
+        best: int | None = None
+        for span in range(si, len(path) + 1):
+            depth = _globstar_match_from(pattern, path, pi + 1, span)
+            if depth is not None and (best is None or depth > best):
+                best = depth
+        return best
+    if si >= len(path):
+        return None
+    if pattern[pi] != "*" and str(pattern[pi]) != str(path[si]):
+        return None
+    return _globstar_match_from(pattern, path, pi + 1, si + 1)
 
 
 def _suffix_match(pattern: Sequence[str], path: Path) -> bool:
@@ -304,6 +447,26 @@ def _suffix_match(pattern: Sequence[str], path: Path) -> bool:
         if str(pat) != str(seg):
             return False
     return True
+
+
+def _item_key_fn(key_path: str) -> KeyFn:
+    parts = tuple(p for p in key_path.split(".") if p)
+
+    def fn(item: Any) -> ComparisonKey:
+        cur: Any = item
+        for part in parts:
+            if not isinstance(cur, Mapping) or part not in cur:
+                raise TypeError(f"item_key {key_path!r} missing on {item!r}")
+            cur = cur[part]
+        if cur is None:
+            raise TypeError(f"item_key {key_path!r} is null on {item!r}")
+        try:
+            hash(cur)
+        except TypeError as exc:
+            raise TypeError(f"item_key {key_path!r} is unhashable: {cur!r}") from exc
+        return cur
+
+    return fn
 
 
 def _path_label(path: Path) -> str:
@@ -321,6 +484,8 @@ def rule(path_pattern: str, **kwargs: Any) -> tuple[str, LayerPolicy]:
             policy_kwargs[name] = DictStrategy(value)
         elif name == "scalar" and isinstance(value, str):
             policy_kwargs[name] = ScalarStrategy(value)
+        elif name in ("key", "item_key"):
+            policy_kwargs["key"] = _item_key_fn(value) if isinstance(value, str) else value
         else:
             policy_kwargs[name] = value
     return path_pattern, LayerPolicy(**policy_kwargs)
@@ -375,7 +540,7 @@ def _run_examples() -> None:
             {"id": 3, "roles": ["admin"]},
         ]
     }
-    # --- list layer: CONCAT keeps every record; UNION collapses by key (first record wins) ---
+    # --- list layer: CONCAT keeps every record; UNION collapses by key + deep-merges matches ---
     list_concat = MergePolicy(rules=[rule("users", list=ListStrategy.CONCAT)])
     assert merge(list_left, list_right, list_concat) == {
         "users": [
@@ -386,10 +551,15 @@ def _run_examples() -> None:
         ]
     }
 
-    list_by_id = MergePolicy(rules=[rule("users", list=ListStrategy.UNION, key=lambda u: u["id"])])
+    list_by_id = MergePolicy(
+        rules=[
+            rule("users", list=ListStrategy.UNION, item_key="id"),
+            rule("users.*.roles", list=ListStrategy.CONCAT_DEDUPE),
+        ]
+    )
     assert merge(list_left, list_right, list_by_id) == {
         "users": [
-            {"id": 1, "roles": ["admin"]},
+            {"id": 1, "roles": ["admin", "billing"]},
             {"id": 2, "roles": ["viewer"]},
             {"id": 3, "roles": ["admin"]},
         ]
@@ -399,17 +569,11 @@ def _run_examples() -> None:
     union_nums = MergePolicy(rules=[rule("ids", list=ListStrategy.UNION)])
     assert merge({"ids": [1, 2, 3]}, {"ids": [3, 4]}, union_nums) == {"ids": [1, 2, 3, 4]}
 
-    # --- union on dict items needs a key ---
-    def user_key(u: dict[str, Any]) -> int:
-        return u["id"]
-
+    # --- union on dict items needs a key; matching records deep-merge ---
     union_users = MergePolicy(
         rules=[
-            rule(
-                "users",
-                list=ListStrategy.UNION,
-                key=user_key,
-            )
+            rule("users", list=ListStrategy.UNION, item_key="id"),
+            rule("users.*.roles", list=ListStrategy.CONCAT),
         ]
     )
     merged_users = merge(
@@ -419,11 +583,53 @@ def _run_examples() -> None:
     )
     assert merged_users == {
         "users": [
-            {"id": 1, "roles": ["a"]},
+            {"id": 1, "roles": ["a", "b"]},
             {"id": 2, "roles": []},
             {"id": 3, "roles": []},
         ]
     }
+
+    # --- zip merges by index into nested structures ---
+    zip_policy = MergePolicy(rules=[rule("rows", list=ListStrategy.ZIP)])
+    assert merge(
+        {"rows": [{"n": 1}, {"n": 2}]},
+        {"rows": [{"extra": True}, {"n": 9}]},
+        zip_policy,
+    ) == {"rows": [{"n": 1, "extra": True}, {"n": 9}]}
+
+    # --- dict[str, list[dict[str, dict[str, str]]]] with per-layer strategies ---
+    deep_left = {
+        "grp": [
+            {"id": "r1", "meta": {"k": "old", "keep": "L"}},
+            {"id": "r2", "meta": {"k": "solo"}},
+        ]
+    }
+    deep_right = {
+        "grp": [
+            {"id": "r1", "meta": {"k": "new", "extra": "R"}},
+        ]
+    }
+    deep_policy = MergePolicy(
+        rules=[
+            rule("*", list=ListStrategy.UNION, item_key="id"),
+            rule("*.*.meta", dict=DictStrategy.DEEP),
+            rule("*.*.meta.k", scalar=ScalarStrategy.FIRST),
+        ]
+    )
+    assert merge(deep_left, deep_right, deep_policy) == {
+        "grp": [
+            {"id": "r1", "meta": {"k": "old", "keep": "L", "extra": "R"}},
+            {"id": "r2", "meta": {"k": "solo"}},
+        ]
+    }
+
+    # --- mid-path ** glob ---
+    mid_glob = MergePolicy(rules=[rule("teams.**.roles", list=ListStrategy.CONCAT_DEDUPE)])
+    assert merge(
+        {"teams": {"ops": {"roles": ["x", "y"]}}},
+        {"teams": {"ops": {"roles": ["y", "z"]}}},
+        mid_glob,
+    ) == {"teams": {"ops": {"roles": ["x", "y", "z"]}}}
 
     # --- intersect keeps only shared keys (by comparison key) ---
     intersect = MergePolicy(rules=[rule("items", list=ListStrategy.INTERSECT)])

@@ -5,10 +5,11 @@ import {
   buildValueScatter,
   failureKindLabel,
   formatMetric,
+  LlmCallDisplayStatus,
+  METRIC_FIELDS,
   metricAxisLabel,
+  MetricField,
   summarizeLlmCalls,
-  type LlmCallDisplayStatus,
-  type MetricField,
 } from "@/lib/llm-distribution"
 import { useStatusPalette } from "@/lib/chart-colors"
 import { ValueScatterChart } from "@/components/value-scatter-chart"
@@ -104,7 +105,7 @@ export function LlmCallDistribution({
         </p>
       )}
       <div className="grid grid-cols-3 gap-1.5">
-        {(["inputChars", "outputChars", "latencyMs"] as MetricField[]).map((field) => (
+        {METRIC_FIELDS.map((field) => (
           <MetricScatter
             field={field}
             calls={flatCalls}
@@ -126,9 +127,9 @@ function describeRecoveredFailures(
 ): string {
   const recovered = calls
     .map((call, i) => ({ call, display: displayStatuses[i] }))
-    .filter(({ call, display }) => display === "retried" && call.failureKind)
+    .filter(({ call, display }) => display === LlmCallDisplayStatus.Retried && call.failureKind)
   if (!recovered.length) {
-    const n = displayStatuses.filter((s) => s === "retried").length
+    const n = displayStatuses.filter((s) => s === LlmCallDisplayStatus.Retried).length
     return n === 1
       ? "One request failed and was automatically retried — the step still succeeded."
       : `${n} requests failed and were automatically retried — the step still succeeded.`
@@ -152,9 +153,9 @@ function MetricScatter({
     calls.map((call, i) => ({ value: call[field], status: displayStatuses[i] })),
   )
   const titles: Record<MetricField, string> = {
-    inputChars: "Input (chars)",
-    outputChars: "Output (chars)",
-    latencyMs: "Response latency",
+    [MetricField.InputChars]: "Input (chars)",
+    [MetricField.OutputChars]: "Output (chars)",
+    [MetricField.LatencyMs]: "Response latency",
   }
   return (
     <ValueScatterChart

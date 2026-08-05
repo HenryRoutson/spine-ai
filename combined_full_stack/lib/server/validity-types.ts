@@ -1,23 +1,25 @@
 // AI : Shared validity types and pure query helpers — imported by validity.ts, validity-messages.ts, validity-inspect.ts.
 import type { ModuleId, PipelineModule, StructureModel, StructureModelId } from "./types";
 
-export type InvalidKind =
-  | "io-mismatch"
-  | "cardinality-mismatch"
-  | "no-output"
-  | "transform-list-wrap"
-  | "empty-label"
-  | "duplicate-label"
-  | "unused-output"
-  | "duplicate-input-struct"
-  | "duplicate-output-struct"
-  | "state-key-missing"
-  | "missing-input-description"
-  | "missing-note"
-  | "missing-structure"
-  | "code-compile-error"
-  | "json-input-mismatch"
-  | "structure-field";
+export enum InvalidKind {
+  IoMismatch = "io-mismatch",
+  CardinalityMismatch = "cardinality-mismatch",
+  NoOutput = "no-output",
+  TransformListWrap = "transform-list-wrap",
+  EmptyLabel = "empty-label",
+  DuplicateLabel = "duplicate-label",
+  UnusedOutput = "unused-output",
+  DuplicateInputStruct = "duplicate-input-struct",
+  DuplicateOutputStruct = "duplicate-output-struct",
+  StateKeyMissing = "state-key-missing",
+  MissingInputDescription = "missing-input-description",
+  MissingNote = "missing-note",
+  MissingStructure = "missing-structure",
+  CodeCompileError = "code-compile-error",
+  JsonInputMismatch = "json-input-mismatch",
+  StructureField = "structure-field",
+  MissingCombineBeforeInput = "missing-combine-before-input",
+}
 
 export interface InvalidStep {
   moduleId: ModuleId;
@@ -33,17 +35,27 @@ export interface InvalidStep {
 
 export type InvalidMap = Map<ModuleId, InvalidStep[]>;
 
+export enum PipelineWarningKind {
+  NoPrompt = "no-prompt",
+  QuoteNoFields = "quote-no-fields",
+  TransformMultiList = "transform-multi-list",
+  JsonInputType = "json-input-type",
+}
+
 export interface PipelineWarning {
   moduleId: ModuleId;
-  kind: "no-prompt" | "quote-no-fields" | "transform-multi-list" | "json-input-type";
+  kind: PipelineWarningKind;
+}
+
+export enum IoMismatchFixKind {
+  AdoptUpstream = "adopt-upstream",
+  AlignUpstream = "align-upstream",
 }
 
 export interface IoMismatchFixHint {
   kind: IoMismatchFixKind;
   label: string;
 }
-
-export type IoMismatchFixKind = "adopt-upstream" | "align-upstream";
 
 export interface IoMismatchInspectorFix {
   mismatchModuleId: ModuleId;

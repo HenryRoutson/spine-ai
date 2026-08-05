@@ -6,12 +6,25 @@ import { loadProjectContext } from "@/lib/cli/project_context"
 import { validateSetupCommand } from "@/lib/cli/validate_setup"
 import { SEEDS_DIR } from "@/lib/server/seed"
 
+const exampleSelectSeed = resolve(SEEDS_DIR, "example_select_demo.json")
+const exampleSelectDocs = resolve(SEEDS_DIR, "../documents/example_select_demo")
+
 describe("validate setup command", () => {
   it("passes homework university inference preset", () => {
     const ctx = loadProjectContext(resolve(SEEDS_DIR, "homework_grader.json"))
     const setupPath = resolve(SEEDS_DIR, "../documents/homework_grader/university_latex_inference.json")
     const result = validateSetupCommand(ctx, setupPath)
     expect(result.ok).toBe(true)
+  })
+
+  it.each([
+    "example_select_demo_inference.json",
+    "roof_storm_inference.json",
+    "kitchen_reno_inference.json",
+  ])("passes example select inference preset %s", (file) => {
+    const ctx = loadProjectContext(exampleSelectSeed)
+    const result = validateSetupCommand(ctx, resolve(exampleSelectDocs, file))
+    expect(result.ok, result.issues.map((i) => i.message).join("; ")).toBe(true)
   })
 
   it("errors when setup file is invalid json", () => {

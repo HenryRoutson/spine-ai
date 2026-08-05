@@ -131,6 +131,10 @@ const SeedFileSchema = z.object({
       code: z.string().optional(),
       model: z.string().optional(),
       costLimitCents: z.number().min(0).optional(),
+      exampleContextLabel: z.string().optional(),
+      exampleContextField: z.string().optional(),
+      exampleReasonField: z.string().optional(),
+      examplePreFilterMax: z.number().int().min(1).optional(),
       cached: z.boolean(),
       auto: z.boolean().optional(),
       avgMs: z.number(),
@@ -447,8 +451,9 @@ export function cloneProject(source: Project, existingProjects: Project[]): Proj
   const id = uid<ProjectId>("p_");
   const name = nextNumberedCloneName(source.name, existingProjects.map((p) => p.name));
   const now = Date.now();
+  const { teamReadOnly: _ro, teamProjectOwnerId: _owner, ...sourceBody } = backfillSeedDocNames(source);
   const cloned: Project = {
-    ...structuredClone(backfillSeedDocNames(source)),
+    ...structuredClone(sourceBody),
     id,
     name,
     createdAt: now,

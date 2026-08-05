@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { uid } from "@/lib/id";
-import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { apiError, requireAuthStore, storeAuthError } from "@/lib/server/api_context";
 import { createProjectBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
 import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { allProjectSeeds, blankProject, cloneProject } from "@/lib/server/seed";
+import { ensureSeedDocs } from "@/lib/server/store";
 import { migrateProjectModules } from "@/lib/server/validity";
 import { logger } from "@/lib/server/server_logger";
 import type { ProjectId } from "@/lib/server/types";
@@ -36,7 +37,12 @@ export async function POST(req: NextRequest) {
     apiLog.info(`POST /api/projects — blank project`, { projectId: project.id });
   }
 
-  store.saveProject(project);
-  await store.flush();
+  try {
+    if (body.templateId) await ensureSeedDocs(store);
+    store.saveProject(project);
+    await store.flush();
+  } catch (err) {
+    return storeAuthError(err);
+  }
   return NextResponse.json(migrateProjectModules(project));
 }

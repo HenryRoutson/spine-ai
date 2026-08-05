@@ -143,6 +143,7 @@ Common mistakes that fail validation:
 6. Input structureOut set to a parsed model — input only ever emits Document; parsing belongs in the next custom-code or llm step.
 7. structureIn/structureOut names not in models array — every referenced structure must be defined in models.
 8. custom-code without list output after a list-emitting step — downstream llm-batch then fails with "expects list[X], upstream emits X".
+9. input → processing → second input without combine — the spine only carries the last step's output; prior input state is dropped unless you merge with combine (side input immediately before combine). Validation error: "prior pipeline state is dropped on the spine".
 
 Before returning modules, walk the chain: for each adjacent pair, confirm previous emits exactly what next expects. If the user prompt lists validation errors, fix every listed mismatch.`;
 }
@@ -165,7 +166,7 @@ export function buildMultiDocumentWorkflowPromptBlock(): string {
 - Every structureIn / structureOut name MUST appear in your models array — do not reference structures you forgot to define.
 - llm-batch requires list[structureIn] on the spine — the step before it must emit a list (often the input with list[Document], or custom-code with list[Row]).
 - Two different document kinds (policy + expense report) = two input steps + combine — not the same as many receipts in one slot.
-- Reference: Batch LLM Example seed (Wrap → List → llm-batch → Unwrap); homework grader Student Submissions (list[Document] input).`;
+- Reference: Batch LLM Example seed (Wrap → List → llm-batch → Unwrap); Example Select Demo (context label + example-select → draft); homework grader Student Submissions (list[Document] input).`;
 }
 
 /** AI : two (or more) document KINDS — combine merges pipeline state with a new upload. */
@@ -216,6 +217,7 @@ Avoid a SINGLE llm call when:
 - The user uploads MANY files of the same kind → list[Document] input + llm-batch (one structured call per file).
 - The document is long (contracts, logs, books) → custom-code chunk/split → list[Chunk] → llm-batch → optional reduce — the whole doc will not fit context.
 - Each row/line/student needs its own extraction or grade → llm-batch; never "in one prompt, loop over all files".
+- You have a library of reference examples and need only the relevant ones for a new case → example-select (list[Example] in, cached-prefix prompt with {description} from a prior step, per-item is_relevant + chain_of_thought) — prefer over embedding RAG when interpretability matters; optional examplePreFilterMax caps candidates before LLM calls.
 - Output is a table of many rows → end pipeline at list[Row] → output (CSV/XLSX export is built-in); do not ask one llm to emit a giant CSV string.
 - Two document types must be read together → process first doc on spine, combine with second doc, THEN llm on the compact merged object — not one llm with both raw files pasted in.
 

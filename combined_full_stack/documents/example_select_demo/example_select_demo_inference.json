@@ -1,0 +1,7 @@
+{
+  "description": "Water damage scope-of-works — filters a library of past examples with example-select before drafting.",
+  "inputs": {
+    "Damage Case": "damage_case.txt",
+    "Example Library": "example_library.json"
+  }
+}

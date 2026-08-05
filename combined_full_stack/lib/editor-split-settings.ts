@@ -2,7 +2,7 @@
 
 import {
   LAYOUT_SPLIT_SETTINGS_CHANGED_EVENT,
-  pipelineCanvasSplit,
+  pipelineInspectorSplit,
   structureSidebarSplit,
   useLayoutSplitWidth,
 } from "@/lib/layout-split-settings"
@@ -15,16 +15,16 @@ export const DEFAULT_STRUCTURE_SIDEBAR_WIDTH = structureSidebarSplit.defaultWidt
 export const readStructureSidebarWidth = structureSidebarSplit.read
 export const writeStructureSidebarWidth = structureSidebarSplit.write
 
-export const PIPELINE_CANVAS_MIN = pipelineCanvasSplit.min
-export const PIPELINE_CANVAS_MAX = pipelineCanvasSplit.max
-export const DEFAULT_PIPELINE_CANVAS_WIDTH = pipelineCanvasSplit.defaultWidth
-export const readPipelineCanvasWidth = pipelineCanvasSplit.read
-export const writePipelineCanvasWidth = pipelineCanvasSplit.write
+export const PIPELINE_INSPECTOR_MIN = pipelineInspectorSplit.min
+export const PIPELINE_INSPECTOR_MAX = pipelineInspectorSplit.max
+export const DEFAULT_PIPELINE_INSPECTOR_WIDTH = pipelineInspectorSplit.defaultWidth
+export const readPipelineInspectorWidth = pipelineInspectorSplit.read
+export const writePipelineInspectorWidth = pipelineInspectorSplit.write
 
 export function useStructureSidebarWidth() {
   return useLayoutSplitWidth(structureSidebarSplit.read)
 }
 
-export function usePipelineCanvasWidth() {
-  return useLayoutSplitWidth(pipelineCanvasSplit.read)
+export function usePipelineInspectorWidth() {
+  return useLayoutSplitWidth(pipelineInspectorSplit.read)
 }

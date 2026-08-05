@@ -14,7 +14,7 @@ import {
 } from "@/lib/inference-input-core";
 import { BUILTIN_DOCUMENT_ID, isBuiltinDocumentModel, stripSharedModels, withSharedModels } from "./builtin_models";
 import { migrateCustomCodeModule } from "@/lib/custom_code_entries";
-import { migrateListMergeModule, syncListOpsStepModule } from "@/lib/list-ops-steps";
+import { migrateListMergeModule, syncListOpsModules } from "@/lib/list-ops-steps";
 import { resolveModuleNote } from "@/lib/pipeline-module-factory";
 import { usesPassthroughStructure, isLlmKind } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
@@ -398,11 +398,10 @@ export function migrateProjectModules(project: Project): Project {
   const folded = foldDocToTextSteps(project.modules);
   const quoted = syncManagedPipelineSteps(folded, models);
   const placed = syncAssertPlacement(quoted);
-  const migrated = placed.map((m) =>
-    syncListOpsStepModule(migrateListMergeModule(migrateCustomCodeModule(m)), models),
-  );
-  // AI : cache is always on — normalize legacy projects that disabled it per step.
-  const withCache = migrated.map((m) => (m.cached ? m : { ...m, cached: true }));
+  const migrated = placed.map((m) => migrateListMergeModule(migrateCustomCodeModule(m)));
+  const listSynced = syncListOpsModules(migrated, models);
+  const withCache = listSynced.modules.map((m) => (m.cached ? m : { ...m, cached: true }));
+  models = listSynced.models;
   const normalized = normalizePassthroughStructureIds(withCache);
   const noted = normalizeModuleNotes(normalized);
   const spineTyped = migrateModulesSpineTypes(noted);
@@ -420,7 +419,8 @@ export function migrateProjectModules(project: Project): Project {
     folded !== project.modules ||
     placed !== folded ||
     migrated.some((m, i) => m !== placed[i]) ||
-    withCache.some((m, i) => m !== migrated[i]) ||
+    listSynced.modules.some((m, i) => m !== migrated[i]) ||
+    withCache.some((m, i) => m !== listSynced.modules[i]) ||
     normalized.some((m, i) => m !== withCache[i]) ||
     noted.some((m, i) => m !== normalized[i]) ||
     spineTyped.some((m, i) => m !== noted[i]);

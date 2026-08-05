@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { apiError, requireAuthStore } from "@/lib/server/api_context";
+import { apiError, requireAuthStore, storeAuthError } from "@/lib/server/api_context";
 import { parseProjectId, parseRequestJson, projectPatchSchema } from "@/lib/server/api_schemas";
 import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { logger } from "@/lib/server/server_logger";
@@ -101,7 +101,11 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       moduleStepEvents(auth.userId, projectId, project.modules, sanitized.modules),
     );
   }
-  await store.flush();
+  try {
+    await store.flush();
+  } catch (err) {
+    return storeAuthError(err);
+  }
   return NextResponse.json({ ok: true });
 }
 
@@ -122,6 +126,10 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   if (writeErr) return apiError(writeErr, HTTP.FORBIDDEN);
   store.deleteProject(projectId);
   apiLog.info(`DELETE /api/projects`, { projectId });
-  await store.flush();
+  try {
+    await store.flush();
+  } catch (err) {
+    return storeAuthError(err);
+  }
   return NextResponse.json({ ok: true });
 }

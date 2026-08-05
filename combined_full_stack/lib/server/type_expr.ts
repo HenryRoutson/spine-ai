@@ -206,7 +206,7 @@ function structureSpineType(modelId: StructureModelId | undefined, isList: boole
 export function stepEmitsList(m: PipelineModule | undefined): boolean {
   if (!m) return false;
   if (m.outType) return isListRoot(m.outType);
-  if (m.kind === "llm-batch") return true;
+  if (m.kind === "llm-batch" || m.kind === "example-select") return true;
   if (m.kind === "chunk") return true;
   return !!(m as PipelineModule & { outIsList?: boolean }).outIsList;
 }
@@ -228,7 +228,7 @@ export function stepSpineOutType(m: PipelineModule | undefined): TypeExpr | unde
 export function stepSpineInType(m: PipelineModule): TypeExpr | undefined {
   if (m.inType) return m.inType;
   if (!m.inStructureId) return undefined;
-  if (m.kind === "llm-batch") {
+  if (m.kind === "llm-batch" || m.kind === "example-select") {
     return { kind: "list", item: { kind: "ref", modelId: m.inStructureId } };
   }
   return { kind: "ref", modelId: m.inStructureId };

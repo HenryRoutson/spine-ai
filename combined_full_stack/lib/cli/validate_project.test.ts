@@ -6,7 +6,7 @@ import { SEEDS_DIR } from "@/lib/server/seed"
 
 describe("validate project command", () => {
   it("passes for example seeds with golden tests", () => {
-    const seeds = ["batch_llm_example.json", "gps_site_profiling.json", "procurement_match.json"]
+    const seeds = ["batch_llm_example.json", "example_select_demo.json", "gps_site_profiling.json", "procurement_match.json"]
     for (const file of seeds) {
       const ctx = loadProjectContext(resolve(SEEDS_DIR, file))
       const result = validateProjectCommand(ctx)
@@ -45,5 +45,16 @@ describe("validate project command", () => {
     const result = validateProjectCommand({ ...ctx, project: broken })
     expect(result.ok).toBe(false)
     expect(result.issues.length).toBeGreaterThan(0)
+  })
+
+  it("flags second input after processing when combine is missing", () => {
+    const ctx = loadProjectContext(resolve(SEEDS_DIR, "example_select_demo.json"))
+    const broken = {
+      ...ctx.project,
+      modules: ctx.project.modules.filter((m) => m.kind !== "combine"),
+    }
+    const result = validateProjectCommand({ ...ctx, project: broken })
+    expect(result.ok).toBe(false)
+    expect(result.issues.some((i) => i.message.includes("combine"))).toBe(true)
   })
 })

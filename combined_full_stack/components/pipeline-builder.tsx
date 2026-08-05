@@ -17,7 +17,7 @@ import { useStore } from "@/lib/store"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { structureIssueMessagesForUi } from "@/lib/structure-validity-ui"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
-import { computeWarnings, formatInvalidMapErrors, ioMismatchInspectorFix, invalidForModule, invalidIssuesForModule, prevModuleId, type IoMismatchFixKind } from "@/lib/validity"
+import { computeWarnings, formatInvalidMapErrors, InvalidKind, ioMismatchInspectorFix, invalidForModule, invalidIssuesForModule, IoMismatchFixKind, prevModuleId } from "@/lib/validity"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import { useRerenderOnEvent } from "@/lib/use-browser-pref-event"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
@@ -59,21 +59,21 @@ import { PipelineExportDialog } from "@/components/pipeline-export-dialog"
 import { ResizableSplit } from "@/components/resizable-split"
 import { InspectorCollapsibleSection } from "@/components/inspector-collapsible-section"
 import {
-  PIPELINE_CANVAS_MAX,
-  PIPELINE_CANVAS_MIN,
-  readPipelineCanvasWidth,
-  usePipelineCanvasWidth,
-  writePipelineCanvasWidth,
+  PIPELINE_INSPECTOR_MAX,
+  PIPELINE_INSPECTOR_MIN,
+  readPipelineInspectorWidth,
+  usePipelineInspectorWidth,
+  writePipelineInspectorWidth,
 } from "@/lib/editor-split-settings"
 
 export function PipelineBuilder() {
-  const { modules, setModules, models, model: globalModel, runs, typeAliases, project } = useStore()
+  const { modules, setModules, models, setModels, model: globalModel, runs, typeAliases, project } = useStore()
   const [selectedId, setSelectedId] = useState<string>(modules[0]?.id ?? "")
   const [copied, setCopied] = useState(false)
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
-  const savedCanvasWidth = usePipelineCanvasWidth()
-  const [canvasWidth, setCanvasWidth] = useState(readPipelineCanvasWidth)
-  useEffect(() => setCanvasWidth(savedCanvasWidth), [savedCanvasWidth])
+  const savedInspectorWidth = usePipelineInspectorWidth()
+  const [inspectorWidth, setInspectorWidth] = useState(readPipelineInspectorWidth)
+  useEffect(() => setInspectorWidth(savedInspectorWidth), [savedInspectorWidth])
 
   const selected = modules.find((m) => m.id === selectedId)
   const { pipelineEditingBlocked: editingBlocked } = computeWorkspaceValidity(
@@ -108,20 +108,25 @@ export function PipelineBuilder() {
   }
 
   function update(id: string, patch: Partial<PipelineModule>) {
-    let next = modules.map((m) => {
+    let derivedModels = models
+    let next = modules.map((m, i) => {
       if (m.id !== id) return m
       const updated = { ...m, ...patch }
-      if (updated.kind === "output" && patch.inStructureId) {
+      if (updated.kind === ModuleKind.Output && patch.inStructureId) {
         updated.outStructureId = patch.inStructureId
       }
       if (updated.kind === ModuleKind.Chunk || updated.kind === ModuleKind.Merge) {
-        return syncListOpsStepModule(updated, models)
+        const prev = i > 0 ? modules[i - 1] : undefined
+        const synced = syncListOpsStepModule(updated, derivedModels, prev)
+        derivedModels = synced.models
+        return synced.module
       }
       return updated
     })
+    if (derivedModels !== models) setModels(derivedModels)
     if (patch.outStructureId !== undefined) {
       const step = modules.find((x) => x.id === id)
-      if (step?.kind === "input") {
+      if (step?.kind === ModuleKind.Input) {
         next = patchInputTargetStructure(next, id as ModuleId, patch.outStructureId)
       }
     }
@@ -130,15 +135,15 @@ export function PipelineBuilder() {
 
   function fixIoMismatch(moduleId: string, kind: IoMismatchFixKind) {
     const issue = invalidForModule(invalid, moduleId as ModuleId)
-    if (!issue || (issue.kind !== "io-mismatch" && issue.kind !== "cardinality-mismatch")) return
-    if (kind === "adopt-upstream" && issue.upstreamEmits) {
+    if (!issue || (issue.kind !== InvalidKind.IoMismatch && issue.kind !== InvalidKind.CardinalityMismatch)) return
+    if (kind === IoMismatchFixKind.AdoptUpstream && issue.upstreamEmits) {
       const m = modules.find((x) => x.id === moduleId)
       const patch: Partial<PipelineModule> = { inStructureId: issue.upstreamEmits }
-      if (m?.kind === "output") patch.outStructureId = issue.upstreamEmits
+      if (m?.kind === ModuleKind.Output) patch.outStructureId = issue.upstreamEmits
       update(moduleId, patch)
       return
     }
-    if (kind === "align-upstream" && issue.expects) {
+    if (kind === IoMismatchFixKind.AlignUpstream && issue.expects) {
       const prevId = prevModuleId(modules, moduleId as ModuleId)
       if (prevId) update(prevId, { outStructureId: issue.expects })
     }
@@ -252,13 +257,14 @@ export function PipelineBuilder() {
 
         <ResizableSplit
           className="min-h-0 flex-1"
-          leadingWidth={canvasWidth}
-          onLeadingWidthChange={setCanvasWidth}
-          onLeadingWidthCommit={writePipelineCanvasWidth}
-          minLeading={PIPELINE_CANVAS_MIN}
-          maxLeading={PIPELINE_CANVAS_MAX}
+          fixedSide="trailing"
+          leadingWidth={inspectorWidth}
+          onLeadingWidthChange={setInspectorWidth}
+          onLeadingWidthCommit={writePipelineInspectorWidth}
+          minLeading={PIPELINE_INSPECTOR_MIN}
+          maxLeading={PIPELINE_INSPECTOR_MAX}
           leading={
-            <div className="min-h-0 min-w-0 overflow-auto">
+            <div className="min-h-0 min-w-0 flex-1 overflow-auto">
               <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col items-stretch px-6 py-8">
                 <PipelineCanvas
                   modules={modules}
@@ -291,8 +297,9 @@ export function PipelineBuilder() {
             </div>
           }
           trailing={
-            <aside className="flex min-h-0 w-[280px] shrink-0 flex-col overflow-hidden border-l border-border/80 bg-muted/20">
-              <div className="border-b border-border/60 px-3 py-2">
+            // AI : fill fixed right pane height so InspectorCollapsibleSection overflow-y-auto can scroll
+            <aside className="flex min-h-0 w-full flex-1 flex-col overflow-hidden border-l border-border/80 bg-muted/20">
+              <div className="shrink-0 border-b border-border/60 px-3 py-2">
                 <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Step inspector</p>
               </div>
               <InspectorCollapsibleSection title="Inspector" variant="panel" fill>

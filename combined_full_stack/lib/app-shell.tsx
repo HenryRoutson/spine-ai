@@ -15,6 +15,13 @@ import { openLlmProvidersSettings, scrollToSettingsSection } from "@/lib/setting
 import type { SharedRunDocScope } from "@/lib/shared-run-doc-scope"
 import type { DocId, StructureModelId } from "@/lib/types"
 
+export type LoggingFocusAnchor = "validation-errors"
+
+export type LoggingFocus = {
+  runId?: string
+  anchor?: LoggingFocusAnchor
+}
+
 export type { AppArea } from "@/lib/app-nav-config"
 export { windowToArea, isBuildStep } from "@/lib/app-nav-config"
 
@@ -42,7 +49,8 @@ interface AppShellState {
   openDocuments: (docId?: DocId) => void
   clearFocusDoc: () => void
   focusRunId: string | null
-  openLogging: (runId?: string) => void
+  focusRunAnchor: LoggingFocusAnchor | null
+  openLogging: (focus?: string | LoggingFocus) => void
   clearFocusRun: () => void
   focusStructureId: StructureModelId | null
   openStructure: (structureId?: StructureModelId) => void
@@ -66,6 +74,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   const [activeWindow, setActiveWindow] = useState<AppWindowId>("structure")
   const [focusDocId, setFocusDocId] = useState<DocId | null>(null)
   const [focusRunId, setFocusRunId] = useState<string | null>(null)
+  const [focusRunAnchor, setFocusRunAnchor] = useState<LoggingFocusAnchor | null>(null)
   const [focusStructureId, setFocusStructureId] = useState<StructureModelId | null>(null)
   const [activeSharedLinkId, setActiveSharedLinkId] = useState<string | null>(null)
   const [sharedRunDocScope, setSharedRunDocScope] = useState<SharedRunDocScope | null>(null)
@@ -86,12 +95,21 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
 
   const clearFocusDoc = useCallback(() => setFocusDocId(null), [])
 
-  const openLogging = useCallback((runId?: string) => {
-    setFocusRunId(runId ?? null)
+  const openLogging = useCallback((focus?: string | LoggingFocus) => {
+    if (typeof focus === "string" || focus === undefined) {
+      setFocusRunId(focus ?? null)
+      setFocusRunAnchor(null)
+    } else {
+      setFocusRunId(focus.runId ?? null)
+      setFocusRunAnchor(focus.anchor ?? null)
+    }
     setActiveWindow("logging")
   }, [])
 
-  const clearFocusRun = useCallback(() => setFocusRunId(null), [])
+  const clearFocusRun = useCallback(() => {
+    setFocusRunId(null)
+    setFocusRunAnchor(null)
+  }, [])
 
   const openStructure = useCallback((structureId?: StructureModelId) => {
     setFocusStructureId(structureId ?? null)
@@ -134,6 +152,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         openDocuments,
         clearFocusDoc,
         focusRunId,
+        focusRunAnchor,
         openLogging,
         clearFocusRun,
         focusStructureId,

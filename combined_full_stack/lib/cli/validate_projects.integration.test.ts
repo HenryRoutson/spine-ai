@@ -3,6 +3,7 @@ import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 import { loadProjectContext } from "@/lib/cli/project_context"
 import { validateProjectCommand } from "@/lib/cli/validate_project"
+import { validateSetupCommand } from "@/lib/cli/validate_setup"
 import { runSpineCli } from "@/lib/cli/run"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { SEEDS_DIR } from "@/lib/server/seed"
@@ -58,5 +59,27 @@ describe("homework grader — agent example baseline", () => {
     expect(inferenceSetups.length).toBeGreaterThanOrEqual(3)
     expect(testFiles.length).toBeGreaterThanOrEqual(5)
     expect(ctx.project.modules.some((m) => m.kind === "llm-batch")).toBe(true)
+  })
+})
+
+describe("example select demo — inference presets", () => {
+  const exampleSelectSeed = resolve(SEEDS_DIR, "example_select_demo.json")
+
+  it("includes inference presets and bundled test files for multiple damage scenarios", () => {
+    const ctx = loadProjectContext(exampleSelectSeed)
+    const inferenceSetups = ctx.seed.docSpecs.filter((d) => d.name.endsWith("_inference.json"))
+    const testFiles = ctx.seed.docSpecs.filter((d) => d.name.endsWith("_testing.json"))
+    expect(inferenceSetups.length).toBeGreaterThanOrEqual(3)
+    expect(testFiles.length).toBeGreaterThanOrEqual(3)
+    expect(ctx.project.modules.some((m) => m.kind === "example-select")).toBe(true)
+  })
+
+  it("validates every bundled inference preset", () => {
+    const ctx = loadProjectContext(exampleSelectSeed)
+    const inferenceSetups = ctx.seed.docSpecs.filter((d) => d.name.endsWith("_inference.json"))
+    for (const spec of inferenceSetups) {
+      const result = validateSetupCommand(ctx, spec.path)
+      expect(result.ok, `${spec.name}: ${result.issues.map((i) => i.message).join("; ")}`).toBe(true)
+    }
   })
 })

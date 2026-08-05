@@ -24,6 +24,7 @@ import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { modelName } from "@/lib/validity"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { WindowHeader } from "@/components/window-header"
+import { DeleteButton } from "@/components/delete-button"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -62,6 +63,7 @@ import { InferenceStepTracePanel } from "@/components/inference/inference-step-t
 import { RunWithStopButton } from "@/components/run-with-stop-button"
 import { IsolatedErrorButton } from "@/components/logging/isolated-error-actions"
 import { useDiagnosisAgents } from "@/lib/diagnosis-agent-context"
+import { DiagnosisRunLink } from "@/components/diagnosis-agents/diagnosis-run-link"
 import { runHasErrors } from "@/lib/run-error-log"
 import { runInputDocsSummary } from "@/lib/inference-input"
 import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
@@ -130,6 +132,7 @@ export function Inference() {
     flushPendingSave,
     typeAliases,
     addDocContent,
+    removeDoc,
     updateRunTest,
   } = useStore()
   const { setActiveWindow, openLogging } = useAppShell()
@@ -149,6 +152,7 @@ export function Inference() {
   const [selectedId, setSelectedId] = useState<DocId | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const [creatingSetup, setCreatingSetup] = useState(false)
+  const [deletingSetupId, setDeletingSetupId] = useState<DocId | null>(null)
   // AI : when inputs are loaded from a test preset, assert against that file after the run.
   const [linkedTest, setLinkedTest] = useState<PresetApplyMeta | null>(null)
   const { width: sidebarWidth, setWidth: setSidebarWidth, commitWidth: commitSidebarWidth } =
@@ -256,6 +260,28 @@ export function Inference() {
     },
     [setupStates, applySetupInputs],
   )
+
+  async function deleteSetup(docId: DocId, e: React.MouseEvent) {
+    e.stopPropagation()
+    setActionError(null)
+    setDeletingSetupId(docId)
+    try {
+      await removeDoc(docId, project.id)
+      if (selectedId === docId) {
+        setSelectedId(null)
+        setLinkedTest(null)
+      }
+      setContents((prev) => {
+        const { [docId]: _removed, ...rest } = prev
+        return rest
+      })
+      invalidateDocText(docId)
+    } catch (err) {
+      setActionError((err as Error).message)
+    } finally {
+      setDeletingSetupId(null)
+    }
+  }
 
   async function createBlankSetup() {
     setActionError(null)
@@ -444,25 +470,37 @@ export function Inference() {
                     const isSelected = selected?.doc.id === s.doc.id
                     return (
                       <li key={s.doc.id}>
-                        <button
-                          type="button"
-                          onClick={() => selectSetup(s.doc.id)}
+                        <div
                           className={cn(
-                            "flex w-full items-start gap-2 rounded-md px-2 py-2 text-left hover:bg-accent",
+                            "flex items-center gap-1 rounded-md px-1 py-1",
                             isSelected && "bg-secondary",
                           )}
                         >
-                          <Layers className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                          <span
-                            className="min-w-0 flex-1 break-all font-mono text-[11px] leading-snug"
-                            title={setupDisplayName(s.doc.name)}
+                          <button
+                            type="button"
+                            onClick={() => selectSetup(s.doc.id)}
+                            className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-1 py-1 text-left hover:bg-accent"
                           >
-                            {setupDisplayName(s.doc.name)}
-                          </span>
-                          <Badge variant="outline" className={cn("shrink-0 font-mono text-[9px]", badge.className)}>
-                            {badge.label}
-                          </Badge>
-                        </button>
+                            <Layers className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                            <span
+                              className="min-w-0 flex-1 break-all font-mono text-[11px] leading-snug"
+                              title={setupDisplayName(s.doc.name)}
+                            >
+                              {setupDisplayName(s.doc.name)}
+                            </span>
+                            <Badge variant="outline" className={cn("shrink-0 font-mono text-[9px]", badge.className)}>
+                              {badge.label}
+                            </Badge>
+                          </button>
+                          <DeleteButton
+                            variant="ghost"
+                            size="icon-sm"
+                            className="shrink-0"
+                            deleting={deletingSetupId === s.doc.id}
+                            label={`Delete ${setupDisplayName(s.doc.name)}`}
+                            onClick={(e) => void deleteSetup(s.doc.id, e)}
+                          />
+                        </div>
                       </li>
                     )
                   })}
@@ -666,6 +704,7 @@ export function Inference() {
                     progressPct={run.progressPct}
                     waitPhrase={run.waitPhrase}
                     logsByModule={run.logsByModule}
+                    codeExecByModule={run.codeExecByModule}
                     logEndRef={run.logEndRef}
                     docs={docs}
                     models={models}
@@ -723,8 +762,9 @@ export function Inference() {
                             </p>
                           </div>
                         )}
-                        <div className="flex justify-center">
+                        <div className="flex flex-wrap items-center justify-center gap-3">
                           <IsolatedErrorButton run={run.run} modules={modules} />
+                          <DiagnosisRunLink runId={run.run.id} />
                         </div>
                       </div>
                     )}
@@ -748,6 +788,7 @@ export function Inference() {
                       progressPct={run.progressPct}
                       waitPhrase={run.waitPhrase}
                       logsByModule={run.logsByModule}
+                    codeExecByModule={run.codeExecByModule}
                       docs={docs}
                       models={models}
                       inputDocs={lastRunInputDocs}

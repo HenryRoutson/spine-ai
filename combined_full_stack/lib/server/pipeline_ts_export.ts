@@ -76,6 +76,20 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
         `return await llmBatchStructured<${itemTs}>(items, promptFor, schema);`,
       ].join("\n");
     }
+    case "example-select": {
+      const prompt = m.prompt ?? "Find useful examples…";
+      const ctxLabel = m.exampleContextLabel ?? "Context";
+      const itemTs = outTs.endsWith("[]") ? outTs.slice(0, -2) : outTs;
+      return [
+        `// Per-item relevance filter — ${outName ?? outTs} with selection_reason`,
+        `const description = JSON.stringify(state["${ctxLabel.replace(/"/g, '\\"')}"], null, 2);`,
+        "const items = Array.isArray(input) ? input : [input];",
+        `const template = ${JSON.stringify(prompt)};`,
+        `const relevanceSchema = { chain_of_thought: "string", is_relevant: "boolean" };`,
+        `const verdicts = await llmBatchStructured(items, (item) => template.replace("{description}", description).replace("{example}", JSON.stringify(item)), relevanceSchema);`,
+        `return items.filter((_, i) => verdicts[i]?.is_relevant).map((item, i) => ({ ...item, selection_reason: verdicts[i]?.chain_of_thought })) as ${outTs};`,
+      ].join("\n");
+    }
     case "quote":
       return [
         "// Match LLM quote strings against source document byte offsets (no LLM cost)",

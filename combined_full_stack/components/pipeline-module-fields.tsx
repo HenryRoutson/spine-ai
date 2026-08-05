@@ -1,27 +1,25 @@
 "use client"
 
 // AI : TODO (spec) — outputDescription + checkOutputDescription: cheap LLM rejects step output that mismatches declared shape.
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { AUTO_STRUCTURE_PARSE_EXPLAINER, isAutoStructureParseStep } from "@/lib/structure-parse-steps"
+import { isExampleSelectKind } from "@/lib/example-select"
 import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds"
 import { formatModuleSpineIn, formatModuleSpineOut } from "@/lib/spine-type"
 import { isMergeModuleKind } from "@/lib/list-ops-steps"
-import { MODULE_META } from "@/lib/types"
-import type {
-  PipelineModule,
-  StructureModel,
-  TypeAlias,
-} from "@/lib/types"
+import { MODULE_META, ModuleKind, type PipelineModule, type StructureModel, type TypeAlias } from "@/lib/types"
 import {
+  InvalidKind,
+  IoMismatchFixKind,
+  PipelineWarningKind,
   invalidStepMessage,
   warningStepMessages,
   type InvalidStep,
-  type IoMismatchFixKind,
   type IoMismatchInspectorFix,
   type PipelineWarning,
 } from "@/lib/validity"
@@ -43,6 +41,7 @@ import { InputModuleFields } from "@/components/pipeline-fields/input-fields"
 import { LlmModuleFields } from "@/components/pipeline-fields/llm-fields"
 import { CodeModuleFields } from "@/components/pipeline-fields/code-fields"
 import { ListOpsModuleFields } from "@/components/pipeline-fields/list-ops-fields"
+import { ExampleSelectModuleFields } from "@/components/pipeline-fields/example-select-fields"
 import { InspectorCollapsibleSection } from "@/components/inspector-collapsible-section"
 
 export { useLlmSchemaPreview } from "@/components/pipeline-fields/shared"
@@ -77,10 +76,15 @@ export function PipelineModuleFields({
   onUpdate,
   onFixIoMismatch,
 }: PipelineModuleFieldsProps) {
+  const priorLabels = useMemo(() => {
+    const idx = modules.findIndex((m) => m.id === selected.id)
+    if (idx <= 0) return []
+    return modules.slice(0, idx).map((m) => m.label.trim()).filter(Boolean)
+  }, [modules, selected.id])
   const llmSchemaPreview = useLlmSchemaPreview(selected, models, typeAliases)
   const edit = mode === "edit" && onUpdate
   const requireInputDescriptions = useBrowserPrefEvent(LOGGING_SETTINGS_CHANGED_EVENT, readRequireInputDescriptions)
-  const hasNoPromptWarning = warnings?.some((w) => w.kind === "no-prompt")
+  const hasNoPromptWarning = warnings?.some((w) => w.kind === PipelineWarningKind.NoPrompt)
 
   if (isAutoQuoteStep(selected)) {
     return (
@@ -242,12 +246,12 @@ export function PipelineModuleFields({
         </PipelineField>
       ) : null}
 
-      {(selected.kind === "input" || selected.kind === "combine" || isLlmKind(selected.kind)) && (
+      {(selected.kind === ModuleKind.Input || selected.kind === ModuleKind.Combine || isLlmKind(selected.kind)) && (
         <PipelineField
           label="Annotation / purpose"
           hint={edit ? "required — describe what this step does or handles" : undefined}
           hintTone={
-            edit && (invalidIssues ?? (invalid ? [invalid] : [])).some((issue) => issue.kind === "missing-note")
+            edit && (invalidIssues ?? (invalid ? [invalid] : [])).some((issue) => issue.kind === InvalidKind.MissingNote)
               ? "error"
               : undefined
           }
@@ -269,7 +273,7 @@ export function PipelineModuleFields({
         </PipelineField>
       )}
 
-      {selected.kind === "input" && (
+      {selected.kind === ModuleKind.Input && (
         <InputModuleFields
           selected={selected}
           models={models}
@@ -283,28 +287,28 @@ export function PipelineModuleFields({
         />
       )}
 
-      {selected.kind !== "input" && (
+      {selected.kind !== ModuleKind.Input && (
         <PipelineField
           label={usesPassthroughStructure(selected.kind) ? "Structure to materialize" : "Input model"}
           hint={
-            selected.kind === "output" && invalid?.kind === "no-output"
+            selected.kind === ModuleKind.Output && invalid?.kind === InvalidKind.NoOutput
               ? "required — pick the structure this step snapshots"
-              : selected.kind === "assert" && invalid?.kind === "no-output"
+              : selected.kind === ModuleKind.Assert && invalid?.kind === InvalidKind.NoOutput
                 ? "required — passthrough structure (matches upstream)"
-                : selected.kind === "human-review" && invalid?.kind === "no-output"
+                : selected.kind === ModuleKind.HumanReview && invalid?.kind === InvalidKind.NoOutput
                   ? "required — data shape shown for review (matches upstream)"
-                  : selected.kind === "human-review"
+                  : selected.kind === ModuleKind.HumanReview
                     ? "pipeline pauses in Inference — approve to continue or reject to stop"
                     : undefined
           }
-          hintTone={usesPassthroughStructure(selected.kind) ? (invalid?.kind === "no-output" ? "error" : "warning") : "warning"}
+          hintTone={usesPassthroughStructure(selected.kind) ? (invalid?.kind === InvalidKind.NoOutput ? "error" : "warning") : "warning"}
         >
           {edit ? (
             <StructureModelSelect
               models={models}
               value={selected.inStructureId}
               onValueChange={(v) => onUpdate!({ inStructureId: v })}
-              invalid={usesPassthroughStructure(selected.kind) && invalid?.kind === "no-output"}
+              invalid={usesPassthroughStructure(selected.kind) && invalid?.kind === InvalidKind.NoOutput}
             />
           ) : (
             <StaticValue mono>
@@ -314,8 +318,8 @@ export function PipelineModuleFields({
           <IoMismatchFieldFix
             fix={
               ioMismatchFix &&
-              (ioMismatchFix.kind === "adopt-upstream" ||
-                (selected.kind === "output" && ioMismatchFix.kind === "align-upstream"))
+              (ioMismatchFix.kind === IoMismatchFixKind.AdoptUpstream ||
+                (selected.kind === ModuleKind.Output && ioMismatchFix.kind === IoMismatchFixKind.AlignUpstream))
                 ? ioMismatchFix
                 : undefined
             }
@@ -325,18 +329,18 @@ export function PipelineModuleFields({
         </PipelineField>
       )}
 
-      {selected.kind !== "input" && selected.kind !== "output" && selected.kind !== "human-review" && (
+      {selected.kind !== ModuleKind.Input && selected.kind !== ModuleKind.Output && selected.kind !== ModuleKind.HumanReview && (
         <PipelineField
           label="Output model"
-          hint={invalid?.kind === "no-output" ? "required — step must emit a structure" : undefined}
-          hintTone={invalid?.kind === "no-output" ? "error" : "warning"}
+          hint={invalid?.kind === InvalidKind.NoOutput ? "required — step must emit a structure" : undefined}
+          hintTone={invalid?.kind === InvalidKind.NoOutput ? "error" : "warning"}
         >
           {edit ? (
             <StructureModelSelect
               models={models}
               value={selected.outStructureId}
               onValueChange={(v) => onUpdate!({ outStructureId: v })}
-              invalid={invalid?.kind === "no-output"}
+              invalid={invalid?.kind === InvalidKind.NoOutput}
             />
           ) : (
             <StaticValue mono>
@@ -344,14 +348,14 @@ export function PipelineModuleFields({
             </StaticValue>
           )}
           <IoMismatchFieldFix
-            fix={ioMismatchFix?.kind === "align-upstream" ? ioMismatchFix : undefined}
+            fix={ioMismatchFix?.kind === IoMismatchFixKind.AlignUpstream ? ioMismatchFix : undefined}
             edit={!!edit}
             onFix={onFixIoMismatch}
           />
         </PipelineField>
       )}
 
-      {selected.kind !== "input" && (
+      {selected.kind !== ModuleKind.Input && (
         <PipelineField label="Spine types">
           <StaticValue mono>
             {formatModuleSpineIn(selected, models)} → {formatModuleSpineOut(selected, models)}
@@ -359,7 +363,7 @@ export function PipelineModuleFields({
         </PipelineField>
       )}
 
-      {isLlmKind(selected.kind) && (
+      {isLlmKind(selected.kind) && !isExampleSelectKind(selected.kind) && (
         <LlmModuleFields
           selected={selected}
           models={models}
@@ -371,7 +375,17 @@ export function PipelineModuleFields({
         />
       )}
 
-      {(selected.kind === "custom-code" || selected.kind === "assert") && (
+      {isExampleSelectKind(selected.kind) && (
+        <ExampleSelectModuleFields
+          selected={selected}
+          priorLabels={priorLabels}
+          edit={!!edit}
+          globalModel={globalModel}
+          onUpdate={onUpdate}
+        />
+      )}
+
+      {(selected.kind === ModuleKind.CustomCode || selected.kind === ModuleKind.Assert) && (
         <CodeModuleFields
           selected={selected}
           edit={!!edit}
@@ -379,7 +393,7 @@ export function PipelineModuleFields({
         />
       )}
 
-      {(selected.kind === "chunk" || selected.kind === "merge" || isMergeModuleKind(selected.kind)) && (
+      {(selected.kind === ModuleKind.Chunk || selected.kind === ModuleKind.Merge || isMergeModuleKind(selected.kind)) && (
         <ListOpsModuleFields
           selected={selected}
           models={models}

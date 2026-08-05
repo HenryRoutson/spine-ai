@@ -7,6 +7,7 @@ import {
   Loader2,
   ScrollText,
   Sparkles,
+  TriangleAlert,
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -15,6 +16,7 @@ import { Badge } from "@/components/ui/badge"
 import { formatCostCents } from "@/lib/format"
 import { useDiagnosisAgents } from "@/lib/diagnosis-agent-context"
 import { useAppShell } from "@/lib/app-shell"
+import { diagnosisRunLinkId } from "@/lib/diagnosis-link"
 import { cn } from "@/lib/utils"
 import type { DiagnosisAgentSession } from "@/lib/diagnosis-types"
 
@@ -153,6 +155,24 @@ export function DiagnosisAgentHub() {
                         auto-started
                       </Badge>
                     )}
+                    <span
+                      className="font-mono text-[9px] text-muted-foreground"
+                      title="Shared link id for validation errors in Logging"
+                    >
+                      {diagnosisRunLinkId(active.runId)}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 gap-1 font-mono text-[10px]"
+                      onClick={() =>
+                        openLogging({ runId: active.runId, anchor: "validation-errors" })
+                      }
+                    >
+                      <TriangleAlert className="h-3 w-3" />
+                      view errors
+                    </Button>
                     <Button
                       type="button"
                       size="sm"

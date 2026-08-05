@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { Check, ChevronDown, LayoutGrid, Loader2, Pencil, Plus, Settings2 } from "lucide-react"
+import { Check, ChevronDown, LayoutGrid, Loader2, Pencil, Plus } from "lucide-react"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import { Button } from "@/components/ui/button"
@@ -21,7 +21,6 @@ import {
   readQuickProjectDelete,
 } from "@/lib/project-delete-settings"
 import { useBrowserPrefEvent } from "@/lib/use-browser-pref-event"
-import { useAppShell } from "@/lib/app-shell"
 import { warmProjectPrefetches } from "@/lib/project-state-cache"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
 import { useStore } from "@/lib/store"
@@ -82,7 +81,6 @@ function ProjectRenameInput({
 export function ProjectSelector({ embed = false }: { embed?: boolean }) {
   const { projects, project, setActiveProjectId, prefetchProject, addProject, renameProject, deleteProject } =
     useStore()
-  const { setActiveWindow } = useAppShell()
   const [editing, setEditing] = useState<{ id: string; initialName: string } | null>(null)
   const [addingProject, setAddingProject] = useState(false)
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
@@ -109,10 +107,6 @@ export function ProjectSelector({ embed = false }: { embed?: boolean }) {
 
   function handleAllProjects() {
     navigateToProjectPicker()
-  }
-
-  function handleProjectSettings() {
-    setActiveWindow("project-settings")
   }
 
   function warmAllProjects() {
@@ -215,15 +209,6 @@ export function ProjectSelector({ embed = false }: { embed?: boolean }) {
             ),
           )}
         </DropdownMenuGroup>
-        {!embed ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleProjectSettings} className="gap-2 text-xs">
-              <Settings2 className="h-3.5 w-3.5" />
-              Project settings…
-            </DropdownMenuItem>
-          </>
-        ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
       {!embed ? (

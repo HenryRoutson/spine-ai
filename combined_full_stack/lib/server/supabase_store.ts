@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
 // AI : TODO refactor (prod) — add original doc bytes via Supabase Storage (see store.ts saveOriginalDocBytes).
 // AI : TODO bug (prod) — user-uploaded PDF/image bytes lost on redeploy; GET /api/docs/[id]/file 404s.
 // AI : adopted from backend_with_users/ — implements the same Store contract, so
@@ -90,9 +91,11 @@ export class SupabaseStore implements Store {
     runProjects: {} as Record<string, ProjectId>,
   };
   private cacheIndex = createParserVisionCacheIndex();
-  private pendingRest: PromiseLike<{ error: unknown }>[] = [];
-  // AI : last upsert wins per project id — lets flush drop rows deleted by a concurrent request.
-  private pendingProjectUpserts = new Map<ProjectId, PromiseLike<{ error: unknown }>>();
+  // AI : defer db calls to flush() so rebindDb always supplies a fresh JWT (same as project upserts).
+  private pendingRest: Array<() => PromiseLike<{ error: unknown }>> = [];
+  // AI : row payloads only — upserts run in flush() with this request's db (not at saveProject time).
+  private pendingProjectUpserts = new Map<ProjectId, Record<string, unknown>>();
+  private flushTail: Promise<void> = Promise.resolve();
   private projectIdsAtInit = new Set<ProjectId>();
   private createdProjectIds = new Set<ProjectId>();
   private hasFingerprintColumn = false;
@@ -104,6 +107,15 @@ export class SupabaseStore implements Store {
     private db: SupabaseClient,
     private scopedUserId: user_id_string,
   ) {}
+
+  // AI : cached stores keep memory warm across requests — rebind so RLS uses this request's JWT.
+  rebindDb(db: SupabaseClient): void {
+    this.db = db;
+  }
+
+  private queueRest(op: () => PromiseLike<{ error: unknown }>): void {
+    this.pendingRest.push(op);
+  }
 
   private withUserId<T extends Record<string, unknown>>(row: T): T {
     return { ...row, user_id: this.scopedUserId };
@@ -119,21 +131,26 @@ export class SupabaseStore implements Store {
     return rest;
   }
 
-  // AI : Supabase DELETE with RLS deny returns 204 + 0 rows — treat that as failure.
+  // AI : drop a never-persisted / already-gone row from memory — DELETE matching 0 is success.
+  private dropLocalProject(id: ProjectId): void {
+    this.state.projects = this.state.projects.filter((p) => p.id !== id);
+    this.pendingProjectUpserts.delete(id);
+    this.projectIdsAtInit.delete(id);
+    this.createdProjectIds.delete(id);
+  }
+
+  // AI : 0-row DELETE is ok (ghost after failed create, or concurrent delete); RLS deny looks the same only with a stale JWT — rebindDb prevents that.
   private queueProjectDelete(id: ProjectId, ownerId: user_id_string): void {
-    this.pendingRest.push(
-      (async () => {
-        const { data, error } = await this.db
-          .from("projects")
-          .delete()
-          .eq("user_id", ownerId)
-          .eq("id", id)
-          .select("id");
-        if (error) return { error };
-        if (!data?.length) return { error: new Error(`DELETE projects/${id} matched 0 rows`) };
-        return { error: null };
-      })(),
-    );
+    this.queueRest(async () => {
+      const { error } = await this.db
+        .from("projects")
+        .delete()
+        .eq("user_id", ownerId)
+        .eq("id", id)
+        .select("id");
+      if (error) return { error };
+      return { error: null };
+    });
   }
 
   async init(): Promise<void> {
@@ -264,9 +281,7 @@ export class SupabaseStore implements Store {
       this.state.runs.push(run);
       this.state.runProjects[run.id] = row.project_id as ProjectId;
       if (this.hasFingerprintColumn && fingerprint && !row.fingerprint) {
-        this.pendingRest.push(
-          this.db.from("runs").update({ fingerprint }).eq("id", run.id),
-        );
+        this.queueRest(() => this.db.from("runs").update({ fingerprint }).eq("id", run.id));
       }
     }
 
@@ -341,23 +356,29 @@ export class SupabaseStore implements Store {
       this.state.projects.push(toPersist);
       this.createdProjectIds.add(toPersist.id);
     } else this.state.projects[i] = toPersist;
-    const ownerId = this.projectPersistUserId(toPersist);
-    const projectRow: Record<string, unknown> = {
-      id: toPersist.id,
-      user_id: ownerId,
-      data: this.projectDataForStorage(toPersist),
-    };
-    if (this.hasProjectTeamIdColumn) projectRow.team_id = toPersist.teamId ?? null;
-    this.pendingProjectUpserts.set(
-      toPersist.id,
-      this.db.from("projects").upsert(projectRow, { onConflict: "user_id,id" }),
-    );
+    // AI : new creates always persist under the signed-in user — clones must not inherit teamProjectOwnerId.
+    const ownerId =
+      this.createdProjectIds.has(toPersist.id) && !this.projectIdsAtInit.has(toPersist.id)
+        ? this.scopedUserId
+        : this.projectPersistUserId(toPersist);
+    // AI : read-only team viewers may sync in memory — never upsert the owner's row under their JWT.
+    const skipPersist = ownerId !== this.scopedUserId && toPersist.teamReadOnly === true;
+    if (!skipPersist) {
+      const projectRow: Record<string, unknown> = {
+        id: toPersist.id,
+        user_id: ownerId,
+        data: this.projectDataForStorage(toPersist),
+      };
+      if (this.hasProjectTeamIdColumn) projectRow.team_id = toPersist.teamId ?? null;
+      this.pendingProjectUpserts.set(toPersist.id, projectRow);
+    }
   }
 
   deleteProject(id: ProjectId): boolean {
     const i = this.state.projects.findIndex((p) => p.id === id);
     if (i === -1) return false;
     const ownerId = this.projectPersistUserId(this.state.projects[i]!);
+    const wasOnlyLocal = this.createdProjectIds.has(id) && !this.projectIdsAtInit.has(id);
     this.state.projects.splice(i, 1);
     this.pendingProjectUpserts.delete(id);
     this.projectIdsAtInit.delete(id);
@@ -369,9 +390,10 @@ export class SupabaseStore implements Store {
     );
     this.state.runs = this.state.runs.filter((r) => !runIds.has(r.id));
     for (const rid of runIds) delete this.state.runProjects[rid];
-    this.queueProjectDelete(id, ownerId);
+    // AI : never-persisted create (failed flush) — nothing to delete in Supabase.
+    if (!wasOnlyLocal) this.queueProjectDelete(id, ownerId);
     if (runIds.size) {
-      this.pendingRest.push(
+      this.queueRest(() =>
         this.db.from("runs").delete().eq("user_id", this.scopedUserId).eq("project_id", id),
       );
     }
@@ -398,7 +420,7 @@ export class SupabaseStore implements Store {
     const payload: ParserCacheRow = { ...row, createdAt: row.createdAt ?? Date.now() };
     indexParserRow(this.cacheIndex, payload);
     if (!this.hasParserCacheTable) return;
-    this.pendingRest.push(
+    this.queueRest(() =>
       this.db.from("doc_parser_cache").upsert(
         {
           cache_key: row.key,
@@ -421,7 +443,7 @@ export class SupabaseStore implements Store {
     const payload: VisionCacheRow = { ...row, createdAt: row.createdAt ?? Date.now() };
     indexVisionRow(this.cacheIndex, payload);
     if (!this.hasVisionCacheTable) return;
-    this.pendingRest.push(
+    this.queueRest(() =>
       this.db.from("doc_vision_cache").upsert(
         {
           cache_key: row.key,
@@ -449,7 +471,7 @@ export class SupabaseStore implements Store {
     this.state.docs[i] = doc;
     const content = this.state.contents.get(id);
     if (content !== undefined) {
-      this.pendingRest.push(
+      this.queueRest(() =>
         this.db.from("docs").upsert(
           this.withUserId({
             id,
@@ -485,7 +507,7 @@ export class SupabaseStore implements Store {
       };
       this.state.docs = [doc, ...this.state.docs.filter((_, j) => j !== i)];
       this.state.contents.set(id, content);
-      this.pendingRest.push(
+      this.queueRest(() =>
         this.db.from("docs").upsert(
           this.withUserId({
             id,
@@ -513,7 +535,7 @@ export class SupabaseStore implements Store {
     };
     this.state.docs = [doc, ...this.state.docs];
     this.state.contents.set(id, content);
-    this.pendingRest.push(
+    this.queueRest(() =>
       this.db.from("docs").upsert(
         this.withUserId({
           id,
@@ -537,12 +559,12 @@ export class SupabaseStore implements Store {
     this.state.docs.splice(i, 1);
     this.state.contents.delete(id);
     purgeParserVisionCacheForDoc(this.cacheIndex, id);
-    this.pendingRest.push(this.db.from("docs").delete().eq("id", id));
+    this.queueRest(() => this.db.from("docs").delete().eq("id", id));
     if (this.hasParserCacheTable) {
-      this.pendingRest.push(this.db.from("doc_parser_cache").delete().eq("doc_id", id));
+      this.queueRest(() => this.db.from("doc_parser_cache").delete().eq("doc_id", id));
     }
     if (this.hasVisionCacheTable) {
-      this.pendingRest.push(this.db.from("doc_vision_cache").delete().eq("doc_id", id));
+      this.queueRest(() => this.db.from("doc_vision_cache").delete().eq("doc_id", id));
     }
     return true;
   }
@@ -560,7 +582,7 @@ export class SupabaseStore implements Store {
     // AI : TODO — persist shared-project runs under teamProjectOwnerId so owners see member runs.
     this.state.runProjects[run.id] = projectId;
     this.state.runs = [run, ...this.state.runs];
-    this.pendingRest.push(
+    this.queueRest(() =>
       this.db.from("runs").upsert(this.withUserId(this.runRow(projectId, run)), { onConflict: "user_id,id" }),
     );
   }
@@ -585,7 +607,7 @@ export class SupabaseStore implements Store {
     const run = { ...this.state.runs[i], ...patch };
     this.state.runs[i] = run;
     const projectId = this.state.runProjects[run.id];
-    this.pendingRest.push(
+    this.queueRest(() =>
       this.db.from("runs").upsert(this.withUserId(this.runRow(projectId, run)), { onConflict: "user_id,id" }),
     );
     return true;
@@ -608,16 +630,60 @@ export class SupabaseStore implements Store {
 
   // AI : await all queued writes; routes call this once before (or right after) responding.
   async flush(): Promise<void> {
+    const run = this.flushTail.then(() => this.flushNow());
+    this.flushTail = run.catch(() => undefined);
+    await run;
+  }
+
+  // AI : warm store may flush long after route auth — revalidate JWT so RLS upserts see auth.uid().
+  private async ensureFreshWriteAuth(): Promise<void> {
+    const { data, error } = await this.db.auth.getUser();
+    if (error || !data.user) throw new Error(AUTH_SIGN_IN_REQUIRED);
+  }
+
+  private async flushNow(): Promise<void> {
+    await this.ensureFreshWriteAuth();
     const onlyNewProjects =
       this.pendingProjectUpserts.size > 0 &&
       [...this.pendingProjectUpserts.keys()].every((id) => this.createdProjectIds.has(id));
     if (!onlyNewProjects) await this.dropConcurrentlyDeletedProjects();
-    const projectUpserts = [...this.pendingProjectUpserts.values()];
+    const flushingCreatedIds = [...this.pendingProjectUpserts.keys()].filter((id) =>
+      this.createdProjectIds.has(id),
+    );
+    const pendingProjectRows = [...this.pendingProjectUpserts.values()];
     this.pendingProjectUpserts.clear();
-    const results = await Promise.all([...projectUpserts, ...this.pendingRest]);
+    const projectUpserts = pendingProjectRows.map((row) =>
+      this.db.from("projects").upsert(row, { onConflict: "user_id,id" }),
+    );
+    const pendingRestOps = this.pendingRest;
     this.pendingRest = [];
+    const results = await Promise.all([
+      ...projectUpserts,
+      ...pendingRestOps.map((op) => op()),
+    ]);
     const failed = results.find((r) => r.error);
-    if (failed) throw failed.error;
+    if (failed) {
+      // AI : drop only creates that never landed — keep ones that upserted before a later pendingRest error.
+      for (const id of flushingCreatedIds) {
+        const { data } = await this.db
+          .from("projects")
+          .select("id")
+          .eq("user_id", this.scopedUserId)
+          .eq("id", id)
+          .maybeSingle();
+        if (data) {
+          this.createdProjectIds.delete(id);
+          this.projectIdsAtInit.add(id);
+        } else {
+          this.dropLocalProject(id);
+        }
+      }
+      throw failed.error;
+    }
+    for (const id of flushingCreatedIds) {
+      this.createdProjectIds.delete(id);
+      this.projectIdsAtInit.add(id);
+    }
   }
 }
 

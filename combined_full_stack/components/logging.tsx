@@ -25,6 +25,7 @@ import { ResizableSplit } from "@/components/resizable-split"
 import { loggingPipelineCanvasSplit, loggingSidebarSplit } from "@/lib/layout-split-settings"
 import { usePersistedLeadingWidth } from "@/lib/use-persisted-leading-width"
 import { cn } from "@/lib/utils"
+import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { useAppShell } from "@/lib/app-shell"
 import { API_ROUTES } from "@/lib/api-routes"
 import { stepDocId, stepDocLinkLabels, stepSourceDocId, isDocReferenceOutputJson } from "@/lib/step-doc"
@@ -52,6 +53,8 @@ import { filterRuns, isTestingRun, RunNotesPreview } from "@/components/logging/
 import { filterRunsByErrorStatus, runHasErrors } from "@/lib/run-error-log"
 import { IsolatedErrorActions } from "@/components/logging/isolated-error-actions"
 import { useDiagnosisAgents } from "@/lib/diagnosis-agent-context"
+import { DiagnosisRunLink } from "@/components/diagnosis-agents/diagnosis-run-link"
+import { diagnosisRunLinkId, scrollToDiagnosisRunLink } from "@/lib/diagnosis-link"
 import { TestResults } from "@/components/test-results"
 import { CompareModal } from "@/components/logging/compare-modal"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
@@ -60,7 +63,7 @@ import { LlmRetryGridSection } from "@/components/logging/llm-retry-grid"
 export function Logging() {
   const palette = useStatusPalette()
   const { runs, billingRuns, docs, modules, models, project, typeAliases, model: globalModel, hydrateRunDetail } = useStore()
-  const { focusRunId, clearFocusRun, setSharedRunDocScope } = useAppShell()
+  const { focusRunId, focusRunAnchor, clearFocusRun, setSharedRunDocScope } = useAppShell()
   const [query, setQuery] = useState("")
   const [selectedRun, setSelectedRun] = useState<string | null>(null)
   const [popup, setPopup] = useState<PopupPayload | null>(null)
@@ -69,6 +72,7 @@ export function Logging() {
   const [errorsOnly, setErrorsOnly] = useState(false)
   const [logCopied, setLogCopied] = useState(false)
   const [jsonCopied, setJsonCopied] = useState(false)
+  const [pendingScrollAnchor, setPendingScrollAnchor] = useState<"validation-errors" | null>(null)
   const { width: sidebarWidth, setWidth: setSidebarWidth, commitWidth: commitSidebarWidth } =
     usePersistedLeadingWidth(loggingSidebarSplit)
   const {
@@ -81,8 +85,18 @@ export function Logging() {
     if (!focusRunId) return
     setSelectedRun(focusRunId)
     setSelectedPipelineModuleId(undefined)
+    if (focusRunAnchor) setPendingScrollAnchor(focusRunAnchor)
     clearFocusRun()
-  }, [focusRunId, clearFocusRun])
+  }, [focusRunId, focusRunAnchor, clearFocusRun])
+
+  useEffect(() => {
+    if (!selectedRun || pendingScrollAnchor !== "validation-errors") return
+    const runId = selectedRun
+    const timer = window.setTimeout(() => {
+      if (scrollToDiagnosisRunLink(runId)) setPendingScrollAnchor(null)
+    }, 150)
+    return () => window.clearTimeout(timer)
+  }, [selectedRun, pendingScrollAnchor])
 
   useEffect(() => {
     if (!selectedRun) return
@@ -323,7 +337,7 @@ export function Logging() {
                       onClick={async () => {
                         await copyTextToClipboard(await runLogJson(active, docs))
                         setJsonCopied(true)
-                        setTimeout(() => setJsonCopied(false), 2000)
+                        setTimeout(() => setJsonCopied(false), COPY_FEEDBACK_MS)
                       }}
                     >
                       {jsonCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
@@ -337,7 +351,7 @@ export function Logging() {
                       onClick={() => {
                         void copyTextToClipboard(runLogText(active))
                         setLogCopied(true)
-                        setTimeout(() => setLogCopied(false), 2000)
+                        setTimeout(() => setLogCopied(false), COPY_FEEDBACK_MS)
                       }}
                     >
                       {logCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
@@ -537,6 +551,8 @@ export function Logging() {
                             <IoSection
                               title="Validation errors"
                               qualifier="error"
+                              anchorId={diagnosisRunLinkId(active.id)}
+                              headerExtra={<DiagnosisRunLink runId={active.id} />}
                               summary={compactPreview(step.outputPreview, PREVIEW_STEP_IO_CHARS)}
                               onExpand={() =>
                                 setPopup({

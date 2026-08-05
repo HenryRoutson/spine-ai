@@ -1,10 +1,10 @@
 // AI : IO-mismatch inspector — one-click fix hints and connector highlight logic for the pipeline canvas.
-import type { ModuleId, PipelineModule, StructureModel } from "./types";
+import { ModuleKind, type ModuleId, type PipelineModule, type StructureModel } from "./types";
 import {
+  InvalidKind,
+  IoMismatchFixKind,
   type InvalidStep,
   type InvalidMap,
-  type InvalidKind,
-  type IoMismatchFixKind,
   type IoMismatchFixHint,
   type IoMismatchInspectorFix,
   invalidForModule,
@@ -14,11 +14,11 @@ import {
 import { invalidStepMessage } from "./validity-messages";
 import { inputFeedsCombine, isCombineSideParseStep } from "./validity-sync";
 
-export type { IoMismatchFixKind, IoMismatchFixHint, IoMismatchInspectorFix };
-export { prevModuleId };
+export type { IoMismatchFixHint, IoMismatchInspectorFix };
+export { IoMismatchFixKind, prevModuleId };
 
 function isSpineMismatchKind(kind: InvalidKind): boolean {
-  return kind === "io-mismatch" || kind === "cardinality-mismatch";
+  return kind === InvalidKind.IoMismatch || kind === InvalidKind.CardinalityMismatch;
 }
 
 // AI : when step input expects X but upstream emits Y — two one-click alignments.
@@ -26,13 +26,13 @@ export function ioMismatchFixHints(
   issue: InvalidStep,
   models: StructureModel[],
 ): IoMismatchFixHint[] | undefined {
-  if (issue.kind !== "io-mismatch" || !issue.expects || !issue.upstreamEmits) return undefined;
+  if (issue.kind !== InvalidKind.IoMismatch || !issue.expects || !issue.upstreamEmits) return undefined;
   const expected = modelName(models, issue.expects);
   const upstream = modelName(models, issue.upstreamEmits);
   if (!expected || !upstream || expected === upstream) return undefined;
   return [
-    { kind: "adopt-upstream", label: `${expected} → ${upstream}` },
-    { kind: "align-upstream", label: `${upstream} → ${expected}` },
+    { kind: IoMismatchFixKind.AdoptUpstream, label: `${expected} → ${upstream}` },
+    { kind: IoMismatchFixKind.AlignUpstream, label: `${upstream} → ${expected}` },
   ];
 }
 
@@ -44,8 +44,8 @@ export function ioMismatchAtModuleIndex(
 ): boolean {
   if (!invalid || moduleIndex < 0 || moduleIndex >= modules.length) return false;
   const m = modules[moduleIndex]!;
-  if (m.kind === "input" && inputFeedsCombine(modules, moduleIndex)) {
-    const combineAt = modules[moduleIndex + 1]?.kind === "combine" ? moduleIndex + 1 : moduleIndex + 2;
+  if (m.kind === ModuleKind.Input && inputFeedsCombine(modules, moduleIndex)) {
+    const combineAt = modules[moduleIndex + 1]?.kind === ModuleKind.Combine ? moduleIndex + 1 : moduleIndex + 2;
     const issue = invalidForModule(invalid, modules[combineAt]!.id);
     return !!issue && isSpineMismatchKind(issue.kind);
   }
@@ -65,10 +65,10 @@ export function ioMismatchUpstreamOf(
       if (prevModuleId(modules, downId) === moduleId) return true;
       const downIdx = modules.findIndex((m) => m.id === downId);
       const down = modules[downIdx];
-      if (down?.kind === "combine") {
+      if (down?.kind === ModuleKind.Combine) {
         // AI : hop over the side group [input, autoParseLlm?] to the combine's spine upstream.
         const inputIdx = isCombineSideParseStep(modules, downIdx - 1) ? downIdx - 2 : downIdx - 1;
-        if (modules[inputIdx]?.kind === "input" && modules[inputIdx - 1]?.id === moduleId) return true;
+        if (modules[inputIdx]?.kind === ModuleKind.Input && modules[inputIdx - 1]?.id === moduleId) return true;
       }
     }
   }
@@ -95,10 +95,10 @@ export function ioMismatchInspectorFix(
 ): IoMismatchInspectorFix | undefined {
   const own = invalidForModule(invalid, moduleId);
   if (own && isSpineMismatchKind(own.kind)) {
-    const adopt = ioMismatchFixHints(own, models)?.find((h) => h.kind === "adopt-upstream");
+    const adopt = ioMismatchFixHints(own, models)?.find((h) => h.kind === IoMismatchFixKind.AdoptUpstream);
     return {
       mismatchModuleId: moduleId,
-      kind: "adopt-upstream",
+      kind: IoMismatchFixKind.AdoptUpstream,
       label: adopt?.label ?? "",
       message: invalidStepMessage(own, models, modules),
     };
@@ -107,10 +107,10 @@ export function ioMismatchInspectorFix(
   for (const [downId, issues] of invalid) {
     for (const issue of issues) {
       if (!isSpineMismatchKind(issue.kind) || prevModuleId(modules, downId) !== moduleId) continue;
-      const align = ioMismatchFixHints(issue, models)?.find((h) => h.kind === "align-upstream");
+      const align = ioMismatchFixHints(issue, models)?.find((h) => h.kind === IoMismatchFixKind.AlignUpstream);
       return {
         mismatchModuleId: downId,
-        kind: "align-upstream",
+        kind: IoMismatchFixKind.AlignUpstream,
         label: align?.label ?? "",
         message: invalidStepMessage(issue, models, modules),
       };

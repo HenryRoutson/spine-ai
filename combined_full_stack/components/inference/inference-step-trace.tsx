@@ -28,8 +28,22 @@ import type {
   StepProgress,
   StepSubProgress,
   StructureModel,
+  PipelineModule,
 } from "@/lib/types"
+import { CustomCodeLanguage } from "@/lib/types"
 import { OutputStepLabel, outputStepOutlineClass, StepTraceOutputPreview, stepHasTraceOutput } from "@/components/inference/inference-outputs"
+import { StepCodeExecPreview } from "@/components/step-code-exec-preview"
+import { IoSection } from "@/components/logging/io-section"
+import { DiagnosisRunLink } from "@/components/diagnosis-agents/diagnosis-run-link"
+import { diagnosisRunLinkId } from "@/lib/diagnosis-link"
+import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
+import { isDocReferenceOutputJson } from "@/lib/step-doc"
+import { firstUserCodeEntry } from "@/lib/custom_code"
+import type { CodeExecUiState } from "@/lib/code-exec-ui"
+
+export function stepTraceIndentClass(nested?: boolean): string {
+  return nested ? "pl-5" : "pl-7"
+}
 
 export function stepDescriptionMeta(
   moduleId: ModuleId,
@@ -69,6 +83,9 @@ export function InferenceStepRow({
   showStepIo = false,
   ioCompact = true,
   outputPreview,
+  module,
+  codeExec,
+  runId,
 }: {
   label: string
   state: StepProgress["status"] | "idle"
@@ -89,6 +106,9 @@ export function InferenceStepRow({
   showStepIo?: boolean
   ioCompact?: boolean
   outputPreview?: string
+  module?: PipelineModule
+  codeExec?: CodeExecUiState
+  runId?: string
 }) {
   const palette = useStatusPalette()
   const descCheckFailed = inputDescriptionCheck?.matches === false
@@ -96,10 +116,22 @@ export function InferenceStepRow({
     (state === "running" || state === "ok" || state === "error") &&
     (descriptionCheckLlmCalls?.length ?? 0) > 0
   const stepFinished = state === "ok" || state === "cached" || state === "error"
+  const errorPreview =
+    state === "error" ? (runStep?.outputPreview ?? outputPreview)?.trim() : undefined
+  const showValidationErrors = showStepIo && stepFinished && !!errorPreview
   const showInputDocPreview =
     isInputStep && showStepIo && stepFinished && (runStep != null || assignedInputDocs.length > 0)
   const showOutputPreview =
-    showStepIo && stepFinished && stepHasTraceOutput(runStep, outputPreview, isInputStep)
+    showStepIo &&
+    stepFinished &&
+    ((runStep?.outputJson && !isDocReferenceOutputJson(runStep.outputJson)) ||
+      (!showValidationErrors && stepHasTraceOutput(runStep, outputPreview, isInputStep)))
+  const ioClassName = stepTraceIndentClass(nested)
+  const codeEntry = module ? firstUserCodeEntry(module) : undefined
+  const displayCode = codeExec?.code ?? codeEntry?.code
+  const showCodeExec =
+    !!displayCode &&
+    (state === "running" || codeExec?.status === "done" || codeExec?.status === "error")
 
   const header = (
     <div className="flex items-center gap-2.5">
@@ -135,7 +167,7 @@ export function InferenceStepRow({
         description={inputDescription}
         check={inputDescriptionCheck}
         forceVisible={descCheckFailed}
-        className={nested ? "pl-5" : "pl-7"}
+        className={ioClassName}
       />
       {showDescCheckCalls && (
         <LlmCallDistribution
@@ -167,8 +199,19 @@ export function InferenceStepRow({
       {serverLogs.length > 0 && (
         <StepServerLogsSection
           logs={serverLogs}
-          className={nested ? "pl-5" : "pl-7"}
+          className={ioClassName}
           forceCollapsed={forceCollapsedLogs}
+        />
+      )}
+      {showCodeExec && displayCode && (
+        <StepCodeExecPreview
+          code={displayCode}
+          language={codeExec?.language ?? codeEntry?.language ?? CustomCodeLanguage.TypeScript}
+          activeLine={codeExec?.activeLine}
+          activeSlot={codeExec?.activeSlot}
+          lineMs={codeExec?.lineMs}
+          compact={ioCompact}
+          className={ioClassName}
         />
       )}
       {showInputDocPreview && (
@@ -177,8 +220,20 @@ export function InferenceStepRow({
           assignedDocs={assignedInputDocs}
           docs={docs}
           models={models}
-          className={nested ? "pl-5" : "pl-7"}
+          className={ioClassName}
         />
+      )}
+      {showValidationErrors && errorPreview && (
+        <IoSection
+          title="Validation errors"
+          qualifier="error"
+          className={ioClassName}
+          anchorId={runId ? diagnosisRunLinkId(runId) : undefined}
+          headerExtra={runId ? <DiagnosisRunLink runId={runId} /> : undefined}
+          summary={compactPreview(errorPreview, PREVIEW_STEP_IO_CHARS)}
+        >
+          <p className="whitespace-pre-wrap text-destructive">{errorPreview}</p>
+        </IoSection>
       )}
       {showOutputPreview && (
         <StepTraceOutputPreview
@@ -186,7 +241,7 @@ export function InferenceStepRow({
           outputPreview={outputPreview}
           models={models}
           compact={ioCompact}
-          className={nested ? "pl-5" : "pl-7"}
+          className={ioClassName}
         />
       )}
     </div>

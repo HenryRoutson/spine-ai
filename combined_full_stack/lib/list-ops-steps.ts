@@ -3,6 +3,7 @@ import { isMergeModuleKind } from "@/lib/module-kinds"
 import { makeCustomCodeEntry } from "@/lib/custom_code_entries"
 import { buildMergeTypeScript, DEFAULT_MERGE_POLICY } from "@/lib/merger"
 import { patchSpineOutList } from "@/lib/server/spine_types"
+import { deriveMergeStepTypes } from "@/lib/merge-type-expr"
 import {
   CustomCodeLanguage,
   LegacyModuleKind,
@@ -25,12 +26,17 @@ export const DEFAULT_CHUNK_TEXT_FIELD = "content"
 
 export const MERGE_LIST_STRATEGY_LABELS: Record<MergeListStrategy, string> = {
   [MergeListStrategy.Concat]: "Concatenate lists",
-  [MergeListStrategy.ConcatDedupe]: "Concatenate + dedupe",
+  [MergeListStrategy.ConcatDedupe]: "Concatenate + merge duplicates",
   [MergeListStrategy.ConcatAssertNoDuplicates]: "Concatenate — fail on duplicates",
-  [MergeListStrategy.Union]: "Union (by item key when set)",
-  [MergeListStrategy.Intersect]: "Intersect (by item key when set)",
+  [MergeListStrategy.Union]: "Union by key — deep-merge matches",
+  [MergeListStrategy.UnionAssert]: "Union — fail on key overlap",
+  [MergeListStrategy.Intersect]: "Intersect by key — deep-merge matches",
+  [MergeListStrategy.IntersectAssert]: "Intersect — fail if left not in right",
   [MergeListStrategy.Replace]: "Replace — right wins",
+  [MergeListStrategy.ReplaceAssert]: "Replace — fail if left is non-empty",
   [MergeListStrategy.Prepend]: "Prepend — right then left",
+  [MergeListStrategy.PrependAssert]: "Prepend — fail if right is non-empty",
+  [MergeListStrategy.Zip]: "Zip — deep-merge by index",
 }
 
 export const MERGE_DICT_STRATEGY_LABELS: Record<MergeDictStrategy, string> = {
@@ -64,7 +70,7 @@ export const MERGE_PRESETS: { id: string; label: string; policy: MergePolicy }[]
   },
   {
     id: "union-by-id",
-    label: "Union list records by id",
+    label: "Union list records by id (deep-merge)",
     policy: {
       default: {
         list: MergeListStrategy.Union,
@@ -75,11 +81,37 @@ export const MERGE_PRESETS: { id: string; label: string; policy: MergePolicy }[]
     },
   },
   {
+    id: "zip-lists",
+    label: "Zip lists by index (deep-merge)",
+    policy: {
+      default: {
+        list: MergeListStrategy.Zip,
+        dict: MergeDictStrategy.Deep,
+        scalar: MergeScalarStrategy.Last,
+      },
+    },
+  },
+  {
     id: "dedupe-tags",
     label: "Dedupe tags at path",
     policy: {
       default: DEFAULT_MERGE_POLICY.default,
       rules: [{ path: "tags", policy: { list: MergeListStrategy.ConcatDedupe } }],
+    },
+  },
+  {
+    id: "nested-keyed",
+    label: "Nested: union by id + dedupe *.*.roles",
+    policy: {
+      default: {
+        list: MergeListStrategy.Concat,
+        dict: MergeDictStrategy.Deep,
+        scalar: MergeScalarStrategy.Last,
+      },
+      rules: [
+        { path: "*", policy: { list: MergeListStrategy.Union, itemKey: "id" } },
+        { path: "**.roles", policy: { list: MergeListStrategy.ConcatDedupe } },
+      ],
     },
   },
 ]
@@ -145,18 +177,43 @@ export function listOpsGeneratedCode(m: PipelineModule, models: StructureModel[]
   return "(input) => input"
 }
 
-export function syncListOpsStepModule(m: PipelineModule, models: StructureModel[]): PipelineModule {
-  if (!isListOpsModule(m)) return m
+export function syncListOpsStepModule(
+  m: PipelineModule,
+  models: StructureModel[],
+  prev?: PipelineModule,
+): { module: PipelineModule; models: StructureModel[] } {
+  if (!isListOpsModule(m)) return { module: m, models }
+
   const code = listOpsGeneratedCode(m, models)
   let next: PipelineModule = {
     ...m,
     fallbackList: [makeCustomCodeEntry(CustomCodeLanguage.TypeScript, code)],
   }
-  if (next.outStructureId) {
-    const emitsList = m.kind === ModuleKind.Chunk
-    next = { ...next, ...patchSpineOutList(next, emitsList) }
+
+  if (m.kind === ModuleKind.Chunk && next.outStructureId) {
+    next = { ...next, ...patchSpineOutList(next, true) }
+    return { module: next, models }
   }
-  return next
+
+  if (isMergeModuleKind(m.kind)) {
+    return deriveMergeStepTypes(next, prev, models, resolveMergePolicy(m))
+  }
+
+  return { module: next, models }
+}
+
+export function syncListOpsModules(
+  modules: PipelineModule[],
+  models: StructureModel[],
+): { modules: PipelineModule[]; models: StructureModel[] } {
+  let nextModels = models
+  const nextModules = modules.map((m, i) => {
+    const prev = i > 0 ? modules[i - 1] : undefined
+    const synced = syncListOpsStepModule(m, nextModels, prev)
+    nextModels = synced.models
+    return synced.module
+  })
+  return { modules: nextModules, models: nextModels }
 }
 
 export function defaultLayerPolicy(policy?: MergePolicy): MergeLayerPolicy {

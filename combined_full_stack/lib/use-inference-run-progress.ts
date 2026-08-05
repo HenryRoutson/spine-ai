@@ -25,6 +25,7 @@ import { activeStepLabelFromStepStates, progressPctFromStepStates } from "@/lib/
 import { isRunAbortedError, useCancellableRun } from "@/lib/use-cancellable-run"
 import type { DocId, JobLogEntry, ModuleId, PipelineModule, PipelineRun, ProjectId, RunJobId } from "@/lib/types"
 import type { ClientStepSpec } from "@/lib/run-types"
+import type { CodeExecUiState } from "@/lib/code-exec-ui"
 import { RunJobSource } from "@/lib/run-jobs-types"
 import { RunPhase } from "@/lib/run-phase"
 
@@ -70,6 +71,7 @@ export function useInferenceRunProgress({
   const [run, setRun] = useState<PipelineRun | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [debugLogs, setDebugLogs] = useState<JobLogEntry[]>([])
+  const [codeExecByModule, setCodeExecByModule] = useState<Map<ModuleId, CodeExecUiState>>(new Map())
   const [runNotes, setRunNotes] = useState("")
   const [pendingHumanReview, setPendingHumanReview] = useState<ClientStepSpec | null>(null)
   const [deduped, setDeduped] = useState(false)
@@ -137,6 +139,7 @@ export function useInferenceRunProgress({
     setRun(null)
     setError(null)
     setDebugLogs([])
+    setCodeExecByModule(new Map())
     setRunNotes("")
     setPendingHumanReview(null)
     setDeduped(false)
@@ -194,6 +197,7 @@ export function useInferenceRunProgress({
     setRun(null)
     setStepStates(new Map())
     setDebugLogs([])
+    setCodeExecByModule(new Map())
     try {
       // AI : flush any debounced project save before starting — prevents stale server state causing 400.
       await flushPendingSave?.()
@@ -227,6 +231,11 @@ export function useInferenceRunProgress({
           if (jobGen !== activeJobGenRef.current || activeJobIdRef.current !== jobId) return
           if (!mountedRef.current) return
           setDebugLogs(logs)
+        },
+        onCodeExec: (state) => {
+          if (jobGen !== activeJobGenRef.current || activeJobIdRef.current !== jobId) return
+          if (!mountedRef.current) return
+          setCodeExecByModule((prev) => new Map(prev).set(state.moduleId, state))
         },
         onHumanReview: (spec) => {
           if (jobGen !== activeJobGenRef.current) {
@@ -324,6 +333,7 @@ export function useInferenceRunProgress({
     error,
     debugLogs,
     logsByModule,
+    codeExecByModule,
     runNotes,
     setRunNotes,
     logEndRef,

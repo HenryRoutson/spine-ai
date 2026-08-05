@@ -1,0 +1,37 @@
+{
+  "description": "Roof storm scenario — golden fixtures for deterministic steps; LLM steps use null placeholders.",
+  "inputs": {
+    "Damage Case": "damage_case_roof_storm.txt",
+    "Example Library": "example_library.json"
+  },
+  "expectedOutputs": {
+    "Normalize Case": {
+      "description": "A severe storm damaged roof tiles on the north-facing slope. Rain entered through missing tiles and caused ceiling stains in the master bedroom below. No structural timber damage was observed."
+    },
+    "Parse Examples": [
+      {
+        "id": "ex-bathroom-leak",
+        "title": "Upstairs bathroom leak — ceiling collapse below",
+        "scope_text": "1. Isolate water supply to upstairs bathroom.\n2. Remove collapsed plasterboard ceiling in kitchen (approx. 4m²).\n3. Dry structural timber with dehumidifiers for 5–7 days; monitor moisture readings.\n4. Replace damaged ceiling joists where deflection exceeds 5mm.\n5. Re-sheet ceiling, stop, and paint to match adjacent areas."
+      },
+      {
+        "id": "ex-roof-storm",
+        "title": "Roof storm damage — tile replacement",
+        "scope_text": "1. Erect edge protection to roof perimeter.\n2. Replace broken roof tiles (approx. 12 nr).\n3. Reseal ridge capping and valley flashings.\n4. Internal: patch ceiling stains only where roof leak was active."
+      },
+      {
+        "id": "ex-kitchen-reno",
+        "title": "Kitchen renovation — cabinetry only",
+        "scope_text": "1. Remove existing kitchen cabinetry and benchtops.\n2. Supply and install new flat-pack cabinetry per plan.\n3. Connect plumbing and electrical by licensed trades.\n4. No structural or ceiling works included."
+      },
+      {
+        "id": "ex-cupping-floor",
+        "title": "Timber floor cupping after slow leak",
+        "scope_text": "1. Confirm subfloor moisture below 12% before floor works.\n2. Sand and recoat cupped timber boards in affected zone (approx. 12m²).\n3. Replace boards that remain crowned after drying period.\n4. Coordinate with ceiling repairs above if leak source not yet rectified."
+      }
+    ],
+    "Select Relevant Examples": null,
+    "Draft Scope": null,
+    "Scope Output": null
+  }
+}

@@ -64,7 +64,7 @@ export async function apiText(url: string, init?: RequestInit): Promise<string> 
 export async function apiPut(
   url: string,
   body: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true } | { ok: false; error: string; status?: number }> {
   try {
     const res = await fetch(url, {
       method: "PUT",
@@ -74,7 +74,7 @@ export async function apiPut(
     });
     if (!res.ok) {
       const parsed = await readApiErrorBody(res);
-      return { ok: false, error: parsed?.error ?? `save failed (${res.status})` };
+      return { ok: false, error: parsed?.error ?? `save failed (${res.status})`, status: res.status };
     }
     return { ok: true };
   } catch (err) {

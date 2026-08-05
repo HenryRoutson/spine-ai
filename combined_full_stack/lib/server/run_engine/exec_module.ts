@@ -5,6 +5,7 @@ import type { ExecResult, RunCtx, RunLogger } from "./engine_types";
 import { execInputStep } from "./steps/input";
 import { execLlmStep } from "./steps/llm";
 import { execLlmBatchStep } from "./steps/llm_batch";
+import { execExampleSelectStep } from "./steps/example_select";
 import {
   execAssertStep,
   execCombineStep,
@@ -32,6 +33,8 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
       return execCustomCodeStep(m, ctx, log);
     case ModuleKind.LlmBatch:
       return execLlmBatchStep(m, ctx, log);
+    case ModuleKind.ExampleSelect:
+      return execExampleSelectStep(m, ctx, log);
     case ModuleKind.Quote:
       return execQuoteStep(m, ctx, log);
     case ModuleKind.Output:

@@ -1,0 +1,534 @@
+{
+  "id": "p_example_select",
+  "name": "Example Select Demo",
+  "kind": "example-select-demo",
+  "models": [
+    {
+      "id": "m_scope_desc",
+      "name": "ScopeDescription",
+      "description": "New damage case text — fills {description} in the example-select prompt.",
+      "fields": [
+        {
+          "id": "f_desc",
+          "name": "description",
+          "type": "text",
+          "optional": false,
+          "description": "Plain-language damage description"
+        }
+      ]
+    },
+    {
+      "id": "m_scope_ex",
+      "name": "ScopeExample",
+      "description": "One reference scope-of-works row from the example library.",
+      "fields": [
+        {
+          "id": "f_id",
+          "name": "id",
+          "type": "text",
+          "optional": false,
+          "description": "Stable example id"
+        },
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Short label"
+        },
+        {
+          "id": "f_scope",
+          "name": "scope_text",
+          "type": "text",
+          "optional": false,
+          "description": "Past scope of works body"
+        }
+      ]
+    },
+    {
+      "id": "m_selected",
+      "name": "SelectedExample",
+      "description": "Relevant example after example-select — includes selection_reason chain-of-thought.",
+      "fields": [
+        {
+          "id": "f_id",
+          "name": "id",
+          "type": "text",
+          "optional": false,
+          "description": "Matches library id"
+        },
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Short label"
+        },
+        {
+          "id": "f_scope",
+          "name": "scope_text",
+          "type": "text",
+          "optional": false,
+          "description": "Past scope body"
+        },
+        {
+          "id": "f_reason",
+          "name": "selection_reason",
+          "type": "text",
+          "optional": false,
+          "description": "Why this example is useful for the current case",
+          "deterministic": false
+        }
+      ]
+    },
+    {
+      "id": "m_draft_req",
+      "name": "ScopeDraftRequest",
+      "description": "Merged description + filtered examples for the final LLM.",
+      "fields": [
+        {
+          "id": "f_desc",
+          "name": "description",
+          "type": "text",
+          "optional": false,
+          "description": "Current damage case"
+        },
+        {
+          "id": "f_examples",
+          "name": "selected_examples",
+          "type": "list[model]",
+          "ref": "m_selected",
+          "optional": false,
+          "description": "LLM-filtered reference rows"
+        }
+      ]
+    },
+    {
+      "id": "m_library_file",
+      "name": "ExampleLibraryFile",
+      "description": "Parsed JSON upload — examples array for the library input step.",
+      "fields": [
+        {
+          "id": "f_examples",
+          "name": "examples",
+          "type": "list[model]",
+          "ref": "m_scope_ex",
+          "optional": false,
+          "description": "Reference scope rows"
+        }
+      ]
+    },
+    {
+      "id": "m_select_bundle",
+      "name": "ScopeSelectBundle",
+      "description": "Damage case + example library merged by combine.",
+      "fields": [
+        {
+          "id": "f_case",
+          "name": "case",
+          "type": "model",
+          "ref": "m_scope_desc",
+          "optional": false,
+          "description": "ScopeDescription from Normalize Case (pipeline state)"
+        },
+        {
+          "id": "f_library",
+          "name": "library",
+          "type": "model",
+          "ref": "m_library_file",
+          "optional": false,
+          "description": "Example library from the side input"
+        }
+      ]
+    },
+    {
+      "id": "m_scope_draft",
+      "name": "ScopeDraft",
+      "description": "Draft scope of works for the new case.",
+      "fields": [
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Short job title",
+          "deterministic": false
+        },
+        {
+          "id": "f_scope",
+          "name": "scope_of_works",
+          "type": "text",
+          "optional": false,
+          "description": "Numbered scope lines",
+          "deterministic": false
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_damage_in",
+      "kind": "input",
+      "label": "Damage Case",
+      "inputType": "text",
+      "inputNameContains": "damage_case",
+      "inputDescription": "Plain-text description of the new damage case",
+      "outStructureId": "m_builtin_document",
+      "cached": true,
+      "avgMs": 80,
+      "avgCostCents": 0,
+      "note": "New leak description — feeds {description} via Normalize Case"
+    },
+    {
+      "id": "mod_normalize",
+      "kind": "custom-code",
+      "label": "Normalize Case",
+      "note": "Document → ScopeDescription — deterministic wrapper for the example-select context label.",
+      "inputDescription": "Damage case Document with plain-text content",
+      "inStructureId": "m_builtin_document",
+      "outStructureId": "m_scope_desc",
+      "cached": true,
+      "avgMs": 5,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "(doc) => ({ description: String(doc?.content ?? \"\").trim() })"
+        }
+      ]
+    },
+    {
+      "id": "mod_library_in",
+      "kind": "input",
+      "label": "Example Library",
+      "inputType": "json",
+      "inputNameContains": "example_library",
+      "inputDescription": "JSON file with examples array of past scope-of-works rows",
+      "outStructureId": "m_library_file",
+      "cached": true,
+      "avgMs": 80,
+      "avgCostCents": 0,
+      "note": "Reference example library — side input for combine (must follow Normalize Case on spine)"
+    },
+    {
+      "id": "mod_combine",
+      "kind": "combine",
+      "label": "Combine Inputs",
+      "note": "Merges ScopeDescription (pipeline state) with Example Library side input — required after input → code → input.",
+      "inputDescription": "Example library JSON (new input) plus ScopeDescription from Normalize Case on pipeline state",
+      "inStructureId": "m_scope_desc",
+      "outStructureId": "m_select_bundle",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_parse_examples",
+      "kind": "custom-code",
+      "label": "Parse Examples",
+      "note": "ScopeSelectBundle → list[ScopeExample] — examples from the merged library field.",
+      "inputDescription": "ScopeSelectBundle from combine — case + library",
+      "inStructureId": "m_select_bundle",
+      "outStructureId": "m_scope_ex",
+      "cached": true,
+      "avgMs": 5,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "(bundle) => { const rows = bundle?.library?.examples; if (!Array.isArray(rows)) throw new Error(\"expected examples array\"); return rows; }"
+        }
+      ],
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_scope_ex" }
+      }
+    },
+    {
+      "id": "mod_select",
+      "kind": "example-select",
+      "label": "Select Relevant Examples",
+      "note": "LLM relevance filter — cached prefix + per-item is_relevant; not embedding RAG.",
+      "inputDescription": "list[ScopeExample] from the parsed library",
+      "inStructureId": "m_scope_ex",
+      "outStructureId": "m_selected",
+      "exampleContextLabel": "Normalize Case",
+      "exampleContextField": "description",
+      "exampleReasonField": "selection_reason",
+      "prompt": "Find useful examples to help create a scope of works for this description of the works.\n\nDESCRIPTION:\n\n{description}\n\nPOSSIBLE USEFUL EXAMPLE:\n\n{example}",
+      "model": "deepseek-v4",
+      "costLimitCents": 100,
+      "cached": true,
+      "avgMs": 2200,
+      "avgCostCents": 3,
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_selected" }
+      }
+    },
+    {
+      "id": "mod_merge",
+      "kind": "custom-code",
+      "label": "Merge for Draft",
+      "note": "list[SelectedExample] + description from Normalize Case on pipeline state → ScopeDraftRequest for the final LLM.",
+      "inputDescription": "Filtered SelectedExample rows with selection_reason",
+      "inStructureId": "m_selected",
+      "outStructureId": "m_draft_req",
+      "cached": true,
+      "avgMs": 5,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "(selected, state) => { const norm = (state ?? {})[\"Normalize Case\"]; const description = norm && typeof norm === \"object\" && norm !== null && typeof norm.description === \"string\" ? norm.description : \"\"; return { description, selected_examples: Array.isArray(selected) ? selected : [] }; }"
+        }
+      ]
+    },
+    {
+      "id": "mod_draft",
+      "kind": "llm",
+      "label": "Draft Scope",
+      "note": "Final scope using selected examples and their selection_reason fields.",
+      "inputDescription": "ScopeDraftRequest with description and selected_examples",
+      "inStructureId": "m_draft_req",
+      "outStructureId": "m_scope_draft",
+      "prompt": "Write a numbered scope of works for the damage description. Use selected_examples only as style and coverage guidance — each row includes selection_reason explaining why it was chosen. Do not copy irrelevant work from distractor examples. Output a concise title and scope_of_works.",
+      "model": "deepseek-v4",
+      "cached": true,
+      "avgMs": 1800,
+      "avgCostCents": 4
+    },
+    {
+      "id": "mod_assert_combine",
+      "kind": "assert",
+      "label": "✓ Combine Inputs",
+      "note": "Structural check — combine retained case description and library examples",
+      "inStructureId": "m_select_bundle",
+      "outStructureId": "m_select_bundle",
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "const b = step(\"Combine Inputs\");\nif (!b?.case?.description || typeof b.case.description !== \"string\" || !b.case.description.trim()) throw new Error(\"combine missing case.description\");\nif (!Array.isArray(b?.library?.examples) || b.library.examples.length < 1) throw new Error(\"combine missing library.examples\");"
+        }
+      ]
+    },
+    {
+      "id": "mod_assert_normalize",
+      "kind": "assert",
+      "label": "✓ Normalize Case",
+      "note": "Golden fixture — damage text wrapped as ScopeDescription",
+      "inStructureId": "m_scope_desc",
+      "outStructureId": "m_scope_desc",
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "assertEqual(step(\"Normalize Case\"), \"Normalize Case\");"
+        }
+      ]
+    },
+    {
+      "id": "mod_assert_parse",
+      "kind": "assert",
+      "label": "✓ Parse Examples",
+      "note": "Golden fixture — four library rows parsed",
+      "inStructureId": "m_scope_ex",
+      "outStructureId": "m_scope_ex",
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "assertEqual(step(\"Parse Examples\"), \"Parse Examples\");"
+        }
+      ],
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_scope_ex" }
+      }
+    },
+    {
+      "id": "mod_assert_select",
+      "kind": "assert",
+      "label": "✓ Select Relevant Examples",
+      "note": "Structural check — at least one row, each has selection_reason from a known library id",
+      "inStructureId": "m_selected",
+      "outStructureId": "m_selected",
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "const selected = step(\"Select Relevant Examples\");\nconst all = step(\"Parse Examples\");\nif (!Array.isArray(selected) || selected.length < 1) throw new Error(\"expected at least one selected example\");\nconst ids = new Set((Array.isArray(all) ? all : []).map((e) => e?.id));\nfor (const row of selected) {\n  if (typeof row?.selection_reason !== \"string\" || !row.selection_reason.trim()) throw new Error(\"missing selection_reason\");\n  if (!ids.has(row?.id)) throw new Error(`unknown example id ${row?.id}`);\n}"
+        }
+      ],
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_selected" }
+      }
+    },
+    {
+      "id": "mod_output",
+      "kind": "output",
+      "label": "Scope Output",
+      "inputDescription": "ScopeDraft with title and scope_of_works",
+      "inStructureId": "m_scope_draft",
+      "outStructureId": "m_scope_draft",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "note": ""
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 80,
+      "latencyMs": 4200,
+      "costCents": 7,
+      "passRate": 90
+    },
+    {
+      "id": "s_agent",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 92,
+      "latencyMs": 24000,
+      "costCents": 120,
+      "passRate": 97
+    },
+    {
+      "id": "s_cheap",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 82,
+      "latencyMs": 15000,
+      "costCents": 10,
+      "passRate": 88
+    }
+  ],
+  "docs": [
+    {
+      "name": "damage_case.txt",
+      "type": "text",
+      "label": "inference",
+      "file": "example_select_demo/damage_case.txt"
+    },
+    {
+      "name": "damage_case_roof_storm.txt",
+      "type": "text",
+      "label": "inference",
+      "file": "example_select_demo/damage_case_roof_storm.txt"
+    },
+    {
+      "name": "damage_case_kitchen_reno.txt",
+      "type": "text",
+      "label": "inference",
+      "file": "example_select_demo/damage_case_kitchen_reno.txt"
+    },
+    {
+      "name": "example_library.json",
+      "type": "json",
+      "label": "inference",
+      "file": "example_select_demo/example_library.json"
+    },
+    {
+      "name": "example_select_demo_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "example_select_demo/example_select_demo_inference.json"
+    },
+    {
+      "name": "roof_storm_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "example_select_demo/roof_storm_inference.json"
+    },
+    {
+      "name": "kitchen_reno_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "example_select_demo/kitchen_reno_inference.json"
+    },
+    {
+      "name": "example_select_demo_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "example_select_demo/example_select_demo_testing.json"
+    },
+    {
+      "name": "roof_storm_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "example_select_demo/roof_storm_testing.json"
+    },
+    {
+      "name": "kitchen_reno_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "example_select_demo/kitchen_reno_testing.json"
+    },
+    {
+      "name": "example_select_demo_README.md",
+      "type": "text",
+      "label": "training",
+      "file": "example_select_demo/README.md"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Bathroom leak (default)",
+      "description": "Default inference preset — damage_case.txt + example_library.json",
+      "inputs": {
+        "Damage Case": "damage_case.txt",
+        "Example Library": "example_library.json"
+      },
+      "expectedOutputs": [
+        { "stepLabel": "Normalize Case", "file": "example_select_demo/expected/normalize_case.json" },
+        { "stepLabel": "Parse Examples", "file": "example_select_demo/expected/parse_examples.json" }
+      ]
+    },
+    {
+      "name": "Roof storm",
+      "description": "Roof storm scenario — damage_case_roof_storm.txt + example_library.json",
+      "inputs": {
+        "Damage Case": "damage_case_roof_storm.txt",
+        "Example Library": "example_library.json"
+      },
+      "expectedOutputs": [
+        { "stepLabel": "Normalize Case", "file": "example_select_demo/expected/roof_storm_normalize_case.json" },
+        { "stepLabel": "Parse Examples", "file": "example_select_demo/expected/parse_examples.json" }
+      ]
+    },
+    {
+      "name": "Kitchen reno",
+      "description": "Kitchen cabinetry scenario — damage_case_kitchen_reno.txt + example_library.json",
+      "inputs": {
+        "Damage Case": "damage_case_kitchen_reno.txt",
+        "Example Library": "example_library.json"
+      },
+      "expectedOutputs": [
+        { "stepLabel": "Normalize Case", "file": "example_select_demo/expected/kitchen_reno_normalize_case.json" },
+        { "stepLabel": "Parse Examples", "file": "example_select_demo/expected/parse_examples.json" }
+      ]
+    }
+  ],
+  "expectedOutputs": [
+    {
+      "stepLabel": "Normalize Case",
+      "file": "example_select_demo/expected/normalize_case.json"
+    },
+    {
+      "stepLabel": "Parse Examples",
+      "file": "example_select_demo/expected/parse_examples.json"
+    }
+  ]
+}

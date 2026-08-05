@@ -80,12 +80,13 @@ function codedTransform(m: PipelineModule): boolean {
 }
 
 function legacyEmitsList(m: PipelineModule): boolean {
-  if (m.kind === "llm-batch") return true;
+  if (m.kind === "llm-batch" || m.kind === "example-select") return true;
   return readLegacyOutIsList(m);
 }
 
 // AI : derive spine out type when outType not yet persisted (incl. one-time legacy outIsList read).
 export function deriveOutType(m: PipelineModule): TypeExpr | undefined {
+  if (m.kind === "merge" && m.outType) return m.outType;
   if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review") {
     const id = m.inStructureId ?? m.outStructureId;
     const base = refType(id);
@@ -95,7 +96,7 @@ export function deriveOutType(m: PipelineModule): TypeExpr | undefined {
   if (!m.outStructureId) return undefined;
   const base = refType(m.outStructureId);
   if (!base) return undefined;
-  if (m.kind === "llm-batch") return listOf(base);
+  if (m.kind === "llm-batch" || m.kind === "example-select") return listOf(base);
   if (m.kind === "transform" && !codedTransform(m) && !legacyEmitsList(m)) {
     return base;
   }
@@ -107,7 +108,7 @@ export function deriveInType(m: PipelineModule): TypeExpr | undefined {
   if (!m.inStructureId) return undefined;
   const base = refType(m.inStructureId);
   if (!base) return undefined;
-  if (m.kind === "llm-batch") return listOf(base);
+  if (m.kind === "llm-batch" || m.kind === "example-select") return listOf(base);
   return base;
 }
 

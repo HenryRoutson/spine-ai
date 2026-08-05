@@ -9,6 +9,8 @@ import {
   runCustomCodeWithFallbacks,
   type CustomCodeAttemptFailure,
 } from "@/lib/custom_code"
+import { formatLineProfileLog, type CodeTraceEvent } from "@/lib/custom_code_trace"
+import type { CodeExecUiState, CodeLineProfile } from "@/lib/code-exec-ui"
 import { CODE_ERROR_NS, recordCodeError } from "@/lib/code-error-history"
 import { getCustomLlmProvider, type CustomLlmProviderDef } from "@/lib/custom-llm-providers"
 import type { LlmClientStepSpec } from "@/lib/llm-client-step"
@@ -209,6 +211,8 @@ export interface AwaitRunCallbacks {
   onLogs?: (logs: JobLogEntry[], newLines: JobLogEntry[]) => void
   // AI : human-review steps pause until the operator approves or rejects in Inference.
   onHumanReview?: (spec: ClientStepSpec) => Promise<"approved" | "rejected">
+  // AI : live line-by-line preview while assert/custom-code runs in the browser.
+  onCodeExec?: (state: CodeExecUiState) => void
   // AI : custom LLM providers persisted on the project (merged with localStorage at runtime).
   projectLlmProviders?: import("@/lib/custom-llm-providers").CustomLlmProviderDef[]
   signal?: AbortSignal
@@ -319,7 +323,7 @@ export async function awaitJobCompletion(
   callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
   intervalMs = DEFAULT_POLL_INTERVAL_MS,
 ): Promise<AwaitRunResult> {
-  const { onStep, onLogs, onHumanReview, projectLlmProviders, signal } =
+  const { onStep, onLogs, onHumanReview, onCodeExec, projectLlmProviders, signal } =
     typeof callbacks === "function" ? { onStep: callbacks } : callbacks
   let seenLogs = 0
   let clientStepBusy = false
@@ -396,11 +400,39 @@ export async function awaitJobCompletion(
       clientStepBusy = true
       const clientLogs: JobLogEntry[] = []
       const tag = kind === "assert" ? "assert" : "custom-code"
+      const primaryEntry = entries[0]!
+      let lineMs: CodeLineProfile = {}
+      const pushCodeExec = (patch: Partial<CodeExecUiState>) => {
+        onCodeExec?.({
+          moduleId,
+          language: primaryEntry.language,
+          code: primaryEntry.code,
+          lineMs,
+          status: "running",
+          ...patch,
+        })
+      }
+      pushCodeExec({})
+      const onTrace = (event: CodeTraceEvent) => {
+        lineMs = event.lineMs
+        pushCodeExec({ activeLine: event.activeLine, activeSlot: event.activeSlot, lineMs })
+      }
       try {
         const { output, failures, attemptIndex, language } =
           kind === "assert"
-            ? await runAssertWithFallbacks(entries, input, pipelineState, expectedOutputs)
-            : await runCustomCodeWithFallbacks(entries, input, pipelineState)
+            ? await runAssertWithFallbacks(entries, input, pipelineState, expectedOutputs, { onTrace })
+            : await runCustomCodeWithFallbacks(entries, input, pipelineState, { onTrace })
+        const profileCode = entries[attemptIndex]?.code ?? primaryEntry.code
+        if (Object.keys(lineMs).length) {
+          clientLogs.push({
+            at: Date.now(),
+            level: JobLogLevel.Info,
+            tag: "code-profile",
+            line: formatLineProfileLog(profileCode, lineMs),
+            moduleId,
+          })
+        }
+        pushCodeExec({ activeLine: undefined, lineMs, status: "done" })
         for (const f of failures) {
           clientLogs.push({
             at: Date.now(),
@@ -430,6 +462,7 @@ export async function awaitJobCompletion(
         await submitClientStep({ output, clientLogs })
         clientStepSubmittedFor = moduleId
       } catch (err) {
+        pushCodeExec({ activeLine: undefined, lineMs, status: "error" })
         const failures =
           err instanceof CustomCodeExhaustedError
             ? err.failures

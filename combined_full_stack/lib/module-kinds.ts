@@ -6,6 +6,7 @@ export const USER_ADDABLE_MODULE_KINDS = [
   ModuleKind.Input,
   ModuleKind.Llm,
   ModuleKind.LlmBatch,
+  ModuleKind.ExampleSelect,
   ModuleKind.Transform,
   ModuleKind.Chunk,
   ModuleKind.Merge,
@@ -22,10 +23,10 @@ export function usesPassthroughStructure(kind: ModuleKind): boolean {
 }
 
 // AI : llm + llm-batch share prompt/model fields across UI and server validity.
-export const LLM_KINDS: ModuleKind[] = [ModuleKind.Llm, ModuleKind.LlmBatch]
+export const LLM_KINDS: ModuleKind[] = [ModuleKind.Llm, ModuleKind.LlmBatch, ModuleKind.ExampleSelect]
 
-export function isLlmKind(kind: ModuleKind): boolean {
-  return LLM_KINDS.includes(kind)
+export function isLlmKind(kind: RunStepKind): boolean {
+  return LLM_KINDS.includes(kind as ModuleKind)
 }
 
 // AI : merge step + legacy list-merge kind string on run logs / migrated modules.
@@ -43,7 +44,7 @@ export function stepIoLabels(kind: RunStepKind) {
   if (kind === ModuleKind.Quote) {
     return { inTitle: "Source + extracts", outTitle: "Linked quotes" }
   }
-  const isLlm = kind === ModuleKind.Llm || kind === ModuleKind.LlmBatch
+  const isLlm = kind === ModuleKind.Llm || kind === ModuleKind.LlmBatch || kind === ModuleKind.ExampleSelect
   return {
     inTitle: isLlm ? "Prompt" : "Input",
     outTitle: isLlm ? "Response" : "Output",

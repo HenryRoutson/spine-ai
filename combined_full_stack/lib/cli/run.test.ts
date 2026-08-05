@@ -7,6 +7,9 @@ const batchSeed = resolve(SEEDS_DIR, "batch_llm_example.json")
 const batchTest = resolve(SEEDS_DIR, "../documents/batch_llm_example/batch_llm_example_testing.json")
 const homeworkSeed = resolve(SEEDS_DIR, "homework_grader.json")
 const homeworkSetup = resolve(SEEDS_DIR, "../documents/homework_grader/university_latex_inference.json")
+const exampleSelectSeed = resolve(SEEDS_DIR, "example_select_demo.json")
+const exampleSelectSetup = resolve(SEEDS_DIR, "../documents/example_select_demo/roof_storm_inference.json")
+const exampleSelectTest = resolve(SEEDS_DIR, "../documents/example_select_demo/kitchen_reno_testing.json")
 
 describe("spine cli run", () => {
   it("returns help for empty argv", async () => {
@@ -94,5 +97,33 @@ describe("spine cli run", () => {
     expect(result.command).toBe("validate setup")
     expect(result.ok).toBe(true)
     expect(result.data?.setupFile).toBe(homeworkSetup)
+  })
+
+  it("validate setup passes example select roof storm preset", async () => {
+    const result = await runSpineCli([
+      "validate",
+      "setup",
+      "--project",
+      exampleSelectSeed,
+      "--file",
+      exampleSelectSetup,
+    ])
+    expect(result.command).toBe("validate setup")
+    expect(result.ok).toBe(true)
+    expect(result.data?.setupFile).toBe(exampleSelectSetup)
+  })
+
+  it("validate test passes example select kitchen reno fixture", async () => {
+    const result = await runSpineCli([
+      "validate",
+      "test",
+      "--project",
+      exampleSelectSeed,
+      "--file",
+      exampleSelectTest,
+    ])
+    expect(result.command).toBe("validate test")
+    expect(result.ok).toBe(true)
+    expect(result.issues.filter((i) => i.level === "error")).toHaveLength(0)
   })
 })

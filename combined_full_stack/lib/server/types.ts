@@ -125,6 +125,7 @@ export enum ModuleKind {
   Input = "input",
   Llm = "llm",
   LlmBatch = "llm-batch", // AI : backend addition — one structured call per list item, merged typed list out
+  ExampleSelect = "example-select", // AI : LLM relevance filter per list item — chain_of_thought + is_relevant, not embedding RAG
   Quote = "quote", // AI : deterministic — resolve LLM quote strings → source-linked spans
   Transform = "transform",
   Combine = "combine",
@@ -147,9 +148,15 @@ export enum MergeListStrategy {
   ConcatDedupe = "concat_dedupe",
   ConcatAssertNoDuplicates = "concat_assert_no_duplicates",
   Union = "union",
+  UnionAssert = "union_assert",
   Intersect = "intersect",
+  IntersectAssert = "intersect_assert",
   Replace = "replace",
+  ReplaceAssert = "replace_assert",
   Prepend = "prepend",
+  PrependAssert = "prepend_assert",
+  // AI : pairwise deep-merge by index; leftover items from the longer list are kept
+  Zip = "zip",
 }
 
 export enum MergeDictStrategy {
@@ -168,7 +175,7 @@ export interface MergeLayerPolicy {
   list?: MergeListStrategy;
   dict?: MergeDictStrategy;
   scalar?: MergeScalarStrategy;
-  // AI : property on list items for union/intersect/dedupe — e.g. "id" for user records.
+  // AI : property path on list items for union/intersect/dedupe — e.g. "id" or "meta.id".
   itemKey?: string;
 }
 
@@ -229,6 +236,11 @@ export interface PipelineModule { // TODO this is bad, it contains multiple poss
   chunkTextField?: string; // chunk step — field on input object to split (default content)
   mergePolicy?: MergePolicy; // merge step — recursive structural policy
   mergeCustom?: string; // merge step — optional custom TS (input) => … overrides policy
+  // AI : example-select — cached-prefix relevance filter (see lib/example-select.ts defaults)
+  exampleContextLabel?: string; // prior step label supplying {description} text
+  exampleContextField?: string; // optional dot path within that step output
+  exampleReasonField?: string; // field on each output item for chain_of_thought (default selection_reason)
+  examplePreFilterMax?: number; // optional cap on candidates before per-item LLM calls
   useOcr?: boolean; // input only — vision OCR when PDF/image is accepted (built-in parser when off)
   cached: boolean;
   // AI : pipeline-managed step — auto-inserted Link Quotes; locked in the builder UI.
@@ -628,7 +640,13 @@ export function inputUsesVisionOcr(m: PipelineModule): boolean {
 // AI : step-cache model slug — vision OCR steps must not share keys with the global run model.
 export function stepModelForCache(m: PipelineModule, globalModel: ModelId): ModelId {
   if (inputUsesVisionOcr(m)) return m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
-  if (m.kind === ModuleKind.Llm || m.kind === ModuleKind.LlmBatch) return m.model ?? globalModel;
+  if (
+    m.kind === ModuleKind.Llm ||
+    m.kind === ModuleKind.LlmBatch ||
+    m.kind === ModuleKind.ExampleSelect
+  ) {
+    return m.model ?? globalModel;
+  }
   return m.model ?? globalModel;
 }
 
@@ -651,6 +669,11 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   },
   [ModuleKind.Llm]: { label: "LLM Call", description: "Run a model against a prompt + schema" },
   [ModuleKind.LlmBatch]: { label: "Batch LLM", description: "list in → list out (one structured call per item). Wrap with Custom TS before/after when upstream/downstream is a single object." },
+  [ModuleKind.ExampleSelect]: {
+    label: "Example Select",
+    description:
+      "Filter a list of examples with a cheap LLM per item — {description} from a prior step, structured is_relevant + chain_of_thought (not embedding RAG)",
+  },
   [ModuleKind.Quote]: {
     label: "Link Quotes",
     description: "Match verbatim LLM quote strings against the source document and attach byte offsets (zero LLM cost)",

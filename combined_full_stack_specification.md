@@ -327,6 +327,11 @@ The inference tab should be able to save multiple named setups like for the home
 
 
 
+show a preview of the code running in the inference view ideally line by line to show what might be getting stuck. if you can have a profile in the logging output to profile line by line what takes the most time that's really helpful
+please add syntax highlighting and a small indicator of which language please for the inference code preview
+
+
+
 # Share 
 you should be able to share links and APIs, see what shared instances currently exist.
 links should have the inference UI to the current pipeline.
@@ -590,6 +595,31 @@ The goal of the dashboard is to
 - Go
 - swift
 - Kotlin
+
+
+
+# merge strategies (recursive structural merger)
+
+Per-path `MergePolicy` with `*` / `**` globs. Dict `deep` recurses; keyed list strategies
+(union / intersect / concat_dedupe) and `zip` recursively merge matching elements so nested
+policies apply at every layer (e.g. `dict[str, list[dict[…]]]`).
+
+```ts
+export enum MergeListStrategy {
+  Concat = "concat",
+  ConcatDedupe = "concat_dedupe",
+  ConcatAssertNoDuplicates = "concat_assert_no_duplicates",
+  Union = "union",           // by itemKey — deep-merge matches
+  UnionAssert = "union_assert",
+  Intersect = "intersect",   // by itemKey — deep-merge matches
+  IntersectAssert = "intersect_assert",
+  Replace = "replace",
+  ReplaceAssert = "replace_assert",
+  Prepend = "prepend",
+  PrependAssert = "prepend_assert",
+  Zip = "zip",               // deep-merge by index
+}
+```
 
 
 
