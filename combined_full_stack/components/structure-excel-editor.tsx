@@ -19,7 +19,7 @@ import {
 import { StructureFieldTypeEditor } from "@/components/structure-field-type-editor"
 import { StructureSourceDocLink } from "@/components/structure-source-doc-link"
 import { fieldTypeLabel } from "@/lib/structure-field-labels"
-import { fieldIsListType } from "@/lib/server/type_expr"
+import { fieldIsMapType, fieldIsSetType, fieldToTypeExpr, fieldUsesItemCardinality } from "@/lib/server/type_expr"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
@@ -271,11 +271,27 @@ function FieldRow({
 }: FieldRowProps) {
   const stripe = rowIdx % 2 === 1
   const isNumeric = field.type === FieldType.Int || field.type === FieldType.Float
-  const isText = field.type === FieldType.Text
-  const isList = fieldIsListType(field)
-  const showsCardinality = isText || isList
-  const minKey = isList ? "minItems" : "minLength"
-  const maxKey = isList ? "maxItems" : "maxLength"
+  const expr = fieldToTypeExpr(field)
+  const isText = field.type === FieldType.Text || (expr.kind === "prim" && expr.name === "text")
+  const isSet = fieldIsSetType(field)
+  const isMap = fieldIsMapType(field)
+  const showsCardinality = isText || fieldUsesItemCardinality(field)
+  const minKey = isText ? "minLength" : "minItems"
+  const maxKey = isText ? "maxLength" : "maxItems"
+  const minTitle = isText
+    ? "minimum string length"
+    : isSet
+      ? "minimum set size"
+      : isMap
+        ? "minimum map entries"
+        : "minimum list length"
+  const maxTitle = isText
+    ? "maximum string length"
+    : isSet
+      ? "maximum set size"
+      : isMap
+        ? "maximum map entries"
+        : "maximum list length"
   const toleranceEnabled = isNumeric && field.deterministic !== false
   const [examplesOpen, setExamplesOpen] = useState(false)
   const exampleStats = useMemo(
@@ -367,7 +383,7 @@ function FieldRow({
                 value={field[minKey] ?? ""}
                 placeholder="min"
                 disabled={locked}
-                title={isList ? "minimum list length" : "minimum string length"}
+                title={minTitle}
                 onChange={(e) => {
                   const raw = e.target.value.trim()
                   if (!raw) {
@@ -390,7 +406,7 @@ function FieldRow({
                 value={field[maxKey] ?? ""}
                 placeholder="max"
                 disabled={locked}
-                title={isList ? "maximum list length" : "maximum string length"}
+                title={maxTitle}
                 onChange={(e) => {
                   const raw = e.target.value.trim()
                   if (!raw) {

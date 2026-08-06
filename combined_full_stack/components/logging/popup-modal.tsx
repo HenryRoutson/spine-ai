@@ -9,7 +9,8 @@ import { IoPager } from "@/components/logging/io-pager"
 import { PromptText } from "@/components/highlight"
 import { QuoteLinks, quotesFromJson } from "@/components/quote-links"
 import { ServerLogLines } from "@/components/server-logs-panel"
-import type { DocId, DocRef, JobLogEntry, StructureModel } from "@/lib/types"
+import { StepPromptPreview } from "@/components/step-prompt-preview"
+import type { DocId, DocRef, InputPreviewItem, JobLogEntry, StructureModel } from "@/lib/types"
 
 export type PopupDocPreviewItem = {
   docId: DocId
@@ -20,6 +21,8 @@ export type PopupDocPreviewItem = {
 export type PopupPayload = {
   json?: string
   text?: string
+  inputPreview?: string
+  promptItems?: InputPreviewItem[]
   serverLogs?: JobLogEntry[]
   docPreviews?: PopupDocPreviewItem[]
   models?: StructureModel[]
@@ -101,6 +104,14 @@ export function PopupModal({ payload, onClose }: PopupModalProps) {
                 maxHeightClass="min-h-0 flex-1"
               />
             )}
+          </div>
+        ) : payload.promptItems?.length || payload.inputPreview?.trim() ? (
+          <div className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed text-foreground">
+            <StepPromptPreview
+              inputPreview={payload.inputPreview}
+              inputPreviewItems={payload.promptItems}
+              sourceDocId={payload.sourceDocId}
+            />
           </div>
         ) : (
           <div className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-foreground">

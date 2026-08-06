@@ -8,6 +8,7 @@ import type { WebSocketLikeConstructor } from "@supabase/realtime-js";
 import { allProjectSeeds, cloneProject } from "../lib/server/seed";
 import { migrateProjectModules } from "../lib/server/validity";
 import { openUserStore } from "../lib/server/supabase_store";
+import type { user_id_string } from "../lib/server/require_auth";
 
 const appRoot = resolve(import.meta.dirname, "..");
 config({ path: resolve(appRoot, ".env.local") });
@@ -34,7 +35,7 @@ async function main() {
     auth: { persistSession: false },
     realtime: { transport: ws as unknown as WebSocketLikeConstructor },
   });
-  const store = await openUserStore(supabase, userId);
+  const store = await openUserStore(supabase, userId as user_id_string);
   const existing = store.projects();
   const project = migrateProjectModules(cloneProject(seed.project, existing));
   store.saveProject(project);

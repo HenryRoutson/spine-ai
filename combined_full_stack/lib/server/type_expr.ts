@@ -5,6 +5,8 @@ import type {
   FieldType,
   InputType,
   ModelField,
+  ModelFieldLegacyTypePick,
+  ModelFieldTypeSourcePick,
   PipelineModule,
   StructureModel,
   StructureModelId,
@@ -18,24 +20,45 @@ import { withBuiltinTypeAliases } from "./builtin_types";
 // AI : TODO (linter-first) — set/map/union/generic: express in generated Py/Rust, not hand-rolled TS in validity.ts.
 export type PrimName = "text" | "int" | "float" | "bool" | "datetime" | "json";
 
-export type TypeExpr =
-  | { kind: "prim"; name: PrimName }
-  | { kind: "document" }
-  | { kind: "quote" }
-  | { kind: "text_quote" }
-  | { kind: "list"; item: TypeExpr }
-  | { kind: "ref"; modelId: StructureModelId }
-  | { kind: "file"; inputTypes: InputType[] }
-  | { kind: "optional"; inner: TypeExpr }
-  | { kind: "set"; item: TypeExpr }
-  | { kind: "map"; key: TypeExpr; value: TypeExpr }
-  | { kind: "union"; variants: TypeExpr[] }
-  | { kind: "generic"; name: string; args: TypeExpr[] }
-  | { kind: "named"; name: string }
-  | { kind: "unset" }
-  | { kind: "unknown" };
+// AI : string values are the persisted wire format in typeExpr JSON — do not rename.
+export const TypeExprKind = {
+  Prim: "prim",
+  Document: "document",
+  Quote: "quote",
+  TextQuote: "text_quote",
+  List: "list",
+  Ref: "ref",
+  File: "file",
+  Optional: "optional",
+  Set: "set",
+  Map: "map",
+  Union: "union",
+  Generic: "generic",
+  Named: "named",
+  Unset: "unset",
+  Unknown: "unknown",
+} as const;
 
-export const UNSET_TYPE_EXPR: TypeExpr = { kind: "unset" };
+export type TypeExprKind = (typeof TypeExprKind)[keyof typeof TypeExprKind];
+
+export type TypeExpr =
+  | { kind: typeof TypeExprKind.Prim; name: PrimName }
+  | { kind: typeof TypeExprKind.Document }
+  | { kind: typeof TypeExprKind.Quote }
+  | { kind: typeof TypeExprKind.TextQuote }
+  | { kind: typeof TypeExprKind.List; item: TypeExpr }
+  | { kind: typeof TypeExprKind.Ref; modelId: StructureModelId }
+  | { kind: typeof TypeExprKind.File; inputTypes: InputType[] }
+  | { kind: typeof TypeExprKind.Optional; inner: TypeExpr }
+  | { kind: typeof TypeExprKind.Set; item: TypeExpr }
+  | { kind: typeof TypeExprKind.Map; key: TypeExpr; value: TypeExpr }
+  | { kind: typeof TypeExprKind.Union; variants: TypeExpr[] }
+  | { kind: typeof TypeExprKind.Generic; name: string; args: TypeExpr[] }
+  | { kind: typeof TypeExprKind.Named; name: string }
+  | { kind: typeof TypeExprKind.Unset }
+  | { kind: typeof TypeExprKind.Unknown };
+
+export const UNSET_TYPE_EXPR: TypeExpr = { kind: TypeExprKind.Unset };
 
 export const QuoteSchema = z.object({
   doc_id: z.string(),
@@ -51,56 +74,56 @@ function byId(models: StructureModel[]): Map<StructureModelId, StructureModel> {
   return new Map(models.map((m) => [m.id, m]));
 }
 
-export function fieldTypeToExpr(field: Pick<ModelField, "type" | "ref">): TypeExpr {
+export function fieldTypeToExpr(field: ModelFieldLegacyTypePick): TypeExpr {
   switch (field.type) {
     case "text":
-      return { kind: "prim", name: "text" };
+      return { kind: TypeExprKind.Prim, name: "text" };
     case "int":
-      return { kind: "prim", name: "int" };
+      return { kind: TypeExprKind.Prim, name: "int" };
     case "float":
-      return { kind: "prim", name: "float" };
+      return { kind: TypeExprKind.Prim, name: "float" };
     case "bool":
-      return { kind: "prim", name: "bool" };
+      return { kind: TypeExprKind.Prim, name: "bool" };
     case "datetime":
-      return { kind: "prim", name: "datetime" };
+      return { kind: TypeExprKind.Prim, name: "datetime" };
     case "json":
-      return { kind: "prim", name: "json" };
+      return { kind: TypeExprKind.Prim, name: "json" };
     case "document":
-      return { kind: "document" };
+      return { kind: TypeExprKind.Document };
     case "list[document]":
-      return { kind: "list", item: { kind: "document" } };
+      return { kind: TypeExprKind.List, item: { kind: TypeExprKind.Document } };
     case "list[text]":
-      return { kind: "list", item: { kind: "prim", name: "text" } };
+      return { kind: TypeExprKind.List, item: { kind: TypeExprKind.Prim, name: "text" } };
     case "tuple[text,quote]":
-      return { kind: "text_quote" };
+      return { kind: TypeExprKind.TextQuote };
     case "list[tuple[text,quote]]":
-      return { kind: "list", item: { kind: "text_quote" } };
+      return { kind: TypeExprKind.List, item: { kind: TypeExprKind.TextQuote } };
     case "model":
-      return field.ref ? { kind: "ref", modelId: field.ref } : { kind: "unknown" };
+      return field.ref ? { kind: TypeExprKind.Ref, modelId: field.ref } : { kind: TypeExprKind.Unknown };
     case "list[model]":
       return {
-        kind: "list",
-        item: field.ref ? { kind: "ref", modelId: field.ref } : { kind: "unknown" },
+        kind: TypeExprKind.List,
+        item: field.ref ? { kind: TypeExprKind.Ref, modelId: field.ref } : { kind: TypeExprKind.Unknown },
       };
     default:
-      return { kind: "unknown" };
+      return { kind: TypeExprKind.Unknown };
   }
 }
 
 // AI : typeExpr wins when set — enables tuple[Model, Model], Optional[Model], etc.
-export function fieldToTypeExpr(field: Pick<ModelField, "type" | "ref" | "typeExpr">): TypeExpr {
+export function fieldToTypeExpr(field: ModelFieldTypeSourcePick): TypeExpr {
   if (field.typeExpr) return field.typeExpr;
   return fieldTypeToExpr(field);
 }
 
 export function typeExprIsQuote(expr: TypeExpr): boolean {
-  return expr.kind === "text_quote" || (expr.kind === "list" && expr.item.kind === "text_quote");
+  return expr.kind === TypeExprKind.TextQuote || (expr.kind === TypeExprKind.List && expr.item.kind === TypeExprKind.TextQuote);
 }
 
 export function typeExprRefModelId(expr: TypeExpr): StructureModelId | undefined {
-  if (expr.kind === "ref") return expr.modelId;
-  if (expr.kind === "list" && expr.item.kind === "ref") return expr.item.modelId;
-  if (expr.kind === "optional") return typeExprRefModelId(expr.inner);
+  if (expr.kind === TypeExprKind.Ref) return expr.modelId;
+  if (expr.kind === TypeExprKind.List && expr.item.kind === TypeExprKind.Ref) return expr.item.modelId;
+  if (expr.kind === TypeExprKind.Optional) return typeExprRefModelId(expr.inner);
   return undefined;
 }
 
@@ -109,24 +132,24 @@ export function collectTypeExprRefModelIds(expr: TypeExpr): StructureModelId[] {
   const ids: StructureModelId[] = [];
   function walk(e: TypeExpr) {
     switch (e.kind) {
-      case "ref":
+      case TypeExprKind.Ref:
         ids.push(e.modelId);
         break;
-      case "list":
-      case "set":
+      case TypeExprKind.List:
+      case TypeExprKind.Set:
         walk(e.item);
         break;
-      case "optional":
+      case TypeExprKind.Optional:
         walk(e.inner);
         break;
-      case "map":
+      case TypeExprKind.Map:
         walk(e.key);
         walk(e.value);
         break;
-      case "union":
+      case TypeExprKind.Union:
         e.variants.forEach(walk);
         break;
-      case "generic":
+      case TypeExprKind.Generic:
         e.args.forEach(walk);
         break;
       default:
@@ -156,21 +179,21 @@ export function expandNamedTypeExpr(expr: TypeExpr, typeAliases: TypeAlias[] = [
   const aliases = withBuiltinTypeAliases(typeAliases);
   const seen = new Set<string>();
   function walk(e: TypeExpr): TypeExpr {
-    if (e.kind === "named") {
+    if (e.kind === TypeExprKind.Named) {
       const resolved = resolveNamedTypeAlias(e.name, aliases, seen);
       return resolved ? walk(resolved) : e;
     }
     switch (e.kind) {
-      case "list":
-      case "set":
+      case TypeExprKind.List:
+      case TypeExprKind.Set:
         return { ...e, item: walk(e.item) };
-      case "optional":
+      case TypeExprKind.Optional:
         return { ...e, inner: walk(e.inner) };
-      case "map":
+      case TypeExprKind.Map:
         return { ...e, key: walk(e.key), value: walk(e.value) };
-      case "union":
+      case TypeExprKind.Union:
         return { ...e, variants: e.variants.map(walk) };
-      case "generic":
+      case TypeExprKind.Generic:
         return { ...e, args: e.args.map(walk) };
       default:
         return e;
@@ -180,11 +203,23 @@ export function expandNamedTypeExpr(expr: TypeExpr, typeAliases: TypeAlias[] = [
 }
 
 export function typeExprIsList(expr: TypeExpr): boolean {
-  return expr.kind === "list";
+  return expr.kind === TypeExprKind.List;
 }
 
-export function fieldIsListType(field: Pick<ModelField, "type" | "ref" | "typeExpr" | "minItems">): boolean {
+export function fieldIsListType(field: ModelFieldTypeSourcePick & Pick<ModelField, "minItems">): boolean {
   return typeExprIsList(fieldToTypeExpr(field));
+}
+
+export function fieldIsSetType(field: ModelFieldTypeSourcePick): boolean {
+  return fieldToTypeExpr(field).kind === TypeExprKind.Set;
+}
+
+export function fieldIsMapType(field: ModelFieldTypeSourcePick): boolean {
+  return fieldToTypeExpr(field).kind === TypeExprKind.Map;
+}
+
+export function fieldUsesItemCardinality(field: ModelFieldTypeSourcePick): boolean {
+  return fieldIsListType(field) || fieldIsSetType(field) || fieldIsMapType(field);
 }
 
 export function isListFieldType(type: FieldType): boolean {
@@ -198,8 +233,8 @@ export function isListFieldType(type: FieldType): boolean {
 
 function structureSpineType(modelId: StructureModelId | undefined, isList: boolean): TypeExpr | undefined {
   if (!modelId) return undefined;
-  const base: TypeExpr = { kind: "ref", modelId };
-  return isList ? { kind: "list", item: base } : base;
+  const base: TypeExpr = { kind: TypeExprKind.Ref, modelId };
+  return isList ? { kind: TypeExprKind.List, item: base } : base;
 }
 
 // AI : list-ness on the spine is encoded in outType (list[T] vs T); llm-batch always emits a list.
@@ -229,69 +264,69 @@ export function stepSpineInType(m: PipelineModule): TypeExpr | undefined {
   if (m.inType) return m.inType;
   if (!m.inStructureId) return undefined;
   if (m.kind === "llm-batch" || m.kind === "example-select") {
-    return { kind: "list", item: { kind: "ref", modelId: m.inStructureId } };
+    return { kind: TypeExprKind.List, item: { kind: TypeExprKind.Ref, modelId: m.inStructureId } };
   }
-  return { kind: "ref", modelId: m.inStructureId };
+  return { kind: TypeExprKind.Ref, modelId: m.inStructureId };
 }
 
 export function inputFileType(m: PipelineModule): TypeExpr | undefined {
   if (m.kind !== "input" || !m.inputType) return undefined;
   const types = Array.isArray(m.inputType) ? m.inputType : [m.inputType];
-  return types.length ? { kind: "file", inputTypes: types } : undefined;
+  return types.length ? { kind: TypeExprKind.File, inputTypes: types } : undefined;
 }
 
 function innerRef(expr: TypeExpr): StructureModelId | undefined {
-  if (expr.kind === "ref") return expr.modelId;
-  if (expr.kind === "list" && expr.item.kind === "ref") return expr.item.modelId;
+  if (expr.kind === TypeExprKind.Ref) return expr.modelId;
+  if (expr.kind === TypeExprKind.List && expr.item.kind === TypeExprKind.Ref) return expr.item.modelId;
   return undefined;
 }
 
-export function isListRoot(expr: TypeExpr): expr is Extract<TypeExpr, { kind: "list" }> {
-  return expr.kind === "list";
+export function isListRoot(expr: TypeExpr): expr is Extract<TypeExpr, { kind: typeof TypeExprKind.List }> {
+  return expr.kind === TypeExprKind.List;
 }
 
 export function typeExprEqual(a: TypeExpr, b: TypeExpr): boolean {
   if (a.kind !== b.kind) return false;
   switch (a.kind) {
-    case "prim":
-      return b.kind === "prim" && a.name === b.name;
-    case "document":
-    case "quote":
-    case "text_quote":
-    case "unknown":
-    case "unset":
+    case TypeExprKind.Prim:
+      return b.kind === TypeExprKind.Prim && a.name === b.name;
+    case TypeExprKind.Document:
+    case TypeExprKind.Quote:
+    case TypeExprKind.TextQuote:
+    case TypeExprKind.Unknown:
+    case TypeExprKind.Unset:
       return true;
-    case "named":
-      return b.kind === "named" && a.name === b.name;
-    case "list":
-      return b.kind === "list" && typeExprEqual(a.item, b.item);
-    case "ref":
-      return b.kind === "ref" && a.modelId === b.modelId;
-    case "file": {
+    case TypeExprKind.Named:
+      return b.kind === TypeExprKind.Named && a.name === b.name;
+    case TypeExprKind.List:
+      return b.kind === TypeExprKind.List && typeExprEqual(a.item, b.item);
+    case TypeExprKind.Ref:
+      return b.kind === TypeExprKind.Ref && a.modelId === b.modelId;
+    case TypeExprKind.File: {
       if (b.kind !== "file") return false;
       const as = [...a.inputTypes].sort().join(",");
       const bs = [...b.inputTypes].sort().join(",");
       return as === bs;
     }
-    case "optional":
-      return b.kind === "optional" && typeExprEqual(a.inner, b.inner);
-    case "set":
-      return b.kind === "set" && typeExprEqual(a.item, b.item);
-    case "map":
+    case TypeExprKind.Optional:
+      return b.kind === TypeExprKind.Optional && typeExprEqual(a.inner, b.inner);
+    case TypeExprKind.Set:
+      return b.kind === TypeExprKind.Set && typeExprEqual(a.item, b.item);
+    case TypeExprKind.Map:
       return (
-        b.kind === "map" &&
+        b.kind === TypeExprKind.Map &&
         typeExprEqual(a.key, b.key) &&
         typeExprEqual(a.value, b.value)
       );
-    case "union":
+    case TypeExprKind.Union:
       return (
-        b.kind === "union" &&
+        b.kind === TypeExprKind.Union &&
         a.variants.length === b.variants.length &&
         a.variants.every((v, i) => typeExprEqual(v, b.variants[i]!))
       );
-    case "generic":
+    case TypeExprKind.Generic:
       return (
-        b.kind === "generic" &&
+        b.kind === TypeExprKind.Generic &&
         a.name === b.name &&
         a.args.length === b.args.length &&
         a.args.every((arg, i) => typeExprEqual(arg, b.args[i]!))
@@ -317,41 +352,41 @@ export function modelName(models: StructureModel[], id?: StructureModelId): stri
 
 export function formatTypeExpr(expr: TypeExpr, models: StructureModel[] = []): string {
   switch (expr.kind) {
-    case "prim":
+    case TypeExprKind.Prim:
       return expr.name;
-    case "document":
+    case TypeExprKind.Document:
       return "Document";
-    case "quote":
+    case TypeExprKind.Quote:
       return "quote_string_t";
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return "text_quote_t";
-    case "list":
+    case TypeExprKind.List:
       return `list[${formatTypeExpr(expr.item, models)}]`;
-    case "ref": {
+    case TypeExprKind.Ref: {
       const name = modelName(models, expr.modelId);
       return name ?? expr.modelId;
     }
-    case "file":
+    case TypeExprKind.File:
       return expr.inputTypes.length === 1
         ? `file(${expr.inputTypes[0]})`
         : `file(${expr.inputTypes.join("|")})`;
-    case "optional":
+    case TypeExprKind.Optional:
       return `optional[${formatTypeExpr(expr.inner, models)}]`;
-    case "set":
+    case TypeExprKind.Set:
       return `set[${formatTypeExpr(expr.item, models)}]`;
-    case "map":
+    case TypeExprKind.Map:
       return `map[${formatTypeExpr(expr.key, models)}, ${formatTypeExpr(expr.value, models)}]`;
-    case "union":
+    case TypeExprKind.Union:
       return expr.variants.map((v) => formatTypeExpr(v, models)).join(" | ");
-    case "generic":
+    case TypeExprKind.Generic:
       return expr.args.length
         ? `${expr.name}[${expr.args.map((a) => formatTypeExpr(a, models)).join(", ")}]`
         : expr.name;
-    case "named":
+    case TypeExprKind.Named:
       return expr.name;
-    case "unset":
+    case TypeExprKind.Unset:
       return "UNSET";
-    case "unknown":
+    case TypeExprKind.Unknown:
       return "?";
     default:
       return "?";
@@ -409,13 +444,31 @@ export function withFieldMeta(schema: ZodType, f: ModelField): ZodType {
   return d ? schema.describe(d) : schema;
 }
 
-// AI : min/max items on lists and min/max length on strings — shared by runtime + LLM zod builders.
+// AI : min/max items on list/set/map and min/max length on strings — shared by runtime + LLM zod builders.
+function mapEntryCount(val: unknown): number {
+  if (val == null || typeof val !== "object" || Array.isArray(val)) return 0;
+  return Object.keys(val as object).length;
+}
+
 export function applyFieldCardinalityConstraints(base: ZodType, f: ModelField): ZodType {
-  if (f.minItems != null && f.minItems >= 1 && fieldIsListType(f) && base instanceof z.ZodArray) {
+  const usesArrayBounds = fieldIsListType(f) || fieldIsSetType(f);
+  if (f.minItems != null && f.minItems >= 1 && usesArrayBounds && base instanceof z.ZodArray) {
     base = base.min(f.minItems);
   }
-  if (f.maxItems != null && f.maxItems >= 1 && fieldIsListType(f) && base instanceof z.ZodArray) {
+  if (f.maxItems != null && f.maxItems >= 1 && usesArrayBounds && base instanceof z.ZodArray) {
     base = base.max(f.maxItems);
+  }
+  if (f.minItems != null && f.minItems >= 1 && fieldIsMapType(f)) {
+    const min = f.minItems;
+    base = base.refine((val) => mapEntryCount(val) >= min, {
+      message: `At least ${min} ${min === 1 ? "entry" : "entries"}`,
+    });
+  }
+  if (f.maxItems != null && f.maxItems >= 1 && fieldIsMapType(f)) {
+    const max = f.maxItems;
+    base = base.refine((val) => mapEntryCount(val) <= max, {
+      message: `At most ${max} ${max === 1 ? "entry" : "entries"}`,
+    });
   }
   if (f.minLength != null && f.minLength >= 1 && base instanceof z.ZodString) {
     base = base.min(f.minLength);
@@ -462,7 +515,7 @@ export function typeExprToZod(
   const { seen, typeAliases: aliases = [] } = opts;
   const index = byId(models);
   switch (expr.kind) {
-    case "prim":
+    case TypeExprKind.Prim:
       switch (expr.name) {
         case "text":
         case "datetime":
@@ -478,28 +531,28 @@ export function typeExprToZod(
         default:
           return z.unknown();
       }
-    case "document":
+    case TypeExprKind.Document:
       return DocumentSchema;
-    case "quote":
+    case TypeExprKind.Quote:
       return opts.llmQuotes ? z.string() : QuoteSchema;
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return llmQuotes ? z.string() : TextQuoteSchema;
-    case "list":
+    case TypeExprKind.List:
       return z.array(typeExprToZod(expr.item, models, opts));
-    case "ref":
+    case TypeExprKind.Ref:
       return refZod(expr.modelId, index, opts);
-    case "optional":
+    case TypeExprKind.Optional:
       return typeExprToZod(expr.inner, models, opts).optional();
-    case "set":
+    case TypeExprKind.Set:
       // AI : TODO (linter-first) — JSON has no set; validate via generated Rust HashSet or pydantic conset, not z.array.
       return z.array(typeExprToZod(expr.item, models, opts));
-    case "map":
+    case TypeExprKind.Map:
       // AI : TODO (linter-first) — non-str map keys need generated Py/Rust types + pyright/cargo, not z.record alone.
       return z.record(
         typeExprToZod(expr.key, models, opts) as z.ZodString,
         typeExprToZod(expr.value, models, opts),
       );
-    case "union":
+    case TypeExprKind.Union:
       return z.union(
         expr.variants.map((v) => typeExprToZod(v, models, opts)) as [
           ZodType,
@@ -507,7 +560,7 @@ export function typeExprToZod(
           ...ZodType[],
         ],
       );
-    case "generic":
+    case TypeExprKind.Generic:
       if (expr.name === "tuple" && expr.args.length >= 2) {
         return z.tuple(
           expr.args.map((a) => typeExprToZod(a, models, opts)) as [
@@ -521,15 +574,15 @@ export function typeExprToZod(
         return typeExprToZod(expr.args[0]!, models, opts);
       }
       return z.record(z.string(), z.unknown());
-    case "named": {
+    case TypeExprKind.Named: {
       const resolved = resolveNamedTypeAlias(expr.name, aliases, opts.seenAliasNames!);
       if (resolved) return typeExprToZod(resolved, models, opts);
       return z.string();
     }
-    case "unset":
+    case TypeExprKind.Unset:
       return z.never();
-    case "file":
-    case "unknown":
+    case TypeExprKind.File:
+    case TypeExprKind.Unknown:
       return z.unknown();
     default:
       return z.unknown();
@@ -598,42 +651,42 @@ function pyPrim(name: PrimName): string {
 
 export function typeExprToPy(expr: TypeExpr, models: StructureModel[] = []): string {
   switch (expr.kind) {
-    case "prim":
+    case TypeExprKind.Prim:
       return pyPrim(expr.name);
-    case "document":
+    case TypeExprKind.Document:
       return "Document";
-    case "quote":
+    case TypeExprKind.Quote:
       return "quote_string_t";
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return "text_quote_t";
-    case "list":
+    case TypeExprKind.List:
       return `list[${typeExprToPy(expr.item, models)}]`;
-    case "ref": {
+    case TypeExprKind.Ref: {
       const name = modelName(models, expr.modelId);
       return name ? modelExportIdentifier(name) : "Any";
     }
-    case "optional":
+    case TypeExprKind.Optional:
       return `${typeExprToPy(expr.inner, models)} | None`;
-    case "set":
+    case TypeExprKind.Set:
       return `set[${typeExprToPy(expr.item, models)}]`;
-    case "map":
+    case TypeExprKind.Map:
       return `dict[${typeExprToPy(expr.key, models)}, ${typeExprToPy(expr.value, models)}]`;
-    case "union":
+    case TypeExprKind.Union:
       return expr.variants.map((v) => typeExprToPy(v, models)).join(" | ");
-    case "generic":
+    case TypeExprKind.Generic:
       if (expr.name === "tuple") {
         return `tuple[${expr.args.map((a) => typeExprToPy(a, models)).join(", ")}]`;
       }
       return expr.args.length
         ? `${expr.name}[${expr.args.map((a) => typeExprToPy(a, models)).join(", ")}]`
         : expr.name;
-    case "named":
+    case TypeExprKind.Named:
       return expr.name;
-    case "unset":
+    case TypeExprKind.Unset:
       return "UNSET";
-    case "file":
+    case TypeExprKind.File:
       return "FileInput";
-    case "unknown":
+    case TypeExprKind.Unknown:
       return "Any";
     default:
       return "Any";
@@ -667,7 +720,7 @@ export function fieldToPy(field: ModelField, models: StructureModel[]): string {
 
 export function typeExprToTs(expr: TypeExpr, models: StructureModel[] = []): string {
   switch (expr.kind) {
-    case "prim":
+    case TypeExprKind.Prim:
       switch (expr.name) {
         case "text":
         case "datetime":
@@ -681,40 +734,40 @@ export function typeExprToTs(expr: TypeExpr, models: StructureModel[] = []): str
         default:
           return "unknown";
       }
-    case "document":
+    case TypeExprKind.Document:
       return "Document";
-    case "quote":
+    case TypeExprKind.Quote:
       return "quote_string_t";
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return "text_quote_t";
-    case "list":
+    case TypeExprKind.List:
       return `${typeExprToTs(expr.item, models)}[]`;
-    case "ref": {
+    case TypeExprKind.Ref: {
       const name = modelName(models, expr.modelId);
       return name ? modelExportIdentifier(name) : "unknown";
     }
-    case "optional":
+    case TypeExprKind.Optional:
       return `${typeExprToTs(expr.inner, models)} | undefined`;
-    case "set":
+    case TypeExprKind.Set:
       return `Set<${typeExprToTs(expr.item, models)}>`;
-    case "map":
+    case TypeExprKind.Map:
       return `Record<${typeExprToTs(expr.key, models)}, ${typeExprToTs(expr.value, models)}>`;
-    case "union":
+    case TypeExprKind.Union:
       return expr.variants.map((v) => typeExprToTs(v, models)).join(" | ");
-    case "generic":
+    case TypeExprKind.Generic:
       if (expr.name === "tuple") {
         return `[${expr.args.map((a) => typeExprToTs(a, models)).join(", ")}]`;
       }
       return expr.args.length
         ? `${expr.name}<${expr.args.map((a) => typeExprToTs(a, models)).join(", ")}>`
         : expr.name;
-    case "named":
+    case TypeExprKind.Named:
       return expr.name;
-    case "unset":
+    case TypeExprKind.Unset:
       return "never";
-    case "file":
+    case TypeExprKind.File:
       return "FileInput";
-    case "unknown":
+    case TypeExprKind.Unknown:
       return "unknown";
     default:
       return "unknown";
@@ -729,7 +782,7 @@ export function labelToPyKey(label: string): string {
 
 // AI : wrap composite BAML types before postfix ? / [] so `int | string` stays grouped.
 function bamlNeedsParens(expr: TypeExpr): boolean {
-  return expr.kind === "union" || expr.kind === "optional" || expr.kind === "map";
+  return expr.kind === TypeExprKind.Union || expr.kind === TypeExprKind.Optional || expr.kind === TypeExprKind.Map;
 }
 
 function bamlWrap(expr: TypeExpr, models: StructureModel[]): string {
@@ -740,7 +793,7 @@ function bamlWrap(expr: TypeExpr, models: StructureModel[]): string {
 // AI : BAML type strings — https://docs.boundaryml.com/ref/baml/types (no datetime/json/set/tuple).
 export function typeExprToBaml(expr: TypeExpr, models: StructureModel[] = []): string {
   switch (expr.kind) {
-    case "prim":
+    case TypeExprKind.Prim:
       switch (expr.name) {
         case "text":
         case "datetime":
@@ -755,28 +808,28 @@ export function typeExprToBaml(expr: TypeExpr, models: StructureModel[] = []): s
         default:
           return "string";
       }
-    case "document":
+    case TypeExprKind.Document:
       return "Document";
-    case "quote":
+    case TypeExprKind.Quote:
       return "string";
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return "TextQuote";
-    case "list":
+    case TypeExprKind.List:
       return `${bamlWrap(expr.item, models)}[]`;
-    case "ref": {
+    case TypeExprKind.Ref: {
       const name = modelName(models, expr.modelId);
       return name ? modelExportIdentifierRust(name) : "string";
     }
-    case "optional":
+    case TypeExprKind.Optional:
       return `${bamlWrap(expr.inner, models)}?`;
-    case "set":
+    case TypeExprKind.Set:
       // AI : BAML has no set — list is the documented substitute.
       return `${bamlWrap(expr.item, models)}[]`;
-    case "map":
+    case TypeExprKind.Map:
       return `map<${typeExprToBaml(expr.key, models)}, ${typeExprToBaml(expr.value, models)}>`;
-    case "union":
+    case TypeExprKind.Union:
       return expr.variants.map((v) => typeExprToBaml(v, models)).join(" | ");
-    case "generic":
+    case TypeExprKind.Generic:
       if (expr.name === "tuple") {
         // AI : BAML has no tuple — flatten to a descriptive string placeholder.
         return "string";
@@ -784,13 +837,13 @@ export function typeExprToBaml(expr: TypeExpr, models: StructureModel[] = []): s
       return expr.args.length
         ? `${expr.name}<${expr.args.map((a) => typeExprToBaml(a, models)).join(", ")}>`
         : expr.name;
-    case "named":
+    case TypeExprKind.Named:
       return expr.name;
-    case "unset":
+    case TypeExprKind.Unset:
       return "null";
-    case "file":
+    case TypeExprKind.File:
       return "FileInput";
-    case "unknown":
+    case TypeExprKind.Unknown:
       return "string";
     default:
       return "string";
@@ -800,7 +853,7 @@ export function typeExprToBaml(expr: TypeExpr, models: StructureModel[] = []): s
 // AI : Rust type strings for pipeline export — serde-friendly, JSON Value for open shapes.
 export function typeExprToRust(expr: TypeExpr, models: StructureModel[] = []): string {
   switch (expr.kind) {
-    case "prim":
+    case TypeExprKind.Prim:
       switch (expr.name) {
         case "text":
         case "datetime":
@@ -816,41 +869,41 @@ export function typeExprToRust(expr: TypeExpr, models: StructureModel[] = []): s
         default:
           return "serde_json::Value";
       }
-    case "document":
+    case TypeExprKind.Document:
       return "Document";
-    case "quote":
+    case TypeExprKind.Quote:
       return "QuoteSpan";
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return "TextQuoteLoose";
-    case "list":
+    case TypeExprKind.List:
       return `Vec<${typeExprToRust(expr.item, models)}>`;
-    case "ref": {
+    case TypeExprKind.Ref: {
       const name = modelName(models, expr.modelId);
       return name ? modelExportIdentifierRust(name) : "serde_json::Value";
     }
-    case "optional":
+    case TypeExprKind.Optional:
       return `Option<${typeExprToRust(expr.inner, models)}>`;
-    case "set":
+    case TypeExprKind.Set:
       return `std::collections::HashSet<${typeExprToRust(expr.item, models)}>`;
-    case "map":
+    case TypeExprKind.Map:
       return `std::collections::HashMap<${typeExprToRust(expr.key, models)}, ${typeExprToRust(expr.value, models)}>`;
-    case "union":
+    case TypeExprKind.Union:
       // AI : untagged unions → Value; callers can narrow after deserialize.
       return "serde_json::Value";
-    case "generic":
+    case TypeExprKind.Generic:
       if (expr.name === "tuple") {
         return `(${expr.args.map((a) => typeExprToRust(a, models)).join(", ")})`;
       }
       return expr.args.length
         ? `${expr.name}<${expr.args.map((a) => typeExprToRust(a, models)).join(", ")}>`
         : expr.name;
-    case "named":
+    case TypeExprKind.Named:
       return expr.name;
-    case "unset":
+    case TypeExprKind.Unset:
       return "!";
-    case "file":
+    case TypeExprKind.File:
       return "FileInput";
-    case "unknown":
+    case TypeExprKind.Unknown:
       return "serde_json::Value";
     default:
       return "serde_json::Value";
@@ -860,7 +913,7 @@ export function typeExprToRust(expr: TypeExpr, models: StructureModel[] = []): s
 // AI : Go type strings for pipeline export — JSON tags on structs; RawMessage for open shapes.
 export function typeExprToGo(expr: TypeExpr, models: StructureModel[] = []): string {
   switch (expr.kind) {
-    case "prim":
+    case TypeExprKind.Prim:
       switch (expr.name) {
         case "text":
         case "datetime":
@@ -876,28 +929,28 @@ export function typeExprToGo(expr: TypeExpr, models: StructureModel[] = []): str
         default:
           return "json.RawMessage";
       }
-    case "document":
+    case TypeExprKind.Document:
       return "Document";
-    case "quote":
+    case TypeExprKind.Quote:
       return "QuoteSpan";
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return "TextQuoteLoose";
-    case "list":
+    case TypeExprKind.List:
       return `[]${typeExprToGo(expr.item, models)}`;
-    case "ref": {
+    case TypeExprKind.Ref: {
       const name = modelName(models, expr.modelId);
       return name ? modelExportIdentifierGo(name) : "json.RawMessage";
     }
-    case "optional":
+    case TypeExprKind.Optional:
       return `*${typeExprToGo(expr.inner, models)}`;
-    case "set":
+    case TypeExprKind.Set:
       // AI : Go has no set — slice is the practical substitute.
       return `[]${typeExprToGo(expr.item, models)}`;
-    case "map":
+    case TypeExprKind.Map:
       return `map[${typeExprToGo(expr.key, models)}]${typeExprToGo(expr.value, models)}`;
-    case "union":
+    case TypeExprKind.Union:
       return "json.RawMessage";
-    case "generic":
+    case TypeExprKind.Generic:
       if (expr.name === "tuple") {
         // AI : Go has no tuple — fall back to RawMessage.
         return "json.RawMessage";
@@ -905,13 +958,13 @@ export function typeExprToGo(expr: TypeExpr, models: StructureModel[] = []): str
       return expr.args.length
         ? `${expr.name}[${expr.args.map((a) => typeExprToGo(a, models)).join(", ")}]`
         : expr.name;
-    case "named":
+    case TypeExprKind.Named:
       return expr.name;
-    case "unset":
+    case TypeExprKind.Unset:
       return "struct{}";
-    case "file":
+    case TypeExprKind.File:
       return "FileInput";
-    case "unknown":
+    case TypeExprKind.Unknown:
       return "json.RawMessage";
     default:
       return "json.RawMessage";

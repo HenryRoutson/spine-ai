@@ -222,7 +222,7 @@ export function legacyFieldFromTypeExpr(
 }
 
 export function fieldTypeExprSource(
-  field: Pick<import("@/lib/types").ModelField, "type" | "ref" | "typeExpr">,
+  field: import("@/lib/types").ModelFieldTypeSourcePick,
   models: StructureModel[],
 ): string {
   return formatTypeExprPy(fieldToTypeExpr(field), models)

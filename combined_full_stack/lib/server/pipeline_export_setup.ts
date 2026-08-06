@@ -127,9 +127,20 @@ export function generateEnvExample(project: Project): string {
 export function generateSetupReadme(project: Project, slug: string): string {
   const needs = analyzeExportRuntimeNeeds(project);
   const lines = [
-    `# ${project.name} — exported pipeline setup`,
+    `# ${project.name}`,
     "",
-    "This folder was generated from Spine. Wire the runtime stubs, then run the orchestrator.",
+    "Exported pipeline from Spine — types, step bodies, gRPC/HTTP connector, and inference UI.",
+    "",
+    "## Quick start",
+    "",
+    "```bash",
+    "cp .env.example .env   # add OPENROUTER_API_KEY",
+    "npm install @grpc/grpc-js @grpc/proto-loader dotenv",
+    "npx tsx connector_server.ts",
+    "# open inference_ui.html → Connector URL http://localhost:8080/v1/run",
+    "```",
+    "",
+    "Or call `runPipeline` / `run_pipeline` directly (see **Run** below).",
     "",
     "## Files",
     "",
@@ -143,8 +154,8 @@ export function generateSetupReadme(project: Project, slug: string): string {
     "- `inference_ui.html` — standalone inference UI (open in browser, POST to connector)",
     "- `.env.example` — copy to `.env` and fill in (never commit real secrets)",
     "- `requirements.txt` — Python deps (`pip install -r requirements.txt`)",
-    "- `README.md` — this file (setup + run)",
-    "- `SETUP.md` — same content as README (compat alias)",
+    "- `README.md` — this file",
+    "- `SETUP.md` — pointer to this README",
     "",
     "## 1. Environment",
     "",
@@ -558,11 +569,18 @@ export function generatePipelineSetupFiles(project: Project): PipelineSetupFile[
   assertNoSecretValuesInExport(envExample);
   assertNoSecretValuesInExport(setupMd);
   assertNoSecretValuesInExport(requirements);
-  // AI : README is the canonical setup doc (spec); SETUP.md kept as a same-content alias.
+  // AI : README is the canonical setup doc (spec); SETUP.md is a short pointer.
+  const setupPointer = [
+    `# ${project.name} — setup`,
+    "",
+    "See **[README.md](./README.md)** for environment, connector, OCR, and run instructions.",
+    "",
+  ].join("\n");
+  assertNoSecretValuesInExport(setupPointer);
   return [
     { filename: ".env.example", content: envExample, mime: "text/plain" },
     { filename: "README.md", content: setupMd, mime: "text/markdown" },
-    { filename: "SETUP.md", content: setupMd, mime: "text/markdown" },
+    { filename: "SETUP.md", content: setupPointer, mime: "text/markdown" },
     { filename: "requirements.txt", content: requirements, mime: "text/plain" },
     ...generateCustomLlmProviderExportFiles(project),
   ];

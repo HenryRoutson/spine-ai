@@ -47,8 +47,10 @@ import { runLogText } from "@/lib/run-log-text"
 import { runLogJson } from "@/lib/run-log-json"
 import { copyTextToClipboard } from "@/lib/clipboard"
 import { IoSection } from "@/components/logging/io-section"
+import { stepHasPromptPreview } from "@/lib/prompt-cache-regions"
 import { IoPager } from "@/components/logging/io-pager"
 import { StepLoadedDocSection } from "@/components/step-loaded-doc-section"
+import { StepPromptSection } from "@/components/step-prompt-section"
 import { StepCodeExecPreview } from "@/components/step-code-exec-preview"
 import { StepValidationErrorsSection } from "@/components/step-validation-errors-section"
 import { STEP_TRACE_IO_INDENT_MARGIN } from "@/lib/step-trace-layout"
@@ -500,6 +502,12 @@ export function Logging() {
 
                           {step.kind === "input" ? (
                             <StepLoadedDocSection step={step} docs={docs} models={models} />
+                          ) : stepHasPromptPreview(step) ? (
+                            <StepPromptSection
+                              step={step}
+                              label={step.label}
+                              className={STEP_TRACE_IO_INDENT_MARGIN}
+                            />
                           ) : (
                           <IoSection
                             title={inTitle}
@@ -519,6 +527,8 @@ export function Logging() {
                                         .map((item) => `${item.label}\n${item.text}`)
                                         .join("\n\n")
                                     : step.inputPreview,
+                                promptItems: step.inputPreviewItems,
+                                inputPreview: step.inputPreview,
                                 title: `${inTitle} (input) · ${step.label}`,
                                 sourceDocId: stepSourceDoc,
                               })

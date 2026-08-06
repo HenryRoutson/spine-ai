@@ -12,9 +12,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
-import { PromptText } from "@/components/highlight"
+import { StepPromptPreview } from "@/components/step-prompt-preview"
 import { QuoteLinks, quotesFromJson } from "@/components/quote-links"
-import { IoPager } from "@/components/logging/io-pager"
 import { API_ROUTES } from "@/lib/api-routes"
 import { cn } from "@/lib/utils"
 import {
@@ -351,17 +350,15 @@ export function Cache() {
                               Input
                             </h3>
                             {detail.inputPreviewItems && detail.inputPreviewItems.length > 1 ? (
-                              <IoPager
-                                items={detail.inputPreviewItems}
-                                renderItem={(item) => (
-                                  <div className="rounded border border-border bg-muted/20 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
-                                    <PromptText text={item.text} />
-                                  </div>
-                                )}
-                              />
+                              <div className="rounded border border-border bg-muted/20 p-3 font-mono text-xs leading-relaxed text-muted-foreground">
+                                <StepPromptPreview
+                                  inputPreview={detail.inputPreview}
+                                  inputPreviewItems={detail.inputPreviewItems}
+                                />
+                              </div>
                             ) : (
-                              <div className="rounded border border-border bg-muted/20 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
-                                <PromptText text={detail.inputPreview} />
+                              <div className="rounded border border-border bg-muted/20 p-3 font-mono text-xs leading-relaxed text-muted-foreground">
+                                <StepPromptPreview inputPreview={detail.inputPreview} />
                               </div>
                             )}
                           </section>

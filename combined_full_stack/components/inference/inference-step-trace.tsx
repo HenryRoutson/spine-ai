@@ -11,6 +11,7 @@ import { LlmCallDistribution } from "@/components/llm-call-distribution"
 import { StepServerLogsSection } from "@/components/server-logs-panel"
 import { StepInputDescription } from "@/components/step-input-description"
 import { StepLoadedDocSection } from "@/components/step-loaded-doc-section"
+import { StepPromptSection } from "@/components/step-prompt-section"
 import { Progress } from "@/components/ui/progress"
 import { formatCostCents } from "@/lib/format"
 import { resolveInputDescriptionCheck } from "@/lib/input-description"
@@ -34,10 +35,11 @@ import { CustomCodeLanguage } from "@/lib/types"
 import { OutputStepLabel, outputStepOutlineClass, StepTraceOutputPreview, stepHasTraceOutput } from "@/components/inference/inference-outputs"
 import { StepCodeExecPreview } from "@/components/step-code-exec-preview"
 import { StepValidationErrorsSection } from "@/components/step-validation-errors-section"
-import { stepTraceIndentClass } from "@/lib/step-trace-layout"
+import { stepHasPromptPreview } from "@/lib/prompt-cache-regions"
 import { isDocReferenceOutputJson } from "@/lib/step-doc"
 import { firstUserCodeEntry } from "@/lib/custom_code"
 import type { CodeExecUiState } from "@/lib/code-exec-ui"
+import { stepTraceIndentClass } from "@/lib/step-trace-layout"
 
 export { stepTraceIndentClass } from "@/lib/step-trace-layout"
 
@@ -117,6 +119,8 @@ export function InferenceStepRow({
   const showValidationErrors = showStepIo && stepFinished && !!errorPreview
   const showInputDocPreview =
     isInputStep && showStepIo && stepFinished && (runStep != null || assignedInputDocs.length > 0)
+  const showPromptPreview =
+    showStepIo && stepFinished && !isInputStep && !!runStep && stepHasPromptPreview(runStep)
   const showOutputPreview =
     showStepIo &&
     stepFinished &&
@@ -214,6 +218,9 @@ export function InferenceStepRow({
           compact={ioCompact}
           className={ioClassName}
         />
+      )}
+      {showPromptPreview && runStep && (
+        <StepPromptSection step={runStep} label={label} className={ioClassName} />
       )}
       {showInputDocPreview && (
         <StepLoadedDocSection

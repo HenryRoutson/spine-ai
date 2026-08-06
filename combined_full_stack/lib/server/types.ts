@@ -52,8 +52,8 @@ export interface ModelField {
   examples?: string[]; // AI : sample values — shown in structure UI and emitted in pydantic / LLM schema hints
   negativeExamples?: string[]; // AI : counterexamples — invalid values the LLM must not emit
   ref?: StructureModelId; // referenced model id when type === "model" | "list[model]"
-  minItems?: number; // AI : minimum list length when type is a list[…] field
-  maxItems?: number; // AI : maximum list length when type is a list[…] field
+  minItems?: number; // AI : min length for list[…] / set[…]; min entry count for map[…, …]
+  maxItems?: number; // AI : max length for list[…] / set[…]; max entry count for map[…, …]
   minLength?: number; // AI : minimum string length when type is text (or text-like)
   maxLength?: number; // AI : maximum string length when type is text (or text-like)
   typeExpr?: TypeExpr; // AI : when set, overrides type/ref — full Python-style type expression
@@ -64,6 +64,20 @@ export interface ModelField {
   // AI : ± allowed on int/float test compare — field-level (spec § Testing), not per test file.
   testTolerance?: number;
 }
+
+// AI : ModelField keys that resolve a field's TypeExpr — typeExpr overrides legacy type/ref.
+export enum ModelFieldTypeSource {
+  Type = "type",
+  Ref = "ref",
+  TypeExpr = "typeExpr",
+}
+
+export type ModelFieldTypeSourcePick = Pick<
+  ModelField,
+  ModelFieldTypeSource.Type | ModelFieldTypeSource.Ref | ModelFieldTypeSource.TypeExpr
+>;
+
+export type ModelFieldLegacyTypePick = Pick<ModelField, ModelFieldTypeSource.Type | ModelFieldTypeSource.Ref>;
 
 // AI : meta-type — one field row inside a StructureDef (structure-of-structures)
 export type StructureFieldDef = Pick<

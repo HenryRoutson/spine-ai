@@ -110,7 +110,7 @@ function workspaceActiveProjectFromSession(): string {
 }
 
 function accountKnowsProject(projectId: string, account: ReturnType<typeof readAccountStateCache>): boolean {
-  return !!projectId && account?.projects.some((p) => p.id === projectId)
+  return !!(projectId && account?.projects.some((p) => p.id === projectId))
 }
 
 function upsertProjectInAccountCache(project: Project): void {

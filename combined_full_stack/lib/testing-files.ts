@@ -413,7 +413,7 @@ type field_path_string = string
 
 // AI : static walk of a type — every field path whose structure definition says
 // AI : deterministic:false (probabilistic — LLM prose that varies per run), e.g. "[].mistake_explanation".
-function isNumericField(f: Pick<StructureModel["fields"][number], "type" | "ref" | "typeExpr" | "deterministic">): boolean {
+function isNumericField(f: import("@/lib/types").ModelFieldTypeSourcePick & Pick<import("@/lib/types").ModelField, "deterministic">): boolean {
   if (f.deterministic === false) return false
   const expr = fieldToTypeExpr(f)
   return expr.kind === "prim" && (expr.name === "int" || expr.name === "float")
