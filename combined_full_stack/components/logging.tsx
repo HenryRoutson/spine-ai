@@ -49,6 +49,7 @@ import { copyTextToClipboard } from "@/lib/clipboard"
 import { IoSection } from "@/components/logging/io-section"
 import { IoPager } from "@/components/logging/io-pager"
 import { StepLoadedDocSection } from "@/components/step-loaded-doc-section"
+import { StepCodeExecPreview } from "@/components/step-code-exec-preview"
 import { filterRuns, isTestingRun, RunNotesPreview } from "@/components/logging/run-picker-column"
 import { filterRunsByErrorStatus, runHasErrors } from "@/lib/run-error-log"
 import { IsolatedErrorActions } from "@/components/logging/isolated-error-actions"
@@ -544,6 +545,16 @@ export function Logging() {
                                   title: `Server logs · ${step.label}`,
                                 })
                               }
+                            />
+                          )}
+
+                          {step.codeProfile && (
+                            <StepCodeExecPreview
+                              code={step.codeProfile.code}
+                              language={step.codeProfile.language}
+                              lineMs={step.codeProfile.lineMs}
+                              compact
+                              className="ml-7"
                             />
                           )}
 

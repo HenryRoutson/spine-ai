@@ -1,6 +1,7 @@
 // AI : shared Zod schemas for API route bodies — reject unknown keys and cap sizes server-side.
 
 import { JobLogLevel } from "@/lib/run-types";
+import { CustomCodeLanguage } from "@/lib/server/types";
 import { z } from "zod";
 import { ASSISTANT_HISTORY_LIMIT } from "@/lib/assistant-chat-types";
 import { TOPUP_OPTIONS_CENTS, FEEDBACK_MIN_CHARS } from "@/lib/billing_config";
@@ -304,6 +305,18 @@ export const jobLogEntrySchema = z.object({
   moduleId: z.string().max(128).optional(),
 });
 
+const codeLineProfileSchema = z
+  .record(z.string().max(16), z.number().min(0).max(600_000))
+  .refine((m) => Object.keys(m).length <= 500, { message: "code line profile too large" });
+
+export const stepCodeProfileSchema = z
+  .object({
+    code: z.string().max(MAX_MODULE_STRING_CHARS),
+    language: z.nativeEnum(CustomCodeLanguage),
+    lineMs: codeLineProfileSchema,
+  })
+  .strict();
+
 export const feedbackBodySchema = z.object({
   message: z.string().trim().min(FEEDBACK_MIN_CHARS).max(MAX_FEEDBACK_MESSAGE_CHARS),
 });
@@ -487,6 +500,7 @@ export const clientStepBodySchema = z
     output: jsonSizeBounded(MAX_CLIENT_STEP_OUTPUT_CHARS).optional(),
     error: z.string().max(4_000).optional(),
     clientLogs: z.array(jobLogEntrySchema).max(MAX_CLIENT_LOGS).optional(),
+    codeProfile: stepCodeProfileSchema.optional(),
   })
   .strict()
   .refine((d) => d.output !== undefined || !!d.error, { message: "output or error required" });
@@ -587,6 +601,7 @@ export const sharedLinkClientStepBodySchema = z
     output: jsonSizeBounded(MAX_CLIENT_STEP_OUTPUT_CHARS).optional(),
     error: z.string().max(4_000).optional(),
     clientLogs: z.array(jobLogEntrySchema).max(MAX_CLIENT_LOGS).optional(),
+    codeProfile: stepCodeProfileSchema.optional(),
   })
   .strict()
   .refine((d) => d.output !== undefined || !!d.error, { message: "output or error required" });

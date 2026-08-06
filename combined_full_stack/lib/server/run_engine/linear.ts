@@ -19,6 +19,7 @@ import {
   recordStepModel,
   stepFailuresFor,
   stepServerLogs,
+  snapshotForByLabel,
   validatesStepOutputAsList,
 } from "./helpers";
 import { applyInputCacheSideEffects, failedStepResult, jsonStringifyStepValue, resultFromCache } from "./results";
@@ -318,7 +319,7 @@ export async function runLinearStepsFrom(
 
     if (status !== "error") {
       ctx.outputs.set(m.id, result.value);
-      ctx.byLabel[m.label] = result.value;
+      ctx.byLabel[m.label] = snapshotForByLabel(m, result.value);
       const structId = m.outStructureId ?? (m.kind === "output" || m.kind === "assert" || m.kind === "human-review" ? m.inStructureId : undefined);
       if (structId) ctx.byModel.set(structId, result.value);
       ctx.prevModuleId = m.id;

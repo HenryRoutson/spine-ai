@@ -52,6 +52,13 @@ export function validatesStepOutputAsList(
   return false;
 }
 
+// AI : byLabel is read by assert/custom-code state["Label"] — list steps must stay arrays for .map(id).
+export function snapshotForByLabel(m: PipelineModule, value: unknown): unknown {
+  if (!stepEmitsList(m) && !resolveOutIsList(m)) return value;
+  if (Array.isArray(value)) return value;
+  return value == null ? [] : [value];
+}
+
 export function prevModuleFor(
   modules: PipelineModule[],
   prevModuleId?: ModuleId,

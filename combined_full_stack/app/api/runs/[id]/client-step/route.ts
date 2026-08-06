@@ -66,6 +66,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
           {
             cacheOwnerId: checkpoint.cacheOwnerId ?? auth.userId,
             clientLogs: body.clientLogs as JobLogEntry[] | undefined,
+            codeProfile: body.codeProfile,
             onStep: (p) => {
             void jobProgress(auth.userId, jobId, p, jobDb).catch((err) =>
               apiLog.error(`jobProgress failed`, { jobId, error: (err as Error).message }),

@@ -34,10 +34,15 @@ const SCOPE_COLORS: { pattern: RegExp; color: string }[] = [
 
 export type syntax_span = { text: string; color: string }
 
-type monaco_token = { startIndex: number; scopes?: string; type?: string }
+// AI : Monaco 0.55+ tokenize() returns Token { offset, type } — not legacy IToken { startIndex, scopes }.
+type monaco_token = { offset?: number; startIndex?: number; scopes?: string; type?: string }
 
 function monacoLanguageId(language: CustomCodeLanguage): string {
   return language === CustomCodeLanguage.Python ? "python" : "typescript"
+}
+
+function tokenOffset(token: monaco_token): number {
+  return token.offset ?? token.startIndex ?? 0
 }
 
 function tokenScopes(token: monaco_token): string {
@@ -57,12 +62,13 @@ function lineSpans(line: string, tokens: monaco_token[]): syntax_span[] {
   if (!tokens.length) return [{ text: line, color: DEFAULT_FG }]
 
   const spans: syntax_span[] = []
-  if (tokens[0].startIndex > 0) {
-    spans.push({ text: line.slice(0, tokens[0].startIndex), color: DEFAULT_FG })
+  const firstOffset = tokenOffset(tokens[0])
+  if (firstOffset > 0) {
+    spans.push({ text: line.slice(0, firstOffset), color: DEFAULT_FG })
   }
   for (let i = 0; i < tokens.length; i++) {
-    const start = tokens[i].startIndex
-    const end = i + 1 < tokens.length ? tokens[i + 1].startIndex : line.length
+    const start = tokenOffset(tokens[i])
+    const end = i + 1 < tokens.length ? tokenOffset(tokens[i + 1]) : line.length
     const text = line.slice(start, end)
     if (!text) continue
     spans.push({ text, color: scopeColor(tokenScopes(tokens[i])) })

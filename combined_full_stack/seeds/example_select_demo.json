@@ -351,7 +351,7 @@
       "id": "mod_assert_select",
       "kind": "assert",
       "label": "✓ Select Relevant Examples",
-      "note": "Structural check — at least one row, each has selection_reason from a known library id",
+      "note": "Structural check — selected ids must exist in the merged library (Combine Inputs), not only Parse Examples state",
       "inStructureId": "m_selected",
       "outStructureId": "m_selected",
       "cached": true,
@@ -359,7 +359,7 @@
       "avgCostCents": 0,
       "fallbackList": [
         {
-          "typescript": "const selected = step(\"Select Relevant Examples\");\nconst all = step(\"Parse Examples\");\nif (!Array.isArray(selected) || selected.length < 1) throw new Error(\"expected at least one selected example\");\nconst ids = new Set((Array.isArray(all) ? all : []).map((e) => e?.id));\nfor (const row of selected) {\n  if (typeof row?.selection_reason !== \"string\" || !row.selection_reason.trim()) throw new Error(\"missing selection_reason\");\n  if (!ids.has(row?.id)) throw new Error(`unknown example id ${row?.id}`);\n}"
+          "typescript": "const selected = Array.isArray(input) ? input : step(\"Select Relevant Examples\");\nif (!Array.isArray(selected) || selected.length < 1) throw new Error(\"expected at least one selected example\");\nconst fromCombine = step(\"Combine Inputs\")?.library?.examples;\nconst fromParse = step(\"Parse Examples\");\nconst all = Array.isArray(fromCombine) && fromCombine.length ? fromCombine : Array.isArray(fromParse) ? fromParse : [];\nif (!all.length) throw new Error(\"expected library examples from Combine Inputs or Parse Examples\");\nconst ids = new Set(all.map((e) => e?.id).filter(Boolean));\nfor (const row of selected) {\n  if (typeof row?.selection_reason !== \"string\" || !row.selection_reason.trim()) throw new Error(\"missing selection_reason\");\n  if (!ids.has(row?.id)) throw new Error(`unknown example id ${row?.id}`);\n}"
         }
       ],
       "outType": {

@@ -10,7 +10,7 @@ import {
   type CustomCodeAttemptFailure,
 } from "@/lib/custom_code"
 import { formatLineProfileLog, type CodeTraceEvent } from "@/lib/custom_code_trace"
-import type { CodeExecUiState, CodeLineProfile } from "@/lib/code-exec-ui"
+import type { CodeExecUiState, CodeLineProfile, StepCodeProfile } from "@/lib/code-exec-ui"
 import { CODE_ERROR_NS, recordCodeError } from "@/lib/code-error-history"
 import { getCustomLlmProvider, type CustomLlmProviderDef } from "@/lib/custom-llm-providers"
 import type { LlmClientStepSpec } from "@/lib/llm-client-step"
@@ -228,6 +228,7 @@ export type ClientStepSubmitPayload = {
   output?: unknown
   error?: string
   clientLogs?: JobLogEntry[]
+  codeProfile?: StepCodeProfile
 }
 
 // AI : assert/custom-code failures are expected project outcomes — warn in console, not Next.js console.error overlay.
@@ -423,7 +424,11 @@ export async function awaitJobCompletion(
             ? await runAssertWithFallbacks(entries, input, pipelineState, expectedOutputs, { onTrace })
             : await runCustomCodeWithFallbacks(entries, input, pipelineState, { onTrace })
         const profileCode = entries[attemptIndex]?.code ?? primaryEntry.code
-        if (Object.keys(lineMs).length) {
+        const profileLanguage = entries[attemptIndex]?.language ?? language
+        const codeProfile: StepCodeProfile | undefined = Object.keys(lineMs).length
+          ? { code: profileCode, language: profileLanguage, lineMs }
+          : undefined
+        if (codeProfile) {
           clientLogs.push({
             at: Date.now(),
             level: JobLogLevel.Info,
@@ -459,10 +464,14 @@ export async function awaitJobCompletion(
               : "custom code returned undefined — add a trailing (input) => output arrow or an explicit return",
           )
         }
-        await submitClientStep({ output, clientLogs })
+        await submitClientStep({ output, clientLogs, codeProfile })
         clientStepSubmittedFor = moduleId
       } catch (err) {
         pushCodeExec({ activeLine: undefined, lineMs, status: "error" })
+        const profileCode = entries[0]?.code ?? primaryEntry.code
+        const codeProfile: StepCodeProfile | undefined = Object.keys(lineMs).length
+          ? { code: profileCode, language: entries[0]?.language ?? primaryEntry.language, lineMs }
+          : undefined
         const failures =
           err instanceof CustomCodeExhaustedError
             ? err.failures
@@ -497,6 +506,7 @@ export async function awaitJobCompletion(
         await submitClientStep({
           error: clientStepSubmitError(kind, err, label),
           clientLogs,
+          codeProfile,
         })
         clientStepSubmittedFor = moduleId
       } finally {

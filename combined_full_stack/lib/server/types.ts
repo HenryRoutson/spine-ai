@@ -461,6 +461,7 @@ export interface RunStep extends Omit<StepDescriptionFields, "outputPreview"> {
   llmCalls?: LlmCallRecord[];
   failures?: RunFailureRecord[];
   serverLogs?: import("@/lib/run-types").JobLogEntry[]; // AI : mirrored ServerLogger lines for this step
+  codeProfile?: import("@/lib/code-exec-ui").StepCodeProfile; // AI : browser custom-code line timings + source snapshot
 }
 
 export type RunFingerprint = string & { __brand: "RunFingerprint" };

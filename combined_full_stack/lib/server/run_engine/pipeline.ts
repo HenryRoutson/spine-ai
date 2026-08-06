@@ -39,7 +39,7 @@ import { computeRunFingerprint, buildRunInputDocIds, stepCacheKey } from "../run
 import { writeStepCache } from "../step_cache";
 import { validateStepOutput } from "../structure";
 import { ensureModelOptionsFresh } from "../openrouter_models";
-import { modelById, recordStepModel, stepFailuresFor, stepServerLogs, validatesStepOutputAsList } from "./helpers";
+import { modelById, recordStepModel, snapshotForByLabel, stepFailuresFor, stepServerLogs, validatesStepOutputAsList } from "./helpers";
 import { persistArtifacts, persistCustomCodeArtifacts } from "./artifacts";
 import { restoreCtx } from "./context";
 import { createWriteLive } from "./live";
@@ -208,7 +208,11 @@ export async function resumeRunPipeline(
   store: Store,
   checkpoint: RunCheckpoint,
   clientStep: ClientStepResume,
-  opts: Omit<RunOptions, "model"> & { model?: ModelId; clientLogs?: import("@/lib/run-types").JobLogEntry[] } = {},
+  opts: Omit<RunOptions, "model"> & {
+    model?: ModelId;
+    clientLogs?: import("@/lib/run-types").JobLogEntry[];
+    codeProfile?: import("@/lib/code-exec-ui").StepCodeProfile;
+  } = {},
 ): Promise<PipelineRun> {
   // AI : landing ephemeral store uses projectOverride — same as runPipeline.
   const rawProject = opts.projectOverride ?? store.project(checkpoint.projectId);
@@ -344,7 +348,7 @@ export async function resumeRunPipeline(
   }
   if (status !== "error") {
     ctx.outputs.set(m.id, result.value);
-    ctx.byLabel[m.label] = result.value;
+    ctx.byLabel[m.label] = snapshotForByLabel(m, result.value);
     const structId = m.outStructureId ?? (m.kind === "output" || m.kind === "assert" ? m.inStructureId : undefined);
     if (structId) ctx.byModel.set(structId, result.value);
     ctx.prevModuleId = m.id;
@@ -367,6 +371,7 @@ export async function resumeRunPipeline(
     llmCalls: result.llmCalls?.length ? result.llmCalls : undefined,
     failures: stepFailuresFor(result, status, ctx.stepExtraFailures),
     serverLogs: stepServerLogs(serverLogs, m.id),
+    codeProfile: opts.codeProfile,
   });
   await opts.onStep?.({ index: checkpoint.stepIndex, total: project.modules.length, moduleId: m.id, label: m.label, status });
   if (status === "error") {
