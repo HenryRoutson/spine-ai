@@ -1,17 +1,33 @@
 import type { CodeLineProfile } from "@/lib/code-exec-ui"
+import { instrumentCodeLinesAst, type InstrumentCodeOpts } from "@/lib/custom_code_trace_ast"
+
+export type { InstrumentCodeOpts } from "@/lib/custom_code_trace_ast"
+
+// AI : line-enter / leave / finish phases for custom-code visual profiling.
+export enum CodeTracePhase {
+  Enter = "enter",
+  Leave = "leave",
+  Done = "done",
+}
 
 export type CodeTraceEvent = {
   line: number
   slot?: number
-  phase: "enter" | "leave" | "done"
+  phase: CodeTracePhase
   activeLine?: number
   activeSlot?: number
   lineMs: CodeLineProfile
   msSinceStart: number
 }
 
-export type ForgeTraceFn = ((line: number, slot?: number) => void) & {
-  finish: () => CodeLineProfile
+export type ForgeTraceFinish = {
+  lineMs: CodeLineProfile
+  lastLine?: number
+  lastSlot?: number
+}
+
+export type ForgeTraceFn = ((line: number, slot?: number) => void | Promise<void>) & {
+  finish: () => ForgeTraceFinish
 }
 
 // AI : profile keys are source line ("3") or lambda slot ("3.1") for inline arrows on that line.
@@ -40,409 +56,17 @@ export function groupProfileSlotsByLine(lineMs?: CodeLineProfile): Map<number, P
   return slotsByLine
 }
 
-type SlotRef = { n: number }
-
-// AI : inject __forgeTrace(line[, slot]) per source line — sync only; UI throttles in run-engine.
-export function instrumentCodeLines(code: string): string {
-  const preambleArrow = splitPreambleArrow(code)
-  if (preambleArrow) {
-    const { preamble, arrow } = preambleArrow
-    const instPreamble = instrumentStatementLines(preamble)
-    const instArrow = instrumentExpressionArrow(arrow)
-    const joiner = preamble.length > 0 && !preamble.endsWith("\n") ? "\n" : ""
-    return instPreamble + joiner + instArrow
+// AI : acorn AST inject — falls back to raw code if parse fails (syntax check runs separately).
+export function instrumentCodeLines(code: string, opts: InstrumentCodeOpts = {}): string {
+  try {
+    return instrumentCodeLinesAst(code, opts)
+  } catch {
+    return code
   }
-  if (isExpressionForm(code)) return instrumentExpressionArrow(code)
-  return instrumentStatementLines(code)
-}
-
-function isExpressionForm(code: string): boolean {
-  return /^\s*(\(|async\s+\(|function\b)/.test(code.trim())
-}
-
-function splitPreambleArrow(code: string): { preamble: string; arrow: string } | null {
-  const trimmed = code.trim()
-  const m = trimmed.match(/[;\n]\s*(\([^)]*\)\s*=>[\s\S]+)$/)
-  if (!m?.[1]) return null
-  const arrow = m[1]
-  const idx = code.lastIndexOf(arrow)
-  if (idx < 0) return null
-  return { preamble: code.slice(0, idx), arrow: code.slice(idx) }
 }
 
 function splitSourceLines(code: string): string[] {
-  const lines: string[] = []
-  let cur = ""
-  let i = 0
-  while (i < code.length) {
-    const skip = skipNonCode(code, i)
-    if (skip > i) {
-      cur += code.slice(i, skip)
-      i = skip
-      continue
-    }
-    const ch = code[i]!
-    if (ch === "\n") {
-      lines.push(cur)
-      cur = ""
-      i++
-      continue
-    }
-    cur += ch
-    i++
-  }
-  if (cur.length > 0 || code.endsWith("\n")) lines.push(cur)
-  return lines
-}
-
-function scanLineContainerDelta(line: string): { open: number; close: number } {
-  let open = 0
-  let close = 0
-  let i = 0
-  while (i < line.length) {
-    i = skipNonCode(line, i)
-    if (i >= line.length) break
-    const ch = line[i]!
-    if (ch === "[" || ch === "{" || ch === "(") open++
-    else if (ch === "]" || ch === "}" || ch === ")") close++
-    i++
-  }
-  return { open, close }
-}
-
-function instrumentStatementLines(code: string): string {
-  const lines = splitSourceLines(code)
-  let containerDepth = 0
-  return lines
-    .map((line, i) => {
-      const trimmed = line.trim()
-      if (!trimmed || /^\s*(\/\/|#)/.test(line)) {
-        const { open, close } = scanLineContainerDelta(line)
-        containerDepth = Math.max(0, containerDepth + open - close)
-        return line
-      }
-      // AI : skip lines inside `[`/`{`/`(` — `__forgeTrace(n); expr` is invalid between array elements.
-      const result = containerDepth === 0 ? instrumentExecutableLine(line, i + 1) : line
-      const { open, close } = scanLineContainerDelta(line)
-      containerDepth = Math.max(0, containerDepth + open - close)
-      return result
-    })
-    .join("\n")
-}
-
-function instrumentExpressionArrow(code: string): string {
-  const lines = splitSourceLines(code)
-  const blockOpenIdx = lines.findIndex((l) => /=>\s*\{/.test(l))
-  if (blockOpenIdx < 0) {
-    const joined = lines.join("\n")
-    return instrumentExprArrowLine(joined, 1)
-  }
-
-  let depth = 0
-  const out: string[] = []
-  for (let i = 0; i < lines.length; i++) {
-    const lineNo = i + 1
-    const line = lines[i]!
-    if (i < blockOpenIdx) {
-      out.push(instrumentExecutableLine(line, lineNo))
-      continue
-    }
-    if (i === blockOpenIdx) {
-      const opened = openExprArrowBlock(line, lineNo)
-      depth += braceDelta(opened)
-      out.push(opened)
-      continue
-    }
-    depth += braceDelta(line)
-    if (depth <= 0) {
-      out.push(line)
-      continue
-    }
-    out.push(instrumentExecutableLine(line, lineNo))
-  }
-  return out.join("\n")
-}
-
-function openExprArrowBlock(line: string, lineNo: number): string {
-  const m = line.match(/^(\s*)(async\s+)?(\([^)]*\)|[\w$]+)\s*=>\s*\{(.*)$/)
-  if (!m) return instrumentExecutableLine(line, lineNo)
-  const indent = m[1] ?? ""
-  const asyncKw = m[2] ?? ""
-  const params = m[3] ?? ""
-  const rest = m[4] ?? ""
-  const tracedRest = rest ? instrumentInlineLambdas(rest, lineNo) : ""
-  return `${indent}${asyncKw}${params} => { __forgeTrace(${lineNo}); ${tracedRest}`
-}
-
-function instrumentExprArrowLine(line: string, lineNo: number): string {
-  const arrow = findTopLevelArrow(line)
-  if (!arrow) return instrumentExecutableLine(line, lineNo)
-  const { paramsStart, bodyStart, bodyEnd, isBlock, hasAsync } = arrow
-  const prefix = line.slice(0, paramsStart)
-  const params = line.slice(paramsStart, arrowIdxOf(line, paramsStart)).trim()
-  const asyncKw = hasAsync ? "async " : ""
-  const trace = `__forgeTrace(${lineNo}); `
-  if (isBlock) {
-    const body = line.slice(bodyStart, bodyEnd)
-    const innerStart = body.indexOf("{") + 1
-    const innerEnd = body.lastIndexOf("}")
-    const inner = body.slice(innerStart, innerEnd)
-    const close = body.slice(innerEnd)
-    return `${prefix}${asyncKw}${params} => { ${trace}${instrumentInlineLambdas(inner, lineNo)}${close}`
-  }
-  const body = line.slice(bodyStart, bodyEnd)
-  const wrapped = instrumentInlineLambdas(body, lineNo)
-  const suffix = line.slice(bodyEnd)
-  return `${prefix}${asyncKw}${params} => { ${trace}return (${wrapped}); }${suffix}`
-}
-
-function arrowIdxOf(line: string, from: number): number {
-  const idx = line.indexOf("=>", from)
-  return idx < 0 ? line.length : idx
-}
-
-function instrumentExecutableLine(line: string, lineNo: number): string {
-  if (!line.trim()) return line
-  if (/^\s*(\/\/|#)/.test(line)) return line
-  const indent = line.match(/^\s*/)?.[0] ?? ""
-  const traced = instrumentInlineLambdas(line.trimStart(), lineNo)
-  return `${indent}__forgeTrace(${lineNo}); ${traced}`
-}
-
-function instrumentInlineLambdas(src: string, lineNo: number, slotRef: SlotRef = { n: 0 }): string {
-  let result = src
-  let searchFrom = 0
-  while (searchFrom < result.length) {
-    let eq = -1
-    for (let j = searchFrom; j < result.length - 1; j++) {
-      const skip = skipNonCode(result, j)
-      if (skip > j) {
-        j = skip - 1
-        continue
-      }
-      if (result[j] === "=" && result[j + 1] === ">" && result[j + 2] !== "=") {
-        eq = j
-        break
-      }
-    }
-    if (eq < 0) break
-    const arrow = tryParseArrow(result, eq)
-    if (!arrow) {
-      searchFrom = eq + 2
-      continue
-    }
-    const slot = ++slotRef.n
-    const { paramsStart, bodyStart, bodyEnd, isBlock, hasAsync } = arrow
-    const params = result.slice(paramsStart, eq).trim()
-    const asyncKw = hasAsync ? "async " : ""
-    const trace = `__forgeTrace(${lineNo}, ${slot}); `
-    let replacement: string
-    if (isBlock) {
-      const body = result.slice(bodyStart, bodyEnd)
-      const innerStart = body.indexOf("{") + 1
-      const innerEnd = body.lastIndexOf("}")
-      const inner = body.slice(innerStart, innerEnd)
-      const close = body.slice(innerEnd)
-      replacement = `${asyncKw}${params} => { ${trace}${instrumentInlineLambdas(inner, lineNo, slotRef)}${close}`
-    } else {
-      const body = result.slice(bodyStart, bodyEnd)
-      const inner = instrumentInlineLambdas(body, lineNo, slotRef)
-      replacement = `${asyncKw}${params} => { ${trace}return (${inner}); }`
-    }
-    result = result.slice(0, paramsStart) + replacement + result.slice(bodyEnd)
-    searchFrom = paramsStart + replacement.length
-  }
-  return result
-}
-
-function findTopLevelArrow(line: string): ReturnType<typeof tryParseArrow> {
-  let i = 0
-  while (i < line.length) {
-    const skip = skipNonCode(line, i)
-    if (skip > i) {
-      i = skip
-      continue
-    }
-    if (line[i] === "=" && line[i + 1] === ">") {
-      const arrow = tryParseArrow(line, i)
-      if (arrow) return arrow
-    }
-    i++
-  }
-  return null
-}
-
-type ParsedArrow = {
-  paramsStart: number
-  bodyStart: number
-  bodyEnd: number
-  isBlock: boolean
-  hasAsync: boolean
-}
-
-function tryParseArrow(src: string, at: number): ParsedArrow | null {
-  if (src[at] !== "=" || src[at + 1] !== ">") return null
-  if (src[at + 2] === "=") return null
-  let i = at - 1
-  while (i >= 0 && /\s/.test(src[i]!)) i--
-  if (i < 0) return null
-
-  let hasAsync = false
-  const asyncPrefix = src.slice(Math.max(0, i - 4), i + 1)
-  if (asyncPrefix === "async" || asyncPrefix.endsWith("async")) {
-    hasAsync = /\basync$/.test(src.slice(0, i + 1).trimEnd())
-    if (hasAsync) {
-      i -= 4
-      while (i >= 0 && /\s/.test(src[i]!)) i--
-      if (i < 0) return null
-    }
-  }
-
-  let paramsStart: number
-  if (src[i] === ")") {
-    let depth = 1
-    i--
-    while (i >= 0 && depth > 0) {
-      const skip = skipNonCodeBackward(src, i)
-      if (skip < i) {
-        i = skip
-        continue
-      }
-      if (src[i] === ")") depth++
-      else if (src[i] === "(") depth--
-      i--
-    }
-    paramsStart = i + 1
-  } else {
-    while (i >= 0 && /[\w$]/.test(src[i]!)) i--
-    paramsStart = i + 1
-  }
-
-  let bodyStart = at + 2
-  while (bodyStart < src.length && /\s/.test(src[bodyStart]!)) bodyStart++
-  if (bodyStart >= src.length) return null
-
-  if (src[bodyStart] === "{") {
-    const end = scanBalanced(src, bodyStart, "{", "}")
-    if (end < 0) return null
-    return { paramsStart, bodyStart, bodyEnd: end + 1, isBlock: true, hasAsync }
-  }
-
-  const end = scanExprEnd(src, bodyStart)
-  return { paramsStart, bodyStart, bodyEnd: end, isBlock: false, hasAsync }
-}
-
-function braceDelta(line: string): number {
-  let delta = 0
-  let i = 0
-  while (i < line.length) {
-    i = skipNonCode(line, i)
-    if (i >= line.length) break
-    const ch = line[i]!
-    if (ch === "{") delta++
-    else if (ch === "}") delta--
-    i++
-  }
-  return delta
-}
-
-function skipNonCode(src: string, i: number): number {
-  const ch = src[i]
-  if (ch === "/" && src[i + 1] === "/") return src.length
-  if (ch === "/" && src[i + 1] === "*") {
-    const end = src.indexOf("*/", i + 2)
-    return end < 0 ? src.length : end + 2
-  }
-  if (ch === "'" || ch === '"') return scanString(src, i, ch)
-  if (ch === "`") return scanTemplate(src, i)
-  return i
-}
-
-function skipNonCodeBackward(src: string, i: number): number {
-  if (src[i] === "/" && src[i - 1] === "/") {
-    let j = i - 2
-    while (j >= 0 && src[j] !== "\n") j--
-    return j
-  }
-  return i
-}
-
-function scanString(src: string, i: number, quote: string): number {
-  let j = i + 1
-  while (j < src.length) {
-    if (src[j] === "\\") {
-      j += 2
-      continue
-    }
-    if (src[j] === quote) return j + 1
-    j++
-  }
-  return src.length
-}
-
-function scanTemplate(src: string, i: number): number {
-  let j = i + 1
-  while (j < src.length) {
-    if (src[j] === "\\") {
-      j += 2
-      continue
-    }
-    if (src[j] === "`") return j + 1
-    if (src[j] === "$" && src[j + 1] === "{") {
-      j = scanBalanced(src, j + 1, "{", "}") + 1
-      continue
-    }
-    j++
-  }
-  return src.length
-}
-
-function scanBalanced(src: string, openIdx: number, open: string, close: string): number {
-  let depth = 0
-  let i = openIdx
-  while (i < src.length) {
-    const skip = skipNonCode(src, i)
-    if (skip > i) {
-      i = skip
-      continue
-    }
-    if (src[i] === open) depth++
-    else if (src[i] === close) {
-      depth--
-      if (depth === 0) return i
-    }
-    i++
-  }
-  return -1
-}
-
-function scanExprEnd(src: string, start: number): number {
-  let paren = 0
-  let brace = 0
-  let bracket = 0
-  let i = start
-  while (i < src.length) {
-    const skip = skipNonCode(src, i)
-    if (skip > i) {
-      i = skip
-      continue
-    }
-    const ch = src[i]!
-    if (ch === "(") paren++
-    else if (ch === ")") {
-      if (paren === 0 && brace === 0 && bracket === 0) return i
-      paren--
-    } else if (ch === "{") brace++
-    else if (ch === "}") {
-      if (brace === 0) return i
-      brace--
-    } else if (ch === "[") bracket++
-    else if (ch === "]") bracket--
-    else if (ch === "," && paren === 0 && brace === 0 && bracket === 0) return i
-    else if (ch === ";" && paren === 0 && brace === 0 && bracket === 0) return i
-    i++
-  }
-  return i
+  return code.split("\n")
 }
 
 export function makeAsyncFunctionSource(src: string): string {
@@ -454,7 +78,10 @@ export function makeAsyncFunctionSource(src: string): string {
   })
 }
 
-export function createForgeTrace(onTrace: (e: CodeTraceEvent) => void): ForgeTraceFn {
+export function createForgeTrace(
+  onTrace: (e: CodeTraceEvent) => void,
+  paint?: () => Promise<void>,
+): ForgeTraceFn {
   const lineMs: CodeLineProfile = {}
   let lastKey = ""
   let lastEnter = 0
@@ -462,7 +89,7 @@ export function createForgeTrace(onTrace: (e: CodeTraceEvent) => void): ForgeTra
 
   const emit = (
     line: number,
-    phase: CodeTraceEvent["phase"],
+    phase: CodeTracePhase,
     slot: number,
     activeLine?: number,
     activeSlot?: number,
@@ -478,27 +105,32 @@ export function createForgeTrace(onTrace: (e: CodeTraceEvent) => void): ForgeTra
     })
   }
 
-  const trace = (line: number, slot = 0) => {
+  const trace = (line: number, slot = 0): void | Promise<void> => {
     const key = codeProfileKey(line, slot)
     const now = performance.now()
     if (lastKey) {
       lineMs[lastKey] = (lineMs[lastKey] ?? 0) + (now - lastEnter)
       const prev = parseCodeProfileKey(lastKey)
-      emit(prev.line, "leave", prev.slot, line, slot > 0 ? slot : undefined)
+      emit(prev.line, CodeTracePhase.Leave, prev.slot, line, slot > 0 ? slot : undefined)
     }
     lastKey = key
     lastEnter = now
-    emit(line, "enter", slot, line, slot > 0 ? slot : undefined)
+    emit(line, CodeTracePhase.Enter, slot, line, slot > 0 ? slot : undefined)
+    if (paint) return paint()
   }
 
-  trace.finish = () => {
+  trace.finish = (): ForgeTraceFinish => {
     const now = performance.now()
     if (lastKey) lineMs[lastKey] = (lineMs[lastKey] ?? 0) + (now - lastEnter)
+    let lastLine: number | undefined
+    let lastSlot: number | undefined
     if (lastKey) {
-      const { line, slot } = parseCodeProfileKey(lastKey)
-      emit(line, "done", slot, undefined, undefined)
+      const parsed = parseCodeProfileKey(lastKey)
+      lastLine = parsed.line
+      lastSlot = parsed.slot > 0 ? parsed.slot : undefined
+      emit(parsed.line, CodeTracePhase.Done, parsed.slot, undefined, undefined)
     }
-    return { ...lineMs }
+    return { lineMs: { ...lineMs }, lastLine, lastSlot }
   }
 
   return trace

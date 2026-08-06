@@ -1,9 +1,9 @@
 "use client"
 
-// AI : TODO export UI — zip download (single archive) instead of sequential downloadBlob calls.
 // AI : TODO export UI — bundled Supabase SQL + Next.js inference shell alongside connector files.
 
 import { useEffect, useMemo, useState } from "react"
+import { zipSync } from "fflate"
 import { AlertTriangle, Check, Code2, Download, FileText, Loader2, X } from "lucide-react"
 import { ReadonlyCodeViewer, type CodeViewerLanguage } from "@/components/code-viewer"
 import { Button } from "@/components/ui/button"
@@ -24,6 +24,7 @@ type ExportTabId =
   | "connector-ts"
   | "connector-py"
   | "env"
+  | "readme"
   | "setup"
   | "requirements"
 
@@ -58,6 +59,7 @@ const TAB_ORDER: ExportTabId[] = [
   "connector-py",
   "env",
   "requirements",
+  "readme",
   "setup",
 ]
 
@@ -67,6 +69,8 @@ function setupFileTabMeta(filename: string): { id: ExportTabId; label: string; l
       return { id: "env", label: ".env.example", language: "plaintext" }
     case "requirements.txt":
       return { id: "requirements", label: "requirements.txt", language: "plaintext" }
+    case "README.md":
+      return { id: "readme", label: "README.md", language: "markdown" }
     case "SETUP.md":
       return { id: "setup", label: "SETUP.md", language: "markdown" }
     case "pipeline_connector.proto":
@@ -222,8 +226,16 @@ export function PipelineExportDialog({
   }
 
   function downloadAll() {
-    // AI : TODO export UI — bundle files into one .zip (JSZip or server route).
-    for (const file of files) downloadBlob(file.filename, file.content, file.mime)
+    if (!files.length) return
+    const enc = new TextEncoder()
+    const entries: Record<string, Uint8Array> = {}
+    for (const file of files) entries[file.filename] = enc.encode(file.content)
+    const zipped = zipSync(entries)
+    downloadBlob(
+      `${projectSlug(project.name)}_export.zip`,
+      zipped,
+      "application/zip",
+    )
     setDownloaded("__all__")
     setTimeout(() => setDownloaded(null), COPY_FEEDBACK_MS)
   }
@@ -247,7 +259,7 @@ export function PipelineExportDialog({
             <div>
               <p className="text-sm font-semibold">Pipeline export</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Pipeline code, gRPC connector, inference UI, and setup files. No secrets in generated code — wire env in your runner.
+                Pipeline code, gRPC connector, inference UI, README, and setup files. No secrets in generated code — wire env in your runner.
               </p>
             </div>
             <Button variant="ghost" size="icon-sm" onClick={() => setOpen(false)}>
@@ -316,7 +328,7 @@ export function PipelineExportDialog({
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3">
                 <p className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
                   <FileText className="h-3 w-3" />
-                  {files.length} files · start with SETUP.md · open inference_ui.html against connector
+                  {files.length} files · start with README.md · open inference_ui.html against connector
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button

@@ -5,7 +5,7 @@ import { fieldExampleUsesJsonEntry } from "@/lib/field-example-schema-hint";
 import { withSharedModels } from "./builtin_models";
 import { withBuiltinTypeAliases } from "./builtin_types";
 import {
-  fieldIsListType,
+  applyFieldCardinalityConstraints,
   fieldToTypeExpr,
   normalizeModelField,
   typeExprToZod,
@@ -86,9 +86,7 @@ export function zodSchemaForFieldExample(
     f,
   );
   if (f.optional) schema = schema.nullish();
-  if (f.minItems && f.minItems > 1 && fieldIsListType(f) && schema instanceof z.ZodArray) {
-    schema = schema.min(f.minItems);
-  }
+  schema = applyFieldCardinalityConstraints(schema, f);
   return schema;
 }
 

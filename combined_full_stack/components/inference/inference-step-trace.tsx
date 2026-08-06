@@ -209,6 +209,8 @@ export function InferenceStepRow({
           activeLine={codeExec?.activeLine}
           activeSlot={codeExec?.activeSlot}
           lineMs={codeExec?.lineMs}
+          // AI : don't inherit step "running" — that includes server description-check before code runs.
+          status={codeExec?.status}
           compact={ioCompact}
           className={ioClassName}
         />

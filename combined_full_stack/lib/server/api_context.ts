@@ -81,12 +81,9 @@ export async function requireAuthStore(
   const limited = await enforceUserRateLimit(auth.userId, tier);
   if (limited) return limited;
   try {
+    // AI : rebind warm SupabaseStore to this request's cookie client — requireAuth already verified claims.
+    // AI : do not gate on getUser(); Auth API timeouts were falsely surfacing as "Sign in required".
     const supabase = await createClient();
-    // AI : validate + refresh JWT before writes — getSession() alone leaves stale tokens on warm SupabaseStore flush.
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError || !authData.user) {
-      return apiError(AUTH_SIGN_IN_REQUIRED, HTTP.UNAUTHORIZED);
-    }
     const store = await getStore();
     if (store instanceof SupabaseStore) store.rebindDb(supabase);
     return { auth, store };

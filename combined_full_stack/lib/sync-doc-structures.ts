@@ -70,6 +70,9 @@ export function modelsChanged(before: StructureModel[], after: StructureModel[])
         old.ref !== f.ref ||
         old.optional !== f.optional ||
         old.minItems !== f.minItems ||
+        old.maxItems !== f.maxItems ||
+        old.minLength !== f.minLength ||
+        old.maxLength !== f.maxLength ||
         stableJson(fieldToTypeExpr(old)) !== stableJson(fieldToTypeExpr(f))
       )
     })

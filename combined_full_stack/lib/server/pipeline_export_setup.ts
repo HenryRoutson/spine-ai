@@ -13,6 +13,8 @@ import {
   llmStructuredStubPyModular,
   llmStructuredStubTsModular,
   openRouterHelpersPyModular,
+  visionOcrStubPy,
+  visionOcrStubTs,
 } from "./pipeline_export_llm";
 import { ModuleKind } from "./types";
 import type { PipelineModule, Project } from "./types";
@@ -41,7 +43,8 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
   let visionOcr = false;
   for (const m of project.modules) {
     if (m.kind === ModuleKind.Llm) llm = true;
-    if (m.kind === ModuleKind.LlmBatch) llmBatch = true;
+    // AI : example-select uses llmBatchStructured — treat like llm-batch for stub inclusion.
+    if (m.kind === ModuleKind.LlmBatch || m.kind === ModuleKind.ExampleSelect) llmBatch = true;
     if (m.kind === ModuleKind.Quote) quote = true;
     if (m.kind === ModuleKind.HumanReview) humanReview = true;
     if (m.kind === ModuleKind.Input && m.useOcr) visionOcr = true;
@@ -140,7 +143,8 @@ export function generateSetupReadme(project: Project, slug: string): string {
     "- `inference_ui.html` — standalone inference UI (open in browser, POST to connector)",
     "- `.env.example` — copy to `.env` and fill in (never commit real secrets)",
     "- `requirements.txt` — Python deps (`pip install -r requirements.txt`)",
-    "- `SETUP.md` — this file",
+    "- `README.md` — this file (setup + run)",
+    "- `SETUP.md` — same content as README (compat alias)",
     "",
     "## 1. Environment",
     "",
@@ -167,6 +171,19 @@ export function generateSetupReadme(project: Project, slug: string): string {
       "Wire `configurePipelineRuntime({ openRouterApiKey })` (or Python equivalent) — OpenRouter is the default LLM provider.",
       "For enterprise internal LLMs, call `registerCustomLlmProvider()` / `register_custom_llm_provider()` and set `llmProviderId`.",
       "Override the model via `openRouterModel` in runtime config, or edit step bodies to pass a different slug.",
+      "",
+    );
+  }
+
+  if (needs.visionOcr) {
+    lines.push(
+      "## Vision OCR",
+      "",
+      "Input steps with `useOcr` call `visionOcr({ mime, base64 })` (OpenRouter multimodal).",
+      "Default vision model: Gemini Flash via OpenRouter (`google/gemini-3-flash-preview`). Override with `visionOcrModel`.",
+      "Pass file bytes as base64 on the Document (`{ filename, content?, mime, base64 }`). If `content` is already text, OCR is skipped.",
+      "",
+      "DeepSeek-OCR (specialized OCR) is not the OpenRouter default — point `visionOcrModel` at a vision-capable slug, or swap the helper for a DeepSeek-OCR / vLLM endpoint.",
       "",
     );
   }
@@ -202,7 +219,9 @@ export function generateSetupReadme(project: Project, slug: string): string {
     }
     lines.push(
       "",
-      "Each input step expects `{ content: string, filename: string }` (read file text into `content`).",
+      needs.visionOcr
+        ? "Each input step expects `{ filename, content }` and/or `{ filename, mime, base64 }` when vision OCR is enabled."
+        : "Each input step expects `{ content: string, filename: string }` (read file text into `content`).",
       "",
     );
   }
@@ -539,8 +558,10 @@ export function generatePipelineSetupFiles(project: Project): PipelineSetupFile[
   assertNoSecretValuesInExport(envExample);
   assertNoSecretValuesInExport(setupMd);
   assertNoSecretValuesInExport(requirements);
+  // AI : README is the canonical setup doc (spec); SETUP.md kept as a same-content alias.
   return [
     { filename: ".env.example", content: envExample, mime: "text/plain" },
+    { filename: "README.md", content: setupMd, mime: "text/markdown" },
     { filename: "SETUP.md", content: setupMd, mime: "text/markdown" },
     { filename: "requirements.txt", content: requirements, mime: "text/plain" },
     ...generateCustomLlmProviderExportFiles(project),
@@ -585,6 +606,9 @@ export function generateRuntimeStubsTs(needs: ExportRuntimeNeeds): string {
   }
   if (needs.llmBatch) {
     lines.push("", ...llmBatchStubTsModular());
+  }
+  if (needs.visionOcr) {
+    lines.push("", ...visionOcrStubTs());
   }
 
   if (needs.quote) {
@@ -657,6 +681,9 @@ export function generateRuntimeStubsPy(needs: ExportRuntimeNeeds): string {
   }
   if (needs.llmBatch) {
     lines.push("", ...llmBatchStubPyModular());
+  }
+  if (needs.visionOcr) {
+    lines.push("", ...visionOcrStubPy());
   }
 
   if (needs.quote) {

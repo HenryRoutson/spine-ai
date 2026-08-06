@@ -56,6 +56,7 @@ export type ClientStepSpec = {
   pipelineState?: PipelineState;
   expectedOutputs?: Record<string, unknown>;
   llmClient?: LlmClientStepSpec;
+  maxRunMs?: number;
 };
 
 export interface RunJob {

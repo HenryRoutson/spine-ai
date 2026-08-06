@@ -87,6 +87,29 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
         castOut("await llm_batch_structured(items, prompt_for, schema)"),
       ].join("\n");
     }
+    case "example-select": {
+      const prompt = m.prompt ?? "Find useful examples…";
+      const ctxLabel = m.exampleContextLabel ?? "Context";
+      const itemsLine = inPy.startsWith("list[") ? "items = input" : "items = input if isinstance(input, list) else [input]";
+      return [
+        `# Per-item relevance filter — ${outName ?? outPy} with selection_reason`,
+        `description = json.dumps(state[${exportStringLiteral(ctxLabel)}], indent=2, default=str)`,
+        itemsLine,
+        `template = ${exportStringLiteral(prompt)}`,
+        `def prompt_for(item: Any) -> str:`,
+        `    return template.replace("{description}", description).replace("{example}", json.dumps(item, default=str))`,
+        `relevance_schema = {"chain_of_thought": "string", "is_relevant": "boolean"}`,
+        `verdicts = await llm_batch_structured(items, prompt_for, relevance_schema)`,
+        `selected = []`,
+        `for i, item in enumerate(items):`,
+        `    verdict = verdicts[i] if i < len(verdicts) else {}`,
+        `    if isinstance(verdict, dict) and verdict.get("is_relevant"):`,
+        `        row = dict(item) if isinstance(item, dict) else (item.model_dump() if hasattr(item, "model_dump") else {"value": item})`,
+        `        row["selection_reason"] = verdict.get("chain_of_thought") or ""`,
+        `        selected.append(row)`,
+        castOut("selected"),
+      ].join("\n");
+    }
     case "quote":
       return [
         "# Match LLM quote strings against source document byte offsets (no LLM cost)",
@@ -186,7 +209,7 @@ export function generatePipelineSourcePy(project: Project): string {
     '"""Generated pipeline export — equivalent Python representation"""',
     `# Project: ${prepared.name}`,
     `# ${prepared.modules.length} steps · ${prepared.models.length} structures`,
-    "# Setup: export also includes .env.example and SETUP.md — copy .env.example → .env",
+    "# Setup: export also includes .env.example and README.md — copy .env.example → .env",
     "",
     "from __future__ import annotations",
     "",

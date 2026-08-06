@@ -8,6 +8,7 @@ import { recordActivityEvent } from "@/lib/server/user_activity";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
 import { computeRunFingerprintForRequest, findMatchingRun } from "@/lib/server/run_fingerprint";
+import { refreshBundledSeedDocsForRun } from "@/lib/server/store";
 import {
   MAX_CONCURRENT_RUNS_PER_USER,
   countActiveJobs,
@@ -99,6 +100,7 @@ export async function POST(req: NextRequest) {
     return apiError(unknownProject(pid), HTTP.NOT_FOUND);
   }
   const project = store.project(pid)!;
+  await refreshBundledSeedDocsForRun(store, project);
   const inputModules = orderedInputModules(project.modules);
   const assignment: InputDocsAssignment = {};
   const contentByDocId: Partial<Record<string, string>> = {};

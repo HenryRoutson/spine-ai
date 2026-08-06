@@ -273,6 +273,7 @@ function pyCustomCodeCall(code: string, outPy: string): string {
 export function generateInputStepBodyTs(m: PipelineModule, outTs: string): string {
   // AI : TODO export — emit input-description LLM guard when checkInputDescription is enabled.
   // AI : TODO export — emit output-description LLM guard when checkOutputDescription ships (spec § pipeline).
+  const purpose = m.inputDescription?.trim() || m.label || "general transcription";
   const lines = [
     "// Parse uploaded file — built-in parser or vision OCR when enabled",
     ...(m.inputDescription
@@ -281,24 +282,37 @@ export function generateInputStepBodyTs(m: PipelineModule, outTs: string): strin
         ]
       : []),
     ...(m.inputNameContains ? [`// Filename must contain: ${JSON.stringify(m.inputNameContains)}`] : []),
-    ...(m.useOcr ? ["// Vision OCR enabled for PDF/image uploads"] : []),
-    "const doc = input as Document;",
+    "const doc = input as Document & { base64?: string; mime?: string };",
   ];
+  if (m.useOcr) {
+    lines.push(
+      `let content = doc.content ?? "";`,
+      `if (doc.base64 && doc.mime) {`,
+      `  // Vision OCR via OpenRouter multimodal (override runtime.visionOcrModel for DeepSeek-OCR hosts)`,
+      `  content = await visionOcr({ mime: doc.mime, base64: doc.base64 }, ${JSON.stringify(purpose)});`,
+      `} else if (!content.trim()) {`,
+      `  throw new Error("Vision OCR: pass Document.base64 + mime, or pre-extracted content");`,
+      `}`,
+    );
+  } else {
+    lines.push("const content = doc.content;");
+  }
   if (inputOutputsDocument(m)) {
-    const docObj = "{ content: doc.content, filename: doc.filename }";
+    const docObj = "{ content, filename: doc.filename }";
     lines.push(stepEmitsList(m) ? `return [${docObj}];` : `return ${docObj};`);
     return lines.join("\n");
   }
   if (stepEmitsList(m)) {
-    lines.push(`const parsed = JSON.parse(doc.content) as unknown;`);
+    lines.push(`const parsed = JSON.parse(content) as unknown;`);
     lines.push(`return (Array.isArray(parsed) ? parsed : [parsed]) as ${outTs};`);
   } else {
-    lines.push(`return JSON.parse(doc.content) as ${outTs};`);
+    lines.push(`return JSON.parse(content) as ${outTs};`);
   }
   return lines.join("\n");
 }
 
 export function generateInputStepBodyPy(m: PipelineModule, outPy: string): string {
+  const purpose = m.inputDescription?.trim() || m.label || "general transcription";
   const lines = [
     "# Parse uploaded file — built-in parser or vision OCR when enabled",
     ...(m.inputDescription
@@ -307,22 +321,35 @@ export function generateInputStepBodyPy(m: PipelineModule, outPy: string): strin
         ]
       : []),
     ...(m.inputNameContains ? [`# Filename must contain: ${JSON.stringify(m.inputNameContains)}`] : []),
-    ...(m.useOcr ? ["# Vision OCR enabled for PDF/image uploads"] : []),
     "doc = input",
   ];
+  if (m.useOcr) {
+    lines.push(
+      'content = getattr(doc, "content", None) or (doc.get("content") if isinstance(doc, dict) else "") or ""',
+      'base64 = getattr(doc, "base64", None) or (doc.get("base64") if isinstance(doc, dict) else None)',
+      'mime = getattr(doc, "mime", None) or (doc.get("mime") if isinstance(doc, dict) else None)',
+      "if base64 and mime:",
+      "    # Vision OCR via OpenRouter multimodal (override vision_ocr_model for DeepSeek-OCR hosts)",
+      `    content = await vision_ocr(str(mime), str(base64), ${JSON.stringify(purpose)})`,
+      "elif not str(content).strip():",
+      '    raise RuntimeError("Vision OCR: pass Document base64 + mime, or pre-extracted content")',
+    );
+  } else {
+    lines.push("content = doc.content");
+  }
   if (inputOutputsDocument(m)) {
     lines.push(
       stepEmitsList(m)
-        ? "return [Document(content=doc.content, filename=doc.filename)]"
-        : "return Document(content=doc.content, filename=doc.filename)",
+        ? "return [Document(content=content, filename=doc.filename)]"
+        : "return Document(content=content, filename=doc.filename)",
     );
     return lines.join("\n");
   }
   if (stepEmitsList(m)) {
-    lines.push("parsed = json.loads(doc.content)");
+    lines.push("parsed = json.loads(content)");
     lines.push(`return cast(${outPy}, cast(object, parsed if isinstance(parsed, list) else [parsed]))`);
   } else {
-    lines.push(`return cast(${outPy}, cast(object, json.loads(doc.content)))`);
+    lines.push(`return cast(${outPy}, cast(object, json.loads(content)))`);
   }
   return lines.join("\n");
 }

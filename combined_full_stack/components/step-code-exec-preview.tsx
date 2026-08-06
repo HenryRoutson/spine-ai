@@ -7,7 +7,7 @@ import { groupProfileSlotsByLine } from "@/lib/custom_code_trace"
 import { CODE_LANG_NAME, CODE_LANG_SHORT, MonacoSyntaxLine, useMonacoSyntaxLines } from "@/lib/code-syntax-highlight"
 import { MONACO_CODE_PREVIEW_BASE_CLASS } from "@/lib/monaco-theme"
 import type { CustomCodeLanguage } from "@/lib/types"
-import type { CodeLineProfile } from "@/lib/code-exec-ui"
+import type { CodeLineProfile, CodeExecUiState } from "@/lib/code-exec-ui"
 
 export function StepCodeExecPreview({
   code,
@@ -15,6 +15,7 @@ export function StepCodeExecPreview({
   activeLine,
   activeSlot,
   lineMs,
+  status,
   compact = false,
   className,
 }: {
@@ -23,6 +24,7 @@ export function StepCodeExecPreview({
   activeLine?: number
   activeSlot?: number
   lineMs?: CodeLineProfile
+  status?: CodeExecUiState["status"]
   compact?: boolean
   className?: string
 }) {
@@ -31,13 +33,17 @@ export function StepCodeExecPreview({
   const scrollRef = useRef<HTMLDivElement>(null)
   const lineRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const maxMs = Math.max(...Object.values(lineMs ?? {}), 0.01)
-  const isLive = activeLine != null
+  // AI : only highlight a line when the tracer set activeLine — never fake "line 1" while the
+  // AI : step is running for other reasons (e.g. server input-description LLM check).
+  const displayLine = activeLine
+  const isLive = displayLine != null
+  const waitingToStart = status === "running" && activeLine == null
   const hasProfile = !isLive && lineMs && Object.keys(lineMs).length > 0
   const slotsByLine = groupProfileSlotsByLine(lineMs)
 
   useEffect(() => {
-    if (activeLine == null) return
-    const row = lineRefs.current.get(activeLine)
+    if (displayLine == null) return
+    const row = lineRefs.current.get(displayLine)
     if (!row || !scrollRef.current) return
     const container = scrollRef.current
     const rowTop = row.offsetTop
@@ -47,17 +53,19 @@ export function StepCodeExecPreview({
     if (rowTop < viewTop || rowBottom > viewBottom) {
       row.scrollIntoView({ block: "nearest", behavior: "smooth" })
     }
-  }, [activeLine, activeSlot])
+  }, [displayLine, activeSlot])
 
   return (
     <div className={cn("mt-2", className)}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <p className="font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
-          {activeLine != null
-            ? `running line ${activeLine}${activeSlot != null ? ` · λ${activeSlot}` : ""}`
-            : hasProfile
-              ? "code profile"
-              : "code"}
+          {displayLine != null
+            ? `running line ${displayLine}${activeSlot != null ? ` · λ${activeSlot}` : ""}`
+            : waitingToStart
+              ? "waiting…"
+              : hasProfile
+                ? "code profile"
+                : "code"}
         </p>
         <span
           className="rounded border border-border bg-muted/50 px-1.5 py-px font-mono text-[8px] font-medium uppercase tracking-wide text-muted-foreground"
@@ -78,7 +86,7 @@ export function StepCodeExecPreview({
           const ln = i + 1
           const ms = lineMs?.[String(ln)]
           const slots = slotsByLine.get(ln) ?? []
-          const isActive = activeLine === ln
+          const isActive = displayLine === ln
           const barPct = ms != null ? profileBarPct(ms, maxMs) : 0
           return (
             <div
@@ -116,7 +124,7 @@ export function StepCodeExecPreview({
               </span>
               </div>
               {slots.map(({ slot, ms: slotMs }) => {
-                const slotActive = activeLine === ln && activeSlot === slot
+                const slotActive = displayLine === ln && activeSlot === slot
                 const slotBarPct = profileBarPct(slotMs, maxMs)
                 return (
                   <div

@@ -7,7 +7,7 @@ import { modelHasQuoteFields } from "./quote_schema";
 import {
   fieldTypeToExpr,
   fieldToTypeExpr,
-  fieldIsListType,
+  applyFieldCardinalityConstraints,
   formatTypeExpr,
   isListFieldType,
   stepEmitsList,
@@ -72,9 +72,7 @@ function llmModelToZod(
       }),
       f,
     );
-    if (f.minItems && f.minItems > 1 && fieldIsListType(f) && base instanceof z.ZodArray) {
-      base = base.min(f.minItems);
-    }
+    base = applyFieldCardinalityConstraints(base, f);
     shape[f.name] = f.optional ? base.optional() : base;
   }
   return z.object(shape);
@@ -95,10 +93,10 @@ export function hasQuoteField(model: StructureModel, models: StructureModel[] = 
 }
 
 // AI : LLM-facing schema — quote fields collapse to plain strings at every nesting depth.
-// AI : the exact suffix appended to every structured LLM call (logging + OpenRouter).
+// AI : constant schema first, variable user content last — maximises provider prompt-cache prefix hits.
 export function structuredLlmPrompt(userPrompt: string, schema: ZodType): string {
   const jsonSchema = JSON.stringify(z.toJSONSchema(schema), null, 2);
-  return `${userPrompt}\n\nRespond with ONLY a JSON value that validates against this JSON Schema:\n${jsonSchema}`;
+  return `Respond with ONLY a JSON value that validates against this JSON Schema:\n${jsonSchema}\n\n${userPrompt}`;
 }
 
 // AI : JSON Schema preview for the pipeline inspector (Zod llmSchema → JSON Schema).

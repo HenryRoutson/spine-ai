@@ -45,6 +45,7 @@ export type RunCheckpoint = {
     pipelineState?: import("../run-types").PipelineState;
     expectedOutputs?: Record<string, unknown>;
     llmClient?: LlmClientStepSpec;
+    maxRunMs?: number;
   };
   expectedOutputs?: Record<string, unknown>;
 };

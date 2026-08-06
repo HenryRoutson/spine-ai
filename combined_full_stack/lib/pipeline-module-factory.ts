@@ -2,6 +2,7 @@ import type { CustomCodeEntry, ModelId, ModuleId, PipelineModule, StructureModel
 import { makeCustomCodeEntry } from "@/lib/custom_code_entries"
 import { DEFAULT_ASSERT_TS } from "@/lib/assert_steps"
 import { DEFAULT_EXAMPLE_SELECT_PROMPT } from "@/lib/example-select"
+import { DEFAULT_CUSTOM_CODE_MAX_RUN_MS } from "@/lib/custom-code-max-run"
 import { DEFAULT_LLM_STEP_COST_LIMIT_CENTS } from "@/lib/llm-cost-limit"
 import { CustomCodeLanguage, InputType, ModuleKind, MODULE_META } from "@/lib/types"
 import {
@@ -30,6 +31,7 @@ export type ModuleFactoryOpts = {
   prompt?: string
   code?: string
   fallbackList?: CustomCodeEntry[]
+  maxRunMs?: number
   model?: ModelId
   costLimitCents?: number
   chunkSize?: number
@@ -101,6 +103,10 @@ export function createPipelineModule(
         : kind === ModuleKind.Assert
           ? (opts.fallbackList ?? [makeCustomCodeEntry(CustomCodeLanguage.TypeScript, DEFAULT_ASSERT_TS)])
           : undefined,
+    maxRunMs:
+      kind === ModuleKind.CustomCode || kind === ModuleKind.Assert
+        ? (opts.maxRunMs ?? DEFAULT_CUSTOM_CODE_MAX_RUN_MS)
+        : undefined,
     chunkSize: kind === ModuleKind.Chunk ? (opts.chunkSize ?? DEFAULT_CHUNK_SIZE) : undefined,
     chunkOverlap: kind === ModuleKind.Chunk ? (opts.chunkOverlap ?? 0) : undefined,
     chunkTextField: kind === ModuleKind.Chunk ? opts.chunkTextField : undefined,

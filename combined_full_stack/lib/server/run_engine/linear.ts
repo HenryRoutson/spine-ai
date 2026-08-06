@@ -10,6 +10,7 @@ import { stepCacheKey } from "../run_fingerprint";
 import { readStepCache, writeStepCache } from "../step_cache";
 import { hasQuoteField, validateStepOutput } from "../structure";
 import { llmStepCostLimitCents, StepCostLimitExceededError } from "../step_cost_limit";
+import { customCodeMaxRunMs } from "@/lib/custom-code-max-run";
 import { DEFAULT_INPUT_CHECK_MODEL, FailureKind, inputUsesVisionOcr, ModuleKind, RunStepStatus, type LlmCallRecord } from "../types";
 import { serializeCtx, resolveStepInputForCheck } from "./context";
 import { execModule } from "./exec_module";
@@ -222,6 +223,7 @@ export async function runLinearStepsFrom(
                 input: err.input,
                 pipelineState: err.pipelineState,
                 expectedOutputs: golden,
+                maxRunMs: customCodeMaxRunMs(m),
               },
             });
           }

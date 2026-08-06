@@ -105,10 +105,31 @@ export async function updateSession(request: NextRequest) {
   });
 
   // AI : getClaims() revalidates the JWT — required so Vercel proxy and browser stay in sync.
-  const { data } = await supabase.auth.getClaims();
-  const user = data?.claims;
+  // AI : when claims are missing (timeout or empty), fall back to cookie session so flaky Auth ≠ signed-out.
+  let user: { sub?: string } | null = null;
+  let authProbeFailed = false;
+  try {
+    const { data } = await supabase.auth.getClaims();
+    user = data?.claims ?? null;
+  } catch {
+    authProbeFailed = true;
+  }
+  if (!user) {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const sessionUser = sessionData.session?.user;
+    if (sessionUser) user = { sub: sessionUser.id };
+    else if (authProbeFailed) {
+      /* keep user null — API path returns 503 below */
+    }
+  }
 
   if (!user && isApiRoute && !isPublicApiPathLocal(pathname, request.method)) {
+    if (authProbeFailed) {
+      return NextResponse.json(
+        { error: "Auth temporarily unavailable — retry shortly." },
+        { status: HTTP.UNAVAILABLE },
+      );
+    }
     return NextResponse.json({ error: AUTH_SIGN_IN_REQUIRED }, { status: 401 });
   }
 

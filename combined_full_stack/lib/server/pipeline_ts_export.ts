@@ -79,15 +79,15 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
     case "example-select": {
       const prompt = m.prompt ?? "Find useful examples…";
       const ctxLabel = m.exampleContextLabel ?? "Context";
-      const itemTs = outTs.endsWith("[]") ? outTs.slice(0, -2) : outTs;
       return [
         `// Per-item relevance filter — ${outName ?? outTs} with selection_reason`,
         `const description = JSON.stringify(state["${ctxLabel.replace(/"/g, '\\"')}"], null, 2);`,
         "const items = Array.isArray(input) ? input : [input];",
         `const template = ${JSON.stringify(prompt)};`,
         `const relevanceSchema = { chain_of_thought: "string", is_relevant: "boolean" };`,
-        `const verdicts = await llmBatchStructured(items, (item) => template.replace("{description}", description).replace("{example}", JSON.stringify(item)), relevanceSchema);`,
-        `return items.filter((_, i) => verdicts[i]?.is_relevant).map((item, i) => ({ ...item, selection_reason: verdicts[i]?.chain_of_thought })) as ${outTs};`,
+        `type RelevanceVerdict = { chain_of_thought?: string; is_relevant?: boolean };`,
+        `const verdicts = await llmBatchStructured<RelevanceVerdict>(items, (item: unknown) => template.replace("{description}", description).replace("{example}", JSON.stringify(item)), relevanceSchema);`,
+        `return items.filter((_, i) => verdicts[i]?.is_relevant).map((item, i) => ({ ...item, selection_reason: verdicts[i]?.chain_of_thought ?? "" })) as ${outTs};`,
       ].join("\n");
     }
     case "quote":
@@ -177,7 +177,7 @@ export function generatePipelineSourceTs(project: Project): string {
     "// Generated pipeline export — equivalent TypeScript representation",
     `// Project: ${prepared.name}`,
     `// ${prepared.modules.length} steps · ${prepared.models.length} structures`,
-    "// Setup: export also includes .env.example and SETUP.md — copy .env.example → .env",
+    "// Setup: export also includes .env.example and README.md — copy .env.example → .env",
     "",
     "// === structures ===",
     generateModelsDts(prepared.models, prepared.typeAliases ?? []),

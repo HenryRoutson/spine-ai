@@ -58,6 +58,24 @@ function ChartContainer({
 }) {
   const uniqueId = React.useId()
   const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`
+  // AI : app shell keeps inactive panels mounted with `hidden` (display:none) — defer
+  // Recharts until the box has a real size so ResponsiveContainer never warns on 0×0.
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const [hasSize, setHasSize] = React.useState(false)
+
+  React.useLayoutEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const syncSize = () => {
+      const { width, height } = el.getBoundingClientRect()
+      setHasSize(width > 0 && height > 0)
+    }
+    syncSize()
+    if (typeof ResizeObserver === "undefined") return
+    const ro = new ResizeObserver(syncSize)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   return (
     <ChartContext.Provider value={{ config }}>
@@ -69,13 +87,16 @@ function ChartContainer({
           className
         )}
         {...props}
+        ref={containerRef}
       >
         <ChartStyle id={chartId} config={config} />
-        <RechartsPrimitive.ResponsiveContainer
-          initialDimension={initialDimension}
-        >
-          {children}
-        </RechartsPrimitive.ResponsiveContainer>
+        {hasSize ? (
+          <RechartsPrimitive.ResponsiveContainer
+            initialDimension={initialDimension}
+          >
+            {children}
+          </RechartsPrimitive.ResponsiveContainer>
+        ) : null}
       </div>
     </ChartContext.Provider>
   )

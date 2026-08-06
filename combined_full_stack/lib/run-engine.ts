@@ -9,7 +9,7 @@ import {
   runCustomCodeWithFallbacks,
   type CustomCodeAttemptFailure,
 } from "@/lib/custom_code"
-import { formatLineProfileLog, type CodeTraceEvent } from "@/lib/custom_code_trace"
+import { CodeTracePhase, formatLineProfileLog, type CodeTraceEvent } from "@/lib/custom_code_trace"
 import type { CodeExecUiState, CodeLineProfile, StepCodeProfile } from "@/lib/code-exec-ui"
 import { CODE_ERROR_NS, recordCodeError } from "@/lib/code-error-history"
 import { getCustomLlmProvider, type CustomLlmProviderDef } from "@/lib/custom-llm-providers"
@@ -332,8 +332,6 @@ export async function awaitJobCompletion(
   let clientStepBusy = false
   let clientStepSubmittedFor: ModuleId | undefined
   let awaitingServerResume = false
-  let traceUiRaf = 0
-  let pendingTraceUi: Pick<CodeExecUiState, "activeLine" | "activeSlot" | "lineMs"> | undefined
   for (;;) {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
     const job = await poll()
@@ -405,7 +403,7 @@ export async function awaitJobCompletion(
       !clientStepBusy &&
       clientStepSubmittedFor !== job.clientStep.moduleId
     ) {
-      const { moduleId, label, entries, input, pipelineState, kind, expectedOutputs } = job.clientStep
+      const { moduleId, label, entries, input, pipelineState, kind, expectedOutputs, maxRunMs } = job.clientStep
       if (!entries?.length) {
         await submitClientStep({ error: `${kind} step has no code configured` })
         clientStepSubmittedFor = moduleId
@@ -427,26 +425,24 @@ export async function awaitJobCompletion(
           ...patch,
         })
       }
-      pushCodeExec({})
-      const flushTraceUi = () => {
-        if (!pendingTraceUi) return
-        pushCodeExec(pendingTraceUi)
-        pendingTraceUi = undefined
-      }
+      pushCodeExec({ activeLine: 1 })
       const onTrace = (event: CodeTraceEvent) => {
         lineMs = event.lineMs
-        pendingTraceUi = { activeLine: event.activeLine, activeSlot: event.activeSlot, lineMs }
-        if (traceUiRaf) return
-        traceUiRaf = requestAnimationFrame(() => {
-          traceUiRaf = 0
-          flushTraceUi()
-        })
+        if (event.phase === CodeTracePhase.Enter && event.activeLine != null) {
+          pushCodeExec({
+            activeLine: event.activeLine,
+            activeSlot: event.activeSlot,
+            lineMs,
+            status: "running",
+          })
+        }
       }
+      const codeOpts = { onTrace, maxRunMs }
       try {
         const { output, failures, attemptIndex, language } =
           kind === "assert"
-            ? await runAssertWithFallbacks(entries, input, pipelineState, expectedOutputs, { onTrace })
-            : await runCustomCodeWithFallbacks(entries, input, pipelineState, { onTrace })
+            ? await runAssertWithFallbacks(entries, input, pipelineState, expectedOutputs, codeOpts)
+            : await runCustomCodeWithFallbacks(entries, input, pipelineState, codeOpts)
         const profileCode = entries[attemptIndex]?.code ?? primaryEntry.code
         const profileLanguage = entries[attemptIndex]?.language ?? language
         const codeProfile: StepCodeProfile | undefined = Object.keys(lineMs).length
@@ -461,11 +457,6 @@ export async function awaitJobCompletion(
             moduleId,
           })
         }
-        if (traceUiRaf) {
-          cancelAnimationFrame(traceUiRaf)
-          traceUiRaf = 0
-        }
-        flushTraceUi()
         pushCodeExec({ activeLine: undefined, lineMs, status: "done" })
         for (const f of failures) {
           clientLogs.push({
@@ -497,11 +488,12 @@ export async function awaitJobCompletion(
         clientStepSubmittedFor = moduleId
         awaitingServerResume = true
       } catch (err) {
-        if (traceUiRaf) {
-          cancelAnimationFrame(traceUiRaf)
-          traceUiRaf = 0
-        }
-        flushTraceUi()
+        const timeoutFailure =
+          err instanceof CustomCodeExhaustedError
+            ? err.failures.find((f) => f.lineMs && Object.keys(f.lineMs).length)
+            : undefined
+        if (timeoutFailure?.lineMs) lineMs = timeoutFailure.lineMs
+        // AI : clear activeLine so StepCodeExecPreview shows profile bars after timeout.
         pushCodeExec({ activeLine: undefined, lineMs, status: "error" })
         const profileCode = entries[0]?.code ?? primaryEntry.code
         const codeProfile: StepCodeProfile | undefined = Object.keys(lineMs).length

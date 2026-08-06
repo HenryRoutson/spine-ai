@@ -3,6 +3,7 @@
 import type { AccountRefreshOpts } from "@/lib/store"
 import { invariant } from "@/lib/assert"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import {
   flattenInputDocIds,
   inputDocsByModuleFromAssignment,
@@ -232,7 +233,9 @@ export function useInferenceRunProgress({
         onCodeExec: (state) => {
           if (jobGen !== activeJobGenRef.current || activeJobIdRef.current !== jobId) return
           if (!mountedRef.current) return
-          setCodeExecByModule((prev) => new Map(prev).set(state.moduleId, state))
+          flushSync(() => {
+            setCodeExecByModule((prev) => new Map(prev).set(state.moduleId, state))
+          })
         },
         onHumanReview: (spec) => {
           if (jobGen !== activeJobGenRef.current) {

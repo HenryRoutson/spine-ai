@@ -110,11 +110,12 @@ async function resolveLandingClientStep(
   }
   const clientLogs: JobLogEntry[] = [];
   const tag = step.kind === "assert" ? "assert" : "custom-code";
+  const codeOpts = { maxRunMs: step.maxRunMs }
   try {
     const { output, failures, attemptIndex, language } =
       step.kind === "assert"
-        ? await runAssertWithFallbacks(entries, step.input, step.pipelineState, step.expectedOutputs)
-        : await runCustomCodeWithFallbacks(entries, step.input, step.pipelineState);
+        ? await runAssertWithFallbacks(entries, step.input, step.pipelineState, step.expectedOutputs, codeOpts)
+        : await runCustomCodeWithFallbacks(entries, step.input, step.pipelineState, codeOpts);
     for (const f of failures) {
       clientLogs.push({
         at: Date.now(),

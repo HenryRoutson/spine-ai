@@ -279,6 +279,7 @@ export class SupabaseStore implements Store {
       this.platformSeedDocsLoaded = true;
       ingestPlatformSeedDocRows(this.platformSeedDocState(), (seedDocs.data ?? []) as DocDbRow[]);
     }
+    this.purgeStaleUserBundledDocsFromMemory();
 
     for (const row of runRows) {
       const run = row.data as PipelineRun;
@@ -630,10 +631,24 @@ export class SupabaseStore implements Store {
     await run;
   }
 
-  // AI : warm store may flush long after route auth — revalidate JWT so RLS upserts see auth.uid().
+  // AI : warm store shares one client slot — reject only on positive user mismatch after rebindDb.
+  // AI : never treat Auth/JWKS timeouts as signed-out; RLS still enforces auth.uid() on writes.
   private async ensureFreshWriteAuth(): Promise<void> {
-    const { data, error } = await this.db.auth.getUser();
-    if (error || !data.user) throw new Error(AUTH_SIGN_IN_REQUIRED);
+    try {
+      const { data, error } = await this.db.auth.getClaims();
+      const sub = !error ? data?.claims?.sub : undefined;
+      if (sub && sub !== this.scopedUserId) throw new Error(AUTH_SIGN_IN_REQUIRED);
+      if (sub) return;
+    } catch (err) {
+      if (err instanceof Error && err.message === AUTH_SIGN_IN_REQUIRED) throw err;
+    }
+    try {
+      const { data: sessionData } = await this.db.auth.getSession();
+      const id = sessionData.session?.user?.id;
+      if (id && id !== this.scopedUserId) throw new Error(AUTH_SIGN_IN_REQUIRED);
+    } catch (err) {
+      if (err instanceof Error && err.message === AUTH_SIGN_IN_REQUIRED) throw err;
+    }
   }
 
   private async flushNow(): Promise<void> {

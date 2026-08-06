@@ -4,6 +4,7 @@ import { Plus, Trash2 } from "lucide-react"
 import { CustomCodeEditor } from "@/components/custom-code-editor"
 import { CodeErrorHistory, CODE_ERROR_NS } from "@/components/code-error-history"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -16,6 +17,11 @@ import {
   languageOfEntry,
   makeCustomCodeEntry,
 } from "@/lib/custom_code_entries"
+import {
+  customCodeMaxRunMs,
+  formatMaxRunSecondsInput,
+  parseMaxRunSecondsInput,
+} from "@/lib/custom-code-max-run"
 import { CustomCodeLanguage, type PipelineModule } from "@/lib/types"
 import { PipelineField, StaticValue } from "@/components/pipeline-fields/shared"
 
@@ -27,8 +33,33 @@ type CodeModuleFieldsProps = {
 
 export function CodeModuleFields({ selected, edit, onUpdate }: CodeModuleFieldsProps) {
   const isAssert = selected.kind === "assert"
+  const maxRunMs = customCodeMaxRunMs(selected)
 
   return (
+    <>
+    <PipelineField
+      label="Max run time"
+      hint="aborts with line timing + last executing line when exceeded"
+    >
+      {edit ? (
+        <div className="flex items-center gap-2">
+          <Input
+            type="number"
+            min={1}
+            step={1}
+            value={formatMaxRunSecondsInput(maxRunMs)}
+            onChange={(e) => {
+              const ms = parseMaxRunSecondsInput(e.target.value)
+              if (ms != null) onUpdate!({ maxRunMs: ms })
+            }}
+            className="h-8 w-24 font-mono text-xs"
+          />
+          <span className="font-mono text-[10px] text-muted-foreground">seconds</span>
+        </div>
+      ) : (
+        <StaticValue mono>{formatMaxRunSecondsInput(maxRunMs)}s</StaticValue>
+      )}
+    </PipelineField>
     <PipelineField
       label={isAssert ? "Assert · step[\"Label\"] + len()" : "Code list · tried in order (first is primary)"}
       hint={
@@ -135,5 +166,6 @@ export function CodeModuleFields({ selected, edit, onUpdate }: CodeModuleFieldsP
         <StaticValue>None</StaticValue>
       )}
     </PipelineField>
+    </>
   )
 }

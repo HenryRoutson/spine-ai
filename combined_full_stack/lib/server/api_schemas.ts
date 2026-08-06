@@ -208,6 +208,7 @@ const pipelineModulePatchSchema = z
     prompt: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
     code: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
     fallbackList: z.array(customCodeEntryPatchSchema).max(20).optional(),
+    maxRunMs: z.number().int().min(1).max(3_600_000).optional(),
     model: z.string().max(128).optional(),
     costLimitCents: z.number().min(0).max(1_000_000).optional(),
     // AI : chunk — allowlisted on PUT so .strict() does not reject builder saves
@@ -253,6 +254,9 @@ const structureFieldPatchSchema = z
     negativeExamples: fieldExampleListSchema,
     ref: z.string().max(128).optional(),
     minItems: z.number().int().min(0).max(10_000).optional(),
+    maxItems: z.number().int().min(0).max(10_000).optional(),
+    minLength: z.number().int().min(0).max(10_000).optional(),
+    maxLength: z.number().int().min(0).max(10_000).optional(),
     typeExpr: typeExprPatchSchema.optional(),
     deterministic: z.boolean().optional(),
     testTolerance: z.number().finite().optional(),

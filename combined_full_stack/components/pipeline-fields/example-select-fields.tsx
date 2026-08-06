@@ -144,7 +144,7 @@ export function ExampleSelectModuleFields({
 
       <PipelineField
         label="Relevance prompt"
-        hint="shared cached prefix — use {description} and {example}; each item call returns is_relevant + chain_of_thought"
+        hint="schema-first cached prefix, then {description}, then {example} last — per-item is_relevant + chain_of_thought"
       >
         {edit ? (
           <Textarea

@@ -19,6 +19,7 @@ import {
 import { StructureFieldTypeEditor } from "@/components/structure-field-type-editor"
 import { StructureSourceDocLink } from "@/components/structure-source-doc-link"
 import { fieldTypeLabel } from "@/lib/structure-field-labels"
+import { fieldIsListType } from "@/lib/server/type_expr"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
@@ -192,6 +193,9 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
                 Examples
               </th>
               <th className="w-20 border-b border-r border-border px-2 py-1.5 text-center text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Min–Max
+              </th>
+              <th className="w-20 border-b border-r border-border px-2 py-1.5 text-center text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Required
               </th>
               <th
@@ -267,6 +271,11 @@ function FieldRow({
 }: FieldRowProps) {
   const stripe = rowIdx % 2 === 1
   const isNumeric = field.type === FieldType.Int || field.type === FieldType.Float
+  const isText = field.type === FieldType.Text
+  const isList = fieldIsListType(field)
+  const showsCardinality = isText || isList
+  const minKey = isList ? "minItems" : "minLength"
+  const maxKey = isList ? "maxItems" : "maxLength"
   const toleranceEnabled = isNumeric && field.deterministic !== false
   const [examplesOpen, setExamplesOpen] = useState(false)
   const exampleStats = useMemo(
@@ -344,6 +353,63 @@ function FieldRow({
             locked={locked}
             onUpdate={onUpdate}
           />
+        </td>
+        <td className="border-b border-r border-border p-0 text-center">
+          {showsCardinality ? (
+            <div
+              className="flex h-8 items-center justify-center gap-0.5 px-0.5"
+              onPointerDown={locked ? onLockedInteract : undefined}
+            >
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={field[minKey] ?? ""}
+                placeholder="min"
+                disabled={locked}
+                title={isList ? "minimum list length" : "minimum string length"}
+                onChange={(e) => {
+                  const raw = e.target.value.trim()
+                  if (!raw) {
+                    onUpdate({ [minKey]: undefined })
+                    return
+                  }
+                  const n = Number(raw)
+                  onUpdate({ [minKey]: Number.isFinite(n) && n >= 1 ? n : undefined })
+                }}
+                className={cn(
+                  "h-6 w-9 rounded border bg-transparent px-0.5 text-center font-mono text-[10px] outline-none",
+                  field[minKey] !== undefined ? "border-output/50 text-output" : "border-border text-muted-foreground",
+                  locked && "pointer-events-none cursor-not-allowed opacity-70",
+                )}
+              />
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={field[maxKey] ?? ""}
+                placeholder="max"
+                disabled={locked}
+                title={isList ? "maximum list length" : "maximum string length"}
+                onChange={(e) => {
+                  const raw = e.target.value.trim()
+                  if (!raw) {
+                    onUpdate({ [maxKey]: undefined })
+                    return
+                  }
+                  const n = Number(raw)
+                  onUpdate({ [maxKey]: Number.isFinite(n) && n >= 1 ? n : undefined })
+                }}
+                className={cn(
+                  "h-6 w-9 rounded border bg-transparent px-0.5 text-center font-mono text-[10px] outline-none",
+                  field[maxKey] !== undefined ? "border-output/50 text-output" : "border-border text-muted-foreground",
+                  locked && "pointer-events-none cursor-not-allowed opacity-70",
+                )}
+              />
+            </div>
+          ) : (
+            <span className="text-[10px] text-muted-foreground/40">—</span>
+          )}
         </td>
         <td className="border-b border-r border-border p-0 text-center">
           <div
@@ -440,7 +506,7 @@ function FieldRow({
       {field.type === "json" && !field.typeExpr && (
         <tr className={cn(stripe && "bg-secondary/15")}>
           <td className="border-b border-r border-border bg-secondary/25" />
-          <td colSpan={8} className="border-b border-border px-2 py-1 text-[10px] text-amber-700 dark:text-amber-500">
+          <td colSpan={9} className="border-b border-border px-2 py-1 text-[10px] text-amber-700 dark:text-amber-500">
             Flexible data stores anything — prefer &ldquo;{fieldTypeLabel(FieldType.Model)}&rdquo; or a Type from the sidebar.
           </td>
         </tr>

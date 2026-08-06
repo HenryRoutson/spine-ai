@@ -233,6 +233,8 @@ please add the option for cost limits per llm step, by default this should be $1
 
 No rag, just quotes as it's more tracable and reliable.
 
+code steps should have a field for the max run time, where if it goes over that time, you get a profile of the time taken and the last line executing to profile things. set at a minute by default 
+
 # Testing 
 
 please create a testing tab, where you can describe the exact output at each step to precisely pinpoint where a pipeline goes wrong

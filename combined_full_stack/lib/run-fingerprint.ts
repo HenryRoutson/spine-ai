@@ -48,6 +48,9 @@ function fieldForFingerprint(f: ModelField) {
     name: field.name,
     optional: field.optional,
     minItems: field.minItems ?? null,
+    maxItems: field.maxItems ?? null,
+    minLength: field.minLength ?? null,
+    maxLength: field.maxLength ?? null,
     // AI : canonical type — typeExpr wins over legacy type/ref so cache keys track schema edits.
     expr: fieldToTypeExpr(field),
     // AI : description/examples feed LLM JSON Schema via withFieldMeta — must invalidate cache/logs.

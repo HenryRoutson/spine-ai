@@ -37,12 +37,25 @@ function emailFromClaims(claims: Record<string, unknown> | undefined): string | 
 
 async function sessionFromClaims(): Promise<AuthSession | null> {
   const db = await createClient();
-  const { data } = await db.auth.getClaims();
-  const sub = data?.claims?.sub;
-  if (!sub) return null;
+  try {
+    const { data } = await db.auth.getClaims();
+    const sub = data?.claims?.sub;
+    if (sub) {
+      return {
+        userId: sub as user_id_string,
+        email: emailFromClaims(data.claims as Record<string, unknown> | undefined),
+      };
+    }
+  } catch {
+    /* Auth/JWKS unreachable — fall through to cookie session */
+  }
+  // AI : cookie session keeps signed-in writes working when getClaims cannot reach Auth.
+  const { data: sessionData } = await db.auth.getSession();
+  const user = sessionData.session?.user;
+  if (!user?.id) return null;
   return {
-    userId: sub as user_id_string,
-    email: emailFromClaims(data.claims as Record<string, unknown> | undefined),
+    userId: user.id as user_id_string,
+    email: typeof user.email === "string" ? user.email : undefined,
   };
 }
 

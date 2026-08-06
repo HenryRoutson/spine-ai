@@ -21,7 +21,7 @@ const storeLog = logger("app-store");
 // AI : bundled separately in dev, so a plain module-level singleton is not enough, and
 // AI : two independent stores would clobber each other's store.json on flush.
 // AI : bump STORE_CACHE_GEN when warm-cache contract changes (e.g. stale-JWT rebind fix).
-const STORE_CACHE_GEN = 6;
+const STORE_CACHE_GEN = 7;
 
 type StoreSlot = {
   __forgeStore?: Promise<JsonStore>;
@@ -91,20 +91,33 @@ async function hydrateUserStore(store: Store): Promise<Store> {
 // AI : Supabase keeps the shared JsonStore; production deploys reject unauthenticated access.
 export async function getStore(): Promise<Store> {
   if (isVercelWithoutSupabase()) throw new Error("Supabase env vars required on Vercel");
+
+  async function userIdFromClient(
+    supabase: Awaited<ReturnType<typeof createClient>>,
+  ): Promise<user_id_string | null> {
+    try {
+      const { data } = await supabase.auth.getClaims();
+      if (data?.claims?.sub) return data.claims.sub as user_id_string;
+    } catch {
+      /* Auth/JWKS unreachable */
+    }
+    const { data: sessionData } = await supabase.auth.getSession();
+    const id = sessionData.session?.user?.id;
+    return id ? (id as user_id_string) : null;
+  }
+
   if (isProductionDeploy()) {
     const supabase = await createClient();
-    const { data } = await supabase.auth.getClaims();
-    if (!data?.claims?.sub) throw new Error(AUTH_SIGN_IN_REQUIRED);
-    const userId = data.claims.sub as user_id_string;
+    const userId = await userIdFromClient(supabase);
+    if (!userId) throw new Error(AUTH_SIGN_IN_REQUIRED);
     storeLog.info(`authenticated user — SupabaseStore`, { sub: userId });
     return openSupabaseUserStore(supabase, userId);
   }
 
   try {
     const supabase = await createClient();
-    const { data } = await supabase.auth.getClaims();
-    if (data?.claims?.sub) {
-      const userId = data.claims.sub as user_id_string;
+    const userId = await userIdFromClient(supabase);
+    if (userId) {
       storeLog.info(`authenticated user — trying SupabaseStore`, { sub: userId });
       try {
         storeLog.info(`using SupabaseStore`);

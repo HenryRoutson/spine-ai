@@ -8,13 +8,18 @@
 
 import { invariant } from "@/lib/assert";
 import { customCodeEntriesForModule, type ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
+import { DEFAULT_CUSTOM_CODE_MAX_RUN_MS, type max_run_ms } from "@/lib/custom-code-max-run";
 import { ModuleKind, type CustomCodeLanguage, type PipelineModule } from "@/lib/types";
 import type { PipelineState } from "@/lib/run-types";
 import { assertEntriesForModule, wrapAssertCode } from "@/lib/assert_steps";
+import type { CodeLineProfile } from "@/lib/code-exec-ui";
 import {
   createForgeTrace,
+  formatLineProfileLog,
   instrumentCodeLines,
+  makeAsyncFunctionSource,
   type CodeTraceEvent,
+  type ForgeTraceFinish,
   type ForgeTraceFn,
 } from "@/lib/custom_code_trace";
 
@@ -32,7 +37,6 @@ export {
 
 export type CustomFn = (input: unknown, state?: PipelineState) => unknown | Promise<unknown>;
 
-const CUSTOM_CODE_TIMEOUT_MS = 15_000;
 const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
 // AI : TODO security — Pyodide loads from CDN; pin SRI or self-host to reduce supply-chain risk.
 
@@ -43,6 +47,9 @@ export type CustomCodeAttemptFailure = {
   error: string;
   stack?: string;
   input: unknown;
+  lineMs?: CodeLineProfile;
+  lastLine?: number;
+  lastSlot?: number;
 };
 
 export type CustomCodeRunResult = {
@@ -57,6 +64,33 @@ export class CustomCodeExhaustedError extends Error {
     const last = failures[failures.length - 1];
     super(`custom code failed after ${failures.length} attempt(s): ${last?.error ?? "unknown"}`);
     this.name = "CustomCodeExhaustedError";
+  }
+}
+
+export class CustomCodeTimeoutError extends Error {
+  constructor(
+    readonly maxRunMs: max_run_ms,
+    readonly code: string,
+    readonly finish: ForgeTraceFinish,
+    label = "custom code",
+  ) {
+    const { lineMs, lastLine, lastSlot } = finish;
+    const lines = code.split("\n");
+    const lastText = lastLine != null ? (lines[lastLine - 1] ?? "").trim() : "";
+    const lastLabel =
+      lastLine == null
+        ? "last line: (unknown — no instrumented line entered)"
+        : lastSlot != null
+          ? `last executing: L${lastLine}.${lastSlot} λ ${lastText.slice(0, 96)}`
+          : `last executing: L${lastLine} ${lastText.slice(0, 96)}`;
+    super(
+      [
+        `${label} timed out after ${maxRunMs}ms`,
+        lastLabel,
+        formatLineProfileLog(code, lineMs),
+      ].join("\n"),
+    );
+    this.name = "CustomCodeTimeoutError";
   }
 }
 
@@ -114,13 +148,20 @@ export function compileCustomFn(code: string): CustomFn {
 
 export type CustomCodeTraceOpts = {
   onTrace?: (event: CodeTraceEvent) => void;
+  maxRunMs?: max_run_ms;
+  // AI : original user source for timeout/line profiles (instrumented body has different lines).
+  profileCode?: string;
 };
 
 // AI : traced compile — __forgeTrace is injected per source line for inference step preview.
-function compileTracedCustomFn(code: string, onTrace: (event: CodeTraceEvent) => void): CustomFn {
-  const traceFn = createForgeTrace(onTrace);
-  const src = buildCustomFnSource(code);
-  const fn = new Function("__forgeTrace", `return ${src}`)(traceFn);
+function compileTracedCustomFn(code: string, onTrace: (event: CodeTraceEvent) => void, visual: boolean): CustomFn {
+  const paint = visual
+    ? () => new Promise<void>((r) => requestAnimationFrame(() => r()))
+    : undefined
+  const traceFn = createForgeTrace(onTrace, paint)
+  const built = buildCustomFnSource(code)
+  const src = visual ? makeAsyncFunctionSource(built) : built
+  const fn = new Function("__forgeTrace", `return ${src}`)(traceFn)
   invariant(typeof fn === "function", "custom code must evaluate to a function (input) => output");
   const wrapped = fn as CustomFn & { __forgeTrace?: ReturnType<typeof createForgeTrace> };
   wrapped.__forgeTrace = traceFn;
@@ -154,13 +195,22 @@ export function tryCompileCustomCodeEntry(
   }
 }
 
-async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms),
-    ),
-  ]);
+async function withTimeout<T>(promise: Promise<T>, ms: max_run_ms, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function isTimeoutMessage(msg: string, ms: max_run_ms): boolean {
+  return msg.includes(`timed out after ${ms}ms`);
 }
 
 export async function runCustomFn(
@@ -169,18 +219,33 @@ export async function runCustomFn(
   state?: PipelineState,
   opts?: CustomCodeTraceOpts,
 ): Promise<unknown> {
-  const fn = opts?.onTrace ? compileTracedCustomFn(code, opts.onTrace) : compileCustomFn(code);
+  const maxRunMs = opts?.maxRunMs ?? DEFAULT_CUSTOM_CODE_MAX_RUN_MS;
+  const profileCode = opts?.profileCode ?? code;
+  const fn = opts?.onTrace ? compileTracedCustomFn(code, opts.onTrace, true) : compileCustomFn(code);
   const trace: ForgeTraceFn | undefined =
     "__forgeTrace" in fn ? (fn as CustomFn & { __forgeTrace?: ForgeTraceFn }).__forgeTrace : undefined;
+  let finished: ForgeTraceFinish | undefined;
+  const finishOnce = (): ForgeTraceFinish => {
+    if (finished) return finished;
+    finished = trace?.finish() ?? { lineMs: {} };
+    return finished;
+  };
   try {
     const result = fn.length >= 2 ? fn(input, state ?? {}) : fn(input);
-    const settled = result instanceof Promise ? await withTimeout(result, CUSTOM_CODE_TIMEOUT_MS, "custom code") : result;
+    const settled = await withTimeout(Promise.resolve(result), maxRunMs, "custom code");
     if (settled === undefined) {
       throw new Error("custom code returned undefined — add a trailing (input) => output arrow or an explicit return");
     }
     return settled;
+  } catch (err) {
+    if (err instanceof CustomCodeTimeoutError) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    if (isTimeoutMessage(msg, maxRunMs)) {
+      throw new CustomCodeTimeoutError(maxRunMs, profileCode, finishOnce());
+    }
+    throw err;
   } finally {
-    trace?.finish();
+    finishOnce();
   }
 }
 
@@ -209,24 +274,38 @@ function pythonSource(code: string): string {
   return `def transform(input, state=None):\n${body}`;
 }
 
-export async function runPythonFn(code: string, input: unknown, state?: PipelineState): Promise<unknown> {
+export async function runPythonFn(
+  code: string,
+  input: unknown,
+  state?: PipelineState,
+  opts?: CustomCodeTraceOpts,
+): Promise<unknown> {
+  const maxRunMs = opts?.maxRunMs ?? DEFAULT_CUSTOM_CODE_MAX_RUN_MS;
   const pyodide = await getPyodide();
   await pyodide.runPythonAsync(pythonSource(code));
   pyodide.globals.set("_forge_input", input);
   pyodide.globals.set("_forge_state", state ?? {});
-  const raw = await withTimeout(
-    pyodide.runPythonAsync(`
+  try {
+    const raw = await withTimeout(
+      pyodide.runPythonAsync(`
 import json
 _r = transform(_forge_input, _forge_state)
 json.dumps(_r, default=str)
 `),
-    CUSTOM_CODE_TIMEOUT_MS,
-    "python custom code",
-  );
-  if (typeof raw !== "string") throw new Error("python custom code did not return JSON");
-  const parsed = JSON.parse(raw) as unknown;
-  invariant(parsed !== undefined, "python custom code returned undefined");
-  return parsed;
+      maxRunMs,
+      "python custom code",
+    );
+    if (typeof raw !== "string") throw new Error("python custom code did not return JSON");
+    const parsed = JSON.parse(raw) as unknown;
+    invariant(parsed !== undefined, "python custom code returned undefined");
+    return parsed;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (isTimeoutMessage(msg, maxRunMs)) {
+      throw new CustomCodeTimeoutError(maxRunMs, code, { lineMs: {} }, "python custom code");
+    }
+    throw err;
+  }
 }
 
 async function runCustomEntry(
@@ -235,9 +314,30 @@ async function runCustomEntry(
   state?: PipelineState,
   opts?: CustomCodeTraceOpts,
 ): Promise<unknown> {
-  if (entry.language === "python") return runPythonFn(entry.code, input, state);
-  const code = opts?.onTrace ? instrumentCodeLines(entry.code) : entry.code;
-  return runCustomFn(code, input, state, opts);
+  const entryOpts: CustomCodeTraceOpts = { ...opts, profileCode: entry.code };
+  if (entry.language === "python") return runPythonFn(entry.code, input, state, entryOpts);
+  const code = opts?.onTrace ? instrumentCodeLines(entry.code, { visual: true }) : entry.code;
+  return runCustomFn(code, input, state, entryOpts);
+}
+
+function failureFromErr(
+  i: number,
+  entry: ParsedCustomCodeEntry,
+  input: unknown,
+  err: unknown,
+): CustomCodeAttemptFailure {
+  const timeout = err instanceof CustomCodeTimeoutError ? err : undefined;
+  return {
+    attemptIndex: i,
+    language: entry.language,
+    code: entry.code,
+    error: (err as Error).message,
+    stack: (err as Error).stack,
+    input,
+    lineMs: timeout?.finish.lineMs,
+    lastLine: timeout?.finish.lastLine,
+    lastSlot: timeout?.finish.lastSlot,
+  };
 }
 
 export async function runCustomCodeWithFallbacks(
@@ -254,14 +354,7 @@ export async function runCustomCodeWithFallbacks(
       const output = await runCustomEntry(entry, input, state, opts);
       return { output, attemptIndex: i, language: entry.language, failures };
     } catch (err) {
-      failures.push({
-        attemptIndex: i,
-        language: entry.language,
-        code: entry.code,
-        error: (err as Error).message,
-        stack: (err as Error).stack,
-        input,
-      });
+      failures.push(failureFromErr(i, entry, input, err));
     }
   }
   throw new CustomCodeExhaustedError(failures);
@@ -278,25 +371,22 @@ export async function runAssertWithFallbacks(
   const failures: CustomCodeAttemptFailure[] = [];
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i]!;
-    const userCode = opts?.onTrace && entry.language !== "python" ? instrumentCodeLines(entry.code) : entry.code;
+    const userCode =
+      opts?.onTrace && entry.language !== "python"
+        ? instrumentCodeLines(entry.code, { visual: true })
+        : entry.code;
     const wrapped = { ...entry, code: wrapAssertCode(userCode, entry.language, expectedOutputs ?? {}) };
+    const entryOpts: CustomCodeTraceOpts = { ...opts, profileCode: entry.code };
     try {
       const result =
         entry.language === "python"
-          ? await runPythonFn(wrapped.code, input, state)
-          : await runCustomFn(wrapped.code, input, state, opts);
+          ? await runPythonFn(wrapped.code, input, state, entryOpts)
+          : await runCustomFn(wrapped.code, input, state, entryOpts);
       if (result === false) throw new Error("assert returned false");
       invariant(result === true || result === input, "assert must return true or pass input through unchanged");
       return { output: input, attemptIndex: i, language: entry.language, failures };
     } catch (err) {
-      failures.push({
-        attemptIndex: i,
-        language: entry.language,
-        code: entry.code,
-        error: (err as Error).message,
-        stack: (err as Error).stack,
-        input,
-      });
+      failures.push(failureFromErr(i, entry, input, err));
     }
   }
   throw new CustomCodeExhaustedError(failures);

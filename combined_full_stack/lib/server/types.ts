@@ -53,6 +53,9 @@ export interface ModelField {
   negativeExamples?: string[]; // AI : counterexamples — invalid values the LLM must not emit
   ref?: StructureModelId; // referenced model id when type === "model" | "list[model]"
   minItems?: number; // AI : minimum list length when type is a list[…] field
+  maxItems?: number; // AI : maximum list length when type is a list[…] field
+  minLength?: number; // AI : minimum string length when type is text (or text-like)
+  maxLength?: number; // AI : maximum string length when type is text (or text-like)
   typeExpr?: TypeExpr; // AI : when set, overrides type/ref — full Python-style type expression
   // AI : field-level flag (spec § Testing) — false = probabilistic, the value varies across runs
   // AI : (LLM prose like a summary or feedback) so tests ignore it. Missing/true = deterministic
@@ -65,7 +68,7 @@ export interface ModelField {
 // AI : meta-type — one field row inside a StructureDef (structure-of-structures)
 export type StructureFieldDef = Pick<
   ModelField,
-  "id" | "name" | "type" | "optional" | "description" | "examples" | "negativeExamples" | "ref" | "minItems" | "typeExpr" | "deterministic" | "testTolerance"
+  "id" | "name" | "type" | "optional" | "description" | "examples" | "negativeExamples" | "ref" | "minItems" | "maxItems" | "minLength" | "maxLength" | "typeExpr" | "deterministic" | "testTolerance"
 >;
 
 export interface TolerantFieldPath {
@@ -229,6 +232,7 @@ export interface PipelineModule { // TODO this is bad, it contains multiple poss
   prompt?: string;
   code?: string; // AI : transform steps with custom code only
   fallbackList?: CustomCodeEntry[]; // AI : custom-code — ordered attempts, first is primary
+  maxRunMs?: number; // AI : custom-code / assert / transform-code — wall clock; default 60s, profile on overrun
   model?: ModelId; // per-step model override
   costLimitCents?: number; // AI : per-llm-step spend cap — defaults to $1 when unset
   chunkSize?: number; // chunk step — max characters per chunk

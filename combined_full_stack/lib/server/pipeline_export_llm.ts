@@ -20,6 +20,8 @@ export function llmRuntimeFieldsTs(): string[] {
     "  openRouterModel?: string;",
     "  openRouterSiteUrl?: string;",
     "  openRouterAppTitle?: string;",
+    "  /** Vision OCR model slug (OpenRouter) — default Gemini Flash; override for DeepSeek-OCR hosts */",
+    "  visionOcrModel?: string;",
   ];
 }
 
@@ -31,6 +33,7 @@ export function llmRuntimeFieldsPy(): string[] {
     "    open_router_model: str | None = None",
     "    open_router_site_url: str | None = None",
     "    open_router_app_title: str | None = None",
+    "    vision_ocr_model: str | None = None",
   ];
 }
 
@@ -42,6 +45,7 @@ export function llmRuntimeFieldsRust(): string[] {
     "    pub open_router_model: Option<String>,",
     "    pub open_router_site_url: Option<String>,",
     "    pub open_router_app_title: Option<String>,",
+    "    pub vision_ocr_model: Option<String>,",
   ];
 }
 
@@ -53,6 +57,7 @@ export function llmRuntimeFieldsGo(): string[] {
     "\tOpenRouterModel   string",
     "\tOpenRouterSiteURL string",
     "\tOpenRouterAppTitle string",
+    "\tVisionOcrModel    string",
   ];
 }
 
@@ -261,6 +266,9 @@ export function generateLlmProviderStubsPy(): string[] {
 
 export function openRouterHelpersPyModular(): string[] {
   return [
+    "import re",
+    "import httpx",
+    "",
     'OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"',
     "",
     "def _extract_json_reply(raw: str) -> str:",
@@ -373,5 +381,103 @@ export function llmBatchStubPyModular(): string[] {
     "    else:",
     "        raws = [await provider.chat(p, provider_model, True) for p in prompts]",
     "    return [json.loads(_extract_json_reply(raw)) for raw in raws]",
+  ];
+}
+
+// AI : OpenRouter multimodal OCR — mirrors in-app docToTextViaLlm; DeepSeek-OCR via visionOcrModel override.
+export function visionOcrStubTs(): string[] {
+  return [
+    'const DEFAULT_VISION_OCR_MODEL: ProviderModelId = "google/gemini-3-flash-preview";',
+    'const OCR_SYSTEM = "You are an OCR engine. Transcribe documents faithfully. Preserve structure with markdown headings and lists where helpful. Output only the transcribed text — no commentary.";',
+    'const DEFAULT_OCR_PROMPT = "Transcribe every visible word, number, and label from this document into plain text. Preserve section headings and question numbering.";',
+    "",
+    "export type VisionOcrBytes = { mime: string; base64: string };",
+    "",
+    "function resolveVisionOcrModel(): ProviderModelId {",
+    "  return runtime.visionOcrModel ?? runtime.llmProviderModel ?? runtime.openRouterModel ?? DEFAULT_VISION_OCR_MODEL;",
+    "}",
+    "",
+    "async function openRouterVisionChat(prompt: string, attachments: VisionOcrBytes[], providerModel: ProviderModelId): Promise<string> {",
+    '  if (!runtime.openRouterApiKey) throw new Error("configurePipelineRuntime({ openRouterApiKey }) for vision OCR");',
+    "  const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [{ type: \"text\", text: prompt }];",
+    "  for (const a of attachments) {",
+    '    content.push({ type: "image_url", image_url: { url: `data:${a.mime};base64,${a.base64}` } });',
+    "  }",
+    "  const res = await fetch(OPENROUTER_CHAT_URL, {",
+    '    method: "POST",',
+    "    headers: {",
+    '      Authorization: `Bearer ${runtime.openRouterApiKey}`,',
+    '      "Content-Type": "application/json",',
+    '      "HTTP-Referer": runtime.openRouterSiteUrl ?? "http://localhost:3000",',
+    '      "X-Title": runtime.openRouterAppTitle ?? "forge-pipeline-export",',
+    "    },",
+    "    body: JSON.stringify({",
+    "      model: providerModel,",
+    '      messages: [{ role: "system", content: OCR_SYSTEM }, { role: "user", content }],',
+    "      temperature: 0,",
+    "      max_tokens: 16384,",
+    "      provider: { allow_fallbacks: false },",
+    "    }),",
+    "  });",
+    "  if (!res.ok) throw new Error(`OpenRouter vision ${res.status}: ${await res.text()}`);",
+    "  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };",
+    "  const text = data.choices?.[0]?.message?.content?.trim();",
+    '  if (!text) throw new Error("vision OCR returned empty text");',
+    "  return text;",
+    "}",
+    "",
+    "/** Vision OCR — pass PDF/image bytes as base64. Override model with runtime.visionOcrModel (e.g. DeepSeek-OCR host). */",
+    "async function visionOcr(bytes: VisionOcrBytes, purpose = \"general transcription\"): Promise<string> {",
+    "  const prompt = `${DEFAULT_OCR_PROMPT}\\n\\nDocument purpose: ${purpose || \"general transcription\"}`;",
+    "  return openRouterVisionChat(prompt, [bytes], resolveVisionOcrModel());",
+    "}",
+  ];
+}
+
+export function visionOcrStubPy(): string[] {
+  return [
+    'DEFAULT_VISION_OCR_MODEL: ProviderModelId = "google/gemini-3-flash-preview"',
+    'OCR_SYSTEM = "You are an OCR engine. Transcribe documents faithfully. Preserve structure with markdown headings and lists where helpful. Output only the transcribed text — no commentary."',
+    'DEFAULT_OCR_PROMPT = "Transcribe every visible word, number, and label from this document into plain text. Preserve section headings and question numbering."',
+    "",
+    "def _resolve_vision_ocr_model() -> ProviderModelId:",
+    "    return runtime.vision_ocr_model or runtime.llm_provider_model or runtime.open_router_model or DEFAULT_VISION_OCR_MODEL",
+    "",
+    "async def _open_router_vision_chat(prompt: str, attachments: list[dict[str, str]], provider_model: ProviderModelId) -> str:",
+    "    if not runtime.open_router_api_key:",
+    '        raise RuntimeError("configure_pipeline_runtime(open_router_api_key=...) for vision OCR")',
+    '    content: list[dict[str, object]] = [{"type": "text", "text": prompt}]',
+    "    for a in attachments:",
+    '        content.append({"type": "image_url", "image_url": {"url": f"data:{a[\'mime\']};base64,{a[\'base64\']}"}})',
+    "    headers = {",
+    '        "Authorization": f"Bearer {runtime.open_router_api_key}",',
+    '        "Content-Type": "application/json",',
+    '        "HTTP-Referer": runtime.open_router_site_url or "http://localhost:3000",',
+    '        "X-Title": runtime.open_router_app_title or "forge-pipeline-export",',
+    "    }",
+    "    payload: dict[str, object] = {",
+    '        "model": provider_model,',
+    '        "messages": [{"role": "system", "content": OCR_SYSTEM}, {"role": "user", "content": content}],',
+    '        "temperature": 0,',
+    '        "max_tokens": 16384,',
+    '        "provider": {"allow_fallbacks": False},',
+    "    }",
+    "    async with httpx.AsyncClient(timeout=180) as client:",
+    "        res = await client.post(OPENROUTER_CHAT_URL, headers=headers, json=payload)",
+    "    if res.status_code != 200:",
+    '        raise RuntimeError(f"OpenRouter vision {res.status_code}: {res.text}")',
+    "    data: Any = res.json()",
+    '    choices: Any = data.get("choices") if isinstance(data, dict) else None',
+    "    first: Any = choices[0] if isinstance(choices, list) and choices else {}",
+    '    message: Any = first.get("message", {}) if isinstance(first, dict) else {}',
+    '    text: Any = message.get("content") if isinstance(message, dict) else None',
+    "    if not isinstance(text, str) or not text.strip():",
+    '        raise RuntimeError("vision OCR returned empty text")',
+    "    return text.strip()",
+    "",
+    "async def vision_ocr(mime: str, base64: str, purpose: str = \"general transcription\") -> str:",
+    '    """Vision OCR via OpenRouter multimodal. Override vision_ocr_model for DeepSeek-OCR hosts."""',
+    '    prompt = f"{DEFAULT_OCR_PROMPT}\\n\\nDocument purpose: {purpose or \'general transcription\'}"',
+    '    return await _open_router_vision_chat(prompt, [{"mime": mime, "base64": base64}], _resolve_vision_ocr_model())',
   ];
 }

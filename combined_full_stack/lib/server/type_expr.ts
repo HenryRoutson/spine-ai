@@ -409,6 +409,23 @@ export function withFieldMeta(schema: ZodType, f: ModelField): ZodType {
   return d ? schema.describe(d) : schema;
 }
 
+// AI : min/max items on lists and min/max length on strings — shared by runtime + LLM zod builders.
+export function applyFieldCardinalityConstraints(base: ZodType, f: ModelField): ZodType {
+  if (f.minItems != null && f.minItems >= 1 && fieldIsListType(f) && base instanceof z.ZodArray) {
+    base = base.min(f.minItems);
+  }
+  if (f.maxItems != null && f.maxItems >= 1 && fieldIsListType(f) && base instanceof z.ZodArray) {
+    base = base.max(f.maxItems);
+  }
+  if (f.minLength != null && f.minLength >= 1 && base instanceof z.ZodString) {
+    base = base.min(f.minLength);
+  }
+  if (f.maxLength != null && f.maxLength >= 1 && base instanceof z.ZodString) {
+    base = base.max(f.maxLength);
+  }
+  return base;
+}
+
 type TypeExprToZodOpts = {
   seen?: Set<StructureModelId>;
   llmQuotes?: boolean;
@@ -534,9 +551,7 @@ function modelToZod(
       typeExprToZod(fieldToTypeExpr(f), [...index.values()], next),
       f,
     );
-    if (f.minItems && f.minItems > 1 && fieldIsListType(f) && base instanceof z.ZodArray) {
-      base = base.min(f.minItems);
-    }
+    base = applyFieldCardinalityConstraints(base, f);
     shape[f.name] = f.optional
       ? opts.llmQuotes
         ? base.optional()

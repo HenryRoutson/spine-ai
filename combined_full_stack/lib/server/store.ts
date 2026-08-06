@@ -400,6 +400,23 @@ async function ingestSeedDoc(store: Store, spec: SeedDocSpec, refreshStale = fal
   store.addDoc(spec.name, spec.type, fresh, spec.label);
 }
 
+// AI : before inference — platform seed_docs + git documents/ beat legacy per-user bundled copies.
+export async function refreshBundledSeedDocsForRun(store: Store, project: Project): Promise<void> {
+  const names = new Set(project.seedDocNames ?? []);
+  if (!names.size) return;
+  const platform = store as Store & {
+    purgeStaleUserBundledDocsFromMemory?: () => number;
+    refreshPlatformSeedDocsFromDb?: () => Promise<number>;
+  };
+  platform.purgeStaleUserBundledDocsFromMemory?.();
+  await platform.refreshPlatformSeedDocsFromDb?.();
+  const { allUniqueSeedDocSpecs } = await import("./seed_docs_platform");
+  for (const spec of allUniqueSeedDocSpecs()) {
+    if (!names.has(spec.name)) continue;
+    await ingestSeedDoc(store, spec, true);
+  }
+}
+
 export class JsonStore implements Store {
   private dir = dataDir();
   private storeFile = join(this.dir, "store.json");
