@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { llmBatchStructured } from "../../llm";
 import { deferBrowserLlmIfNeeded } from "../defer_browser_llm";
-import { structuredLlmPrompt } from "../../structure";
+import {
+  exampleSelectRelevanceSchema,
+  fillExampleSelectPrompt,
+} from "@/lib/example-select-relevance";
 import {
   DEFAULT_EXAMPLE_SELECT_PROMPT,
   exampleReasonField,
@@ -10,14 +13,9 @@ import type { PipelineModule } from "../../types";
 import { llmCallBudget, materializeHints, materializeStepOutput, modelById, prevModuleFor } from "../helpers";
 import { requireLinearInput } from "../context";
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types";
+import { structuredLlmPrompt } from "../../structure";
 
-// AI : fixed relevance schema — not the step output structure; keeps per-item calls cheap and consistent.
-const relevanceSchema = z.object({
-  chain_of_thought: z.string().describe("Why this example might or might not be useful for the task"),
-  is_relevant: z.boolean().describe("Whether to include this example in the filtered output"),
-});
-
-type RelevanceResult = z.infer<typeof relevanceSchema>;
+type RelevanceResult = z.infer<typeof exampleSelectRelevanceSchema>;
 
 function readDotPath(value: unknown, path: string): unknown {
   const parts = path.split(".").filter(Boolean);
@@ -41,10 +39,7 @@ function formatExampleContext(value: unknown, fieldPath?: string): string {
 }
 
 function exampleSelectPrompt(template: string, description: string, example: unknown): string {
-  const exampleText = typeof example === "string" ? example : JSON.stringify(example, null, 2);
-  return template
-    .replace(/\{description\}/g, description)
-    .replace(/\{example\}/g, exampleText);
+  return fillExampleSelectPrompt(template, description, example);
 }
 
 function batchInputPreview(
@@ -105,7 +100,7 @@ export async function execExampleSelectStep(m: PipelineModule, ctx: RunCtx, log:
   });
 
   const promptFor = (item: unknown) =>
-    structuredLlmPrompt(exampleSelectPrompt(template, description, item), relevanceSchema);
+    structuredLlmPrompt(exampleSelectPrompt(template, description, item), exampleSelectRelevanceSchema);
   const preview = batchInputPreview(items, promptFor);
 
   deferBrowserLlmIfNeeded(
@@ -129,7 +124,7 @@ export async function execExampleSelectStep(m: PipelineModule, ctx: RunCtx, log:
   const relevanceRows = await llmBatchStructured(
     items,
     (item: unknown) => exampleSelectPrompt(template, description, item),
-    relevanceSchema,
+    exampleSelectRelevanceSchema,
     { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls, ...llmCallBudget(ctx, m.label) },
     log.child("example-select"),
     (current: number, total: number) => ctx.reportSub?.({ label: "Relevance checks", current, total }),

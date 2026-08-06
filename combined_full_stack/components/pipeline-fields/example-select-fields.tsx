@@ -3,6 +3,7 @@
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { ModelSelector } from "@/components/model-selector"
+import { ExampleSelectPromptCachePreview } from "@/components/example-select-prompt-cache-preview"
 import { formatCostCents } from "@/lib/format"
 import {
   formatCostLimitUsdInput,
@@ -32,6 +33,7 @@ export function ExampleSelectModuleFields({
   onUpdate,
 }: ExampleSelectModuleFieldsProps) {
   const costLimitCents = llmStepCostLimitCents(selected)
+  const promptTemplate = selected.prompt?.trim() || DEFAULT_EXAMPLE_SELECT_PROMPT
 
   return (
     <>
@@ -144,28 +146,25 @@ export function ExampleSelectModuleFields({
 
       <PipelineField
         label="Relevance prompt"
-        hint="schema-first cached prefix, then {description}, then {example} last — per-item is_relevant + chain_of_thought"
+        hint="schema-first cached prefix · {description} per run · {example} last per candidate"
       >
         {edit ? (
-          <Textarea
-            value={selected.prompt ?? DEFAULT_EXAMPLE_SELECT_PROMPT}
-            onChange={(e) => onUpdate!({ prompt: e.target.value })}
-            className="min-h-32 resize-y text-xs leading-relaxed"
-          />
+          <div className="space-y-3">
+            <Textarea
+              value={selected.prompt ?? DEFAULT_EXAMPLE_SELECT_PROMPT}
+              onChange={(e) => onUpdate!({ prompt: e.target.value })}
+              className="min-h-32 resize-y font-mono text-xs leading-relaxed"
+            />
+            <ExampleSelectPromptCachePreview template={promptTemplate} />
+          </div>
         ) : (
-          <StaticValue mono pre>
-            {selected.prompt?.trim() || DEFAULT_EXAMPLE_SELECT_PROMPT}
-          </StaticValue>
+          <div className="space-y-3">
+            <StaticValue mono pre>
+              {promptTemplate}
+            </StaticValue>
+            <ExampleSelectPromptCachePreview template={promptTemplate} />
+          </div>
         )}
-      </PipelineField>
-
-      <PipelineField label="Per-item relevance schema">
-        <StaticValue mono pre>
-          {`{
-  "chain_of_thought": "string",
-  "is_relevant": boolean
-}`}
-        </StaticValue>
       </PipelineField>
     </>
   )
