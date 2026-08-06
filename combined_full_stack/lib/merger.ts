@@ -21,20 +21,24 @@ type ResolvedLayerPolicy = {
   keyFn: KeyFn | undefined;
 };
 
-const DEFAULT_LAYER: ResolvedLayerPolicy = {
+const DEFAULT_MERGE_LAYER: MergeLayerPolicy = {
   list: MergeListStrategy.Concat,
   dict: MergeDictStrategy.Deep,
   scalar: MergeScalarStrategy.Last,
+};
+
+const DEFAULT_LAYER: ResolvedLayerPolicy = {
+  list: DEFAULT_MERGE_LAYER.list ?? MergeListStrategy.Concat,
+  dict: DEFAULT_MERGE_LAYER.dict ?? MergeDictStrategy.Deep,
+  scalar: DEFAULT_MERGE_LAYER.scalar ?? MergeScalarStrategy.Last,
   keyFn: undefined,
 };
 
 export const DEFAULT_MERGE_POLICY: MergePolicy = {
-  default: {
-    list: MergeListStrategy.Concat,
-    dict: MergeDictStrategy.Deep,
-    scalar: MergeScalarStrategy.Last,
-  },
+  default: DEFAULT_MERGE_LAYER,
 };
+
+export const EMPTY_MERGE_LAYER_POLICY: MergeLayerPolicy = DEFAULT_MERGE_LAYER;
 
 function resolveLayer(raw: MergeLayerPolicy | undefined): ResolvedLayerPolicy {
   return {

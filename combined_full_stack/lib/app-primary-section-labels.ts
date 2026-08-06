@@ -16,26 +16,22 @@ export enum AppPrimarySectionTitle {
 
 export const APP_PRIMARY_SECTION_NAV: Record<
   AppPrimarySection,
-  { label: AppPrimarySectionTitle; shortLabel: string; title: string }
+  { label: AppPrimarySectionTitle; title: string }
 > = {
   [AppPrimarySection.Run]: {
     label: AppPrimarySectionTitle.Run,
-    shortLabel: "Run",
     title: "Run your pipelines and shared links",
   },
   [AppPrimarySection.Build]: {
     label: AppPrimarySectionTitle.Build,
-    shortLabel: "Build",
     title: "Create and edit your own pipelines",
   },
   [AppPrimarySection.Billing]: {
     label: AppPrimarySectionTitle.Billing,
-    shortLabel: "Billing",
     title: "Usage, credits, and cost attribution",
   },
   [AppPrimarySection.Settings]: {
     label: AppPrimarySectionTitle.Settings,
-    shortLabel: "Settings",
     title: "Account and workspace settings",
   },
 }

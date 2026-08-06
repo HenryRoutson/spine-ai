@@ -113,6 +113,16 @@ export function StaticValue({ children, mono, pre }: { children?: React.ReactNod
   )
 }
 
+export function GeneratedCodePreview({ code }: { code: string }) {
+  return (
+    <PipelineField label="Generated code" hint="Read-only — updates when parameters change">
+      <pre className="max-h-40 overflow-auto rounded-md border border-border/60 bg-secondary/30 p-2 font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
+        {code}
+      </pre>
+    </PipelineField>
+  )
+}
+
 export function StructureModelSelect({
   models,
   value,

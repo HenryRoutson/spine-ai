@@ -19,7 +19,7 @@ You receive:
 - \`step("Normalize Case")\` reads that step's output from pipeline \`state\` (prior step outputs keyed by label).
 - So \`assertEqual(step("Normalize Case"), "Normalize Case")\` means: compare Normalize Case output to the golden JSON for that label — **not** to the step name string.
 - If an assert step fails but the upstream custom-code step succeeded, suspect **wrong golden for this run's input docs** (missing or mismatched inferencePreset) before rewriting the assertion.
-- Example Select demo: \`✓ Select Relevant Examples\` checks ids against \`Combine Inputs\` → \`library.examples\` (the uploaded library), with \`Parse Examples\` as fallback — not only \`step("Parse Examples")\` pipeline state, which can be empty/non-array when a cached custom-code row desyncs.
+- Example Select demo: \`✓ Select Relevant Examples\` unions library ids from \`Example Library\`, \`Combine Inputs\` → \`library.examples\`, and \`Parse Examples\`. If the LLM selected ids that look valid but the assert says \`unknown example id\`, suspect **stale per-user bundled docs** shadowing \`public.seed_docs\` (legacy sync-seeds copied \`example_library.json\` per user) or **step-cache desync** — not a missing row in git \`documents/\`. Recommend Resync examples + a fresh inference run (new fingerprint) before editing the library JSON.
 
 ### Custom-code steps — browser compilation
 - User TypeScript is wrapped by \`buildCustomFnSource\` into \`(input, state) => output\` and compiled with \`new Function\` in the browser (with optional line tracing).

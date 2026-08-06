@@ -14,7 +14,6 @@ import { assertEntriesForModule, wrapAssertCode } from "@/lib/assert_steps";
 import {
   createForgeTrace,
   instrumentCodeLines,
-  makeAsyncFunctionSource,
   type CodeTraceEvent,
   type ForgeTraceFn,
 } from "@/lib/custom_code_trace";
@@ -120,7 +119,7 @@ export type CustomCodeTraceOpts = {
 // AI : traced compile — __forgeTrace is injected per source line for inference step preview.
 function compileTracedCustomFn(code: string, onTrace: (event: CodeTraceEvent) => void): CustomFn {
   const traceFn = createForgeTrace(onTrace);
-  const src = makeAsyncFunctionSource(buildCustomFnSource(code));
+  const src = buildCustomFnSource(code);
   const fn = new Function("__forgeTrace", `return ${src}`)(traceFn);
   invariant(typeof fn === "function", "custom code must evaluate to a function (input) => output");
   const wrapped = fn as CustomFn & { __forgeTrace?: ReturnType<typeof createForgeTrace> };

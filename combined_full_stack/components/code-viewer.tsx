@@ -5,7 +5,9 @@ import dynamic from "next/dynamic"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import type { editor } from "monaco-editor"
 import { ensureMonacoTypeScriptEnv } from "@/lib/monaco-loader"
+import { CUSTOM_CODE_LANG_LABEL } from "@/lib/code-language-labels"
 import { MONACO_VS_DARK_THEME } from "@/lib/monaco-theme"
+import { CustomCodeLanguage } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
@@ -14,8 +16,8 @@ export type CodeViewerLanguage = "python" | "typescript" | "rust" | "go" | "baml
 export const CODE_VIEWER_LANGUAGES: CodeViewerLanguage[] = ["python", "typescript", "rust", "go", "baml"]
 
 export const CODE_LANG_LABEL: Record<CodeViewerLanguage, string> = {
-  python: "Python",
-  typescript: "TypeScript",
+  python: CUSTOM_CODE_LANG_LABEL[CustomCodeLanguage.Python],
+  typescript: CUSTOM_CODE_LANG_LABEL[CustomCodeLanguage.TypeScript],
   rust: "Rust",
   go: "Go",
   baml: "BAML",

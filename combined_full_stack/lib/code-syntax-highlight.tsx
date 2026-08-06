@@ -5,21 +5,13 @@ import { loader } from "@monaco-editor/react"
 import type { Monaco } from "@monaco-editor/react"
 import "@/lib/monaco-loader"
 import { ensureMonacoTypeScriptEnv } from "@/lib/monaco-loader"
-import { MONACO_VS_DARK_THEME } from "@/lib/monaco-theme"
+import { MONACO_VS_DARK_FG, MONACO_VS_DARK_THEME } from "@/lib/monaco-theme"
+import { CODE_LANG_NAME, CODE_LANG_SHORT } from "@/lib/code-language-labels"
 import { CustomCodeLanguage } from "@/lib/types"
 
-export const CODE_LANG_SHORT: Record<CustomCodeLanguage, string> = {
-  [CustomCodeLanguage.TypeScript]: "TS",
-  [CustomCodeLanguage.Python]: "PY",
-}
+export { CODE_LANG_NAME, CODE_LANG_SHORT } from "@/lib/code-language-labels"
 
-export const CODE_LANG_NAME: Record<CustomCodeLanguage, string> = {
-  [CustomCodeLanguage.TypeScript]: "TypeScript",
-  [CustomCodeLanguage.Python]: "Python",
-}
-
-const DEFAULT_FG = "#d4d4d4"
-// AI : matches StepCodeExecPreview background — colorize resolves mtk classes against this theme.
+const DEFAULT_FG = MONACO_VS_DARK_FG
 
 export type syntax_span = { text: string; color: string }
 

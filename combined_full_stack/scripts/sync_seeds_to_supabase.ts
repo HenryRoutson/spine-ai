@@ -33,6 +33,7 @@ async function main() {
 
   const stats = await syncPlatformSeeds(supabase);
   console.log("platform seed_docs", { docs: stats.docs, replaced: stats.replaced });
+  console.log("removed per-user bundled doc rows", stats.removedUserBundledDocs);
   console.log("removed per-user template project rows", stats.removedTemplateProjects);
   console.log(`done — ${seeds.length} seed template(s) in git, ${stats.docs} bundled doc(s) in seed_docs`);
 }

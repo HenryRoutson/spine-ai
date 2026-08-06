@@ -1,5 +1,6 @@
 import type { DocDbRow } from "./doc_ref";
 import { docRefFromDbRow } from "./doc_ref";
+import { allBundledSeedDocNames } from "./seed_docs_platform";
 import type { DocId, DocRef } from "./types";
 
 export type PlatformSeedDocState = {
@@ -16,13 +17,24 @@ export function clearPlatformSeedDocState(state: PlatformSeedDocState): void {
   state.platformSeedDocIds.clear();
 }
 
-// AI : merge public.seed_docs into memory — skip names already owned by the user's docs table.
+// AI : bundled seed names always use public.seed_docs — replace stale per-user copies from legacy sync-seeds.
 export function ingestPlatformSeedDocRows(state: PlatformSeedDocState, rows: DocDbRow[]): number {
-  const names = new Set(state.docs.map((d) => d.name));
+  const bundled = allBundledSeedDocNames();
   let added = 0;
   for (const row of rows) {
-    if (names.has(row.name)) continue;
-    names.add(row.name);
+    const existingIdx = state.docs.findIndex((d) => d.name === row.name);
+    if (existingIdx >= 0) {
+      const existing = state.docs[existingIdx]!;
+      const samePlatformRow = state.platformSeedDocIds.has(existing.id) && existing.id === row.id;
+      if (samePlatformRow) continue;
+      if (bundled.has(row.name) || state.platformSeedDocIds.has(existing.id)) {
+        state.docs.splice(existingIdx, 1);
+        state.contents.delete(existing.id);
+        state.platformSeedDocIds.delete(existing.id);
+      } else {
+        continue;
+      }
+    }
     const id = row.id as DocId;
     state.platformSeedDocIds.add(id);
     state.docs.push(docRefFromDbRow(row));

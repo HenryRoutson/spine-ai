@@ -43,14 +43,12 @@ function ModeButton({
   onClick,
   icon: Icon,
   label,
-  shortLabel,
   title,
 }: {
   active: boolean
   onClick: () => void
   icon: React.ComponentType<{ className?: string }>
   label: string
-  shortLabel: string
   title: string
 }) {
   return (
@@ -66,8 +64,7 @@ function ModeButton({
       )}
     >
       <Icon className="h-3.5 w-3.5 shrink-0" />
-      <span className="sm:hidden">{shortLabel}</span>
-      <span className="hidden sm:inline">{label}</span>
+      <span>{label}</span>
     </button>
   )
 }

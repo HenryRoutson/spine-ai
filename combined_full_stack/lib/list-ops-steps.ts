@@ -1,7 +1,7 @@
 // AI : list chunk + merge step codegen and legacy list-merge migration.
 import { isMergeModuleKind } from "@/lib/module-kinds"
 import { makeCustomCodeEntry } from "@/lib/custom_code_entries"
-import { buildMergeTypeScript, DEFAULT_MERGE_POLICY } from "@/lib/merger"
+import { buildMergeTypeScript, DEFAULT_MERGE_POLICY, EMPTY_MERGE_LAYER_POLICY } from "@/lib/merger"
 import { patchSpineOutList } from "@/lib/server/spine_types"
 import { deriveMergeStepTypes } from "@/lib/merge-type-expr"
 import {
@@ -18,7 +18,7 @@ import {
   type StructureModelId,
 } from "@/lib/types"
 
-export { isMergeModuleKind } from "@/lib/module-kinds"
+export { DEFAULT_MERGE_POLICY, EMPTY_MERGE_LAYER_POLICY } from "@/lib/merger"
 
 export const DEFAULT_CHUNK_SIZE = 2000
 export const DEFAULT_CHUNK_OVERLAP = 0

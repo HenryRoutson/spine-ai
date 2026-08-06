@@ -2,10 +2,12 @@
 
 import { useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
-import type { CodeLineProfile } from "@/lib/code-exec-ui"
-import { parseCodeProfileKey } from "@/lib/custom_code_trace"
+import { formatProfileMs, profileBarPct } from "@/lib/code-exec-ui"
+import { groupProfileSlotsByLine } from "@/lib/custom_code_trace"
 import { CODE_LANG_NAME, CODE_LANG_SHORT, MonacoSyntaxLine, useMonacoSyntaxLines } from "@/lib/code-syntax-highlight"
+import { MONACO_CODE_PREVIEW_BASE_CLASS } from "@/lib/monaco-theme"
 import type { CustomCodeLanguage } from "@/lib/types"
+import type { CodeLineProfile } from "@/lib/code-exec-ui"
 
 export function StepCodeExecPreview({
   code,
@@ -31,6 +33,7 @@ export function StepCodeExecPreview({
   const maxMs = Math.max(...Object.values(lineMs ?? {}), 0.01)
   const isLive = activeLine != null
   const hasProfile = !isLive && lineMs && Object.keys(lineMs).length > 0
+  const slotsByLine = groupProfileSlotsByLine(lineMs)
 
   useEffect(() => {
     if (activeLine == null) return
@@ -45,15 +48,6 @@ export function StepCodeExecPreview({
       row.scrollIntoView({ block: "nearest", behavior: "smooth" })
     }
   }, [activeLine, activeSlot])
-  const slotsByLine = new Map<number, { slot: number; ms: number }[]>()
-  for (const [key, ms] of Object.entries(lineMs ?? {})) {
-    const { line, slot } = parseCodeProfileKey(key)
-    if (slot <= 0) continue
-    const list = slotsByLine.get(line) ?? []
-    list.push({ slot, ms })
-    slotsByLine.set(line, list)
-  }
-  for (const list of slotsByLine.values()) list.sort((a, b) => a.slot - b.slot)
 
   return (
     <div className={cn("mt-2", className)}>
@@ -75,7 +69,8 @@ export function StepCodeExecPreview({
       <div
         ref={scrollRef}
         className={cn(
-          "relative overflow-y-auto rounded border border-border bg-[#1e1e1e] font-mono leading-snug text-[#d4d4d4]",
+          "relative overflow-y-auto rounded border border-border",
+          MONACO_CODE_PREVIEW_BASE_CLASS,
           compact ? "max-h-36 text-[9px]" : "max-h-56 text-[10px]",
         )}
       >
@@ -84,7 +79,7 @@ export function StepCodeExecPreview({
           const ms = lineMs?.[String(ln)]
           const slots = slotsByLine.get(ln) ?? []
           const isActive = activeLine === ln
-          const barPct = ms != null ? Math.max(4, Math.round((ms / maxMs) * 100)) : 0
+          const barPct = ms != null ? profileBarPct(ms, maxMs) : 0
           return (
             <div
               key={ln}
@@ -110,7 +105,7 @@ export function StepCodeExecPreview({
                 </span>
                 {hasProfile && (
                   <span className="w-11 shrink-0 tabular-nums text-muted-foreground/80">
-                    {ms != null ? `${ms < 10 ? ms.toFixed(1) : Math.round(ms)}ms` : ""}
+                    {ms != null ? formatProfileMs(ms) : ""}
                   </span>
                 )}
                 {hasProfile && (
@@ -122,7 +117,7 @@ export function StepCodeExecPreview({
               </div>
               {slots.map(({ slot, ms: slotMs }) => {
                 const slotActive = activeLine === ln && activeSlot === slot
-                const slotBarPct = Math.max(4, Math.round((slotMs / maxMs) * 100))
+                const slotBarPct = profileBarPct(slotMs, maxMs)
                 return (
                   <div
                     key={`${ln}.${slot}`}
@@ -141,7 +136,7 @@ export function StepCodeExecPreview({
                       λ{slot}
                     </span>
                     <span className="w-11 shrink-0 tabular-nums text-muted-foreground/70">
-                      {slotMs < 10 ? slotMs.toFixed(1) : Math.round(slotMs)}ms
+                      {formatProfileMs(slotMs)}
                     </span>
                     <span className="mt-1.5 h-1 shrink-0 rounded-full bg-primary/20" style={{ width: `${slotBarPct * 0.22}px` }} />
                     <span className="min-w-0 flex-1 text-[9px] text-muted-foreground/70">inline lambda</span>

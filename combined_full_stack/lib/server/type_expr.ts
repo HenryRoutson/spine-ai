@@ -246,7 +246,7 @@ function innerRef(expr: TypeExpr): StructureModelId | undefined {
   return undefined;
 }
 
-export function isListRoot(expr: TypeExpr): boolean {
+export function isListRoot(expr: TypeExpr): expr is Extract<TypeExpr, { kind: "list" }> {
   return expr.kind === "list";
 }
 

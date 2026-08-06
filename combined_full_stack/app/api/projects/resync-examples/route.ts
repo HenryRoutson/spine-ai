@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { requireAuthStore } from "@/lib/server/api_context";
 import { createAdminClient } from "@/lib/server/supabase_admin";
-import { upsertPlatformSeedDocs } from "@/lib/server/seed_docs_platform";
-import { ensureSeedDocs, backfillAllProjectSeedDocNames, purgeSeedTemplateProjects } from "@/lib/server/store";
+import { syncPlatformSeeds } from "@/lib/server/seed_docs_platform";
+import {
+  backfillAllProjectSeedDocNames,
+  purgeSeedTemplateProjects,
+  syncAllUserProjectsFromSeeds,
+} from "@/lib/server/store";
 import { SupabaseStore } from "@/lib/server/supabase_store";
 import { logger } from "@/lib/server/server_logger";
 
@@ -16,18 +20,26 @@ export async function POST() {
 
   const removed = purgeSeedTemplateProjects(store);
   let platformDocs = 0;
+  let removedUserBundledDocs = 0;
   const admin = await createAdminClient();
   if (admin) {
-    const synced = await upsertPlatformSeedDocs(admin);
-    platformDocs = synced.docs;
+    const synced = await syncPlatformSeeds(admin);
+    removedUserBundledDocs = synced.removedUserBundledDocs;
     if (store instanceof SupabaseStore) {
+      store.purgeStaleUserBundledDocsFromMemory();
       platformDocs = await store.refreshPlatformSeedDocsFromDb();
     }
-  } else {
-    await ensureSeedDocs(store, { refreshStale: true });
   }
+  syncAllUserProjectsFromSeeds(store);
   const backfilled = backfillAllProjectSeedDocNames(store);
   await store.flush();
-  apiLog.info(`resynced example docs`, { removed, platformDocs, backfilled });
-  return NextResponse.json({ updated: removed + platformDocs + backfilled });
+  apiLog.info(`resynced example docs`, {
+    removed,
+    platformDocs,
+    removedUserBundledDocs,
+    backfilled,
+  });
+  return NextResponse.json({
+    updated: removed + platformDocs + backfilled + removedUserBundledDocs,
+  });
 }

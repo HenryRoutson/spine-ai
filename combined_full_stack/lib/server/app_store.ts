@@ -21,7 +21,7 @@ const storeLog = logger("app-store");
 // AI : bundled separately in dev, so a plain module-level singleton is not enough, and
 // AI : two independent stores would clobber each other's store.json on flush.
 // AI : bump STORE_CACHE_GEN when warm-cache contract changes (e.g. stale-JWT rebind fix).
-const STORE_CACHE_GEN = 5;
+const STORE_CACHE_GEN = 6;
 
 type StoreSlot = {
   __forgeStore?: Promise<JsonStore>;

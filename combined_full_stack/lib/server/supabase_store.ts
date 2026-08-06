@@ -17,6 +17,7 @@ import {
   ingestPlatformSeedDocRows,
   type PlatformSeedDocState,
 } from "./platform_seed_docs";
+import { allBundledSeedDocNames } from "./seed_docs_platform";
 import type {
   FileContentHash,
   ParserCacheKey,
@@ -547,6 +548,20 @@ export class SupabaseStore implements Store {
 
     this.platformSeedDocsLoaded = true;
     return ingestPlatformSeedDocRows(this.platformSeedDocState(), (seedDocs.data ?? []) as DocDbRow[]);
+  }
+
+  // AI : legacy per-user bundled rows shadow seed_docs in memory until purged from public.docs.
+  purgeStaleUserBundledDocsFromMemory(): number {
+    const bundled = allBundledSeedDocNames();
+    let removed = 0;
+    for (let i = this.state.docs.length - 1; i >= 0; i--) {
+      const doc = this.state.docs[i]!;
+      if (!bundled.has(doc.name) || this.platformSeedDocIds.has(doc.id)) continue;
+      this.state.docs.splice(i, 1);
+      this.state.contents.delete(doc.id);
+      removed += 1;
+    }
+    return removed;
   }
 
   runs(projectId?: ProjectId): PipelineRun[] {

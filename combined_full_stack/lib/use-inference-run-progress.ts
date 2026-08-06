@@ -84,7 +84,6 @@ export function useInferenceRunProgress({
   const activeTrackIdRef = useRef<string | null>(null)
   const mountedRef = useRef(true)
   const stepStatesRef = useRef<Map<ModuleId, StepUiState>>(new Map())
-  const configChangedDuringRunRef = useRef(false)
   const runsRef = useRef(runs)
   runsRef.current = runs
   const runJobs = useRunJobs()
@@ -105,19 +104,10 @@ export function useInferenceRunProgress({
 
   useEffect(() => {
     mountedRef.current = true
-    const tracked = runJobs.runningInferenceForProject(projectId)
-    if (tracked) {
-      activeTrackIdRef.current = tracked.id
-      activeJobIdRef.current = tracked.jobId
-      setPhase(RunPhase.Running)
-      setStepStates(new Map(tracked.stepStates))
-      stepStatesRef.current = new Map(tracked.stepStates)
-      setError(null)
-    }
     return () => {
       mountedRef.current = false
     }
-  }, [projectId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [projectId])
 
   useRunNotesFlushOnLeave(
     phase === RunPhase.Done ? run?.id : undefined,
@@ -130,20 +120,34 @@ export function useInferenceRunProgress({
     },
   )
 
-  function resetRunState() {
-    activeJobGenRef.current++
-    activeJobIdRef.current = null
-    activeTrackIdRef.current = null
+  function clearRunUiState() {
     setPhase(RunPhase.Idle)
     setStepStates(new Map())
+    stepStatesRef.current = new Map()
     setRun(null)
     setError(null)
     setDebugLogs([])
     setCodeExecByModule(new Map())
-    setRunNotes("")
     setPendingHumanReview(null)
     setDeduped(false)
     humanReviewResolveRef.current = null
+  }
+
+  // AI : orphan local callbacks but keep the job in the Runs hub.
+  function detachFromActiveRun() {
+    activeJobGenRef.current++
+    activeJobIdRef.current = null
+    activeTrackIdRef.current = null
+    humanReviewResolveRef.current?.("rejected")
+    clearRunUiState()
+  }
+
+  function resetRunState() {
+    activeJobGenRef.current++
+    activeJobIdRef.current = null
+    activeTrackIdRef.current = null
+    clearRunUiState()
+    setRunNotes("")
     savedNotesRef.current = undefined
     resetInputs?.()
   }
@@ -157,20 +161,13 @@ export function useInferenceRunProgress({
       return
     }
     if (prevConfigKeyRef.current === configResetKey) return
+    prevConfigKeyRef.current = configResetKey
     if (phase === RunPhase.Running) {
-      configChangedDuringRunRef.current = true
-      prevConfigKeyRef.current = configResetKey
+      detachFromActiveRun()
       return
     }
-    prevConfigKeyRef.current = configResetKey
     resetRunState()
   }, [configResetKey, phase]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (phase !== RunPhase.Done || !configChangedDuringRunRef.current) return
-    configChangedDuringRunRef.current = false
-    resetRunState()
-  }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function start() {
     if (isPreviewOnly()) return

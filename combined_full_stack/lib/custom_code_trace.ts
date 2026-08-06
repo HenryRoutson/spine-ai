@@ -10,7 +10,7 @@ export type CodeTraceEvent = {
   msSinceStart: number
 }
 
-export type ForgeTraceFn = ((line: number, slot?: number) => Promise<void>) & {
+export type ForgeTraceFn = ((line: number, slot?: number) => void) & {
   finish: () => CodeLineProfile
 }
 
@@ -25,9 +25,24 @@ export function parseCodeProfileKey(key: string): { line: number; slot: number }
   return { line: Number(key.slice(0, dot)), slot: Number(key.slice(dot + 1)) }
 }
 
+export type ProfileSlot = { slot: number; ms: number }
+
+export function groupProfileSlotsByLine(lineMs?: CodeLineProfile): Map<number, ProfileSlot[]> {
+  const slotsByLine = new Map<number, ProfileSlot[]>()
+  for (const [key, ms] of Object.entries(lineMs ?? {})) {
+    const { line, slot } = parseCodeProfileKey(key)
+    if (slot <= 0) continue
+    const list = slotsByLine.get(line) ?? []
+    list.push({ slot, ms })
+    slotsByLine.set(line, list)
+  }
+  for (const list of slotsByLine.values()) list.sort((a, b) => a.slot - b.slot)
+  return slotsByLine
+}
+
 type SlotRef = { n: number }
 
-// AI : inject await __forgeTrace(line[, slot]) inside async bodies — never before a top-level `(…) =>` expression.
+// AI : inject __forgeTrace(line[, slot]) per source line — sync only; UI throttles in run-engine.
 export function instrumentCodeLines(code: string): string {
   const preambleArrow = splitPreambleArrow(code)
   if (preambleArrow) {
@@ -80,9 +95,38 @@ function splitSourceLines(code: string): string[] {
   return lines
 }
 
+function scanLineContainerDelta(line: string): { open: number; close: number } {
+  let open = 0
+  let close = 0
+  let i = 0
+  while (i < line.length) {
+    i = skipNonCode(line, i)
+    if (i >= line.length) break
+    const ch = line[i]!
+    if (ch === "[" || ch === "{" || ch === "(") open++
+    else if (ch === "]" || ch === "}" || ch === ")") close++
+    i++
+  }
+  return { open, close }
+}
+
 function instrumentStatementLines(code: string): string {
-  return splitSourceLines(code)
-    .map((line, i) => instrumentExecutableLine(line, i + 1))
+  const lines = splitSourceLines(code)
+  let containerDepth = 0
+  return lines
+    .map((line, i) => {
+      const trimmed = line.trim()
+      if (!trimmed || /^\s*(\/\/|#)/.test(line)) {
+        const { open, close } = scanLineContainerDelta(line)
+        containerDepth = Math.max(0, containerDepth + open - close)
+        return line
+      }
+      // AI : skip lines inside `[`/`{`/`(` — `__forgeTrace(n); expr` is invalid between array elements.
+      const result = containerDepth === 0 ? instrumentExecutableLine(line, i + 1) : line
+      const { open, close } = scanLineContainerDelta(line)
+      containerDepth = Math.max(0, containerDepth + open - close)
+      return result
+    })
     .join("\n")
 }
 
@@ -127,7 +171,7 @@ function openExprArrowBlock(line: string, lineNo: number): string {
   const params = m[3] ?? ""
   const rest = m[4] ?? ""
   const tracedRest = rest ? instrumentInlineLambdas(rest, lineNo) : ""
-  return `${indent}${asyncKw || "async "}${params} => { await __forgeTrace(${lineNo}); ${tracedRest}`
+  return `${indent}${asyncKw}${params} => { __forgeTrace(${lineNo}); ${tracedRest}`
 }
 
 function instrumentExprArrowLine(line: string, lineNo: number): string {
@@ -136,8 +180,8 @@ function instrumentExprArrowLine(line: string, lineNo: number): string {
   const { paramsStart, bodyStart, bodyEnd, isBlock, hasAsync } = arrow
   const prefix = line.slice(0, paramsStart)
   const params = line.slice(paramsStart, arrowIdxOf(line, paramsStart)).trim()
-  const asyncKw = hasAsync ? "" : "async "
-  const trace = `await __forgeTrace(${lineNo}); `
+  const asyncKw = hasAsync ? "async " : ""
+  const trace = `__forgeTrace(${lineNo}); `
   if (isBlock) {
     const body = line.slice(bodyStart, bodyEnd)
     const innerStart = body.indexOf("{") + 1
@@ -162,7 +206,7 @@ function instrumentExecutableLine(line: string, lineNo: number): string {
   if (/^\s*(\/\/|#)/.test(line)) return line
   const indent = line.match(/^\s*/)?.[0] ?? ""
   const traced = instrumentInlineLambdas(line.trimStart(), lineNo)
-  return `${indent}await __forgeTrace(${lineNo}); ${traced}`
+  return `${indent}__forgeTrace(${lineNo}); ${traced}`
 }
 
 function instrumentInlineLambdas(src: string, lineNo: number, slotRef: SlotRef = { n: 0 }): string {
@@ -190,8 +234,8 @@ function instrumentInlineLambdas(src: string, lineNo: number, slotRef: SlotRef =
     const slot = ++slotRef.n
     const { paramsStart, bodyStart, bodyEnd, isBlock, hasAsync } = arrow
     const params = result.slice(paramsStart, eq).trim()
-    const asyncKw = hasAsync ? "" : "async "
-    const trace = `await __forgeTrace(${lineNo}, ${slot}); `
+    const asyncKw = hasAsync ? "async " : ""
+    const trace = `__forgeTrace(${lineNo}, ${slot}); `
     let replacement: string
     if (isBlock) {
       const body = result.slice(bodyStart, bodyEnd)
@@ -434,7 +478,7 @@ export function createForgeTrace(onTrace: (e: CodeTraceEvent) => void): ForgeTra
     })
   }
 
-  const trace = async (line: number, slot = 0) => {
+  const trace = (line: number, slot = 0) => {
     const key = codeProfileKey(line, slot)
     const now = performance.now()
     if (lastKey) {
@@ -445,7 +489,6 @@ export function createForgeTrace(onTrace: (e: CodeTraceEvent) => void): ForgeTra
     lastKey = key
     lastEnter = now
     emit(line, "enter", slot, line, slot > 0 ? slot : undefined)
-    await new Promise<void>((r) => setTimeout(r, 0))
   }
 
   trace.finish = () => {

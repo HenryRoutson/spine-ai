@@ -14,6 +14,7 @@ export type PlatformSeedDocSyncStats = {
   docs: number;
   replaced: number;
   removedTemplateProjects: number;
+  removedUserBundledDocs: number;
 };
 
 type SeedDocExistingRow = { id: string; content: string };
@@ -47,6 +48,10 @@ async function deleteStaleSeedDocRows(
     replaced += 1;
   }
   return replaced;
+}
+
+export function allBundledSeedDocNames(): Set<string> {
+  return new Set(allUniqueSeedDocSpecs().map((s) => s.name));
 }
 
 // AI : dedupe bundled examples — many seeds share the same inference JSON filenames.
@@ -85,6 +90,15 @@ export async function upsertPlatformSeedDocs(supabase: SupabaseClient): Promise<
 }
 
 // AI : legacy sync-seeds wrote template project rows per user — templates belong in seeds/*.json only.
+// AI : legacy per-user sync-seeds duplicated bundled docs into public.docs — drop them (seed_docs is canonical).
+export async function purgeStaleUserBundledDocs(supabase: SupabaseClient): Promise<number> {
+  const names = [...allBundledSeedDocNames()];
+  if (!names.length) return 0;
+  const { data, error } = await supabase.from("docs").delete().in("name", names).select("id");
+  if (error) throw error;
+  return data?.length ?? 0;
+}
+
 export async function purgeUserTemplateProjects(supabase: SupabaseClient): Promise<number> {
   const templateIds = [...seedTemplateIds()];
   if (!templateIds.length) return 0;
@@ -95,6 +109,7 @@ export async function purgeUserTemplateProjects(supabase: SupabaseClient): Promi
 
 export async function syncPlatformSeeds(supabase: SupabaseClient): Promise<PlatformSeedDocSyncStats> {
   const { docs, replaced } = await upsertPlatformSeedDocs(supabase);
+  const removedUserBundledDocs = await purgeStaleUserBundledDocs(supabase);
   const removedTemplateProjects = await purgeUserTemplateProjects(supabase);
-  return { docs, replaced, removedTemplateProjects };
+  return { docs, replaced, removedTemplateProjects, removedUserBundledDocs };
 }

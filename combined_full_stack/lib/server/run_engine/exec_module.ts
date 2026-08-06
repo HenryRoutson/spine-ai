@@ -1,6 +1,6 @@
 import { assertNever } from "@/lib/assert";
 import { ModuleKind, type PipelineModule } from "../types";
-import { isMergeModuleKind } from "@/lib/list-ops-steps";
+import { isMergeModuleKind } from "@/lib/module-kinds";
 import type { ExecResult, RunCtx, RunLogger } from "./engine_types";
 import { execInputStep } from "./steps/input";
 import { execLlmStep } from "./steps/llm";

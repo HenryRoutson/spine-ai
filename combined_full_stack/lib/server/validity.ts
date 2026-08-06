@@ -14,10 +14,9 @@ import type {
   TypeAlias,
 } from "./types";
 import { ModuleKind } from "./types";
-import { isMergeModuleKind } from "@/lib/list-ops-steps";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
-import { usesPassthroughStructure, isLlmKind, stepRequiresNote } from "@/lib/module-kinds";
+import { usesPassthroughStructure, isLlmKind, isMergeModuleKind, stepRequiresNote } from "@/lib/module-kinds";
 import { inputModuleTypesAreAllJsonNative } from "@/lib/inference-input-core";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
 import {

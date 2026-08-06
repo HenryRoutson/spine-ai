@@ -50,12 +50,13 @@ import { IoSection } from "@/components/logging/io-section"
 import { IoPager } from "@/components/logging/io-pager"
 import { StepLoadedDocSection } from "@/components/step-loaded-doc-section"
 import { StepCodeExecPreview } from "@/components/step-code-exec-preview"
+import { StepValidationErrorsSection } from "@/components/step-validation-errors-section"
+import { STEP_TRACE_IO_INDENT_MARGIN } from "@/lib/step-trace-layout"
 import { filterRuns, isTestingRun, RunNotesPreview } from "@/components/logging/run-picker-column"
 import { filterRunsByErrorStatus, runHasErrors } from "@/lib/run-error-log"
 import { IsolatedErrorActions } from "@/components/logging/isolated-error-actions"
 import { useDiagnosisAgents } from "@/lib/diagnosis-agent-context"
-import { DiagnosisRunLink } from "@/components/diagnosis-agents/diagnosis-run-link"
-import { diagnosisRunLinkId, scrollToDiagnosisRunLink } from "@/lib/diagnosis-link"
+import { scrollToDiagnosisRunLink } from "@/lib/diagnosis-link"
 import { TestResults } from "@/components/test-results"
 import { CompareModal } from "@/components/logging/compare-modal"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
@@ -458,7 +459,7 @@ export function Logging() {
                             </span>
                           </div>
 
-                          <StepFailuresSection step={step} className="ml-7" />
+                          <StepFailuresSection step={step} className={STEP_TRACE_IO_INDENT_MARGIN} />
 
                           {(stepLlmCalls.length > 0 || descCheckLlmCalls.length > 0) && (
                             <LlmRetryGridSection
@@ -469,7 +470,7 @@ export function Logging() {
                                   ? step.inputPreviewItems?.length
                                   : undefined
                               }
-                              className="ml-7"
+                              className={STEP_TRACE_IO_INDENT_MARGIN}
                             />
                           )}
 
@@ -477,7 +478,7 @@ export function Logging() {
                             description={resolveStepInputDescription(step, modules)}
                             check={step.inputDescriptionCheck}
                             forceVisible={step.status === "error"}
-                            className="ml-7"
+                            className={STEP_TRACE_IO_INDENT_MARGIN}
                           />
 
                           {descCheckLlmCalls.length > 0 && (
@@ -554,26 +555,21 @@ export function Logging() {
                               language={step.codeProfile.language}
                               lineMs={step.codeProfile.lineMs}
                               compact
-                              className="ml-7"
+                              className={STEP_TRACE_IO_INDENT_MARGIN}
                             />
                           )}
 
                           {step.status === "error" && step.outputPreview && (
-                            <IoSection
-                              title="Validation errors"
-                              qualifier="error"
-                              anchorId={diagnosisRunLinkId(active.id)}
-                              headerExtra={<DiagnosisRunLink runId={active.id} />}
-                              summary={compactPreview(step.outputPreview, PREVIEW_STEP_IO_CHARS)}
+                            <StepValidationErrorsSection
+                              errorPreview={step.outputPreview}
+                              runId={active.id}
                               onExpand={() =>
                                 setPopup({
                                   text: step.outputPreview,
                                   title: `Validation errors · ${step.label}`,
                                 })
                               }
-                            >
-                              <p className="whitespace-pre-wrap text-destructive">{step.outputPreview}</p>
-                            </IoSection>
+                            />
                           )}
 
                           {!(step.kind === "input" && isDocReferenceOutputJson(step.outputJson)) && (

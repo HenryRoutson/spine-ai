@@ -109,6 +109,8 @@ const MAX_PROGRESS_POLLS = 10
 const PROGRESS_POLL_BACKOFF_MS = 200
 const PROGRESS_429_RETRY_MAX = 60
 const DEFAULT_POLL_INTERVAL_MS = 700
+// AI : after browser submits client-step, poll quickly until server pauses on the next step.
+const CLIENT_RESUME_POLL_MS = 120
 
 // AI : parallel job polls share one user rate-limit bucket — stretch interval so N jobs stay under poll tier max.
 export function pollIntervalForParallelJobs(parallelCount: number): number {
@@ -329,6 +331,9 @@ export async function awaitJobCompletion(
   let seenLogs = 0
   let clientStepBusy = false
   let clientStepSubmittedFor: ModuleId | undefined
+  let awaitingServerResume = false
+  let traceUiRaf = 0
+  let pendingTraceUi: Pick<CodeExecUiState, "activeLine" | "activeSlot" | "lineMs"> | undefined
   for (;;) {
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError")
     const job = await poll()
@@ -340,7 +345,13 @@ export async function awaitJobCompletion(
       onLogs?.(logs, newLines)
       seenLogs = logs.length
     }
-    if (!job.clientStep) clientStepSubmittedFor = undefined
+    if (!job.clientStep && !awaitingServerResume) clientStepSubmittedFor = undefined
+    if (
+      awaitingServerResume &&
+      ((job.clientStep && job.clientStep.moduleId !== clientStepSubmittedFor) || job.run || job.error)
+    ) {
+      awaitingServerResume = false
+    }
     if (
       job.clientStep?.kind === "human-review" &&
       !job.run &&
@@ -359,6 +370,7 @@ export async function awaitJobCompletion(
             await submitClientStep({ error: "Human review rejected" })
           }
           clientStepSubmittedFor = spec.moduleId
+          awaitingServerResume = true
         } finally {
           clientStepBusy = false
         }
@@ -378,6 +390,7 @@ export async function awaitJobCompletion(
       try {
         await submitBrowserLlmClientStep(moduleId, label, llmClient, projectLlmProviders, submitClientStep)
         clientStepSubmittedFor = moduleId
+        awaitingServerResume = true
       } finally {
         clientStepBusy = false
       }
@@ -396,6 +409,7 @@ export async function awaitJobCompletion(
       if (!entries?.length) {
         await submitClientStep({ error: `${kind} step has no code configured` })
         clientStepSubmittedFor = moduleId
+        awaitingServerResume = true
         continue
       }
       clientStepBusy = true
@@ -414,9 +428,19 @@ export async function awaitJobCompletion(
         })
       }
       pushCodeExec({})
+      const flushTraceUi = () => {
+        if (!pendingTraceUi) return
+        pushCodeExec(pendingTraceUi)
+        pendingTraceUi = undefined
+      }
       const onTrace = (event: CodeTraceEvent) => {
         lineMs = event.lineMs
-        pushCodeExec({ activeLine: event.activeLine, activeSlot: event.activeSlot, lineMs })
+        pendingTraceUi = { activeLine: event.activeLine, activeSlot: event.activeSlot, lineMs }
+        if (traceUiRaf) return
+        traceUiRaf = requestAnimationFrame(() => {
+          traceUiRaf = 0
+          flushTraceUi()
+        })
       }
       try {
         const { output, failures, attemptIndex, language } =
@@ -437,6 +461,11 @@ export async function awaitJobCompletion(
             moduleId,
           })
         }
+        if (traceUiRaf) {
+          cancelAnimationFrame(traceUiRaf)
+          traceUiRaf = 0
+        }
+        flushTraceUi()
         pushCodeExec({ activeLine: undefined, lineMs, status: "done" })
         for (const f of failures) {
           clientLogs.push({
@@ -466,7 +495,13 @@ export async function awaitJobCompletion(
         }
         await submitClientStep({ output, clientLogs, codeProfile })
         clientStepSubmittedFor = moduleId
+        awaitingServerResume = true
       } catch (err) {
+        if (traceUiRaf) {
+          cancelAnimationFrame(traceUiRaf)
+          traceUiRaf = 0
+        }
+        flushTraceUi()
         pushCodeExec({ activeLine: undefined, lineMs, status: "error" })
         const profileCode = entries[0]?.code ?? primaryEntry.code
         const codeProfile: StepCodeProfile | undefined = Object.keys(lineMs).length
@@ -509,6 +544,7 @@ export async function awaitJobCompletion(
           codeProfile,
         })
         clientStepSubmittedFor = moduleId
+        awaitingServerResume = true
       } finally {
         clientStepBusy = false
       }
@@ -524,7 +560,7 @@ export async function awaitJobCompletion(
         cachedRunId: job.cachedRunId,
       }
     }
-    await new Promise((r) => setTimeout(r, intervalMs))
+    await new Promise((r) => setTimeout(r, awaitingServerResume ? CLIENT_RESUME_POLL_MS : intervalMs))
   }
 }
 

@@ -82,7 +82,6 @@ function PrimaryButton({
   onWarm,
   icon: Icon,
   label,
-  shortLabel,
   title,
 }: {
   active: boolean
@@ -91,7 +90,6 @@ function PrimaryButton({
   onWarm?: () => void
   icon: React.ComponentType<{ className?: string }>
   label: string
-  shortLabel: string
   title: string
 }) {
   return (
@@ -115,8 +113,7 @@ function PrimaryButton({
       ) : (
         <Icon className="h-3.5 w-3.5 shrink-0" />
       )}
-      <span className="sm:hidden">{shortLabel}</span>
-      <span className="hidden sm:inline">{label}</span>
+      <span>{label}</span>
     </button>
   )
 }

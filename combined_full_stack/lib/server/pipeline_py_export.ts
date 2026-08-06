@@ -18,7 +18,7 @@ import {
   pyCustomCodeCall,
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsPy } from "./pipeline_export_setup";
-import { isMergeModuleKind } from "@/lib/list-ops-steps";
+import { isMergeModuleKind } from "@/lib/module-kinds";
 import { MODULE_META } from "./types";
 import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";

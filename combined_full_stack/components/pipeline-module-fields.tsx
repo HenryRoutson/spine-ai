@@ -9,9 +9,8 @@ import { Switch } from "@/components/ui/switch"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import { AUTO_STRUCTURE_PARSE_EXPLAINER, isAutoStructureParseStep } from "@/lib/structure-parse-steps"
 import { isExampleSelectKind } from "@/lib/example-select"
-import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds"
+import { isLlmKind, isMergeModuleKind, usesPassthroughStructure } from "@/lib/module-kinds"
 import { formatModuleSpineIn, formatModuleSpineOut } from "@/lib/spine-type"
-import { isMergeModuleKind } from "@/lib/list-ops-steps"
 import { MODULE_META, ModuleKind, type PipelineModule, type StructureModel, type TypeAlias } from "@/lib/types"
 import {
   InvalidKind,

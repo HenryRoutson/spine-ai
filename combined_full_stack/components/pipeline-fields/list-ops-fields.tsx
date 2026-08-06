@@ -1,14 +1,10 @@
 "use client"
 
-import {
-  MergeDictStrategy,
-  MergeListStrategy,
-  MergeScalarStrategy,
-} from "@/lib/types"
-import type { MergeLayerPolicy, MergePolicyRule, PipelineModule, StructureModel } from "@/lib/types"
+import type { MergePolicyRule, PipelineModule, StructureModel } from "@/lib/types"
+import { isMergeModuleKind } from "@/lib/module-kinds"
 import {
   defaultLayerPolicy,
-  isMergeModuleKind,
+  EMPTY_MERGE_LAYER_POLICY,
   listOpsGeneratedCode,
   MERGE_DICT_STRATEGY_LABELS,
   MERGE_LIST_STRATEGY_LABELS,
@@ -19,7 +15,12 @@ import {
   DEFAULT_CHUNK_SIZE,
   DEFAULT_CHUNK_TEXT_FIELD,
 } from "@/lib/list-ops-steps"
-import { PipelineField, StaticValue } from "@/components/pipeline-fields/shared"
+import {
+  MergeDictStrategySelect,
+  MergeListStrategySelect,
+  MergeScalarStrategySelect,
+} from "@/components/pipeline-fields/merge-strategy-fields"
+import { GeneratedCodePreview, PipelineField, StaticValue } from "@/components/pipeline-fields/shared"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
@@ -30,18 +31,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { MergeDictStrategy, MergeListStrategy, MergeScalarStrategy } from "@/lib/types"
 
 type ListOpsModuleFieldsProps = {
   selected: PipelineModule
   models: StructureModel[]
   edit: boolean
   onUpdate?: (patch: Partial<PipelineModule>) => void
-}
-
-const EMPTY_RULE_POLICY: MergeLayerPolicy = {
-  list: MergeListStrategy.Concat,
-  dict: MergeDictStrategy.Deep,
-  scalar: MergeScalarStrategy.Last,
 }
 
 export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOpsModuleFieldsProps) {
@@ -177,21 +173,10 @@ export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOp
               hint="Fallback for every array — union/zip recurse into matching items"
             >
               {edit ? (
-                <Select
+                <MergeListStrategySelect
                   value={layer.list ?? MergeListStrategy.Concat}
-                  onValueChange={(v) => patchDefault({ list: v as MergeListStrategy })}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.values(MergeListStrategy).map((s) => (
-                      <SelectItem key={s} value={s} className="text-xs">
-                        {MERGE_LIST_STRATEGY_LABELS[s]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onValueChange={(v) => patchDefault({ list: v })}
+                />
               ) : (
                 <StaticValue>{MERGE_LIST_STRATEGY_LABELS[layer.list ?? MergeListStrategy.Concat]}</StaticValue>
               )}
@@ -199,21 +184,10 @@ export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOp
 
             <PipelineField label="Default dict strategy" hint="Fallback for every object">
               {edit ? (
-                <Select
+                <MergeDictStrategySelect
                   value={layer.dict ?? MergeDictStrategy.Deep}
-                  onValueChange={(v) => patchDefault({ dict: v as MergeDictStrategy })}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.values(MergeDictStrategy).map((s) => (
-                      <SelectItem key={s} value={s} className="text-xs">
-                        {MERGE_DICT_STRATEGY_LABELS[s]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onValueChange={(v) => patchDefault({ dict: v })}
+                />
               ) : (
                 <StaticValue>{MERGE_DICT_STRATEGY_LABELS[layer.dict ?? MergeDictStrategy.Deep]}</StaticValue>
               )}
@@ -221,21 +195,10 @@ export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOp
 
             <PipelineField label="Default scalar strategy" hint="Conflicting primitives at the same path">
               {edit ? (
-                <Select
+                <MergeScalarStrategySelect
                   value={layer.scalar ?? MergeScalarStrategy.Last}
-                  onValueChange={(v) => patchDefault({ scalar: v as MergeScalarStrategy })}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.values(MergeScalarStrategy).map((s) => (
-                      <SelectItem key={s} value={s} className="text-xs">
-                        {MERGE_SCALAR_STRATEGY_LABELS[s]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  onValueChange={(v) => patchDefault({ scalar: v })}
+                />
               ) : (
                 <StaticValue>
                   {MERGE_SCALAR_STRATEGY_LABELS[layer.scalar ?? MergeScalarStrategy.Last]}
@@ -283,7 +246,7 @@ export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOp
                     size="sm"
                     className="h-7 self-start text-xs"
                     onClick={() =>
-                      setRules([...rules, { path: "*", policy: { ...EMPTY_RULE_POLICY } }])
+                      setRules([...rules, { path: "*", policy: { ...EMPTY_MERGE_LAYER_POLICY } }])
                     }
                   >
                     Add path rule
@@ -356,51 +319,24 @@ function MergePathRuleRow({
         </Button>
       </div>
       <div className="grid grid-cols-2 gap-1.5">
-        <Select
+        <MergeListStrategySelect
           value={p.list ?? MergeListStrategy.Concat}
-          onValueChange={(v) => onChange({ policy: { list: v as MergeListStrategy } })}
-        >
-          <SelectTrigger className="h-7 text-[11px]">
-            <SelectValue placeholder="List" />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.values(MergeListStrategy).map((s) => (
-              <SelectItem key={s} value={s} className="text-xs">
-                {MERGE_LIST_STRATEGY_LABELS[s]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
+          onValueChange={(v) => onChange({ policy: { list: v } })}
+          triggerClassName="h-7 text-[11px]"
+          placeholder="List"
+        />
+        <MergeDictStrategySelect
           value={p.dict ?? MergeDictStrategy.Deep}
-          onValueChange={(v) => onChange({ policy: { dict: v as MergeDictStrategy } })}
-        >
-          <SelectTrigger className="h-7 text-[11px]">
-            <SelectValue placeholder="Dict" />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.values(MergeDictStrategy).map((s) => (
-              <SelectItem key={s} value={s} className="text-xs">
-                {MERGE_DICT_STRATEGY_LABELS[s]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
+          onValueChange={(v) => onChange({ policy: { dict: v } })}
+          triggerClassName="h-7 text-[11px]"
+          placeholder="Dict"
+        />
+        <MergeScalarStrategySelect
           value={p.scalar ?? MergeScalarStrategy.Last}
-          onValueChange={(v) => onChange({ policy: { scalar: v as MergeScalarStrategy } })}
-        >
-          <SelectTrigger className="h-7 text-[11px]">
-            <SelectValue placeholder="Scalar" />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.values(MergeScalarStrategy).map((s) => (
-              <SelectItem key={s} value={s} className="text-xs">
-                {MERGE_SCALAR_STRATEGY_LABELS[s]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          onValueChange={(v) => onChange({ policy: { scalar: v } })}
+          triggerClassName="h-7 text-[11px]"
+          placeholder="Scalar"
+        />
         <Input
           value={p.itemKey ?? ""}
           onChange={(e) => onChange({ policy: { itemKey: e.target.value.trim() || undefined } })}
@@ -412,12 +348,3 @@ function MergePathRuleRow({
   )
 }
 
-function GeneratedCodePreview({ code }: { code: string }) {
-  return (
-    <PipelineField label="Generated code" hint="Read-only — updates when parameters change">
-      <pre className="max-h-40 overflow-auto rounded-md border border-border/60 bg-secondary/30 p-2 font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
-        {code}
-      </pre>
-    </PipelineField>
-  )
-}

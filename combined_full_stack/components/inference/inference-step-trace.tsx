@@ -33,17 +33,13 @@ import type {
 import { CustomCodeLanguage } from "@/lib/types"
 import { OutputStepLabel, outputStepOutlineClass, StepTraceOutputPreview, stepHasTraceOutput } from "@/components/inference/inference-outputs"
 import { StepCodeExecPreview } from "@/components/step-code-exec-preview"
-import { IoSection } from "@/components/logging/io-section"
-import { DiagnosisRunLink } from "@/components/diagnosis-agents/diagnosis-run-link"
-import { diagnosisRunLinkId } from "@/lib/diagnosis-link"
-import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
+import { StepValidationErrorsSection } from "@/components/step-validation-errors-section"
+import { stepTraceIndentClass } from "@/lib/step-trace-layout"
 import { isDocReferenceOutputJson } from "@/lib/step-doc"
 import { firstUserCodeEntry } from "@/lib/custom_code"
 import type { CodeExecUiState } from "@/lib/code-exec-ui"
 
-export function stepTraceIndentClass(nested?: boolean): string {
-  return nested ? "pl-5" : "pl-7"
-}
+export { stepTraceIndentClass } from "@/lib/step-trace-layout"
 
 export function stepDescriptionMeta(
   moduleId: ModuleId,
@@ -227,16 +223,11 @@ export function InferenceStepRow({
         />
       )}
       {showValidationErrors && errorPreview && (
-        <IoSection
-          title="Validation errors"
-          qualifier="error"
+        <StepValidationErrorsSection
+          errorPreview={errorPreview}
+          runId={runId}
           className={ioClassName}
-          anchorId={runId ? diagnosisRunLinkId(runId) : undefined}
-          headerExtra={runId ? <DiagnosisRunLink runId={runId} /> : undefined}
-          summary={compactPreview(errorPreview, PREVIEW_STEP_IO_CHARS)}
-        >
-          <p className="whitespace-pre-wrap text-destructive">{errorPreview}</p>
-        </IoSection>
+        />
       )}
       {showOutputPreview && (
         <StepTraceOutputPreview
