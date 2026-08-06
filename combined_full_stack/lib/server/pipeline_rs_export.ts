@@ -17,6 +17,7 @@ import {
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsRust } from "./pipeline_export_setup";
 import { pipelineStateRustType } from "./pipeline_state";
+import { exportWebhookStepBodyRust, webhookStepUsesPipelineState } from "@/lib/webhook-step";
 import { isMergeModuleKind } from "@/lib/module-kinds";
 import { MODULE_META } from "./types";
 import { stepEmitsList } from "./type_expr";
@@ -90,6 +91,40 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
         "Ok(out)",
       ].join("\n");
     }
+    case "example-select": {
+      const prompt = m.prompt ?? "Find useful examples…";
+      const ctxLabel = m.exampleContextLabel ?? "Context";
+      const ctxKey = exportStringLiteral(ctxLabel);
+      const pointer = m.exampleContextField?.trim()
+        ? `"/${m.exampleContextField.trim().split(".").filter(Boolean).join("/")}"`
+        : "None";
+      const itemRust = outRust.startsWith("Vec<") && outRust.endsWith(">") ? outRust.slice(4, -1) : outRust;
+      return [
+        `// Per-item relevance filter — ${outName ?? outRust} with selection_reason`,
+        `let ctx_value = state.get(${ctxKey}).cloned().unwrap_or(Value::Null);`,
+        pointer === "None"
+          ? `let picked = &ctx_value;`
+          : `let picked = ctx_value.pointer(${pointer}).unwrap_or(&ctx_value);`,
+        `let description = if let Some(s) = picked.as_str() { s.to_string() } else { serde_json::to_string_pretty(picked)? };`,
+        "let input_value = serde_json::to_value(&input)?;",
+        "let items = if let Value::Array(arr) = &input_value { arr.clone() } else { vec![input_value] };",
+        `let template = ${exportStringLiteral(prompt)};`,
+        `let schema = serde_json::json!({"chain_of_thought": "string", "is_relevant": "boolean"});`,
+        "let mut out = Vec::new();",
+        "for item in items {",
+        `    let ask = template.replace("{description}", &description).replace("{example}", &serde_json::to_string_pretty(&item)?);`,
+        "    let verdict = llm_structured(&ask, &schema).await?;",
+        "    if verdict.get(\"is_relevant\").and_then(|v| v.as_bool()).unwrap_or(false) {",
+        `        let mut row = item.clone();`,
+        "        if let Value::Object(ref mut map) = row {",
+        "            map.insert(\"selection_reason\".to_string(), verdict.get(\"chain_of_thought\").cloned().unwrap_or(Value::String(String::new())));",
+        "        }",
+        `        out.push(serde_json::from_value::<${itemRust}>(row)?);`,
+        "    }",
+        "}",
+        "Ok(out)",
+      ].join("\n");
+    }
     case "quote":
       return [
         "// Match LLM quote strings against source document byte offsets (no LLM cost)",
@@ -131,6 +166,8 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
         "wait_for_human_review(&input).await?;",
         "Ok(input)",
       ].join("\n");
+    case "webhook":
+      return exportWebhookStepBodyRust();
     case "output":
       return [`// Snapshot ${outName ?? inName ?? "pipeline output"}`, "Ok(input)"].join("\n");
     default:
@@ -138,7 +175,8 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
   }
 }
 
-function stepBodyUsesPipelineState(body: string): boolean {
+function stepBodyUsesPipelineState(body: string, m?: PipelineModule): boolean {
+  if (m?.kind === "webhook" && webhookStepUsesPipelineState(m)) return true;
   // AI : real state reads only — ignore commented lines.
   return body
     .split("\n")
@@ -157,7 +195,7 @@ function generateStepFn(
   const outRust = exportSpineOutRust(m, project, index);
   const meta = MODULE_META[m.kind];
   const body = generateStepBody(m, project, outRust, inRust);
-  const stateParam = stepBodyUsesPipelineState(body) ? "state" : "_state";
+  const stateParam = stepBodyUsesPipelineState(body, m) ? "state" : "_state";
   const docLines = [
     `/// ${m.label.replace(/\*\//g, "*\\/")}`,
     `/// Kind: ${meta.label}`,

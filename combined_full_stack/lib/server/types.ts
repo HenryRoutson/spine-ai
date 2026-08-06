@@ -8,6 +8,7 @@
 // AI :   - frontend MODEL_CATALOG may drift from backend until merge.
 
 import type { TypeExpr } from "./type_expr";
+import type { ExampleSelectVerdict } from "@/lib/example-select-verdicts";
 
 export type { TypeExpr } from "./type_expr";
 
@@ -151,7 +152,15 @@ export enum ModuleKind {
   CustomCode = "custom-code",
   Assert = "assert", // AI : validate pipeline state — passthrough spine; code reads step["Label"] keys
   HumanReview = "human-review", // AI : pause in Inference — operator approves or rejects before continuing
+  Webhook = "webhook", // AI : server-side HTTP call — n8n, search APIs, Zapier, internal services
   Output = "output",
+}
+
+// AI : webhook step HTTP verbs — GET omitted (no JSON body contract).
+export enum WebhookMethod {
+  Post = "POST",
+  Put = "PUT",
+  Patch = "PATCH",
 }
 
 export enum CustomCodeLanguage {
@@ -254,6 +263,8 @@ export interface PipelineModule { // TODO this is bad, it contains multiple poss
   chunkTextField?: string; // chunk step — field on input object to split (default content)
   mergePolicy?: MergePolicy; // merge step — recursive structural policy
   mergeCustom?: string; // merge step — optional custom TS (input) => … overrides policy
+  mergeStateLabel?: string; // merge step — prior step label whose output is merged with spine input
+  mergeWrapListField?: string; // merge step — when spine is list[T], wrap as { field: T[] } before merge
   // AI : example-select — cached-prefix relevance filter (see lib/example-select.ts defaults)
   exampleContextLabel?: string; // prior step label supplying {description} text
   exampleContextField?: string; // optional dot path within that step output
@@ -261,6 +272,13 @@ export interface PipelineModule { // TODO this is bad, it contains multiple poss
   examplePreFilterMax?: number; // optional cap on candidates before per-item LLM calls
   useOcr?: boolean; // input only — vision OCR when PDF/image is accepted (built-in parser when off)
   cached: boolean;
+  // AI : webhook — server-side HTTP integration (URL may be literal or env:VAR / ${VAR})
+  webhookUrl?: string;
+  webhookMethod?: WebhookMethod;
+  webhookAuthEnv?: string; // env var name — value sent as Authorization (Bearer added when missing)
+  webhookTimeoutMs?: number;
+  webhookIncludeState?: boolean; // default true — POST { input, state }
+  webhookResponsePath?: string; // dot path into JSON response body
   // AI : pipeline-managed step — auto-inserted Link Quotes; locked in the builder UI.
   auto?: boolean;
   // metrics (real ones are recomputed from run history, see billing.ts)
@@ -345,6 +363,7 @@ export interface Project {
   createdAt?: number; // AI : ms since epoch — set when blank/cloned; templates from seeds/*.json omit this
   lastOpenedAt?: number; // AI : ms since epoch — updated when user opens/switches to this project
   documentation?: string; // AI : freeform markdown — prepended to every agent/assistant prompt call to prevent regressions
+  langfuseExport?: boolean; // AI : when true + LANGFUSE_* env set, pipeline runs mirror to Langfuse as secondary telemetry
   teamId?: import("@/lib/team-types").team_id_string; // AI : when set, team members can view/run; bills team owner
   teamReadOnly?: boolean; // AI : true when loaded from another member's account — client disables edits
   teamProjectOwnerId?: import("./require_auth").user_id_string; // AI : runtime-only — owner's user_id when viewing a shared team project
@@ -477,6 +496,7 @@ export interface RunStep extends Omit<StepDescriptionFields, "outputPreview"> {
   inputDescription?: string; // AI : snapshot at run time — expected input for this step
   docId?: DocId; // AI : source doc for input steps — powers logging trace links
   llmCalls?: LlmCallRecord[];
+  exampleSelectVerdicts?: ExampleSelectVerdict[];
   failures?: RunFailureRecord[];
   serverLogs?: import("@/lib/run-types").JobLogEntry[]; // AI : mirrored ServerLogger lines for this step
   codeProfile?: import("@/lib/code-exec-ui").StepCodeProfile; // AI : browser custom-code line timings + source snapshot
@@ -590,6 +610,8 @@ export interface PipelineRun {
   notes?: string; // AI : freeform context for this run — set before or after inference
   source?: RunSource;
   test?: RunTestReport; // AI : only on source "testing" runs — keeps the verdict in Logging
+  langfuseTraceId?: string; // AI : Langfuse trace id when langfuseExport was enabled for this run
+  langfuseTraceUrl?: string; // AI : deep link into Langfuse UI (server-built from LANGFUSE_BASE_URL)
 
   sharedLinkId?: SharedLinkId;
   hostedApiId?: HostedApiId;
@@ -721,6 +743,10 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   [ModuleKind.HumanReview]: {
     label: "Human Review",
     description: "Pause in Inference for approve or reject — passthrough on approval",
+  },
+  [ModuleKind.Webhook]: {
+    label: "Webhook",
+    description: "POST spine input to an external URL (n8n, search APIs, Zapier) — server-side, secrets via env vars",
   },
   [ModuleKind.Output]: {
     label: "Output",

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Example Select Demo — inference</title>
+  <title>Example Select Demo 2 1 — inference</title>
   <style>
     :root {
       color-scheme: dark;
@@ -97,20 +97,25 @@
   <div class="shell">
     <header class="header">
       <div class="step">inference / exported</div>
-      <h1>Example Select Demo</h1>
+      <h1>Example Select Demo 2 1</h1>
       <p class="desc">Upload inputs and run via the shared PipelineConnector (HTTP JSON or gRPC backend).</p>
     </header>
 
     <div id="inputs">
-<section class="card input-slot" data-label="Damage Case">
-  <header><strong>Damage Case</strong><span class="badge">Text</span><span class="badge muted">name ∋ "damage_case"</span></header>
-  <input type="file" class="file-input" data-label="Damage Case" />
-  <p class="file-name muted" data-label="Damage Case">No file selected</p>
+<section class="card input-slot" data-label="Work Description">
+  <header><strong>Work Description</strong><span class="badge">Text</span><span class="badge muted">name ∋ "work_description"</span></header>
+  <input type="file" class="file-input" data-label="Work Description" />
+  <p class="file-name muted" data-label="Work Description">No file selected</p>
 </section>
-<section class="card input-slot" data-label="Example Library">
-  <header><strong>Example Library</strong><span class="badge">JSON</span><span class="badge muted">name ∋ "example_library"</span></header>
-  <input type="file" class="file-input" data-label="Example Library" />
-  <p class="file-name muted" data-label="Example Library">No file selected</p>
+<section class="card input-slot" data-label="Job Example Library">
+  <header><strong>Job Example Library</strong><span class="badge">JSON</span><span class="badge muted">name ∋ "job_example_library"</span></header>
+  <input type="file" class="file-input" data-label="Job Example Library" />
+  <p class="file-name muted" data-label="Job Example Library">No file selected</p>
+</section>
+<section class="card input-slot" data-label="Work Item Catalog">
+  <header><strong>Work Item Catalog</strong><span class="badge">JSON</span><span class="badge muted">name ∋ "work_item_catalog"</span></header>
+  <input type="file" class="file-input" data-label="Work Item Catalog" />
+  <p class="file-name muted" data-label="Work Item Catalog">No file selected</p>
 </section>
     </div>
 
@@ -192,8 +197,9 @@
       try {
         const slots = await collectInputs();
         const body = { inputs: [
-      { label: "Damage Case", document: slots["Damage Case"] },
-      { label: "Example Library", document: slots["Example Library"] }
+      { label: "Work Description", document: slots["Work Description"] },
+      { label: "Job Example Library", document: slots["Job Example Library"] },
+      { label: "Work Item Catalog", document: slots["Work Item Catalog"] }
     ] };
         const res = await fetch(document.getElementById('endpoint').value, {
           method: 'POST',

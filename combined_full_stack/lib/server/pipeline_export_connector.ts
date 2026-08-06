@@ -115,7 +115,7 @@ export function generateConnectorServerTs(project: Project, slug: string): strin
     "import * as grpc from '@grpc/grpc-js';",
     "import * as protoLoader from '@grpc/proto-loader';",
     "import { createServer } from 'node:http';",
-    `import { configurePipelineRuntime, runPipeline } from './${slug}_pipeline';`,
+    `import { configurePipelineRuntime, runPipeline, getLastRunTrace } from './${slug}_pipeline';`,
     "",
     "const PROTO_PATH = new URL('./pipeline_connector.proto', import.meta.url).pathname;",
     "const GRPC_PORT = process.env.PIPELINE_GRPC_PORT ?? '50051';",
@@ -130,9 +130,12 @@ export function generateConnectorServerTs(project: Project, slug: string): strin
     "  sourceDocId: process.env.PIPELINE_SOURCE_DOC_ID,",
     "});",
     "",
-    "async function executeRun(body: Record<string, unknown>): Promise<string> {",
+    "async function executeRun(body: Record<string, unknown>): Promise<{ resultJson: string; stepTrace: unknown[] }> {",
     httpRunHandlerTs(slug, multi),
-    "  return JSON.stringify(result, null, 2);",
+    "  return {",
+    "    resultJson: JSON.stringify(result, null, 2),",
+    "    stepTrace: getLastRunTrace(),",
+    "  };",
     "}",
     "",
     "const packageDefinition = protoLoader.loadSync(PROTO_PATH, {",
@@ -181,9 +184,9 @@ export function generateConnectorServerTs(project: Project, slug: string): strin
     "    for await (const chunk of req) chunks.push(chunk as Buffer);",
     "    try {",
     "      const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as Record<string, unknown>;",
-    "      const resultJson = await executeRun(body);",
+    "      const payload = await executeRun(body);",
     '      res.writeHead(200, { "Content-Type": "application/json" });',
-    "      res.end(JSON.stringify({ resultJson }));",
+    "      res.end(JSON.stringify(payload));",
     "    } catch (e) {",
     '      res.writeHead(500, { "Content-Type": "application/json" });',
     "      res.end(JSON.stringify({ error: (e as Error).message }));",
@@ -264,7 +267,7 @@ export function generateConnectorServerPy(project: Project, slug: string): strin
     "import pipeline_connector_pb2",
     "import pipeline_connector_pb2_grpc",
     "",
-    `from ${slug}_pipeline import configure_pipeline_runtime, run_pipeline`,
+    `from ${slug}_pipeline import configure_pipeline_runtime, get_last_run_trace, run_pipeline`,
     "",
     'GRPC_PORT = os.environ.get("PIPELINE_GRPC_PORT", "50051")',
     'HTTP_PORT = int(os.environ.get("PIPELINE_HTTP_PORT", "8080"))',
@@ -279,9 +282,12 @@ export function generateConnectorServerPy(project: Project, slug: string): strin
     ")",
     "",
     "",
-    "async def execute_run(body: dict) -> str:",
+    "async def execute_run(body: dict) -> dict:",
     httpRunHandlerPy(multi),
-    "    return json.dumps(result, indent=2)",
+    "    return {",
+    '        "resultJson": json.dumps(result, indent=2),',
+    '        "stepTrace": get_last_run_trace(),',
+    "    }",
     "",
     "",
     "class PipelineConnectorServicer(pipeline_connector_pb2_grpc.PipelineConnectorServicer):",
@@ -309,9 +315,9 @@ export function generateConnectorServerPy(project: Project, slug: string): strin
     "    if first.startswith('POST /v1/run'):",
     "        try:",
     "            body = json.loads(body_raw or '{}')",
-    "            result_json = await execute_run(body)",
-    '            payload = json.dumps({"resultJson": result_json}).encode()',
-    '            writer.write(b"HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: " + str(len(payload)).encode() + b"\\r\\n\\r\\n" + payload)',
+    "            payload = await execute_run(body)",
+    '            body = json.dumps({"resultJson": payload["resultJson"], "stepTrace": payload["stepTrace"]}).encode()',
+    '            writer.write(b"HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: " + str(len(body)).encode() + b"\\r\\n\\r\\n" + body)',
     "        except Exception as e:",
     '            payload = json.dumps({"error": str(e)}).encode()',
     '            writer.write(b"HTTP/1.1 500 Internal Server Error\\r\\nContent-Type: application/json\\r\\nContent-Length: " + str(len(payload)).encode() + b"\\r\\n\\r\\n" + payload)',
@@ -377,6 +383,7 @@ export function generateInferenceUiHtml(project: Project): string {
   const inputMods = orderedInputModules(project.modules);
   const multi = inputMods.length > 1;
   const runPayload = buildRunPayloadJs(multi, inputMods);
+  const stepLabels = project.modules.map((m) => labelAsStateKey(m.label)).filter(Boolean);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -471,6 +478,39 @@ export function generateInferenceUiHtml(project: Project): string {
     .status.err { color: var(--destructive); }
     .status.ok { color: var(--ok); }
     .status.run { color: var(--muted); }
+    .tabs { display: flex; gap: 0.35rem; margin-bottom: 0.5rem; }
+    .tabs button { background: transparent; color: var(--muted); font: 600 10px/1 var(--mono); }
+    .tabs button.active { color: var(--fg); border-color: var(--fg); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .trace-list { display: flex; flex-direction: column; gap: 0.35rem; max-height: 28rem; overflow: auto; }
+    .trace-step {
+      border: 1px solid var(--border);
+      border-radius: 0.35rem;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    .trace-step summary {
+      cursor: pointer;
+      list-style: none;
+      padding: 0.45rem 0.6rem;
+      font: 600 10px/1.4 var(--mono);
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .trace-step summary::-webkit-details-marker { display: none; }
+    .trace-step pre {
+      margin: 0;
+      padding: 0.6rem;
+      border-top: 1px solid var(--border);
+      font: 500 10px/1.45 var(--mono);
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 14rem;
+      overflow: auto;
+    }
+    .trace-empty { font: 500 10px/1.4 var(--mono); color: var(--muted); padding: 0.5rem 0; }
   </style>
 </head>
 <body>
@@ -491,17 +531,29 @@ ${inputSlotHtml(project)}
         <input id="endpoint" type="url" value="http://localhost:8080/v1/run" />
       </label>
       <button id="run" type="button">Run pipeline</button>
+      <button id="loadPreset" type="button" class="ghost">Load sample inputs</button>
       <button id="health" type="button" class="ghost">Health</button>
       <span id="status" class="status"></span>
     </div>
 
     <section class="card">
-      <div class="step" style="margin-bottom:0.5rem">output</div>
-      <pre id="output" class="output">—</pre>
+      <div class="tabs">
+        <button type="button" class="tab active" data-tab="output">Output</button>
+        <button type="button" class="tab" data-tab="trace">Step trace</button>
+      </div>
+      <div id="panel-output" class="panel active">
+        <div class="step" style="margin-bottom:0.5rem">final result</div>
+        <pre id="output" class="output">—</pre>
+      </div>
+      <div id="panel-trace" class="panel">
+        <div class="step" style="margin-bottom:0.5rem">per-step outputs (logging view)</div>
+        <div id="trace" class="trace-list"><p class="trace-empty">Run the pipeline to populate step outputs.</p></div>
+      </div>
     </section>
   </div>
   <script>
     const multi = ${multi ? "true" : "false"};
+    const stepLabels = ${JSON.stringify(stepLabels)};
     const slots = {};
 
     async function readFile(input) {
@@ -537,6 +589,62 @@ ${inputSlotHtml(project)}
       return idx >= 0 ? raw.slice(0, idx) : raw;
     }
 
+    document.querySelectorAll('.tab').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach((b) => b.classList.remove('active'));
+        document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+      });
+    });
+
+    function renderTrace(stepTrace) {
+      const trace = document.getElementById('trace');
+      if (!stepTrace || !stepTrace.length) {
+        trace.innerHTML = '<p class="trace-empty">No step trace returned — use connector_server.ts with getLastRunTrace().</p>';
+        return;
+      }
+      trace.innerHTML = stepTrace.map((entry, i) => {
+        const label = entry.label || stepLabels[i] || ('Step ' + (i + 1));
+        const body = JSON.stringify(entry.output, null, 2);
+        return '<details class="trace-step"' + (i === stepTrace.length - 1 ? ' open' : '') + '><summary><span>' + label + '</span><span class="muted">' + body.length + ' chars</span></summary><pre>' + body.replace(/</g, '&lt;') + '</pre></details>';
+      }).join('');
+    }
+
+    async function loadPresetFiles() {
+      const res = await fetch('documents/inference_setup.json');
+      if (!res.ok) throw new Error('documents/inference_setup.json not found — open UI from export folder');
+      const setup = await res.json();
+      const inputs = setup.inputs || (setup.presets && setup.presets[0] && setup.presets[0].inputs) || {};
+      for (const [label, filename] of Object.entries(inputs)) {
+        const fileRes = await fetch('documents/' + filename);
+        if (!fileRes.ok) throw new Error('Missing documents/' + filename);
+        const content = await fileRes.text();
+        const input = document.querySelector('.file-input[data-label="' + label + '"]');
+        const nameEl = document.querySelector('.file-name[data-label="' + label + '"]');
+        if (!input) continue;
+        const file = new File([content], String(filename), { type: 'text/plain' });
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+        if (nameEl) nameEl.textContent = filename + ' (preset)';
+      }
+    }
+
+    document.getElementById('loadPreset').addEventListener('click', async () => {
+      const status = document.getElementById('status');
+      status.textContent = 'Loading…';
+      status.className = 'status run';
+      try {
+        await loadPresetFiles();
+        status.textContent = 'Preset loaded';
+        status.className = 'status ok';
+      } catch (e) {
+        status.textContent = e.message;
+        status.className = 'status err';
+      }
+    });
+
     document.getElementById('health').addEventListener('click', async () => {
       const status = document.getElementById('status');
       status.textContent = 'Checking…';
@@ -560,6 +668,7 @@ ${inputSlotHtml(project)}
       status.textContent = 'Running…';
       status.className = 'status run';
       output.textContent = '—';
+      document.getElementById('trace').innerHTML = '<p class="trace-empty">Running…</p>';
       try {
         const slots = await collectInputs();
         const body = ${runPayload};
@@ -571,8 +680,10 @@ ${inputSlotHtml(project)}
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         output.textContent = data.resultJson ?? JSON.stringify(data, null, 2);
+        renderTrace(data.stepTrace);
         status.textContent = 'Done';
         status.className = 'status ok';
+        document.querySelector('.tab[data-tab="trace"]').click();
       } catch (e) {
         output.textContent = e.message;
         status.textContent = 'Failed';

@@ -6,11 +6,13 @@ import {
   type MergeLayerPolicy,
   type MergePolicy,
   type ModelField,
+  FieldType,
   type PipelineModule,
   type StructureModel,
   type StructureModelId,
 } from "@/lib/types";
 import { fieldToTypeExpr, isListRoot, stepSpineOutType, type TypeExpr } from "@/lib/server/type_expr";
+import { labelAsStateKey } from "@/lib/server/pipeline_state";
 
 type PathSegment = string | number;
 type Path = PathSegment[];
@@ -206,6 +208,12 @@ function ensureMergedModel(
   return id;
 }
 
+function upsertDerivedModels(models: StructureModel[], derived: StructureModel[]): StructureModel[] {
+  const byId = new Map(models.map((m) => [m.id, m]));
+  for (const m of derived) byId.set(m.id, m);
+  return [...byId.values()];
+}
+
 function mergeListTypes(
   left: Extract<TypeExpr, { kind: "list" }>,
   right: Extract<TypeExpr, { kind: "list" }>,
@@ -333,10 +341,58 @@ export function deriveMergePairType(
   };
 }
 
-function upsertDerivedModels(models: StructureModel[], derived: StructureModel[]): StructureModel[] {
-  const byId = new Map(models.map((m) => [m.id, m]));
-  for (const m of derived) byId.set(m.id, m);
-  return [...byId.values()];
+function wrapListFieldType(
+  listExpr: Extract<TypeExpr, { kind: "list" }>,
+  fieldName: string,
+  outModelId: StructureModelId | undefined,
+  ctx: MergeTypeCtx,
+  stepId?: string,
+): TypeExpr {
+  const outModel = outModelId ? modelById(ctx, outModelId) : undefined;
+  const field = outModel?.fields.find((f) => f.name === fieldName);
+  const itemExpr = field ? fieldToTypeExpr(field) : listExpr;
+  const wrapId = (`sm_merge_wrap_${stepId ?? "step"}_${fieldName}`) as StructureModelId;
+  const wrapModel: StructureModel = {
+    id: wrapId,
+    name: `Wrap_${fieldName}`,
+    description: "Auto-derived merge spine operand.",
+    auto: true,
+    fields: [
+      {
+        id: `f_wrap_${fieldName}`,
+        name: fieldName,
+        type: field?.type ?? FieldType.ListModel,
+        ref: field?.ref,
+        optional: false,
+        description: field?.description ?? "",
+        typeExpr: itemExpr,
+      },
+    ],
+  };
+  ctx.derived.set(wrapId, wrapModel);
+  return { kind: "ref", modelId: wrapId };
+}
+
+function spineOperandType(
+  m: PipelineModule,
+  spineType: TypeExpr,
+  ctx: MergeTypeCtx,
+): TypeExpr {
+  const wrap = m.mergeWrapListField?.trim();
+  if (wrap && spineType.kind === "list") {
+    return wrapListFieldType(spineType, wrap, m.outStructureId, ctx, m.id);
+  }
+  return spineType;
+}
+
+function stateOperandType(
+  m: PipelineModule,
+  modules: PipelineModule[] | undefined,
+): TypeExpr | undefined {
+  const label = m.mergeStateLabel?.trim();
+  if (!label || !modules?.length) return undefined;
+  const stateMod = modules.find((mod) => labelAsStateKey(mod.label) === labelAsStateKey(label));
+  return stateMod ? stepSpineOutType(stateMod) : undefined;
 }
 
 export function deriveMergeStepTypes(
@@ -344,31 +400,72 @@ export function deriveMergeStepTypes(
   prev: PipelineModule | undefined,
   models: StructureModel[],
   policy: MergePolicy,
+  modules?: PipelineModule[],
 ): { module: PipelineModule; models: StructureModel[] } {
   if (m.mergeCustom?.trim()) return { module: m, models };
 
-  const inType =
+  const spineType =
     (prev && stepSpineOutType(prev)) ??
     (m.inStructureId ? ({ kind: "ref", modelId: m.inStructureId } as TypeExpr) : undefined);
-  if (!inType) return { module: m, models };
+  if (!spineType) return { module: m, models };
 
-  const { outType, models: nextModels } = deriveMergeSpineOutType(inType, policy, models, m.id);
+  const stateType = stateOperandType(m, modules);
+  if (stateType) {
+    const ctx: MergeTypeCtx = { models, derived: new Map(), mergeStepId: m.id };
+    const rightType = spineOperandType(m, spineType, ctx);
+    const modelsWithDerived = upsertDerivedModels(models, [...ctx.derived.values()]);
+    const { outType, models: pairModels } = deriveMergePairType(
+      stateType,
+      rightType,
+      policy,
+      modelsWithDerived,
+      m.id,
+    );
+    const derivedModels = [...ctx.derived.values(), ...pairModels.filter((dm) => dm.auto && !ctx.derived.has(dm.id))];
+    const nextModels = derivedModels.length ? upsertDerivedModels(modelsWithDerived, derivedModels) : modelsWithDerived;
+    const refId =
+      m.outStructureId ??
+      (outType.kind === "ref"
+        ? outType.modelId
+        : outType.kind === "list" && outType.item.kind === "ref"
+          ? outType.item.modelId
+          : undefined);
+    const moduleOutType: TypeExpr = m.outStructureId
+      ? { kind: "ref", modelId: m.outStructureId }
+      : outType;
+    return {
+      models: m.outStructureId ? models : nextModels,
+      module: {
+        ...m,
+        inStructureId: m.inStructureId ?? refFromInType(spineType),
+        outStructureId: refId ?? m.outStructureId,
+        inType: spineType,
+        outType: moduleOutType,
+      },
+    };
+  }
+
+  const { outType, models: nextModels } = deriveMergeSpineOutType(spineType, policy, models, m.id);
 
   const refId =
-    outType.kind === "ref"
+    m.outStructureId ??
+    (outType.kind === "ref"
       ? outType.modelId
       : outType.kind === "list" && outType.item.kind === "ref"
         ? outType.item.modelId
-        : m.outStructureId;
+        : undefined);
+  const moduleOutType: TypeExpr = m.outStructureId
+    ? { kind: "ref", modelId: m.outStructureId }
+    : outType;
 
   return {
-    models: nextModels,
+    models: m.outStructureId ? models : nextModels,
     module: {
       ...m,
-      inStructureId: m.inStructureId ?? refFromInType(inType),
+      inStructureId: m.inStructureId ?? refFromInType(spineType),
       outStructureId: refId ?? m.outStructureId,
-      inType,
-      outType,
+      inType: spineType,
+      outType: moduleOutType,
     },
   };
 }

@@ -10,6 +10,7 @@ import {
   exportSpineOutTs,
   generateCombineStepBodyTs,
   generateCustomCodeStepBodyTs,
+  generateExampleContextExprTs,
   generateInputStepBodyTs,
   generateOrchestratorTs,
   modelName,
@@ -18,6 +19,7 @@ import {
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsTs } from "./pipeline_export_setup";
 import { isMergeModuleKind } from "@/lib/module-kinds";
+import { exportWebhookStepBodyTs, webhookStepUsesPipelineState } from "@/lib/webhook-step";
 import { MODULE_META } from "./types";
 import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
@@ -79,9 +81,10 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
     case "example-select": {
       const prompt = m.prompt ?? "Find useful examples…";
       const ctxLabel = m.exampleContextLabel ?? "Context";
+      const descriptionExpr = generateExampleContextExprTs(ctxLabel, m.exampleContextField);
       return [
         `// Per-item relevance filter — ${outName ?? outTs} with selection_reason`,
-        `const description = JSON.stringify(state["${ctxLabel.replace(/"/g, '\\"')}"], null, 2);`,
+        `const description = ${descriptionExpr};`,
         "const items = Array.isArray(input) ? input : [input];",
         `const template = ${JSON.stringify(prompt)};`,
         `const relevanceSchema = { chain_of_thought: "string", is_relevant: "boolean" };`,
@@ -130,6 +133,8 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
         "await waitForHumanReview(input);",
         `return input as unknown as ${outTs};`,
       ].join("\n");
+    case "webhook":
+      return exportWebhookStepBodyTs(m, outTs);
     case "output":
       return [
         `// Snapshot ${outName ?? inName ?? "pipeline output"}`,
@@ -140,7 +145,8 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
   }
 }
 
-function stepBodyUsesPipelineState(body: string): boolean {
+function stepBodyUsesPipelineState(body: string, m?: PipelineModule): boolean {
+  if (m?.kind === "webhook" && webhookStepUsesPipelineState(m)) return true;
   return /\bstate\s*\[|__assert\(input,\s*state\)|__compiled\.length >= 2/.test(body);
 }
 
@@ -150,7 +156,7 @@ function generateStepFn(m: PipelineModule, project: Project, index: number): str
   const outTs = exportSpineOutTs(m, project, index);
   const meta = MODULE_META[m.kind];
   const body = generateStepBody(m, project, outTs, inTs);
-  const stateParam = stepBodyUsesPipelineState(body) ? "state" : "_state";
+  const stateParam = stepBodyUsesPipelineState(body, m) ? "state" : "_state";
   const header = [
     `/**`,
     ` * ${m.label.replace(/\*\//g, "*\\/")}`,

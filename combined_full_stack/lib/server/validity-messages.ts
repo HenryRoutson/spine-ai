@@ -87,6 +87,9 @@ export function invalidStepMessage(
   if (issue.kind === InvalidKind.MissingCombineBeforeInput) {
     return "prior pipeline state is dropped on the spine — use input → … → combine (side input immediately before combine), not input → code → input";
   }
+  if (issue.kind === InvalidKind.MissingWebhookUrl) {
+    return "set a webhook URL (HTTPS or env:VAR)";
+  }
   return "invalid step";
 }
 

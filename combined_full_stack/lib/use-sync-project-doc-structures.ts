@@ -13,22 +13,26 @@ import type { StructureModelId } from "@/lib/types"
 export function useSyncProjectDocStructures() {
   const { docs, project, models, setModels, projectLoading } = useStore()
   const syncedRef = useRef(new Set<string>())
-  const modelsRef = useRef(models)
-  modelsRef.current = models
+  const dedupedProjectRef = useRef<string | null>(null)
+  const setModelsRef = useRef(setModels)
+  setModelsRef.current = setModels
 
   useEffect(() => {
     syncedRef.current = new Set()
+    dedupedProjectRef.current = null
   }, [project.id])
 
-  // AI : collapse legacy per-doc duplicates (HomeworkStudentAlexRow, …) into numbered Structure N.
+  // AI : collapse legacy per-doc duplicates (HomeworkStudentAlexRow, …) into numbered Structure N — once per project load.
   useEffect(() => {
     if (projectLoading) return
+    if (dedupedProjectRef.current === project.id) return
     const deduped = repairOrphanModelRefs(
-      dedupeInferredModelsByShape(modelsRef.current),
+      dedupeInferredModelsByShape(models),
       () => uid<StructureModelId>(),
     )
-    if (modelsChanged(modelsRef.current, deduped)) setModels(deduped)
-  }, [project.id, projectLoading, setModels])
+    dedupedProjectRef.current = project.id
+    if (modelsChanged(models, deduped)) setModelsRef.current(deduped)
+  }, [project.id, projectLoading, models])
 
   useEffect(() => {
     if (projectLoading) return
@@ -40,7 +44,7 @@ export function useSyncProjectDocStructures() {
     let cancelled = false
 
     ;(async () => {
-      let next = modelsRef.current
+      let next = models
 
       for (const doc of pending) {
         try {
@@ -60,13 +64,13 @@ export function useSyncProjectDocStructures() {
         if (cancelled) return
       }
 
-      if (!cancelled && modelsChanged(modelsRef.current, next)) {
-        setModels(next)
+      if (!cancelled && modelsChanged(models, next)) {
+        setModelsRef.current(next)
       }
     })()
 
     return () => {
       cancelled = true
     }
-  }, [docs, project.id, project.seedDocNames, projectLoading, setModels])
+  }, [docs, project.id, project.seedDocNames, projectLoading, models])
 }

@@ -9,6 +9,7 @@ import {
   DEFAULT_EXAMPLE_SELECT_PROMPT,
   exampleReasonField,
 } from "@/lib/example-select";
+import { buildExampleSelectVerdicts } from "@/lib/example-select-verdicts";
 import type { PipelineModule } from "../../types";
 import { llmCallBudget, materializeHints, materializeStepOutput, modelById, prevModuleFor } from "../helpers";
 import { requireLinearInput } from "../context";
@@ -55,13 +56,6 @@ function batchInputPreview(
       text: promptFor(item),
     })),
   };
-}
-
-function enrichExample(item: unknown, reasonField: string, chainOfThought: string): Record<string, unknown> {
-  if (item != null && typeof item === "object" && !Array.isArray(item)) {
-    return { ...(item as Record<string, unknown>), [reasonField]: chainOfThought };
-  }
-  return { value: item, [reasonField]: chainOfThought };
 }
 
 export async function execExampleSelectStep(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
@@ -130,16 +124,16 @@ export async function execExampleSelectStep(m: PipelineModule, ctx: RunCtx, log:
     (current: number, total: number) => ctx.reportSub?.({ label: "Relevance checks", current, total }),
   );
 
-  const kept: Record<string, unknown>[] = [];
-  for (let i = 0; i < items.length; i++) {
-    const verdict = relevanceRows[i] as RelevanceResult | undefined;
-    if (!verdict?.is_relevant) continue;
-    kept.push(enrichExample(items[i], reasonField, verdict.chain_of_thought));
-  }
+  const { kept, verdicts } = buildExampleSelectVerdicts(
+    items,
+    relevanceRows as RelevanceResult[],
+    reasonField,
+  );
 
   log.info(`example-select complete`, {
     moduleId: m.id,
     kept: kept.length,
+    rejected: verdicts.length - kept.length,
     candidates: items.length,
   });
 
@@ -152,5 +146,6 @@ export async function execExampleSelectStep(m: PipelineModule, ctx: RunCtx, log:
     json: JSON.stringify(value, null, 2),
     ...batchInputPreview(items, promptFor),
     llmCalls: ctx.stepLlmCalls,
+    exampleSelectVerdicts: verdicts,
   };
 }

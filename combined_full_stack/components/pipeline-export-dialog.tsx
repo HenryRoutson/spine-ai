@@ -9,6 +9,7 @@ import { ReadonlyCodeViewer, type CodeViewerLanguage } from "@/components/code-v
 import { Button } from "@/components/ui/button"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { downloadBlob } from "@/lib/download-blob"
+import { API_ROUTES } from "@/lib/api-routes"
 import type { Project, StructureModel, TypeAlias } from "@/lib/types"
 import type { PipelineModule } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -27,6 +28,8 @@ type ExportTabId =
   | "readme"
   | "setup"
   | "requirements"
+  | "run-ts"
+  | "run-py"
 
 type ExportFile = {
   id: ExportTabId
@@ -59,6 +62,8 @@ const TAB_ORDER: ExportTabId[] = [
   "connector-py",
   "env",
   "requirements",
+  "run-ts",
+  "run-py",
   "readme",
   "setup",
 ]
@@ -73,6 +78,10 @@ function setupFileTabMeta(filename: string): { id: ExportTabId; label: string; l
       return { id: "readme", label: "README.md", language: "markdown" }
     case "SETUP.md":
       return { id: "setup", label: "SETUP.md", language: "markdown" }
+    case "run_example.ts":
+      return { id: "run-ts", label: "run_example.ts", language: "typescript" }
+    case "run_example.py":
+      return { id: "run-py", label: "run_example.py", language: "python" }
     case "pipeline_connector.proto":
       return { id: "proto", label: "connector.proto", language: "plaintext" }
     case "inference_ui.html":
@@ -129,6 +138,14 @@ export function PipelineExportDialog({
         const setupFiles = generatePipelineSetupFiles(exportProject)
         const connectorFiles = generatePipelineConnectorFiles(exportProject)
         for (const f of connectorFiles) assertNoSecretValuesInExport(f.content)
+        const docRes = await fetch(API_ROUTES.pipelineExportDocuments, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(exportProject),
+        })
+        const documentFiles: { filename: string; content: string; mime: string }[] = docRes.ok
+          ? await docRes.json()
+          : []
         const next: ExportFile[] = [
           {
             id: "typescript",
@@ -192,6 +209,14 @@ export function PipelineExportDialog({
               language: meta.language,
             }
           }),
+          ...documentFiles.map((f) => ({
+            id: "setup" as const,
+            label: f.filename,
+            filename: f.filename,
+            content: f.content,
+            mime: f.mime,
+            language: "plaintext" as const,
+          })),
         ]
         if (!cancelled) setFiles(next)
       } catch (e) {
@@ -259,7 +284,7 @@ export function PipelineExportDialog({
             <div>
               <p className="text-sm font-semibold">Pipeline export</p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Pipeline code, gRPC connector, inference UI, README, and setup files. No secrets in generated code — wire env in your runner.
+                Pipeline code, gRPC connector, inference UI with step trace, sample documents, and setup files. No secrets in generated code — wire env in your runner.
               </p>
             </div>
             <Button variant="ghost" size="icon-sm" onClick={() => setOpen(false)}>
@@ -328,7 +353,7 @@ export function PipelineExportDialog({
               <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border px-4 py-3">
                 <p className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
                   <FileText className="h-3 w-3" />
-                  {files.length} files · start with README.md · open inference_ui.html against connector
+                  {files.length} files · start with README.md · documents/ + inference_setup.json · open inference_ui.html against connector
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button

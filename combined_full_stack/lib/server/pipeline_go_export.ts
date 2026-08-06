@@ -18,6 +18,7 @@ import {
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsGo, type ExportRuntimeNeeds } from "./pipeline_export_setup";
 import { pipelineStateGoType } from "./pipeline_state";
+import { exportWebhookStepBodyGo, webhookStepUsesPipelineState } from "@/lib/webhook-step";
 import { isMergeModuleKind } from "@/lib/module-kinds";
 import { MODULE_META } from "./types";
 import { stepEmitsList } from "./type_expr";
@@ -143,6 +144,109 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         `return out, nil`,
       ].join("\n");
     }
+    case "example-select": {
+      const prompt = m.prompt ?? "Find useful examples…";
+      const ctxLabel = m.exampleContextLabel ?? "Context";
+      const ctxKey = exportStringLiteral(ctxLabel);
+      const itemGo = outGo.startsWith("[]") ? outGo.slice(2) : outGo;
+      const fieldPath = m.exampleContextField?.trim();
+      const descriptionBlock = fieldPath
+        ? [
+            `ctxRaw, ok := state[${ctxKey}]`,
+            `if !ok {`,
+            `\treturn ${zero}, fmt.Errorf("example-select: missing context label %s", ${ctxKey})`,
+            `}`,
+            `ctxJSON, err := json.Marshal(ctxRaw)`,
+            `if err != nil {`,
+            `\treturn ${zero}, err`,
+            `}`,
+            `var ctxAny any`,
+            `if err := json.Unmarshal(ctxJSON, &ctxAny); err != nil {`,
+            `\treturn ${zero}, err`,
+            `}`,
+            `picked := ctxAny`,
+            ...fieldPath.split(".").filter(Boolean).map((part) => {
+              const p = exportStringLiteral(part);
+              return [
+                `if m, ok := picked.(map[string]any); ok {`,
+                `\tpicked = m[${p}]`,
+                `}`,
+              ].join("\n");
+            }),
+            `var description string`,
+            `switch v := picked.(type) {`,
+            `case string:`,
+            `\tdescription = v`,
+            `default:`,
+            `\tb, err := json.MarshalIndent(picked, "", "  ")`,
+            `\tif err != nil {`,
+            `\t\treturn ${zero}, err`,
+            `\t}`,
+            `\tdescription = string(b)`,
+            `}`,
+          ]
+        : [
+            `ctxRaw, ok := state[${ctxKey}]`,
+            `if !ok {`,
+            `\treturn ${zero}, fmt.Errorf("example-select: missing context label %s", ${ctxKey})`,
+            `}`,
+            `b, err := json.MarshalIndent(ctxRaw, "", "  ")`,
+            `if err != nil {`,
+            `\treturn ${zero}, err`,
+            `}`,
+            `description := string(b)`,
+          ];
+      return [
+        `// Per-item relevance filter — ${outName ?? outGo} with selection_reason`,
+        ...descriptionBlock,
+        `inJSON, err := json.Marshal(input)`,
+        `if err != nil {`,
+        `\treturn ${zero}, err`,
+        `}`,
+        `var items []json.RawMessage`,
+        `if len(inJSON) > 0 && inJSON[0] == '[' {`,
+        `\tif err := json.Unmarshal(inJSON, &items); err != nil {`,
+        `\t\treturn ${zero}, err`,
+        `\t}`,
+        `} else {`,
+        `\titems = []json.RawMessage{inJSON}`,
+        `}`,
+        `schema := json.RawMessage([]byte("{\\"chain_of_thought\\":\\"string\\",\\"is_relevant\\":\\"boolean\\"}"))`,
+        `template := ${exportStringLiteral(prompt)}`,
+        `out := make([]${itemGo}, 0, len(items))`,
+        `for _, item := range items {`,
+        `\task := strings.ReplaceAll(strings.ReplaceAll(template, "{description}", description), "{example}", string(item))`,
+        `\tvalue, err := llmStructured(ask, schema)`,
+        `\tif err != nil {`,
+        `\t\treturn ${zero}, err`,
+        `\t}`,
+        `\tvar verdict map[string]any`,
+        `\tif err := json.Unmarshal(value, &verdict); err != nil {`,
+        `\t\treturn ${zero}, err`,
+        `\t}`,
+        `\tif relevant, _ := verdict["is_relevant"].(bool); !relevant {`,
+        `\t\tcontinue`,
+        `\t}`,
+        `\tvar row map[string]any`,
+        `\tif err := json.Unmarshal(item, &row); err != nil {`,
+        `\t\treturn ${zero}, err`,
+        `\t}`,
+        `\tif reason, ok := verdict["chain_of_thought"].(string); ok {`,
+        `\t\trow["selection_reason"] = reason`,
+        `\t}`,
+        `\tb, err := json.Marshal(row)`,
+        `\tif err != nil {`,
+        `\t\treturn ${zero}, err`,
+        `\t}`,
+        `\tvar one ${itemGo}`,
+        `\tif err := json.Unmarshal(b, &one); err != nil {`,
+        `\t\treturn ${zero}, err`,
+        `\t}`,
+        `\tout = append(out, one)`,
+        `}`,
+        `return out, nil`,
+      ].join("\n");
+    }
     case "quote":
       return [
         "// Match LLM quote strings against source document byte offsets (no LLM cost)",
@@ -201,6 +305,8 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         "}",
         "return input, nil",
       ].join("\n");
+    case "webhook":
+      return exportWebhookStepBodyGo(m, zero);
     case "output":
       return [`// Snapshot ${outName ?? inName ?? "pipeline output"}`, "return input, nil"].join("\n");
     default:
@@ -208,7 +314,8 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
   }
 }
 
-function stepBodyUsesPipelineState(body: string): boolean {
+function stepBodyUsesPipelineState(body: string, m?: PipelineModule): boolean {
+  if (m?.kind === "webhook" && webhookStepUsesPipelineState(m)) return true;
   // AI : real state reads only — ignore commented lines.
   return body
     .split("\n")
@@ -240,7 +347,7 @@ function generateStepFnGo(
   const outGo = exportSpineOutGo(m, project, index);
   const meta = MODULE_META[m.kind];
   const body = generateStepBody(m, project, outGo, inGo);
-  const stateParam = stepBodyUsesPipelineState(body) ? "state" : "_state";
+  const stateParam = stepBodyUsesPipelineState(body, m) ? "state" : "_state";
   const docLines = [
     `// ${m.label.replace(/\*\//g, "*\\/")}`,
     `// Kind: ${meta.label}`,

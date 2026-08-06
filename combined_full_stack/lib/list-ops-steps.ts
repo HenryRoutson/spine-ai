@@ -172,7 +172,10 @@ export function buildChunkTypeScript(
 export function listOpsGeneratedCode(m: PipelineModule, models: StructureModel[]): string {
   if (m.kind === ModuleKind.Chunk) return buildChunkTypeScript(m, models)
   if (isMergeModuleKind(m.kind)) {
-    return buildMergeTypeScript(resolveMergePolicy(m), m.mergeCustom)
+    return buildMergeTypeScript(resolveMergePolicy(m), m.mergeCustom, {
+      stateLabel: m.mergeStateLabel,
+      wrapListField: m.mergeWrapListField,
+    })
   }
   return "(input) => input"
 }
@@ -181,10 +184,16 @@ export function syncListOpsStepModule(
   m: PipelineModule,
   models: StructureModel[],
   prev?: PipelineModule,
+  modules?: PipelineModule[],
 ): { module: PipelineModule; models: StructureModel[] } {
   if (!isListOpsModule(m)) return { module: m, models }
 
   const code = listOpsGeneratedCode(m, models)
+  const existingTs = m.fallbackList?.[0]?.typescript
+  if (existingTs === code && m.inType && m.outType) {
+    return { module: m, models }
+  }
+
   let next: PipelineModule = {
     ...m,
     fallbackList: [makeCustomCodeEntry(CustomCodeLanguage.TypeScript, code)],
@@ -196,7 +205,7 @@ export function syncListOpsStepModule(
   }
 
   if (isMergeModuleKind(m.kind)) {
-    return deriveMergeStepTypes(next, prev, models, resolveMergePolicy(m))
+    return deriveMergeStepTypes(next, prev, models, resolveMergePolicy(m), modules)
   }
 
   return { module: next, models }
@@ -206,14 +215,15 @@ export function syncListOpsModules(
   modules: PipelineModule[],
   models: StructureModel[],
 ): { modules: PipelineModule[]; models: StructureModel[] } {
-  let nextModels = models
+  let scratchModels = models
   const nextModules = modules.map((m, i) => {
     const prev = i > 0 ? modules[i - 1] : undefined
-    const synced = syncListOpsStepModule(m, nextModels, prev)
-    nextModels = synced.models
+    const synced = syncListOpsStepModule(m, scratchModels, prev, modules)
+    scratchModels = synced.models
     return synced.module
   })
-  return { modules: nextModules, models: nextModels }
+  // AI : ephemeral sm_merge_* / sm_merge_wrap_* models are for type derivation only — not persisted.
+  return { modules: nextModules, models }
 }
 
 export function defaultLayerPolicy(policy?: MergePolicy): MergeLayerPolicy {

@@ -1,0 +1,334 @@
+[
+  {
+    "id": "job-bathroom-ceiling-collapse",
+    "title": "Upstairs bathroom leak — kitchen ceiling collapse",
+    "work_description": "Water escaped from an upstairs ensuite. Plasterboard ceiling in the kitchen below failed and fell. Timber joists were wet; insurer requested drying before rebuild.",
+    "billed_items": [
+      {
+        "work_item_id": "WI-00001",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00002",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00061",
+        "quantity": 12
+      },
+      {
+        "work_item_id": "WI-00068",
+        "quantity": 12
+      },
+      {
+        "work_item_id": "WI-00071",
+        "quantity": 2
+      },
+      {
+        "work_item_id": "WI-00072",
+        "quantity": 14
+      },
+      {
+        "work_item_id": "WI-00073",
+        "quantity": 12
+      },
+      {
+        "work_item_id": "WI-00091",
+        "quantity": 2
+      },
+      {
+        "work_item_id": "WI-00041",
+        "quantity": 12
+      },
+      {
+        "work_item_id": "WI-00042",
+        "quantity": 12
+      },
+      {
+        "work_item_id": "WI-00051",
+        "quantity": 12
+      }
+    ]
+  },
+  {
+    "id": "job-slow-leak-cupping",
+    "title": "Slow bathroom leak — cupped timber floor",
+    "work_description": "Long-term leak at shower screen. Kitchen ceiling stained but intact; hallway timber flooring cupped. Scope focused on leak rectification, drying, and floor restoration.",
+    "billed_items": [
+      {
+        "work_item_id": "WI-00003",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00011",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00031",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00032",
+        "quantity": 14
+      },
+      {
+        "work_item_id": "WI-00033",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00071",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00072",
+        "quantity": 7
+      },
+      {
+        "work_item_id": "WI-00058",
+        "quantity": 6
+      }
+    ]
+  },
+  {
+    "id": "job-bathroom-stack-failure",
+    "title": "Bathroom stack leak — multi-room water damage",
+    "work_description": "Failed waste connection in upstairs bathroom affected kitchen ceiling and laundry wall. Full strip of wet linings, structural check, and phased reinstatement.",
+    "billed_items": [
+      {
+        "work_item_id": "WI-00001",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00005",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00061",
+        "quantity": 8
+      },
+      {
+        "work_item_id": "WI-00062",
+        "quantity": 16
+      },
+      {
+        "work_item_id": "WI-00071",
+        "quantity": 2
+      },
+      {
+        "work_item_id": "WI-00074",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00092",
+        "quantity": 3
+      },
+      {
+        "work_item_id": "WI-00041",
+        "quantity": 8
+      },
+      {
+        "work_item_id": "WI-00043",
+        "quantity": 16
+      },
+      {
+        "work_item_id": "WI-00051",
+        "quantity": 8
+      },
+      {
+        "work_item_id": "WI-00052",
+        "quantity": 16
+      }
+    ]
+  },
+  {
+    "id": "job-roof-tile-storm",
+    "title": "Roof storm damage — tile and flashing",
+    "work_description": "Hail and wind lifted tiles on north slope. Minor ceiling staining in bedroom; primary scope is roof make-safe and tile replacement.",
+    "billed_items": [
+      {
+        "work_item_id": "WI-00029",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00021",
+        "quantity": 18
+      },
+      {
+        "work_item_id": "WI-00022",
+        "quantity": 12
+      },
+      {
+        "work_item_id": "WI-00023",
+        "quantity": 6
+      },
+      {
+        "work_item_id": "WI-00058",
+        "quantity": 4
+      }
+    ]
+  },
+  {
+    "id": "job-roof-valley-leak",
+    "title": "Valley flashing leak — patch ceiling stain only",
+    "work_description": "Active roof leak at valley during heavy rain. Roofer replaced flashing; internal works limited to stain block and ceiling touch-up where leak tracked.",
+    "billed_items": [
+      {
+        "work_item_id": "WI-00023",
+        "quantity": 8
+      },
+      {
+        "work_item_id": "WI-00024",
+        "quantity": 4
+      },
+      {
+        "work_item_id": "WI-00027",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00058",
+        "quantity": 3
+      },
+      {
+        "work_item_id": "WI-00045",
+        "quantity": 2
+      }
+    ]
+  },
+  {
+    "id": "job-kitchen-cabinet-refresh",
+    "title": "Kitchen renovation — cabinetry and bench",
+    "work_description": "Owner upgrade: new flat-pack kitchen, stone bench, and connections. No water damage; bathroom and ceilings out of scope.",
+    "billed_items": [
+      {
+        "work_item_id": "WI-00081",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00082",
+        "quantity": 6
+      },
+      {
+        "work_item_id": "WI-00083",
+        "quantity": 3
+      },
+      {
+        "work_item_id": "WI-00084",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00010",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00018",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "id": "job-pool-fence-compliance",
+    "title": "Pool fence compliance upgrade",
+    "work_description": "Council notice: replace non-compliant pool gate and latch hardware to current standard.",
+    "billed_items": [
+      {
+        "work_item_id": "WI-00100",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00055",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "id": "job-office-fitout",
+    "title": "Commercial office data and lighting fitout",
+    "work_description": "Tenant improvement: new LED panels, data drops, and partition lining in open-plan suite.",
+    "billed_items": [
+      {
+        "work_item_id": "WI-00013",
+        "quantity": 24
+      },
+      {
+        "work_item_id": "WI-00019",
+        "quantity": 8
+      },
+      {
+        "work_item_id": "WI-00043",
+        "quantity": 45
+      },
+      {
+        "work_item_id": "WI-00052",
+        "quantity": 120
+      }
+    ]
+  },
+  {
+    "id": "job-driveway-replace",
+    "title": "Driveway concrete replacement",
+    "work_description": "Remove failed driveway section and pour new exposed aggregate slab with control joints.",
+    "billed_items": [
+      {
+        "work_item_id": "WI-00067",
+        "quantity": 4
+      },
+      {
+        "work_item_id": "WI-00040",
+        "quantity": 28
+      }
+    ]
+  },
+  {
+    "id": "job-hvac-split-install",
+    "title": "Split-system AC — lounge install",
+    "work_description": "Supply and install reverse-cycle split system with new dedicated circuit and condenser pad.",
+    "billed_items": [
+      {
+        "work_item_id": "WI-00017",
+        "quantity": 1
+      },
+      {
+        "work_item_id": "WI-00015",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "id": "job-exterior-repaint",
+    "title": "Whole-house exterior repaint",
+    "work_description": "Wash down, scrape, and repaint weatherboard elevations including trims and fascia.",
+    "billed_items": [
+      {
+        "work_item_id": "WI-00053",
+        "quantity": 180
+      },
+      {
+        "work_item_id": "WI-00054",
+        "quantity": 65
+      },
+      {
+        "work_item_id": "WI-00030",
+        "quantity": 1
+      }
+    ]
+  },
+  {
+    "id": "job-deck-extension",
+    "title": "Timber deck extension — rear yard",
+    "work_description": "New hardwood deck on screw piles with balustrade; unrelated to internal water claims.",
+    "billed_items": [
+      {
+        "work_item_id": "WI-00094",
+        "quantity": 2
+      },
+      {
+        "work_item_id": "WI-00095",
+        "quantity": 6
+      },
+      {
+        "work_item_id": "WI-00056",
+        "quantity": 28
+      }
+    ]
+  }
+]

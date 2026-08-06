@@ -10,6 +10,9 @@ const homeworkSetup = resolve(SEEDS_DIR, "../documents/homework_grader/universit
 const exampleSelectSeed = resolve(SEEDS_DIR, "example_select_demo.json")
 const exampleSelectSetup = resolve(SEEDS_DIR, "../documents/example_select_demo/roof_storm_inference.json")
 const exampleSelectTest = resolve(SEEDS_DIR, "../documents/example_select_demo/kitchen_reno_testing.json")
+const exampleSelect2Seed = resolve(SEEDS_DIR, "billed_work_catalog_select.json")
+const exampleSelect2Setup = resolve(SEEDS_DIR, "../documents/billed_work_catalog_select/billed_work_catalog_select_inference.json")
+const exampleSelect2Test = resolve(SEEDS_DIR, "../documents/billed_work_catalog_select/billed_work_catalog_select_testing.json")
 
 describe("spine cli run", () => {
   it("returns help for empty argv", async () => {
@@ -121,6 +124,33 @@ describe("spine cli run", () => {
       exampleSelectSeed,
       "--file",
       exampleSelectTest,
+    ])
+    expect(result.command).toBe("validate test")
+    expect(result.ok).toBe(true)
+    expect(result.issues.filter((i) => i.level === "error")).toHaveLength(0)
+  })
+
+  it("validate setup passes billed work catalog select inference preset", async () => {
+    const result = await runSpineCli([
+      "validate",
+      "setup",
+      "--project",
+      exampleSelect2Seed,
+      "--file",
+      exampleSelect2Setup,
+    ])
+    expect(result.command).toBe("validate setup")
+    expect(result.ok).toBe(true)
+  })
+
+  it("validate test passes billed work catalog select fixture", async () => {
+    const result = await runSpineCli([
+      "validate",
+      "test",
+      "--project",
+      exampleSelect2Seed,
+      "--file",
+      exampleSelect2Test,
     ])
     expect(result.command).toBe("validate test")
     expect(result.ok).toBe(true)

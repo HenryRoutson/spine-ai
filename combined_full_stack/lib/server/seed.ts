@@ -139,6 +139,34 @@ const SeedFileSchema = z.object({
       exampleContextField: z.string().optional(),
       exampleReasonField: z.string().optional(),
       examplePreFilterMax: z.number().int().min(1).optional(),
+      mergeStateLabel: z.string().optional(),
+      mergeWrapListField: z.string().optional(),
+      mergeCustom: z.string().optional(),
+      mergePolicy: z
+        .object({
+          default: z
+            .object({
+              list: z.string().optional(),
+              dict: z.string().optional(),
+              scalar: z.string().optional(),
+              itemKey: z.string().optional(),
+            })
+            .optional(),
+          rules: z
+            .array(
+              z.object({
+                path: z.string(),
+                policy: z.object({
+                  list: z.string().optional(),
+                  dict: z.string().optional(),
+                  scalar: z.string().optional(),
+                  itemKey: z.string().optional(),
+                }),
+              }),
+            )
+            .optional(),
+        })
+        .optional(),
       cached: z.boolean(),
       auto: z.boolean().optional(),
       avgMs: z.number(),
@@ -197,6 +225,7 @@ export interface SeedDocSpec {
   type: InputType;
   label: DocLabel;
   path: string; // absolute path under the repo /documents folder (pdf or plain text/json)
+  relativeFile: string; // path relative to documents/ (e.g. billed_work_catalog_select/foo.txt)
 }
 
 export interface ProjectSeed {
@@ -313,8 +342,20 @@ export function loadProjectSeed(path: string): ProjectSeed {
       type: d.type,
       label: d.label,
       path: resolveSeedDocPath(d.file),
+      relativeFile: d.file,
     })),
   };
+}
+
+// AI : resolve bundled seed docs for export — id, kind, then numbered-clone base name.
+export function resolveProjectSeed(project: Project): ProjectSeed | undefined {
+  const seeds = allProjectSeeds();
+  const byId = seeds.find((s) => s.project.id === project.id);
+  if (byId) return byId;
+  const byKind = seeds.find((s) => s.project.kind === project.kind);
+  if (byKind) return byKind;
+  const baseName = project.name.replace(/ \d+$/, "");
+  return seeds.find((s) => s.project.name === baseName);
 }
 
 // AI : every JSON under seeds/ is a project — drop a file in, it lands in the store on next boot.

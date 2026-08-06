@@ -1,10 +1,16 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+import { buildCustomFnSource, compileCustomFn, instrumentCustomCodeLines, runCustomFn, splitCustomCodeParts } from "@/lib/custom_code"
 import { instrumentCodeLines, makeAsyncFunctionSource } from "@/lib/custom_code_trace"
 import { wrapAssertTypeScript } from "@/lib/assert_steps"
-import { buildCustomFnSource } from "@/lib/custom_code"
+import { buildMergeTypeScript } from "@/lib/merger"
 
-function compileInstrumented(code: string, asAssert = false, visual = false): void {
-  const inst = instrumentCodeLines(code, { visual })
+function compileInstrumented(
+  code: string,
+  asAssert = false,
+  visual = false,
+  instrument = instrumentCodeLines,
+): void {
+  const inst = instrument(code, { visual })
   const built = asAssert ? buildCustomFnSource(wrapAssertTypeScript(inst)) : buildCustomFnSource(inst)
   const src = visual ? makeAsyncFunctionSource(built) : built
   // eslint-disable-next-line no-new-function -- mirrors browser inference compile path
@@ -82,5 +88,56 @@ describe("instrumentCodeLines (AST)", () => {
 
   it("handles preamble + trailing arrow", () => {
     compileInstrumented(`const x = 1;\n(input) => x`)
+  })
+
+  it("compiles merge step codegen with helper functions and (input, state) arrow", () => {
+    const code = buildMergeTypeScript(undefined, undefined, {
+      stateLabel: "Normalize Case",
+      wrapListField: "selected_examples",
+    })
+    const src = buildCustomFnSource(code)
+    // eslint-disable-next-line no-new-function -- mirrors browser inference compile path
+    const fn = new Function(`return ${src}`)() as (input: unknown, state: Record<string, unknown>) => unknown
+    const out = fn([{ id: "ex-1", selection_reason: "relevant" }], {
+      "Normalize Case": { description: "leak" },
+    }) as { description?: string; selected_examples?: unknown[] }
+    expect(out.description).toBe("leak")
+    expect(out.selected_examples).toHaveLength(1)
+  })
+
+  it("does not instrument merge runtime helpers under visual mode", () => {
+    const code = buildMergeTypeScript(undefined, undefined, {
+      stateLabel: "Normalize Case",
+      wrapListField: "selected_examples",
+    })
+    const parts = splitCustomCodeParts(code)
+    expect(parts?.preamble).toBeTruthy()
+    expect(parts?.preamble).not.toContain("await __forgeTrace")
+    const inst = instrumentCustomCodeLines(code, { visual: true })
+    expect(inst.slice(0, inst.indexOf("(input, state)"))).not.toContain("await __forgeTrace")
+    expect(inst).toMatch(/\(input, state\)[\s\S]*await __forgeTrace/)
+    expect(() => compileCustomFn(instrumentCustomCodeLines(code, { visual: false }))).not.toThrow()
+  })
+
+  it("runs merge step with visual trace without instrumenting runtime helpers", async () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0)
+      return 0
+    })
+    const code = buildMergeTypeScript(undefined, undefined, {
+      stateLabel: "Normalize Case",
+      wrapListField: "selected_examples",
+    })
+    const inst = instrumentCustomCodeLines(code, { visual: true })
+    const t0 = performance.now()
+    const out = await runCustomFn(
+      inst,
+      [{ id: "ex-1", selection_reason: "relevant" }],
+      { "Normalize Case": { description: "leak" } },
+      { onTrace: () => {}, maxRunMs: 5_000, profileCode: code },
+    )
+    expect(performance.now() - t0).toBeLessThan(2_000)
+    expect((out as { description?: string }).description).toBe("leak")
+    vi.unstubAllGlobals()
   })
 })

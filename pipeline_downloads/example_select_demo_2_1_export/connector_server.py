@@ -18,7 +18,7 @@ load_dotenv()
 import pipeline_connector_pb2
 import pipeline_connector_pb2_grpc
 
-from example_select_demo_pipeline import configure_pipeline_runtime, run_pipeline
+from example_select_demo_2_1_pipeline import configure_pipeline_runtime, run_pipeline
 
 GRPC_PORT = os.environ.get("PIPELINE_GRPC_PORT", "50051")
 HTTP_PORT = int(os.environ.get("PIPELINE_HTTP_PORT", "8080"))

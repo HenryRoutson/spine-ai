@@ -6,7 +6,7 @@ import { SEEDS_DIR } from "@/lib/server/seed"
 
 describe("validate project command", () => {
   it("passes for example seeds with golden tests", () => {
-    const seeds = ["batch_llm_example.json", "example_select_demo.json", "gps_site_profiling.json", "procurement_match.json"]
+    const seeds = ["batch_llm_example.json", "example_select_demo.json", "billed_work_catalog_select.json", "gps_site_profiling.json", "procurement_match.json"]
     for (const file of seeds) {
       const ctx = loadProjectContext(resolve(SEEDS_DIR, file))
       const result = validateProjectCommand(ctx)

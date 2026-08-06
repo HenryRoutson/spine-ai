@@ -1,20 +1,29 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { AlertTriangle, Loader2 } from "lucide-react"
 import { useStore } from "@/lib/store"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { timeAgo } from "@/lib/time-ago"
 
 export function ProjectSettings() {
-  const { project, deleteProject } = useStore()
+  const { project, patchProject, deleteProject } = useStore()
   const [confirmName, setConfirmName] = useState("")
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [langfuseConfigured, setLangfuseConfigured] = useState<boolean | null>(null)
 
   const nameMatches = confirmName.trim() === project.name
   const canDelete = nameMatches && !project.teamReadOnly && !deleting
+
+  useEffect(() => {
+    void fetch("/api/langfuse/status")
+      .then((r) => r.json())
+      .then((data: { configured?: boolean }) => setLangfuseConfigured(!!data.configured))
+      .catch(() => setLangfuseConfigured(false))
+  }, [])
 
   async function handleDelete() {
     if (!canDelete) return
@@ -64,6 +73,33 @@ export function ProjectSettings() {
               </div>
             ) : null}
           </dl>
+        </section>
+
+        <section className="mb-6 rounded-lg border border-border bg-card">
+          <div className="border-b border-border px-4 py-3">
+            <h3 className="text-sm font-semibold">Langfuse export</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Mirror pipeline runs to Langfuse as secondary telemetry. Spine Logging remains the canonical in-app trace.
+            </p>
+          </div>
+          <label className="flex cursor-pointer items-start gap-3 px-4 py-3">
+            <Switch
+              checked={!!project.langfuseExport}
+              disabled={project.teamReadOnly || langfuseConfigured === false}
+              onCheckedChange={(checked) => patchProject({ langfuseExport: !!checked })}
+              className="mt-0.5"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">Export runs to Langfuse</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {langfuseConfigured === null
+                  ? "Checking server configuration…"
+                  : langfuseConfigured
+                    ? "Requires LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY on the server (optional LANGFUSE_BASE_URL for self-host)."
+                    : "Server is not configured — set Langfuse API keys in the deployment environment first."}
+              </span>
+            </span>
+          </label>
         </section>
 
         <section className="rounded-lg border border-destructive/40 bg-card">

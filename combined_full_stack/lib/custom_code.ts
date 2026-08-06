@@ -16,12 +16,15 @@ import type { CodeLineProfile } from "@/lib/code-exec-ui";
 import {
   createForgeTrace,
   formatLineProfileLog,
+  instrumentArrowSource,
   instrumentCodeLines,
   makeAsyncFunctionSource,
   type CodeTraceEvent,
   type ForgeTraceFinish,
   type ForgeTraceFn,
+  type InstrumentCodeOpts,
 } from "@/lib/custom_code_trace";
+import { previewCustomCodeInput, truncateClientStepText, MAX_CLIENT_LOG_LINE_CHARS } from "@/lib/client-step-payload";
 
 export type { CustomCodeLanguage, CustomCodeEntry } from "@/lib/types";
 export type { ParsedCustomCodeEntry } from "@/lib/custom_code_entries";
@@ -102,37 +105,67 @@ export function numberedCodeBlock(code: string): string {
 }
 
 export function formatCustomCodeFailureLog(f: CustomCodeAttemptFailure, tag = "custom-code"): string {
-  const inputJson = JSON.stringify(f.input, null, 2);
   const parts = [
     `${tag} attempt ${f.attemptIndex + 1} (${f.language}) failed: ${f.error}`,
     "--- code ---",
     numberedCodeBlock(f.code),
     "--- input (reproduce) ---",
-    inputJson,
+    previewCustomCodeInput(f.input),
   ];
   if (f.stack?.trim()) {
     parts.push("--- stack ---", f.stack.trim());
   }
-  return parts.join("\n");
+  return truncateClientStepText(parts.join("\n"), MAX_CLIENT_LOG_LINE_CHARS);
 }
 
 // AI : wrap raw user code into a self-invoking `(input, state) => output` source string.
 // AI : pure string transform — does NOT evaluate. Both compile (browser) and syntax-check (server) share it.
+function trailingArrowParams(arrow: string): string[] {
+  const head = arrow.trim().replace(/^async\s+/, "");
+  const params = head.match(/^\(([^)]*)\)/)?.[1]?.trim() ?? "input";
+  if (!params) return ["input"];
+  return params.split(",").map((p) => p.trim()).filter(Boolean);
+}
+
+export type CustomCodeParts = {
+  preamble: string;
+  arrow: string;
+};
+
+export function splitCustomCodeParts(code: string): CustomCodeParts | undefined {
+  const trimmed = code.trim();
+  const mainArrow =
+    trimmed.match(/;\s*((?:async\s+)?\([^)]*\)\s*=>[\s\S]+)$/) ??
+    trimmed.match(/\n\s*((?:async\s+)?\([^)]*\)\s*=>[\s\S]+)$/);
+  if (!mainArrow) return undefined;
+  const arrowStart = trimmed.lastIndexOf(mainArrow[1]!);
+  const preamble = trimmed.slice(0, arrowStart).replace(/[;\s]*$/, "");
+  const arrow = trimmed.slice(arrowStart);
+  if (!preamble) return undefined;
+  return { preamble, arrow };
+}
+
+// AI : visual line profiler — instrument only the trailing arrow, not generated merge/chunk runtime.
+export function instrumentCustomCodeLines(code: string, opts: InstrumentCodeOpts = {}): string {
+  const parts = splitCustomCodeParts(code);
+  if (!parts) return instrumentCodeLines(code, opts);
+  const arrowInst = instrumentArrowSource(parts.arrow, opts);
+  return `${parts.preamble}\n${arrowInst}`;
+}
+
+// AI : merge/chunk codegen is preamble helpers + trailing arrow — line profiler must not instrument helpers.
 export function buildCustomFnSource(code: string): string {
   const trimmed = code.trim();
+  const parts = splitCustomCodeParts(trimmed);
+  if (parts) {
+    const { preamble, arrow } = parts;
+    const args = trailingArrowParams(arrow);
+    const outerParams = args.join(", ");
+    const callArgs = args.join(", ");
+    return `(${outerParams}) => { ${preamble}; return (${arrow})(${callArgs}); }`;
+  }
   const isExpression = /^\s*(\(|function\b|async\b)/.test(trimmed);
   if (isExpression) return `(${trimmed})`;
-  // AI : seed steps prefix helper consts then a trailing `(arg)=>…` — invoke it with input.
-  const mainArrow =
-    trimmed.match(/;\s*(\([^)]*\)\s*=>[\s\S]+)$/) ?? trimmed.match(/\n\s*(\([^)]*\)\s*=>[\s\S]+)$/);
-  if (mainArrow) {
-    const arrowStart = trimmed.lastIndexOf(mainArrow[1]!);
-    const preamble = trimmed.slice(0, arrowStart).replace(/[;\s]*$/, "");
-    const arrow = trimmed.slice(arrowStart);
-    return preamble
-      ? `((input) => { ${preamble}; return (${arrow})(input); })`
-      : `((input) => { return (${arrow})(input); })`;
-  }
   return `((input) => { ${trimmed} })`;
 }
 
@@ -160,7 +193,9 @@ function compileTracedCustomFn(code: string, onTrace: (event: CodeTraceEvent) =>
     : undefined
   const traceFn = createForgeTrace(onTrace, paint)
   const built = buildCustomFnSource(code)
-  const src = visual ? makeAsyncFunctionSource(built) : built
+  // AI : visual instrumentation already async-ifies the trailing arrow — don't double-wrap the outer fn.
+  const innerAsync = splitCustomCodeParts(code)?.arrow.trimStart().startsWith("async ")
+  const src = visual && !innerAsync ? makeAsyncFunctionSource(built) : built
   const fn = new Function("__forgeTrace", `return ${src}`)(traceFn)
   invariant(typeof fn === "function", "custom code must evaluate to a function (input) => output");
   const wrapped = fn as CustomFn & { __forgeTrace?: ReturnType<typeof createForgeTrace> };
@@ -316,7 +351,7 @@ async function runCustomEntry(
 ): Promise<unknown> {
   const entryOpts: CustomCodeTraceOpts = { ...opts, profileCode: entry.code };
   if (entry.language === "python") return runPythonFn(entry.code, input, state, entryOpts);
-  const code = opts?.onTrace ? instrumentCodeLines(entry.code, { visual: true }) : entry.code;
+  const code = opts?.onTrace ? instrumentCustomCodeLines(entry.code, { visual: true }) : entry.code;
   return runCustomFn(code, input, state, entryOpts);
 }
 
@@ -373,7 +408,7 @@ export async function runAssertWithFallbacks(
     const entry = entries[i]!;
     const userCode =
       opts?.onTrace && entry.language !== "python"
-        ? instrumentCodeLines(entry.code, { visual: true })
+        ? instrumentCustomCodeLines(entry.code, { visual: true })
         : entry.code;
     const wrapped = { ...entry, code: wrapAssertCode(userCode, entry.language, expectedOutputs ?? {}) };
     const entryOpts: CustomCodeTraceOpts = { ...opts, profileCode: entry.code };

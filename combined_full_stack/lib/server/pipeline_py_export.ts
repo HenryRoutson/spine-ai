@@ -10,6 +10,7 @@ import {
   exportSpineInPy,
   exportSpineOutPy,
   generateCombineStepBodyPy,
+  generateExampleContextLinesPy,
   generateInputStepBodyPy,
   generateOrchestratorPy,
   modelName,
@@ -18,6 +19,7 @@ import {
   pyCustomCodeCall,
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsPy } from "./pipeline_export_setup";
+import { exportWebhookStepBodyPy, webhookStepUsesPipelineState } from "@/lib/webhook-step";
 import { isMergeModuleKind } from "@/lib/module-kinds";
 import { MODULE_META } from "./types";
 import { stepEmitsList } from "./type_expr";
@@ -93,7 +95,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
       const itemsLine = inPy.startsWith("list[") ? "items = input" : "items = input if isinstance(input, list) else [input]";
       return [
         `# Per-item relevance filter — ${outName ?? outPy} with selection_reason`,
-        `description = json.dumps(state[${exportStringLiteral(ctxLabel)}], indent=2, default=str)`,
+        ...generateExampleContextLinesPy(ctxLabel, m.exampleContextField),
         itemsLine,
         `template = ${exportStringLiteral(prompt)}`,
         `def prompt_for(item: Any) -> str:`,
@@ -160,6 +162,8 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
         "await wait_for_human_review(input)",
         castOut("input"),
       ].join("\n");
+    case "webhook":
+      return exportWebhookStepBodyPy(m, outPy);
     case "output":
       return [`# Snapshot ${outName ?? inName ?? "pipeline output"}`, castOut("input")].join("\n");
     default:
@@ -167,7 +171,8 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
   }
 }
 
-function stepBodyUsesPipelineState(body: string): boolean {
+function stepBodyUsesPipelineState(body: string, m?: PipelineModule): boolean {
+  if (m?.kind === "webhook" && webhookStepUsesPipelineState(m)) return true;
   // AI : real state reads only — ignore commented lines.
   return body
     .split("\n")
@@ -181,7 +186,7 @@ function generateStepFn(m: PipelineModule, project: Project, index: number): str
   const outPy = exportSpineOutPy(m, project, index);
   const meta = MODULE_META[m.kind];
   const body = generateStepBody(m, project, outPy, inPy);
-  const stateParam = stepBodyUsesPipelineState(body) ? "state" : "_state";
+  const stateParam = stepBodyUsesPipelineState(body, m) ? "state" : "_state";
   const docLines = [
     m.label,
     `Kind: ${meta.label}`,

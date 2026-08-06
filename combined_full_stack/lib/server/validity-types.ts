@@ -19,6 +19,7 @@ export enum InvalidKind {
   JsonInputMismatch = "json-input-mismatch",
   StructureField = "structure-field",
   MissingCombineBeforeInput = "missing-combine-before-input",
+  MissingWebhookUrl = "missing-webhook-url",
 }
 
 export interface InvalidStep {

@@ -39,6 +39,13 @@ import { computeRunFingerprint, buildRunInputDocIds, stepCacheKey } from "../run
 import { writeStepCache } from "../step_cache";
 import { validateStepOutput } from "../structure";
 import { ensureModelOptionsFresh } from "../openrouter_models";
+import {
+  beginLangfusePipelineRun,
+  exportLangfuseRunStep,
+  finalizeLangfusePipelineRun,
+  langfuseTraceUrl,
+  resumeLangfusePipelineRun,
+} from "../langfuse_export";
 import { modelById, recordStepModel, snapshotForByLabel, stepFailuresFor, stepServerLogs, validatesStepOutputAsList } from "./helpers";
 import { persistArtifacts, persistCustomCodeArtifacts } from "./artifacts";
 import { restoreCtx } from "./context";
@@ -137,6 +144,14 @@ export async function runPipeline(
   const cacheOwnerId = opts.cacheOwnerId ?? "local";
   const savedCentsAcc = { value: 0 };
 
+  const langfuseTraceId = await beginLangfusePipelineRun({
+    project,
+    projectId,
+    runId,
+    inputDocIds: fingerprintInputDocIds,
+    source: opts.runMeta?.source,
+  });
+
   const writeLive = createWriteLive(project, model, steps, opts.liveHtml ?? persist);
   await runLinearStepsFrom(
     {
@@ -177,6 +192,13 @@ export async function runPipeline(
     fingerprint,
     ...opts.runMeta,
   };
+
+  const closedTraceId = await finalizeLangfusePipelineRun(run);
+  const exportedTraceId = closedTraceId ?? langfuseTraceId;
+  if (exportedTraceId) {
+    run.langfuseTraceId = exportedTraceId;
+    run.langfuseTraceUrl = langfuseTraceUrl(exportedTraceId);
+  }
 
   writeLive(-1);
 
@@ -232,6 +254,13 @@ export async function resumeRunPipeline(
       checkpoint.ctx.inputByModule ?? {},
     );
   const fingerprint = computeRunFingerprint(project, model, fingerprintInputDocIds);
+  const langfuseTraceId = await resumeLangfusePipelineRun({
+    project,
+    projectId: checkpoint.projectId,
+    runId: checkpoint.runId,
+    inputDocIds: fingerprintInputDocIds,
+    source: opts.runMeta?.source,
+  });
   const ctx = restoreCtx(project, store, ledger, model, checkpoint.ctx);
   const steps: RunStep[] = [...checkpoint.steps];
   const artifacts: { moduleId: ModuleId; structure?: StructureModel; value: unknown }[] = steps
@@ -369,10 +398,14 @@ export async function resumeRunPipeline(
     outputJson: result.json,
     inputDescription: m.inputDescription?.trim() || undefined,
     llmCalls: result.llmCalls?.length ? result.llmCalls : undefined,
+    exampleSelectVerdicts: result.exampleSelectVerdicts?.length
+      ? result.exampleSelectVerdicts
+      : undefined,
     failures: stepFailuresFor(result, status, ctx.stepExtraFailures),
     serverLogs: stepServerLogs(serverLogs, m.id),
     codeProfile: opts.codeProfile,
   });
+  exportLangfuseRunStep(steps[steps.length - 1]!);
   await opts.onStep?.({ index: checkpoint.stepIndex, total: project.modules.length, moduleId: m.id, label: m.label, status });
   if (status === "error") {
     writeLive(-1);
@@ -389,6 +422,12 @@ export async function resumeRunPipeline(
       fingerprint,
       ...opts.runMeta,
     };
+    const closedTraceId = await finalizeLangfusePipelineRun(run);
+    const exportedTraceId = closedTraceId ?? langfuseTraceId;
+    if (exportedTraceId) {
+      run.langfuseTraceId = exportedTraceId;
+      run.langfuseTraceUrl = langfuseTraceUrl(exportedTraceId);
+    }
     if (persist) {
       persistArtifacts(checkpoint.runId, checkpoint.inputDocId, store, artifacts, project.modules, project.models);
       store.addRun(checkpoint.projectId, run);
@@ -435,6 +474,13 @@ export async function resumeRunPipeline(
     fingerprint,
     ...opts.runMeta,
   };
+
+  const closedTraceId = await finalizeLangfusePipelineRun(run);
+  const exportedTraceId = closedTraceId ?? langfuseTraceId;
+  if (exportedTraceId) {
+    run.langfuseTraceId = exportedTraceId;
+    run.langfuseTraceUrl = langfuseTraceUrl(exportedTraceId);
+  }
 
   writeLive(-1);
   if (persist) {

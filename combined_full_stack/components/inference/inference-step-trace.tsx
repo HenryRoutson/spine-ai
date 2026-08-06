@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import {
   AlertTriangle,
   CheckCircle2,
@@ -40,8 +41,27 @@ import { isDocReferenceOutputJson } from "@/lib/step-doc"
 import { firstUserCodeEntry } from "@/lib/custom_code"
 import type { CodeExecUiState } from "@/lib/code-exec-ui"
 import { stepTraceIndentClass } from "@/lib/step-trace-layout"
+import {
+  formatStepElapsed,
+  STEP_RUNNING_WARN_MS,
+  stepRunningLimitMs,
+} from "@/lib/step-running-watch"
 
 export { stepTraceIndentClass } from "@/lib/step-trace-layout"
+
+function useStepRunningElapsed(active: boolean): number {
+  const [elapsed, setElapsed] = useState(0)
+  useEffect(() => {
+    if (!active) {
+      setElapsed(0)
+      return
+    }
+    const t0 = performance.now()
+    const id = window.setInterval(() => setElapsed(performance.now() - t0), 250)
+    return () => window.clearInterval(id)
+  }, [active])
+  return elapsed
+}
 
 export function stepDescriptionMeta(
   moduleId: ModuleId,
@@ -109,6 +129,10 @@ export function InferenceStepRow({
   runId?: string
 }) {
   const palette = useStatusPalette()
+  const runningElapsed = useStepRunningElapsed(state === "running")
+  const runningLimitMs = stepRunningLimitMs(module?.maxRunMs)
+  const runningSlow = state === "running" && runningElapsed >= STEP_RUNNING_WARN_MS
+  const runningOverLimit = state === "running" && runningElapsed >= runningLimitMs
   const descCheckFailed = inputDescriptionCheck?.matches === false
   const showDescCheckCalls =
     (state === "running" || state === "ok" || state === "error") &&
@@ -151,6 +175,17 @@ export function InferenceStepRow({
       {descriptionCheckCostCents != null && descriptionCheckCostCents > 0 && state !== "idle" && state !== "cached" && (
         <span className="font-mono text-[10px] text-muted-foreground">
           desc check · {formatCostCents(descriptionCheckCostCents)}
+        </span>
+      )}
+      {state === "running" && runningElapsed >= 500 && (
+        <span
+          className={cn(
+            "font-mono text-[10px] tabular-nums",
+            runningOverLimit ? "text-destructive" : runningSlow ? "text-chart-4" : "text-muted-foreground",
+          )}
+        >
+          {formatStepElapsed(runningElapsed)}
+          {runningOverLimit ? ` · max ${formatStepElapsed(runningLimitMs)}` : ""}
         </span>
       )}
     </div>

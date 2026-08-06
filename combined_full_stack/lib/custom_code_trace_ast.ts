@@ -195,6 +195,17 @@ function parseUserProgram(code: string): Program {
   }
 }
 
+export function instrumentArrowSourceAst(code: string, opts: InstrumentCodeOpts = {}): string {
+  const trimmed = code.trim()
+  if (!trimmed) return code
+  const visual = opts.visual === true
+  const ast = instrumentProgram(parseUserProgram(trimmed), visual)
+  if (isArrowExpressionProgram(ast)) {
+    return generate((ast.body[0] as ExpressionStatement).expression)
+  }
+  return instrumentCodeLinesAst(code, opts)
+}
+
 export function instrumentCodeLinesAst(code: string, opts: InstrumentCodeOpts = {}): string {
   const trimmed = code.trim()
   if (!trimmed) return code

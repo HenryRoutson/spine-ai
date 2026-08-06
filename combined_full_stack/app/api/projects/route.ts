@@ -4,7 +4,7 @@ import { apiError, requireAuthStore, storeAuthError } from "@/lib/server/api_con
 import { createProjectBodySchema, parseRequestJson } from "@/lib/server/api_schemas";
 import { HTTP, unknownProject } from "@/lib/server/api-errors";
 import { allProjectSeeds, blankProject, cloneProject } from "@/lib/server/seed";
-import { ensureSeedDocs } from "@/lib/server/store";
+import { ensureBundledSeedDocsForProject, ensureSeedDocs } from "@/lib/server/store";
 import { migrateProjectModules } from "@/lib/server/validity";
 import { logger } from "@/lib/server/server_logger";
 import type { ProjectId } from "@/lib/server/types";
@@ -38,7 +38,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    if (body.templateId) await ensureSeedDocs(store);
+    if (body.templateId) {
+      await ensureSeedDocs(store);
+      await ensureBundledSeedDocsForProject(store, project);
+    }
     store.saveProject(project);
     await store.flush();
   } catch (err) {

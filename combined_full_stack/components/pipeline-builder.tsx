@@ -117,7 +117,7 @@ export function PipelineBuilder() {
       }
       if (updated.kind === ModuleKind.Chunk || updated.kind === ModuleKind.Merge) {
         const prev = i > 0 ? modules[i - 1] : undefined
-        const synced = syncListOpsStepModule(updated, derivedModels, prev)
+        const synced = syncListOpsStepModule(updated, derivedModels, prev, modules)
         derivedModels = synced.models
         return synced.module
       }

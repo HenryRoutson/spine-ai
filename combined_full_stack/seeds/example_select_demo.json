@@ -78,7 +78,8 @@
           "type": "text",
           "optional": false,
           "description": "Why this example is useful for the current case",
-          "deterministic": false
+          "deterministic": false,
+          "minLength": 1
         }
       ]
     },
@@ -100,7 +101,8 @@
           "type": "list[model]",
           "ref": "m_selected",
           "optional": false,
-          "description": "LLM-filtered reference rows"
+          "description": "LLM-filtered reference rows",
+          "minItems": 1
         }
       ]
     },
@@ -268,20 +270,17 @@
     },
     {
       "id": "mod_merge",
-      "kind": "custom-code",
+      "kind": "merge",
       "label": "Merge for Draft",
-      "note": "list[SelectedExample] + description from Normalize Case on pipeline state → ScopeDraftRequest for the final LLM.",
+      "note": "Deep-merge Normalize Case (pipeline state) with selected_examples from example-select → ScopeDraftRequest.",
       "inputDescription": "Filtered SelectedExample rows with selection_reason",
       "inStructureId": "m_selected",
       "outStructureId": "m_draft_req",
+      "mergeStateLabel": "Normalize Case",
+      "mergeWrapListField": "selected_examples",
       "cached": true,
       "avgMs": 5,
-      "avgCostCents": 0,
-      "fallbackList": [
-        {
-          "typescript": "(selected, state) => { const norm = (state ?? {})[\"Normalize Case\"]; const description = norm && typeof norm === \"object\" && norm !== null && typeof norm.description === \"string\" ? norm.description : \"\"; return { description, selected_examples: Array.isArray(selected) ? selected : [] }; }"
-        }
-      ]
+      "avgCostCents": 0
     },
     {
       "id": "mod_draft",
@@ -296,78 +295,6 @@
       "cached": true,
       "avgMs": 1800,
       "avgCostCents": 4
-    },
-    {
-      "id": "mod_assert_combine",
-      "kind": "assert",
-      "label": "✓ Combine Inputs",
-      "note": "Structural check — ScopeSelectBundle on input; cardinality enforced by structure minLength/minItems at combine",
-      "inStructureId": "m_select_bundle",
-      "outStructureId": "m_select_bundle",
-      "cached": true,
-      "avgMs": 2,
-      "avgCostCents": 0,
-      "fallbackList": [
-        {
-          "typescript": "void step(\"Combine Inputs\");\nif (input == null || typeof input !== \"object\") throw new Error(\"expected ScopeSelectBundle on input\");"
-        }
-      ]
-    },
-    {
-      "id": "mod_assert_normalize",
-      "kind": "assert",
-      "label": "✓ Normalize Case",
-      "note": "Golden fixture — damage text wrapped as ScopeDescription",
-      "inStructureId": "m_scope_desc",
-      "outStructureId": "m_scope_desc",
-      "cached": true,
-      "avgMs": 2,
-      "avgCostCents": 0,
-      "fallbackList": [
-        {
-          "typescript": "assertEqual(step(\"Normalize Case\"), \"Normalize Case\");"
-        }
-      ]
-    },
-    {
-      "id": "mod_assert_parse",
-      "kind": "assert",
-      "label": "✓ Parse Examples",
-      "note": "Golden fixture — four library rows parsed",
-      "inStructureId": "m_scope_ex",
-      "outStructureId": "m_scope_ex",
-      "cached": true,
-      "avgMs": 2,
-      "avgCostCents": 0,
-      "fallbackList": [
-        {
-          "typescript": "assertEqual(step(\"Parse Examples\"), \"Parse Examples\");"
-        }
-      ],
-      "outType": {
-        "kind": "list",
-        "item": { "kind": "ref", "modelId": "m_scope_ex" }
-      }
-    },
-    {
-      "id": "mod_assert_select",
-      "kind": "assert",
-      "label": "✓ Select Relevant Examples",
-      "note": "Structural check — selected ids must exist in Example Library / Combine Inputs / Parse Examples",
-      "inStructureId": "m_selected",
-      "outStructureId": "m_selected",
-      "cached": true,
-      "avgMs": 2,
-      "avgCostCents": 0,
-      "fallbackList": [
-        {
-          "typescript": "const selected = Array.isArray(input) ? input : step(\"Select Relevant Examples\");\nif (!Array.isArray(selected) || selected.length < 1) throw new Error(\"expected at least one selected example\");\nconst rows = [\n  step(\"Example Library\")?.examples,\n  step(\"Combine Inputs\")?.library?.examples,\n  step(\"Parse Examples\"),\n].flatMap((v) => (Array.isArray(v) ? v : []));\nif (!rows.length) throw new Error(\"expected library examples from Example Library, Combine Inputs, or Parse Examples\");\nconst ids = new Set(rows.map((e) => e?.id).filter(Boolean));\nfor (const row of selected) {\n  if (typeof row?.selection_reason !== \"string\" || !row.selection_reason.trim()) throw new Error(\"missing selection_reason\");\n  if (!ids.has(row?.id)) throw new Error(`unknown example id ${row?.id} (library has: ${[...ids].sort().join(\", \")})`);\n}"
-        }
-      ],
-      "outType": {
-        "kind": "list",
-        "item": { "kind": "ref", "modelId": "m_selected" }
-      }
     },
     {
       "id": "mod_output",

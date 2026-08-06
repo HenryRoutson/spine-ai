@@ -405,7 +405,7 @@ export function migrateProjectModules(project: Project): Project {
   const normalized = normalizePassthroughStructureIds(withCache);
   const noted = normalizeModuleNotes(normalized);
   const spineTyped = migrateModulesSpineTypes(noted);
-  const modelsChanged =
+  const modelsChangedFlag =
     models.length !== project.models.length ||
     models.some((m, i) => {
       const prev = project.models[i];
@@ -415,11 +415,11 @@ export function migrateProjectModules(project: Project): Project {
       );
     });
   const changed =
-    modelsChanged ||
+    modelsChangedFlag ||
     folded !== project.modules ||
     placed !== folded ||
     migrated.some((m, i) => m !== placed[i]) ||
-    listSynced.modules.some((m, i) => m !== migrated[i]) ||
+    !modulesEqual(listSynced.modules, migrated) ||
     withCache.some((m, i) => m !== listSynced.modules[i]) ||
     normalized.some((m, i) => m !== withCache[i]) ||
     noted.some((m, i) => m !== normalized[i]) ||

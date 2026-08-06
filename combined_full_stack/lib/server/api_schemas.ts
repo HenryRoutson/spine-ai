@@ -218,11 +218,19 @@ const pipelineModulePatchSchema = z
     // AI : merge — recursive structural policy (+ optional custom TS override)
     mergePolicy: mergePolicyPatchSchema.optional(),
     mergeCustom: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
+    mergeStateLabel: z.string().max(200).optional(),
+    mergeWrapListField: z.string().max(200).optional(),
     // AI : example-select — allowlisted on PUT so .strict() does not reject builder saves
     exampleContextLabel: z.string().max(200).optional(),
     exampleContextField: z.string().max(512).optional(),
     exampleReasonField: z.string().max(200).optional(),
     examplePreFilterMax: z.number().int().min(1).max(10_000).optional(),
+    webhookUrl: z.string().max(4_096).optional(),
+    webhookMethod: z.enum(["POST", "PUT", "PATCH"]).optional(),
+    webhookAuthEnv: z.string().max(256).optional(),
+    webhookTimeoutMs: z.number().int().min(1_000).max(600_000).optional(),
+    webhookIncludeState: z.boolean().optional(),
+    webhookResponsePath: z.string().max(512).optional(),
     useOcr: z.boolean().optional(),
     cached: z.boolean().optional(),
     auto: z.boolean().optional(),
@@ -345,6 +353,7 @@ export const projectPatchSchema = z
     inferencePresets: z.array(jsonSizeBounded(50_000)).max(50).optional(),
     llmProviders: z.array(jsonSizeBounded(100_000)).max(20).optional(),
     documentation: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS).optional(),
+    langfuseExport: z.boolean().optional(),
   })
   .strict();
 

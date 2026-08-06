@@ -68,4 +68,11 @@ describe("pipeline TS export lint", () => {
     expect(src).toMatch(/async function step_Human_Review\(input: LegacyUser\[\]/);
     expect(src).toMatch(/"Human Review": LegacyUser\[\]/);
   });
+
+  it("example-select export respects exampleContextField", () => {
+    const { project } = loadProjectSeed(resolve(SEEDS_DIR, "billed_work_catalog_select.json"));
+    const src = generatePipelineSourceTs(project);
+    expect(src).toMatch(/const description = \(typeof \(state\["Normalize Case"\] as Record<string, unknown>\)\["description"\]/);
+    expect(src).not.toMatch(/JSON\.stringify\(state\["Normalize Case"\], null, 2\)/);
+  });
 });

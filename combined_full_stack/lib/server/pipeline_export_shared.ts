@@ -222,6 +222,40 @@ export function upstreamLabelForCombine(m: PipelineModule, project: Project): St
   return undefined;
 }
 
+// AI : mirror execExampleSelectStep formatExampleContext — field path picks {description} text.
+export function generateExampleContextExprTs(ctxLabel: string, fieldPath?: string): string {
+  const key = JSON.stringify(ctxLabel);
+  const base = `state[${key}]`;
+  if (!fieldPath?.trim()) {
+    return `(typeof ${base} === "string" ? ${base} : JSON.stringify(${base}, null, 2)) as string`;
+  }
+  let accessor = base;
+  for (const part of fieldPath.trim().split(".").filter(Boolean)) {
+    accessor = `(${accessor} as Record<string, unknown>)[${JSON.stringify(part)}]`;
+  }
+  return `(typeof ${accessor} === "string" ? ${accessor} : JSON.stringify(${accessor}, null, 2)) as string`;
+}
+
+export function generateExampleContextLinesPy(ctxLabel: string, fieldPath?: string): string[] {
+  const key = exportStringLiteral(ctxLabel);
+  if (!fieldPath?.trim()) {
+    return [
+      `_ctx = state[${key}]`,
+      `description = _ctx if isinstance(_ctx, str) else json.dumps(_ctx, indent=2, default=str)`,
+    ];
+  }
+  const lines = [`_ctx = state[${key}]`];
+  for (const part of fieldPath.trim().split(".").filter(Boolean)) {
+    lines.push(
+      `_ctx = (_ctx.get(${exportStringLiteral(part)}) if isinstance(_ctx, dict) else getattr(_ctx, ${exportStringLiteral(part)}, None))`,
+    );
+  }
+  lines.push(
+    `description = _ctx if isinstance(_ctx, str) else json.dumps(_ctx, indent=2, default=str)`,
+  );
+  return lines;
+}
+
 function inputOutputsDocument(m: PipelineModule): boolean {
   return m.outStructureId === BUILTIN_DOCUMENT_ID;
 }
@@ -644,7 +678,20 @@ function orchestratorInvokeLine(
 export function generateOrchestratorTs(project: Project, stepFnName: (m: PipelineModule, i: number) => string): string {
   const inputMods = orchestratorInputMods(project);
   const multi = inputMods.length > 1;
-  const lines: string[] = [];
+  const lines: string[] = [
+    "export type PipelineStepTraceEntry = { label: string; output: unknown };",
+    "",
+    "let lastRunTrace: PipelineStepTraceEntry[] = [];",
+    "",
+    "export function getLastRunTrace(): PipelineStepTraceEntry[] {",
+    "  return lastRunTrace;",
+    "}",
+    "",
+    "function snapshotTraceOutput(value: unknown): unknown {",
+    "  return JSON.parse(JSON.stringify(value));",
+    "}",
+    "",
+  ];
 
   if (multi) {
     lines.push("export type PipelineRunInputs = {");
@@ -657,7 +704,12 @@ export function generateOrchestratorTs(project: Project, stepFnName: (m: Pipelin
     lines.push("export async function runPipeline(initialInput: Document): Promise<unknown> {");
   }
 
-  lines.push("  const state = {} as PipelineState;", "  let spine: unknown;", "");
+  lines.push(
+    "  lastRunTrace = [];",
+    "  const state = {} as PipelineState;",
+    "  let spine: unknown;",
+    "",
+  );
 
   for (let i = 0; i < project.modules.length; i++) {
     const m = project.modules[i]!;
@@ -667,7 +719,12 @@ export function generateOrchestratorTs(project: Project, stepFnName: (m: Pipelin
     const inTs = exportSpineInTs(m, project, i);
     lines.push(`  // ${i + 1}. ${m.label}`);
     lines.push(orchestratorInvokeLine(m, fn, "ts", !multi, inTs));
-    if (label) lines.push(`  state[${JSON.stringify(label)}] = spine as ${outTs};`);
+    if (label) {
+      lines.push(`  state[${JSON.stringify(label)}] = spine as ${outTs};`);
+      lines.push(
+        `  lastRunTrace.push({ label: ${JSON.stringify(label)}, output: snapshotTraceOutput(spine) });`,
+      );
+    }
     lines.push("");
   }
 
@@ -678,7 +735,13 @@ export function generateOrchestratorTs(project: Project, stepFnName: (m: Pipelin
 export function generateOrchestratorPy(project: Project, stepFnName: (m: PipelineModule, i: number) => string): string {
   const inputMods = orchestratorInputMods(project);
   const multi = inputMods.length > 1;
-  const lines: string[] = [];
+  const lines: string[] = [
+    "last_run_trace: list[dict[str, Any]] = []",
+    "",
+    "def get_last_run_trace() -> list[dict[str, Any]]:",
+    "    return last_run_trace",
+    "",
+  ];
 
   if (multi) {
     lines.push("async def run_pipeline(inputs: dict[str, Document]) -> Any:");
@@ -686,7 +749,13 @@ export function generateOrchestratorPy(project: Project, stepFnName: (m: Pipelin
     lines.push("async def run_pipeline(initial_input: Document) -> Any:");
   }
 
-  lines.push("    state = cast(PipelineState, cast(object, {}))", "    spine: Any = None", "");
+  lines.push(
+    "    global last_run_trace",
+    "    last_run_trace = []",
+    "    state = cast(PipelineState, cast(object, {}))",
+    "    spine: Any = None",
+    "",
+  );
 
   for (let i = 0; i < project.modules.length; i++) {
     const m = project.modules[i]!;
@@ -695,7 +764,12 @@ export function generateOrchestratorPy(project: Project, stepFnName: (m: Pipelin
     const inTs = exportSpineInPy(m, project, i);
     lines.push(`    # ${i + 1}. ${m.label}`);
     lines.push(orchestratorInvokeLine(m, fn, "py", !multi, inTs));
-    if (label) lines.push(`    state[${JSON.stringify(label)}] = spine`);
+    if (label) {
+      lines.push(`    state[${JSON.stringify(label)}] = spine`);
+      lines.push(
+        `    last_run_trace.append({"label": ${JSON.stringify(label)}, "output": json.loads(json.dumps(spine, default=str))})`,
+      );
+    }
     lines.push("");
   }
 

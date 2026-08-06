@@ -8,6 +8,8 @@ import { SEEDS_DIR } from "@/lib/server/seed"
 
 const exampleSelectSeed = resolve(SEEDS_DIR, "example_select_demo.json")
 const exampleSelectDocs = resolve(SEEDS_DIR, "../documents/example_select_demo")
+const exampleSelect2Seed = resolve(SEEDS_DIR, "billed_work_catalog_select.json")
+const exampleSelect2Docs = resolve(SEEDS_DIR, "../documents/billed_work_catalog_select")
 
 describe("validate setup command", () => {
   it("passes homework university inference preset", () => {
@@ -24,6 +26,15 @@ describe("validate setup command", () => {
   ])("passes example select inference preset %s", (file) => {
     const ctx = loadProjectContext(exampleSelectSeed)
     const result = validateSetupCommand(ctx, resolve(exampleSelectDocs, file))
+    expect(result.ok, result.issues.map((i) => i.message).join("; ")).toBe(true)
+  })
+
+  it("passes billed work catalog select inference preset", () => {
+    const ctx = loadProjectContext(exampleSelect2Seed)
+    const result = validateSetupCommand(
+      ctx,
+      resolve(exampleSelect2Docs, "billed_work_catalog_select_inference.json"),
+    )
     expect(result.ok, result.issues.map((i) => i.message).join("; ")).toBe(true)
   })
 

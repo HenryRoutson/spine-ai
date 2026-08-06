@@ -393,6 +393,7 @@ async function ingestSeedDoc(store: Store, spec: SeedDocSpec, refreshStale = fal
   }
   const existingByHash = store.docs().find((d) => d.id === hashContent(fresh));
   if (existingByHash) {
+    if (store.docs().some((d) => d.name === spec.name)) return;
     // AI : seeds/*.json renamed a bundled example — same bytes, new filename for inputNameContains.
     store.repointDocName(existingByHash.id, spec.name);
     return;
@@ -401,6 +402,20 @@ async function ingestSeedDoc(store: Store, spec: SeedDocSpec, refreshStale = fal
 }
 
 // AI : before inference — platform seed_docs + git documents/ beat legacy per-user bundled copies.
+export async function ensureBundledSeedDocsForProject(store: Store, project: Project): Promise<void> {
+  await refreshBundledSeedDocsForRun(store, project);
+  if (!store.usesPlatformSeedDocs?.()) return;
+  const missing = (project.seedDocNames ?? []).filter((name) => !store.docs().some((d) => d.name === name));
+  if (!missing.length) return;
+  const { createAdminClient } = await import("./supabase_admin");
+  const admin = await createAdminClient();
+  if (!admin) return;
+  const { syncPlatformSeeds } = await import("./seed_docs_platform");
+  await syncPlatformSeeds(admin);
+  const { SupabaseStore } = await import("./supabase_store");
+  if (store instanceof SupabaseStore) await store.refreshPlatformSeedDocsFromDb();
+}
+
 export async function refreshBundledSeedDocsForRun(store: Store, project: Project): Promise<void> {
   const names = new Set(project.seedDocNames ?? []);
   if (!names.size) return;

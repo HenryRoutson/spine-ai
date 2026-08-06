@@ -24,6 +24,7 @@ import {
   validatesStepOutputAsList,
 } from "./helpers";
 import { applyInputCacheSideEffects, failedStepResult, jsonStringifyStepValue, resultFromCache } from "./results";
+import { exportLangfuseRunStep } from "../langfuse_export";
 import type { ExecResult, LinearStepParams } from "./engine_types";
 
 export async function runLinearStepsFrom(
@@ -351,10 +352,14 @@ export async function runLinearStepsFrom(
       descriptionCheckLlmCalls: descriptionCheckLlmCalls?.length ? descriptionCheckLlmCalls : undefined,
       docId: result.docId,
       llmCalls: result.llmCalls?.length ? result.llmCalls : undefined,
+      exampleSelectVerdicts: result.exampleSelectVerdicts?.length
+        ? result.exampleSelectVerdicts
+        : undefined,
       failures: stepFailuresFor(result, status, ctx.stepExtraFailures),
       serverLogs: stepServerLogs(serverLogs, m.id),
     });
     const stepRecord = steps[steps.length - 1]!;
+    exportLangfuseRunStep(stepRecord);
     await opts.onStep?.({
       index: i,
       total: project.modules.length,

@@ -1,6 +1,7 @@
 import { orderedInputModules } from "@/lib/inference-input";
 import { labelAsStateKey } from "./pipeline_state";
 import type { PipelineSetupFile } from "./pipeline_export_shared";
+import { generatePipelineRunnerFiles } from "./pipeline_export_runners";
 import {
   generateLlmProviderStubsPy,
   generateLlmProviderStubsTs,
@@ -18,14 +19,17 @@ import {
 } from "./pipeline_export_llm";
 import { ModuleKind } from "./types";
 import type { PipelineModule, Project } from "./types";
+import { collectWebhookExportEnvKeys } from "@/lib/webhook-step";
 
 export type ExportRuntimeNeeds = {
   llm: boolean;
   llmBatch: boolean;
   quote: boolean;
   humanReview: boolean;
+  webhook: boolean;
   visionOcr: boolean;
   inputModules: { label: string; filenameHint?: string; inputType?: string }[];
+  webhookEnvKeys: { label: string; envKey: string; authEnv?: string }[];
 };
 
 export type { PipelineSetupFile } from "./pipeline_export_shared";
@@ -40,6 +44,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
   let llmBatch = false;
   let quote = false;
   let humanReview = false;
+  let webhook = false;
   let visionOcr = false;
   for (const m of project.modules) {
     if (m.kind === ModuleKind.Llm) llm = true;
@@ -47,9 +52,19 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
     if (m.kind === ModuleKind.LlmBatch || m.kind === ModuleKind.ExampleSelect) llmBatch = true;
     if (m.kind === ModuleKind.Quote) quote = true;
     if (m.kind === ModuleKind.HumanReview) humanReview = true;
+    if (m.kind === ModuleKind.Webhook) webhook = true;
     if (m.kind === ModuleKind.Input && m.useOcr) visionOcr = true;
   }
-  return { llm, llmBatch, quote, humanReview, visionOcr, inputModules };
+  return {
+    llm,
+    llmBatch,
+    quote,
+    humanReview,
+    webhook,
+    visionOcr,
+    inputModules,
+    webhookEnvKeys: collectWebhookExportEnvKeys(project.modules),
+  };
 }
 
 function projectSlug(name: string): string {
@@ -102,6 +117,15 @@ export function generateEnvExample(project: Project): string {
     );
   }
 
+  if (needs.webhook && needs.webhookEnvKeys.length) {
+    lines.push("# Webhook steps — external integrations (n8n, search APIs, Zapier, …)");
+    for (const w of needs.webhookEnvKeys) {
+      lines.push(`# Step "${w.label}"`, `${w.envKey}=""`);
+      if (w.authEnv) lines.push(`${w.authEnv}=""`);
+      lines.push("");
+    }
+  }
+
   lines.push(
     "# Connector — gRPC + HTTP JSON bridge (see connector_server.*)",
     'PIPELINE_GRPC_PORT="50051"',
@@ -152,6 +176,8 @@ export function generateSetupReadme(project: Project, slug: string): string {
     "- `pipeline_connector.proto` — gRPC contract (same for TS and Python)",
     "- `connector_server.ts` / `connector_server.py` — gRPC + HTTP JSON bridge",
     "- `inference_ui.html` — standalone inference UI (open in browser, POST to connector)",
+    "- `documents/` — sample input files, `inference_setup.json`, and `testing_setup.json` when bundled",
+    "- `run_example.ts` / `run_example.py` — load documents/ and print step trace",
     "- `.env.example` — copy to `.env` and fill in (never commit real secrets)",
     "- `requirements.txt` — Python deps (`pip install -r requirements.txt`)",
     "- `README.md` — this file",
@@ -270,6 +296,8 @@ export function generateSetupReadme(project: Project, slug: string): string {
     "```",
     "",
     "Open `inference_ui.html` in a browser (or serve statically). Point **Connector URL** at `http://localhost:8080/v1/run`.",
+    "Use **Load sample inputs** to pre-fill file paths from `documents/inference_setup.json`.",
+    "After a run, open the **Step trace** tab to inspect per-step outputs (like the in-app logging view).",
     "",
     "## Run",
     "",
@@ -583,6 +611,7 @@ export function generatePipelineSetupFiles(project: Project): PipelineSetupFile[
     { filename: "SETUP.md", content: setupPointer, mime: "text/markdown" },
     { filename: "requirements.txt", content: requirements, mime: "text/plain" },
     ...generateCustomLlmProviderExportFiles(project),
+    ...generatePipelineRunnerFiles(project),
   ];
 }
 
@@ -650,6 +679,54 @@ export function generateRuntimeStubsTs(needs: ExportRuntimeNeeds): string {
       "    return;",
       "  }",
       '  throw new Error("wire waitForHumanReview or configurePipelineRuntime({ onHumanReview })");',
+      "}",
+    );
+  }
+
+  if (needs.webhook) {
+    lines.push(
+      "",
+      "type WebhookCallOpts = {",
+      "  urlEnv: string;",
+      "  method?: string;",
+      "  authEnv?: string;",
+      "  includeState?: boolean;",
+      "  responsePath?: string;",
+      "  timeoutMs?: number;",
+      "};",
+      "",
+      "async function callWebhook(",
+      "  input: unknown,",
+      "  state: PipelineState,",
+      "  opts: WebhookCallOpts,",
+      "): Promise<unknown> {",
+      '  const url = process.env[opts.urlEnv]?.trim();',
+      '  if (!url) throw new Error(`set ${opts.urlEnv} in .env`);',
+      "  const headers: Record<string, string> = {",
+      '    "Content-Type": "application/json",',
+      '    Accept: "application/json",',
+      "  };",
+      "  if (opts.authEnv) {",
+      "    const auth = process.env[opts.authEnv]?.trim();",
+      '    if (auth) headers.Authorization = auth.startsWith("Bearer ") ? auth : `Bearer ${auth}`;',
+      "  }",
+      "  const body = opts.includeState === false ? { input } : { input, state };",
+      "  const res = await fetch(url, {",
+      '    method: opts.method ?? "POST",',
+      "    headers,",
+      "    body: JSON.stringify(body),",
+      "    signal: AbortSignal.timeout(opts.timeoutMs ?? 30_000),",
+      "  });",
+      "  if (!res.ok) {",
+      '    const text = await res.text().catch(() => "");',
+      '    throw new Error(`webhook ${res.status}: ${text.slice(0, 240)}`);',
+      "  }",
+      "  const raw = await res.json();",
+      "  if (!opts.responsePath?.trim()) return raw;",
+      "  return opts.responsePath.split(\".\").reduce<unknown>((cur, key) => {",
+      '    if (cur == null || typeof cur !== "object") throw new Error(`webhook response path failed at ${key}`);',
+      "    return (cur as Record<string, unknown>)[key];",
+      "  }, raw);",
       "}",
     );
   }
@@ -724,6 +801,51 @@ export function generateRuntimeStubsPy(needs: ExportRuntimeNeeds): string {
       "        await runtime.on_human_review(input)",
       "        return",
       '    raise NotImplementedError("wire wait_for_human_review or configure_pipeline_runtime(on_human_review=...)")',
+    );
+  }
+
+  if (needs.webhook) {
+    lines.push(
+      "",
+      "async def call_webhook(",
+      "    input: Any,",
+      "    state: PipelineState,",
+      "    *,",
+      "    url_env: str,",
+      '    method: str = "POST",',
+      "    auth_env: str | None = None,",
+      "    include_state: bool = True,",
+      "    response_path: str | None = None,",
+      "    timeout_ms: int = 30_000,",
+      ") -> Any:",
+      "    import json",
+      "    import os",
+      "    import urllib.request",
+      "    url = (os.environ.get(url_env) or '').strip()",
+      "    if not url:",
+      "        raise RuntimeError(f'set {url_env} in .env')",
+      "    headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}",
+      "    if auth_env:",
+      "        auth = (os.environ.get(auth_env) or '').strip()",
+      "        if auth:",
+      "            headers['Authorization'] = auth if auth.startswith('Bearer ') else f'Bearer {auth}'",
+      "    body = {'input': input} if not include_state else {'input': input, 'state': state}",
+      "    req = urllib.request.Request(",
+      "        url,",
+      "        data=json.dumps(body).encode(),",
+      "        headers=headers,",
+      "        method=method,",
+      "    )",
+      "    with urllib.request.urlopen(req, timeout=timeout_ms / 1000) as res:",
+      "        raw = json.loads(res.read().decode())",
+      "    if not response_path:",
+      "        return raw",
+      "    cur: Any = raw",
+      "    for key in response_path.split('.'):",
+      "        if not isinstance(cur, dict):",
+      "            raise RuntimeError(f'webhook response path failed at {key}')",
+      "        cur = cur[key]",
+      "    return cur",
     );
   }
 
@@ -891,6 +1013,15 @@ export function generateRuntimeStubsRust(needs: ExportRuntimeNeeds): string {
       "",
       "async fn wait_for_human_review<T: serde::Serialize>(_input: &T) -> anyhow::Result<()> {",
       '    anyhow::bail!("wire wait_for_human_review")',
+      "}",
+    );
+  }
+
+  if (needs.webhook) {
+    lines.push(
+      "",
+      "async fn call_webhook(_input: &serde_json::Value, _state: &PipelineState) -> anyhow::Result<serde_json::Value> {",
+      '    anyhow::bail!("wire call_webhook — set WEBHOOK_URL_* env vars and HTTP client")',
       "}",
     );
   }
@@ -1108,6 +1239,24 @@ export function generateRuntimeStubsGo(needs: ExportRuntimeNeeds): string {
       "",
       "func WaitForHumanReview(_input any) error {",
       '\treturn fmt.Errorf("wire WaitForHumanReview")',
+      "}",
+    );
+  }
+
+  if (needs.webhook) {
+    lines.push(
+      "",
+      "type WebhookOpts struct {",
+      "\tURLEnv       string",
+      "\tMethod       string",
+      "\tAuthEnv      string",
+      "\tIncludeState bool",
+      "\tResponsePath string",
+      "\tTimeoutMs    int",
+      "}",
+      "",
+      "func CallWebhook(_input any, _state PipelineState, _opts WebhookOpts) (json.RawMessage, error) {",
+      '\treturn nil, fmt.Errorf("wire CallWebhook — set WEBHOOK_URL_* env vars")',
       "}",
     );
   }

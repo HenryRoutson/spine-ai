@@ -83,3 +83,24 @@ describe("example select demo — inference presets", () => {
     }
   })
 })
+
+describe("billed work catalog select — structured catalog", () => {
+  const billedWorkSeed = resolve(SEEDS_DIR, "billed_work_catalog_select.json")
+
+  it("includes two example-select steps and a 100-item catalog fixture", () => {
+    const ctx = loadProjectContext(billedWorkSeed)
+    const selectSteps = ctx.project.modules.filter((m) => m.kind === "example-select")
+    expect(selectSteps).toHaveLength(2)
+    expect(ctx.project.modules.filter((m) => m.kind === "combine")).toHaveLength(2)
+    expect(ctx.seed.docSpecs.some((d) => d.name === "work_item_catalog.json")).toBe(true)
+  })
+
+  it("validates every bundled inference preset", () => {
+    const ctx = loadProjectContext(billedWorkSeed)
+    const inferenceSetups = ctx.seed.docSpecs.filter((d) => d.name.endsWith("_inference.json"))
+    for (const spec of inferenceSetups) {
+      const result = validateSetupCommand(ctx, spec.path)
+      expect(result.ok, `${spec.name}: ${result.issues.map((i) => i.message).join("; ")}`).toBe(true)
+    }
+  })
+})

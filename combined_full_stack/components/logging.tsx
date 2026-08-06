@@ -30,6 +30,7 @@ import { useAppShell } from "@/lib/app-shell"
 import { API_ROUTES } from "@/lib/api-routes"
 import { stepDocId, stepDocLinkLabels, stepSourceDocId, isDocReferenceOutputJson } from "@/lib/step-doc"
 import { descriptionCheckLlmCallsFromStep, llmCallsFromStep } from "@/lib/llm-distribution"
+import { ExampleSelectVerdictsSection } from "@/components/example-select-verdicts"
 import { enrichRunModules, modulesFromRunSteps } from "@/lib/pipeline-run-diff"
 import { PipelineCanvas } from "@/components/pipeline-canvas"
 import { PipelineInspector } from "@/components/pipeline-inspector"
@@ -307,6 +308,16 @@ export function Logging() {
                   <div className="min-w-0">
                     <p className="font-mono text-[10px] uppercase text-muted-foreground">Run</p>
                     <p className="truncate font-mono text-xs">{active.id}</p>
+                    {active.langfuseTraceUrl ? (
+                      <a
+                        href={active.langfuseTraceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-block font-mono text-[10px] text-primary underline-offset-2 hover:underline"
+                      >
+                        Open in Langfuse
+                      </a>
+                    ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     {active && runHasErrors(active) && (
@@ -497,6 +508,13 @@ export function Logging() {
                               calls={stepLlmCalls}
                               compact
                               stepSucceeded={step.status !== "error"}
+                            />
+                          )}
+
+                          {step.kind === "example-select" && (
+                            <ExampleSelectVerdictsSection
+                              verdicts={step.exampleSelectVerdicts}
+                              className={STEP_TRACE_IO_INDENT_MARGIN}
                             />
                           )}
 

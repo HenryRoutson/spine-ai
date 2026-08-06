@@ -15,6 +15,7 @@ import {
   Lock,
   ShieldCheck,
   UserCheck,
+  Webhook,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -54,6 +55,7 @@ export const KIND_ICON: Record<ModuleKind, ModuleIcon> = {
   [ModuleKind.CustomCode]: Code2,
   [ModuleKind.Assert]: ShieldCheck,
   [ModuleKind.HumanReview]: UserCheck,
+  [ModuleKind.Webhook]: Webhook,
   [ModuleKind.Output]: FileOutput,
 }
 
@@ -70,6 +72,7 @@ export const KIND_COLOR: Record<ModuleKind, string> = {
   [ModuleKind.CustomCode]: "text-chart-1",
   [ModuleKind.Assert]: "text-chart-2",
   [ModuleKind.HumanReview]: "text-chart-1",
+  [ModuleKind.Webhook]: "text-chart-4",
   [ModuleKind.Output]: "text-output",
 }
 
@@ -87,6 +90,7 @@ export const KIND_SURFACE: Record<ModuleKind, string> = {
   [ModuleKind.CustomCode]: "border-chart-1/40 bg-chart-1/10",
   [ModuleKind.Assert]: "border-chart-2/40 bg-chart-2/10",
   [ModuleKind.HumanReview]: "border-chart-1/40 bg-chart-1/10",
+  [ModuleKind.Webhook]: "border-chart-4/40 bg-chart-4/10",
   [ModuleKind.Output]: "border-output/40 bg-output/10",
 }
 

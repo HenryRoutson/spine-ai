@@ -1,5 +1,6 @@
 import { parseFetchJson, readApiErrorBody, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
+import { sanitizeClientStepPayload } from "@/lib/client-step-payload"
 import {
   awaitJobCompletion,
   mergeStepStates,
@@ -67,16 +68,18 @@ async function submitSharedClientStep(
   jobId: RunJobId,
   token: string,
   payload: ClientStepSubmitPayload,
+  opts?: { stepLabel?: string },
 ): Promise<void> {
   const res = await fetch(API_ROUTES.sharedLinkClientStep(linkId), {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify({ jobId, token, ...payload }),
+    body: JSON.stringify({ jobId, token, ...sanitizeClientStepPayload(payload) }),
   })
   if (res.ok) return
   const body = await readApiErrorBody(res)
   if (res.status === 409 && body?.error?.includes("not waiting for client code")) return
-  throw new Error(body?.error ?? "Client step failed")
+  const stepHint = opts?.stepLabel ? ` "${opts.stepLabel}"` : ""
+  throw new Error(body?.error ?? `Client code step${stepHint} failed`)
 }
 
 export async function awaitSharedRun(
@@ -88,11 +91,14 @@ export async function awaitSharedRun(
     | ((steps: StepProgress[]) => void),
   intervalMs = 700,
 ): Promise<PipelineRun> {
+  const clientStepContext = { stepLabel: undefined as string | undefined }
   const { run } = await awaitJobCompletion(
     () => pollSharedProgress(linkId, jobId, token),
-    (payload) => submitSharedClientStep(linkId, jobId, token, payload),
+    (payload) =>
+      submitSharedClientStep(linkId, jobId, token, payload, { stepLabel: clientStepContext.stepLabel }),
     callbacks,
     intervalMs,
+    clientStepContext,
   )
   return run
 }

@@ -258,6 +258,38 @@ export function ListOpsModuleFields({ selected, models, edit, onUpdate }: ListOp
         )}
 
         <PipelineField
+          label="Pipeline state operand"
+          hint="Prior step label — merged with spine input (e.g. Normalize Case)"
+        >
+          {edit ? (
+            <Input
+              value={selected.mergeStateLabel ?? ""}
+              onChange={(e) => onUpdate?.({ mergeStateLabel: e.target.value || undefined, mergeCustom: undefined })}
+              placeholder="Normalize Case"
+              className="h-8 font-mono text-xs"
+            />
+          ) : (
+            <StaticValue mono>{selected.mergeStateLabel?.trim() || "—"}</StaticValue>
+          )}
+        </PipelineField>
+
+        <PipelineField
+          label="Wrap list field"
+          hint="When spine is list[T], wrap as { field: T[] } before merge — must exist on output structure"
+        >
+          {edit ? (
+            <Input
+              value={selected.mergeWrapListField ?? ""}
+              onChange={(e) => onUpdate?.({ mergeWrapListField: e.target.value || undefined, mergeCustom: undefined })}
+              placeholder="selected_examples"
+              className="h-8 font-mono text-xs"
+            />
+          ) : (
+            <StaticValue mono>{selected.mergeWrapListField?.trim() || "—"}</StaticValue>
+          )}
+        </PipelineField>
+
+        <PipelineField
           label="Custom function"
           hint="Optional — TypeScript (input) => … overrides policy when set"
         >

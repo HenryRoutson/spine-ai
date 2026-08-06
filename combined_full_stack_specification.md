@@ -6,12 +6,18 @@ Tabs :
 projects 
 structure 
 pipeline 
+testing
 inference 
 share
+earnings
 logging
+cache
 documents 
+docs
 billing 
 settings
+
+**Consumer mode** — users without a project get a slim Run view (shared links, marketplace) instead of the full builder.
 
 
 # sign in out
@@ -59,6 +65,7 @@ For a structure field you can
   add a field
   provide a doc string style comment on the whole structure
   pick a type which is itself another model, and see errors for when a cyclic graph forms and nothing is optional in the graph
+**Quote fields** — text paired with a source-document span; auto-linked after LLM steps that output them.
 preview code of structures with pydantic or zod and syntax highlighting
 ask an ai assistant to change the models for you
 
@@ -89,16 +96,23 @@ A central visualisation of all steps of the pipeline with boxes for each step an
 
 steps include 
 
-1. input - select a any subset of input types like pdf, word not just 1. select doucment to be default.
-2. custom function - typescript or python or rust, with built in fallback system
-single llm call
-3. parallel llm call - ensuring this completes in a similar time to the single call.
-4. output (there can be multiple per pipeline)
-Other more advanced types
-5. Group By (like SQL) - comes with default logic for lists, dicts, sets to implment group by in every supported coding language so it gets filled in automatically on export.
-6. Human review - bool
-7. Human review - chat until resolution - optional voice trascribe 
-8. Human review - single text response - optional voice trascribe  
+1. **Input** — any subset of input types (not just one); default document; filename filters; optional input-description check
+2. **Single LLM call** — one structured response against an output schema
+3. **Batch LLM** — list in → one structured call per item → typed list out (runs in parallel)
+4. **Example select** — filter a candidate list via cheap per-item LLM relevance checks (`is_relevant` + reasoning); not vector RAG; optional pre-filter cap; prompt-cache region preview in builder
+5. **Custom code** — TypeScript or Python with ordered fallbacks; max runtime with profiling on overrun; runs in the browser and submits results back to the server
+6. **Transform** — deterministic reshape (e.g. list unwrap/wrap); optional custom reshape code
+7. **Combine inputs** — merge a side input with accumulated pipeline state into one structure
+8. **Chunk** — split document text into sized/overlapping chunks as a list
+9. **Merge** — recursive structural merge with per-path policies (dict deep/shallow; list concat, union, intersect, dedupe, zip, replace); optional custom merge code
+10. **Assert** — validate pipeline state via code or golden expectations; passthrough on success
+11. **Human review** — pause run for approve/reject before continuing; passthrough on approval
+12. **Webhook** — server-side HTTP POST/PUT/PATCH to external URLs; spine `{ input, state }` in, typed JSON out; secrets via env vars
+13. **Output** — named snapshots of structures anywhere in the pipeline (multiple allowed)
+
+**Auto-managed steps** (locked, inserted by the system when needed):
+- **Structure parse** — when non-JSON inputs need conversion to a typed model
+- **Link quotes** — when output schemas include quote fields; resolves quotes to source-document spans for traceability
 
 Input types include 
 1. PDF - add a is_use_ocr toggle if pdf is an option.
@@ -196,12 +210,9 @@ add an optional input description which is evaluated by an llm if enabled to che
 pleaes make an option in settings to make input descriptoins mandatory. make sure to charge these llm checks to billing, create a seperate billing graph for this at the bottom of logging under Mean cost called Description Validation cost. then add a toggle inside each step for if the description will be checked, in case it's expensive but you want to run it occasitionally
 
 
-add an export to python button to export the whole pipeline to python, including the front end UI. this should include a lot of supabase info so maybe use sql, plus some derived errors like validation.
-there should be an assert to check no env keys are in the export
-export should have a readme file and instructions for how to setup a scalable API using the existing code.
+Export the whole pipeline as a self-contained bundle: TypeScript, Python, Rust, Go, and BAML, plus connector servers (HTTP and gRPC), inference UI, setup guide, env template, and project documents. Assert no secret env keys are embedded. Generated code is linted before download.
 
-there should be an export pipeline to code,
-the pop up showns download buttons button to export to typescript and python.
+Export dialog shows per-language download buttons and a zip of the full bundle.
 
 
 you should always have the ability to view the whole pipeline as code, 
@@ -231,7 +242,9 @@ You should run automated tests to assert that generated code from a valid pipeli
 
 please add the option for cost limits per llm step, by default this should be $1
 
-No rag, just quotes as it's more tracable and reliable.
+No RAG — use **quotes** (source-linked spans) and **example select** (LLM relevance filtering) for traceability instead of vector retrieval.
+
+Per-step **cache toggle** on LLM steps.
 
 code steps should have a field for the max run time, where if it goes over that time, you get a profile of the time taken and the last line executing to profile things. set at a minute by default 
 
@@ -303,7 +316,10 @@ there is a run button,
 when you click it a live server log appears. when the run is completed there is a button directing users to the logging tab. server logs displayed should be broken down by step in the pipeline.
 there is a text field to put a description of why you are doing this run which you can edit in logging and saerch for later to organiase your runs.
 if you do a run that has already been completed the same setup, there is a button that appears to go to the log and not to run.
+**Run fingerprinting** — identical pipeline + inputs link to the prior run instead of re-executing.
 documents are selected from the documents tab to avoid repeat uplaods, latency in upload, and work in converting to text.
+
+**Input compatibility** — after paired uploads, compare extracted keys (JSON paths, regex, question-id sets) and show MATCH / MISMATCH / MISSING per variable before the run starts.
 
 if you do not have enough funds in billing, a button to direct you to the billing tab will appear.
 
@@ -369,6 +385,8 @@ some shared pipelines make you money and some cost you depending on what you're 
 you should be able to edit the credit limit for liabilities after creating the link.
 you should be able to monitor all the logs and calls that are being made for APIs and links.
 
+**Deployment activity** — filterable feed of who ran shared links/APIs, what they uploaded, and spend.
+
 
 There should be share options to 
 
@@ -412,7 +430,11 @@ each input has a link back to the original document.
 there are graphs for llm calls of the distribution of the number of characters for each input prompt and output response, and a graph of the response latency. 
 
 Any source docments which are used for extraction of quotes, are highlighted in a color to seperate it. there is also a link back to that doucment and any quotes which are extracted can be clicked on to see the highlighted region of the text the quote is from with the ability to scroll. although the prompt or response might contain json that isn't noted, there should be an automatic json extractor which should sepearte json and add syntax highlighting.
-Quotes are validated in a method that is not brute force and doesn't look through the whole dictionary, but instead uses the structs to know where quotes to validate are located. 
+Quotes are validated in a method that is not brute force and doesn't look through the whole dictionary, but instead uses the structs to know where quotes to validate are located.
+
+**Example-select verdicts** — per-candidate kept/excluded audit with reasoning, browsable in the step trace.
+
+**Diagnosis agents** — auto-spawn on failed runs; launch manually from logging to debug isolated errors. 
 
 each step should be annoted with cost and latency
 
@@ -440,6 +462,37 @@ Ensure all data from the run is included, including failures, and the whole log 
 
 ensure there is a setting to change what is displayed for each step between excel or json or other.
 
+## Langfuse export (secondary telemetry)
+
+Spine Logging remains the canonical in-app trace (step I/O, schema failures, example-select verdicts, testing verdicts, quote links, billing). Langfuse is an **optional secondary export** for teams that already use [Langfuse](https://langfuse.com/) for cross-app observability, dashboards, and production debugging.
+
+**Design principles**
+
+- **Opt-in per project** — `Project.langfuseExport` toggle in Library → Settings → Langfuse export. Off by default.
+- **Server credentials only** — `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and optional `LANGFUSE_BASE_URL` (self-host) live in deployment env, never in the browser or exported pipeline zip.
+- **Never blocks runs** — export is async/fire-and-forget; Langfuse SDK errors are swallowed so pipeline execution and Spine persistence are unaffected.
+- **Deterministic trace id** — Langfuse `traceId` is derived from Spine `runId` via `createTraceId(runId)` so resumed runs and external scoring can correlate.
+- **Logging deep link** — successful exports set `PipelineRun.langfuseTraceId` and `langfuseTraceUrl`; Logging shows “Open in Langfuse” when present.
+
+**Observation mapping**
+
+| Spine | Langfuse |
+|-------|----------|
+| `PipelineRun` | root `chain` observation |
+| `RunStep` | child `span` (label, kind, status, cost, latency, verdicts in metadata) |
+| each `LlmCallRecord` | child `generation` (model, char usage, latency, retry round) |
+| description-check LLM calls | `generation` children prefixed `input-desc:` |
+
+Prompt/output text is truncated (~24k chars) before export. Full prompts remain in Spine only.
+
+**What Langfuse does not replace**
+
+- Step-level Testing tab assertions and deterministic diffs
+- Pipeline builder, structures, cache, billing, marketplace, code export
+- Prompt versioning / A/B (use Langfuse prompt management separately if needed)
+
+Exported pipelines (`connector_server.ts`, Python runners) do not auto-include Langfuse — add the Langfuse JS/Python SDK in your deployment if you want traces outside the Spine app host.
+
 # documents
 
 the documents tab contains all documents and their size with the ability to view them. you can also view pdf documents markdown in raw text or as formatted or as the original pdf and the same for word and other more complex documents. 
@@ -462,7 +515,13 @@ for any json structure or excel csv, if you load a file into the system, it auto
 
 by default documents are tied to the project they're uploaded to. however they can be selected in a list what projects they're available in.
 
+# Cache
 
+browse cached step inputs and outputs across runs; search entries; inspect I/O with the same JSON viewers used in logging.
+
+# Docs
+
+project markdown documentation (rules and context for assistants); auto-derived mermaid pipeline graph rendered in preview.
 
 # Billing 
 current credit.
@@ -471,6 +530,9 @@ the ability to top up or subscribe to add tokens and a refresh button.
 cache savings.
 graph of dates and spending to see when spending decreases or increasesm, including total and model breakdown.
 
+# Earnings
+
+creator balance from shared links and hosted APIs; withdraw earnings to account billing credit.
 
 # Settings
 select which type of json syntax highlighting 
@@ -479,6 +541,8 @@ select which type of json syntax highlighting
 
   Editor
   Classic code editor — peach strings, cyan keys
+
+**Langfuse export** (per project, Library → Settings): toggle `Export runs to Langfuse`. Requires server env `LANGFUSE_PUBLIC_KEY` + `LANGFUSE_SECRET_KEY`. Optional `LANGFUSE_BASE_URL` for self-hosted Langfuse. See § Langfuse export under Logging.
 
 select default json reader 
 JSON reader
@@ -510,9 +574,15 @@ if a tab is disabled it turns red and so it should be a waterfall or if you fix 
 
 please make a shared component which is the run with stop button which should have a play icon, which when clicked shows a loading animation and a stop button next to it. ensure you handle stop logic elegantly and with shared logic.
 
-enterprise logic for teams
+**Teams** — shared projects, invites, membership; team owner billing; read-only team viewing.
 
 you can resize different parts of the UI with ResizableSplit.
+
+**A/B strategy benchmarking** — compare execution strategies (e.g. single LLM vs agent) with an LLM judge.
+
+**Project assistant** — streaming AI dock for whole-project proposals (structures, pipeline, docs) with approval before apply.
+
+**Prompt cache preview** — visualise cached vs per-run vs per-candidate prompt regions for LLM and example-select steps.
 
 please add the option to allow for custom llm apis, and make this modular so that whatever the default one is like openrouter is just one of these wrapped APIs. Ensure you support features like batched responses so you can utilise that if it's availble. I'm adding this because if we're doing custom deployments into companies like KPMG, which i've worked at, we're going to need to use their internall LLM. These internal LLMs often have custom logic for calling them. You will likely need to persist a client to avoid recreating it, and try to make it easy to select which model to select in a way that is generic across custom interal APIs. this will likely just be a generic enum for model to a variable that controls this in the custom API. You will need to seperate provider and llm model, as they're seperate concepts. Ensure you export this logic into the exported code, including exporting openrouter as the default and as an option in all exports. I should be able to view the code for openrouter as an example, with syntax highlighting, and for all the different supported langauges. I should then have an option to add a provider, with code and asserts around this code that there is one function with a certain type signature maybe. I should be able to select either openrouter:gpt-5-mini or custom_provider:gpt-5-mini.
 You should just have a page with a list of providers and openrouter should be a locked example. Ensure you treat the block like custom code, were you can see all the error historically that have occured in the hash exact same code (ignoring whitespace).
@@ -672,89 +742,73 @@ RootLayout (app/layout.tsx)
 
 ---
 
-## Navigation model — current problem & refactor target
+## Navigation model — current implementation
 
-### What feels wrong today
+### L0 — Primary header nav (`AppChromeHeader` + `AppPrimaryNav`)
+
+| Section | Builder mode | Consumer mode |
+|---------|--------------|---------------|
+| **Run** | — | Shared links, marketplace, active shared run |
+| **Build** | Workspace with active project | Navigate to project picker / builder |
+| **Billing** | Account billing (hides workspace tabs) | Account billing |
+| **Settings** | Account settings (hides workspace tabs) | Account settings |
+
+Consumer and builder share the same four primary sections. **Build** shows `ProjectSelector` in the header when a project is active.
+
+### L1 — Workspace tabs (`AppWindowNav`)
+
+Horizontal numbered tabs under the header (replaces the old vertical `AppSidebar`). Tabs show validity state — blocked tabs turn destructive and disable click.
+
+**Builder workspace tabs (12):** Structures (01), Pipeline (02), Testing (03), Inference (04), Share (05), Earnings (06), Logging (07), Cache (08), Documents (09), Docs (10), project Billing (11), project Settings (12).
+
+Account **Billing** / **Settings** (L0) are separate from project **Billing** / **Settings** (tabs 11–12).
+
+**Consumer workspace:** only **Run** (`share`) — Billing and Settings are reached via L0.
+
+`BUILDER_AREAS` / `BUILD_STEPS` in `lib/app-nav-config.ts` define logical groupings; `BuildWorkflowStepper` exists but is not wired — grouping is visual (numbered hints) only for now.
+
+### L2 — Page-local navigation
+
+Entity lists (struct list, run list, test list, inference setups) and Share section pills remain inside each tab. Still the main remaining nav collision vs L1.
+
+### Remaining refactor targets
+
+- Collapse 12 flat workspace tabs into area sub-nav (Build stepper + Deploy / Observe / Library pills)
+- Restyle L2 entity lists as muted entity rails (not nav clones)
+- Pipeline inspector → collapsible right drawer
+- Agent dock → sheet/drawer instead of `ResizableSplit` column
+
+### What still feels wrong (L2+)
 
 The app stacks **up to four navigation layers**, many using the same visual pattern (vertical list, `bg-secondary` selected row, mono labels, icon + text). Page-local lists read as a second “main menu” beside the real one.
 
 ```
 ┌─────────────┬──────────────────┬─────────────────────┬──────────────┐
-│ L1 App      │ L2 Page list     │ L3 Main canvas      │ L4 Inspector │
-│ AppSidebar  │ (looks like L1!) │                     │ / Agent dock │
-│ 11 equal    │ struct list      │ PipelineCanvas      │              │
-│ tabs        │ run list         │ StructureExcelEditor│              │
-│             │ test list        │ Inference run UI    │              │
-│             │ settings nav     │                     │              │
+│ L0 Primary  │ L1 Workspace     │ L2 Page list        │ L3/L4        │
+│ Run|Build|… │ AppWindowNav     │ (looks like L1!)    │ Inspector /  │
+│             │ 12 numbered tabs │ struct/run/test list│ Agent dock   │
 └─────────────┴──────────────────┴─────────────────────┴──────────────┘
-         ↑                              ↑
-    "Workspace"                   Horizontal pill tabs
-    Structures 01                 (Share: Publish | Shared | …)
-    Pipeline 02
-    …
 ```
 
 | Layer | What it is | Where | Problem |
 |-------|------------|-------|---------|
-| **L0** | Mode | Route: `/` consumer vs `/projects` vs `/run/[id]` | OK — separate routes |
-| **L1** | App sections | `AppSidebar` (`components/app-sidebar.tsx`) | **11 flat peers** — workflow steps (01–05) sit next to ops tools (Logging, Cache, Documents, Billing) with identical weight |
-| **L2** | Page entity list | Left `ResizableSplit` inside tab | **Visually clones L1** — struct list, run list, test list, inference setups, settings sections all look like app nav |
-| **L2b** | Page sections | Horizontal pills under `WindowHeader` | **Third nav metaphor** — Share Publish/Shared/Marketplace/Activity competes with sidebar |
+| **L0** | Mode + account | `AppPrimaryNav` in header | Done — Run \| Build \| Billing \| Settings |
+| **L1** | Workspace tabs | `AppWindowNav` (horizontal) | **12 flat peers** — logical areas exist in config but not in UI yet |
+| **L2** | Page entity list | Left `ResizableSplit` inside tab | **Visually clones L1** — struct list, run list, test list, inference setups |
+| **L2b** | Page sections | Horizontal pills under `WindowHeader` | Share Publish/Shared/Marketplace/Activity competes with workspace tabs |
 | **L3** | Primary work area | Canvas / editor / run UI | Correct — should dominate visually |
-| **L4** | Detail / tools | Right inspector, agent dock, doc viewer | **Fourth column** — pipeline inspector + agent dock both feel like “another sidebar” |
+| **L4** | Detail / tools | Right inspector, agent dock, doc viewer | Pipeline inspector + agent dock feel like another sidebar |
 
 Concrete collisions:
 
-1. **Structure** — `AppSidebar` “Structures” + left struct/type list (`structure-builder.tsx`) = two sidebars, same selected-row styling.
-2. **Pipeline** — app “Pipeline” tab + right **Inspector** panel = user must infer inspector is step config, not app navigation.
-3. **Logging** — app “Logging” + left run list + inner pipeline canvas split = three columns of lists.
-4. **Settings** — header button opens a page that **adds its own left nav** (`SETTINGS_SECTIONS`) while `AppSidebar` stays visible.
-5. **Share** — app “Share” + horizontal section tabs + (in publish) Link/API/Marketplace sub-tabs = nav inside nav.
+1. **Structure** — workspace tab + left struct/type list = two nav rows, same styling.
+2. **Pipeline** — workspace tab + right **Inspector** = user must infer inspector is step config.
+3. **Logging** — workspace tab + left run list + inner pipeline canvas split = three columns of lists.
+4. **Account settings** — L0 Settings hides workspace nav; project Settings (tab 12) is separate.
+5. **Share** — workspace tab + horizontal section tabs + publish sub-tabs = nav inside nav.
 6. **Agent dock** — `ProjectAssistantDockLayout` trailing pane uses same full-height column pattern as page sidebars.
 
-`WindowHeader` step labels (`01 / Structure`, `05 / Share`) imply a **linear workflow**, but the sidebar presents everything as **parallel destinations** — the mental model and the UI disagree.
-
-### Target: one job per navigation level
-
-**Rule:** each level must look and behave differently. Only **L1** uses the app chrome sidebar. Everything inside a page uses inset panels, top bars, or inspectors — never a second `SidebarMenu`.
-
-#### L0 — Mode (routes, not tabs)
-
-| Mode | Route | Shell |
-|------|-------|-------|
-| Run (consumer) | `/` | Minimal chrome — no project |
-| Build (picker) | `/projects` | Full-page gallery, no app sidebar |
-| Build (workspace) | `/` with active project | Builder shell below |
-| Shared link only | `/run/[id]` | Standalone runner |
-
-#### L1 — App areas (max 5 groups, not 11 items)
-
-Collapse the flat list into **grouped top-level areas**. Workflow steps live **inside Build**, not as siblings of Billing.
-
-```
-Consumer (/):
-  Run          → shared links, marketplace browse, active shared run
-  Account      → billing, settings
-
-Builder (/ + project):
-  Build        → linear sub-flow: Structure → Pipeline → Testing → Inference  (the "creator" view)
-  Deploy       → Share, Earnings, marketplace publish, deployment activity
-  Observe      → Logging, Cache
-  Library      → Documents, project Docs (markdown rules)
-  Account      → Billing, Settings
-```
-
-**Implementation options for L1 (pick one in refactor):**
-
-| Option | L1 control | Pros |
-|--------|------------|------|
-| **A. Top primary tabs** | Horizontal bar under header: Build \| Deploy \| Observe \| Library \| Account | Workflow sub-steps sit under Build only; no confusion with entity lists |
-| **B. Grouped sidebar** | `SidebarGroup` per area; Build children indented | Keeps sidebar; must visually indent + label groups (“Build”, “Operate”) |
-| **C. Build-only sidebar** | Sidebar only on Build route; other areas are separate routes `/logging`, etc. | Clearest separation; more routing work |
-
-Recommended: **A (top tabs) + B styling for Build sub-steps** — matches `WindowHeader` step numbers.
-
-#### L2 — Page-local navigation (entity lists & sections)
+### Target patterns (not yet fully applied)
 
 **Must not use `Sidebar` / `SidebarMenuButton`.** Use a distinct pattern:
 
@@ -835,20 +889,20 @@ When **L1 ≠ Build**, drop the stepper and entity rail unless that area needs a
 
 No left app sidebar in consumer mode — L1 is top tabs only.
 
-### Refactor checklist (files)
+### Refactor checklist (remaining)
 
-| Step | Action | Files |
-|------|--------|-------|
-| 1 | Extract nav config into grouped areas | `lib/app-nav-config.ts` → add `APP_AREAS`, `BUILD_STEPS` |
-| 2 | Replace flat `AppSidebar` with L1 top tabs OR grouped sidebar | `app-shell-layout.tsx`, new `app-top-nav.tsx` |
-| 3 | Add Build stepper component wired to `activeWindow` for structure/pipeline/testing/inference only | new `build-workflow-stepper.tsx` |
-| 4 | Restyle page entity lists — no `SidebarMenuButton` | `structure-builder.tsx`, `logging/run-picker-column.tsx`, `testing.tsx`, `inference.tsx`, `settings.tsx` |
-| 5 | Pipeline inspector → collapsible right drawer with title | `pipeline-builder.tsx`, `inspector-collapsible-section.tsx` |
-| 6 | Share — keep section tabs, remove duplicate nav feel | `share/share-page.tsx` |
-| 7 | Settings — full-page Account view; optional: hide L1 when settings open | `settings.tsx`, `app-shell-layout.tsx` |
-| 8 | Agent dock → Sheet/drawer | `project-assistant-dock-layout.tsx` |
-| 9 | Consumer — remove sidebar, use top tabs | `ConsumerShellLayout` in `app-shell-layout.tsx` |
-| 10 | Persist `activeWindow` under area + step in URL query or path | `lib/app-shell.tsx` |
+| Step | Action | Status |
+|------|--------|--------|
+| 1 | `APP_AREAS`, `BUILD_STEPS` in nav config | Done |
+| 2 | L0 primary nav (`AppPrimaryNav`) | Done |
+| 3 | Replace `AppSidebar` with `AppWindowNav` | Done (12 flat tabs; area grouping not wired) |
+| 4 | Wire `BuildWorkflowStepper` for Build-only sub-nav | Not wired |
+| 5 | Restyle page entity lists as entity rails | Open |
+| 6 | Pipeline inspector → collapsible drawer | Open |
+| 7 | Agent dock → Sheet/drawer | Open |
+| 8 | Persist `activeWindow` in URL | Open |
+
+`AppSidebar` remains in repo but is unused.
 
 ### State model (for refactor)
 
@@ -882,14 +936,12 @@ Document this in UI copy: consumer never sees Structure/Pipeline tabs; developer
 
 ## 1. Consumer view (run shared pipelines)
 
-> **Nav note:** See [Navigation model](#navigation-model--current-problem--refactor-target) — consumer should use **top tabs (Run | Account)**, not a left sidebar that mirrors page lists.
-
 Users with **no projects** (or who cleared active project) land in consumer mode at `/`.
 
 ```
 /  (ConsumerShellLayout)
-├── AppSidebar — tabs: Shared with me, Billing
-├── Header — logo, "run shared pipelines", Settings, Feedback
+├── AppChromeHeader — Run | Build | Billing | Settings
+├── AppWindowNav — Run tab only (when on Run section)
 └── Main (activeWindow)
     ├── share → SharePage (consumer variant)
     │   ├── section: Shared with me
@@ -902,8 +954,8 @@ Users with **no projects** (or who cleared active project) land in consumer mode
     │           ├── HumanReviewPanel (human-review steps)
     │           ├── InferenceStepTracePanel
     │           └── InferenceRunOutputs
-    ├── billing → Billing
-    └── settings → Settings
+    ├── billing → Billing (account)
+    └── settings → Settings (account)
         ├── TeamSettings
         ├── Account / sign out
         ├── ModelSelector
@@ -923,7 +975,7 @@ SharedRunViewer
     └── LazyDocViewer (document preview overlay)
 ```
 
-Consumer sidebar items are defined in `CONSUMER_WINDOWS` inside `components/app-shell-layout.tsx`.
+Consumer panels: `CONSUMER_PANEL_IDS` in `components/app-shell-layout.tsx`.
 
 ---
 
@@ -950,19 +1002,18 @@ Opening a project sets `activeProjectId` in session and navigates to `/` → **B
 
 ## 3. Pipeline creator / builder view
 
-> **Nav note:** This section describes **current** nesting. Target IA collapses 11 sidebar items into 5 areas + a Build stepper; page sidebars become **entity rails** with distinct styling. See [Navigation model](#navigation-model--current-problem--refactor-target).
-
 Once a project is active, `/` renders the full builder shell:
 
 ```
 /  (BuilderShellLayout)
-├── AppSidebar — 11 tabs (see below)
-├── Header
-│   ├── ProjectSelector (dropdown: switch / rename / delete / all projects / new)
+├── AppChromeHeader
+│   ├── AppPrimaryNav — Run | Build | Billing | Settings
+│   ├── ProjectSelector (when Build section active)
 │   ├── RunningJobsHub
 │   ├── ProjectAssistantDockToggle
 │   ├── DiagnosisAgentHub
 │   └── FeedbackButton
+├── AppWindowNav — 12 numbered horizontal workspace tabs (hidden on account Billing/Settings)
 ├── ProjectAssistantDockLayout
 │   ├── Main tab content (activeWindow)
 │   └── ProjectAssistantDockPanel (optional trailing pane)
@@ -971,7 +1022,7 @@ Once a project is active, `/` renders the full builder shell:
 └── LazyDocViewer (global document overlay)
 ```
 
-### Builder sidebar tabs → root components
+### Builder workspace tabs → root components
 
 | Tab | `activeWindow` | Root component | Step |
 |-----|----------------|----------------|------|
@@ -980,13 +1031,15 @@ Once a project is active, `/` renders the full builder shell:
 | Testing | `testing` | `Testing` | 03 |
 | Inference | `inference` | `Inference` | 04 |
 | Share | `share` | `SharePage` (builder variant) | 05 |
-| Earnings | `earnings` | `Earnings` | — |
+| Earnings | `earnings` | `Earnings` | 06 |
 | Logging | `logging` | `Logging` | 07 |
 | Cache | `cache` | `Cache` | 08 |
 | Documents | `documents` | `Documents` | 09 |
 | Docs | `docs` | `Documentation` | 10 |
-| Billing | `billing` | `Billing` | 11 |
-| Settings | `settings` | `Settings` | header only |
+| Billing | `project-billing` | `ProjectBilling` | 11 |
+| Settings | `project-settings` | `ProjectSettings` (Langfuse toggle, etc.) | 12 |
+
+Account **billing** / **settings** windows are separate — reached via L0 primary nav, not workspace tabs.
 
 ---
 
@@ -1021,7 +1074,7 @@ PipelineBuilder
 ├── PipelineExportDialog
 ├── ResizableSplit
 │   ├── PipelineCanvas (visual step chain)
-│   │   ├── PipelineNode per step (input, LLM, parallel LLM, code, group-by, human review, output, …)
+│   │   ├── PipelineNode per step (input, LLM, batch LLM, example select, transform, merge, chunk, code, webhook, human review, output, auto-managed parse/quote, …)
 │   │   ├── Insert slots (AddStepMenu)
 │   │   └── PipelineSummaryBox (AI summary)
 │   └── Inspector sidebar
@@ -1029,8 +1082,10 @@ PipelineBuilder
 │           ├── shared.tsx — PipelineField, StructureModelSelect, IoMismatchFieldFix
 │           ├── input-fields.tsx — InputModuleFields (file types, default doc)
 │           ├── llm-fields.tsx — LlmModuleFields (prompt, model, schema)
+│           ├── example-select-fields.tsx — ExampleSelectModuleFields (+ prompt cache preview)
+│           ├── webhook-fields.tsx — WebhookModuleFields
 │           ├── code-fields.tsx — CodeModuleFields → CustomCodeEditor
-│           └── list-ops-fields.tsx — ListOpsModuleFields (group-by / merge)
+│           └── list-ops-fields.tsx — ListOpsModuleFields (transform / merge)
 ```
 
 Step kinds map to `lib/types` `ModuleKind` and `MODULE_META` icons.
@@ -1101,6 +1156,7 @@ Logging
 │       ├── StepProfiling
 │       ├── StepFailuresSection
 │       ├── LlmRetryGridSection
+│       ├── ExampleSelectVerdicts (kept/excluded candidates)
 │       ├── StepServerLogsSection
 │       ├── RunNotesEditor
 │       ├── TestResults (for test runs)
@@ -1115,10 +1171,12 @@ Logging
 |-----|---------------------|
 | **Cache** | cache list + `JsonPreviewPanel`, `IoPager`, search toggles |
 | **Documents** | upload zone, `DocProjectPicker`, file list, `PreviewBlockedDialog` |
-| **Docs** | markdown editor + preview (`Documentation`) |
-| **Billing** | balance, `Chart` (usage over time), checkout, API keys |
+| **Docs** | markdown editor + preview + mermaid pipeline graph (`Documentation`) |
+| **Project billing** | per-project usage chart |
+| **Project settings** | Langfuse export toggle, project-level prefs |
 | **Earnings** | creator balance, withdraw to billing |
-| **Settings** | `SETTINGS_SECTIONS` nav + `TeamSettings`, `PrivacySettings`, toggles |
+| **Account billing** | balance, `Chart` (usage over time), checkout, API keys |
+| **Account settings** | `SETTINGS_SECTIONS` nav + `TeamSettings`, `PrivacySettings`, toggles |
 
 ### 3.8 Global builder overlays (not tabs)
 

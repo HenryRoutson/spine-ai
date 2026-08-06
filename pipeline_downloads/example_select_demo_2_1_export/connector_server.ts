@@ -6,7 +6,7 @@ import "dotenv/config";
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import { createServer } from 'node:http';
-import { configurePipelineRuntime, runPipeline } from './example_select_demo_pipeline';
+import { configurePipelineRuntime, runPipeline } from './example_select_demo_2_1_pipeline';
 
 const PROTO_PATH = new URL('./pipeline_connector.proto', import.meta.url).pathname;
 const GRPC_PORT = process.env.PIPELINE_GRPC_PORT ?? '50051';

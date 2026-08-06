@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_MERGE_POLICY } from "@/lib/merger";
-import { deriveMergePairType, deriveMergeSpineOutType } from "@/lib/merge-type-expr";
+import { deriveMergePairType, deriveMergeSpineOutType, deriveMergeStepTypes } from "@/lib/merge-type-expr";
 import {
   MergeDictStrategy,
   MergeListStrategy,
@@ -93,5 +93,64 @@ describe("deriveMergeSpineOutType", () => {
     const inType = { kind: "ref" as const, modelId: row.id };
     const { outType } = deriveMergeSpineOutType(inType, DEFAULT_MERGE_POLICY, [row]);
     expect(outType).toEqual(inType);
+  });
+});
+
+describe("deriveMergeStepTypes with pipeline state", () => {
+  const scopeDesc: StructureModel = {
+    id: "m_scope_desc" as StructureModelId,
+    name: "ScopeDescription",
+    description: "",
+    fields: [{ name: "description", type: "text" }],
+  };
+
+  const selected: StructureModel = {
+    id: "m_selected" as StructureModelId,
+    name: "SelectedExample",
+    description: "",
+    fields: [
+      { name: "id", type: "text" },
+      { name: "selection_reason", type: "text" },
+    ],
+  };
+
+  const draftReq: StructureModel = {
+    id: "m_draft_req" as StructureModelId,
+    name: "ScopeDraftRequest",
+    description: "",
+    fields: [
+      { name: "description", type: "text" },
+      { name: "selected_examples", type: "list[model]", ref: selected.id },
+    ],
+  };
+
+  it("merges state label output with wrapped list spine", () => {
+    const modules = [
+      { id: "mod_norm", kind: "custom-code" as const, label: "Normalize Case", cached: true, avgMs: 0, avgCostCents: 0, outStructureId: scopeDesc.id, outType: { kind: "ref" as const, modelId: scopeDesc.id } },
+      { id: "mod_select", kind: "example-select" as const, label: "Select Relevant Examples", cached: true, avgMs: 0, avgCostCents: 0, outStructureId: selected.id, outType: { kind: "list" as const, item: { kind: "ref" as const, modelId: selected.id } } },
+      {
+        id: "mod_merge",
+        kind: "merge" as const,
+        label: "Merge for Draft",
+        cached: true,
+        avgMs: 0,
+        avgCostCents: 0,
+        inStructureId: selected.id,
+        outStructureId: draftReq.id,
+        mergeStateLabel: "Normalize Case",
+        mergeWrapListField: "selected_examples",
+      },
+    ];
+    const mergeMod = modules[2]!;
+    const { module, models: nextModels } = deriveMergeStepTypes(
+      mergeMod,
+      modules[1],
+      [scopeDesc, selected, draftReq],
+      DEFAULT_MERGE_POLICY,
+      modules,
+    );
+    expect(module.outStructureId).toBe(draftReq.id);
+    expect(module.outType).toEqual({ kind: "ref", modelId: draftReq.id });
+    expect(nextModels.some((m) => m.id.startsWith("sm_merge_"))).toBe(false);
   });
 });

@@ -1,4 +1,5 @@
 import type { JobLogEntry, PipelineState, StepProgress, StepSubProgress } from "@/lib/run-types";
+import type { ExampleSelectVerdict } from "@/lib/example-select-verdicts";
 import type { runLogger } from "../server_logger";
 import type { Store } from "../store";
 import type { UsageLedger } from "../usage";
@@ -53,6 +54,7 @@ export interface ExecResult {
   inputPreviewItems?: InputPreviewItem[];
   docId?: DocId;
   llmCalls?: LlmCallRecord[];
+  exampleSelectVerdicts?: ExampleSelectVerdict[];
 }
 
 export interface RunCtx {

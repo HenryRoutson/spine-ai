@@ -41,6 +41,7 @@ import { LlmModuleFields } from "@/components/pipeline-fields/llm-fields"
 import { CodeModuleFields } from "@/components/pipeline-fields/code-fields"
 import { ListOpsModuleFields } from "@/components/pipeline-fields/list-ops-fields"
 import { ExampleSelectModuleFields } from "@/components/pipeline-fields/example-select-fields"
+import { WebhookModuleFields } from "@/components/pipeline-fields/webhook-fields"
 import { InspectorCollapsibleSection } from "@/components/inspector-collapsible-section"
 
 export { useLlmSchemaPreview } from "@/components/pipeline-fields/shared"
@@ -399,6 +400,10 @@ export function PipelineModuleFields({
           edit={!!edit}
           onUpdate={onUpdate}
         />
+      )}
+
+      {selected.kind === ModuleKind.Webhook && (
+        <WebhookModuleFields selected={selected} edit={!!edit} invalid={invalid} onUpdate={onUpdate} />
       )}
     </div>
   )

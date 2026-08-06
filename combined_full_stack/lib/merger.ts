@@ -484,23 +484,60 @@ function pathLabel(path: Path): string {
   return path.map(String).join(".");
 }
 
-export function buildMergeTypeScript(policy: MergePolicy | undefined, custom?: string): string {
+export type MergeCodegenOptions = {
+  stateLabel?: string;
+  wrapListField?: string;
+};
+
+function mergeFoldBody(policyJson: string, valuesExpr: string, reuseValues = false): string {
+  const valuesLine = reuseValues ? "" : `  const values = ${valuesExpr};\n`;
+  return `${valuesLine}  const resolver = new __resolve(${policyJson});
+  if (!values.length) return null;
+  if (values.length === 1) return values[0];
+  let result = values[0];
+  for (let i = 1; i < values.length; i++) result = __mergePair(result, values[i], resolver, []);
+  return result;`;
+}
+
+export function buildMergeTypeScript(
+  policy: MergePolicy | undefined,
+  custom?: string,
+  opts?: MergeCodegenOptions,
+): string {
   const trimmed = custom?.trim();
   if (trimmed) {
     return trimmed.startsWith("(") || trimmed.startsWith("input") ? trimmed : `(input) => (${trimmed})`;
   }
   const policyJson = JSON.stringify(policy ?? DEFAULT_MERGE_POLICY);
-  return `${mergeRuntimeHelpers()}
+  const stateLabel = opts?.stateLabel?.trim();
+  const wrapField = opts?.wrapListField?.trim();
+  const runtime = `${mergeRuntimeHelpers()}
 const __mergePair = ${mergePairSource()};
-const __resolve = ${policyResolverSource()};
+const __resolve = ${policyResolverSource()};`;
+
+  if (stateLabel || wrapField) {
+    const wrapKey = wrapField ? JSON.stringify(wrapField) : '""';
+    const stateKey = stateLabel ? JSON.stringify(stateLabel) : '""';
+    return `${runtime}
+(input, state) => {
+  let spine = input;
+  if (${wrapKey} && Array.isArray(spine)) spine = { [${wrapKey}]: spine };
+  const values = [];
+  if (${stateKey}) {
+    const fromState = (state ?? {})[${stateKey}];
+    if (fromState != null) values.push(fromState);
+  }
+  if (spine != null) values.push(spine);
+${mergeFoldBody(policyJson, "values", true)}
+}`;
+  }
+
+  return `${runtime}
 (input) => {
-  const resolver = new __resolve(${policyJson});
-  const values = Array.isArray(input) ? input.filter((v) => v != null) : (input != null ? [input] : []);
-  if (!values.length) return null;
-  if (values.length === 1) return values[0];
-  let result = values[0];
-  for (let i = 1; i < values.length; i++) result = __mergePair(result, values[i], resolver, []);
-  return result;
+${mergeFoldBody(
+  policyJson,
+  "Array.isArray(input) ? input.filter((v) => v != null) : (input != null ? [input] : [])",
+)}
 }`;
 }
 

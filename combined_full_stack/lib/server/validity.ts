@@ -467,6 +467,30 @@ function computeExampleSelectInvalid(modules: PipelineModule[]): InvalidMap {
   return invalid;
 }
 
+function computeMergeStateInvalid(modules: PipelineModule[], models: StructureModel[]): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (let i = 0; i < modules.length; i++) {
+    const m = modules[i]!;
+    if (!isMergeModuleKind(m.kind)) continue;
+    const label = m.mergeStateLabel?.trim();
+    if (label && !labelsInScope(modules, i).has(label)) {
+      pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.StateKeyMissing, missingLabel: label });
+    }
+    const wrap = m.mergeWrapListField?.trim();
+    if (wrap && m.outStructureId) {
+      const out = models.find((model) => model.id === m.outStructureId);
+      if (!out?.fields.some((f) => f.name === wrap)) {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: `mergeWrapListField "${wrap}" is not on output structure ${out?.name ?? m.outStructureId}`,
+        });
+      }
+    }
+  }
+  return invalid;
+}
+
 function computeMissingCombineBeforeInputInvalid(modules: PipelineModule[]): InvalidMap {
   const invalid: InvalidMap = new Map();
   let needsCombineForNextInput = false;
@@ -501,6 +525,16 @@ function computeNoteInvalid(modules: PipelineModule[]): InvalidMap {
   return invalid;
 }
 
+function computeWebhookInvalid(modules: PipelineModule[]): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (const m of modules) {
+    if (m.kind !== ModuleKind.Webhook) continue;
+    if (m.webhookUrl?.trim()) continue;
+    pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.MissingWebhookUrl });
+  }
+  return invalid;
+}
+
 // AI : canonical I/O-validity check — strictly linear except combine (pipeline state + side doc).
 export function computeInvalid(
   modules: PipelineModule[],
@@ -515,7 +549,17 @@ export function computeInvalid(
     list.push(...issues);
     invalid.set(moduleId, list);
   }
+  for (const [moduleId, issues] of computeWebhookInvalid(modules)) {
+    const list = invalid.get(moduleId) ?? [];
+    list.push(...issues);
+    invalid.set(moduleId, list);
+  }
   for (const [moduleId, issues] of computeExampleSelectInvalid(modules)) {
+    const list = invalid.get(moduleId) ?? [];
+    list.push(...issues);
+    invalid.set(moduleId, list);
+  }
+  for (const [moduleId, issues] of computeMergeStateInvalid(modules, models)) {
     const list = invalid.get(moduleId) ?? [];
     list.push(...issues);
     invalid.set(moduleId, list);

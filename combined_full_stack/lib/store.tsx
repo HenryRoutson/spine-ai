@@ -169,6 +169,7 @@ function serializeProjectPutBody(p: Project): string {
     inferencePresets: p.inferencePresets,
     llmProviders: p.llmProviders,
     documentation: p.documentation,
+    langfuseExport: p.langfuseExport,
   })
 }
 

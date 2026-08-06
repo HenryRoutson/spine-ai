@@ -1,5 +1,5 @@
 import type { CodeLineProfile } from "@/lib/code-exec-ui"
-import { instrumentCodeLinesAst, type InstrumentCodeOpts } from "@/lib/custom_code_trace_ast"
+import { instrumentArrowSourceAst, instrumentCodeLinesAst, type InstrumentCodeOpts } from "@/lib/custom_code_trace_ast"
 
 export type { InstrumentCodeOpts } from "@/lib/custom_code_trace_ast"
 
@@ -60,6 +60,15 @@ export function groupProfileSlotsByLine(lineMs?: CodeLineProfile): Map<number, P
 export function instrumentCodeLines(code: string, opts: InstrumentCodeOpts = {}): string {
   try {
     return instrumentCodeLinesAst(code, opts)
+  } catch {
+    return code
+  }
+}
+
+// AI : preamble+arrow codegen — avoid wrapping the arrow in extra parens before rejoin.
+export function instrumentArrowSource(code: string, opts: InstrumentCodeOpts = {}): string {
+  try {
+    return instrumentArrowSourceAst(code, opts)
   } catch {
     return code
   }

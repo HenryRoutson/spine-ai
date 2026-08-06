@@ -1,0 +1,8 @@
+{
+  "description": "Two-pass example-select — structured billed work with 100-item catalog and cached-prefix filtering.",
+  "inputs": {
+    "Work Description": "billed_work_description.txt",
+    "Job Example Library": "job_example_library.json",
+    "Work Item Catalog": "work_item_catalog.json"
+  }
+}

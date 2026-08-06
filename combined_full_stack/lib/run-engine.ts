@@ -15,6 +15,12 @@ import { CODE_ERROR_NS, recordCodeError } from "@/lib/code-error-history"
 import { getCustomLlmProvider, type CustomLlmProviderDef } from "@/lib/custom-llm-providers"
 import type { LlmClientStepSpec } from "@/lib/llm-client-step"
 import { runBrowserLlmPrompts } from "@/lib/llm-provider-runtime"
+import {
+  MAX_CLIENT_STEP_ERROR_CHARS,
+  sanitizeClientStepPayload,
+  truncateClientStepText,
+  type ClientStepSubmitPayload,
+} from "@/lib/client-step-payload"
 import { readApiErrorBody, formatApiError, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { RATE_LIMITS } from "@/lib/rate_limit_config"
@@ -220,17 +226,12 @@ export interface AwaitRunCallbacks {
   signal?: AbortSignal
 }
 
+export type { ClientStepSubmitPayload } from "@/lib/client-step-payload"
+
 export type AwaitRunResult = {
   run: PipelineRun
   deduped?: boolean
   cachedRunId?: PipelineRun["id"]
-}
-
-export type ClientStepSubmitPayload = {
-  output?: unknown
-  error?: string
-  clientLogs?: JobLogEntry[]
-  codeProfile?: StepCodeProfile
 }
 
 // AI : assert/custom-code failures are expected project outcomes — warn in console, not Next.js console.error overlay.
@@ -250,31 +251,19 @@ function recordCustomCodeFailures(failures: CustomCodeAttemptFailure[]): void {
 }
 
 function clientStepSubmitError(kind: string, err: unknown, stepLabel?: string): string {
-  const uiLocation = `Inference → Run Pipeline → ${kind} step${stepLabel ? ` (${stepLabel})` : ""}`;
+  const stepName = stepLabel ? `"${stepLabel}" ` : ""
+  const uiLocation = `Inference → Run Pipeline → ${kind} step${stepLabel ? ` (${stepLabel})` : ""}`
+  let message: string
   if (err instanceof CustomCodeExhaustedError) {
-    const last = err.failures[err.failures.length - 1];
-    if (kind === "assert" && last?.error) {
-      return [
-        last.error,
-        `UI location: ${uiLocation}`,
-        formatCustomCodeFailureLog(last, "assert"),
-      ].join("\n");
-    }
-    if (last) {
-      return [
-        err.message,
-        `UI location: ${uiLocation}`,
-        formatCustomCodeFailureLog(last, kind === "assert" ? "assert" : "custom-code"),
-      ].join("\n");
-    }
-    return err.message;
+    const last = err.failures[err.failures.length - 1]
+    message = kind === "assert" && last?.error ? last.error : err.message
+  } else {
+    message = err instanceof Error ? err.message : String(err)
   }
-  const { message, stack } = err instanceof Error ? err : { message: String(err), stack: undefined };
-  return [
-    message,
-    `UI location: ${uiLocation}`,
-    ...(stack?.trim() ? ["Stack trace:", stack.trim()] : []),
-  ].join("\n");
+  return truncateClientStepText(
+    [`${stepName}${kind} step failed: ${message}`, `UI location: ${uiLocation}`].join("\n"),
+    MAX_CLIENT_STEP_ERROR_CHARS,
+  )
 }
 
 // AI : shared poll loop for dev runs and shared-link runs — handles browser client steps + human review.
@@ -312,8 +301,11 @@ async function submitBrowserLlmClientStep(
       moduleId,
     })
     await submitClientStep({
-      error: [`${tag} step (${label}) failed: ${message}`, `UI location: Inference → Run Pipeline → LLM (${label})`].join(
-        "\n",
+      error: truncateClientStepText(
+        [`${tag} step (${label}) failed: ${message}`, `UI location: Inference → Run Pipeline → LLM (${label})`].join(
+          "\n",
+        ),
+        MAX_CLIENT_STEP_ERROR_CHARS,
       ),
       clientLogs,
     })
@@ -325,6 +317,7 @@ export async function awaitJobCompletion(
   submitClientStep: (payload: ClientStepSubmitPayload) => Promise<void>,
   callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
   intervalMs = DEFAULT_POLL_INTERVAL_MS,
+  clientStepContext?: { stepLabel?: string },
 ): Promise<AwaitRunResult> {
   const { onStep, onLogs, onHumanReview, onCodeExec, projectLlmProviders, signal } =
     typeof callbacks === "function" ? { onStep: callbacks } : callbacks
@@ -343,7 +336,10 @@ export async function awaitJobCompletion(
       onLogs?.(logs, newLines)
       seenLogs = logs.length
     }
-    if (!job.clientStep && !awaitingServerResume) clientStepSubmittedFor = undefined
+    if (!job.clientStep && !awaitingServerResume) {
+      clientStepSubmittedFor = undefined
+      if (clientStepContext) clientStepContext.stepLabel = undefined
+    }
     if (
       awaitingServerResume &&
       ((job.clientStep && job.clientStep.moduleId !== clientStepSubmittedFor) || job.run || job.error)
@@ -358,6 +354,7 @@ export async function awaitJobCompletion(
       clientStepSubmittedFor !== job.clientStep.moduleId
     ) {
       const spec = job.clientStep
+      if (clientStepContext) clientStepContext.stepLabel = spec.label
       if (onHumanReview) {
         clientStepBusy = true
         try {
@@ -384,6 +381,7 @@ export async function awaitJobCompletion(
       clientStepSubmittedFor !== job.clientStep.moduleId
     ) {
       const { moduleId, label, llmClient } = job.clientStep
+      if (clientStepContext) clientStepContext.stepLabel = label
       clientStepBusy = true
       try {
         await submitBrowserLlmClientStep(moduleId, label, llmClient, projectLlmProviders, submitClientStep)
@@ -404,6 +402,7 @@ export async function awaitJobCompletion(
       clientStepSubmittedFor !== job.clientStep.moduleId
     ) {
       const { moduleId, label, entries, input, pipelineState, kind, expectedOutputs, maxRunMs } = job.clientStep
+      if (clientStepContext) clientStepContext.stepLabel = label
       if (!entries?.length) {
         await submitClientStep({ error: `${kind} step has no code configured` })
         clientStepSubmittedFor = moduleId
@@ -425,7 +424,7 @@ export async function awaitJobCompletion(
           ...patch,
         })
       }
-      pushCodeExec({ activeLine: 1 })
+      pushCodeExec({})
       const onTrace = (event: CodeTraceEvent) => {
         lineMs = event.lineMs
         if (event.phase === CodeTracePhase.Enter && event.activeLine != null) {
@@ -586,17 +585,19 @@ export async function cancelRun(jobId: RunJobId): Promise<void> {
 async function submitClientStep(
   jobId: RunJobId,
   payload: ClientStepSubmitPayload,
+  opts?: { stepLabel?: string },
 ): Promise<void> {
   const res = await fetch(API_ROUTES.runClientStep(jobId), {
     method: "POST",
     headers: JSON_HEADERS,
-    body: JSON.stringify(payload),
+    body: JSON.stringify(sanitizeClientStepPayload(payload)),
   })
   if (res.ok) return
   const body = await readApiErrorBody(res)
   // AI : race fix — stale progress can trigger a second POST after claim; 409 is harmless, keep polling.
   if (res.status === 409 && body?.error?.includes("not waiting for client code")) return
-  throwApiError(`Client code step for job ${jobId} failed`, res, body)
+  const stepHint = opts?.stepLabel ? ` "${opts.stepLabel}"` : ""
+  throwApiError(`Client code step${stepHint} for job ${jobId} failed`, res, body)
 }
 
 export async function awaitRun(
@@ -604,10 +605,12 @@ export async function awaitRun(
   callbacks: AwaitRunCallbacks | ((steps: StepProgress[]) => void),
   intervalMs = DEFAULT_POLL_INTERVAL_MS,
 ): Promise<AwaitRunResult> {
+  const clientStepContext = { stepLabel: undefined as string | undefined }
   return awaitJobCompletion(
     () => runProgress(jobId),
-    (payload) => submitClientStep(jobId, payload),
+    (payload) => submitClientStep(jobId, payload, { stepLabel: clientStepContext.stepLabel }),
     callbacks,
     intervalMs,
+    clientStepContext,
   )
 }

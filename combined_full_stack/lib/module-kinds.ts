@@ -14,6 +14,7 @@ export const USER_ADDABLE_MODULE_KINDS = [
   ModuleKind.CustomCode,
   ModuleKind.Assert,
   ModuleKind.HumanReview,
+  ModuleKind.Webhook,
   ModuleKind.Output,
 ] as const satisfies readonly ModuleKind[]
 

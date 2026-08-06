@@ -15,6 +15,7 @@ import {
   execQuoteStep,
   execTransformStep,
 } from "./steps/misc";
+import { execWebhookStep } from "./steps/webhook";
 
 export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   log.debug(`execModule start`, { moduleId: m.id, kind: m.kind, label: m.label });
@@ -43,6 +44,8 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
       return execAssertStep(m, ctx, log);
     case ModuleKind.HumanReview:
       return execHumanReviewStep(m, ctx, log);
+    case ModuleKind.Webhook:
+      return execWebhookStep(m, ctx, log);
     default: {
       if (isMergeModuleKind(m.kind)) return execCustomCodeStep(m, ctx, log);
       const unreachable: never = m.kind;
