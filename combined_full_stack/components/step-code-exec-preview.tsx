@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 import type { CodeLineProfile } from "@/lib/code-exec-ui"
 import { parseCodeProfileKey } from "@/lib/custom_code_trace"
@@ -25,8 +26,25 @@ export function StepCodeExecPreview({
 }) {
   const lines = code.split("\n")
   const highlighted = useMonacoSyntaxLines(code, language)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const lineRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const maxMs = Math.max(...Object.values(lineMs ?? {}), 0.01)
-  const hasProfile = lineMs && Object.keys(lineMs).length > 0
+  const isLive = activeLine != null
+  const hasProfile = !isLive && lineMs && Object.keys(lineMs).length > 0
+
+  useEffect(() => {
+    if (activeLine == null) return
+    const row = lineRefs.current.get(activeLine)
+    if (!row || !scrollRef.current) return
+    const container = scrollRef.current
+    const rowTop = row.offsetTop
+    const rowBottom = rowTop + row.offsetHeight
+    const viewTop = container.scrollTop
+    const viewBottom = viewTop + container.clientHeight
+    if (rowTop < viewTop || rowBottom > viewBottom) {
+      row.scrollIntoView({ block: "nearest", behavior: "smooth" })
+    }
+  }, [activeLine, activeSlot])
   const slotsByLine = new Map<number, { slot: number; ms: number }[]>()
   for (const [key, ms] of Object.entries(lineMs ?? {})) {
     const { line, slot } = parseCodeProfileKey(key)
@@ -41,7 +59,11 @@ export function StepCodeExecPreview({
     <div className={cn("mt-2", className)}>
       <div className="mb-1 flex items-center justify-between gap-2">
         <p className="font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
-          {activeLine != null ? `running line ${activeLine}` : hasProfile ? "code profile" : "code"}
+          {activeLine != null
+            ? `running line ${activeLine}${activeSlot != null ? ` · λ${activeSlot}` : ""}`
+            : hasProfile
+              ? "code profile"
+              : "code"}
         </p>
         <span
           className="rounded border border-border bg-muted/50 px-1.5 py-px font-mono text-[8px] font-medium uppercase tracking-wide text-muted-foreground"
@@ -51,6 +73,7 @@ export function StepCodeExecPreview({
         </span>
       </div>
       <div
+        ref={scrollRef}
         className={cn(
           "relative overflow-y-auto rounded border border-border bg-[#1e1e1e] font-mono leading-snug text-[#d4d4d4]",
           compact ? "max-h-36 text-[9px]" : "max-h-56 text-[10px]",
@@ -60,14 +83,20 @@ export function StepCodeExecPreview({
           const ln = i + 1
           const ms = lineMs?.[String(ln)]
           const slots = slotsByLine.get(ln) ?? []
-          const isActive = activeLine === ln && activeSlot == null
+          const isActive = activeLine === ln
           const barPct = ms != null ? Math.max(4, Math.round((ms / maxMs) * 100)) : 0
           return (
-            <div key={ln}>
+            <div
+              key={ln}
+              ref={(el) => {
+                if (el) lineRefs.current.set(ln, el)
+                else lineRefs.current.delete(ln)
+              }}
+            >
               <div
                 className={cn(
-                  "flex min-w-0 items-start gap-1.5 px-1.5 py-px",
-                  isActive && "bg-primary/15",
+                  "flex min-w-0 items-start gap-1.5 border-l-2 border-transparent px-1.5 py-px",
+                  isActive && "border-primary bg-primary/20",
                   hasProfile && ms != null && ms === maxMs && maxMs > 1 && "bg-amber-500/10",
                 )}
               >
@@ -98,9 +127,9 @@ export function StepCodeExecPreview({
                   <div
                     key={`${ln}.${slot}`}
                     className={cn(
-                      "flex min-w-0 items-start gap-1.5 py-px pl-5 pr-1.5",
-                      slotActive && "bg-primary/10",
-                      slotMs === maxMs && maxMs > 1 && "bg-amber-500/10",
+                      "flex min-w-0 items-start gap-1.5 border-l-2 border-transparent py-px pl-5 pr-1.5",
+                      slotActive && "border-primary bg-primary/15",
+                      !isLive && slotMs === maxMs && maxMs > 1 && "bg-amber-500/10",
                     )}
                   >
                     <span

@@ -32,7 +32,7 @@ python3 scripts/setup_local.py all --start-dev
 | Environment | `env` | Copy `.env.template` → `.env`, generate dashboard/proxy secrets |
 | Database | `supabase` | `supabase start` + migrations from `combined_full_stack/supabase/` |
 | Dependencies | `deps` | `npm install` (all apps) + `sync:shared` |
-| Seed data | `seeds` | Create local test user, run `npm run sync-seeds` |
+| Seed data | `seeds` | After migrations: `npm run sync-seeds` (writes `public.seed_docs` once — not per user) |
 | Apps | `dev` | `npm run dev:all` |
 
 `all` runs: `check` → `env` → `deps` → `supabase` → `seeds` → optional OpenRouter check.

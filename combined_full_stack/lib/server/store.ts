@@ -37,6 +37,7 @@ import {
   type VisionCacheKey,
   type VisionCacheRow,
 } from "./doc_text_cache";
+import { buildDocRef } from "./doc_ref";
 
 function visionCacheDir(): string {
   return join(dataDir(), "vision_cache");
@@ -176,6 +177,8 @@ export interface Store {
   updateRunNotes(runId: PipelineRun["id"], notes: string | undefined): boolean;
   updateRunTest(runId: PipelineRun["id"], test: RunTestReport | undefined): boolean;
   flush(): Promise<void>;
+  /** AI : Supabase — bundled examples come from public.seed_docs, not per-user docs rows. */
+  usesPlatformSeedDocs?(): boolean;
 }
 
 // AI : pull models + module graph from a bundled template — keep per-step model/prompt overrides.
@@ -254,6 +257,7 @@ export { userProjectsFrom, isSeedTemplateProject };
 // AI : refreshStale (explicit "Resync examples" only) also replaces bundled docs whose content
 // AI : drifted from seeds — never on bootstrap, or user edits to example docs would revert.
 export async function ensureSeedDocs(store: Store, opts?: { refreshStale?: boolean }): Promise<void> {
+  if (store.usesPlatformSeedDocs?.() && !opts?.refreshStale) return;
   for (const seed of allProjectSeeds()) {
     for (const spec of seed.docSpecs) {
       try {
@@ -433,28 +437,12 @@ export class JsonStore implements Store {
       // AI : content-addressed reuse — bump uploadedAt + filename so docsForProject picks this edit.
       const path = join(this.docsDir, `${id}.txt`);
       if (!existsSync(path)) writeFileSync(path, content, "utf8");
-      const doc: DocRef = {
-        ...this.state.docs[i]!,
-        name,
-        type,
-        label,
-        sizeKb: Math.max(1, Math.round(content.length / 1024)),
-        uploadedAt: now,
-        preview: content.slice(0, 180),
-      };
+      const doc = buildDocRef({ id, name, type, label, content, uploadedAt: now });
       this.state.docs = [doc, ...this.state.docs.filter((_, j) => j !== i)];
       return doc;
     }
     writeFileSync(join(this.docsDir, `${id}.txt`), content, "utf8");
-    const doc: DocRef = {
-      id,
-      name,
-      type,
-      label,
-      sizeKb: Math.max(1, Math.round(content.length / 1024)),
-      uploadedAt: now,
-      preview: content.slice(0, 180),
-    };
+    const doc = buildDocRef({ id, name, type, label, content, uploadedAt: now });
     this.state.docs = [doc, ...this.state.docs];
     return doc;
   }

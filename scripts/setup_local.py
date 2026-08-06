@@ -353,16 +353,13 @@ def create_local_test_user(api_url: str, service_key: str) -> str:
     return user_id_str
 
 
-def sync_seeds(user_id: str) -> None:
-    env = read_env_file(ENV_FILE)
-    env[SEED_USER_ENV] = user_id
+def sync_seeds(_user_id: str | None = None) -> None:
     run(
-        ["npm", "run", "sync-seeds", "--", f"--user-id={user_id}"],
+        ["npm", "run", "sync-seeds"],
         cwd=APP_DIR,
-        env=env,
+        env=read_env_file(ENV_FILE),
     )
-    upsert_env(ENV_FILE, {SEED_USER_ENV: user_id})
-    log("seed projects synced")
+    log("platform seed docs synced (seed_docs table + template project purge)")
 
 
 def openrouter_ready() -> bool:

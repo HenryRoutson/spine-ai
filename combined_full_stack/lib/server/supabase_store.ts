@@ -11,6 +11,12 @@ import { storeErrorMessage } from "./errors";
 import { listTeamsForUser } from "./teams";
 import { migrateProjectModules } from "./validity";
 import { stripSharedModels } from "./builtin_models";
+import { buildDocRef, docRefFromDbRow, type DocDbRow, userDocDbRow } from "./doc_ref";
+import {
+  clearPlatformSeedDocState,
+  ingestPlatformSeedDocRows,
+  type PlatformSeedDocState,
+} from "./platform_seed_docs";
 import type {
   FileContentHash,
   ParserCacheKey,
@@ -46,17 +52,6 @@ interface RunRow {
   started_at: number;
   data: PipelineRun;
   fingerprint?: string | null;
-}
-
-interface DocRow {
-  id: string;
-  name: string;
-  type: string;
-  label: string;
-  size_kb: number;
-  uploaded_at: number;
-  preview: string;
-  content: string; // AI : built-in parser text only — vision OCR lives in doc_vision_cache
 }
 
 interface VisionCacheDbRow {
@@ -102,6 +97,16 @@ export class SupabaseStore implements Store {
   private hasProjectTeamIdColumn = false;
   private hasVisionCacheTable = false;
   private hasParserCacheTable = false;
+  private platformSeedDocsLoaded = false;
+  private platformSeedDocIds = new Set<DocId>();
+
+  private platformSeedDocState(): PlatformSeedDocState {
+    return {
+      docs: this.state.docs,
+      contents: this.state.contents,
+      platformSeedDocIds: this.platformSeedDocIds,
+    };
+  }
 
   constructor(
     private db: SupabaseClient,
@@ -213,7 +218,7 @@ export class SupabaseStore implements Store {
     this.state.projects = [...ownedProjects, ...sharedTeamProjects];
     this.projectIdsAtInit = new Set(this.state.projects.map((p) => p.id));
 
-    const docRows: DocRow[] = [...((docs.data ?? []) as DocRow[])];
+    const docRows: DocDbRow[] = [...((docs.data ?? []) as DocDbRow[])];
     const sharedOwnerIds = [
       ...new Set(
         sharedTeamProjects
@@ -229,7 +234,7 @@ export class SupabaseStore implements Store {
         .order("uploaded_at", { ascending: false });
       if (!sharedDocs.error) {
         const seen = new Set(docRows.map((row) => row.id));
-        for (const row of (sharedDocs.data ?? []) as DocRow[]) {
+        for (const row of (sharedDocs.data ?? []) as DocDbRow[]) {
           if (!seen.has(row.id)) {
             seen.add(row.id);
             docRows.push(row);
@@ -263,17 +268,17 @@ export class SupabaseStore implements Store {
     }
 
     for (const row of docRows) {
-      this.state.docs.push({
-        id: row.id as DocId,
-        name: row.name,
-        type: row.type as InputType,
-        label: row.label as DocLabel,
-        sizeKb: row.size_kb,
-        uploadedAt: row.uploaded_at,
-        preview: row.preview,
-      });
-      this.state.contents.set(row.id as DocId, row.content);
+      const doc = docRefFromDbRow(row);
+      this.state.docs.push(doc);
+      this.state.contents.set(doc.id, row.content);
     }
+
+    const seedDocs = await this.db.from("seed_docs").select("*");
+    if (!seedDocs.error) {
+      this.platformSeedDocsLoaded = true;
+      ingestPlatformSeedDocRows(this.platformSeedDocState(), (seedDocs.data ?? []) as DocDbRow[]);
+    }
+
     for (const row of runRows) {
       const run = row.data as PipelineRun;
       const fingerprint = (row.fingerprint ?? run.fingerprint) as RunFingerprint | undefined;
@@ -404,6 +409,10 @@ export class SupabaseStore implements Store {
     return this.state.docs;
   }
 
+  usesPlatformSeedDocs(): boolean {
+    return this.platformSeedDocsLoaded;
+  }
+
   docContent(id: DocId): string | undefined {
     return this.state.contents.get(id);
   }
@@ -470,21 +479,11 @@ export class SupabaseStore implements Store {
     const doc = { ...prev, name };
     this.state.docs[i] = doc;
     const content = this.state.contents.get(id);
-    if (content !== undefined) {
+    if (content !== undefined && !this.platformSeedDocIds.has(id)) {
       this.queueRest(() =>
-        this.db.from("docs").upsert(
-          this.withUserId({
-            id,
-            name,
-            type: doc.type,
-            label: doc.label,
-            size_kb: doc.sizeKb,
-            uploaded_at: doc.uploadedAt,
-            preview: doc.preview,
-            content,
-          }),
-          { onConflict: "user_id,id" },
-        ),
+        this.db.from("docs").upsert(userDocDbRow(this.scopedUserId, doc, content), {
+          onConflict: "user_id,id",
+        }),
       );
     }
     return true;
@@ -496,59 +495,23 @@ export class SupabaseStore implements Store {
     const i = this.state.docs.findIndex((d) => d.id === id);
     if (i >= 0) {
       // AI : content-addressed reuse — bump uploadedAt + filename so docsForProject picks this edit.
-      const doc: DocRef = {
-        ...this.state.docs[i]!,
-        name,
-        type,
-        label,
-        sizeKb: Math.max(1, Math.round(content.length / 1024)),
-        uploadedAt: now,
-        preview: content.slice(0, 180),
-      };
+      const doc = buildDocRef({ id, name, type, label, content, uploadedAt: now });
       this.state.docs = [doc, ...this.state.docs.filter((_, j) => j !== i)];
       this.state.contents.set(id, content);
       this.queueRest(() =>
-        this.db.from("docs").upsert(
-          this.withUserId({
-            id,
-            name,
-            type,
-            label,
-            size_kb: doc.sizeKb,
-            uploaded_at: doc.uploadedAt,
-            preview: doc.preview,
-            content,
-          }),
-          { onConflict: "user_id,id" },
-        ),
+        this.db.from("docs").upsert(userDocDbRow(this.scopedUserId, doc, content), {
+          onConflict: "user_id,id",
+        }),
       );
       return doc;
     }
-    const doc: DocRef = {
-      id,
-      name,
-      type,
-      label,
-      sizeKb: Math.max(1, Math.round(content.length / 1024)),
-      uploadedAt: now,
-      preview: content.slice(0, 180),
-    };
+    const doc = buildDocRef({ id, name, type, label, content, uploadedAt: now });
     this.state.docs = [doc, ...this.state.docs];
     this.state.contents.set(id, content);
     this.queueRest(() =>
-      this.db.from("docs").upsert(
-        this.withUserId({
-          id,
-          name,
-          type,
-          label,
-          size_kb: doc.sizeKb,
-          uploaded_at: doc.uploadedAt,
-          preview: doc.preview,
-          content,
-        }),
-        { onConflict: "user_id,id" },
-      ),
+      this.db.from("docs").upsert(userDocDbRow(this.scopedUserId, doc, content), {
+        onConflict: "user_id,id",
+      }),
     );
     return doc;
   }
@@ -556,10 +519,15 @@ export class SupabaseStore implements Store {
   removeDoc(id: DocId): boolean {
     const i = this.state.docs.findIndex((d) => d.id === id);
     if (i === -1) return false;
+    const platformOnly = this.platformSeedDocIds.has(id);
     this.state.docs.splice(i, 1);
     this.state.contents.delete(id);
     purgeParserVisionCacheForDoc(this.cacheIndex, id);
-    this.queueRest(() => this.db.from("docs").delete().eq("id", id));
+    if (!platformOnly) {
+      this.queueRest(() => this.db.from("docs").delete().eq("id", id));
+    } else {
+      this.platformSeedDocIds.delete(id);
+    }
     if (this.hasParserCacheTable) {
       this.queueRest(() => this.db.from("doc_parser_cache").delete().eq("doc_id", id));
     }
@@ -567,6 +535,18 @@ export class SupabaseStore implements Store {
       this.queueRest(() => this.db.from("doc_vision_cache").delete().eq("doc_id", id));
     }
     return true;
+  }
+
+  // AI : resync-examples — reload public.seed_docs after admin upsert from git.
+  async refreshPlatformSeedDocsFromDb(): Promise<number> {
+    clearPlatformSeedDocState(this.platformSeedDocState());
+    this.platformSeedDocsLoaded = false;
+
+    const seedDocs = await this.db.from("seed_docs").select("*");
+    if (seedDocs.error) return 0;
+
+    this.platformSeedDocsLoaded = true;
+    return ingestPlatformSeedDocRows(this.platformSeedDocState(), (seedDocs.data ?? []) as DocDbRow[]);
   }
 
   runs(projectId?: ProjectId): PipelineRun[] {

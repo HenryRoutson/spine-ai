@@ -131,7 +131,10 @@ export function InferenceStepRow({
   const displayCode = codeExec?.code ?? codeEntry?.code
   const showCodeExec =
     !!displayCode &&
-    (state === "running" || codeExec?.status === "done" || codeExec?.status === "error")
+    (state === "running" ||
+      codeExec?.status === "running" ||
+      codeExec?.status === "done" ||
+      codeExec?.status === "error")
 
   const header = (
     <div className="flex items-center gap-2.5">

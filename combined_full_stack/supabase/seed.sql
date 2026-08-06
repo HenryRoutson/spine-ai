@@ -1,1 +1,1 @@
--- AI : SQL seed hook for `supabase db reset` — example projects load via `npm run sync-seeds`.
+-- AI : SQL seed hook for `supabase db reset` — bundled docs load via `npm run sync-seeds` into public.seed_docs.

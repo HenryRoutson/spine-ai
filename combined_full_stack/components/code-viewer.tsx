@@ -5,6 +5,7 @@ import dynamic from "next/dynamic"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import type { editor } from "monaco-editor"
 import { ensureMonacoTypeScriptEnv } from "@/lib/monaco-loader"
+import { MONACO_VS_DARK_THEME } from "@/lib/monaco-theme"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
@@ -28,7 +29,7 @@ export const CODE_LANG_LINT_HINT: Record<CodeViewerLanguage, string> = {
   baml: "baml generate",
 }
 
-export const MONACO_CODE_THEME = "vs-dark" as const
+export const MONACO_CODE_THEME = MONACO_VS_DARK_THEME
 
 const CODE_VIEWER_BG = "bg-[oklch(0.14_0.004_264)]"
 
