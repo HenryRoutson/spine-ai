@@ -1,4 +1,4 @@
-import type { AppWindowId } from "@/lib/app-shell"
+import { AppWindowId } from "@/lib/app-window-id"
 
 const prefetched = new Set<AppWindowId>()
 
@@ -7,46 +7,46 @@ export function prefetchWorkspacePanel(windowId: AppWindowId): void {
   if (prefetched.has(windowId)) return
   prefetched.add(windowId)
   switch (windowId) {
-    case "structure":
+    case AppWindowId.Structure:
       void import("@/components/structure-builder")
       break
-    case "pipeline":
+    case AppWindowId.Pipeline:
       void import("@/components/pipeline-builder")
       break
-    case "testing":
+    case AppWindowId.Testing:
       void import("@/components/testing")
       break
-    case "inference":
+    case AppWindowId.Inference:
       void import("@/components/inference")
       break
-    case "share":
+    case AppWindowId.Share:
       void import("@/components/share/share-page")
       break
-    case "earnings":
+    case AppWindowId.Earnings:
       void import("@/components/earnings")
       break
-    case "logging":
+    case AppWindowId.Logging:
       void import("@/components/logging")
       break
-    case "cache":
+    case AppWindowId.Cache:
       void import("@/components/cache")
       break
-    case "documents":
+    case AppWindowId.Documents:
       void import("@/components/documents")
       break
-    case "docs":
+    case AppWindowId.Docs:
       void import("@/components/documentation")
       break
-    case "project-billing":
+    case AppWindowId.ProjectBilling:
       void import("@/components/project-billing")
       break
-    case "project-settings":
+    case AppWindowId.ProjectSettings:
       void import("@/components/project-settings")
       break
-    case "billing":
+    case AppWindowId.Billing:
       void import("@/components/billing")
       break
-    case "settings":
+    case AppWindowId.Settings:
       void import("@/components/settings")
       break
     default:
@@ -55,18 +55,18 @@ export function prefetchWorkspacePanel(windowId: AppWindowId): void {
 }
 
 const BUILDER_PANEL_ORDER: AppWindowId[] = [
-  "structure",
-  "pipeline",
-  "testing",
-  "inference",
-  "share",
-  "earnings",
-  "logging",
-  "cache",
-  "documents",
-  "docs",
-  "project-billing",
-  "project-settings",
+  AppWindowId.Structure,
+  AppWindowId.Pipeline,
+  AppWindowId.Testing,
+  AppWindowId.Inference,
+  AppWindowId.Share,
+  AppWindowId.Earnings,
+  AppWindowId.Logging,
+  AppWindowId.Cache,
+  AppWindowId.Documents,
+  AppWindowId.Docs,
+  AppWindowId.ProjectBilling,
+  AppWindowId.ProjectSettings,
 ]
 
 // AI : warm the visible tab first, then stagger the rest so chunks don't compete on the wire.

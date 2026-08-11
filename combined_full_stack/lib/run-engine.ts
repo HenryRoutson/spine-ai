@@ -219,6 +219,8 @@ export interface AwaitRunCallbacks {
   onLogs?: (logs: JobLogEntry[], newLines: JobLogEntry[]) => void
   // AI : human-review steps pause until the operator approves or rejects in Inference.
   onHumanReview?: (spec: ClientStepSpec) => Promise<"approved" | "rejected">
+  // AI : chatbot pause — Inference runs turns; resolves with ChatbotResult for client-step submit.
+  onChatbot?: (spec: ClientStepSpec) => Promise<import("@/lib/chatbot-step").ChatbotResultValue>
   // AI : live line-by-line preview while assert/custom-code runs in the browser.
   onCodeExec?: (state: CodeExecUiState) => void
   // AI : custom LLM providers persisted on the project (merged with localStorage at runtime).
@@ -319,7 +321,7 @@ export async function awaitJobCompletion(
   intervalMs = DEFAULT_POLL_INTERVAL_MS,
   clientStepContext?: { stepLabel?: string },
 ): Promise<AwaitRunResult> {
-  const { onStep, onLogs, onHumanReview, onCodeExec, projectLlmProviders, signal } =
+  const { onStep, onLogs, onHumanReview, onChatbot, onCodeExec, projectLlmProviders, signal } =
     typeof callbacks === "function" ? { onStep: callbacks } : callbacks
   let seenLogs = 0
   let clientStepBusy = false
@@ -374,6 +376,29 @@ export async function awaitJobCompletion(
       throw new Error("This pipeline requires human review, which is not available on this page")
     }
     if (
+      job.clientStep?.kind === "chatbot" &&
+      !job.run &&
+      !job.error &&
+      !clientStepBusy &&
+      clientStepSubmittedFor !== job.clientStep.moduleId
+    ) {
+      const spec = job.clientStep
+      if (clientStepContext) clientStepContext.stepLabel = spec.label
+      if (onChatbot) {
+        clientStepBusy = true
+        try {
+          const result = await onChatbot(spec)
+          await submitClientStep({ output: result })
+          clientStepSubmittedFor = spec.moduleId
+          awaitingServerResume = true
+        } finally {
+          clientStepBusy = false
+        }
+        continue
+      }
+      throw new Error("This pipeline requires a chatbot session, which is not available on this page")
+    }
+    if (
       job.clientStep?.llmClient &&
       !job.run &&
       !job.error &&
@@ -395,6 +420,7 @@ export async function awaitJobCompletion(
     if (
       job.clientStep &&
       job.clientStep.kind !== "human-review" &&
+      job.clientStep.kind !== "chatbot" &&
       !job.clientStep.llmClient &&
       !job.run &&
       !job.error &&

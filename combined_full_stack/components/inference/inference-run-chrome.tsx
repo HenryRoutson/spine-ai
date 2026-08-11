@@ -11,9 +11,21 @@ import {
   ScrollText,
   UserCheck,
   X,
+  MessagesSquare,
+  LogOut,
 } from "lucide-react"
 import { JsonHighlight } from "@/components/highlight"
 import { Button } from "@/components/ui/button"
+import {
+  Chat,
+  ChatBubble,
+  ChatBubbleAvatar,
+  ChatBubbleContent,
+  ChatInput,
+  ChatList,
+  ChatMessage,
+  ChatTypingIndicator,
+} from "@/components/ui/chat"
 import { cn } from "@/lib/utils"
 import { copyTextToClipboard } from "@/lib/clipboard"
 import { formatErrorForClipboard } from "@/lib/error-copy"
@@ -21,7 +33,16 @@ import type { RunErrorDisplay } from "@/lib/run-errors"
 import type { ClientStepSpec } from "@/lib/run-types"
 import type { PipelineModule } from "@/lib/types"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
-
+import {
+  buildChatbotResult,
+  DEFAULT_CHATBOT_MAX_TURNS,
+  parseChatbotPrompt,
+  resolveChatbotMode,
+  type ChatbotExitReason,
+  type ChatbotResultValue,
+  type ChatbotTurn,
+} from "@/lib/chatbot-step"
+import { API_ROUTES } from "@/lib/api-routes"
 import { RunPhase } from "@/lib/run-phase"
 
 export function InferenceRunSection({
@@ -312,6 +333,173 @@ export function HumanReviewPanel({
                 <X className="h-3.5 w-3.5" />
               )}
               Reject
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function ChatbotPanel({
+  spec,
+  module,
+  jobId,
+  onComplete,
+}: {
+  spec: ClientStepSpec
+  module?: PipelineModule
+  jobId: string
+  onComplete: (result: ChatbotResultValue) => void | Promise<void>
+}) {
+  const mode = resolveChatbotMode(spec.chatbotMode ?? module?.chatbotMode)
+  const maxTurns = spec.maxTurns ?? module?.maxTurns ?? DEFAULT_CHATBOT_MAX_TURNS
+  const promptText = useMemo(() => {
+    try {
+      return parseChatbotPrompt(spec.input).prompt
+    } catch {
+      return ""
+    }
+  }, [spec.input])
+
+  const [transcript, setTranscript] = useState<ChatbotTurn[]>([])
+  const [draft, setDraft] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [finishing, setFinishing] = useState(false)
+  const bootstrapped = useRef(false)
+
+  async function fetchAssistantReply(nextTranscript: ChatbotTurn[]): Promise<string> {
+    const res = await fetch(API_ROUTES.runChatbotTurn(jobId), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript: nextTranscript }),
+    })
+    const data = (await res.json().catch(() => ({}))) as { reply?: string; error?: string }
+    if (!res.ok) throw new Error(data.error ?? `chatbot turn failed (${res.status})`)
+    if (!data.reply?.trim()) throw new Error("empty assistant reply")
+    return data.reply.trim()
+  }
+
+  async function finish(exit_reason: ChatbotExitReason, turns: ChatbotTurn[]) {
+    if (finishing) return
+    setFinishing(true)
+    setBusy(true)
+    try {
+      await onComplete(buildChatbotResult(promptText, turns, exit_reason))
+    } finally {
+      setFinishing(false)
+      setBusy(false)
+    }
+  }
+
+  // AI : open with an assistant message driven by the locked prompt.
+  useEffect(() => {
+    if (bootstrapped.current || !promptText || !jobId) return
+    bootstrapped.current = true
+    let cancelled = false
+    setBusy(true)
+    void (async () => {
+      try {
+        const reply = await fetchAssistantReply([])
+        if (cancelled) return
+        setTranscript([{ role: "assistant", content: reply }])
+      } catch (e) {
+        if (!cancelled) setError((e as Error).message)
+      } finally {
+        if (!cancelled) setBusy(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap once per pause
+  }, [jobId, promptText])
+
+  async function sendUser() {
+    const text = draft.trim()
+    if (!text || busy || finishing) return
+    const userTurn: ChatbotTurn = { role: "user", content: text }
+    const withUser = [...transcript, userTurn]
+    setTranscript(withUser)
+    setDraft("")
+    setBusy(true)
+    setError(null)
+    try {
+      const reply = await fetchAssistantReply(withUser)
+      const withAssistant: ChatbotTurn[] = [...withUser, { role: "assistant", content: reply }]
+      setTranscript(withAssistant)
+      const userTurns = withAssistant.filter((t) => t.role === "user").length
+      if (mode === "single") {
+        await finish("single", withAssistant)
+        return
+      }
+      if (userTurns >= maxTurns) {
+        await finish("max-turns", withAssistant)
+      }
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-chart-2/50 bg-chart-2/5 p-4">
+      <div className="flex items-start gap-3">
+        <MessagesSquare className="mt-0.5 h-5 w-5 shrink-0 text-chart-2" />
+        <div className="min-w-0 flex-1 space-y-3">
+          <div>
+            <p className="text-sm font-medium">Chatbot session</p>
+            <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+              Step · {spec.label} · {mode === "single" ? "single" : "until exit"}
+            </p>
+            {module?.note?.trim() && (
+              <p className="mt-2 text-xs text-muted-foreground">{module.note.trim()}</p>
+            )}
+          </div>
+          {promptText ? (
+            <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+              <p className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">Prompt</p>
+              <p className="mt-1 whitespace-pre-wrap text-xs">{promptText}</p>
+            </div>
+          ) : (
+            <p className="text-xs text-destructive">Invalid ChatbotPrompt input — expected non-empty `prompt`.</p>
+          )}
+          <Chat className="max-h-80 min-h-48 rounded-md border border-border bg-background">
+            <ChatList>
+              {transcript.map((t, i) => {
+                const variant = t.role === "user" ? "user" : "assistant"
+                return (
+                  <ChatMessage key={`${t.role}-${i}`} variant={variant}>
+                    <ChatBubbleAvatar variant={variant} />
+                    <ChatBubble variant={variant}>
+                      <ChatBubbleContent>{t.content}</ChatBubbleContent>
+                    </ChatBubble>
+                  </ChatMessage>
+                )
+              })}
+              {busy && !finishing ? <ChatTypingIndicator /> : null}
+            </ChatList>
+            <ChatInput
+              value={draft}
+              onChange={setDraft}
+              onSend={() => void sendUser()}
+              disabled={busy || finishing || !promptText || (mode === "single" && transcript.some((t) => t.role === "user"))}
+              placeholder="Reply…"
+            />
+          </Chat>
+          {error ? <p className="text-xs text-destructive">{error}</p> : null}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              disabled={busy || finishing || !promptText}
+              onClick={() => void finish("exit", transcript)}
+            >
+              {finishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
+              Exit
             </Button>
           </div>
         </div>

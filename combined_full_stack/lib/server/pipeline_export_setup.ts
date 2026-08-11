@@ -26,6 +26,7 @@ export type ExportRuntimeNeeds = {
   llmBatch: boolean;
   quote: boolean;
   humanReview: boolean;
+  chatbot: boolean;
   webhook: boolean;
   visionOcr: boolean;
   inputModules: { label: string; filenameHint?: string; inputType?: string }[];
@@ -44,6 +45,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
   let llmBatch = false;
   let quote = false;
   let humanReview = false;
+  let chatbot = false;
   let webhook = false;
   let visionOcr = false;
   for (const m of project.modules) {
@@ -52,6 +54,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
     if (m.kind === ModuleKind.LlmBatch || m.kind === ModuleKind.ExampleSelect) llmBatch = true;
     if (m.kind === ModuleKind.Quote) quote = true;
     if (m.kind === ModuleKind.HumanReview) humanReview = true;
+    if (m.kind === ModuleKind.Chatbot) chatbot = true;
     if (m.kind === ModuleKind.Webhook) webhook = true;
     if (m.kind === ModuleKind.Input && m.useOcr) visionOcr = true;
   }
@@ -60,6 +63,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
     llmBatch,
     quote,
     humanReview,
+    chatbot,
     webhook,
     visionOcr,
     inputModules,
@@ -239,6 +243,17 @@ export function generateSetupReadme(project: Project, slug: string): string {
       "## Human review",
       "",
       "Implement `waitForHumanReview` / `wait_for_human_review` — pause until an operator approves the spine value.",
+      "",
+    );
+  }
+
+  // AI : chatbot README + waitForChatbotSession stubs when pipeline uses Chatbot steps.
+  if (needs.chatbot) {
+    lines.push(
+      "## Chatbot",
+      "",
+      "Implement `waitForChatbotSession` / `wait_for_chatbot_session` — pause for a prompted chat.",
+      "Input is `ChatbotPrompt` (`prompt` field). Return `ChatbotResult` (prompt, transcript, exit_reason).",
       "",
     );
   }
@@ -622,6 +637,11 @@ export function generateRuntimeConfigSectionTs(needs: ExportRuntimeNeeds): strin
     ...(needs.llm || needs.llmBatch || needs.visionOcr ? llmRuntimeFieldsTs() : []),
     ...(needs.quote ? ["  sourceText?: string;", "  sourceDocId?: string;"] : []),
     ...(needs.humanReview ? ["  onHumanReview?: <T>(input: T) => Promise<void>;"] : []),
+    ...(needs.chatbot
+      ? [
+          "  onChatbot?: (input: ChatbotPrompt) => Promise<ChatbotResult>;",
+        ]
+      : []),
     "  // AI : TODO export — Supabase persistence (supabaseUrl, supabaseServiceKey).",
     "  // AI : TODO export — step cache (enableCache, cacheUrl / PIPELINE_CACHE_URL).",
     "};",
@@ -679,6 +699,26 @@ export function generateRuntimeStubsTs(needs: ExportRuntimeNeeds): string {
       "    return;",
       "  }",
       '  throw new Error("wire waitForHumanReview or configurePipelineRuntime({ onHumanReview })");',
+      "}",
+    );
+  }
+
+  // AI : chatbot session stub — mirror human review, return ChatbotResult.
+  if (needs.chatbot) {
+    lines.push(
+      "",
+      "type ChatbotPrompt = { prompt: string };",
+      "type ChatbotTurn = { role: string; content: string };",
+      "type ChatbotResult = { prompt: string; transcript: ChatbotTurn[]; exit_reason: string };",
+      "",
+      "async function waitForChatbotSession(",
+      "  input: ChatbotPrompt,",
+      "  _opts?: { mode?: string },",
+      "): Promise<ChatbotResult> {",
+      "  if (runtime.onChatbot) {",
+      "    return runtime.onChatbot(input);",
+      "  }",
+      '  throw new Error("wire waitForChatbotSession or configurePipelineRuntime({ onChatbot })");',
       "}",
     );
   }
@@ -750,6 +790,9 @@ export function generateRuntimeConfigSectionPy(needs: ExportRuntimeNeeds): strin
   if (needs.humanReview) {
     fields.push("    on_human_review: Callable[[Any], Any] | None = None");
   }
+  if (needs.chatbot) {
+    fields.push("    on_chatbot: Callable[..., Any] | None = None");
+  }
   if (!fields.length) fields.push("    pass");
   lines.push(
     ...fields,
@@ -801,6 +844,16 @@ export function generateRuntimeStubsPy(needs: ExportRuntimeNeeds): string {
       "        await runtime.on_human_review(input)",
       "        return",
       '    raise NotImplementedError("wire wait_for_human_review or configure_pipeline_runtime(on_human_review=...)")',
+    );
+  }
+
+  if (needs.chatbot) {
+    lines.push(
+      "",
+      "async def wait_for_chatbot_session(input: Any, mode: str = 'until-exit') -> Any:",
+      "    if runtime.on_chatbot:",
+      "        return await runtime.on_chatbot(input, mode=mode)",
+      '    raise NotImplementedError("wire wait_for_chatbot_session or configure_pipeline_runtime(on_chatbot=...)")',
     );
   }
 
@@ -1013,6 +1066,15 @@ export function generateRuntimeStubsRust(needs: ExportRuntimeNeeds): string {
       "",
       "async fn wait_for_human_review<T: serde::Serialize>(_input: &T) -> anyhow::Result<()> {",
       '    anyhow::bail!("wire wait_for_human_review")',
+      "}",
+    );
+  }
+
+  if (needs.chatbot) {
+    lines.push(
+      "",
+      "async fn wait_for_chatbot_session<T: serde::Serialize>(_input: &T) -> anyhow::Result<serde_json::Value> {",
+      '    anyhow::bail!("wire wait_for_chatbot_session")',
       "}",
     );
   }
@@ -1239,6 +1301,15 @@ export function generateRuntimeStubsGo(needs: ExportRuntimeNeeds): string {
       "",
       "func WaitForHumanReview(_input any) error {",
       '\treturn fmt.Errorf("wire WaitForHumanReview")',
+      "}",
+    );
+  }
+
+  if (needs.chatbot) {
+    lines.push(
+      "",
+      "func WaitForChatbotSession(_input any) (any, error) {",
+      '\treturn nil, fmt.Errorf("wire WaitForChatbotSession")',
       "}",
     );
   }

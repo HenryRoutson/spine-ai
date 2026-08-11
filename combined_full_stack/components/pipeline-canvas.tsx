@@ -42,7 +42,15 @@ import { useStatusPalette } from "@/lib/chart-colors"
 import { Badge } from "@/components/ui/badge"
 import { StructureLink } from "@/components/structure-link"
 
-type PipelineTestCoverageStatus = "input" | "passthrough" | "tracked" | "untracked"
+const PipelineTestCoverageStatus = {
+  Input: "input",
+  Passthrough: "passthrough",
+  Tracked: "tracked",
+  Untracked: "untracked",
+} as const
+
+type PipelineTestCoverageStatus =
+  (typeof PipelineTestCoverageStatus)[keyof typeof PipelineTestCoverageStatus]
 
 type PipelineCanvasProps = {
   modules: PipelineModule[]
@@ -584,33 +592,33 @@ function testCoverageBorder(
   if (!status) return undefined
   const selectedRing = selected ? "ring-1 ring-primary/40" : undefined
   switch (status) {
-    case "tracked":
+    case PipelineTestCoverageStatus.Tracked:
       return cn("border-chart-2/50 bg-chart-2/5", selectedRing)
-    case "untracked":
+    case PipelineTestCoverageStatus.Untracked:
       return cn("border-dashed border-muted-foreground/45 bg-muted/10", selectedRing)
-    case "input":
+    case PipelineTestCoverageStatus.Input:
       return cn("border-sky-500/40 bg-sky-500/5", selectedRing)
-    case "passthrough":
+    case PipelineTestCoverageStatus.Passthrough:
       return cn("border-dashed border-muted-foreground/30 bg-muted/15", selectedRing)
   }
 }
 
 function TestCoverageBadge({ status }: { status: PipelineTestCoverageStatus }) {
-  if (status === "tracked") {
+  if (status === PipelineTestCoverageStatus.Tracked) {
     return (
       <Badge variant="outline" className="shrink-0 border-chart-2/40 font-mono text-[9px] text-chart-2">
         checked
       </Badge>
     )
   }
-  if (status === "untracked") {
+  if (status === PipelineTestCoverageStatus.Untracked) {
     return (
       <Badge variant="outline" className="shrink-0 border-muted-foreground/40 font-mono text-[9px] text-muted-foreground">
         not checked
       </Badge>
     )
   }
-  if (status === "input") {
+  if (status === PipelineTestCoverageStatus.Input) {
     return (
       <Badge variant="outline" className="shrink-0 border-sky-500/40 font-mono text-[9px] text-sky-600">
         input

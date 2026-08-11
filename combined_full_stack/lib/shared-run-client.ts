@@ -87,7 +87,11 @@ export async function awaitSharedRun(
   jobId: RunJobId,
   token: string,
   callbacks:
-    | { onStep: (steps: StepProgress[]) => void; onHumanReview?: (spec: ClientStepSpec) => Promise<"approved" | "rejected"> }
+    | {
+        onStep: (steps: StepProgress[]) => void
+        onHumanReview?: (spec: ClientStepSpec) => Promise<"approved" | "rejected">
+        onChatbot?: (spec: ClientStepSpec) => Promise<import("@/lib/chatbot-step").ChatbotResultValue>
+      }
     | ((steps: StepProgress[]) => void),
   intervalMs = 700,
 ): Promise<PipelineRun> {

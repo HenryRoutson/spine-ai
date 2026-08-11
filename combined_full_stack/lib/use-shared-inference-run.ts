@@ -22,6 +22,7 @@ import {
 } from "@/lib/shared-run-client"
 import { cacheUploadFileText, fetchSharedRunDocText } from "@/lib/shared-run-doc-cache"
 import { pipelineFinalOutputSteps } from "@/lib/step-doc"
+import { buildChatbotResult } from "@/lib/chatbot-step"
 
 import { RunPhase } from "@/lib/run-phase"
 
@@ -166,6 +167,14 @@ export function useSharedInferenceRun(
             return new Promise<"approved" | "rejected">((resolve) => {
               humanReviewResolveRef.current = resolve
             })
+          },
+          // AI : shared links — auto-exit chatbot (no turn API on public runs yet).
+          onChatbot: (spec) => {
+            const prompt =
+              spec.input && typeof spec.input === "object" && !Array.isArray(spec.input) && typeof (spec.input as { prompt?: unknown }).prompt === "string"
+                ? (spec.input as { prompt: string }).prompt
+                : ""
+            return Promise.resolve(buildChatbotResult(prompt, [], "exit"))
           },
         },
       )

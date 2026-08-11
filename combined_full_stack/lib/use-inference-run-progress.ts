@@ -28,6 +28,7 @@ import { isRunAbortedError, useCancellableRun } from "@/lib/use-cancellable-run"
 import type { DocId, JobLogEntry, ModuleId, PipelineModule, PipelineRun, ProjectId, RunJobId } from "@/lib/types"
 import type { ClientStepSpec } from "@/lib/run-types"
 import type { CodeExecUiState } from "@/lib/code-exec-ui"
+import { buildChatbotResult, type ChatbotResultValue } from "@/lib/chatbot-step"
 import { RunJobSource } from "@/lib/run-jobs-types"
 import { RunPhase } from "@/lib/run-phase"
 
@@ -78,8 +79,11 @@ export function useInferenceRunProgress({
   const [codeExecByModule, setCodeExecByModule] = useState<Map<ModuleId, CodeExecUiState>>(new Map())
   const [runNotes, setRunNotes] = useState("")
   const [pendingHumanReview, setPendingHumanReview] = useState<ClientStepSpec | null>(null)
+  const [pendingChatbot, setPendingChatbot] = useState<ClientStepSpec | null>(null)
+  const [activeJobId, setActiveJobId] = useState<RunJobId | null>(null)
   const [deduped, setDeduped] = useState(false)
   const humanReviewResolveRef = useRef<((decision: "approved" | "rejected") => void) | null>(null)
+  const chatbotResolveRef = useRef<((result: import("@/lib/chatbot-step").ChatbotResultValue) => void) | null>(null)
   const runNotesRef = useRef("")
   const savedNotesRef = useRef<string | undefined>(undefined)
   const logEndRef = useRef<HTMLDivElement>(null)
@@ -133,8 +137,11 @@ export function useInferenceRunProgress({
     setDebugLogs([])
     setCodeExecByModule(new Map())
     setPendingHumanReview(null)
+    setPendingChatbot(null)
+    setActiveJobId(null)
     setDeduped(false)
     humanReviewResolveRef.current = null
+    chatbotResolveRef.current = null
   }
 
   // AI : orphan local callbacks but keep the job in the Runs hub.
@@ -143,6 +150,9 @@ export function useInferenceRunProgress({
     activeJobIdRef.current = null
     activeTrackIdRef.current = null
     humanReviewResolveRef.current?.("rejected")
+    chatbotResolveRef.current?.(
+      buildChatbotResult("", [], "exit"),
+    )
     clearRunUiState()
   }
 
@@ -212,6 +222,7 @@ export function useInferenceRunProgress({
       )
       if (jobGen !== activeJobGenRef.current) return
       activeJobIdRef.current = jobId
+      setActiveJobId(jobId)
       runJobs.bindJobId(trackId, jobId)
       cancellable.trackJobId(jobId)
       refreshBilling().catch(console.error)
@@ -248,6 +259,15 @@ export function useInferenceRunProgress({
           setPendingHumanReview(spec)
           return new Promise<"approved" | "rejected">((resolve) => {
             humanReviewResolveRef.current = resolve
+          })
+        },
+        onChatbot: (spec) => {
+          if (jobGen !== activeJobGenRef.current || !mountedRef.current) {
+            return Promise.resolve(buildChatbotResult("", [], "exit"))
+          }
+          setPendingChatbot(spec)
+          return new Promise<ChatbotResultValue>((resolve) => {
+            chatbotResolveRef.current = resolve
           })
         },
         projectLlmProviders,
@@ -294,12 +314,20 @@ export function useInferenceRunProgress({
     setPhase(RunPhase.Idle)
     setPendingHumanReview(null)
     humanReviewResolveRef.current = null
+    setPendingChatbot(null)
+    chatbotResolveRef.current = null
   }
 
   function resolveHumanReview(decision: "approved" | "rejected") {
     humanReviewResolveRef.current?.(decision)
     humanReviewResolveRef.current = null
     setPendingHumanReview(null)
+  }
+
+  function resolveChatbot(result: ChatbotResultValue) {
+    chatbotResolveRef.current?.(result)
+    chatbotResolveRef.current = null
+    setPendingChatbot(null)
   }
 
   function reset() {
@@ -313,7 +341,7 @@ export function useInferenceRunProgress({
     runErrorDisplay,
     runButtonBusy,
     runButtonLabel,
-  } = useRunProgressUi({ modules, phase, stepStates, run, pendingHumanReview })
+  } = useRunProgressUi({ modules, phase, stepStates, run, pendingHumanReview, pendingChatbot })
 
   const activeModuleId = useMemo(() => {
     for (const m of modules) {
@@ -348,8 +376,11 @@ export function useInferenceRunProgress({
     progressPct,
     waitPhrase,
     pendingHumanReview,
+    pendingChatbot,
+    activeJobId,
     deduped,
     resolveHumanReview,
+    resolveChatbot,
     start,
     stop,
     reset,

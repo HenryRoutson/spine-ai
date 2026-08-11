@@ -1,15 +1,22 @@
 "use client"
 
 // AI : TODO (spec) — store prompts as JSON components; flatten only when sending to OpenRouter; profile context-length per component.
-import { useMemo } from "react"
+import { useMemo, Children, isValidElement, type ReactNode } from "react"
 import { Link2 } from "lucide-react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
-import rehypeSanitize from "rehype-sanitize"
+import remarkMath from "remark-math"
+import rehypeKatex from "rehype-katex"
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize"
+import type { Schema } from "hast-util-sanitize"
+import "katex/dist/katex.min.css"
+import { MermaidBlock } from "@/components/mermaid-block"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { normalizeTestJson, stablePrettyJson } from "@/lib/deep_equal"
 import { tryParseJson } from "@/lib/json-utils"
+import { MarkupKind } from "@/lib/markup-kinds"
+import { validateMarkup } from "@/lib/markup-validate"
 import {
   assignPathsToPrettyLines,
   prettyJsonLineCompareComment,
@@ -465,7 +472,104 @@ function isSafeImageSrc(src: string | undefined): src is string {
   return /^https?:/i.test(trimmed)
 }
 
-const markdownComponents: Components = {
+// AI : allow KaTeX output through sanitize (runs after rehype-katex).
+const katexSanitizeSchema: Schema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    div: [...(defaultSchema.attributes?.div ?? []), ["className"], ["class"], ["style"]],
+    span: [...(defaultSchema.attributes?.span ?? []), ["className"], ["class"], ["style"], ["ariaHidden"], ["aria-hidden"]],
+    math: [["xmlns"], ["display"]],
+    annotation: [["encoding"]],
+    semantics: [],
+    mrow: [],
+    mi: [],
+    mo: [],
+    mn: [],
+    msup: [],
+    msub: [],
+    msubsup: [],
+    mfrac: [],
+    msqrt: [],
+    mroot: [],
+    mtext: [],
+    mspace: [["width"]],
+  },
+  tagNames: [
+    ...(defaultSchema.tagNames ?? []),
+    "math",
+    "annotation",
+    "semantics",
+    "mrow",
+    "mi",
+    "mo",
+    "mn",
+    "msup",
+    "msub",
+    "msubsup",
+    "mfrac",
+    "msqrt",
+    "mroot",
+    "mtext",
+    "mspace",
+  ],
+}
+
+function mermaidChartFromCodeChildren(children: ReactNode): string {
+  return String(children ?? "")
+    .replace(/\n$/, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+}
+
+function isMermaidCode(className: string | undefined): boolean {
+  return /(?:^|\s)language-mermaid(?:\s|$)/.test(className ?? "")
+}
+
+function makeMarkdownComponents(inverted: boolean): Components {
+  const base = inverted ? invertedMarkdownComponentsBase : markdownComponentsBase
+  return {
+    ...base,
+    code: (props) => {
+      const { className, children } = props
+      if (isMermaidCode(className)) {
+        return <MermaidBlock chart={mermaidChartFromCodeChildren(children)} inverted={inverted} />
+      }
+      if (inverted) {
+        return className ? (
+          <code className="font-mono text-[11px] text-white">{children}</code>
+        ) : (
+          <code className="rounded bg-neutral-900 px-1 font-mono text-[11px] text-white">{children}</code>
+        )
+      }
+      return className ? (
+        <code className="font-mono text-[11px] text-primary">{children}</code>
+      ) : (
+        <code className="rounded bg-secondary px-1 font-mono text-[11px] text-primary">{children}</code>
+      )
+    },
+    pre: (props) => {
+      const { children } = props
+      const only = Children.count(children) === 1 ? Children.only(children) : null
+      if (isValidElement(only) && only.type === MermaidBlock) return only
+      if (inverted) {
+        return (
+          <pre className="mb-2 overflow-x-auto rounded border border-neutral-700 bg-neutral-900 p-2 font-mono text-[11px] text-white">
+            {children}
+          </pre>
+        )
+      }
+      return (
+        <pre className="mb-2 overflow-x-auto rounded border border-border bg-secondary/50 p-2 font-mono text-[11px] text-primary">
+          {children}
+        </pre>
+      )
+    },
+  }
+}
+
+const markdownComponentsBase: Components = {
   h1: ({ children }) => <h1 className="mb-2 text-base font-semibold text-foreground">{children}</h1>,
   h2: ({ children }) => <h2 className="mb-1.5 mt-4 text-sm font-semibold text-foreground">{children}</h2>,
   h3: ({ children }) => <h3 className="mb-1 mt-3 text-sm font-medium text-foreground">{children}</h3>,
@@ -517,7 +621,7 @@ const markdownComponents: Components = {
   td: ({ children }) => <td className="border border-border px-2 py-1 text-muted-foreground">{children}</td>,
 }
 
-const invertedMarkdownComponents: Components = {
+const invertedMarkdownComponentsBase: Components = {
   h1: ({ children }) => <h1 className="mb-2 text-base font-semibold text-white">{children}</h1>,
   h2: ({ children }) => <h2 className="mb-1.5 mt-4 text-sm font-semibold text-white">{children}</h2>,
   h3: ({ children }) => <h3 className="mb-1 mt-3 text-sm font-medium text-white">{children}</h3>,
@@ -570,17 +674,58 @@ const invertedMarkdownComponents: Components = {
 }
 
 export function MarkdownView({ md, inverted = false }: { md: string; inverted?: boolean }) {
+  const components = useMemo(() => makeMarkdownComponents(inverted), [inverted])
   return (
     <div className={cn("text-xs leading-relaxed", inverted ? "text-white" : "text-foreground")}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeSanitize]}
-        components={inverted ? invertedMarkdownComponents : markdownComponents}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex, [rehypeSanitize, katexSanitizeSchema]]}
+        components={components}
       >
         {md}
       </ReactMarkdown>
     </div>
   )
+}
+
+function MarkupIssuesBanner({ issues }: { issues: ReturnType<typeof validateMarkup>["issues"] }) {
+  if (!issues.length) return null
+  return (
+    <ul className="mb-3 space-y-1 rounded border border-border bg-secondary/40 px-2 py-1.5 font-mono text-[10px]">
+      {issues.map((issue, i) => (
+        <li
+          key={`${issue.message}-${i}`}
+          className={issue.severity === "error" ? "text-destructive" : "text-chart-3"}
+        >
+          {issue.severity}
+          {issue.line != null ? ` L${issue.line}` : ""}: {issue.message}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// AI : generic formatted view — markdown (GFM+math+mermaid) or latex (validate + math preview).
+export function MarkupView({
+  kind,
+  source,
+  inverted = false,
+}: {
+  kind: MarkupKind
+  source: string
+  inverted?: boolean
+}) {
+  const checked = useMemo(() => validateMarkup(kind, source), [kind, source])
+  return (
+    <div>
+      <MarkupIssuesBanner issues={checked.issues} />
+      <MarkdownView md={source} inverted={inverted} />
+    </div>
+  )
+}
+
+export function markupViewKindOrMarkdown(kind: MarkupKind | null | undefined): MarkupKind {
+  return kind ?? MarkupKind.Markdown
 }
 
 // Render prompt text with embedded JSON blobs syntax-highlighted inline.

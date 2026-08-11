@@ -1,18 +1,21 @@
-import { fieldToTypeExpr } from "@/lib/server/type_expr"
-import type { PrimName, TypeExpr } from "@/lib/server/type_expr"
+import { fieldToTypeExpr, PrimName, TypeExprKind, type TypeExpr } from "@/lib/server/type_expr"
 import { BUILTIN_QUOTE_SPAN_ID } from "@/lib/server/builtin_models"
 import { FieldType } from "@/lib/types"
 import type { StructureModel, StructureModelId } from "@/lib/types"
 
 const PRIM_ALIASES: Record<string, PrimName> = {
-  text: "text",
-  str: "text",
-  string: "text",
-  int: "int",
-  float: "float",
-  bool: "bool",
-  datetime: "datetime",
-  json: "json",
+  text: PrimName.Text,
+  str: PrimName.Text,
+  string: PrimName.Text,
+  int: PrimName.Int,
+  float: PrimName.Float,
+  bool: PrimName.Bool,
+  datetime: PrimName.Datetime,
+  json: PrimName.Json,
+  markdown: PrimName.Markdown,
+  md: PrimName.Markdown,
+  latex: PrimName.Latex,
+  tex: PrimName.Latex,
 }
 
 // AI : split on a separator at bracket depth 0 — supports nested list[tuple[A, B]].
@@ -43,22 +46,22 @@ function parseIdentifier(raw: string, models: StructureModel[]): TypeExpr {
   if (!id) throw new Error("Empty type name")
 
   const prim = PRIM_ALIASES[id.toLowerCase()]
-  if (prim) return { kind: "prim", name: prim }
-  if (id === "Document") return { kind: "document" }
-  if (id === "quote_string_t") return { kind: "quote" }
-  if (id.toLowerCase() === "quote") return { kind: "quote" }
-  if (id === "Quote") return { kind: "quote" }
-  if (id === "text_quote_t") return { kind: "text_quote" }
-  if (id === "TextQuote") return { kind: "text_quote" }
+  if (prim) return { kind: TypeExprKind.Prim, name: prim }
+  if (id === "Document") return { kind: TypeExprKind.Document }
+  if (id === "quote_string_t") return { kind: TypeExprKind.Quote }
+  if (id.toLowerCase() === "quote") return { kind: TypeExprKind.Quote }
+  if (id === "Quote") return { kind: TypeExprKind.Quote }
+  if (id === "text_quote_t") return { kind: TypeExprKind.TextQuote }
+  if (id === "TextQuote") return { kind: TypeExprKind.TextQuote }
   if (id === "quote_span_t" || id === "QuoteSpan") {
-    return { kind: "ref", modelId: BUILTIN_QUOTE_SPAN_ID }
+    return { kind: TypeExprKind.Ref, modelId: BUILTIN_QUOTE_SPAN_ID }
   }
-  if (id === "UNSET") return { kind: "unset" }
+  if (id === "UNSET") return { kind: TypeExprKind.Unset }
 
   const hit = modelByName(models, id)
-  if (hit) return { kind: "ref", modelId: hit.id as StructureModelId }
+  if (hit) return { kind: TypeExprKind.Ref, modelId: hit.id as StructureModelId }
 
-  return { kind: "named", name: id }
+  return { kind: TypeExprKind.Named, name: id }
 }
 
 function parseGeneric(name: string, argsStr: string, models: StructureModel[]): TypeExpr {
@@ -67,27 +70,27 @@ function parseGeneric(name: string, argsStr: string, models: StructureModel[]): 
 
   if (lower === "list") {
     if (args.length !== 1) throw new Error("list[T] takes one type argument")
-    return { kind: "list", item: args[0]! }
+    return { kind: TypeExprKind.List, item: args[0]! }
   }
   if (lower === "set") {
     if (args.length !== 1) throw new Error("set[T] takes one type argument")
-    return { kind: "set", item: args[0]! }
+    return { kind: TypeExprKind.Set, item: args[0]! }
   }
   if (lower === "optional") {
     if (args.length !== 1) throw new Error("Optional[T] takes one type argument")
-    return { kind: "optional", inner: args[0]! }
+    return { kind: TypeExprKind.Optional, inner: args[0]! }
   }
   if (lower === "tuple") {
     if (args.length < 2) throw new Error("tuple needs at least two element types")
-    return { kind: "generic", name: "tuple", args }
+    return { kind: TypeExprKind.Generic, name: "tuple", args }
   }
   if (lower === "dict" || lower === "map") {
     if (args.length !== 2) throw new Error("dict[K, V] needs key and value types")
-    return { kind: "map", key: args[0]!, value: args[1]! }
+    return { kind: TypeExprKind.Map, key: args[0]!, value: args[1]! }
   }
   if (lower === "union") {
     if (args.length < 2) throw new Error("Union needs at least two variants")
-    return { kind: "union", variants: args }
+    return { kind: TypeExprKind.Union, variants: args }
   }
 
   const model = modelByName(models, name)
@@ -96,12 +99,12 @@ function parseGeneric(name: string, argsStr: string, models: StructureModel[]): 
       if (args.length !== model.params.length) {
         throw new Error(`${name} expects ${model.params.length} type argument(s)`)
       }
-      return { kind: "ref", modelId: model.id as StructureModelId, args }
+      return { kind: TypeExprKind.Ref, modelId: model.id as StructureModelId, args }
     }
-    if (args.length === 0) return { kind: "ref", modelId: model.id as StructureModelId }
+    if (args.length === 0) return { kind: TypeExprKind.Ref, modelId: model.id as StructureModelId }
   }
 
-  return { kind: "generic", name, args }
+  return { kind: TypeExprKind.Generic, name, args }
 }
 
 function parsePrimary(source: string, models: StructureModel[]): TypeExpr {
@@ -110,14 +113,14 @@ function parsePrimary(source: string, models: StructureModel[]): TypeExpr {
 
   const optionalMatch = /^(Optional|optional)\[([\s\S]+)\]$/.exec(s)
   if (optionalMatch) {
-    return { kind: "optional", inner: parseTypeExprString(optionalMatch[2]!.trim(), models) }
+    return { kind: TypeExprKind.Optional, inner: parseTypeExprString(optionalMatch[2]!.trim(), models) }
   }
 
   const unionMatch = /^Union\[([\s\S]+)\]$/.exec(s)
   if (unionMatch) {
     const variants = splitTopLevel(unionMatch[1]!, ",").map((part) => parseTypeExprString(part, models))
     if (variants.length < 2) throw new Error("Union needs at least two variants")
-    return { kind: "union", variants }
+    return { kind: TypeExprKind.Union, variants }
   }
 
   const bracket = s.indexOf("[")
@@ -138,7 +141,7 @@ export function parseTypeExprString(source: string, models: StructureModel[]): T
   if (trimmed.includes("|")) {
     const variants = splitTopLevel(trimmed, "|").map((part) => parsePrimary(part, models))
     if (variants.length < 2) throw new Error("Union needs at least two variants")
-    return { kind: "union", variants }
+    return { kind: TypeExprKind.Union, variants }
   }
 
   return parsePrimary(trimmed, models)
@@ -157,42 +160,42 @@ export function tryParseTypeExprString(
 
 export function formatTypeExprPy(expr: TypeExpr, models: StructureModel[] = []): string {
   switch (expr.kind) {
-    case "prim":
-      return expr.name === "text" ? "str" : expr.name
-    case "document":
+    case TypeExprKind.Prim:
+      return expr.name === PrimName.Text ? "str" : expr.name
+    case TypeExprKind.Document:
       return "Document"
-    case "quote":
+    case TypeExprKind.Quote:
       return "quote_string_t"
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return "text_quote_t"
-    case "list":
+    case TypeExprKind.List:
       return `list[${formatTypeExprPy(expr.item, models)}]`
-    case "ref": {
+    case TypeExprKind.Ref: {
       const name = models.find((m) => m.id === expr.modelId)?.name
       return name ?? String(expr.modelId)
     }
-    case "optional":
+    case TypeExprKind.Optional:
       return `Optional[${formatTypeExprPy(expr.inner, models)}]`
-    case "set":
+    case TypeExprKind.Set:
       return `set[${formatTypeExprPy(expr.item, models)}]`
-    case "map":
+    case TypeExprKind.Map:
       return `dict[${formatTypeExprPy(expr.key, models)}, ${formatTypeExprPy(expr.value, models)}]`
-    case "union":
+    case TypeExprKind.Union:
       return expr.variants.map((v) => formatTypeExprPy(v, models)).join(" | ")
-    case "generic":
+    case TypeExprKind.Generic:
       if (expr.name === "tuple") {
         return `tuple[${expr.args.map((a) => formatTypeExprPy(a, models)).join(", ")}]`
       }
       return expr.args.length
         ? `${expr.name}[${expr.args.map((a) => formatTypeExprPy(a, models)).join(", ")}]`
         : expr.name
-    case "named":
+    case TypeExprKind.Named:
       return expr.name
-    case "unset":
+    case TypeExprKind.Unset:
       return "UNSET"
-    case "file":
+    case TypeExprKind.File:
       return "FileInput"
-    case "unknown":
+    case TypeExprKind.Unknown:
       return "Any"
     default:
       return "Any"
@@ -204,25 +207,27 @@ export function legacyFieldFromTypeExpr(
   expr: TypeExpr,
 ): { type: FieldType; ref?: StructureModelId } | null {
   switch (expr.kind) {
-    case "prim":
-      if (expr.name === "json") return { type: FieldType.Json }
-      if (expr.name === "text") return { type: FieldType.Text }
-      if (expr.name === "int") return { type: FieldType.Int }
-      if (expr.name === "float") return { type: FieldType.Float }
-      if (expr.name === "bool") return { type: FieldType.Bool }
-      if (expr.name === "datetime") return { type: FieldType.Datetime }
+    case TypeExprKind.Prim:
+      if (expr.name === PrimName.Json) return { type: FieldType.Json }
+      if (expr.name === PrimName.Text) return { type: FieldType.Text }
+      if (expr.name === PrimName.Markdown) return { type: FieldType.Text }
+      if (expr.name === PrimName.Latex) return { type: FieldType.Text }
+      if (expr.name === PrimName.Int) return { type: FieldType.Int }
+      if (expr.name === PrimName.Float) return { type: FieldType.Float }
+      if (expr.name === PrimName.Bool) return { type: FieldType.Bool }
+      if (expr.name === PrimName.Datetime) return { type: FieldType.Datetime }
       return null
-    case "document":
+    case TypeExprKind.Document:
       return { type: FieldType.Document }
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return { type: FieldType.TupleTextQuote }
-    case "list":
-      if (expr.item.kind === "text_quote") return { type: FieldType.ListTupleTextQuote }
-      if (expr.item.kind === "document") return { type: FieldType.ListDocument }
-      if (expr.item.kind === "prim" && expr.item.name === "text") return { type: FieldType.ListText }
-      if (expr.item.kind === "ref") return { type: FieldType.ListModel, ref: expr.item.modelId }
+    case TypeExprKind.List:
+      if (expr.item.kind === TypeExprKind.TextQuote) return { type: FieldType.ListTupleTextQuote }
+      if (expr.item.kind === TypeExprKind.Document) return { type: FieldType.ListDocument }
+      if (expr.item.kind === TypeExprKind.Prim && expr.item.name === PrimName.Text) return { type: FieldType.ListText }
+      if (expr.item.kind === TypeExprKind.Ref) return { type: FieldType.ListModel, ref: expr.item.modelId }
       return null
-    case "ref":
+    case TypeExprKind.Ref:
       return { type: FieldType.Model, ref: expr.modelId }
     default:
       return null

@@ -6,7 +6,15 @@
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react"
 
-export type DocViewMode = "pdf" | "parser" | "vision" | "json" | "formatted"
+export const DocViewMode = {
+  Pdf: "pdf",
+  Parser: "parser",
+  Vision: "vision",
+  Json: "json",
+  Formatted: "formatted",
+} as const
+
+export type DocViewMode = (typeof DocViewMode)[keyof typeof DocViewMode]
 
 export interface DocJumpTarget {
   docId: string

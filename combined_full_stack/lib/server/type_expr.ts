@@ -1,16 +1,17 @@
 import { z, type ZodType } from "zod";
 import { isValidJsonString } from "@/lib/json-utils";
+import { isValidLatex, isValidMarkdown } from "@/lib/markup-validate";
 import { modelExportIdentifier, modelExportIdentifierGo, modelExportIdentifierRust } from "@/lib/structure-shape";
-import type {
+import {
   FieldType,
-  InputType,
-  ModelField,
-  ModelFieldLegacyTypePick,
-  ModelFieldTypeSourcePick,
-  PipelineModule,
-  StructureModel,
-  StructureModelId,
-  TypeAlias,
+  type InputType,
+  type ModelField,
+  type ModelFieldLegacyTypePick,
+  type ModelFieldTypeSourcePick,
+  type PipelineModule,
+  type StructureModel,
+  type StructureModelId,
+  type TypeAlias,
 } from "./types";
 import { withBuiltinTypeAliases } from "./builtin_types";
 
@@ -19,7 +20,19 @@ import { withBuiltinTypeAliases } from "./builtin_types";
 // AI :   logic once pyright + cargo check (or clippy) validate spine + custom-code on every save/CI.
 // AI : TODO (linter-first) — set/map/union/generic: express in generated Py/Rust, not hand-rolled TS in validity.ts.
 // AI : polymorphism helpers: lib/type-expr-polymorph.ts (assignability, alias/struct params, path types).
-export type PrimName = "text" | "int" | "float" | "bool" | "datetime" | "json";
+// AI : string values are the persisted wire format in typeExpr JSON — do not rename.
+export const PrimName = {
+  Text: "text",
+  Int: "int",
+  Float: "float",
+  Bool: "bool",
+  Datetime: "datetime",
+  Json: "json",
+  Markdown: "markdown",
+  Latex: "latex",
+} as const;
+
+export type PrimName = (typeof PrimName)[keyof typeof PrimName];
 
 // AI : string values are the persisted wire format in typeExpr JSON — do not rename.
 export const TypeExprKind = {
@@ -70,6 +83,8 @@ export const QuoteSchema = z.object({
 const TextQuoteSchema = z.object({ text: z.string(), quote: QuoteSchema });
 const DocumentSchema = z.object({ content: z.string(), filename: z.string() });
 const JsonStringSchema = z.string().refine(isValidJsonString, { message: "must be valid JSON" });
+const MarkdownStringSchema = z.string().refine(isValidMarkdown, { message: "must be valid markdown" });
+const LatexStringSchema = z.string().refine(isValidLatex, { message: "must be valid latex" });
 
 function byId(models: StructureModel[]): Map<StructureModelId, StructureModel> {
   return new Map(models.map((m) => [m.id, m]));
@@ -77,31 +92,31 @@ function byId(models: StructureModel[]): Map<StructureModelId, StructureModel> {
 
 export function fieldTypeToExpr(field: ModelFieldLegacyTypePick): TypeExpr { // TODO this looks bad and hardcoded
   switch (field.type) {
-    case "text":
-      return { kind: TypeExprKind.Prim, name: "text" };
-    case "int":
-      return { kind: TypeExprKind.Prim, name: "int" };
-    case "float":
-      return { kind: TypeExprKind.Prim, name: "float" };
-    case "bool":
-      return { kind: TypeExprKind.Prim, name: "bool" };
-    case "datetime":
-      return { kind: TypeExprKind.Prim, name: "datetime" };
-    case "json":
-      return { kind: TypeExprKind.Prim, name: "json" };
-    case "document":
+    case FieldType.Text:
+      return { kind: TypeExprKind.Prim, name: PrimName.Text };
+    case FieldType.Int:
+      return { kind: TypeExprKind.Prim, name: PrimName.Int };
+    case FieldType.Float:
+      return { kind: TypeExprKind.Prim, name: PrimName.Float };
+    case FieldType.Bool:
+      return { kind: TypeExprKind.Prim, name: PrimName.Bool };
+    case FieldType.Datetime:
+      return { kind: TypeExprKind.Prim, name: PrimName.Datetime };
+    case FieldType.Json:
+      return { kind: TypeExprKind.Prim, name: PrimName.Json };
+    case FieldType.Document:
       return { kind: TypeExprKind.Document };
-    case "list[document]":
+    case FieldType.ListDocument:
       return { kind: TypeExprKind.List, item: { kind: TypeExprKind.Document } };
-    case "list[text]":
-      return { kind: TypeExprKind.List, item: { kind: TypeExprKind.Prim, name: "text" } };
-    case "tuple[text,quote]":
+    case FieldType.ListText:
+      return { kind: TypeExprKind.List, item: { kind: TypeExprKind.Prim, name: PrimName.Text } };
+    case FieldType.TupleTextQuote:
       return { kind: TypeExprKind.TextQuote };
-    case "list[tuple[text,quote]]":
+    case FieldType.ListTupleTextQuote:
       return { kind: TypeExprKind.List, item: { kind: TypeExprKind.TextQuote } };
-    case "model":
+    case FieldType.Model:
       return field.ref ? { kind: TypeExprKind.Ref, modelId: field.ref } : { kind: TypeExprKind.Unknown };
-    case "list[model]":
+    case FieldType.ListModel:
       return {
         kind: TypeExprKind.List,
         item: field.ref ? { kind: TypeExprKind.Ref, modelId: field.ref } : { kind: TypeExprKind.Unknown },
@@ -253,6 +268,9 @@ export function stepEmitsList(m: PipelineModule | undefined): boolean {
 export function stepSpineOutType(m: PipelineModule | undefined): TypeExpr | undefined {
   if (!m) return undefined;
   if (m.outType) return m.outType;
+  if (m.kind === "chatbot" && m.outStructureId) {
+    return structureSpineType(m.outStructureId, false);
+  }
   if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review") {
     const id = m.inStructureId ?? m.outStructureId;
     return id ? structureSpineType(id, stepEmitsList(m)) : undefined;
@@ -527,17 +545,21 @@ export function typeExprToZod(
   switch (expr.kind) {
     case TypeExprKind.Prim:
       switch (expr.name) {
-        case "text":
-        case "datetime":
+        case PrimName.Text:
+        case PrimName.Datetime:
           return z.string();
-        case "int":
+        case PrimName.Int:
           return z.number().int();
-        case "float":
+        case PrimName.Float:
           return z.number();
-        case "bool":
+        case PrimName.Bool:
           return z.boolean();
-        case "json":
+        case PrimName.Json:
           return JsonStringSchema;
+        case PrimName.Markdown:
+          return MarkdownStringSchema;
+        case PrimName.Latex:
+          return LatexStringSchema;
         default:
           return z.unknown();
       }
@@ -644,15 +666,17 @@ export function spineTypeToZod(expr: TypeExpr, models: StructureModel[], typeAli
 
 function pyPrim(name: PrimName): string {
   switch (name) {
-    case "text":
-    case "datetime":
-    case "json":
+    case PrimName.Text:
+    case PrimName.Datetime:
+    case PrimName.Json:
+    case PrimName.Markdown:
+    case PrimName.Latex:
       return "str";
-    case "int":
+    case PrimName.Int:
       return "int";
-    case "float":
+    case PrimName.Float:
       return "float";
-    case "bool":
+    case PrimName.Bool:
       return "bool";
     default:
       return "Any";
@@ -734,14 +758,16 @@ export function typeExprToTs(expr: TypeExpr, models: StructureModel[] = []): str
   switch (expr.kind) {
     case TypeExprKind.Prim:
       switch (expr.name) {
-        case "text":
-        case "datetime":
-        case "json":
+        case PrimName.Text:
+        case PrimName.Datetime:
+        case PrimName.Json:
+        case PrimName.Markdown:
+        case PrimName.Latex:
           return "string";
-        case "int":
-        case "float":
+        case PrimName.Int:
+        case PrimName.Float:
           return "number";
-        case "bool":
+        case PrimName.Bool:
           return "boolean";
         default:
           return "unknown";
@@ -809,15 +835,17 @@ export function typeExprToBaml(expr: TypeExpr, models: StructureModel[] = []): s
   switch (expr.kind) {
     case TypeExprKind.Prim:
       switch (expr.name) {
-        case "text":
-        case "datetime":
-        case "json":
+        case PrimName.Text:
+        case PrimName.Datetime:
+        case PrimName.Json:
+        case PrimName.Markdown:
+        case PrimName.Latex:
           return "string";
-        case "int":
+        case PrimName.Int:
           return "int";
-        case "float":
+        case PrimName.Float:
           return "float";
-        case "bool":
+        case PrimName.Bool:
           return "bool";
         default:
           return "string";
@@ -869,16 +897,18 @@ export function typeExprToRust(expr: TypeExpr, models: StructureModel[] = []): s
   switch (expr.kind) {
     case TypeExprKind.Prim:
       switch (expr.name) {
-        case "text":
-        case "datetime":
+        case PrimName.Text:
+        case PrimName.Datetime:
+        case PrimName.Markdown:
+        case PrimName.Latex:
           return "String";
-        case "json":
+        case PrimName.Json:
           return "serde_json::Value";
-        case "int":
+        case PrimName.Int:
           return "i64";
-        case "float":
+        case PrimName.Float:
           return "f64";
-        case "bool":
+        case PrimName.Bool:
           return "bool";
         default:
           return "serde_json::Value";
@@ -929,16 +959,18 @@ export function typeExprToGo(expr: TypeExpr, models: StructureModel[] = []): str
   switch (expr.kind) {
     case TypeExprKind.Prim:
       switch (expr.name) {
-        case "text":
-        case "datetime":
+        case PrimName.Text:
+        case PrimName.Datetime:
+        case PrimName.Markdown:
+        case PrimName.Latex:
           return "string";
-        case "json":
+        case PrimName.Json:
           return "json.RawMessage";
-        case "int":
+        case PrimName.Int:
           return "int64";
-        case "float":
+        case PrimName.Float:
           return "float64";
-        case "bool":
+        case PrimName.Bool:
           return "bool";
         default:
           return "json.RawMessage";

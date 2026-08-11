@@ -1,7 +1,7 @@
 import { InputType } from "@/lib/types"
 import type { DocId, DocRef, RunStep } from "@/lib/types"
 import type { DocViewMode } from "@/lib/doc-viewer"
-import { isMarkdownDoc, isPdfDoc } from "@/lib/doc-content"
+import { isMarkdownDoc, isLatexDoc, isPdfDoc } from "@/lib/doc-content"
 
 // AI : resolve the source doc for an input step — new runs store docId; older runs parse the preview.
 export function stepDocId(step: RunStep): DocId | undefined {
@@ -111,6 +111,12 @@ export function stepDocLinkLabels(doc?: DocRef): {
     return {
       input: { mode: "formatted", label: "formatted markdown" },
       output: { mode: "formatted", label: "formatted markdown" },
+    }
+  }
+  if (isLatexDoc(doc)) {
+    return {
+      input: { mode: "formatted", label: "formatted latex" },
+      output: { mode: "formatted", label: "formatted latex" },
     }
   }
   if (isPdfDoc(doc)) {

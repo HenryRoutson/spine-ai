@@ -24,6 +24,7 @@ export const API_ROUTES = {
   run: (id: string) => `/api/runs/${id}`,
   runProgress: (id: string) => `/api/runs/${id}/progress`,
   runClientStep: (id: string) => `/api/runs/${id}/client-step`,
+  runChatbotTurn: (id: string) => `/api/runs/${id}/chatbot-turn`,
   cache: "/api/cache",
   cacheEntry: (key: string) => `/api/cache/${encodeURIComponent(key)}`,
   abtest: "/api/abtest",

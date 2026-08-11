@@ -3,6 +3,7 @@
 import { useRef, useState } from "react"
 import { Check, Copy } from "lucide-react"
 import type { AssistantDebugEntry } from "@/lib/assistant-chat-types"
+import { AssistantDebugKind } from "@/lib/assistant-debug-types"
 import { formatAssistantDebugTrace } from "@/lib/assistant-debug"
 import { copyTextToClipboard } from "@/lib/clipboard"
 import { Button } from "@/components/ui/button"
@@ -11,13 +12,13 @@ import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 
 function DebugEntryRow({ entry }: { entry: AssistantDebugEntry }) {
   switch (entry.kind) {
-    case "phase":
+    case AssistantDebugKind.Phase:
       return (
         <p className="font-mono text-[9px] uppercase tracking-wider text-primary">
           {entry.phase}
         </p>
       )
-    case "thinking":
+    case AssistantDebugKind.Thinking:
       return (
         <div>
           <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
@@ -28,7 +29,7 @@ function DebugEntryRow({ entry }: { entry: AssistantDebugEntry }) {
           </p>
         </div>
       )
-    case "llm_response":
+    case AssistantDebugKind.LlmResponse:
       return (
         <div>
           <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
@@ -39,7 +40,7 @@ function DebugEntryRow({ entry }: { entry: AssistantDebugEntry }) {
           </pre>
         </div>
       )
-    case "structured_failure":
+    case AssistantDebugKind.StructuredFailure:
       return (
         <div>
           <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-destructive">
@@ -50,7 +51,7 @@ function DebugEntryRow({ entry }: { entry: AssistantDebugEntry }) {
           </pre>
         </div>
       )
-    case "validation_failed":
+    case AssistantDebugKind.ValidationFailed:
       return (
         <div>
           <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-amber-600 dark:text-amber-400">
@@ -61,7 +62,7 @@ function DebugEntryRow({ entry }: { entry: AssistantDebugEntry }) {
           </pre>
         </div>
       )
-    case "done":
+    case AssistantDebugKind.Done:
       return (
         <div>
           <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
@@ -74,7 +75,7 @@ function DebugEntryRow({ entry }: { entry: AssistantDebugEntry }) {
           )}
         </div>
       )
-    case "error":
+    case AssistantDebugKind.Error:
       return (
         <div>
           <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-destructive">Error</p>

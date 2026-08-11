@@ -39,6 +39,7 @@ import {
   INPUT_TYPES,
   InputType,
   ModuleKind,
+  ChatbotMode,
   type ModelId,
   type ModuleId,
   type PipelineModule,
@@ -78,6 +79,8 @@ const moduleSpecSchema = z
     inputDescription: z.string().optional(),
     checkInputDescription: z.boolean().optional(),
     prompt: z.string().optional(),
+    chatbotMode: z.enum(["single", "until-exit"]).optional(),
+    maxTurns: z.number().int().min(1).max(200).optional(),
     code: z
       .string()
       .optional()
@@ -202,7 +205,7 @@ const modulePatchEntrySchema = z.object({
 
 const modelSpecSchema = structureModelSpecSchema;
 
-const ASSISTANT_DOC_TYPES = [InputType.Text, InputType.Json] as const satisfies readonly InputType[];
+const ASSISTANT_DOC_TYPES = [InputType.Text, InputType.Markdown, InputType.Latex, InputType.Json] as const satisfies readonly InputType[];
 
 const docSpecSchema = z.object({
   name: z.string(),
@@ -346,6 +349,11 @@ function makeModuleFromSpec(
       code: spec.code,
       model: modelId,
       assembleBindings: spec.kind === ModuleKind.Assemble ? spec.assembleBindings : undefined,
+      chatbotMode:
+        spec.kind === ModuleKind.Chatbot
+          ? (spec.chatbotMode === "single" ? ChatbotMode.Single : ChatbotMode.UntilExit)
+          : undefined,
+      maxTurns: spec.kind === ModuleKind.Chatbot ? spec.maxTurns : undefined,
       parallelBranches,
     },
     models,

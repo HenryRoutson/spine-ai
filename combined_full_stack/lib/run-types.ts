@@ -57,6 +57,10 @@ export type ClientStepSpec = {
   expectedOutputs?: Record<string, unknown>;
   llmClient?: LlmClientStepSpec;
   maxRunMs?: number;
+  // AI : chatbot pause metadata for Inference panel.
+  chatbotMode?: import("@/lib/chatbot-step").ChatbotMode;
+  model?: import("./types").ModelId;
+  maxTurns?: number;
 };
 
 export interface RunJob {

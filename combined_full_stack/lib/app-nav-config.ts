@@ -18,7 +18,7 @@ import {
   Settings2,
 } from "lucide-react"
 import { SpineNavIcon } from "@/components/spine-mark"
-import type { AppWindowId } from "@/lib/app-shell"
+import { AppWindowId } from "@/lib/app-window-id"
 import { AppPrimarySectionTitle } from "@/lib/app-primary-section-labels"
 
 // AI : marketing site lives on a separate deploy from the app
@@ -35,12 +35,14 @@ export enum AppArea {
   Run = "run",
 }
 
-export enum BuildStepId {
-  Structure = "structure",
-  Pipeline = "pipeline",
-  Testing = "testing",
-  Inference = "inference",
-}
+export const BuildStepId = {
+  Structure: AppWindowId.Structure,
+  Pipeline: AppWindowId.Pipeline,
+  Testing: AppWindowId.Testing,
+  Inference: AppWindowId.Inference,
+} as const
+
+export type BuildStepId = (typeof BuildStepId)[keyof typeof BuildStepId]
 
 export type AppNavItem = {
   id: AppWindowId
@@ -78,36 +80,36 @@ export const BUILDER_AREAS: AppAreaConfig[] = [
     id: AppArea.Build,
     label: "Build",
     icon: Hammer,
-    windows: [BuildStepId.Structure, BuildStepId.Pipeline, BuildStepId.Testing, BuildStepId.Inference],
-    defaultWindow: BuildStepId.Structure,
+    windows: [AppWindowId.Structure, AppWindowId.Pipeline, AppWindowId.Testing, AppWindowId.Inference],
+    defaultWindow: AppWindowId.Structure,
   },
   {
     id: AppArea.Deploy,
     label: "Deploy",
     icon: Rocket,
-    windows: ["share", "earnings"],
-    defaultWindow: "share",
+    windows: [AppWindowId.Share, AppWindowId.Earnings],
+    defaultWindow: AppWindowId.Share,
   },
   {
     id: AppArea.Observe,
     label: "Observe",
     icon: Eye,
-    windows: ["logging", "cache"],
-    defaultWindow: "logging",
+    windows: [AppWindowId.Logging, AppWindowId.Cache],
+    defaultWindow: AppWindowId.Logging,
   },
   {
     id: AppArea.Library,
     label: "Library",
     icon: Library,
-    windows: ["documents", "docs", "project-billing", "project-settings"],
-    defaultWindow: "documents",
+    windows: [AppWindowId.Documents, AppWindowId.Docs, AppWindowId.ProjectBilling, AppWindowId.ProjectSettings],
+    defaultWindow: AppWindowId.Documents,
   },
   {
     id: AppArea.Account,
     label: "Account",
     icon: UserCircle,
-    windows: ["billing", "settings"],
-    defaultWindow: "billing",
+    windows: [AppWindowId.Billing, AppWindowId.Settings],
+    defaultWindow: AppWindowId.Billing,
   },
 ]
 
@@ -116,56 +118,56 @@ export const CONSUMER_AREAS: AppAreaConfig[] = [
     id: AppArea.Run,
     label: "Run",
     icon: Users,
-    windows: ["share"],
-    defaultWindow: "share",
+    windows: [AppWindowId.Share],
+    defaultWindow: AppWindowId.Share,
   },
   {
     id: AppArea.Account,
     label: "Account",
     icon: UserCircle,
-    windows: ["billing", "settings"],
-    defaultWindow: "billing",
+    windows: [AppWindowId.Billing, AppWindowId.Settings],
+    defaultWindow: AppWindowId.Billing,
   },
 ]
 
 export const AREA_SUB_NAV: Partial<Record<AppArea, AppNavItem[]>> = {
   [AppArea.Deploy]: [
-    { id: "share", label: "Share", hint: "05", icon: SquareArrowUp },
-    { id: "earnings", label: "Earnings", hint: "06", icon: Wallet },
+    { id: AppWindowId.Share, label: "Share", hint: "05", icon: SquareArrowUp },
+    { id: AppWindowId.Earnings, label: "Earnings", hint: "06", icon: Wallet },
   ],
   [AppArea.Observe]: [
-    { id: "logging", label: "Logging", hint: "07", icon: ScrollText },
-    { id: "cache", label: "Cache", hint: "08", icon: Database },
+    { id: AppWindowId.Logging, label: "Logging", hint: "07", icon: ScrollText },
+    { id: AppWindowId.Cache, label: "Cache", hint: "08", icon: Database },
   ],
   [AppArea.Library]: [
-    { id: "documents", label: "Documents", hint: "09", icon: Files },
-    { id: "docs", label: "Docs", hint: "10", icon: BookOpen },
-    { id: "project-billing", label: "Billing", hint: "11", icon: CreditCard },
-    { id: "project-settings", label: "Settings", hint: "12", icon: Settings2 },
+    { id: AppWindowId.Documents, label: "Documents", hint: "09", icon: Files },
+    { id: AppWindowId.Docs, label: "Docs", hint: "10", icon: BookOpen },
+    { id: AppWindowId.ProjectBilling, label: "Billing", hint: "11", icon: CreditCard },
+    { id: AppWindowId.ProjectSettings, label: "Settings", hint: "12", icon: Settings2 },
   ],
   [AppArea.Account]: [
-    { id: "billing", label: "Billing", hint: "", icon: CreditCard },
-    { id: "settings", label: "Settings", hint: "", icon: UserCircle },
+    { id: AppWindowId.Billing, label: "Billing", hint: "", icon: CreditCard },
+    { id: AppWindowId.Settings, label: "Settings", hint: "", icon: UserCircle },
   ],
 }
 
 // AI : legacy flat list — kept for validity helpers and deep links
 export const BUILDER_NAV_ITEMS: AppNavItem[] = [
-  { id: "structure", label: "Structures", hint: "01", icon: Boxes },
-  { id: "pipeline", label: "Pipeline", hint: "02", icon: SpineNavIcon },
-  { id: "testing", label: "Testing", hint: "03", icon: SquareCheck },
-  { id: "inference", label: "Inference", hint: "04", icon: Play },
-  { id: "share", label: "Share", hint: "05", icon: SquareArrowUp },
-  { id: "earnings", label: "Earnings", hint: "06", icon: Wallet },
-  { id: "logging", label: "Logging", hint: "07", icon: ScrollText },
-  { id: "cache", label: "Cache", hint: "08", icon: Database },
-  { id: "documents", label: "Documents", hint: "09", icon: Files },
-  { id: "docs", label: "Docs", hint: "10", icon: BookOpen },
-  { id: "project-billing", label: "Billing", hint: "11", icon: CreditCard },
-  { id: "project-settings", label: "Settings", hint: "12", icon: Settings2 },
+  { id: AppWindowId.Structure, label: "Structures", hint: "01", icon: Boxes },
+  { id: AppWindowId.Pipeline, label: "Pipeline", hint: "02", icon: SpineNavIcon },
+  { id: AppWindowId.Testing, label: "Testing", hint: "03", icon: SquareCheck },
+  { id: AppWindowId.Inference, label: "Inference", hint: "04", icon: Play },
+  { id: AppWindowId.Share, label: "Share", hint: "05", icon: SquareArrowUp },
+  { id: AppWindowId.Earnings, label: "Earnings", hint: "06", icon: Wallet },
+  { id: AppWindowId.Logging, label: "Logging", hint: "07", icon: ScrollText },
+  { id: AppWindowId.Cache, label: "Cache", hint: "08", icon: Database },
+  { id: AppWindowId.Documents, label: "Documents", hint: "09", icon: Files },
+  { id: AppWindowId.Docs, label: "Docs", hint: "10", icon: BookOpen },
+  { id: AppWindowId.ProjectBilling, label: "Billing", hint: "11", icon: CreditCard },
+  { id: AppWindowId.ProjectSettings, label: "Settings", hint: "12", icon: Settings2 },
 ]
 
-export const ACCOUNT_WINDOW_IDS = new Set<AppWindowId>(["billing", "settings"])
+export const ACCOUNT_WINDOW_IDS = new Set<AppWindowId>([AppWindowId.Billing, AppWindowId.Settings])
 
 // AI : workspace tabs include project-billing (11); account billing/settings are L0 only.
 export const BUILDER_WORKSPACE_NAV_ITEMS: AppNavItem[] = BUILDER_NAV_ITEMS.filter(
@@ -177,30 +179,30 @@ export function isAccountWindow(window: AppWindowId): boolean {
 }
 
 export const CONSUMER_NAV_ITEMS: AppNavItem[] = [
-  { id: "share", label: AppPrimarySectionTitle.Run, hint: "01", icon: Users },
+  { id: AppWindowId.Share, label: AppPrimarySectionTitle.Run, hint: "01", icon: Users },
 ]
 
 export function windowToArea(window: AppWindowId, consumer = false): AppArea {
   if (consumer) {
-    if (window === "share") return AppArea.Run
+    if (window === AppWindowId.Share) return AppArea.Run
     return AppArea.Account
   }
   switch (window) {
-    case BuildStepId.Structure:
-    case BuildStepId.Pipeline:
-    case BuildStepId.Testing:
-    case BuildStepId.Inference:
+    case AppWindowId.Structure:
+    case AppWindowId.Pipeline:
+    case AppWindowId.Testing:
+    case AppWindowId.Inference:
       return AppArea.Build
-    case "share":
-    case "earnings":
+    case AppWindowId.Share:
+    case AppWindowId.Earnings:
       return AppArea.Deploy
-    case "logging":
-    case "cache":
+    case AppWindowId.Logging:
+    case AppWindowId.Cache:
       return AppArea.Observe
-    case "documents":
-    case "docs":
-    case "project-billing":
-    case "project-settings":
+    case AppWindowId.Documents:
+    case AppWindowId.Docs:
+    case AppWindowId.ProjectBilling:
+    case AppWindowId.ProjectSettings:
       return AppArea.Library
     default:
       return AppArea.Account
@@ -222,5 +224,5 @@ export function defaultWindowForArea(
   area: AppArea,
   areas: AppAreaConfig[] = BUILDER_AREAS,
 ): AppWindowId {
-  return areas.find((a) => a.id === area)?.defaultWindow ?? BuildStepId.Structure
+  return areas.find((a) => a.id === area)?.defaultWindow ?? AppWindowId.Structure
 }

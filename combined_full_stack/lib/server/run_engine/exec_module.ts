@@ -18,6 +18,7 @@ import {
   execTransformStep,
 } from "./steps/misc";
 import { execWebhookStep } from "./steps/webhook";
+import { execChatbotStep } from "./steps/chatbot";
 
 export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   log.debug(`execModule start`, { moduleId: m.id, kind: m.kind, label: m.label });
@@ -53,6 +54,8 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
       return execHumanReviewStep(m, ctx, log);
     case ModuleKind.Webhook:
       return execWebhookStep(m, ctx, log);
+    case ModuleKind.Chatbot:
+      return execChatbotStep(m, ctx, log);
     // AI : TODO (n8n-stage-E-exec) — case ModuleKind.N8n: return execN8nStep(m, ctx, log)
     // AI :   (ephemeral 1-node workflow against self-hosted n8n; see lib/server/n8n-roadmap.ts).
     default: {

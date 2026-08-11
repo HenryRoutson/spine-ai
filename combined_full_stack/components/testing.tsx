@@ -49,6 +49,7 @@ import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-
 import { labelAsStateKey } from "@/lib/server/pipeline_state"
 import { docsForProject } from "@/lib/project-docs"
 import { awaitRun, isRunBillingError, mergeStepStates, pollIntervalForParallelJobs, startRunWithRetry, type StepUiState } from "@/lib/run-engine"
+import { buildChatbotResult } from "@/lib/chatbot-step"
 import { isRunAbortedError, useCancellableRunRegistry } from "@/lib/use-cancellable-run"
 import { useStore } from "@/lib/store"
 import { formatCostCents, formatSecondsShort } from "@/lib/format"
@@ -712,6 +713,14 @@ function staleLoadFailedContent(content: string): string | null {
         },
         // AI : tests are unattended — auto-approve human-review gates.
         onHumanReview: () => Promise.resolve("approved" as const),
+        // AI : tests are unattended — exit chatbot with empty transcript.
+        onChatbot: (spec) => {
+          const prompt =
+            spec.input && typeof spec.input === "object" && !Array.isArray(spec.input) && typeof (spec.input as { prompt?: unknown }).prompt === "string"
+              ? (spec.input as { prompt: string }).prompt
+              : ""
+          return Promise.resolve(buildChatbotResult(prompt, [], "exit"))
+        },
         projectLlmProviders: project.llmProviders,
       }, pollIntervalMs)
       const report = await evaluateTestReport(run, state.test, project, model)

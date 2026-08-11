@@ -1,5 +1,7 @@
 import { confidentialUploadWarning } from "@/lib/confidential-upload";
 import { prettyJsonString, tryParseJson } from "@/lib/json-utils";
+import { markupKindFromInputType } from "@/lib/markup-kinds";
+import { validateMarkup } from "@/lib/markup-validate";
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, MESSAGE_REQUIRED, unknownProject } from "@/lib/server/api-errors";
@@ -45,10 +47,17 @@ function validateDocContent(body: {
 
   const inferred = inputTypeFromFilename(body.name);
   const type = body.type ?? inferred;
-  if (type !== InputType.Text && type !== InputType.Json) {
-    return apiError("only text and json documents can be created from content", HTTP.BAD_REQUEST);
+  const textLike =
+    type === InputType.Text || type === InputType.Markdown || type === InputType.Latex || type === InputType.Json;
+  if (!textLike) {
+    return apiError("only text, markdown, latex, and json documents can be created from content", HTTP.BAD_REQUEST);
   }
-  if (type !== inferred && !(type === InputType.Text && (body.name.endsWith(".txt") || body.name.endsWith(".md")))) {
+  const extOk =
+    type === inferred ||
+    (type === InputType.Text && body.name.endsWith(".txt")) ||
+    (type === InputType.Markdown && (body.name.endsWith(".md") || body.name.endsWith(".markdown"))) ||
+    (type === InputType.Latex && (body.name.endsWith(".tex") || body.name.endsWith(".latex")));
+  if (!extOk) {
     return apiError(`filename extension does not match type "${type}"`, HTTP.BAD_REQUEST);
   }
 
@@ -60,6 +69,14 @@ function validateDocContent(body: {
   } else {
     const htmlBlock = rejectHtmlTextContent(content);
     if (htmlBlock) return apiError(htmlBlock, HTTP.BAD_REQUEST);
+    const markupKind = markupKindFromInputType(type);
+    if (markupKind) {
+      const checked = validateMarkup(markupKind, content);
+      if (!checked.ok) {
+        const first = checked.issues.find((i) => i.severity === "error");
+        return apiError(first?.message ?? `invalid ${markupKind}`, HTTP.BAD_REQUEST);
+      }
+    }
   }
 
   const label: DocLabel = body.label === DocLabel.Training ? DocLabel.Training : DocLabel.Inference;

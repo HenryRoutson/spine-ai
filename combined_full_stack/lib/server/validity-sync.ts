@@ -12,7 +12,7 @@ import { DEFAULT_LLM_STEP_COST_LIMIT_CENTS } from "@/lib/llm-cost-limit";
 import {
   inputModuleTypesAreAllJsonNative,
 } from "@/lib/inference-input-core";
-import { BUILTIN_DOCUMENT_ID, isBuiltinDocumentModel, stripSharedModels, withSharedModels } from "./builtin_models";
+import { BUILTIN_DOCUMENT_ID, BUILTIN_CHATBOT_PROMPT_ID, BUILTIN_CHATBOT_RESULT_ID, isBuiltinDocumentModel, stripSharedModels, withSharedModels } from "./builtin_models";
 import { migrateCustomCodeModule } from "@/lib/custom_code_entries";
 import { migrateListMergeModule, syncListOpsModules } from "@/lib/list-ops-steps";
 import { syncAssembleModules } from "@/lib/assemble-type-expr";
@@ -380,6 +380,25 @@ function normalizePassthroughStructureIds(modules: PipelineModule[]): PipelineMo
   });
 }
 
+// AI : chatbot I/O is locked to shared builtins — re-pin on migrate.
+function normalizeChatbotStructureIds(modules: PipelineModule[]): PipelineModule[] {
+  return modules.map((m) => {
+    if (m.kind !== ModuleKind.Chatbot) return m;
+    if (m.inStructureId === BUILTIN_CHATBOT_PROMPT_ID && m.outStructureId === BUILTIN_CHATBOT_RESULT_ID) {
+      return m;
+    }
+    return {
+      ...m,
+      inStructureId: BUILTIN_CHATBOT_PROMPT_ID,
+      outStructureId: BUILTIN_CHATBOT_RESULT_ID,
+      ...patchSpineOutList(
+        { ...m, outStructureId: BUILTIN_CHATBOT_RESULT_ID },
+        false,
+      ),
+    };
+  });
+}
+
 function normalizeModuleNotes(modules: PipelineModule[]): PipelineModule[] {
   return modules.map((m) => ({
     ...m,
@@ -405,7 +424,8 @@ export function migrateProjectModules(project: Project): Project {
   const withCache = assembleSynced.modules.map((m) => (m.cached ? m : { ...m, cached: true }));
   models = assembleSynced.models;
   const normalized = normalizePassthroughStructureIds(withCache);
-  const noted = normalizeModuleNotes(normalized);
+  const chatbotPinned = normalizeChatbotStructureIds(normalized);
+  const noted = normalizeModuleNotes(chatbotPinned);
   const spineTyped = migrateModulesSpineTypes(noted);
   const modelsChangedFlag =
     models.length !== project.models.length ||

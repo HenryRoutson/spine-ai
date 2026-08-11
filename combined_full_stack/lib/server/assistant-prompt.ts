@@ -50,6 +50,8 @@ export function buildModuleKindsPromptBlock(): string {
 // AI : TODO (n8n-stage-G-export) — document n8n step for assistant: pick n8nNodeType from catalog,
 // AI :   fill n8nParameters for resource/operation; never invent node type strings (see n8n-roadmap.ts).
 
+// AI : chatbot — structureIn must be ChatbotPrompt; structureOut ChatbotResult; set chatbotMode; no module.prompt.
+
 export function buildFieldTypesPromptBlock(): string {
   return FIELD_TYPES.map((t) => `- ${t}`).join("\n");
 }
@@ -66,9 +68,10 @@ export function buildModelOptionsPromptBlock(): string {
 }
 
 export function buildTypeAliasesRulesPromptBlock(): string {
+  // AI : ChatbotPrompt / ChatbotResult listed in built-in structures below.
   return `Reusable type aliases (typeAliases array):
 - Built-in types (always available — do NOT redefine in typeAliases): quote_string_t (LLM verbatim quote string), quote_span_t (linked QuoteSpan struct), text_quote_t (text + quote string pair). Prefer these over typeExpr tuple[text, quote].
-- Built-in structures (always available): Document (upload I/O), QuoteSpan (doc_id, start, end — linked span after Link Quotes).
+- Built-in structures (always available): Document (upload I/O), QuoteSpan (doc_id, start, end — linked span after Link Quotes), ChatbotPrompt (prompt text for Chatbot steps), ChatbotTurn, ChatbotResult (prompt + transcript + exit_reason).
 - Define standalone Python-style types when a field shape is reused or nested: list[list[int]], dict[str, str], Optional[T], tuple[Section, Meta].
 - Each alias: name, description, expr (Python type string — same syntax as the Structure → Types editor).
 - Reference an alias from a struct field by using the alias name as the field type (e.g. type: "quote_id_t").

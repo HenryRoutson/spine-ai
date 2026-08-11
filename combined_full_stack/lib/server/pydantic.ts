@@ -1,4 +1,13 @@
-import { fieldToPy, fieldToTypeExpr, typeExprToBaml, typeExprToGo, typeExprToPy, typeExprToRust, typeExprToTs } from "./type_expr";
+import {
+  fieldToPy,
+  fieldToTypeExpr,
+  typeExprToBaml,
+  typeExprToGo,
+  typeExprToPy,
+  typeExprToRust,
+  typeExprToTs,
+  TypeExprKind,
+} from "./type_expr";
 import { stripBuiltinTypeAliases } from "./builtin_types";
 import { stripSharedModels } from "./builtin_models";
 import type { TypeExpr } from "./types";
@@ -27,9 +36,9 @@ function typeAliasExportNameGo(name: string): string {
 // AI : alias bodies must not self-reference quote/text_quote names — resolve to concrete Py types.
 function typeExprToAliasDefinitionPy(expr: TypeExpr, models: StructureModel[]): string {
   switch (expr.kind) {
-    case "quote":
+    case TypeExprKind.Quote:
       return "str";
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return "dict[str, str]";
     default:
       return typeExprToPy(expr, models);
@@ -53,9 +62,9 @@ export function typeAliasesToPydantic(aliases: TypeAlias[], models: StructureMod
 // AI : alias bodies must not self-reference quote/text_quote names — those resolve to concrete TS types.
 function typeExprToAliasDefinitionTs(expr: TypeExpr, models: StructureModel[]): string {
   switch (expr.kind) {
-    case "quote":
+    case TypeExprKind.Quote:
       return "string";
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return "{ text: string; quote: string }";
     default:
       return typeExprToTs(expr, models);
@@ -127,7 +136,7 @@ export function allModelsToPydantic(
   const needDatetime = exportModels.some((m) =>
     m.fields.some((f) => {
       const t = fieldToTypeExpr(f);
-      return t.kind === "prim" && t.name === "datetime";
+      return t.kind === TypeExprKind.Prim && t.name === "datetime";
     }),
   );
   const imports = includeImports
@@ -182,9 +191,9 @@ export function allModelsToDts(
 
 function typeExprToAliasDefinitionRust(expr: TypeExpr, models: StructureModel[]): string {
   switch (expr.kind) {
-    case "quote":
+    case TypeExprKind.Quote:
       return "String";
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return "TextQuoteLoose";
     default:
       return typeExprToRust(expr, models);
@@ -200,7 +209,7 @@ export function typeAliasToRust(alias: TypeAlias, models: StructureModel[]): str
 
 function fieldToRust(field: { name: string; optional: boolean; description?: string }, models: StructureModel[], expr: TypeExpr): string {
   let t = typeExprToRust(expr, models);
-  if (field.optional && expr.kind !== "optional") t = `Option<${t}>`;
+  if (field.optional && expr.kind !== TypeExprKind.Optional) t = `Option<${t}>`;
   const { ident, rename } = rustFieldIdent(field.name);
   const lines: string[] = [];
   if (field.description?.trim()) lines.push(`    /// ${field.description.trim()}`);
@@ -284,9 +293,9 @@ export function allModelsToRust(
 
 function typeExprToAliasDefinitionGo(expr: TypeExpr, models: StructureModel[]): string {
   switch (expr.kind) {
-    case "quote":
+    case TypeExprKind.Quote:
       return "string";
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return "TextQuoteLoose";
     default:
       return typeExprToGo(expr, models);
@@ -306,9 +315,9 @@ function fieldToGo(
   expr: TypeExpr,
 ): string {
   let t = typeExprToGo(expr, models);
-  if (field.optional && expr.kind !== "optional") t = `*${t}`;
+  if (field.optional && expr.kind !== TypeExprKind.Optional) t = `*${t}`;
   const { ident, jsonTag } = goFieldIdent(field.name);
-  const omit = field.optional || expr.kind === "optional" ? ",omitempty" : "";
+  const omit = field.optional || expr.kind === TypeExprKind.Optional ? ",omitempty" : "";
   const lines: string[] = [];
   if (field.description?.trim()) lines.push(`\t// ${field.description.trim()}`);
   lines.push(`\t${ident} ${t} \`json:"${jsonTag}${omit}"\``);
@@ -371,9 +380,9 @@ export function allModelsToGo(models: StructureModel[], typeAliases: TypeAlias[]
 
 function typeExprToAliasDefinitionBaml(expr: TypeExpr, models: StructureModel[]): string {
   switch (expr.kind) {
-    case "quote":
+    case TypeExprKind.Quote:
       return "string";
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return "TextQuote";
     default:
       return typeExprToBaml(expr, models);
@@ -396,7 +405,7 @@ function bamlFieldIdent(name: string): string {
 }
 
 function bamlNeedsParensForField(expr: TypeExpr): boolean {
-  return expr.kind === "union" || expr.kind === "map";
+  return expr.kind === TypeExprKind.Union || expr.kind === TypeExprKind.Map;
 }
 
 function fieldToBaml(
@@ -405,7 +414,7 @@ function fieldToBaml(
   expr: TypeExpr,
 ): string {
   let t = typeExprToBaml(expr, models);
-  if (field.optional && expr.kind !== "optional") {
+  if (field.optional && expr.kind !== TypeExprKind.Optional) {
     t = `${bamlNeedsParensForField(expr) ? `(${t})` : t}?`;
   }
   const ident = bamlFieldIdent(field.name);

@@ -265,6 +265,7 @@ export function OwnPipelineRunPanel({
           onReject={() => runHook.resolveHumanReview("rejected")}
         />
       )}
+      {/* AI : own-pipeline chatbot uses same Inference ChatbotPanel path when wired through run hooks. */}
 
       {runHook.error && runHook.phase !== RunPhase.Done && (
         <ErrorBanner

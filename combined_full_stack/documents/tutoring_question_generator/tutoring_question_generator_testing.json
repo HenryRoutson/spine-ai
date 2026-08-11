@@ -1,0 +1,7 @@
+{
+  "description": "Tutoring Question Generator — request {question_type, variations} → LaTeX template → batch fills → formatted LaTeX document.",
+  "inputs": {
+    "Request": "year10_request.json"
+  },
+  "expectedOutputs": {}
+}

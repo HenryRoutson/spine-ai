@@ -1,48 +1,61 @@
-import type { PrimName, TypeExpr } from "@/lib/server/type_expr"
-import { UNSET_TYPE_EXPR } from "@/lib/server/type_expr"
+import {
+  PrimName,
+  TypeExprKind,
+  UNSET_TYPE_EXPR,
+  type TypeExpr,
+} from "@/lib/server/type_expr"
+import { MarkupKind } from "@/lib/markup-kinds"
 import type { StructureModel, StructureModelId } from "@/lib/types"
 
 export type TypePath = number[]
 
-export type TypeKindPick =
-  | "unset"
-  | "str"
-  | "int"
-  | "float"
-  | "bool"
-  | "datetime"
-  | "json"
-  | "document"
-  | "quote"
-  | "text_quote"
-  | "list"
-  | "dict"
-  | "set"
-  | "optional"
-  | "tuple"
-  | "union"
-  | "named"
-  | "model"
+// AI : UI picker ids — not identical to TypeExprKind (str/dict/tuple/model are editor affordances).
+export const TypeKindPick = {
+  Unset: "unset",
+  Str: "str",
+  Int: "int",
+  Float: "float",
+  Bool: "bool",
+  Datetime: "datetime",
+  Json: "json",
+  Markdown: MarkupKind.Markdown,
+  Latex: MarkupKind.Latex,
+  Document: "document",
+  Quote: "quote",
+  TextQuote: "text_quote",
+  List: "list",
+  Dict: "dict",
+  Set: "set",
+  Optional: "optional",
+  Tuple: "tuple",
+  Union: "union",
+  Named: "named",
+  Model: "model",
+} as const
+
+export type TypeKindPick = (typeof TypeKindPick)[keyof typeof TypeKindPick]
 
 export const TYPE_KIND_OPTIONS: { id: TypeKindPick; label: string; hint?: string }[] = [
-  { id: "list", label: "list[…]", hint: "Homogeneous sequence" },
-  { id: "dict", label: "dict[K, V]", hint: "Key-value map" },
-  { id: "set", label: "set[…]", hint: "Unique collection" },
-  { id: "optional", label: "Optional[…]", hint: "May be absent" },
-  { id: "tuple", label: "tuple[…]", hint: "Fixed-length product" },
-  { id: "union", label: "A | B", hint: "One of several types" },
-  { id: "str", label: "str" },
-  { id: "int", label: "int" },
-  { id: "float", label: "float" },
-  { id: "bool", label: "bool" },
-  { id: "datetime", label: "datetime" },
-  { id: "json", label: "json" },
-  { id: "document", label: "Document" },
-  { id: "quote", label: "Quote" },
-  { id: "text_quote", label: "TextQuote" },
-  { id: "model", label: "Structure model" },
-  { id: "named", label: "Custom name", hint: "e.g. quote_id_t" },
-  { id: "unset", label: "UNSET", hint: "Placeholder slot" },
+  { id: TypeKindPick.List, label: "list[…]", hint: "Homogeneous sequence" },
+  { id: TypeKindPick.Dict, label: "dict[K, V]", hint: "Key-value map" },
+  { id: TypeKindPick.Set, label: "set[…]", hint: "Unique collection" },
+  { id: TypeKindPick.Optional, label: "Optional[…]", hint: "May be absent" },
+  { id: TypeKindPick.Tuple, label: "tuple[…]", hint: "Fixed-length product" },
+  { id: TypeKindPick.Union, label: "A | B", hint: "One of several types" },
+  { id: TypeKindPick.Str, label: "str" },
+  { id: TypeKindPick.Int, label: "int" },
+  { id: TypeKindPick.Float, label: "float" },
+  { id: TypeKindPick.Bool, label: "bool" },
+  { id: TypeKindPick.Datetime, label: "datetime" },
+  { id: TypeKindPick.Json, label: "json" },
+  { id: TypeKindPick.Markdown, label: "markdown", hint: "Validated GFM + math + mermaid" },
+  { id: TypeKindPick.Latex, label: "latex", hint: "Validated TeX with package allowlist" },
+  { id: TypeKindPick.Document, label: "Document" },
+  { id: TypeKindPick.Quote, label: "Quote" },
+  { id: TypeKindPick.TextQuote, label: "TextQuote" },
+  { id: TypeKindPick.Model, label: "Structure model" },
+  { id: TypeKindPick.Named, label: "Custom name", hint: "e.g. quote_id_t" },
+  { id: TypeKindPick.Unset, label: "UNSET", hint: "Placeholder slot" },
 ]
 
 export function exprFromKindPick(
@@ -51,43 +64,51 @@ export function exprFromKindPick(
   modelId?: StructureModelId,
 ): TypeExpr {
   switch (pick) {
-    case "unset":
+    case TypeKindPick.Unset:
       return UNSET_TYPE_EXPR
-    case "str":
-      return { kind: "prim", name: "text" }
-    case "int":
-      return { kind: "prim", name: "int" }
-    case "float":
-      return { kind: "prim", name: "float" }
-    case "bool":
-      return { kind: "prim", name: "bool" }
-    case "datetime":
-      return { kind: "prim", name: "datetime" }
-    case "json":
-      return { kind: "prim", name: "json" }
-    case "document":
-      return { kind: "document" }
-    case "quote":
-      return { kind: "quote" }
-    case "text_quote":
-      return { kind: "text_quote" }
-    case "list":
-      return { kind: "list", item: UNSET_TYPE_EXPR }
-    case "dict":
-      return { kind: "map", key: { kind: "prim", name: "text" }, value: UNSET_TYPE_EXPR }
-    case "set":
-      return { kind: "set", item: UNSET_TYPE_EXPR }
-    case "optional":
-      return { kind: "optional", inner: UNSET_TYPE_EXPR }
-    case "tuple":
-      return { kind: "generic", name: "tuple", args: [UNSET_TYPE_EXPR, UNSET_TYPE_EXPR] }
-    case "union":
-      return { kind: "union", variants: [UNSET_TYPE_EXPR, UNSET_TYPE_EXPR] }
-    case "named":
-      return { kind: "named", name: "quote_id_t" }
-    case "model": {
+    case TypeKindPick.Str:
+      return { kind: TypeExprKind.Prim, name: PrimName.Text }
+    case TypeKindPick.Int:
+      return { kind: TypeExprKind.Prim, name: PrimName.Int }
+    case TypeKindPick.Float:
+      return { kind: TypeExprKind.Prim, name: PrimName.Float }
+    case TypeKindPick.Bool:
+      return { kind: TypeExprKind.Prim, name: PrimName.Bool }
+    case TypeKindPick.Datetime:
+      return { kind: TypeExprKind.Prim, name: PrimName.Datetime }
+    case TypeKindPick.Json:
+      return { kind: TypeExprKind.Prim, name: PrimName.Json }
+    case TypeKindPick.Markdown:
+      return { kind: TypeExprKind.Prim, name: PrimName.Markdown }
+    case TypeKindPick.Latex:
+      return { kind: TypeExprKind.Prim, name: PrimName.Latex }
+    case TypeKindPick.Document:
+      return { kind: TypeExprKind.Document }
+    case TypeKindPick.Quote:
+      return { kind: TypeExprKind.Quote }
+    case TypeKindPick.TextQuote:
+      return { kind: TypeExprKind.TextQuote }
+    case TypeKindPick.List:
+      return { kind: TypeExprKind.List, item: UNSET_TYPE_EXPR }
+    case TypeKindPick.Dict:
+      return {
+        kind: TypeExprKind.Map,
+        key: { kind: TypeExprKind.Prim, name: PrimName.Text },
+        value: UNSET_TYPE_EXPR,
+      }
+    case TypeKindPick.Set:
+      return { kind: TypeExprKind.Set, item: UNSET_TYPE_EXPR }
+    case TypeKindPick.Optional:
+      return { kind: TypeExprKind.Optional, inner: UNSET_TYPE_EXPR }
+    case TypeKindPick.Tuple:
+      return { kind: TypeExprKind.Generic, name: "tuple", args: [UNSET_TYPE_EXPR, UNSET_TYPE_EXPR] }
+    case TypeKindPick.Union:
+      return { kind: TypeExprKind.Union, variants: [UNSET_TYPE_EXPR, UNSET_TYPE_EXPR] }
+    case TypeKindPick.Named:
+      return { kind: TypeExprKind.Named, name: "quote_id_t" }
+    case TypeKindPick.Model: {
       const id = modelId ?? (models[0]?.id as StructureModelId | undefined)
-      return id ? { kind: "ref", modelId: id } : UNSET_TYPE_EXPR
+      return id ? { kind: TypeExprKind.Ref, modelId: id } : UNSET_TYPE_EXPR
     }
   }
 }
@@ -108,15 +129,15 @@ export function setAtPath(root: TypeExpr, path: TypePath, next: TypeExpr): TypeE
 
 function childAt(expr: TypeExpr, index: number): TypeExpr {
   switch (expr.kind) {
-    case "list":
-    case "set":
-    case "optional":
+    case TypeExprKind.List:
+    case TypeExprKind.Set:
+    case TypeExprKind.Optional:
       return index === 0 ? slotOf(expr) : UNSET_TYPE_EXPR
-    case "map":
+    case TypeExprKind.Map:
       return index === 0 ? expr.key : index === 1 ? expr.value : UNSET_TYPE_EXPR
-    case "union":
+    case TypeExprKind.Union:
       return expr.variants[index] ?? UNSET_TYPE_EXPR
-    case "generic":
+    case TypeExprKind.Generic:
       return expr.args[index] ?? UNSET_TYPE_EXPR
     default:
       return UNSET_TYPE_EXPR
@@ -124,29 +145,29 @@ function childAt(expr: TypeExpr, index: number): TypeExpr {
 }
 
 function slotOf(expr: TypeExpr): TypeExpr {
-  if (expr.kind === "list" || expr.kind === "set") return expr.item
-  if (expr.kind === "optional") return expr.inner
+  if (expr.kind === TypeExprKind.List || expr.kind === TypeExprKind.Set) return expr.item
+  if (expr.kind === TypeExprKind.Optional) return expr.inner
   return UNSET_TYPE_EXPR
 }
 
 function mapChild(expr: TypeExpr, index: number, fn: (child: TypeExpr) => TypeExpr): TypeExpr {
   switch (expr.kind) {
-    case "list":
+    case TypeExprKind.List:
       return { ...expr, item: fn(expr.item) }
-    case "set":
+    case TypeExprKind.Set:
       return { ...expr, item: fn(expr.item) }
-    case "optional":
+    case TypeExprKind.Optional:
       return { ...expr, inner: fn(expr.inner) }
-    case "map":
+    case TypeExprKind.Map:
       if (index === 0) return { ...expr, key: fn(expr.key) }
       if (index === 1) return { ...expr, value: fn(expr.value) }
       return expr
-    case "union": {
+    case TypeExprKind.Union: {
       const variants = [...expr.variants]
       variants[index] = fn(variants[index] ?? UNSET_TYPE_EXPR)
       return { ...expr, variants }
     }
-    case "generic": {
+    case TypeExprKind.Generic: {
       const args = [...expr.args]
       args[index] = fn(args[index] ?? UNSET_TYPE_EXPR)
       return { ...expr, args }
@@ -158,25 +179,25 @@ function mapChild(expr: TypeExpr, index: number, fn: (child: TypeExpr) => TypeEx
 
 export function appendUnionVariant(root: TypeExpr, path: TypePath): TypeExpr {
   const target = getAtPath(root, path)
-  if (target.kind !== "union") return root
+  if (target.kind !== TypeExprKind.Union) return root
   return setAtPath(root, path, { ...target, variants: [...target.variants, UNSET_TYPE_EXPR] })
 }
 
 export function appendTupleArg(root: TypeExpr, path: TypePath): TypeExpr {
   const target = getAtPath(root, path)
-  if (target.kind !== "generic" || target.name !== "tuple") return root
+  if (target.kind !== TypeExprKind.Generic || target.name !== "tuple") return root
   return setAtPath(root, path, { ...target, args: [...target.args, UNSET_TYPE_EXPR] })
 }
 
 export function removeChildAt(root: TypeExpr, path: TypePath, index: number): TypeExpr {
   const target = getAtPath(root, path)
-  if (target.kind === "union" && target.variants.length > 2) {
+  if (target.kind === TypeExprKind.Union && target.variants.length > 2) {
     return setAtPath(root, path, {
       ...target,
       variants: target.variants.filter((_, i) => i !== index),
     })
   }
-  if (target.kind === "generic" && target.name === "tuple" && target.args.length > 2) {
+  if (target.kind === TypeExprKind.Generic && target.name === "tuple" && target.args.length > 2) {
     return setAtPath(root, path, {
       ...target,
       args: target.args.filter((_, i) => i !== index),
@@ -187,19 +208,19 @@ export function removeChildAt(root: TypeExpr, path: TypePath, index: number): Ty
 
 export function childPaths(expr: TypeExpr, base: TypePath = []): { label: string; path: TypePath }[] {
   switch (expr.kind) {
-    case "list":
-    case "set":
+    case TypeExprKind.List:
+    case TypeExprKind.Set:
       return [{ label: "item", path: [...base, 0] }]
-    case "optional":
+    case TypeExprKind.Optional:
       return [{ label: "inner", path: [...base, 0] }]
-    case "map":
+    case TypeExprKind.Map:
       return [
         { label: "key", path: [...base, 0] },
         { label: "value", path: [...base, 1] },
       ]
-    case "union":
+    case TypeExprKind.Union:
       return expr.variants.map((_, i) => ({ label: `opt ${i + 1}`, path: [...base, i] }))
-    case "generic":
+    case TypeExprKind.Generic:
       if (expr.name === "tuple") {
         return expr.args.map((_, i) => ({ label: `#${i + 1}`, path: [...base, i] }))
       }
@@ -210,18 +231,18 @@ export function childPaths(expr: TypeExpr, base: TypePath = []): { label: string
 }
 
 export function typeExprHasUnset(expr: TypeExpr): boolean {
-  if (expr.kind === "unset") return true
+  if (expr.kind === TypeExprKind.Unset) return true
   switch (expr.kind) {
-    case "list":
-    case "set":
+    case TypeExprKind.List:
+    case TypeExprKind.Set:
       return typeExprHasUnset(expr.item)
-    case "optional":
+    case TypeExprKind.Optional:
       return typeExprHasUnset(expr.inner)
-    case "map":
+    case TypeExprKind.Map:
       return typeExprHasUnset(expr.key) || typeExprHasUnset(expr.value)
-    case "union":
+    case TypeExprKind.Union:
       return expr.variants.some(typeExprHasUnset)
-    case "generic":
+    case TypeExprKind.Generic:
       return expr.args.some(typeExprHasUnset)
     default:
       return false

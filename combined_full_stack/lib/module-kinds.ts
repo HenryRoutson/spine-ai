@@ -18,10 +18,12 @@ export const USER_ADDABLE_MODULE_KINDS = [
   ModuleKind.HumanReview,
   ModuleKind.Webhook,
   // AI : TODO (n8n-stage-A-ui) — ModuleKind.N8n once kind exists (catalog picker, not generic webhook).
+  ModuleKind.Chatbot,
   ModuleKind.Output,
 ] as const satisfies readonly ModuleKind[]
 
 // AI : output/assert/human-review use inStructureId as the spine passthrough contract.
+// AI : Chatbot is NOT passthrough — in=ChatbotPrompt, out=ChatbotResult.
 export function usesPassthroughStructure(kind: ModuleKind): boolean {
   return kind === ModuleKind.Output || kind === ModuleKind.Assert || kind === ModuleKind.HumanReview
 }
@@ -53,6 +55,9 @@ export function stepRequiresNote(kind: ModuleKind): boolean {
 export function stepIoLabels(kind: RunStepKind) {
   if (kind === ModuleKind.Quote) {
     return { inTitle: "Source + extracts", outTitle: "Linked quotes" }
+  }
+  if (kind === ModuleKind.Chatbot) {
+    return { inTitle: "Prompt (ChatbotPrompt)", outTitle: "Chat result" }
   }
   const isLlm = kind === ModuleKind.Llm || kind === ModuleKind.LlmBatch || kind === ModuleKind.ExampleSelect
   return {

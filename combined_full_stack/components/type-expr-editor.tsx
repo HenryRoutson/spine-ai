@@ -28,37 +28,37 @@ import {
 import { formatTypeExprPy } from "@/lib/type-expr-parse"
 import { TypeExprHighlight } from "@/components/type-expr-preview"
 import type { TypeExpr } from "@/lib/server/type_expr"
-import { UNSET_TYPE_EXPR } from "@/lib/server/type_expr"
+import { PrimName, TypeExprKind, UNSET_TYPE_EXPR } from "@/lib/server/type_expr"
 import type { StructureModel, StructureModelId, TypeAlias } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 function kindLabel(expr: TypeExpr, models: StructureModel[]): string {
   switch (expr.kind) {
-    case "prim":
-      return expr.name === "text" ? "str" : expr.name
-    case "list":
+    case TypeExprKind.Prim:
+      return expr.name === PrimName.Text ? "str" : expr.name
+    case TypeExprKind.List:
       return "list"
-    case "map":
+    case TypeExprKind.Map:
       return "dict"
-    case "set":
+    case TypeExprKind.Set:
       return "set"
-    case "optional":
+    case TypeExprKind.Optional:
       return "Optional"
-    case "union":
+    case TypeExprKind.Union:
       return "union"
-    case "generic":
+    case TypeExprKind.Generic:
       return expr.name === "tuple" ? "tuple" : expr.name
-    case "ref":
+    case TypeExprKind.Ref:
       return models.find((m) => m.id === expr.modelId)?.name ?? "model"
-    case "named":
+    case TypeExprKind.Named:
       return expr.name
-    case "unset":
+    case TypeExprKind.Unset:
       return "UNSET"
-    case "document":
+    case TypeExprKind.Document:
       return "Document"
-    case "quote":
+    case TypeExprKind.Quote:
       return "Quote"
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return "TextQuote"
     default:
       return expr.kind

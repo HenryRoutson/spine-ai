@@ -194,10 +194,11 @@ const SeedFileSchema = z.object({
             .optional(),
         })
         .optional(),
-      cached: z.boolean(),
+      // AI : authoring defaults — omit in seeds; real latency/cost come from run history (billing.moduleMetrics).
+      cached: z.boolean().default(true),
       auto: z.boolean().optional(),
-      avgMs: z.number(),
-      avgCostCents: z.number(),
+      avgMs: z.number().default(0),
+      avgCostCents: z.number().default(0),
       fallbackList: z
         .array(z.object({ typescript: z.string().optional(), python: z.string().optional() }))
         .optional(),

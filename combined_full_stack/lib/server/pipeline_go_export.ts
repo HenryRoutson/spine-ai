@@ -314,6 +314,15 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         "}",
         "return input, nil",
       ].join("\n");
+    case ModuleKind.Chatbot:
+      return [
+        "// Prompted chatbot — input is ChatbotPrompt; returns ChatbotResult",
+        "result, err := WaitForChatbotSession(input)",
+        "if err != nil {",
+        `\treturn ${zero}, err`,
+        "}",
+        "return result, nil",
+      ].join("\n");
     case ModuleKind.Webhook:
       return exportWebhookStepBodyGo(m, zero);
     case ModuleKind.Output:

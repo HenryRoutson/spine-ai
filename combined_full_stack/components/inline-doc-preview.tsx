@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react"
 import { DocViewerLoading } from "@/components/doc-viewer-loading"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
-import { MarkdownView } from "@/components/highlight"
+import { MarkupView } from "@/components/highlight"
 import {
   defaultInlineDocViewMode,
   docViewTabLabel,
   inlineDocViewTabs,
   isPdfDoc,
+  markupKindForDoc,
 } from "@/lib/doc-content"
+import { MarkupKind } from "@/lib/markup-kinds"
 import type { DocViewMode } from "@/lib/doc-viewer"
 import { docTextContent, fetchDocText } from "@/lib/doc-text-cache"
 import { useDocFetchScope } from "@/lib/use-doc-fetch-scope"
@@ -116,7 +118,7 @@ export function InlineDocPreview({
           />
         ) : view === "formatted" ? (
           <div className="px-3 py-2.5">
-            <MarkdownView md={parserText} />
+            <MarkupView kind={markupKindForDoc(doc) ?? MarkupKind.Markdown} source={parserText} />
           </div>
         ) : (
           <pre className="whitespace-pre-wrap px-3 py-2.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
@@ -130,7 +132,9 @@ export function InlineDocPreview({
             ? "table view — excel/json"
             : "json view"
           : view === "formatted"
-            ? "formatted markdown"
+            ? markupKindForDoc(doc) === MarkupKind.Latex
+              ? "formatted latex"
+              : "formatted markdown"
             : showPdf
               ? "raw text — converted from pdf"
               : "built-in parser text"}

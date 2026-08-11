@@ -46,6 +46,10 @@ export type RunCheckpoint = {
     expectedOutputs?: Record<string, unknown>;
     llmClient?: LlmClientStepSpec;
     maxRunMs?: number;
+    // AI : chatbot pause — mode/model/maxTurns for Inference panel turns.
+    chatbotMode?: import("@/lib/chatbot-step").ChatbotMode;
+    model?: ModelId;
+    maxTurns?: number;
   };
   expectedOutputs?: Record<string, unknown>;
 };
@@ -53,6 +57,17 @@ export type RunCheckpoint = {
 export class HumanReviewPendingError extends Error {
   constructor(readonly input: unknown) {
     super("human review pending");
+  }
+}
+
+export class ChatbotPendingError extends Error {
+  constructor(
+    readonly input: unknown,
+    readonly chatbotMode: import("@/lib/chatbot-step").ChatbotMode,
+    readonly model?: ModelId,
+    readonly maxTurns?: number,
+  ) {
+    super("chatbot session pending");
   }
 }
 

@@ -14,6 +14,11 @@ import {
 import { openLlmProvidersSettings, scrollToSettingsSection } from "@/lib/settings-nav"
 import type { SharedRunDocScope } from "@/lib/shared-run-doc-scope"
 import type { DocId, StructureModelId } from "@/lib/types"
+import { AppWindowId as AppWindow } from "@/lib/app-window-id"
+
+export * from "@/lib/app-window-id"
+
+type WindowId = (typeof AppWindow)[keyof typeof AppWindow]
 
 export type LoggingFocusAnchor = "validation-errors"
 
@@ -25,25 +30,9 @@ export type LoggingFocus = {
 export type { AppArea } from "@/lib/app-nav-config"
 export { windowToArea, isBuildStep } from "@/lib/app-nav-config"
 
-export type AppWindowId =
-  | "structure"
-  | "pipeline"
-  | "testing"
-  | "inference"
-  | "share"
-  | "earnings"
-  | "logging"
-  | "cache"
-  | "documents"
-  | "docs"
-  | "project-billing"
-  | "project-settings"
-  | "billing"
-  | "settings"
-
 interface AppShellState {
-  activeWindow: AppWindowId
-  setActiveWindow: (window: AppWindowId) => void
+  activeWindow: WindowId
+  setActiveWindow: (window: WindowId) => void
   setActiveArea: (area: AppArea, consumer?: boolean) => void
   focusDocId: DocId | null
   openDocuments: (docId?: DocId) => void
@@ -71,7 +60,7 @@ interface AppShellState {
 const AppShellContext = createContext<AppShellState | null>(null)
 
 export function AppShellProvider({ children }: { children: ReactNode }) {
-  const [activeWindow, setActiveWindow] = useState<AppWindowId>("structure")
+  const [activeWindow, setActiveWindow] = useState<WindowId>(AppWindow.Structure)
   const [focusDocId, setFocusDocId] = useState<DocId | null>(null)
   const [focusRunId, setFocusRunId] = useState<string | null>(null)
   const [focusRunAnchor, setFocusRunAnchor] = useState<LoggingFocusAnchor | null>(null)
@@ -83,14 +72,14 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
 
   const openSharedRun = useCallback((linkId: string) => {
     setActiveSharedLinkId(linkId)
-    setActiveWindow("share")
+    setActiveWindow(AppWindow.Share)
   }, [])
 
   const clearSharedRun = useCallback(() => setActiveSharedLinkId(null), [])
 
   const openDocuments = useCallback((docId?: DocId) => {
     setFocusDocId(docId ?? null)
-    setActiveWindow("documents")
+    setActiveWindow(AppWindow.Documents)
   }, [])
 
   const clearFocusDoc = useCallback(() => setFocusDocId(null), [])
@@ -103,7 +92,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       setFocusRunId(focus.runId ?? null)
       setFocusRunAnchor(focus.anchor ?? null)
     }
-    setActiveWindow("logging")
+    setActiveWindow(AppWindow.Logging)
   }, [])
 
   const clearFocusRun = useCallback(() => {
@@ -113,7 +102,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
 
   const openStructure = useCallback((structureId?: StructureModelId) => {
     setFocusStructureId(structureId ?? null)
-    setActiveWindow("structure")
+    setActiveWindow(AppWindow.Structure)
   }, [])
 
   const clearFocusStructure = useCallback(() => setFocusStructureId(null), [])
@@ -122,13 +111,13 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
 
   const openTesting = useCallback((testDocName?: string) => {
     setFocusTestDocName(testDocName ?? null)
-    setActiveWindow("testing")
+    setActiveWindow(AppWindow.Testing)
   }, [])
 
   const clearFocusTestDoc = useCallback(() => setFocusTestDocName(null), [])
 
   const openSettingsSection = useCallback((sectionId: string) => {
-    setActiveWindow("settings")
+    setActiveWindow(AppWindow.Settings)
     if (sectionId === "settings-llm-providers") {
       setPendingLlmProvidersOpen(true)
       window.setTimeout(() => openLlmProvidersSettings(), 50)

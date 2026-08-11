@@ -1,6 +1,12 @@
 import { withSharedModels } from "@/lib/server/builtin_models";
 import { withBuiltinTypeAliases } from "@/lib/server/builtin_types";
-import { expandNamedTypeExpr, fieldToTypeExpr, type TypeExpr } from "@/lib/server/type_expr";
+import {
+  expandNamedTypeExpr,
+  fieldToTypeExpr,
+  PrimName,
+  TypeExprKind,
+  type TypeExpr,
+} from "@/lib/server/type_expr";
 import { formatTypeExprPy } from "@/lib/type-expr-parse";
 import type { ModelField, StructureModel, StructureModelId, TypeAlias } from "@/lib/types";
 
@@ -32,67 +38,67 @@ function modelNameFor(modelId: StructureModelId, models: StructureModel[]): stri
 function exampleLines(expr: TypeExpr, opts: HintOpts, indent: number): string[] {
   const sp = pad(indent);
   switch (expr.kind) {
-    case "prim":
+    case TypeExprKind.Prim:
       switch (expr.name) {
-        case "text":
+        case PrimName.Text:
           return [`${sp}"string"`];
-        case "int":
+        case PrimName.Int:
           return [`${sp}999  // int`];
-        case "float":
+        case PrimName.Float:
           return [`${sp}9.99  // float`];
-        case "bool":
+        case PrimName.Bool:
           return [`${sp}true  // bool`];
-        case "datetime":
+        case PrimName.Datetime:
           return [`${sp}"2024-01-01T00:00:00Z"  // datetime`];
-        case "json":
+        case PrimName.Json:
           return [`${sp}"{\\"key\\": \\"string\\"}"  // json`];
         default:
           return [`${sp}?`];
       }
-    case "document":
+    case TypeExprKind.Document:
       return objectLines(
         [
-          { name: "content", expr: { kind: "prim", name: "text" } },
-          { name: "filename", expr: { kind: "prim", name: "text" } },
+          { name: "content", expr: { kind: TypeExprKind.Prim, name: PrimName.Text } },
+          { name: "filename", expr: { kind: TypeExprKind.Prim, name: PrimName.Text } },
         ],
         opts,
         indent,
       );
-    case "quote":
+    case TypeExprKind.Quote:
       return objectLines(
         [
-          { name: "doc_id", expr: { kind: "prim", name: "text" } },
-          { name: "start", expr: { kind: "prim", name: "int" } },
-          { name: "end", expr: { kind: "prim", name: "int" } },
+          { name: "doc_id", expr: { kind: TypeExprKind.Prim, name: PrimName.Text } },
+          { name: "start", expr: { kind: TypeExprKind.Prim, name: PrimName.Int } },
+          { name: "end", expr: { kind: TypeExprKind.Prim, name: PrimName.Int } },
         ],
         opts,
         indent,
       );
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return objectLines(
         [
-          { name: "text", expr: { kind: "prim", name: "text" } },
-          { name: "quote", expr: { kind: "quote" } },
+          { name: PrimName.Text, expr: { kind: TypeExprKind.Prim, name: PrimName.Text } },
+          { name: "quote", expr: { kind: TypeExprKind.Quote } },
         ],
         opts,
         indent,
       );
-    case "list":
-    case "set": {
+    case TypeExprKind.List:
+    case TypeExprKind.Set: {
       const itemLines = exampleLines(expr.item, opts, indent + 1);
       return [`${sp}[`, ...itemLines, `${sp}]`];
     }
-    case "map": {
+    case TypeExprKind.Map: {
       const valueLines = exampleLines(expr.value, opts, indent + 1);
-      const keySample = expr.key.kind === "prim" && expr.key.name === "text" ? "string" : "key";
+      const keySample = expr.key.kind === TypeExprKind.Prim && expr.key.name === PrimName.Text ? "string" : "key";
       if (valueLines.length === 1) {
         return [`${sp}{`, `${pad(indent + 1)}"${keySample}": ${valueLines[0]!.trim()},`, `${sp}}`];
       }
       return [`${sp}{`, `${pad(indent + 1)}"${keySample}": ${valueLines[0]!.trim()}`, ...valueLines.slice(1), `${sp}}`];
     }
-    case "optional":
+    case TypeExprKind.Optional:
       return exampleLines(expr.inner, opts, indent);
-    case "ref": {
+    case TypeExprKind.Ref: {
       if (opts.seenModels.has(expr.modelId)) {
         return [`${sp}{ ... }  // ${modelNameFor(expr.modelId, opts.models)}`];
       }
@@ -104,23 +110,23 @@ function exampleLines(expr: TypeExpr, opts: HintOpts, indent: number): string[] 
         .map((f) => ({ name: f.name, expr: fieldToTypeExpr(f) }));
       return objectLines(fields, opts, indent);
     }
-    case "union":
+    case TypeExprKind.Union:
       return expr.variants.flatMap((variant, i) => {
         const lines = exampleLines(variant, opts, indent);
         return i === 0 ? lines : [`${sp}// or`, ...lines];
       });
-    case "generic":
+    case TypeExprKind.Generic:
       if (expr.name === "tuple" && expr.args.length >= 2) {
         const parts = expr.args.map((arg) => exampleLines(arg, opts, 0).join(" ").trim());
         return [`${sp}(${parts.join(", ")})`];
       }
       if (expr.args.length === 1) return exampleLines(expr.args[0]!, opts, indent);
       return [`${sp}?`];
-    case "named":
+    case TypeExprKind.Named:
       return [`${sp}${expr.name}`];
-    case "unset":
+    case TypeExprKind.Unset:
       return [`${sp}?  // complete the field type first`];
-    case "unknown":
+    case TypeExprKind.Unknown:
       return [`${sp}?`];
     default:
       return [`${sp}?`];
@@ -151,18 +157,18 @@ function objectLines(
 
 export function fieldExampleUsesJsonEntry(expr: TypeExpr): boolean {
   switch (expr.kind) {
-    case "list":
-    case "set":
-    case "map":
-    case "ref":
-    case "document":
-    case "quote":
-    case "text_quote":
-    case "generic":
+    case TypeExprKind.List:
+    case TypeExprKind.Set:
+    case TypeExprKind.Map:
+    case TypeExprKind.Ref:
+    case TypeExprKind.Document:
+    case TypeExprKind.Quote:
+    case TypeExprKind.TextQuote:
+    case TypeExprKind.Generic:
       return true;
-    case "optional":
+    case TypeExprKind.Optional:
       return fieldExampleUsesJsonEntry(expr.inner);
-    case "union":
+    case TypeExprKind.Union:
       return expr.variants.some((variant) => fieldExampleUsesJsonEntry(variant));
     default:
       return false;
@@ -171,49 +177,49 @@ export function fieldExampleUsesJsonEntry(expr: TypeExpr): boolean {
 
 export function exampleTemplateValue(expr: TypeExpr, opts: HintOpts): unknown {
   switch (expr.kind) {
-    case "prim":
+    case TypeExprKind.Prim:
       switch (expr.name) {
-        case "text":
+        case PrimName.Text:
           return "string";
-        case "int":
+        case PrimName.Int:
           return 999;
-        case "float":
+        case PrimName.Float:
           return 9.99;
-        case "bool":
+        case PrimName.Bool:
           return true;
-        case "datetime":
+        case PrimName.Datetime:
           return "2024-01-01T00:00:00Z";
-        case "json":
+        case PrimName.Json:
           return '{"key": "string"}';
         default:
           return null;
       }
-    case "document":
+    case TypeExprKind.Document:
       return {
         content: "string",
         filename: "string",
       };
-    case "quote":
+    case TypeExprKind.Quote:
       return {
         doc_id: "string",
         start: 999,
         end: 999,
       };
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return {
         text: "string",
-        quote: exampleTemplateValue({ kind: "quote" }, opts),
+        quote: exampleTemplateValue({ kind: TypeExprKind.Quote }, opts),
       };
-    case "list":
-    case "set":
+    case TypeExprKind.List:
+    case TypeExprKind.Set:
       return [exampleTemplateValue(expr.item, opts)];
-    case "map": {
-      const keySample = expr.key.kind === "prim" && expr.key.name === "text" ? "string" : "key";
+    case TypeExprKind.Map: {
+      const keySample = expr.key.kind === TypeExprKind.Prim && expr.key.name === PrimName.Text ? "string" : "key";
       return { [keySample]: exampleTemplateValue(expr.value, opts) };
     }
-    case "optional":
+    case TypeExprKind.Optional:
       return exampleTemplateValue(expr.inner, opts);
-    case "ref": {
+    case TypeExprKind.Ref: {
       if (opts.seenModels.has(expr.modelId)) {
         return { "…": "…" };
       }
@@ -226,15 +232,15 @@ export function exampleTemplateValue(expr: TypeExpr, opts: HintOpts): unknown {
       }
       return out;
     }
-    case "union":
+    case TypeExprKind.Union:
       return exampleTemplateValue(expr.variants[0]!, opts);
-    case "generic":
+    case TypeExprKind.Generic:
       if (expr.name === "tuple" && expr.args.length >= 2) {
         return expr.args.map((arg) => exampleTemplateValue(arg, opts));
       }
       if (expr.args.length === 1) return exampleTemplateValue(expr.args[0]!, opts);
       return null;
-    case "named":
+    case TypeExprKind.Named:
       return expr.name;
     default:
       return null;
@@ -243,26 +249,26 @@ export function exampleTemplateValue(expr: TypeExpr, opts: HintOpts): unknown {
 
 function entryNoteFor(expr: TypeExpr): string {
   switch (expr.kind) {
-    case "prim":
-      if (expr.name === "json") return "Enter a JSON string — the field stores serialized JSON.";
-      if (expr.name === "int" || expr.name === "float" || expr.name === "bool") {
+    case TypeExprKind.Prim:
+      if (expr.name === PrimName.Json) return "Enter a JSON string — the field stores serialized JSON.";
+      if (expr.name === PrimName.Int || expr.name === PrimName.Float || expr.name === PrimName.Bool) {
         return "Enter the literal value shown above.";
       }
       return "Enter the string value shown above.";
-    case "list":
-    case "set":
-    case "map":
-    case "ref":
-    case "document":
-    case "quote":
-    case "text_quote":
-    case "generic":
+    case TypeExprKind.List:
+    case TypeExprKind.Set:
+    case TypeExprKind.Map:
+    case TypeExprKind.Ref:
+    case TypeExprKind.Document:
+    case TypeExprKind.Quote:
+    case TypeExprKind.TextQuote:
+    case TypeExprKind.Generic:
       return "Enter JSON matching the shape above.";
-    case "optional":
+    case TypeExprKind.Optional:
       return entryNoteFor(expr.inner);
-    case "union":
+    case TypeExprKind.Union:
       return "Enter JSON matching one of the shapes above.";
-    case "unset":
+    case TypeExprKind.Unset:
       return "Complete the field type before adding examples.";
     default:
       return "Values must match the field type.";

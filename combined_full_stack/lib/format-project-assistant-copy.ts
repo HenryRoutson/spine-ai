@@ -1,5 +1,6 @@
 import type { AssistantChatMessage } from "@/components/assistant-chat"
 import type { AssistantDebugEntry, AssistantStreamingDraft } from "@/lib/assistant-chat-types"
+import { AssistantDebugKind } from "@/lib/assistant-debug-types"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 
 type ProjectAssistantCopyHumanTurn = {
@@ -42,7 +43,7 @@ function agentTurnFromStreamingDraft(
   draft: AssistantStreamingDraft,
 ): ProjectAssistantCopyAgentTurn | null {
   const debugTrace = [...draft.debugTrace]
-  const hasThinkingEntry = debugTrace.some((e) => e.kind === "thinking")
+  const hasThinkingEntry = debugTrace.some((e) => e.kind === AssistantDebugKind.Thinking)
   if (draft.liveThinking && !hasThinkingEntry) {
     debugTrace.push({ kind: "thinking", text: draft.liveThinking })
   }

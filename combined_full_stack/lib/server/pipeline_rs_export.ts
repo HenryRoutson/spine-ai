@@ -175,6 +175,12 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
         "wait_for_human_review(&input).await?;",
         "Ok(input)",
       ].join("\n");
+    case ModuleKind.Chatbot:
+      return [
+        "// Prompted chatbot — input is ChatbotPrompt; returns ChatbotResult",
+        "let __chat = wait_for_chatbot_session(&input).await?;",
+        "Ok(__chat)",
+      ].join("\n");
     case ModuleKind.Webhook:
       return exportWebhookStepBodyRust();
     case ModuleKind.Output:

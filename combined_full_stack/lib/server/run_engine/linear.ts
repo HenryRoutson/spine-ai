@@ -4,7 +4,7 @@ import { compactPreview } from "@/lib/text-preview";
 import { inputTypeLabel } from "../../inference-input";
 import { assertInputMatchesDescription, InputDescriptionRejectedError, shouldCheckInputDescription } from "../input_description_check";
 import { collectLogsDuring, withStepModuleContext } from "../job_log_sink";
-import { ClientStepPendingError, HumanReviewPendingError, LlmClientStepPendingError, PipelinePausedError } from "../run_checkpoint";
+import { ClientStepPendingError, HumanReviewPendingError, ChatbotPendingError, LlmClientStepPendingError, PipelinePausedError } from "../run_checkpoint";
 import { expectedOutputsForRun } from "../seed";
 import { stepCacheKey } from "../run_fingerprint";
 import { readStepCache, writeStepCache } from "../step_cache";
@@ -270,6 +270,31 @@ export async function runLinearStepsFrom(
                 label: m.label,
                 kind: ModuleKind.HumanReview,
                 input: err.input,
+              },
+            });
+          }
+          if (err instanceof ChatbotPendingError) {
+            throw new PipelinePausedError({
+              runId,
+              projectId,
+              cacheOwnerId,
+              inputDocId,
+              inputDocIds: fingerprintInputDocIds,
+              fingerprintInputDocIds,
+              model,
+              stepIndex: i,
+              startedAt,
+              steps: [...steps],
+              ctx: serializeCtx(ctx),
+              expectedOutputs: runGolden(),
+              clientStep: {
+                moduleId: m.id,
+                label: m.label,
+                kind: ModuleKind.Chatbot,
+                input: err.input,
+                chatbotMode: err.chatbotMode,
+                model: err.model,
+                maxTurns: err.maxTurns,
               },
             });
           }

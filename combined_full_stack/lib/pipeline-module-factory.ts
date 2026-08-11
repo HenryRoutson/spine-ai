@@ -5,7 +5,15 @@ import { DEFAULT_EXAMPLE_SELECT_PROMPT } from "@/lib/example-select"
 import { DEFAULT_CUSTOM_CODE_MAX_RUN_MS } from "@/lib/custom-code-max-run"
 import { DEFAULT_LLM_STEP_COST_LIMIT_CENTS } from "@/lib/llm-cost-limit"
 import { DEFAULT_WEBHOOK_TIMEOUT_MS } from "@/lib/webhook-step"
-import { CustomCodeLanguage, InputType, ModuleKind, MODULE_META, WebhookMethod } from "@/lib/types"
+import {
+  DEFAULT_CHATBOT_MAX_TURNS,
+  DEFAULT_CHATBOT_MODE,
+} from "@/lib/chatbot-step"
+import {
+  BUILTIN_CHATBOT_PROMPT_ID,
+  BUILTIN_CHATBOT_RESULT_ID,
+} from "@/lib/server/builtin_models"
+import { ChatbotMode, CustomCodeLanguage, InputType, ModuleKind, MODULE_META, WebhookMethod } from "@/lib/types"
 import {
   DEFAULT_CHUNK_SIZE,
   resolveMergePolicy,
@@ -42,6 +50,10 @@ export type ModuleFactoryOpts = {
   mergeCustom?: string
   assembleBindings?: import("@/lib/types").PipelineModule["assembleBindings"]
   parallelBranches?: import("@/lib/types").PipelineModule["parallelBranches"]
+  webhookMethod?: WebhookMethod
+  webhookTimeoutMs?: number
+  chatbotMode?: ChatbotMode
+  maxTurns?: number
 }
 
 // AI : fallback when legacy data omits note on steps that require it.
@@ -64,13 +76,20 @@ export function createPipelineModule(
 ): PipelineModule {
   const { kind } = opts
   const isLlm = isLlmKind(kind)
+  const isChatbot = kind === ModuleKind.Chatbot
   const defaultModel = models[0]?.id
-  const outStructureId =
-    kind === ModuleKind.Assemble || kind === ModuleKind.Parallel
+  const outStructureId = isChatbot
+    ? BUILTIN_CHATBOT_RESULT_ID
+    : kind === ModuleKind.Assemble || kind === ModuleKind.Parallel
       ? opts.outStructureId
       : usesPassthroughStructure(kind)
         ? opts.outStructureId ?? opts.inStructureId ?? defaultModel
         : opts.outStructureId ?? defaultModel
+  const inStructureId = isChatbot
+    ? BUILTIN_CHATBOT_PROMPT_ID
+    : kind !== ModuleKind.Input
+      ? opts.inStructureId ?? defaultModel
+      : undefined
   const spineList =
     opts.outType != null
       ? opts.outType.kind === "list"
@@ -96,7 +115,7 @@ export function createPipelineModule(
     inputNameContains: kind === ModuleKind.Input ? opts.inputNameContains?.trim() || undefined : undefined,
     inputDescription: opts.inputDescription?.trim() || undefined,
     inputMinCount: kind === ModuleKind.Input ? opts.inputMinCount : undefined,
-    inStructureId: kind !== ModuleKind.Input ? opts.inStructureId ?? defaultModel : undefined,
+    inStructureId,
     outStructureId,
     ...(outType ? { outType } : {}),
     assembleBindings: kind === ModuleKind.Assemble ? (opts.assembleBindings ?? {}) : undefined,
@@ -119,7 +138,7 @@ export function createPipelineModule(
     chunkTextField: kind === ModuleKind.Chunk ? opts.chunkTextField : undefined,
     mergePolicy: kind === ModuleKind.Merge ? (opts.mergePolicy ?? resolveMergePolicy({ kind } as PipelineModule)) : undefined,
     mergeCustom: kind === ModuleKind.Merge ? opts.mergeCustom : undefined,
-    model: isLlm ? opts.model ?? globalModel : undefined,
+    model: isLlm || isChatbot ? opts.model ?? globalModel : undefined,
     costLimitCents:
       isLlm || kind === ModuleKind.Parallel
         ? opts.costLimitCents ?? DEFAULT_LLM_STEP_COST_LIMIT_CENTS
@@ -127,6 +146,11 @@ export function createPipelineModule(
     webhookMethod: kind === ModuleKind.Webhook ? (opts.webhookMethod ?? WebhookMethod.Post) : undefined,
     webhookTimeoutMs: kind === ModuleKind.Webhook ? (opts.webhookTimeoutMs ?? DEFAULT_WEBHOOK_TIMEOUT_MS) : undefined,
     // AI : TODO (n8n-stage-A) — defaults for ModuleKind.N8n (timeout, responseMode "first", empty parameters).
+    chatbotMode: isChatbot
+      ? (opts.chatbotMode ??
+        (DEFAULT_CHATBOT_MODE === "single" ? ChatbotMode.Single : ChatbotMode.UntilExit))
+      : undefined,
+    maxTurns: isChatbot ? (opts.maxTurns ?? DEFAULT_CHATBOT_MAX_TURNS) : undefined,
   })
   if (kind === ModuleKind.Chunk || kind === ModuleKind.Merge) {
     return syncListOpsStepModule(base, models).module

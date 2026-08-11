@@ -16,6 +16,7 @@ type UseRunProgressUiArgs = {
   stepStates: Map<ModuleId, StepUiState>
   run: PipelineRun | null
   pendingHumanReview: ClientStepSpec | null
+  pendingChatbot?: ClientStepSpec | null
 }
 
 export function useRunProgressUi({
@@ -24,6 +25,7 @@ export function useRunProgressUi({
   stepStates,
   run,
   pendingHumanReview,
+  pendingChatbot = null,
 }: UseRunProgressUiArgs) {
   const progressPct = useMemo(() => {
     if (phase === RunPhase.Idle) return 0
@@ -56,10 +58,12 @@ export function useRunProgressUi({
   const waitPhrase = useCyclingWaitPhrase(phase === RunPhase.Running, runningHints)
   const runErr = useMemo(() => (run ? pipelineRunError(run) : null), [run])
   const runErrorDisplay = useMemo(() => (run ? formatRunErrorForDisplay(run) : null), [run])
-  const runButtonBusy = phase === RunPhase.Running && !pendingHumanReview
+  const runButtonBusy = phase === RunPhase.Running && !pendingHumanReview && !pendingChatbot
   const runButtonLabel =
     pendingHumanReview != null
       ? "Waiting for your review…"
+      : pendingChatbot != null
+        ? "Waiting for chatbot…"
       : phase === RunPhase.Running
         ? `${waitPhrase}…`
         : "Run pipeline"

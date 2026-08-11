@@ -95,18 +95,21 @@ export function inputTypeLabel(type?: InputTypeSpec): string {
   return `${labels.slice(0, -1).join(", ")} or ${labels[labels.length - 1]}`
 }
 
-const FILE_ACCEPT: Partial<Record<InputType, string>> = {
-  pdf: ".pdf",
-  word: ".doc,.docx",
-  excel: ".xls,.xlsx,.csv",
-  json: ".json",
-  text: ".txt,.md",
-  web: ".html,.htm",
-  image: ".png,.jpg,.jpeg,.webp",
+// AI : lists until the HTML accept= boundary; join only there.
+const FILE_ACCEPT: Partial<Record<InputType, readonly string[]>> = {
+  pdf: [".pdf"],
+  word: [".doc", ".docx"],
+  excel: [".xls", ".xlsx", ".csv"],
+  json: [".json"],
+  text: [".txt"],
+  markdown: [".md", ".markdown"],
+  latex: [".tex", ".latex"],
+  web: [".html", ".htm"],
+  image: [".png", ".jpg", ".jpeg", ".webp"],
 }
 
 export function inputTypeAccept(type?: InputTypeSpec): string | undefined {
   const types = !type ? [] : Array.isArray(type) ? type : [type]
-  const exts = types.map((t) => FILE_ACCEPT[t]).filter(Boolean)
+  const exts = types.flatMap((t) => FILE_ACCEPT[t] ?? [])
   return exts.length ? exts.join(",") : undefined
 }

@@ -44,6 +44,7 @@ import { AssembleModuleFields } from "@/components/pipeline-fields/assemble-fiel
 import { ParallelModuleFields } from "@/components/pipeline-fields/parallel-fields"
 import { ExampleSelectModuleFields } from "@/components/pipeline-fields/example-select-fields"
 import { WebhookModuleFields } from "@/components/pipeline-fields/webhook-fields"
+import { ChatbotModuleFields } from "@/components/pipeline-fields/chatbot-fields"
 import { InspectorCollapsibleSection } from "@/components/inspector-collapsible-section"
 
 export { useLlmSchemaPreview } from "@/components/pipeline-fields/shared"
@@ -293,7 +294,7 @@ export function PipelineModuleFields({
         />
       )}
 
-      {selected.kind !== ModuleKind.Input && (
+      {selected.kind !== ModuleKind.Input && selected.kind !== ModuleKind.Chatbot && (
         <PipelineField
           label={usesPassthroughStructure(selected.kind) ? "Structure to materialize" : "Input model"}
           hint={
@@ -338,6 +339,7 @@ export function PipelineModuleFields({
       {selected.kind !== ModuleKind.Input &&
         selected.kind !== ModuleKind.Output &&
         selected.kind !== ModuleKind.HumanReview &&
+        selected.kind !== ModuleKind.Chatbot &&
         selected.kind !== ModuleKind.Assemble &&
         selected.kind !== ModuleKind.Parallel && (
         <PipelineField
@@ -437,6 +439,14 @@ export function PipelineModuleFields({
         <WebhookModuleFields selected={selected} edit={!!edit} invalid={invalid} onUpdate={onUpdate} />
       )}
       {/* AI : TODO (n8n-stage-A-ui) — ModuleKind.N8n → N8nModuleFields (node picker + param form from catalog) */}
+      {selected.kind === ModuleKind.Chatbot && (
+        <ChatbotModuleFields
+          selected={selected}
+          edit={!!edit}
+          globalModel={globalModel}
+          onUpdate={onUpdate}
+        />
+      )}
     </div>
   )
 }

@@ -189,6 +189,7 @@ export function SharedRunPanel({
           onReject={() => run.resolveHumanReview("rejected")}
         />
       )}
+      {/* AI : shared-link chatbot auto-exits in use-shared-inference-run (no ChatbotPanel yet). */}
 
       {run.error && run.phase !== "done" && (
         <ErrorBanner

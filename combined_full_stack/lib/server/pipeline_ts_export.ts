@@ -139,6 +139,14 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
         "await waitForHumanReview(input);",
         `return input as unknown as ${outTs};`,
       ].join("\n");
+    case ModuleKind.Chatbot:
+      return [
+        "// Prompted chatbot — input is ChatbotPrompt; returns ChatbotResult",
+        "const __chat = await waitForChatbotSession(input as ChatbotPrompt, { mode: " +
+          JSON.stringify(m.chatbotMode ?? "until-exit") +
+          " });",
+        `return __chat as unknown as ${outTs};`,
+      ].join("\n");
     case ModuleKind.Webhook:
       return exportWebhookStepBodyTs(m, outTs);
     case ModuleKind.Output:

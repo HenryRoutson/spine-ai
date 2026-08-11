@@ -433,6 +433,7 @@ export function Logging() {
                       const Icon = stepKindIcon(step.kind)
                       const { inTitle, outTitle } = stepIoLabels(step.kind)
                       const stepLlmCalls = llmCallsFromStep(step)
+                      // AI : chatbot transcript is in outputJson — JsonHighlight below is enough for v1.
                       const descCheckLlmCalls = descriptionCheckLlmCallsFromStep(step)
                       const stepQuotes = quotesFromJson(step.outputJson)
                       const stepDoc = stepDocId(step)

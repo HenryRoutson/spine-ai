@@ -11,7 +11,7 @@ import { jsonUnifiedDiff } from "@/lib/json-diff"
 import { resolveNamedRunInputs, type ResolvedNamedInputs } from "@/lib/inference-presets"
 import { validateNamedInputs, isInferenceSetupFileName } from "@/lib/inference-setup-files"
 import { labelAsStateKey, validatePipelineStateEntry } from "@/lib/server/pipeline_state"
-import { fieldToTypeExpr, stepSpineOutType } from "@/lib/server/type_expr"
+import { fieldToTypeExpr, PrimName, stepSpineOutType, TypeExprKind } from "@/lib/server/type_expr"
 import { tryParseJson } from "@/lib/json-utils"
 import { buildRunConfigPayload, hashStableJson, stableJson } from "@/lib/run-fingerprint"
 import { DocLabel, ModuleKind, RunSource, RunTestStepStatus, type RunTestProbabilisticResult } from "@/lib/types"
@@ -416,7 +416,7 @@ type field_path_string = string
 function isNumericField(f: import("@/lib/types").ModelFieldTypeSourcePick & Pick<import("@/lib/types").ModelField, "deterministic">): boolean {
   if (f.deterministic === false) return false
   const expr = fieldToTypeExpr(f)
-  return expr.kind === "prim" && (expr.name === "int" || expr.name === "float")
+  return expr.kind === TypeExprKind.Prim && (expr.name === PrimName.Int || expr.name === PrimName.Float)
 }
 
 function collectProbabilisticPaths(
@@ -428,12 +428,12 @@ function collectProbabilisticPaths(
 ): void {
   if (!expr) return
   switch (expr.kind) {
-    case "optional":
+    case TypeExprKind.Optional:
       return collectProbabilisticPaths(expr.inner, models, path, seen, out)
-    case "list":
-    case "set":
+    case TypeExprKind.List:
+    case TypeExprKind.Set:
       return collectProbabilisticPaths(expr.item, models, `${path}[]`, seen, out)
-    case "ref": {
+    case TypeExprKind.Ref: {
       if (seen.has(expr.modelId)) return
       const model = models.find((m) => m.id === expr.modelId)
       if (!model) return
@@ -467,12 +467,12 @@ function collectTolerantPaths(
 ): void {
   if (!expr) return
   switch (expr.kind) {
-    case "optional":
+    case TypeExprKind.Optional:
       return collectTolerantPaths(expr.inner, models, path, seen, out)
-    case "list":
-    case "set":
+    case TypeExprKind.List:
+    case TypeExprKind.Set:
       return collectTolerantPaths(expr.item, models, `${path}[]`, seen, out)
-    case "ref": {
+    case TypeExprKind.Ref: {
       if (seen.has(expr.modelId)) return
       const model = models.find((m) => m.id === expr.modelId)
       if (!model) return

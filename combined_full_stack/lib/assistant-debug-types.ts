@@ -2,26 +2,39 @@
 
 export type AssistantLoadingPhase = "thinking" | "structuring" | "retrying"
 
+// AI : debug-trace discriminant — keep wire strings stable for streamed events + UI.
+export const AssistantDebugKind = {
+  Phase: "phase",
+  Thinking: "thinking",
+  LlmResponse: "llm_response",
+  StructuredFailure: "structured_failure",
+  ValidationFailed: "validation_failed",
+  Done: "done",
+  Error: "error",
+} as const
+
+export type AssistantDebugKind = (typeof AssistantDebugKind)[keyof typeof AssistantDebugKind]
+
 export type AssistantDebugEntry =
-  | { kind: "phase"; phase: AssistantLoadingPhase }
-  | { kind: "thinking"; text: string }
-  | { kind: "llm_response"; label: string; response: unknown }
+  | { kind: typeof AssistantDebugKind.Phase; phase: AssistantLoadingPhase }
+  | { kind: typeof AssistantDebugKind.Thinking; text: string }
+  | { kind: typeof AssistantDebugKind.LlmResponse; label: string; response: unknown }
   | {
-      kind: "structured_failure"
+      kind: typeof AssistantDebugKind.StructuredFailure
       attempt: number
       failureKind: string
       error: string
     }
-  | { kind: "validation_failed"; attempt: number; errors: string }
+  | { kind: typeof AssistantDebugKind.ValidationFailed; attempt: number; errors: string }
   | {
-      kind: "done"
+      kind: typeof AssistantDebugKind.Done
       message: string
       retryCount: number
       invalidCount: number
       validationErrors: string | null
       proposal: unknown | null
     }
-  | { kind: "error"; error: string }
+  | { kind: typeof AssistantDebugKind.Error; error: string }
 
 export const ASSISTANT_STREAM_EVENT = {
   THINKING_DELTA: "thinking_delta",

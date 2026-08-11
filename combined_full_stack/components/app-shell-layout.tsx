@@ -19,7 +19,8 @@ import { CONSUMER_NAV_ITEMS } from "@/lib/app-nav-config"
 import { AppShellKind, useAppShellKind } from "@/lib/app-shell-kind"
 import { ProjectPickerContext, useConsumerStore, useOptionalConsumerStore, useOptionalStore, useStore } from "@/lib/store"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
-import { useAppShell, type AppWindowId } from "@/lib/app-shell"
+import { useAppShell } from "@/lib/app-shell"
+import { AppWindowId } from "@/lib/app-window-id"
 import { useSyncProjectDocStructures } from "@/lib/use-sync-project-doc-structures"
 import { LazyDocViewer } from "@/components/lazy-doc-viewer"
 import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
@@ -106,63 +107,63 @@ function ProjectSwitchOverlay({ projectName }: { projectName: string }) {
   )
 }
 
-const CONSUMER_WINDOW_IDS = new Set<AppWindowId>(["share", "billing", "settings"])
+const CONSUMER_WINDOW_IDS = new Set<AppWindowId>([AppWindowId.Share, AppWindowId.Billing, AppWindowId.Settings])
 
 function resolveConsumerWindow(window: AppWindowId): AppWindowId {
-  return CONSUMER_WINDOW_IDS.has(window) ? window : "share"
+  return CONSUMER_WINDOW_IDS.has(window) ? window : AppWindowId.Share
 }
 
-const CONSUMER_PANEL_IDS: AppWindowId[] = ["share", "billing", "settings"]
+const CONSUMER_PANEL_IDS: AppWindowId[] = [AppWindowId.Share, AppWindowId.Billing, AppWindowId.Settings]
 
 // AI : primary-nav account tabs stay mounted so Billing/Settings open instantly after prefetch.
-const EAGER_ACCOUNT_PANEL_IDS: AppWindowId[] = ["billing", "settings"]
+const EAGER_ACCOUNT_PANEL_IDS: AppWindowId[] = [AppWindowId.Billing, AppWindowId.Settings]
 
 const BUILDER_PANEL_IDS: AppWindowId[] = [
-  "structure",
-  "pipeline",
-  "testing",
-  "inference",
-  "share",
-  "earnings",
-  "logging",
-  "cache",
-  "documents",
-  "docs",
-  "project-billing",
-  "project-settings",
-  "billing",
-  "settings",
+  AppWindowId.Structure,
+  AppWindowId.Pipeline,
+  AppWindowId.Testing,
+  AppWindowId.Inference,
+  AppWindowId.Share,
+  AppWindowId.Earnings,
+  AppWindowId.Logging,
+  AppWindowId.Cache,
+  AppWindowId.Documents,
+  AppWindowId.Docs,
+  AppWindowId.ProjectBilling,
+  AppWindowId.ProjectSettings,
+  AppWindowId.Billing,
+  AppWindowId.Settings,
 ]
 
 function renderWindowPanel(windowId: AppWindowId): ReactNode {
   switch (windowId) {
-    case "structure":
+    case AppWindowId.Structure:
       return <StructureBuilder />
-    case "pipeline":
+    case AppWindowId.Pipeline:
       return <PipelineBuilder />
-    case "testing":
+    case AppWindowId.Testing:
       return <Testing />
-    case "inference":
+    case AppWindowId.Inference:
       return <Inference />
-    case "share":
+    case AppWindowId.Share:
       return <Share />
-    case "earnings":
+    case AppWindowId.Earnings:
       return <Earnings />
-    case "logging":
+    case AppWindowId.Logging:
       return <Logging />
-    case "cache":
+    case AppWindowId.Cache:
       return <Cache />
-    case "documents":
+    case AppWindowId.Documents:
       return <Documents />
-    case "docs":
+    case AppWindowId.Docs:
       return <DocumentationPanel />
-    case "project-billing":
+    case AppWindowId.ProjectBilling:
       return <ProjectBilling />
-    case "project-settings":
+    case AppWindowId.ProjectSettings:
       return <ProjectSettings />
-    case "billing":
+    case AppWindowId.Billing:
       return <Billing />
-    case "settings":
+    case AppWindowId.Settings:
       return <SettingsPanel />
     default:
       return null
@@ -348,11 +349,11 @@ function ConsumerShellLayoutInner({ variant = "default" }: { variant?: "default"
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.has("teamInvite")) setActiveWindow("settings")
-    else if (params.has("session_id") || params.has("canceled") || params.get("window") === "billing")
-      setActiveWindow("billing")
-    else if (params.get("window") === "settings") setActiveWindow("settings")
-    else if (!CONSUMER_WINDOW_IDS.has(activeWindow)) setActiveWindow("share")
+    if (params.has("teamInvite")) setActiveWindow(AppWindowId.Settings)
+    else if (params.has("session_id") || params.has("canceled") || params.get("window") === AppWindowId.Billing)
+      setActiveWindow(AppWindowId.Billing)
+    else if (params.get("window") === AppWindowId.Settings) setActiveWindow(AppWindowId.Settings)
+    else if (!CONSUMER_WINDOW_IDS.has(activeWindow)) setActiveWindow(AppWindowId.Share)
   }, [activeWindow, setActiveWindow])
 
   useEffect(() => {
@@ -434,8 +435,8 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    if (params.has("teamInvite")) setActiveWindow("settings")
-    else if (params.has("session_id") || params.has("canceled")) setActiveWindow("billing")
+    if (params.has("teamInvite")) setActiveWindow(AppWindowId.Settings)
+    else if (params.has("session_id") || params.has("canceled")) setActiveWindow(AppWindowId.Billing)
   }, [setActiveWindow])
 
   const warmedAllPanelsRef = useRef(false)

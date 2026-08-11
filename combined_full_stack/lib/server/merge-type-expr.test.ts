@@ -8,6 +8,7 @@ import {
   type MergePolicy,
   type StructureModel,
   type StructureModelId,
+  FieldType,
 } from "@/lib/types";
 
 const usersA: StructureModel = {
@@ -15,8 +16,8 @@ const usersA: StructureModel = {
   name: "UsersA",
   description: "",
   fields: [
-    { name: "id", type: "int" },
-    { name: "roles", type: "list[text]" },
+    { id: "f_id", name: "id", type: FieldType.Int, optional: false, description: "" },
+    { id: "f_roles", name: "roles", type: FieldType.ListText, optional: false, description: "" },
   ],
 };
 
@@ -25,8 +26,8 @@ const usersB: StructureModel = {
   name: "UsersB",
   description: "",
   fields: [
-    { name: "id", type: "int" },
-    { name: "billing", type: "text" },
+    { id: "f_id", name: "id", type: FieldType.Int, optional: false, description: "" },
+    { id: "f_billing", name: "billing", type: FieldType.Text, optional: false, description: "" },
   ],
 };
 
@@ -35,8 +36,8 @@ const row: StructureModel = {
   name: "Row",
   description: "",
   fields: [
-    { name: "tags", type: "list[text]" },
-    { name: "users", type: "list[model]", ref: usersA.id },
+    { id: "f_tags", name: "tags", type: FieldType.ListText, optional: false, description: "" },
+    { id: "f_users", name: "users", type: FieldType.ListModel, optional: false, description: "", ref: usersA.id },
   ],
 };
 
@@ -101,7 +102,7 @@ describe("deriveMergeStepTypes with pipeline state", () => {
     id: "m_scope_desc" as StructureModelId,
     name: "ScopeDescription",
     description: "",
-    fields: [{ name: "description", type: "text" }],
+    fields: [{ id: "f_description", name: "description", type: FieldType.Text, optional: false, description: "" }],
   };
 
   const selected: StructureModel = {
@@ -109,8 +110,8 @@ describe("deriveMergeStepTypes with pipeline state", () => {
     name: "SelectedExample",
     description: "",
     fields: [
-      { name: "id", type: "text" },
-      { name: "selection_reason", type: "text" },
+      { id: "f_id", name: "id", type: FieldType.Text, optional: false, description: "" },
+      { id: "f_selection_reason", name: "selection_reason", type: FieldType.Text, optional: false, description: "" },
     ],
   };
 
@@ -119,8 +120,8 @@ describe("deriveMergeStepTypes with pipeline state", () => {
     name: "ScopeDraftRequest",
     description: "",
     fields: [
-      { name: "description", type: "text" },
-      { name: "selected_examples", type: "list[model]", ref: selected.id },
+      { id: "f_description", name: "description", type: FieldType.Text, optional: false, description: "" },
+      { id: "f_selected_examples", name: "selected_examples", type: FieldType.ListModel, optional: false, description: "", ref: selected.id },
     ],
   };
 

@@ -12,8 +12,9 @@ import { DocViewerLoading } from "@/components/doc-viewer-loading"
 import { cn } from "@/lib/utils"
 import { DataDownloadMenu } from "@/components/data-download-menu"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
-import { MarkdownView } from "@/components/highlight"
-import { docViewerTabs, docViewTabLabel, isPdfDoc } from "@/lib/doc-content"
+import { MarkupView } from "@/components/highlight"
+import { docViewerTabs, docViewTabLabel, isPdfDoc, markupKindForDoc } from "@/lib/doc-content"
+import { MarkupKind } from "@/lib/markup-kinds"
 import { isTabularDocType } from "@/lib/doc-structure-infer"
 import { isDownloadableJson } from "@/lib/json-utils"
 import type { DocId, DocRef } from "@/lib/types"
@@ -158,7 +159,11 @@ export function DocViewer() {
           )
         ) : view === "formatted" ? (
           <div className="flex-1 overflow-auto px-6 py-5">
-            {parserText === null ? <DocViewerLoading /> : <MarkdownView md={parserText} />}
+            {parserText === null ? (
+              <DocViewerLoading />
+            ) : (
+              <MarkupView kind={markupKindForDoc(docRef) ?? MarkupKind.Markdown} source={parserText} />
+            )}
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

@@ -82,6 +82,22 @@ export function buildHumanReviewResult(value: unknown): ExecResult {
   };
 }
 
+export function buildChatbotResult(value: unknown): ExecResult {
+  const turns =
+    value && typeof value === "object" && !Array.isArray(value) && Array.isArray((value as { transcript?: unknown }).transcript)
+      ? ((value as { transcript: unknown[] }).transcript.length)
+      : 0;
+  const reason =
+    value && typeof value === "object" && !Array.isArray(value) && typeof (value as { exit_reason?: unknown }).exit_reason === "string"
+      ? (value as { exit_reason: string }).exit_reason
+      : "exit";
+  return {
+    value,
+    preview: `chatbot ${reason} — ${turns} turn${turns === 1 ? "" : "s"}`,
+    json: JSON.stringify(value, null, 2),
+  };
+}
+
 export function buildAssertResult(value: unknown): ExecResult {
   const count = Array.isArray(value) ? value.length : 1;
   return {

@@ -135,6 +135,8 @@ export enum InputType {
   Word = "word",
   Json = "json",
   Text = "text",
+  Markdown = "markdown",
+  Latex = "latex",
   Web = "web",
   Image = "image",
 }
@@ -162,7 +164,14 @@ export enum ModuleKind {
   HumanReview = "human-review", // AI : pause in Inference — operator approves or rejects before continuing
   Webhook = "webhook", // AI : server-side HTTP call — search APIs, Zapier, internal services (generic URL)
   // AI : TODO (n8n-stage-A) — add N8n = "n8n" — 1:1 wrap of one n8n node type (see lib/server/n8n-roadmap.ts).
+  Chatbot = "chatbot", // AI : pause for prompted chat — spine in ChatbotPrompt, out ChatbotResult
   Output = "output",
+}
+
+// AI : chatbot session length — single exchange vs loop until Exit.
+export enum ChatbotMode {
+  Single = "single",
+  UntilExit = "until-exit",
 }
 
 // AI : webhook step HTTP verbs — GET omitted (no JSON body contract).
@@ -300,6 +309,7 @@ export interface PipelineModule { // TODO this is bad, it contains multiple poss
   exampleReasonField?: string; // field on each output item for chain_of_thought (default selection_reason)
   examplePreFilterMax?: number; // optional cap on candidates before per-item LLM calls
   useOcr?: boolean; // input only — vision OCR when PDF/image is accepted (built-in parser when off)
+  // AI : step result cache toggle — authoring may omit (defaults true via seed/factory).
   cached: boolean;
   // AI : webhook — server-side HTTP integration (URL may be literal or env:VAR / ${VAR})
   webhookUrl?: string;
@@ -311,9 +321,12 @@ export interface PipelineModule { // TODO this is bad, it contains multiple poss
   // AI : TODO (n8n-stage-A) — n8nNodeType / n8nNodeVersion / n8nParameters / n8nCredentialEnv /
   // AI :   n8nBaseUrlEnv / n8nApiKeyEnv / n8nTimeoutMs / n8nResponseMode / n8nResponsePath
   // AI :   (1:1 n8n node; catalog from OSS nodes-base — see lib/server/n8n-roadmap.ts).
+  // AI : chatbot — prompt is spine ChatbotPrompt.prompt (no module.prompt).
+  chatbotMode?: ChatbotMode;
+  maxTurns?: number;
   // AI : pipeline-managed step — auto-inserted Link Quotes; locked in the builder UI.
   auto?: boolean;
-  // metrics (real ones are recomputed from run history, see billing.ts)
+  // AI : authoring may omit these — seed/API/factory default them. Live UI metrics use billing.moduleMetrics.
   avgMs: number;
   avgCostCents: number;
 }
@@ -731,6 +744,8 @@ export const INPUT_TYPES: { value: InputType; label: string }[] = [
   { value: InputType.Excel, label: "Excel" },
   { value: InputType.Json, label: "JSON" },
   { value: InputType.Text, label: "Text" },
+  { value: InputType.Markdown, label: "Markdown" },
+  { value: InputType.Latex, label: "LaTeX" },
   { value: InputType.Web, label: "Web" },
   { value: InputType.Image, label: "Image" },
 ];
@@ -789,6 +804,10 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     description: "POST spine input to an external URL (search APIs, Zapier, custom HTTP) — server-side, secrets via env vars",
   },
   // AI : TODO (n8n-stage-A) — MODULE_META[ModuleKind.N8n] = { label: "n8n", description: "Run one n8n node (Slack, Gmail, …) via self-hosted n8n" }
+  [ModuleKind.Chatbot]: {
+    label: "Chatbot",
+    description: "Pause for prompted chat (single or until Exit) — input is locked ChatbotPrompt",
+  },
   [ModuleKind.Output]: {
     label: "Output",
     description: "Materialize a named snapshot of a structure — not the pipeline's only output; add one anywhere you want an artifact",

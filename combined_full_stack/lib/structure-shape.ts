@@ -1,6 +1,12 @@
-import type { ModelField, StructureModel, StructureModelId } from "@/lib/types"
+import {
+  collectTypeExprRefModelIds,
+  fieldToTypeExpr,
+  PrimName,
+  TypeExprKind,
+  type TypeExpr,
+} from "@/lib/server/type_expr"
 import { referencedModelIds } from "@/lib/structure-ref"
-import { collectTypeExprRefModelIds, fieldToTypeExpr, type TypeExpr } from "@/lib/server/type_expr"
+import type { ModelField, StructureModel, StructureModelId } from "@/lib/types"
 
 const STRUCTURE_NUMBER_RE = /^Structure[_ ](\d+)$/
 
@@ -64,40 +70,40 @@ export function goFieldIdent(name: string): { ident: string; jsonTag: string } {
 // AI : shape compare ignores model names — nested @sig carries the structural identity.
 function formatTypeExprShape(expr: TypeExpr): string {
   switch (expr.kind) {
-    case "prim":
-      return expr.name === "text" ? "str" : expr.name
-    case "document":
+    case TypeExprKind.Prim:
+      return expr.name === PrimName.Text ? "str" : expr.name
+    case TypeExprKind.Document:
       return "Document"
-    case "quote":
+    case TypeExprKind.Quote:
       return "Quote"
-    case "text_quote":
+    case TypeExprKind.TextQuote:
       return "TextQuote"
-    case "list":
+    case TypeExprKind.List:
       return `list[${formatTypeExprShape(expr.item)}]`
-    case "ref":
+    case TypeExprKind.Ref:
       return "Model"
-    case "optional":
+    case TypeExprKind.Optional:
       return `Optional[${formatTypeExprShape(expr.inner)}]`
-    case "set":
+    case TypeExprKind.Set:
       return `set[${formatTypeExprShape(expr.item)}]`
-    case "map":
+    case TypeExprKind.Map:
       return `dict[${formatTypeExprShape(expr.key)}, ${formatTypeExprShape(expr.value)}]`
-    case "union":
+    case TypeExprKind.Union:
       return expr.variants.map((v) => formatTypeExprShape(v)).join(" | ")
-    case "generic":
+    case TypeExprKind.Generic:
       if (expr.name === "tuple") {
         return `tuple[${expr.args.map((a) => formatTypeExprShape(a)).join(", ")}]`
       }
       return expr.args.length
         ? `${expr.name}[${expr.args.map((a) => formatTypeExprShape(a)).join(", ")}]`
         : expr.name
-    case "named":
+    case TypeExprKind.Named:
       return expr.name
-    case "unset":
+    case TypeExprKind.Unset:
       return "UNSET"
-    case "file":
+    case TypeExprKind.File:
       return "FileInput"
-    case "unknown":
+    case TypeExprKind.Unknown:
       return "Any"
     default:
       return "Any"

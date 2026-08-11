@@ -2,10 +2,11 @@
 // AI : TODO (linter-first) — deriveOutType is interim; canonical spine types live in generated pipeline_types.py/.rs.
 import { z } from "zod";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
-import type { ModuleKind, PipelineModule, StructureModelId } from "./types";
+import { InputType, type ModuleKind, type PipelineModule, type StructureModelId } from "./types";
 import {
   formatTypeExpr,
   isListRoot,
+  PrimName,
   stepEmitsList,
   type TypeExpr,
 } from "./type_expr";
@@ -22,8 +23,8 @@ export {
   typeExprToTs,
 } from "./type_expr";
 
-const PrimNameSchema = z.enum(["text", "int", "float", "bool", "datetime", "json"]);
-const InputTypeSchema = z.enum(["pdf", "excel", "word", "json", "text", "web", "image"]);
+const PrimNameSchema = z.nativeEnum(PrimName);
+const InputTypeSchema = z.nativeEnum(InputType);
 
 // AI : JSON-safe TypeExpr — persisted on PipelineModule.inType / outType.
 const TypeExprSchemaInner: z.ZodType<TypeExpr> = z.lazy(() =>
@@ -92,6 +93,10 @@ function legacyEmitsList(m: PipelineModule): boolean {
 export function deriveOutType(m: PipelineModule): TypeExpr | undefined {
   // AI : TODO (n8n-stage-F-spine) — ModuleKind.N8n: typically outStructureId / json item shape from node output.
   if (m.kind === "merge" && m.outType) return m.outType;
+  if (m.kind === "chatbot") {
+    const id = m.outStructureId;
+    return id ? refType(id) : undefined;
+  }
   if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review") {
     const id = m.inStructureId ?? m.outStructureId;
     const base = refType(id);

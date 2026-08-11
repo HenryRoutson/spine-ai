@@ -1,5 +1,11 @@
 // AI : structure field integrity — empty names, dangling refs, duplicate names within a model.
-import { fieldToTypeExpr, collectTypeExprRefModelIds, normalizeModelField, type TypeExpr } from "@/lib/server/type_expr";
+import {
+  collectTypeExprRefModelIds,
+  fieldToTypeExpr,
+  normalizeModelField,
+  TypeExprKind,
+  type TypeExpr,
+} from "@/lib/server/type_expr";
 import {
   validateFieldExampleString,
   validateNegativeFieldExampleString,
@@ -8,15 +14,18 @@ import { withSharedModels } from "@/lib/structure";
 import { isBuiltinTypeAliasName, stripBuiltinTypeAliases, withBuiltinTypeAliases } from "@/lib/server/builtin_types";
 import type { ModelField, StructureModel, StructureModelId, TypeAlias } from "@/lib/types";
 
-export type StructureIssueKind =
-  | "empty-field-name"
-  | "duplicate-field-name"
-  | "dangling-field-ref"
-  | "unknown-type-alias"
-  | "empty-alias-name"
-  | "duplicate-alias-name"
-  | "incomplete-type-expr"
-  | "invalid-field-example";
+export const StructureIssueKind = {
+  EmptyFieldName: "empty-field-name",
+  DuplicateFieldName: "duplicate-field-name",
+  DanglingFieldRef: "dangling-field-ref",
+  UnknownTypeAlias: "unknown-type-alias",
+  EmptyAliasName: "empty-alias-name",
+  DuplicateAliasName: "duplicate-alias-name",
+  IncompleteTypeExpr: "incomplete-type-expr",
+  InvalidFieldExample: "invalid-field-example",
+} as const;
+
+export type StructureIssueKind = (typeof StructureIssueKind)[keyof typeof StructureIssueKind];
 
 export type StructureIssue = {
   modelId: StructureModelId;
@@ -39,27 +48,27 @@ function fieldRefIds(field: ModelField): StructureModelId[] {
 
 function collectNamedTypeExprs(expr: TypeExpr, out: Set<string>, seen = new Set<string>()): void {
   switch (expr.kind) {
-    case "named":
+    case TypeExprKind.Named:
       if (!seen.has(expr.name.toLowerCase())) {
         seen.add(expr.name.toLowerCase());
         out.add(expr.name);
       }
       break;
-    case "list":
-    case "set":
+    case TypeExprKind.List:
+    case TypeExprKind.Set:
       collectNamedTypeExprs(expr.item, out, seen);
       break;
-    case "optional":
+    case TypeExprKind.Optional:
       collectNamedTypeExprs(expr.inner, out, seen);
       break;
-    case "map":
+    case TypeExprKind.Map:
       collectNamedTypeExprs(expr.key, out, seen);
       collectNamedTypeExprs(expr.value, out, seen);
       break;
-    case "union":
+    case TypeExprKind.Union:
       expr.variants.forEach((v) => collectNamedTypeExprs(v, out, seen));
       break;
-    case "generic":
+    case TypeExprKind.Generic:
       expr.args.forEach((a) => collectNamedTypeExprs(a, out, seen));
       break;
     default:
@@ -89,8 +98,8 @@ function typeExprHasUnsetOrAliasUnset(
   typeAliases: TypeAlias[],
   seenAliases = new Set<string>(),
 ): boolean {
-  if (expr.kind === "unset") return true;
-  if (expr.kind === "named") {
+  if (expr.kind === TypeExprKind.Unset) return true;
+  if (expr.kind === TypeExprKind.Named) {
     const key = expr.name.trim().toLowerCase();
     if (!key || seenAliases.has(key)) return false;
     const alias = aliasByName(typeAliases).get(key);
@@ -99,19 +108,19 @@ function typeExprHasUnsetOrAliasUnset(
     return typeExprHasUnsetOrAliasUnset(alias.expr, typeAliases, seenAliases);
   }
   switch (expr.kind) {
-    case "list":
-    case "set":
+    case TypeExprKind.List:
+    case TypeExprKind.Set:
       return typeExprHasUnsetOrAliasUnset(expr.item, typeAliases, seenAliases);
-    case "optional":
+    case TypeExprKind.Optional:
       return typeExprHasUnsetOrAliasUnset(expr.inner, typeAliases, seenAliases);
-    case "map":
+    case TypeExprKind.Map:
       return (
         typeExprHasUnsetOrAliasUnset(expr.key, typeAliases, seenAliases) ||
         typeExprHasUnsetOrAliasUnset(expr.value, typeAliases, seenAliases)
       );
-    case "union":
+    case TypeExprKind.Union:
       return expr.variants.some((v) => typeExprHasUnsetOrAliasUnset(v, typeAliases, seenAliases));
-    case "generic":
+    case TypeExprKind.Generic:
       return expr.args.some((a) => typeExprHasUnsetOrAliasUnset(a, typeAliases, seenAliases));
     default:
       return false;
@@ -154,7 +163,7 @@ export function computeStructureIssues(
       const field = normalizeModelField(rawField);
       const name = field.name.trim();
       if (!name) {
-        issues.push({ modelId: model.id, kind: "empty-field-name", fieldId: field.id });
+        issues.push({ modelId: model.id, kind: StructureIssueKind.EmptyFieldName, fieldId: field.id });
         continue;
       }
 
@@ -162,7 +171,7 @@ export function computeStructureIssues(
       if (prev) {
         issues.push({
           modelId: model.id,
-          kind: "duplicate-field-name",
+          kind: StructureIssueKind.DuplicateFieldName,
           fieldId: field.id,
           fieldName: name,
         });
@@ -174,7 +183,7 @@ export function computeStructureIssues(
         if (!byId.has(refId)) {
           issues.push({
             modelId: model.id,
-            kind: "dangling-field-ref",
+            kind: StructureIssueKind.DanglingFieldRef,
             fieldId: field.id,
             fieldName: name,
             refId,
@@ -186,7 +195,7 @@ export function computeStructureIssues(
       for (const aliasName of unknownNamedTypes(fieldExpr, mergedAliases)) {
         issues.push({
           modelId: model.id,
-          kind: "unknown-type-alias",
+          kind: StructureIssueKind.UnknownTypeAlias,
           fieldId: field.id,
           fieldName: name,
           aliasName,
@@ -195,7 +204,7 @@ export function computeStructureIssues(
       if (typeExprHasUnsetOrAliasUnset(fieldExpr, mergedAliases)) {
         issues.push({
           modelId: model.id,
-          kind: "incomplete-type-expr",
+          kind: StructureIssueKind.IncompleteTypeExpr,
           fieldId: field.id,
           fieldName: name,
         });
@@ -207,7 +216,7 @@ export function computeStructureIssues(
           if (!result.ok) {
             issues.push({
               modelId: model.id,
-              kind: "invalid-field-example",
+              kind: StructureIssueKind.InvalidFieldExample,
               fieldId: field.id,
               fieldName: name,
               exampleIndex,
@@ -221,7 +230,7 @@ export function computeStructureIssues(
           if (!result.ok) {
             issues.push({
               modelId: model.id,
-              kind: "invalid-field-example",
+              kind: StructureIssueKind.InvalidFieldExample,
               fieldId: field.id,
               fieldName: name,
               exampleIndex,
@@ -240,7 +249,7 @@ export function computeStructureIssues(
     if (!name) {
       issues.push({
         modelId: models[0]?.id ?? ("" as StructureModelId),
-        kind: "empty-alias-name",
+        kind: StructureIssueKind.EmptyAliasName,
         aliasName: alias.name,
       });
       continue;
@@ -248,7 +257,7 @@ export function computeStructureIssues(
     if (isBuiltinTypeAliasName(name)) {
       issues.push({
         modelId: models[0]?.id ?? ("" as StructureModelId),
-        kind: "duplicate-alias-name",
+        kind: StructureIssueKind.DuplicateAliasName,
         aliasName: name,
       });
       continue;
@@ -257,7 +266,7 @@ export function computeStructureIssues(
     if (prev) {
       issues.push({
         modelId: models[0]?.id ?? ("" as StructureModelId),
-        kind: "duplicate-alias-name",
+        kind: StructureIssueKind.DuplicateAliasName,
         aliasName: name,
       });
     } else {
@@ -270,7 +279,7 @@ export function computeStructureIssues(
       if (!byId.has(refId)) {
         issues.push({
           modelId: models[0]?.id ?? ("" as StructureModelId),
-          kind: "dangling-field-ref",
+          kind: StructureIssueKind.DanglingFieldRef,
           refId,
           aliasName: alias.name,
         });
@@ -280,7 +289,7 @@ export function computeStructureIssues(
       if (unknown.toLowerCase() === alias.name.trim().toLowerCase()) continue;
       issues.push({
         modelId: models[0]?.id ?? ("" as StructureModelId),
-        kind: "unknown-type-alias",
+        kind: StructureIssueKind.UnknownTypeAlias,
         aliasName: `${alias.name} → ${unknown}`,
       });
     }
@@ -289,7 +298,7 @@ export function computeStructureIssues(
     if (typeExprHasUnsetOrAliasUnset(alias.expr, mergedAliases, seenAliases)) {
       issues.push({
         modelId: models[0]?.id ?? ("" as StructureModelId),
-        kind: "incomplete-type-expr",
+        kind: StructureIssueKind.IncompleteTypeExpr,
         aliasName: alias.name,
       });
     }
@@ -301,32 +310,32 @@ export function computeStructureIssues(
 export function structureIssueMessage(issue: StructureIssue, models: StructureModel[]): string {
   const modelName = models.find((m) => m.id === issue.modelId)?.name ?? issue.modelId;
   switch (issue.kind) {
-    case "empty-field-name":
+    case StructureIssueKind.EmptyFieldName:
       return `${modelName}: field has no name`;
-    case "duplicate-field-name":
+    case StructureIssueKind.DuplicateFieldName:
       return `${modelName}: duplicate field name "${issue.fieldName ?? "?"}"`;
-    case "dangling-field-ref":
+    case StructureIssueKind.DanglingFieldRef:
       if (issue.aliasName) {
         return `type alias "${issue.aliasName}" references missing structure`;
       }
       return `${modelName}.${issue.fieldName ?? "?"} references missing structure`;
-    case "unknown-type-alias":
+    case StructureIssueKind.UnknownTypeAlias:
       if (!issue.fieldName) {
         return issue.aliasName?.includes(" → ")
           ? `type alias ${issue.aliasName}`
           : `unknown type alias "${issue.aliasName ?? "?"}"`;
       }
       return `${modelName}.${issue.fieldName} uses unknown type alias "${issue.aliasName ?? "?"}"`;
-    case "empty-alias-name":
+    case StructureIssueKind.EmptyAliasName:
       return "type alias has no name";
-    case "duplicate-alias-name":
+    case StructureIssueKind.DuplicateAliasName:
       return `duplicate type alias name "${issue.aliasName ?? "?"}"`;
-    case "incomplete-type-expr":
+    case StructureIssueKind.IncompleteTypeExpr:
       if (issue.aliasName) {
         return `type alias "${issue.aliasName}" has unfilled UNSET slots`;
       }
       return `${modelName}.${issue.fieldName ?? "?"} has unfilled UNSET slots in its type`;
-    case "invalid-field-example": {
+    case StructureIssueKind.InvalidFieldExample: {
       const label = issue.negativeExample ? "negative example" : "example";
       const n = (issue.exampleIndex ?? 0) + 1;
       return `${modelName}.${issue.fieldName ?? "?"} ${label} ${n} does not match field type — ${issue.exampleError ?? "invalid value"}`;

@@ -170,6 +170,12 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
         "await wait_for_human_review(input)",
         castOut("input"),
       ].join("\n");
+    case ModuleKind.Chatbot:
+      return [
+        "# Prompted chatbot — input is ChatbotPrompt; returns ChatbotResult",
+        `result = await wait_for_chatbot_session(input, mode="${m.chatbotMode ?? "until-exit"}")`,
+        castOut("result"),
+      ].join("\n");
     case ModuleKind.Webhook:
       return exportWebhookStepBodyPy(m, outPy);
     case ModuleKind.Output:

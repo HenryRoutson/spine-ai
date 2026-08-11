@@ -56,6 +56,7 @@ import {
   ErrorBanner,
   GoToLoggingButton,
   HumanReviewPanel,
+  ChatbotPanel,
   InferenceRunSection,
   RunErrorSummary,
 } from "@/components/inference/inference-run-chrome"
@@ -644,6 +645,14 @@ export function Inference() {
                     module={modules.find((m) => m.id === run.pendingHumanReview!.moduleId)}
                     onApprove={() => run.resolveHumanReview("approved")}
                     onReject={() => run.resolveHumanReview("rejected")}
+                  />
+                )}
+                {run.pendingChatbot && run.activeJobId && (
+                  <ChatbotPanel
+                    spec={run.pendingChatbot}
+                    module={modules.find((m) => m.id === run.pendingChatbot!.moduleId)}
+                    jobId={run.activeJobId}
+                    onComplete={(result) => run.resolveChatbot(result)}
                   />
                 )}
 

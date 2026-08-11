@@ -269,6 +269,8 @@ const pipelineModulePatchSchema = z
     // AI : TODO (n8n-stage-A-api) — allowlist n8nNodeType, n8nNodeVersion, n8nParameters (record),
     // AI :   n8nCredentialEnv, n8nBaseUrlEnv, n8nApiKeyEnv, n8nTimeoutMs, n8nResponseMode, n8nResponsePath
     // AI :   (see lib/server/n8n-roadmap.ts).
+    chatbotMode: z.enum(["single", "until-exit"]).optional(),
+    maxTurns: z.number().int().min(1).max(200).optional(),
     useOcr: z.boolean().optional(),
     cached: z.boolean().optional(),
     auto: z.boolean().optional(),
@@ -556,6 +558,21 @@ export const clientStepBodySchema = z
   })
   .strict()
   .refine((d) => d.output !== undefined || !!d.error, { message: "output or error required" });
+
+export const chatbotTurnBodySchema = z
+  .object({
+    transcript: z
+      .array(
+        z
+          .object({
+            role: z.enum(["user", "assistant", "system"]),
+            content: z.string().max(32_000),
+          })
+          .strict(),
+      )
+      .max(200),
+  })
+  .strict();
 
 export const abtestBodySchema = z
   .object({

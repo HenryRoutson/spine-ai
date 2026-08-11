@@ -52,6 +52,8 @@ const TYPE_ICON: Record<InputType, typeof FileText> = {
   excel: FileSpreadsheet,
   json: FileJson,
   text: FileText,
+  markdown: FileText,
+  latex: FileText,
   web: Globe,
   image: ImageIcon,
 }
