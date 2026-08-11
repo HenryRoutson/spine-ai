@@ -433,6 +433,34 @@ body[data-embed] .rp-header { min-height:28px; }
 .dp-val-bool-f { font-size:12px; color:#9ca3af; }
 .dp-val-null   { font-size:12px; color:#ccc; font-style:italic; }
 .dp-val-ref    { cursor:pointer; }
+.markup-chip {
+  display:inline-flex; align-items:center; gap:6px;
+  padding:3px 8px; border-radius:6px; border:1px solid #334155;
+  background:#0f172a; color:#93c5fd; font-size:11px; font-family:ui-monospace,monospace;
+  cursor:pointer; max-width:100%;
+}
+.markup-chip:hover { background:#1e293b; color:#bfdbfe; border-color:#475569; }
+.markup-chip .mk-kind { font-weight:700; text-transform:uppercase; letter-spacing:.04em; font-size:9px; color:#38bdf8; }
+.markup-chip .mk-preview { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:220px; color:#cbd5e1; }
+.markup-preview {
+  margin-top:6px; padding:10px 12px; border-radius:8px; border:1px solid var(--border);
+  background:#0b1220; color:#e2e8f0; font-size:12.5px; line-height:1.55;
+}
+.markup-preview.t-closed { display:none; }
+.markup-preview h2 { font-size:14px; font-weight:700; margin:10px 0 6px; color:#f8fafc; }
+.markup-preview h3 { font-size:13px; font-weight:600; margin:8px 0 4px; color:#f1f5f9; }
+.markup-preview h4 { font-size:12px; font-weight:600; margin:6px 0 3px; color:#e2e8f0; }
+.markup-preview p { margin:0 0 8px; color:#cbd5e1; }
+.markup-preview em { font-style:italic; color:#e2e8f0; }
+.markup-preview strong { font-weight:700; color:#f8fafc; }
+.markup-preview .tikz-host {
+  margin:8px 0; padding:10px; border-radius:8px; border:1px solid #334155; background:#fff; color:#000;
+  overflow-x:auto;
+}
+.markup-preview .tikz-fallback {
+  font-family:ui-monospace,monospace; font-size:10px; color:#94a3b8; white-space:pre-wrap; margin-top:6px;
+}
+.detail-panel.dp-wide { width:min(720px, 92vw); }
 .dp-section {
   font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.07em;
   color:var(--muted); padding:8px 8px 2px; margin-top:4px;
@@ -664,6 +692,229 @@ function inferType(val) {
   if (typeof val==='string') return isDateStr(val)?'date':'string';
   if (Array.isArray(val)) return 'array';
   return 'object';
+}
+
+// AI : latex / markdown string leaves — preview inside tree/table/detail (not a separate viewer tab).
+const MARKUP_LATEX_KEYS = new Set(['latex','latex_body','latex_template','tex','source_tex']);
+const MARKUP_MD_KEYS = new Set(['markdown','md','body_md','content_md','readme','documentation']);
+let _katexReady = null;
+let _tikzReady = null;
+
+function looksLikeLatexSource(s) {
+  const t = String(s).trim();
+  if (!t) return false;
+  if (/\\documentclass\b/.test(t) || /\\begin\{document\}/.test(t)) return true;
+  if (/\\begin\{tikzpicture\}/.test(t) || /\\section\*?\b/.test(t) || /\\subsection\*?\b/.test(t)) return true;
+  const cmds = t.match(/\\[a-zA-Z]+/g);
+  return (cmds?.length ?? 0) >= 3 && (/\$[^$]+\$/.test(t) || /\\frac\b|\\mathbf\b|\\textit\b/.test(t));
+}
+function looksLikeMarkdownSource(s) {
+  const t = String(s);
+  return /^#{1,6}\s/m.test(t) || /\*\*[^*]+\*\*/.test(t) || /```/.test(t) || /\[[^\]]+\]\([^)]+\)/.test(t);
+}
+function detectMarkupKind(s, key='') {
+  if (typeof s !== 'string' || !s.trim()) return null;
+  const k = String(key).toLowerCase();
+  if (MARKUP_LATEX_KEYS.has(k)) return 'latex';
+  if (MARKUP_MD_KEYS.has(k)) return 'markdown';
+  if (looksLikeLatexSource(s)) return 'latex';
+  if (s.length > 80 && looksLikeMarkdownSource(s)) return 'markdown';
+  return null;
+}
+function markupChipLabel(kind, s) {
+  const n = String(s).length;
+  const size = n >= 1000 ? `${(n/1000).toFixed(1)}k` : String(n);
+  return size;
+}
+function latexToPreviewMarkdown(source) {
+  let body = source;
+  const doc = source.match(/\\begin\{document\}([\s\S]*?)\\end\{document\}/);
+  if (doc?.[1] != null) body = doc[1];
+  body = body.replace(/\\begin\{tikzpicture\}[\s\S]*?\\end\{tikzpicture\}/g, (block) => `\n\n\`\`\`tikz\n${block.trim()}\n\`\`\`\n\n`);
+  body = body.replace(/\\begin\{figure\}[\s\S]*?\\end\{figure\}/g, (fig) => {
+    const tikz = fig.match(/```tikz[\s\S]*?```/);
+    return tikz ? `\n\n${tikz[0]}\n\n` : '\n\n*[figure]*\n\n';
+  });
+  body = body
+    .replace(/\\section\*\{([^}]*)\}/g, '\n\n## $1\n\n')
+    .replace(/\\section\{([^}]*)\}/g, '\n\n## $1\n\n')
+    .replace(/\\subsection\*\{([^}]*)\}/g, '\n\n### $1\n\n')
+    .replace(/\\subsection\{([^}]*)\}/g, '\n\n### $1\n\n')
+    .replace(/\\subsubsection\*\{([^}]*)\}/g, '\n\n#### $1\n\n')
+    .replace(/\\subsubsection\{([^}]*)\}/g, '\n\n#### $1\n\n')
+    .replace(/\\textbf\{([^}]*)\}/g, '**$1**')
+    .replace(/\\textit\{([^}]*)\}/g, '*$1*')
+    .replace(/\\emph\{([^}]*)\}/g, '*$1*')
+    .replace(/\\underline\{([^}]*)\}/g, '$1')
+    .replace(/\\textmd\{([^}]*)\}/g, '$1')
+    .replace(/\\textrm\{([^}]*)\}/g, '$1')
+    .replace(/\\begin\{enumerate\}/g, '\n')
+    .replace(/\\end\{enumerate\}/g, '\n')
+    .replace(/\\begin\{itemize\}/g, '\n')
+    .replace(/\\end\{itemize\}/g, '\n')
+    .replace(/\\item\s+/g, '\n- ')
+    .replace(/\\newline\b/g, '\n')
+    .replace(/\\\\/g, '\n')
+    .replace(/\\par\b/g, '\n\n')
+    .replace(/~/g, ' ')
+    .replace(/\\(?:vspace|hspace|label|ref|cite)\*?\{[^}]*\}/g, '')
+    .replace(/\\(?:centering|raggedright|raggedleft|noindent|bigskip|medskip|smallskip)\b/g, '');
+  return body.replace(/\n{3,}/g, '\n\n').trim();
+}
+function simpleMarkdownToHtml(md) {
+  const parts = [];
+  const lines = md.split('\n');
+  let i = 0;
+  let para = [];
+  const flushPara = () => {
+    if (!para.length) return;
+    const text = para.join(' ').trim();
+    if (text) parts.push(`<p>${inlineFormat(text)}</p>`);
+    para = [];
+  };
+  const inlineFormat = (t) => {
+    let s = esc(t);
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    return s;
+  };
+  while (i < lines.length) {
+    const line = lines[i];
+    const fence = line.match(/^```(\w+)?\s*$/);
+    if (fence) {
+      flushPara();
+      const lang = fence[1] || '';
+      const buf = [];
+      i++;
+      while (i < lines.length && !/^```\s*$/.test(lines[i])) { buf.push(lines[i]); i++; }
+      i++;
+      const body = buf.join('\n');
+      if (lang === 'tikz') {
+        parts.push(`<div class="tikz-host" data-tikz="${encodeURIComponent(body)}"></div>`);
+      } else {
+        parts.push(`<pre class="tikz-fallback">${esc(body)}</pre>`);
+      }
+      continue;
+    }
+    if (/^####\s+/.test(line)) { flushPara(); parts.push(`<h4>${inlineFormat(line.replace(/^####\s+/, ''))}</h4>`); i++; continue; }
+    if (/^###\s+/.test(line)) { flushPara(); parts.push(`<h3>${inlineFormat(line.replace(/^###\s+/, ''))}</h3>`); i++; continue; }
+    if (/^##\s+/.test(line)) { flushPara(); parts.push(`<h2>${inlineFormat(line.replace(/^##\s+/, ''))}</h2>`); i++; continue; }
+    if (/^-\s+/.test(line)) { flushPara(); parts.push(`<p>• ${inlineFormat(line.replace(/^-\s+/, ''))}</p>`); i++; continue; }
+    if (!line.trim()) { flushPara(); i++; continue; }
+    para.push(line.trim());
+    i++;
+  }
+  flushPara();
+  return parts.join('');
+}
+function ensureKatex() {
+  if (_katexReady) return _katexReady;
+  _katexReady = new Promise((resolve, reject) => {
+    if (window.katex && window.renderMathInElement) { resolve(); return; }
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css';
+    document.head.appendChild(css);
+    const s1 = document.createElement('script');
+    s1.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js';
+    s1.onload = () => {
+      const s2 = document.createElement('script');
+      s2.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/contrib/auto-render.min.js';
+      s2.onload = () => resolve();
+      s2.onerror = () => reject(new Error('katex auto-render failed'));
+      document.head.appendChild(s2);
+    };
+    s1.onerror = () => reject(new Error('katex failed'));
+    document.head.appendChild(s1);
+  });
+  return _katexReady;
+}
+function ensureTikzJax() {
+  if (_tikzReady) return _tikzReady;
+  const base = 'https://cdn.jsdelivr.net/npm/@planktimerr/tikzjax@1.0.7/dist';
+  _tikzReady = new Promise((resolve, reject) => {
+    if (window.TikzJax) { resolve(); return; }
+    if (!document.querySelector('link[data-tikzjax-fonts]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = `${base}/fonts.css`;
+      link.dataset.tikzjaxFonts = '1';
+      document.head.appendChild(link);
+    }
+    const existing = document.querySelector('script[data-tikzjax]');
+    if (existing) {
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error('tikzjax failed')), { once: true });
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = `${base}/tikzjax.js`;
+    script.async = true;
+    script.dataset.tikzjax = '1';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('tikzjax failed'));
+    document.head.appendChild(script);
+  });
+  return _tikzReady;
+}
+async function mountMarkupPreview(container, source, kind) {
+  container.className = 'markup-preview';
+  container.textContent = 'Rendering…';
+  try {
+    const md = kind === 'latex' ? latexToPreviewMarkdown(source) : String(source);
+    container.innerHTML = simpleMarkdownToHtml(md);
+    await ensureKatex();
+    if (window.renderMathInElement) {
+      window.renderMathInElement(container, {
+        delimiters: [
+          { left: '$$', right: '$$', display: true },
+          { left: '\\[', right: '\\]', display: true },
+          { left: '$', right: '$', display: false },
+          { left: '\\(', right: '\\)', display: false },
+        ],
+        throwOnError: false,
+      });
+    }
+    const hosts = [...container.querySelectorAll('.tikz-host[data-tikz]')];
+    if (hosts.length) {
+      await ensureTikzJax();
+      for (const host of hosts) {
+        const encoded = host.getAttribute('data-tikz') || '';
+        let src = '';
+        try { src = decodeURIComponent(encoded); } catch { src = encoded; }
+        host.removeAttribute('data-tikz');
+        const script = document.createElement('script');
+        script.type = 'text/tikz';
+        script.textContent = /\\begin\{tikzpicture\}/.test(src)
+          ? src
+          : `\\begin{tikzpicture}\n${src}\n\\end{tikzpicture}`;
+        host.appendChild(script);
+      }
+    }
+  } catch (err) {
+    container.textContent = err instanceof Error ? err.message : 'markup preview failed';
+  }
+}
+function mkMarkupChip(source, kind, onOpen) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'markup-chip';
+  const oneLine = String(source).replace(/\s+/g, ' ').trim().slice(0, 80);
+  btn.innerHTML = `<span class="mk-kind">${esc(kind)}</span><span class="mk-preview">${esc(oneLine)}</span><span>${esc(markupChipLabel(kind, source))}ch</span>`;
+  btn.title = `Open formatted ${kind} preview`;
+  btn.onclick = (e) => { e.stopPropagation(); onOpen(); };
+  return btn;
+}
+function openMarkupDetail(title, source, kind) {
+  const panel = document.querySelector('.detail-panel');
+  if (panel) panel.classList.add('dp-wide');
+  document.getElementById('dp-title').textContent = title || kind.toUpperCase();
+  const body = document.getElementById('dp-body');
+  body.innerHTML = '';
+  const wrap = document.createElement('div');
+  body.appendChild(wrap);
+  mountMarkupPreview(wrap, source, kind);
+  document.getElementById('detail-overlay').style.display = 'flex';
 }
 
 // AI: parse JSON embedded in string fields (cells_json, table_a_json, …) — shared by tree + table views
@@ -1432,8 +1683,34 @@ function renderTreeNode(val, keyName, container, path, isArrayItem, jsonPath) {
 
   // Leaf node
   assertNotRawEmbeddedJson(val, jsonPath || keyName);
-  const {text,cls}=formatTreeVal(val, keyName);
+  const markupKind = typeof val === 'string' ? detectMarkupKind(val, keyName) : null;
+  const node = document.createElement('div'); node.className = 'tree-node';
   const row=document.createElement('div'); row.className='tree-row t-leaf';
+  if (markupKind) {
+    const preview = document.createElement('div');
+    preview.className = 'markup-preview t-closed';
+    preview.style.marginLeft = '28px';
+    row.innerHTML =
+      `<span class="t-spacer"></span>` +
+      `<span class="t-key">${esc(label)}</span>` +
+      `<span class="t-dot"></span>` +
+      (jsonPath ? mkJumpLinks(jsonPath, true) : '');
+    const chip = mkMarkupChip(val, markupKind, () => {
+      const open = !preview.classList.toggle('t-closed');
+      if (open && !preview.dataset.mounted) {
+        preview.dataset.mounted = '1';
+        mountMarkupPreview(preview, val, markupKind);
+      }
+    });
+    row.appendChild(chip);
+    row.addEventListener('mouseenter',()=>updateCrumb(path));
+    row.addEventListener('mouseleave',clearCrumb);
+    node.appendChild(row);
+    node.appendChild(preview);
+    container.appendChild(node);
+    return;
+  }
+  const {text,cls}=formatTreeVal(val, keyName);
   const valHtml=cls==='string'
     ? `<span class="t-val string">${esc(text)}</span>`
     : `<span class="t-val ${cls}">${esc(text)}</span>`;
@@ -1612,6 +1889,15 @@ function renderDataVal(val,path,container,keyName) {
     const lbls=document.createElement('div'); lbls.className='n-labels';
     lbls.innerHTML=`<div class="n-label">${esc(label)}</div>`; head.appendChild(lbls);
     const bdgs=document.createElement('div'); bdgs.className='n-badges';
+    const markupKind = typeof val === 'string' ? detectMarkupKind(val, keyName || '') : null;
+    if (markupKind) {
+      bdgs.innerHTML=`<span class="badge bt-text">${esc(markupKind)}</span>`;
+      head.appendChild(bdgs); card.appendChild(head);
+      const chipWrap=document.createElement('div'); chipWrap.style.padding='0 12px 10px';
+      chipWrap.appendChild(mkMarkupChip(val, markupKind, () => openMarkupDetail(label, val, markupKind)));
+      card.appendChild(chipWrap);
+      wireNode(head,chev,null,path); container.appendChild(card); return;
+    }
     const jsType=type==='date'?'string':type,fmt=type==='date'?'date':null;
     bdgs.innerHTML=`<span class="badge ${typeBadgeClass(jsType,fmt,null)}">${friendlyTypeName(jsType,fmt,null)}</span>`;
     head.appendChild(bdgs); card.appendChild(head);
@@ -2103,6 +2389,14 @@ function fillPrimCell(td, val, key, jsonPath) {
   if (type==='boolean') { td.innerHTML=val?`<span class="td-bool-y">✓ Yes</span>`:`<span class="td-bool-n">✗ No</span>`; appendCellJumps(td, path); return; }
   if (type==='date')    { td.className='td-date'; td.textContent=fmtDate(val); appendCellJumps(td, path); return; }
   if (type==='number')  { td.className='td-num';  td.textContent=formatNum(val,key); appendCellJumps(td, path); return; }
+  if (typeof val === 'string') {
+    const kind = detectMarkupKind(val, key);
+    if (kind) {
+      td.appendChild(mkMarkupChip(val, kind, () => openMarkupDetail(humanize(key), val, kind)));
+      appendCellJumps(td, path);
+      return;
+    }
+  }
   const s=String(val); td.textContent=s; td.title=s;
   if (s.length>30) td.style.maxWidth='180px';
   appendCellJumps(td, path);
@@ -2216,8 +2510,21 @@ function extractSchemaFields(schema, out, prefix, depth) {
 
 // ── Detail slide-over ─────────────────────────────────────────────────────────
 function openDetailPanel(title, obj) {
+  const panel = document.querySelector('.detail-panel');
+  if (panel) panel.classList.remove('dp-wide');
   document.getElementById('dp-title').textContent=title;
   const body=document.getElementById('dp-body'); body.innerHTML='';
+
+  // AI : bare markup string (or single-field latex pack opened as string) — full formatted preview.
+  if (typeof obj === 'string') {
+    const kind = detectMarkupKind(obj, title) || 'markdown';
+    if (panel) panel.classList.add('dp-wide');
+    const wrap = document.createElement('div');
+    body.appendChild(wrap);
+    mountMarkupPreview(wrap, obj, kind);
+    document.getElementById('detail-overlay').style.display='flex';
+    return;
+  }
 
   function addRow(key, val, indent=0) {
     val = unwrapForDisplay(val);
@@ -2241,13 +2548,18 @@ function openDetailPanel(title, obj) {
       row.appendChild(btn);
     } else {
       assertNotRawEmbeddedJson(val, key);
-      const valEl=document.createElement('span');
-      if (val===null) { valEl.className='dp-val-null'; valEl.textContent='—'; }
-      else if (type==='boolean') { valEl.className=val?'dp-val-bool-t':'dp-val-bool-f'; valEl.textContent=val?'Yes':'No'; }
-      else if (type==='date')  { valEl.className='dp-val-date'; valEl.textContent=fmtDate(val); }
-      else if (type==='number'){ valEl.className='dp-val-num'; valEl.textContent=formatNum(val,key); }
-      else { valEl.className='dp-val'; valEl.textContent=String(val); }
-      row.appendChild(valEl);
+      const markupKind = typeof val === 'string' ? detectMarkupKind(val, key) : null;
+      if (markupKind) {
+        row.appendChild(mkMarkupChip(val, markupKind, () => openMarkupDetail(humanize(key), val, markupKind)));
+      } else {
+        const valEl=document.createElement('span');
+        if (val===null) { valEl.className='dp-val-null'; valEl.textContent='—'; }
+        else if (type==='boolean') { valEl.className=val?'dp-val-bool-t':'dp-val-bool-f'; valEl.textContent=val?'Yes':'No'; }
+        else if (type==='date')  { valEl.className='dp-val-date'; valEl.textContent=fmtDate(val); }
+        else if (type==='number'){ valEl.className='dp-val-num'; valEl.textContent=formatNum(val,key); }
+        else { valEl.className='dp-val'; valEl.textContent=String(val); }
+        row.appendChild(valEl);
+      }
     }
     body.appendChild(row);
   }
@@ -2256,8 +2568,11 @@ function openDetailPanel(title, obj) {
   document.getElementById('detail-overlay').style.display='flex';
 }
 function closeDetail(e) {
-  if (!e||e.target===document.getElementById('detail-overlay'))
+  if (!e||e.target===document.getElementById('detail-overlay')) {
+    const panel = document.querySelector('.detail-panel');
+    if (panel) panel.classList.remove('dp-wide');
     document.getElementById('detail-overlay').style.display='none';
+  }
 }
 
 // ── Examples ──────────────────────────────────────────────────────────────────

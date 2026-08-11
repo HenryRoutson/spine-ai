@@ -68,7 +68,7 @@ export function PopupModal({ payload, onClose }: PopupModalProps) {
             {popupQuotes.length > 0 && (
               <QuoteLinks quotes={popupQuotes} className="border-b border-border px-4 py-3" />
             )}
-            <JsonPreviewPanel json={payload.json} className="min-h-0 flex-1" />
+            <JsonPreviewPanel json={payload.json} models={payload.models} className="min-h-0 flex-1" />
           </div>
         ) : payload.serverLogs ? (
           <div className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed">

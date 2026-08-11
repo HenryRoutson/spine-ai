@@ -2,10 +2,26 @@ import { assertEntriesForModule, wrapAssertPython } from "@/lib/assert_steps";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { allModelsToPydantic } from "./pydantic";
 import {
+  assertPassthroughComment,
+  assertValidateComment,
+  chatbotComment,
+  exampleSelectComment,
+  exportComment,
+  exportFileMetaComments,
+  exportSectionComment,
   exportStringLiteral,
+  fallbacksFirstComment,
+  humanReviewComment,
   indentExportBlock,
+  llmBatchComment,
+  parallelBranchesComment,
+  passthroughCustomComment,
   primaryExportCustomCode,
+  quoteLinkComment,
+  reshapeStepComment,
+  snapshotComment,
   stepFnNameFromLabel,
+  structuredLlmComment,
   withExportLineCountMeta,
   exportSpineInPy,
   exportSpineOutPy,
@@ -29,6 +45,8 @@ import type { PipelineModule, Project } from "./types";
 // AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
 // AI : TODO (linter-first) — exported .py is the lint target (pyright on full pipeline export + user custom code).
 
+const C = "#" as const;
+
 function inlinePythonCustomCode(code: string, outPy: string): string {
   if (/^\s*def\s+\w+\s*\(/.test(code)) {
     return [`${code}`, pyCustomCodeCall(code, outPy)].join("\n");
@@ -49,7 +67,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
     if (custom?.language === "python") {
       const lines = inlinePythonCustomCode(custom.code, outPy).split("\n");
       if (fallbacks.length > 1) {
-        lines.unshift(`# ${fallbacks.length} fallback implementations — first shown`);
+        lines.unshift(exportComment(C, fallbacksFirstComment(fallbacks.length)));
       }
       return lines.join("\n");
     }
@@ -60,7 +78,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
         castOut("input"),
       ].join("\n");
     }
-    return ["# Passthrough — no custom code configured", castOut("input")].join("\n");
+    return [exportComment(C, passthroughCustomComment()), castOut("input")].join("\n");
   }
 
   switch (m.kind) {
@@ -71,7 +89,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
       const prompt = m.prompt ?? "Process the input.";
       const model = m.model ?? "deepseek-v4";
       return [
-        `# Structured LLM call → ${outName ?? outPy}${stepEmitsList(m) ? "[]" : ""}`,
+        exportComment(C, structuredLlmComment(outName ?? outPy, stepEmitsList(m))),
         `_model = ${exportStringLiteral(model)}`,
         `user_prompt = ${exportStringLiteral(prompt)} + "\\n\\nINPUT DATA:\\n" + json.dumps(input, indent=2, default=str)`,
         `schema = None  # JSON schema for ${outName ?? "output"}`,
@@ -82,7 +100,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
       const prompt = m.prompt ?? "Process the item.";
       const itemsLine = inPy.startsWith("list[") ? "items = input" : "items = input if isinstance(input, list) else [input]";
       return [
-        `# One structured LLM call per list item → ${outName ?? outPy}[]`,
+        exportComment(C, llmBatchComment(outName ?? outPy)),
         itemsLine,
         `def prompt_for(item: Any) -> str:`,
         `    return ${exportStringLiteral(prompt)} + "\\n\\nITEM:\\n" + json.dumps(item, indent=2)`,
@@ -95,7 +113,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
       const ctxLabel = m.exampleContextLabel ?? "Context";
       const itemsLine = inPy.startsWith("list[") ? "items = input" : "items = input if isinstance(input, list) else [input]";
       return [
-        `# Per-item relevance filter — ${outName ?? outPy} with selection_reason`,
+        exportComment(C, exampleSelectComment(outName ?? outPy)),
         ...generateExampleContextLinesPy(ctxLabel, m.exampleContextField),
         itemsLine,
         `template = ${exportStringLiteral(prompt)}`,
@@ -115,7 +133,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
     }
     case ModuleKind.Quote:
       return [
-        "# Match LLM quote strings against source document byte offsets (no LLM cost)",
+        exportComment(C, quoteLinkComment()),
         castOut("resolve_quotes(input, '', '')"),
       ].join("\n");
     case ModuleKind.Combine:
@@ -124,7 +142,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
       return generateAssembleStepBodyPy(m, project, outPy);
     case ModuleKind.Parallel:
       return [
-        "# Parallel LLM branches — run concurrently then join (see runtime)",
+        exportComment(C, parallelBranchesComment()),
         castOut("{**{}}"),
       ].join("\n");
     case ModuleKind.Transform: {
@@ -140,7 +158,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
         ].join("\n");
       }
       return [
-        `# Reshape ${inName ?? "input"} → ${outName ?? outPy}${stepEmitsList(m) ? " (list)" : ""}`,
+        exportComment(C, reshapeStepComment(m, inName, outName, outPy)),
         castOut("input"),
       ].join("\n");
     }
@@ -149,7 +167,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
       const expectations = project.expectedOutputs ?? {};
       if (entries[0]?.language === "python") {
         return [
-          "# Validate pipeline state — passthrough on success",
+          exportComment(C, assertValidateComment()),
           wrapAssertPython(entries[0].code, expectations),
           "transform(input, state)",
           castOut("input"),
@@ -162,24 +180,24 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
           castOut("input"),
         ].join("\n");
       }
-      return ["# Assert passthrough", castOut("input")].join("\n");
+      return [exportComment(C, assertPassthroughComment()), castOut("input")].join("\n");
     }
     case ModuleKind.HumanReview:
       return [
-        "# Pause for operator approval in Inference tab",
+        exportComment(C, humanReviewComment()),
         "await wait_for_human_review(input)",
         castOut("input"),
       ].join("\n");
     case ModuleKind.Chatbot:
       return [
-        "# Prompted chatbot — input is ChatbotPrompt; returns ChatbotResult",
+        exportComment(C, chatbotComment()),
         `result = await wait_for_chatbot_session(input, mode="${m.chatbotMode ?? "until-exit"}")`,
         castOut("result"),
       ].join("\n");
     case ModuleKind.Webhook:
       return exportWebhookStepBodyPy(m, outPy);
     case ModuleKind.Output:
-      return [`# Snapshot ${outName ?? inName ?? "pipeline output"}`, castOut("input")].join("\n");
+      return [exportComment(C, snapshotComment(outName, inName)), castOut("input")].join("\n");
     default:
       return castOut("input");
   }
@@ -226,9 +244,7 @@ export function generatePipelineSourcePy(project: Project): string {
 
   sections.push(
     '"""Generated pipeline export — equivalent Python representation"""',
-    `# Project: ${prepared.name}`,
-    `# ${prepared.modules.length} steps · ${prepared.models.length} structures`,
-    "# Setup: export also includes .env.example and README.md — copy .env.example → .env",
+    ...exportFileMetaComments(C, prepared),
     "",
     "from __future__ import annotations",
     "",
@@ -238,17 +254,17 @@ export function generatePipelineSourcePy(project: Project): string {
     "",
     "from pydantic import BaseModel, Field",
     "",
-    "# === structures ===",
+    exportSectionComment(C, "structures"),
     allModelsToPydantic(prepared.models, prepared.typeAliases ?? [], { includeImports: false }),
     "",
-    "# === pipeline state ===",
+    exportSectionComment(C, "pipeline state"),
     pipelineStatePyTypedDictForExport(prepared),
     "",
     runtimeStubs,
     "",
-    "# === steps ===",
+    exportSectionComment(C, "steps"),
     stepFns,
-    "# === orchestrator ===",
+    exportSectionComment(C, "orchestrator"),
     orchestrator,
   );
 

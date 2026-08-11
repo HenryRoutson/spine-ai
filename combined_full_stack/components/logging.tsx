@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { PromptText } from "@/components/highlight"
-import { JsonViewerEmbed } from "@/components/json-viewer"
+import { JsonPreviewPanel } from "@/components/json-preview-panel"
 import { LlmCallDistribution } from "@/components/llm-call-distribution"
 import { StepFailuresSection } from "@/components/step-failures-panel"
 import { StepProfiling } from "@/components/step-profiling"
@@ -626,9 +626,10 @@ export function Logging() {
                             }
                           >
                             {step.outputJson ? (
-                              <div className="-m-2 mt-0 h-[min(12rem,28vh)] overflow-hidden">
-                                <JsonViewerEmbed
+                              <div className="-m-2 mt-0 h-[min(16rem,36vh)] overflow-hidden">
+                                <JsonPreviewPanel
                                   json={step.outputJson}
+                                  models={models}
                                   defaultView="table"
                                   className="h-full"
                                 />

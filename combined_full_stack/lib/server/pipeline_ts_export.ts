@@ -2,9 +2,24 @@ import { assertEntriesForModule, wrapAssertTypeScriptForExport } from "@/lib/ass
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { generateModelsDts } from "./type_codegen";
 import {
+  assertPassthroughComment,
+  assertValidateComment,
+  chatbotComment,
+  exampleSelectComment,
+  exportComment,
+  exportFileMetaComments,
+  exportSectionComment,
+  fallbacksFirstComment,
+  humanReviewComment,
   indentExportBlock,
+  llmBatchComment,
+  passthroughCustomComment,
   primaryExportCustomCode,
+  quoteLinkComment,
+  reshapeStepComment,
+  snapshotComment,
   stepFnNameFromLabel,
+  structuredLlmComment,
   withExportLineCountMeta,
   exportSpineInTs,
   exportSpineOutTs,
@@ -29,6 +44,8 @@ import type { PipelineModule, Project } from "./types";
 // AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
 // AI : TODO export — emit only pipeline-referenced structures, not every project model.
 
+const C = "//" as const;
+
 function generateStepBody(m: PipelineModule, project: Project, outTs: string, inTs: string): string {
   const outName = modelName(project, m.outStructureId);
   const inName = modelName(project, m.inStructureId);
@@ -39,7 +56,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
     if (custom?.language === "typescript") {
       const lines = [generateCustomCodeStepBodyTs(custom.code, inTs, outTs)];
       if (fallbacks.length > 1) {
-        lines.unshift(`// ${fallbacks.length} fallback implementations — first shown`);
+        lines.unshift(exportComment(C, fallbacksFirstComment(fallbacks.length)));
       }
       return lines.join("\n");
     }
@@ -50,7 +67,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
         `return input as unknown as ${outTs};`,
       ].join("\n");
     }
-    return [`// Passthrough — no custom code configured`, `return input as unknown as ${outTs};`].join("\n");
+    return [exportComment(C, passthroughCustomComment()), `return input as unknown as ${outTs};`].join("\n");
   }
 
   switch (m.kind) {
@@ -61,7 +78,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
       const prompt = m.prompt ?? "Process the input.";
       const model = m.model ?? "/* global default model */";
       return [
-        `// Structured LLM call → ${outName ?? outTs}${stepEmitsList(m) ? "[]" : ""}`,
+        exportComment(C, structuredLlmComment(outName ?? outTs, stepEmitsList(m))),
         `const _model = ${typeof model === "string" && model.startsWith("/*") ? `"deepseek-v4"` : JSON.stringify(model)};`,
         `void _model;`,
         `const userPrompt = ${JSON.stringify(prompt)} + "\\n\\nINPUT DATA:\\n" + JSON.stringify(input, null, 2);`,
@@ -73,7 +90,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
       const prompt = m.prompt ?? "Process the item.";
       const itemTs = outTs.endsWith("[]") ? outTs.slice(0, -2) : outTs;
       return [
-        `// One structured LLM call per list item → ${outName ?? outTs}`,
+        exportComment(C, llmBatchComment(outName ?? outTs)),
         "const items = Array.isArray(input) ? input : [input];",
         `const promptFor = (item: unknown) => ${JSON.stringify(prompt)} + "\\n\\nITEM:\\n" + JSON.stringify(item, null, 2);`,
         `const schema = /* JSON schema for ${outName ?? "output"} */ {};`,
@@ -85,7 +102,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
       const ctxLabel = m.exampleContextLabel ?? "Context";
       const descriptionExpr = generateExampleContextExprTs(ctxLabel, m.exampleContextField);
       return [
-        `// Per-item relevance filter — ${outName ?? outTs} with selection_reason`,
+        exportComment(C, exampleSelectComment(outName ?? outTs)),
         `const description = ${descriptionExpr};`,
         "const items = Array.isArray(input) ? input : [input];",
         `const template = ${JSON.stringify(prompt)};`,
@@ -97,7 +114,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
     }
     case ModuleKind.Quote:
       return [
-        "// Match LLM quote strings against source document byte offsets (no LLM cost)",
+        exportComment(C, quoteLinkComment()),
         `return resolveQuotes(input, "", "") as unknown as ${outTs};`,
       ].join("\n");
     case ModuleKind.Combine:
@@ -115,7 +132,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
         return [`// Python transform (not inlined):`, `// ${custom.code.split("\n").join("\n// ")}`, `return input as unknown as ${outTs};`].join("\n");
       }
       return [
-        `// Reshape ${inName ?? "input"} → ${outName ?? outTs}${stepEmitsList(m) ? " (list)" : ""}`,
+        exportComment(C, reshapeStepComment(m, inName, outName, outTs)),
         `return input as unknown as ${outTs};`,
       ].join("\n");
     }
@@ -125,23 +142,23 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
       if (entries[0]?.language === "typescript") {
         const wrapped = wrapAssertTypeScriptForExport(entries[0].code, expectations);
         return [
-          "// Validate pipeline state — passthrough on success",
+          exportComment(C, assertValidateComment()),
           `const __assert = ${wrapped};`,
           "__assert(input, state);",
           `return input as unknown as ${outTs};`,
         ].join("\n");
       }
-      return [`// Assert passthrough`, `return input as unknown as ${outTs};`].join("\n");
+      return [exportComment(C, assertPassthroughComment()), `return input as unknown as ${outTs};`].join("\n");
     }
     case ModuleKind.HumanReview:
       return [
-        "// Pause for operator approval in Inference tab",
+        exportComment(C, humanReviewComment()),
         "await waitForHumanReview(input);",
         `return input as unknown as ${outTs};`,
       ].join("\n");
     case ModuleKind.Chatbot:
       return [
-        "// Prompted chatbot — input is ChatbotPrompt; returns ChatbotResult",
+        exportComment(C, chatbotComment()),
         "const __chat = await waitForChatbotSession(input as ChatbotPrompt, { mode: " +
           JSON.stringify(m.chatbotMode ?? "until-exit") +
           " });",
@@ -151,7 +168,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
       return exportWebhookStepBodyTs(m, outTs);
     case ModuleKind.Output:
       return [
-        `// Snapshot ${outName ?? inName ?? "pipeline output"}`,
+        exportComment(C, snapshotComment(outName, inName)),
         `return input as unknown as ${outTs};`,
       ].join("\n");
     default:
@@ -195,21 +212,19 @@ export function generatePipelineSourceTs(project: Project): string {
 
   sections.push(
     "// Generated pipeline export — equivalent TypeScript representation",
-    `// Project: ${prepared.name}`,
-    `// ${prepared.modules.length} steps · ${prepared.models.length} structures`,
-    "// Setup: export also includes .env.example and README.md — copy .env.example → .env",
+    ...exportFileMetaComments(C, prepared),
     "",
-    "// === structures ===",
+    exportSectionComment(C, "structures"),
     generateModelsDts(prepared.models, prepared.typeAliases ?? []),
     "",
-    "// === pipeline state ===",
+    exportSectionComment(C, "pipeline state"),
     pipelineStateTsInterfaceForExport(prepared),
     "",
     runtimeStubs,
     "",
-    "// === steps ===",
+    exportSectionComment(C, "steps"),
     stepFns,
-    "// === orchestrator ===",
+    exportSectionComment(C, "orchestrator"),
     orchestrator,
   );
 

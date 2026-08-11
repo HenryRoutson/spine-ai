@@ -1,6 +1,6 @@
 {
-  "id": "p_tutoring_questions",
-  "name": "Tutoring Question Generator",
+  "id": "p_tutoring_random_fill",
+  "name": "Tutoring Random Fill",
   "kind": "education",
   "models": [
     {
@@ -27,7 +27,7 @@
     {
       "id": "m_q_template",
       "name": "QuestionTemplate",
-      "description": "LaTeX question template with {var} placeholders filled by random values in transform.",
+      "description": "LaTeX question template with {var} placeholders filled by random integers.",
       "fields": [
         {
           "id": "f_title",
@@ -71,7 +71,7 @@
     {
       "id": "m_latex_pack",
       "name": "LatexPack",
-      "description": "Final LaTeX worksheet \u2014 template filled with random values per variation.",
+      "description": "Final LaTeX worksheet \u2014 same template filled with random integers.",
       "fields": [
         {
           "id": "f_title",
@@ -109,7 +109,7 @@
       "inputDescription": "Request \u2014 question_type and variations",
       "inStructureId": "m_request",
       "outStructureId": "m_q_template",
-      "prompt": "You write exam-style questions for a tutoring company.\n\nInput fields:\n- question_type: topic / year level / style\n- variations: ignored here (a later step fills that many copies)\n\nProduce ONE reusable question template matching question_type:\n- title and topic\n- latex_template: LaTeX question BODY (not a full document). Every blank is a braced placeholder like {a}, {b}. Only placeholders \u2014 no concrete numbers. Include TikZ only when the question type needs a diagram.\n- variables: placeholder names without braces, in order. Prefer placeholders that work with small positive integers (1\u201312).\n- tutor_notes: brief tip for the tutor\n\nKeep any diagram self-contained in tikzpicture. Use only standard LaTeX/TikZ.",
+      "prompt": "You write exam-style questions for a tutoring company.\n\nInput fields:\n- question_type: topic / year level / style\n- variations: ignored here (a later step fills that many copies with random integers)\n\nProduce ONE reusable question template matching question_type:\n- title and topic\n- latex_template: LaTeX question BODY (not a full document). Every blank is a braced placeholder like {a}, {b}. Only placeholders \u2014 no concrete numbers. Include TikZ only when the question type needs a diagram.\n- variables: placeholder names without braces, in order. Prefer placeholders that work with small positive integers (1\u201312).\n- tutor_notes: brief tip for the tutor\n\nKeep any diagram self-contained in tikzpicture. Use only standard LaTeX/TikZ.",
       "model": "deepseek-v4"
     },
     {
@@ -134,7 +134,7 @@
   ],
   "strategies": [
     {
-      "id": "s_single_tutor",
+      "id": "s_single_random",
       "kind": "single-llm",
       "name": "Single LLM Call",
       "enabled": true,
@@ -145,7 +145,7 @@
       "passRate": 88
     },
     {
-      "id": "s_agent_tutor",
+      "id": "s_agent_random",
       "kind": "claude-code",
       "name": "Agent (Frontier)",
       "enabled": true,
@@ -156,7 +156,7 @@
       "passRate": 97
     },
     {
-      "id": "s_cheap_tutor",
+      "id": "s_cheap_random",
       "kind": "cheap-agent",
       "name": "Agent (Cheap Model)",
       "enabled": true,
@@ -172,44 +172,44 @@
       "name": "year10_request.json",
       "type": "json",
       "label": "inference",
-      "file": "tutoring_question_generator/year10_request.json"
+      "file": "tutoring_random_fill/year10_request.json"
     },
     {
       "name": "year12_request.json",
       "type": "json",
       "label": "inference",
-      "file": "tutoring_question_generator/year12_request.json"
+      "file": "tutoring_random_fill/year12_request.json"
     },
     {
       "name": "year10_inference.json",
       "type": "json",
       "label": "inference",
-      "file": "tutoring_question_generator/year10_inference.json"
+      "file": "tutoring_random_fill/year10_inference.json"
     },
     {
       "name": "year12_inference.json",
       "type": "json",
       "label": "inference",
-      "file": "tutoring_question_generator/year12_inference.json"
+      "file": "tutoring_random_fill/year12_inference.json"
     },
     {
-      "name": "tutoring_question_generator_testing.json",
+      "name": "tutoring_random_fill_testing.json",
       "type": "json",
       "label": "training",
-      "file": "tutoring_question_generator/tutoring_question_generator_testing.json"
+      "file": "tutoring_random_fill/tutoring_random_fill_testing.json"
     }
   ],
   "inferencePresets": [
     {
       "name": "Year 10 Pythagoras",
-      "description": "Year 10 right-triangle missing-side questions \u2014 4 variations",
+      "description": "Year 10 right-triangle missing-side questions \u2014 4 random fills",
       "inputs": {
         "Request": "year10_request.json"
       }
     },
     {
       "name": "Year 12 Differentiation",
-      "description": "Year 12 calculus differentiation questions \u2014 3 variations",
+      "description": "Year 12 calculus differentiation questions \u2014 3 random fills",
       "inputs": {
         "Request": "year12_request.json"
       }

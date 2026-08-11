@@ -1,0 +1,7 @@
+{
+  "description": "Tutoring Random Fill — request → template → random integer fills → LaTeX.",
+  "inputs": {
+    "Request": "year10_request.json"
+  },
+  "expectedOutputs": {}
+}

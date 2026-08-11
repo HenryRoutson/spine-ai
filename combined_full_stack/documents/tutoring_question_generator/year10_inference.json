@@ -1,6 +1,0 @@
-{
-  "description": "Year 10 Pythagoras worksheet — 4 numeric variations of one right-triangle template.",
-  "inputs": {
-    "Request": "year10_request.json"
-  }
-}

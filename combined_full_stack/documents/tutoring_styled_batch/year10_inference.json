@@ -1,0 +1,6 @@
+{
+  "description": "Year 10 Pythagoras — 4 differently styled questions via llm-batch.",
+  "inputs": {
+    "Request": "year10_request.json"
+  }
+}

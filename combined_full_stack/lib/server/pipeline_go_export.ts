@@ -2,11 +2,26 @@ import { assertEntriesForModule } from "@/lib/assert_steps";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { allModelsToGo } from "./pydantic";
 import {
+  assertPassthroughComment,
+  assertValidateComment,
+  chatbotComment,
+  exampleSelectComment,
+  exportComment,
+  exportFileMetaComments,
+  exportSectionComment,
   exportStringLiteral,
   goZeroValue,
+  humanReviewComment,
   indentExportBlock,
+  llmBatchComment,
   makeUniqueStepFnName,
+  parallelBranchesComment,
+  passthroughCustomComment,
   primaryExportCustomCode,
+  quoteLinkComment,
+  reshapeStepComment,
+  snapshotComment,
+  structuredLlmComment,
   withExportLineCountMeta,
   exportSpineInGo,
   exportSpineOutGo,
@@ -26,6 +41,8 @@ import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
 
 // AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
+
+const C = "//" as const;
 
 function commentForeignCode(code: string, langLabel: string): string {
   return [
@@ -82,7 +99,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         ...passthrough,
       ].join("\n");
     }
-    return ["// Passthrough — no custom code configured", ...passthrough].join("\n");
+    return [exportComment(C, passthroughCustomComment()), ...passthrough].join("\n");
   }
 
   switch (m.kind) {
@@ -92,7 +109,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
       const prompt = m.prompt ?? "Process the input.";
       const model = m.model ?? "deepseek-v4";
       return [
-        `// Structured LLM call → ${outName ?? outGo}${stepEmitsList(m) ? "[]" : ""}`,
+        exportComment(C, structuredLlmComment(outName ?? outGo, stepEmitsList(m))),
         `_ = ${exportStringLiteral(model)}`,
         `inJSON, err := json.MarshalIndent(input, "", "  ")`,
         `if err != nil {`,
@@ -115,7 +132,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
       const prompt = m.prompt ?? "Process the item.";
       const itemGo = outGo.startsWith("[]") ? outGo.slice(2) : outGo;
       return [
-        `// One structured LLM call per list item → ${outName ?? outGo}`,
+        exportComment(C, llmBatchComment(outName ?? outGo)),
         `inJSON, err := json.Marshal(input)`,
         `if err != nil {`,
         `\treturn ${zero}, err`,
@@ -198,7 +215,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
             `description := string(b)`,
           ];
       return [
-        `// Per-item relevance filter — ${outName ?? outGo} with selection_reason`,
+        exportComment(C, exampleSelectComment(outName ?? outGo)),
         ...descriptionBlock,
         `inJSON, err := json.Marshal(input)`,
         `if err != nil {`,
@@ -250,7 +267,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
     }
     case ModuleKind.Quote:
       return [
-        "// Match LLM quote strings against source document byte offsets (no LLM cost)",
+        exportComment(C, quoteLinkComment()),
         "linked, err := resolveQuotes(input, \"\", \"\")",
         "if err != nil {",
         `\treturn ${zero}, err`,
@@ -267,7 +284,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
       return generateAssembleStepBodyGo(m, project, outGo);
     case ModuleKind.Parallel:
       return [
-        "// Parallel LLM branches — join product (see runtime)",
+        exportComment(C, parallelBranchesComment()),
         `var merged ${outGo}`,
         "return merged, nil",
       ].join("\n");
@@ -291,7 +308,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         ].join("\n");
       }
       return [
-        `// Reshape ${inName ?? "input"} → ${outName ?? outGo}${stepEmitsList(m) ? " (list)" : ""}`,
+        exportComment(C, reshapeStepComment(m, inName, outName, outGo)),
         ...passthrough,
       ].join("\n");
     }
@@ -300,15 +317,15 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
       if (entries[0]?.code.trim()) {
         return [
           commentForeignCode(entries[0].code, `${entries[0].language} assert`),
-          "// Validate pipeline state — passthrough on success",
+          exportComment(C, assertValidateComment()),
           "return input, nil",
         ].join("\n");
       }
-      return ["// Assert passthrough", "return input, nil"].join("\n");
+      return [exportComment(C, assertPassthroughComment()), "return input, nil"].join("\n");
     }
     case ModuleKind.HumanReview:
       return [
-        "// Pause for operator approval in Inference tab",
+        exportComment(C, humanReviewComment()),
         "if err := WaitForHumanReview(input); err != nil {",
         `\treturn ${zero}, err`,
         "}",
@@ -316,7 +333,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
       ].join("\n");
     case ModuleKind.Chatbot:
       return [
-        "// Prompted chatbot — input is ChatbotPrompt; returns ChatbotResult",
+        exportComment(C, chatbotComment()),
         "result, err := WaitForChatbotSession(input)",
         "if err != nil {",
         `\treturn ${zero}, err`,
@@ -326,7 +343,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
     case ModuleKind.Webhook:
       return exportWebhookStepBodyGo(m, zero);
     case ModuleKind.Output:
-      return [`// Snapshot ${outName ?? inName ?? "pipeline output"}`, "return input, nil"].join("\n");
+      return [exportComment(C, snapshotComment(outName, inName)), "return input, nil"].join("\n");
     default:
       return "return input, nil";
   }
@@ -394,26 +411,23 @@ export function generatePipelineSourceGo(project: Project): string {
 
   sections.push(
     "// Generated pipeline export — equivalent Go representation",
-    `// Project: ${prepared.name}`,
-    `// ${prepared.modules.length} steps · ${prepared.models.length} structures`,
-    "// Setup: export also includes .env.example and README.md — copy .env.example → .env",
-    "// Stdlib: encoding/json, net/http (see README.md)",
+    ...exportFileMetaComments(C, prepared, ["Stdlib: encoding/json, net/http (see README.md)"]),
     "",
     "package pipeline",
     "",
     goImports(needs, prepared),
     "",
-    "// === structures ===",
+    exportSectionComment(C, "structures"),
     allModelsToGo(prepared.models, prepared.typeAliases ?? []),
     "",
-    "// === pipeline state ===",
+    exportSectionComment(C, "pipeline state"),
     pipelineStateGoType(prepared),
     "",
     runtimeStubs,
     "",
-    "// === steps ===",
+    exportSectionComment(C, "steps"),
     stepFns,
-    "// === orchestrator ===",
+    exportSectionComment(C, "orchestrator"),
     orchestrator,
   );
 

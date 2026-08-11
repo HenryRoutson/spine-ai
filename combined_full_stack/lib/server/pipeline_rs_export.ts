@@ -2,10 +2,25 @@ import { assertEntriesForModule } from "@/lib/assert_steps";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { allModelsToRust } from "./pydantic";
 import {
+  assertPassthroughComment,
+  assertValidateComment,
+  chatbotComment,
+  exampleSelectComment,
+  exportComment,
+  exportFileMetaComments,
+  exportSectionComment,
   exportStringLiteral,
+  humanReviewComment,
   indentExportBlock,
+  llmBatchComment,
   makeUniqueStepFnName,
+  parallelBranchesComment,
+  passthroughCustomComment,
   primaryExportCustomCode,
+  quoteLinkComment,
+  reshapeStepComment,
+  snapshotComment,
+  structuredLlmComment,
   withExportLineCountMeta,
   exportSpineInRust,
   exportSpineOutRust,
@@ -26,6 +41,8 @@ import type { PipelineModule, Project } from "./types";
 
 // AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
 // AI : TODO (linter-first) — exported .rs is the lint target (cargo check on full pipeline export + user custom code).
+
+const C = "//" as const;
 
 function commentForeignCode(code: string, langLabel: string): string {
   return [
@@ -52,7 +69,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
       ].join("\n");
     }
     return [
-      "// Passthrough — no custom code configured",
+      exportComment(C, passthroughCustomComment()),
       `let out: ${outRust} = serde_json::from_value(serde_json::to_value(&input)?)?;`,
       "Ok(out)",
     ].join("\n");
@@ -65,7 +82,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
       const prompt = m.prompt ?? "Process the input.";
       const model = m.model ?? "deepseek-v4";
       return [
-        `// Structured LLM call → ${outName ?? outRust}${stepEmitsList(m) ? "[]" : ""}`,
+        exportComment(C, structuredLlmComment(outName ?? outRust, stepEmitsList(m))),
         `let _model = ${exportStringLiteral(model)};`,
         `let _ = _model;`,
         `let user_prompt = format!("{}\\n\\nINPUT DATA:\\n{}", ${exportStringLiteral(prompt)}, serde_json::to_string_pretty(&input)?);`,
@@ -79,7 +96,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
       const prompt = m.prompt ?? "Process the item.";
       const itemRust = outRust.startsWith("Vec<") && outRust.endsWith(">") ? outRust.slice(4, -1) : outRust;
       return [
-        `// One structured LLM call per list item → ${outName ?? outRust}`,
+        exportComment(C, llmBatchComment(outName ?? outRust)),
         "let input_value = serde_json::to_value(&input)?;",
         "let items = if let Value::Array(arr) = &input_value { arr.clone() } else { vec![input_value] };",
         `let schema = serde_json::json!({}); // JSON schema for ${outName ?? "output"}`,
@@ -101,7 +118,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
         : "None";
       const itemRust = outRust.startsWith("Vec<") && outRust.endsWith(">") ? outRust.slice(4, -1) : outRust;
       return [
-        `// Per-item relevance filter — ${outName ?? outRust} with selection_reason`,
+        exportComment(C, exampleSelectComment(outName ?? outRust)),
         `let ctx_value = state.get(${ctxKey}).cloned().unwrap_or(Value::Null);`,
         pointer === "None"
           ? `let picked = &ctx_value;`
@@ -128,7 +145,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
     }
     case ModuleKind.Quote:
       return [
-        "// Match LLM quote strings against source document byte offsets (no LLM cost)",
+        exportComment(C, quoteLinkComment()),
         "let linked = resolve_quotes(&input, \"\", \"\")?;",
         `let out: ${outRust} = serde_json::from_value(linked)?;`,
         "Ok(out)",
@@ -139,7 +156,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
       return generateAssembleStepBodyRust(m, project, outRust);
     case ModuleKind.Parallel:
       return [
-        "// Parallel LLM branches — join product (see runtime)",
+        exportComment(C, parallelBranchesComment()),
         `let out: ${outRust} = serde_json::from_value(serde_json::json!({}))?;`,
         "Ok(out)",
       ].join("\n");
@@ -153,7 +170,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
         ].join("\n");
       }
       return [
-        `// Reshape ${inName ?? "input"} → ${outName ?? outRust}${stepEmitsList(m) ? " (list)" : ""}`,
+        exportComment(C, reshapeStepComment(m, inName, outName, outRust)),
         `let out: ${outRust} = serde_json::from_value(serde_json::to_value(&input)?)?;`,
         "Ok(out)",
       ].join("\n");
@@ -163,28 +180,28 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
       if (entries[0]?.code.trim()) {
         return [
           commentForeignCode(entries[0].code, `${entries[0].language} assert`),
-          "// Validate pipeline state — passthrough on success",
+          exportComment(C, assertValidateComment()),
           "Ok(input)",
         ].join("\n");
       }
-      return ["// Assert passthrough", "Ok(input)"].join("\n");
+      return [exportComment(C, assertPassthroughComment()), "Ok(input)"].join("\n");
     }
     case ModuleKind.HumanReview:
       return [
-        "// Pause for operator approval in Inference tab",
+        exportComment(C, humanReviewComment()),
         "wait_for_human_review(&input).await?;",
         "Ok(input)",
       ].join("\n");
     case ModuleKind.Chatbot:
       return [
-        "// Prompted chatbot — input is ChatbotPrompt; returns ChatbotResult",
+        exportComment(C, chatbotComment()),
         "let __chat = wait_for_chatbot_session(&input).await?;",
         "Ok(__chat)",
       ].join("\n");
     case ModuleKind.Webhook:
       return exportWebhookStepBodyRust();
     case ModuleKind.Output:
-      return [`// Snapshot ${outName ?? inName ?? "pipeline output"}`, "Ok(input)"].join("\n");
+      return [exportComment(C, snapshotComment(outName, inName)), "Ok(input)"].join("\n");
     default:
       return "Ok(input)";
   }
@@ -237,22 +254,19 @@ export function generatePipelineSourceRust(project: Project): string {
 
   sections.push(
     "// Generated pipeline export — equivalent Rust representation",
-    `// Project: ${prepared.name}`,
-    `// ${prepared.modules.length} steps · ${prepared.models.length} structures`,
-    "// Setup: export also includes .env.example and README.md — copy .env.example → .env",
-    "// Cargo: serde, serde_json, tokio, reqwest, anyhow (see README.md)",
+    ...exportFileMetaComments(C, prepared, ["Cargo: serde, serde_json, tokio, reqwest, anyhow (see README.md)"]),
     "",
-    "// === structures ===",
+    exportSectionComment(C, "structures"),
     allModelsToRust(prepared.models, prepared.typeAliases ?? []),
     "",
-    "// === pipeline state ===",
+    exportSectionComment(C, "pipeline state"),
     pipelineStateRustType(prepared),
     "",
     runtimeStubs,
     "",
-    "// === steps ===",
+    exportSectionComment(C, "steps"),
     stepFns,
-    "// === orchestrator ===",
+    exportSectionComment(C, "orchestrator"),
     orchestrator,
   );
 

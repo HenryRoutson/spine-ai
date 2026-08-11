@@ -1,0 +1,7 @@
+{
+  "description": "Tutoring Styled Batch — request → style jobs → llm-batch full questions → LaTeX.",
+  "inputs": {
+    "Request": "year10_request.json"
+  },
+  "expectedOutputs": {}
+}

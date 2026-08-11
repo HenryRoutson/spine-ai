@@ -11,10 +11,12 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize"
 import type { Schema } from "hast-util-sanitize"
 import "katex/dist/katex.min.css"
 import { MermaidBlock } from "@/components/mermaid-block"
+import { TikzBlock } from "@/components/tikz-block"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { normalizeTestJson, stablePrettyJson } from "@/lib/deep_equal"
 import { tryParseJson } from "@/lib/json-utils"
+import { latexSourceToPreviewMarkdown } from "@/lib/latex-preview"
 import { MarkupKind } from "@/lib/markup-kinds"
 import { validateMarkup } from "@/lib/markup-validate"
 import {
@@ -527,6 +529,14 @@ function isMermaidCode(className: string | undefined): boolean {
   return /(?:^|\s)language-mermaid(?:\s|$)/.test(className ?? "")
 }
 
+function isTikzCode(className: string | undefined): boolean {
+  return /(?:^|\s)language-tikz(?:\s|$)/.test(className ?? "")
+}
+
+function isDiagramCodeElement(el: ReactNode): boolean {
+  return isValidElement(el) && (el.type === MermaidBlock || el.type === TikzBlock)
+}
+
 function makeMarkdownComponents(inverted: boolean): Components {
   const base = inverted ? invertedMarkdownComponentsBase : markdownComponentsBase
   return {
@@ -535,6 +545,9 @@ function makeMarkdownComponents(inverted: boolean): Components {
       const { className, children } = props
       if (isMermaidCode(className)) {
         return <MermaidBlock chart={mermaidChartFromCodeChildren(children)} inverted={inverted} />
+      }
+      if (isTikzCode(className)) {
+        return <TikzBlock source={mermaidChartFromCodeChildren(children)} inverted={inverted} />
       }
       if (inverted) {
         return className ? (
@@ -552,7 +565,7 @@ function makeMarkdownComponents(inverted: boolean): Components {
     pre: (props) => {
       const { children } = props
       const only = Children.count(children) === 1 ? Children.only(children) : null
-      if (isValidElement(only) && only.type === MermaidBlock) return only
+      if (isDiagramCodeElement(only)) return only
       if (inverted) {
         return (
           <pre className="mb-2 overflow-x-auto rounded border border-neutral-700 bg-neutral-900 p-2 font-mono text-[11px] text-white">
@@ -705,7 +718,7 @@ function MarkupIssuesBanner({ issues }: { issues: ReturnType<typeof validateMark
   )
 }
 
-// AI : generic formatted view — markdown (GFM+math+mermaid) or latex (validate + math preview).
+// AI : generic formatted view — markdown (GFM+math+mermaid) or latex (validate + KaTeX preview).
 export function MarkupView({
   kind,
   source,
@@ -716,10 +729,14 @@ export function MarkupView({
   inverted?: boolean
 }) {
   const checked = useMemo(() => validateMarkup(kind, source), [kind, source])
+  const md = useMemo(
+    () => (kind === MarkupKind.Latex ? latexSourceToPreviewMarkdown(source) : source),
+    [kind, source],
+  )
   return (
     <div>
       <MarkupIssuesBanner issues={checked.issues} />
-      <MarkdownView md={source} inverted={inverted} />
+      <MarkdownView md={md} inverted={inverted} />
     </div>
   )
 }

@@ -53,6 +53,124 @@ export function primaryExportCustomCode(m: PipelineModule): ExportCustomCode | n
   return { language: primary.language, code: primary.code.trim() };
 }
 
+// AI : shared export comments — body helpers + style prefix so ts/py/rs/go stay DRY.
+export type ExportCommentStyle = "//" | "#";
+
+export function exportComment(style: ExportCommentStyle, body: string): string {
+  return `${style} ${body}`;
+}
+
+export function reshapeStepComment(
+  m: PipelineModule,
+  inName: string | undefined,
+  outName: string | undefined,
+  outFallback: string,
+): string {
+  return `Reshape ${inName ?? "input"} → ${outName ?? outFallback}${stepEmitsList(m) ? " (list)" : ""}`;
+}
+
+export function passthroughCustomComment(): string {
+  return "Passthrough — no custom code configured";
+}
+
+export function structuredLlmComment(outLabel: string, emitsList: boolean): string {
+  return `Structured LLM call → ${outLabel}${emitsList ? "[]" : ""}`;
+}
+
+export function llmBatchComment(outLabel: string): string {
+  return `One structured LLM call per list item → ${outLabel}`;
+}
+
+export function exampleSelectComment(outLabel: string): string {
+  return `Per-item relevance filter — ${outLabel} with selection_reason`;
+}
+
+export function quoteLinkComment(): string {
+  return "Match LLM quote strings against source document byte offsets (no LLM cost)";
+}
+
+export function parallelBranchesComment(): string {
+  return "Parallel LLM branches — run concurrently then join (see runtime)";
+}
+
+export function assertValidateComment(): string {
+  return "Validate pipeline state — passthrough on success";
+}
+
+export function assertPassthroughComment(): string {
+  return "Assert passthrough";
+}
+
+export function humanReviewComment(): string {
+  return "Pause for operator approval in Inference tab";
+}
+
+export function chatbotComment(): string {
+  return "Prompted chatbot — input is ChatbotPrompt; returns ChatbotResult";
+}
+
+export function snapshotComment(outName: string | undefined, inName: string | undefined): string {
+  return `Snapshot ${outName ?? inName ?? "pipeline output"}`;
+}
+
+export function fallbacksFirstComment(count: number): string {
+  return `${count} fallback implementations — first shown`;
+}
+
+export function parseUploadedComment(): string {
+  return "Parse uploaded file — built-in parser or vision OCR when enabled";
+}
+
+export function inputGuardComment(description: string, checkDisabled: boolean): string {
+  return `Input guard: ${JSON.stringify(description)}${checkDisabled ? " (disabled)" : ""}`;
+}
+
+export function filenameContainsComment(needle: string): string {
+  return `Filename must contain: ${JSON.stringify(needle)}`;
+}
+
+export function visionOcrEnabledComment(): string {
+  return "Vision OCR enabled for PDF/image uploads";
+}
+
+export function assembleZipComment(): string {
+  return "Zip spine + pipeline state labels into one flat structure (Assemble)";
+}
+
+export function mergeUpstreamComment(inName: string | undefined): string {
+  return `Merge uploaded document with upstream ${inName ?? "pipeline data"} from pipeline state`;
+}
+
+export function inputStepCommentLines(style: ExportCommentStyle, m: PipelineModule): string[] {
+  return [
+    exportComment(style, parseUploadedComment()),
+    ...(m.inputDescription
+      ? [exportComment(style, inputGuardComment(m.inputDescription, m.checkInputDescription === false))]
+      : []),
+    ...(m.inputNameContains ? [exportComment(style, filenameContainsComment(m.inputNameContains))] : []),
+  ];
+}
+
+export function exportFileMetaComments(
+  style: ExportCommentStyle,
+  project: Project,
+  extras: string[] = [],
+): string[] {
+  return [
+    exportComment(style, `Project: ${project.name}`),
+    exportComment(style, `${project.modules.length} steps · ${project.models.length} structures`),
+    exportComment(style, "Setup: export also includes .env.example and README.md — copy .env.example → .env"),
+    ...extras.map((body) => exportComment(style, body)),
+  ];
+}
+
+export function exportSectionComment(
+  style: ExportCommentStyle,
+  section: "structures" | "pipeline state" | "steps" | "orchestrator",
+): string {
+  return exportComment(style, `=== ${section} ===`);
+}
+
 export function stepFnNameFromLabel(m: PipelineModule, index: number): string {
   const key = labelToPyKey(m.label);
   return key !== "_empty" ? `step_${key}` : `step_${index}`;
@@ -310,13 +428,7 @@ export function generateInputStepBodyTs(m: PipelineModule, outTs: string): strin
   // AI : TODO export — emit output-description LLM guard when checkOutputDescription ships (spec § pipeline).
   const purpose = m.inputDescription?.trim() || m.label || "general transcription";
   const lines = [
-    "// Parse uploaded file — built-in parser or vision OCR when enabled",
-    ...(m.inputDescription
-      ? [
-          `// Input guard: ${JSON.stringify(m.inputDescription)}${m.checkInputDescription === false ? " (disabled)" : ""}`,
-        ]
-      : []),
-    ...(m.inputNameContains ? [`// Filename must contain: ${JSON.stringify(m.inputNameContains)}`] : []),
+    ...inputStepCommentLines("//", m),
     "const doc = input as Document & { base64?: string; mime?: string };",
   ];
   if (m.useOcr) {
@@ -349,13 +461,7 @@ export function generateInputStepBodyTs(m: PipelineModule, outTs: string): strin
 export function generateInputStepBodyPy(m: PipelineModule, outPy: string): string {
   const purpose = m.inputDescription?.trim() || m.label || "general transcription";
   const lines = [
-    "# Parse uploaded file — built-in parser or vision OCR when enabled",
-    ...(m.inputDescription
-      ? [
-          `# Input guard: ${JSON.stringify(m.inputDescription)}${m.checkInputDescription === false ? " (disabled)" : ""}`,
-        ]
-      : []),
-    ...(m.inputNameContains ? [`# Filename must contain: ${JSON.stringify(m.inputNameContains)}`] : []),
+    ...inputStepCommentLines("#", m),
     "doc = input",
   ];
   if (m.useOcr) {
@@ -391,14 +497,8 @@ export function generateInputStepBodyPy(m: PipelineModule, outPy: string): strin
 
 export function generateInputStepBodyRust(m: PipelineModule, outRust: string): string {
   const lines = [
-    "// Parse uploaded file — built-in parser or vision OCR when enabled",
-    ...(m.inputDescription
-      ? [
-          `// Input guard: ${JSON.stringify(m.inputDescription)}${m.checkInputDescription === false ? " (disabled)" : ""}`,
-        ]
-      : []),
-    ...(m.inputNameContains ? [`// Filename must contain: ${JSON.stringify(m.inputNameContains)}`] : []),
-    ...(m.useOcr ? ["// Vision OCR enabled for PDF/image uploads"] : []),
+    ...inputStepCommentLines("//", m),
+    ...(m.useOcr ? [exportComment("//", visionOcrEnabledComment())] : []),
   ];
   if (inputOutputsDocument(m)) {
     if (stepEmitsList(m)) {
@@ -426,14 +526,8 @@ export function generateInputStepBodyRust(m: PipelineModule, outRust: string): s
 export function generateInputStepBodyGo(m: PipelineModule, outGo: string): string {
   const zero = goZeroValue(outGo);
   const lines = [
-    "// Parse uploaded file — built-in parser or vision OCR when enabled",
-    ...(m.inputDescription
-      ? [
-          `// Input guard: ${JSON.stringify(m.inputDescription)}${m.checkInputDescription === false ? " (disabled)" : ""}`,
-        ]
-      : []),
-    ...(m.inputNameContains ? [`// Filename must contain: ${JSON.stringify(m.inputNameContains)}`] : []),
-    ...(m.useOcr ? ["// Vision OCR enabled for PDF/image uploads"] : []),
+    ...inputStepCommentLines("//", m),
+    ...(m.useOcr ? [exportComment("//", visionOcrEnabledComment())] : []),
   ];
   if (inputOutputsDocument(m)) {
     if (stepEmitsList(m)) {
@@ -495,7 +589,7 @@ export function generateCombineStepBodyTs(m: PipelineModule, project: Project, o
         : `${f.name}: (state as Record<string, unknown>)[${upstreamKey}]`;
     }) ?? [];
   return [
-    `// Merge uploaded document with upstream ${inName ?? "pipeline data"} from pipeline state`,
+    exportComment("//", mergeUpstreamComment(inName)),
     "const newDoc = Array.isArray(input) ? input[0] : input;",
     `const merged = { ${fieldExprs.join(", ")} };`,
     `return merged as ${outTs};`,
@@ -518,7 +612,7 @@ export function generateAssembleStepBodyTs(m: PipelineModule, project: Project, 
   );
   const poly = assemblePolymorphicTsSignature(m.outType, bindings, project.typeAliases ?? []);
   const lines = [
-    "// Zip spine + pipeline state labels into one flat structure (Assemble)",
+    exportComment("//", assembleZipComment()),
     ...(poly ? [`// polymorphic shape ${poly}`] : []),
     `const assembled = { ${fieldExprs.join(", ")} };`,
     `return assembled as ${outTs};`,
@@ -544,7 +638,7 @@ export function generateAssembleStepBodyPy(m: PipelineModule, _project: Project,
     return `"${name}": ${rhs}`;
   });
   return [
-    "# Zip spine + pipeline state labels into one flat structure (Assemble)",
+    exportComment("#", assembleZipComment()),
     `return cast(${outPy}, cast(object, {${fieldExprs.join(", ")}}))`,
   ].join("\n");
 }
@@ -556,7 +650,7 @@ export function generateParallelStepBodyTs(m: PipelineModule, outTs: string): st
       `${JSON.stringify(b.field)}: await llmStructured(${JSON.stringify(b.prompt || "Process the input.")} + "\\n\\nINPUT DATA:\\n" + JSON.stringify(input), /* schema for ${b.outStructureId} */ {} as never)`,
   );
   return [
-    "// Parallel LLM branches on shared spine input, then join",
+    exportComment("//", parallelBranchesComment()),
     `const assembled = { ${calls.join(", ")} };`,
     `return assembled as ${outTs};`,
   ].join("\n");
@@ -585,7 +679,7 @@ export function generateAssembleStepBodyRust(m: PipelineModule, project: Project
     return `map.insert(${JSON.stringify(name)}.to_string(), ${rhs});`;
   });
   return [
-    "// Zip spine + pipeline state labels into one flat structure (Assemble)",
+    exportComment("//", assembleZipComment()),
     "let mut map = serde_json::Map::new();",
     ...inserts,
     `let out: ${outName} = serde_json::from_value(Value::Object(map))?;`,
@@ -608,7 +702,7 @@ export function generateAssembleStepBodyGo(m: PipelineModule, project: Project, 
     return `\t${JSON.stringify(name)}: ${rhs},`;
   });
   return [
-    "// Zip spine + pipeline state labels into one flat structure (Assemble)",
+    exportComment("//", assembleZipComment()),
     "payload := map[string]any{",
     ...assigns,
     "}",
@@ -646,7 +740,7 @@ export function generateCombineStepBodyPy(
   const unwrap = inPy.startsWith("list[") ? "new_doc = input[0]" : "new_doc = input";
   // AI : cast via object — dict literals are not TypedDict/BaseModel-compatible under strict pyright.
   return [
-    `# Merge uploaded document with upstream ${inName ?? "pipeline data"} from pipeline state`,
+    exportComment("#", mergeUpstreamComment(inName)),
     unwrap,
     `return cast(${outPy}, cast(object, {${fieldExprs.join(", ")}}))`,
   ].join("\n");
@@ -674,7 +768,7 @@ export function generateCombineStepBodyRust(m: PipelineModule, project: Project,
     ? 'let new_doc = input.into_iter().next().ok_or_else(|| anyhow::anyhow!("combine expects at least one document"))?;'
     : "let new_doc = input;";
   return [
-    `// Merge uploaded document with upstream ${inName ?? "pipeline data"} from pipeline state`,
+    exportComment("//", mergeUpstreamComment(inName)),
     unwrap,
     `let merged = ${outName} {`,
     ...fieldExprs,
@@ -713,7 +807,7 @@ export function generateCombineStepBodyGo(
       ].join("\n")
     : "newDoc := input";
   return [
-    `// Merge uploaded document with upstream ${inName ?? "pipeline data"} from pipeline state`,
+    exportComment("//", mergeUpstreamComment(inName)),
     unwrap,
     "payload := map[string]any{",
     ...fieldEntries,
