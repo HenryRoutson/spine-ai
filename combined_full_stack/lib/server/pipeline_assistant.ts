@@ -84,12 +84,22 @@ const moduleSpecSchema = z
       .describe("custom-code only — TypeScript arrow expression e.g. (rows) => rows.map(...)"),
     model: z.string().optional(),
     inputMinCount: z.number().int().min(1).optional(),
+    assembleBindings: z
+      .record(
+        z.string(),
+        z.discriminatedUnion("kind", [
+          z.object({ kind: z.literal("spine") }),
+          z.object({ kind: z.literal("state"), label: z.string() }),
+        ]),
+      )
+      .optional()
+      .describe("assemble only — field name → spine or { kind: state, label: prior step label }"),
   })
   .superRefine((spec, ctx) => {
     if (stepRequiresNote(spec.kind) && !spec.note?.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "note is required for input, combine, and llm steps",
+        message: "note is required for input, combine, assemble, and llm steps",
         path: ["note"],
       });
     }
@@ -269,11 +279,13 @@ function makeModuleFromSpec(
       inputDescription: spec.inputDescription,
       inputMinCount: spec.inputMinCount,
       inStructureId: spec.kind !== "input" ? inId ?? defaultOutForKind(spec.kind, models) : undefined,
-      outStructureId: outId,
+      // AI : assemble without structureOut → auto-derive product from bindings on sync
+      outStructureId: spec.kind === ModuleKind.Assemble && !outHint ? undefined : outId,
       emitsList,
       prompt: spec.prompt,
       code: spec.code,
       model: modelId,
+      assembleBindings: spec.kind === ModuleKind.Assemble ? spec.assembleBindings : undefined,
     },
     models,
     globalModel,

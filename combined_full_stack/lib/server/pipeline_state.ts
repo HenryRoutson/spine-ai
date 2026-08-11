@@ -5,9 +5,7 @@ import { formatTypeExpr, labelToPyKey, stepSpineOutType, typeExprToGo, typeExprT
 
 export type { PipelineState, StepLabel };
 
-// AI : TODO (assemble-flat-state) — keep state flat StepLabel → value; N-way assemble from labels.
-// AI :   Avoid nested products (zip∘zip); lint bindings that read another assemble when labels in scope.
-// AI :   See lib/server/assemble-roadmap.ts.
+// AI : state stays flat StepLabel → value; Assemble zips labels into one product (see assemble-type-expr.ts).
 
 export function emptyPipelineState(): PipelineState {
   return {};

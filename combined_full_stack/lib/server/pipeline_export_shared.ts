@@ -501,6 +501,82 @@ export function generateCombineStepBodyTs(m: PipelineModule, project: Project, o
   ].join("\n");
 }
 
+function assembleFieldExprTs(source: import("./types").AssembleSource): string {
+  if (source.kind === "spine") return "input";
+  return `state[${JSON.stringify(source.label.trim())}]`;
+}
+
+export function generateAssembleStepBodyTs(m: PipelineModule, _project: Project, outTs: string): string {
+  const bindings = m.assembleBindings ?? {};
+  const fieldExprs = Object.entries(bindings).map(
+    ([name, source]) => `${name}: ${assembleFieldExprTs(source)}`,
+  );
+  return [
+    "// Zip spine + pipeline state labels into one flat structure (Assemble)",
+    `const assembled = { ${fieldExprs.join(", ")} };`,
+    `return assembled as ${outTs};`,
+  ].join("\n");
+}
+
+export function generateAssembleStepBodyPy(m: PipelineModule, project: Project, outPy: string): string {
+  const bindings = m.assembleBindings ?? {};
+  const fieldExprs = Object.entries(bindings).map(([name, source]) => {
+    const rhs = source.kind === "spine" ? "input" : `state[${JSON.stringify(source.label.trim())}]`;
+    return `"${name}": ${rhs}`;
+  });
+  return [
+    "# Zip spine + pipeline state labels into one flat structure (Assemble)",
+    `return cast(${outPy}, cast(object, {${fieldExprs.join(", ")}}))`,
+  ].join("\n");
+}
+
+export function generateAssembleStepBodyRust(m: PipelineModule, project: Project, outRust: string): string {
+  const bindings = m.assembleBindings ?? {};
+  const rawOutName = modelName(project, m.outStructureId);
+  const outName = rawOutName ? modelExportIdentifierRust(rawOutName) : outRust;
+  const inserts = Object.entries(bindings).map(([name, source]) => {
+    const rhs =
+      source.kind === "spine"
+        ? "serde_json::to_value(&input)?"
+        : `state.get(${JSON.stringify(source.label.trim())}).cloned().unwrap_or(Value::Null)`;
+    return `map.insert(${JSON.stringify(name)}.to_string(), ${rhs});`;
+  });
+  return [
+    "// Zip spine + pipeline state labels into one flat structure (Assemble)",
+    "let mut map = serde_json::Map::new();",
+    ...inserts,
+    `let out: ${outName} = serde_json::from_value(Value::Object(map))?;`,
+    "Ok(out)",
+  ].join("\n");
+}
+
+export function generateAssembleStepBodyGo(m: PipelineModule, project: Project, outGo: string): string {
+  const bindings = m.assembleBindings ?? {};
+  const zero = `*new(${outGo})`;
+  const assigns = Object.entries(bindings).map(([name, source]) => {
+    const rhs =
+      source.kind === "spine"
+        ? "input"
+        : `state[${JSON.stringify(source.label.trim())}]`;
+    return `\t${JSON.stringify(name)}: ${rhs},`;
+  });
+  return [
+    "// Zip spine + pipeline state labels into one flat structure (Assemble)",
+    "payload := map[string]any{",
+    ...assigns,
+    "}",
+    "b, err := json.Marshal(payload)",
+    "if err != nil {",
+    `\treturn ${zero}, err`,
+    "}",
+    `var merged ${outGo}`,
+    "if err := json.Unmarshal(b, &merged); err != nil {",
+    `\treturn ${zero}, err`,
+    "}",
+    "return merged, nil",
+  ].join("\n");
+}
+
 export function generateCombineStepBodyPy(
   m: PipelineModule,
   project: Project,

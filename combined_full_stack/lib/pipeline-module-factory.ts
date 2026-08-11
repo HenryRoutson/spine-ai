@@ -40,6 +40,7 @@ export type ModuleFactoryOpts = {
   chunkTextField?: string
   mergePolicy?: import("@/lib/types").MergePolicy
   mergeCustom?: string
+  assembleBindings?: import("@/lib/types").PipelineModule["assembleBindings"]
 }
 
 // AI : fallback when legacy data omits note on steps that require it.
@@ -64,9 +65,11 @@ export function createPipelineModule(
   const isLlm = isLlmKind(kind)
   const defaultModel = models[0]?.id
   const outStructureId =
-    usesPassthroughStructure(kind)
-      ? opts.outStructureId ?? opts.inStructureId ?? defaultModel
-      : opts.outStructureId ?? defaultModel
+    kind === ModuleKind.Assemble
+      ? opts.outStructureId
+      : usesPassthroughStructure(kind)
+        ? opts.outStructureId ?? opts.inStructureId ?? defaultModel
+        : opts.outStructureId ?? defaultModel
   const spineList =
     opts.outType != null
       ? opts.outType.kind === "list"
@@ -95,6 +98,7 @@ export function createPipelineModule(
     inStructureId: kind !== ModuleKind.Input ? opts.inStructureId ?? defaultModel : undefined,
     outStructureId,
     ...(outType ? { outType } : {}),
+    assembleBindings: kind === ModuleKind.Assemble ? (opts.assembleBindings ?? {}) : undefined,
     prompt: isLlm
       ? opts.prompt ?? (kind === ModuleKind.ExampleSelect ? DEFAULT_EXAMPLE_SELECT_PROMPT : "")
       : undefined,

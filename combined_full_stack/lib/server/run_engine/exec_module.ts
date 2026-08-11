@@ -6,6 +6,7 @@ import { execInputStep } from "./steps/input";
 import { execLlmStep } from "./steps/llm";
 import { execLlmBatchStep } from "./steps/llm_batch";
 import { execExampleSelectStep } from "./steps/example_select";
+import { execAssembleStep } from "./steps/assemble";
 import {
   execAssertStep,
   execCombineStep,
@@ -24,6 +25,8 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
       return execInputStep(m, ctx, log);
     case ModuleKind.Llm:
       return execLlmStep(m, ctx, log);
+    case ModuleKind.Assemble:
+      return execAssembleStep(m, ctx, log);
     case ModuleKind.Combine:
       return execCombineStep(m, ctx, log);
     case ModuleKind.Transform:

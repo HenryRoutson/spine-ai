@@ -9,6 +9,7 @@ import {
   exportSpineInTs,
   exportSpineOutTs,
   generateCombineStepBodyTs,
+  generateAssembleStepBodyTs,
   generateCustomCodeStepBodyTs,
   generateExampleContextExprTs,
   generateInputStepBodyTs,
@@ -100,6 +101,8 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
       ].join("\n");
     case "combine":
       return generateCombineStepBodyTs(m, project, outTs);
+    case "assemble":
+      return generateAssembleStepBodyTs(m, project, outTs);
     case "transform": {
       const custom = primaryExportCustomCode(m);
       if (custom?.language === "typescript") {

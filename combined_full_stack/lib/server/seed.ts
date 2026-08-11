@@ -142,6 +142,15 @@ const SeedFileSchema = z.object({
       mergeStateLabel: z.string().optional(),
       mergeWrapListField: z.string().optional(),
       mergeCustom: z.string().optional(),
+      assembleBindings: z
+        .record(
+          z.string(),
+          z.discriminatedUnion("kind", [
+            z.object({ kind: z.literal("spine") }),
+            z.object({ kind: z.literal("state"), label: z.string() }),
+          ]),
+        )
+        .optional(),
       mergePolicy: z
         .object({
           default: z

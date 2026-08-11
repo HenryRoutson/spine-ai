@@ -113,7 +113,6 @@ export interface StructureModel {
   locked?: boolean; // AI : read-only in Structure UI — cannot rename, edit fields, or delete
   sourceDocId?: DocId; // AI : document this structure was inferred from — links back in Structure tab
   // AI : TODO (assemble-stage-D) — params?: string[] + Ref args for parameterized structs (Report[T]).
-  // AI :   Stage A derive stays monomorphic auto models; see lib/server/assemble-roadmap.ts.
 }
 
 // AI : standalone reusable type — not a struct with fields; referenced by name in type expressions.
@@ -149,9 +148,8 @@ export enum ModuleKind {
   ExampleSelect = "example-select", // AI : LLM relevance filter per list item — chain_of_thought + is_relevant, not embedding RAG
   Quote = "quote", // AI : deterministic — resolve LLM quote strings → source-linked spans
   Transform = "transform",
-  // AI : TODO (assemble-stage-A) — add ModuleKind.Assemble (zip from spine + state labels → flat product).
-  // AI :   Combine = new upload ⊕ one state structure; Assemble = N computed outputs → product.
-  // AI :   Do not extend Combine into a list of LLM sources — see lib/server/assemble-roadmap.ts.
+  // AI : zip spine + state["Label"] → flat product (not Combine — that is upload ⊕ one state struct).
+  Assemble = "assemble",
   Combine = "combine",
   Chunk = "chunk", // AI : split text / document into list chunks (generated TS)
   Merge = "merge", // AI : recursive structural merge — dict deep, list concat/union/dedupe, per-path rules
@@ -221,6 +219,11 @@ export interface MergePolicy {
   rules?: MergePolicyRule[];
 };
 
+// AI : assemble field source — spine = previous step; state = ctx.byLabel[label].
+export type AssembleSource =
+  | { kind: "spine" }
+  | { kind: "state"; label: string };
+
 // AI : one language key per entry — e.g. { "typescript": "(input) => input" } or { "python": "..." }.
 export interface CustomCodeEntry { typescript?: string; python?: string };
 
@@ -271,9 +274,8 @@ export interface PipelineModule { // TODO this is bad, it contains multiple poss
   mergeCustom?: string; // merge step — optional custom TS (input) => … overrides policy
   mergeStateLabel?: string; // merge step — prior step label whose output is merged with spine input
   mergeWrapListField?: string; // merge step — when spine is list[T], wrap as { field: T[] } before merge
-  // AI : TODO (assemble-stage-A) — assembleBindings?: Record<field_name, spine | { kind: "state"; label }>.
-  // AI : TODO (assemble-stage-A-derive) — auto outStructure from binding TypeExprs (flat product, not zip∘zip).
-  // AI : TODO (assemble-stage-A-path) — optional path sources; prefer original labels over nested assemble reads.
+  // AI : assemble — field name → spine | state["Label"]; auto out model id sm_assemble_<moduleId>
+  assembleBindings?: Record<string, AssembleSource>;
   // AI : example-select — cached-prefix relevance filter (see lib/example-select.ts defaults)
   exampleContextLabel?: string; // prior step label supplying {description} text
   exampleContextField?: string; // optional dot path within that step output
@@ -732,7 +734,10 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     label: "Transform",
     description: "Deterministic reshape — list→object wrap needs a list field on the output structure, or custom TS code",
   },
-  // AI : TODO (assemble-stage-A) — MODULE_META entry for Assemble: "Zip spine + state labels into one structure".
+  [ModuleKind.Assemble]: {
+    label: "Assemble",
+    description: "Zip spine + prior step labels into one flat structure (no LLM; not Combine Inputs)",
+  },
   [ModuleKind.Combine]: { label: "Combine Inputs", description: "Merge a new input with the pipeline state" },
   [ModuleKind.Chunk]: {
     label: "Chunk",

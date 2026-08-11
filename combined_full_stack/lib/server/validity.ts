@@ -36,6 +36,7 @@ import {
   typeExprEqual,
   type TypeExpr,
 } from "./type_expr";
+import { typeExprAssignable, validateAssembleBindings } from "@/lib/assemble-type-expr";
 import {
   stepEmits,
   stepEmitsList,
@@ -116,7 +117,15 @@ export {
 
 function pushInvalid(invalid: InvalidMap, issue: InvalidStep): void {
   const list = invalid.get(issue.moduleId) ?? [];
-  if (list.some((x) => x.kind === issue.kind && x.expectsType === issue.expectsType && x.missingLabel === issue.missingLabel)) {
+  if (
+    list.some(
+      (x) =>
+        x.kind === issue.kind &&
+        x.expectsType === issue.expectsType &&
+        x.missingLabel === issue.missingLabel &&
+        x.structureMessage === issue.structureMessage,
+    )
+  ) {
     return;
   }
   list.push(issue);
@@ -169,12 +178,10 @@ function stepAcceptsSpineType(
   expected: TypeExpr,
   actual: TypeExpr,
   models: StructureModel[],
+  typeAliases: TypeAlias[] = [],
 ): boolean {
   // AI : TODO (linter-first) — delete when spine compat is cargo/pyright on generated orchestrator only.
-  // AI : TODO (assemble-stage-B) — use typeExprAssignable here once assemble/spine share assignability.
-  // AI : TODO (assemble-stage-A) — computeAssembleInvalid (bindings, labelsInScope, field types).
-  // AI : TODO (assemble-flat-state) — warn assemble←assemble when original labels are still in scope.
-  if (typeExprEqual(expected, actual)) return true;
+  if (typeExprAssignable(expected, actual, typeAliases) || typeExprEqual(expected, actual)) return true;
   // AI : passthrough steps read pipeline state by label — spine type at this index is not their contract.
   if (m.kind === ModuleKind.Output || m.kind === ModuleKind.Assert || m.kind === ModuleKind.HumanReview || m.kind === ModuleKind.Quote) return true;
   if (!cardinalityMismatch(expected, actual)) return false;
@@ -183,6 +190,35 @@ function stepAcceptsSpineType(
   // AI : bare transform auto-wraps list[T] into { listField: T[] } when the output structure has a matching list field.
   if (bareTransformCanAutoWrapList(m, actual, models)) return true;
   return false;
+}
+
+function computeAssembleInvalid(
+  modules: PipelineModule[],
+  models: StructureModel[],
+  typeAliases: TypeAlias[] = [],
+): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (let i = 0; i < modules.length; i++) {
+    const m = modules[i]!;
+    if (m.kind !== ModuleKind.Assemble) continue;
+    const prev = i > 0 ? modules[i - 1] : undefined;
+    for (const issue of validateAssembleBindings(m, prev, modules, i, models, typeAliases)) {
+      if (issue.missingLabel) {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StateKeyMissing,
+          missingLabel: issue.missingLabel,
+        });
+      } else {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: issue.message,
+        });
+      }
+    }
+  }
+  return invalid;
 }
 
 function moduleInputTypes(m: PipelineModule): string[] {
@@ -567,6 +603,11 @@ export function computeInvalid(
     list.push(...issues);
     invalid.set(moduleId, list);
   }
+  for (const [moduleId, issues] of computeAssembleInvalid(modules, models, opts?.typeAliases ?? [])) {
+    const list = invalid.get(moduleId) ?? [];
+    list.push(...issues);
+    invalid.set(moduleId, list);
+  }
   for (const [moduleId, issues] of computeMissingCombineBeforeInputInvalid(modules)) {
     const list = invalid.get(moduleId) ?? [];
     list.push(...issues);
@@ -634,7 +675,7 @@ export function computeInvalid(
       if (invalidIssuesForModule(invalid, m.id).some((x) => x.kind === InvalidKind.NoOutput)) continue;
       const expected = stepSpineInType(m);
       const upstreamType = (prev && stepSpineOutType(prev)) ?? flowType;
-      if (!expected || !upstreamType || !stepAcceptsSpineType(m, expected, upstreamType, models)) {
+      if (!expected || !upstreamType || !stepAcceptsSpineType(m, expected, upstreamType, models, opts?.typeAliases ?? [])) {
         if (expected && upstreamType) {
           pushInvalid(invalid, spineMismatchIssue(m.id, expected, upstreamType, models));
         } else {
@@ -658,7 +699,7 @@ export function computeInvalid(
 
     const expected = stepSpineInType(m);
     const upstreamType = (prev && stepSpineOutType(prev)) ?? flowType;
-    if (!expected || !upstreamType || !stepAcceptsSpineType(m, expected, upstreamType, models)) {
+    if (!expected || !upstreamType || !stepAcceptsSpineType(m, expected, upstreamType, models, opts?.typeAliases ?? [])) {
       if (expected && upstreamType) {
         pushInvalid(invalid, spineMismatchIssue(m.id, expected, upstreamType, models));
       } else {

@@ -11,6 +11,7 @@ import {
   exportSpineInGo,
   exportSpineOutGo,
   generateCombineStepBodyGo,
+  generateAssembleStepBodyGo,
   generateInputStepBodyGo,
   generateOrchestratorGo,
   modelName,
@@ -262,6 +263,8 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
       ].join("\n");
     case "combine":
       return generateCombineStepBodyGo(m, project, outGo, inGo);
+    case "assemble":
+      return generateAssembleStepBodyGo(m, project, outGo);
     case "transform": {
       const custom = primaryExportCustomCode(m);
       const passthrough = [

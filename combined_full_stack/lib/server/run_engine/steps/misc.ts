@@ -14,10 +14,8 @@ import { requireLinearInput } from "../context";
 import { buildAssertResult, jsonStringifyStepValue } from "../results";
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types";
 
-// AI : TODO (assemble-stage-A) — execAssembleStep (new file): zip spine + ctx.byLabel → flat product.
-// AI :   Combine stays ingestion (side doc ⊕ byModel[structureIn]); do not add multi-LLM source lists here.
-// AI : TODO (assemble-parallel) — optional later: scoped parallel LLM branches → auto-assemble join.
-// AI :   Roadmap: lib/server/assemble-roadmap.ts
+// AI : Combine = side doc ⊕ byModel[structureIn]. Multi-LLM zip lives in steps/assemble.ts.
+// AI : TODO (assemble-parallel) — scoped parallel LLM branches → auto-assemble join (see assemble-roadmap.ts).
 export async function execCombineStep(m: PipelineModule, ctx: RunCtx, _log: RunLogger): Promise<ExecResult> {
   const { project } = ctx;
   const out = modelById(project.models, m.outStructureId);

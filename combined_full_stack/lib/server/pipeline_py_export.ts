@@ -10,6 +10,7 @@ import {
   exportSpineInPy,
   exportSpineOutPy,
   generateCombineStepBodyPy,
+  generateAssembleStepBodyPy,
   generateExampleContextLinesPy,
   generateInputStepBodyPy,
   generateOrchestratorPy,
@@ -119,6 +120,8 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
       ].join("\n");
     case "combine":
       return generateCombineStepBodyPy(m, project, outPy, inPy);
+    case "assemble":
+      return generateAssembleStepBodyPy(m, project, outPy);
     case "transform": {
       const custom = primaryExportCustomCode(m);
       if (custom?.language === "python") {

@@ -40,6 +40,7 @@ import { InputModuleFields } from "@/components/pipeline-fields/input-fields"
 import { LlmModuleFields } from "@/components/pipeline-fields/llm-fields"
 import { CodeModuleFields } from "@/components/pipeline-fields/code-fields"
 import { ListOpsModuleFields } from "@/components/pipeline-fields/list-ops-fields"
+import { AssembleModuleFields } from "@/components/pipeline-fields/assemble-fields"
 import { ExampleSelectModuleFields } from "@/components/pipeline-fields/example-select-fields"
 import { WebhookModuleFields } from "@/components/pipeline-fields/webhook-fields"
 import { InspectorCollapsibleSection } from "@/components/inspector-collapsible-section"
@@ -246,7 +247,10 @@ export function PipelineModuleFields({
         </PipelineField>
       ) : null}
 
-      {(selected.kind === ModuleKind.Input || selected.kind === ModuleKind.Combine || isLlmKind(selected.kind)) && (
+      {(selected.kind === ModuleKind.Input ||
+        selected.kind === ModuleKind.Combine ||
+        selected.kind === ModuleKind.Assemble ||
+        isLlmKind(selected.kind)) && (
         <PipelineField
           label="Annotation / purpose"
           hint={edit ? "required — describe what this step does or handles" : undefined}
@@ -329,7 +333,10 @@ export function PipelineModuleFields({
         </PipelineField>
       )}
 
-      {selected.kind !== ModuleKind.Input && selected.kind !== ModuleKind.Output && selected.kind !== ModuleKind.HumanReview && (
+      {selected.kind !== ModuleKind.Input &&
+        selected.kind !== ModuleKind.Output &&
+        selected.kind !== ModuleKind.HumanReview &&
+        selected.kind !== ModuleKind.Assemble && (
         <PipelineField
           label="Output model"
           hint={invalid?.kind === InvalidKind.NoOutput ? "required — step must emit a structure" : undefined}
@@ -353,6 +360,17 @@ export function PipelineModuleFields({
             onFix={onFixIoMismatch}
           />
         </PipelineField>
+      )}
+
+      {selected.kind === ModuleKind.Assemble && (
+        <AssembleModuleFields
+          selected={selected}
+          models={models}
+          modules={modules}
+          priorLabels={priorLabels}
+          edit={!!edit}
+          onUpdate={onUpdate}
+        />
       )}
 
       {selected.kind !== ModuleKind.Input && (

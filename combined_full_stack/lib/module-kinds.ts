@@ -2,7 +2,6 @@ import { LegacyModuleKind, ModuleKind } from "@/lib/types"
 import type { RunStepKind } from "@/lib/types"
 
 // AI : kinds users can add in the builder / pipeline assistant (quote is auto-managed).
-// AI : TODO (assemble-stage-A) — add ModuleKind.Assemble here + stepRequiresNote when kind lands.
 export const USER_ADDABLE_MODULE_KINDS = [
   ModuleKind.Input,
   ModuleKind.Llm,
@@ -11,6 +10,7 @@ export const USER_ADDABLE_MODULE_KINDS = [
   ModuleKind.Transform,
   ModuleKind.Chunk,
   ModuleKind.Merge,
+  ModuleKind.Assemble,
   ModuleKind.Combine,
   ModuleKind.CustomCode,
   ModuleKind.Assert,
@@ -38,7 +38,12 @@ export function isMergeModuleKind(kind: string): boolean {
 
 // AI : input/combine/llm steps expose Annotation / purpose — must be non-empty when the pipeline is valid.
 export function stepRequiresNote(kind: ModuleKind): boolean {
-  return kind === ModuleKind.Input || kind === ModuleKind.Combine || isLlmKind(kind)
+  return (
+    kind === ModuleKind.Input ||
+    kind === ModuleKind.Combine ||
+    kind === ModuleKind.Assemble ||
+    isLlmKind(kind)
+  )
 }
 
 // AI : llm steps use prompt/response wording; quote step shows source + extracts → linked spans.

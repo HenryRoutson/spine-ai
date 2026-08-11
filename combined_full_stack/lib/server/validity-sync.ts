@@ -15,6 +15,7 @@ import {
 import { BUILTIN_DOCUMENT_ID, isBuiltinDocumentModel, stripSharedModels, withSharedModels } from "./builtin_models";
 import { migrateCustomCodeModule } from "@/lib/custom_code_entries";
 import { migrateListMergeModule, syncListOpsModules } from "@/lib/list-ops-steps";
+import { syncAssembleModules } from "@/lib/assemble-type-expr";
 import { resolveModuleNote } from "@/lib/pipeline-module-factory";
 import { usesPassthroughStructure, isLlmKind } from "@/lib/module-kinds";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
@@ -400,8 +401,9 @@ export function migrateProjectModules(project: Project): Project {
   const placed = syncAssertPlacement(quoted);
   const migrated = placed.map((m) => migrateListMergeModule(migrateCustomCodeModule(m)));
   const listSynced = syncListOpsModules(migrated, models);
-  const withCache = listSynced.modules.map((m) => (m.cached ? m : { ...m, cached: true }));
-  models = listSynced.models;
+  const assembleSynced = syncAssembleModules(listSynced.modules, models);
+  const withCache = assembleSynced.modules.map((m) => (m.cached ? m : { ...m, cached: true }));
+  models = assembleSynced.models;
   const normalized = normalizePassthroughStructureIds(withCache);
   const noted = normalizeModuleNotes(normalized);
   const spineTyped = migrateModulesSpineTypes(noted);
@@ -420,7 +422,8 @@ export function migrateProjectModules(project: Project): Project {
     placed !== folded ||
     migrated.some((m, i) => m !== placed[i]) ||
     !modulesEqual(listSynced.modules, migrated) ||
-    withCache.some((m, i) => m !== listSynced.modules[i]) ||
+    !modulesEqual(assembleSynced.modules, listSynced.modules) ||
+    withCache.some((m, i) => m !== assembleSynced.modules[i]) ||
     normalized.some((m, i) => m !== withCache[i]) ||
     noted.some((m, i) => m !== normalized[i]) ||
     spineTyped.some((m, i) => m !== noted[i]);

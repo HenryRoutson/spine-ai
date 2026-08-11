@@ -53,6 +53,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 
 import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"
 import { syncListOpsStepModule } from "@/lib/list-ops-steps"
+import { deriveAssembleStepTypes } from "@/lib/assemble-type-expr"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { copyTextToClipboard } from "@/lib/clipboard"
 import { PipelineExportDialog } from "@/components/pipeline-export-dialog"
@@ -118,6 +119,12 @@ export function PipelineBuilder() {
       if (updated.kind === ModuleKind.Chunk || updated.kind === ModuleKind.Merge) {
         const prev = i > 0 ? modules[i - 1] : undefined
         const synced = syncListOpsStepModule(updated, derivedModels, prev, modules)
+        derivedModels = synced.models
+        return synced.module
+      }
+      if (updated.kind === ModuleKind.Assemble) {
+        const prev = i > 0 ? modules[i - 1] : undefined
+        const synced = deriveAssembleStepTypes(updated, prev, modules, i, derivedModels)
         derivedModels = synced.models
         return synced.module
       }

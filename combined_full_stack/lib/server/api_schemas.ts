@@ -220,6 +220,16 @@ const pipelineModulePatchSchema = z
     mergeCustom: z.string().max(MAX_MODULE_STRING_CHARS).optional(),
     mergeStateLabel: z.string().max(200).optional(),
     mergeWrapListField: z.string().max(200).optional(),
+    // AI : assemble — field → spine | state label
+    assembleBindings: z
+      .record(
+        z.string().max(200),
+        z.discriminatedUnion("kind", [
+          z.object({ kind: z.literal("spine") }).strict(),
+          z.object({ kind: z.literal("state"), label: z.string().max(200) }).strict(),
+        ]),
+      )
+      .optional(),
     // AI : example-select — allowlisted on PUT so .strict() does not reject builder saves
     exampleContextLabel: z.string().max(200).optional(),
     exampleContextField: z.string().max(512).optional(),

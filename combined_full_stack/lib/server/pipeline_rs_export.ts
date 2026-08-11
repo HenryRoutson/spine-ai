@@ -10,6 +10,7 @@ import {
   exportSpineInRust,
   exportSpineOutRust,
   generateCombineStepBodyRust,
+  generateAssembleStepBodyRust,
   generateInputStepBodyRust,
   generateOrchestratorRust,
   modelName,
@@ -134,6 +135,8 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
       ].join("\n");
     case "combine":
       return generateCombineStepBodyRust(m, project, outRust, _inRust);
+    case "assemble":
+      return generateAssembleStepBodyRust(m, project, outRust);
     case "transform": {
       const custom = primaryExportCustomCode(m);
       if (custom) {
