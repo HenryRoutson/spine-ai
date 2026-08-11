@@ -47,7 +47,7 @@ export function PopupModal({ payload, onClose }: PopupModalProps) {
   }, [onClose])
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-[5vh]">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-[5vh]">
       <button
         aria-label="Close viewer"
         className="absolute inset-0 bg-background/70 backdrop-blur-sm"

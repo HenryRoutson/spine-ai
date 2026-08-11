@@ -620,7 +620,11 @@ export function Logging() {
                             onExpand={() =>
                               setPopup(
                                 step.outputJson
-                                  ? { json: step.outputJson, title: `${outTitle} (output) · ${step.label}` }
+                                  ? {
+                                      json: step.outputJson,
+                                      models,
+                                      title: `${outTitle} (output) · ${step.label}`,
+                                    }
                                   : { text: step.outputPreview, title: `${outTitle} (output) · ${step.label}` },
                               )
                             }
@@ -632,6 +636,13 @@ export function Logging() {
                                   models={models}
                                   defaultView="table"
                                   className="h-full"
+                                  onFullscreen={() =>
+                                    setPopup({
+                                      json: step.outputJson!,
+                                      models,
+                                      title: `${outTitle} (output) · ${step.label}`,
+                                    })
+                                  }
                                 />
                               </div>
                             ) : step.status !== "error" ? (

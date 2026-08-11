@@ -1,7 +1,9 @@
 "use client"
 
+import { useState } from "react"
 import { AlertTriangle, CheckCircle2 } from "lucide-react"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
+import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
 import { cn } from "@/lib/utils"
 import { useStatusPalette } from "@/lib/chart-colors"
 import { hasDisplayableStepOutput, isDocReferenceOutputJson } from "@/lib/step-doc"
@@ -26,6 +28,7 @@ export function InferenceRunOutputs({
   steps: RunStep[]
   models?: StructureModel[]
 }) {
+  const [popup, setPopup] = useState<PopupPayload | null>(null)
   return (
     <div className="space-y-3">
       <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">final outputs</p>
@@ -36,8 +39,19 @@ export function InferenceRunOutputs({
           expanded={i === steps.length - 1}
           isOutputStep={step.kind === "output"}
           models={models}
+          onFullscreen={
+            step.outputJson
+              ? () =>
+                  setPopup({
+                    json: step.outputJson!,
+                    models,
+                    title: `${step.label} (output)`,
+                  })
+              : undefined
+          }
         />
       ))}
+      {popup && <PopupModal payload={popup} onClose={() => setPopup(null)} />}
     </div>
   )
 }
@@ -47,11 +61,13 @@ function InferenceStepOutput({
   expanded,
   isOutputStep,
   models,
+  onFullscreen,
 }: {
   step: RunStep
   expanded: boolean
   isOutputStep: boolean
   models?: StructureModel[]
+  onFullscreen?: () => void
 }) {
   const ok = step.status === "ok" || step.status === "cached"
   const palette = useStatusPalette()
@@ -79,7 +95,13 @@ function InferenceStepOutput({
       </div>
       {step.outputJson ? (
         <div className={expanded ? "h-[min(28rem,55vh)]" : "h-[min(16rem,32vh)]"}>
-          <JsonPreviewPanel json={step.outputJson} models={models} defaultView="table" className="h-full" />
+          <JsonPreviewPanel
+            json={step.outputJson}
+            models={models}
+            defaultView="table"
+            className="h-full"
+            onFullscreen={onFullscreen}
+          />
         </div>
       ) : (
         <div className="max-h-48 overflow-auto px-4 py-3">

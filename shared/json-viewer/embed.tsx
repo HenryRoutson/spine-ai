@@ -16,6 +16,8 @@ export type JsonViewerEmbedProps = {
   onSettingsEventName?: string
   readDefaultView?: () => JsonViewerHumanViewId
   readSyntaxTheme?: () => JsonViewerSyntaxThemeId
+  // AI : parent hosts a larger viewer (PopupModal) — shows ⛶ next to JSON + latex detail
+  onFullscreen?: () => void
 }
 
 export function JsonViewerEmbed({
@@ -26,8 +28,11 @@ export function JsonViewerEmbed({
   onSettingsEventName,
   readDefaultView,
   readSyntaxTheme,
+  onFullscreen,
 }: JsonViewerEmbedProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const onFullscreenRef = useRef(onFullscreen)
+  onFullscreenRef.current = onFullscreen
 
   // AI : same-origin only — avoids leaking JSON to arbitrary embedders via postMessage("*").
   function post(payload: object) {
@@ -39,6 +44,7 @@ export function JsonViewerEmbed({
   const resolvedDefaultView = defaultView ?? readDefaultView?.() ?? "tree"
   const resolvedSyntaxTheme =
     syntaxTheme ?? readSyntaxTheme?.() ?? DEFAULT_JSON_VIEWER_SYNTAX_THEME
+  const showFullscreen = !!onFullscreen
 
   function sendLoad() {
     post({
@@ -46,12 +52,13 @@ export function JsonViewerEmbed({
       json,
       defaultView: resolvedDefaultView,
       syntaxTheme: resolvedSyntaxTheme,
+      showFullscreen,
     })
   }
 
   useEffect(() => {
     sendLoad()
-  }, [json, resolvedDefaultView, resolvedSyntaxTheme]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [json, resolvedDefaultView, resolvedSyntaxTheme, showFullscreen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!onSettingsEventName) return
@@ -60,11 +67,24 @@ export function JsonViewerEmbed({
         type: "json-viewer:settings",
         defaultView: defaultView ?? readDefaultView?.() ?? "tree",
         syntaxTheme: syntaxTheme ?? readSyntaxTheme?.() ?? DEFAULT_JSON_VIEWER_SYNTAX_THEME,
+        showFullscreen: !!onFullscreenRef.current,
       })
     }
     window.addEventListener(onSettingsEventName, onSettings)
     return () => window.removeEventListener(onSettingsEventName, onSettings)
   }, [onSettingsEventName, defaultView, syntaxTheme, readDefaultView, readSyntaxTheme])
+
+  useEffect(() => {
+    if (!onFullscreen) return
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return
+      if (e.source !== iframeRef.current?.contentWindow) return
+      if (!e.data || e.data.type !== "json-viewer:fullscreen") return
+      onFullscreenRef.current?.()
+    }
+    window.addEventListener("message", onMessage)
+    return () => window.removeEventListener("message", onMessage)
+  }, [onFullscreen])
 
   return (
     <iframe

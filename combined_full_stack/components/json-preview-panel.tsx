@@ -14,6 +14,7 @@ export function JsonPreviewPanel({
   className,
   defaultView,
   downloadBaseName,
+  onFullscreen,
 }: {
   json: string
   models?: StructureModel[]
@@ -21,6 +22,7 @@ export function JsonPreviewPanel({
   className?: string
   defaultView?: JsonViewerHumanViewId
   downloadBaseName?: string
+  onFullscreen?: () => void
 }) {
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", className)}>
@@ -33,7 +35,12 @@ export function JsonPreviewPanel({
           className="ml-auto shrink-0"
         />
       </div>
-      <JsonViewerEmbed json={json} className="min-h-0 flex-1" defaultView={defaultView} />
+      <JsonViewerEmbed
+        json={json}
+        className="min-h-0 flex-1"
+        defaultView={defaultView}
+        onFullscreen={onFullscreen}
+      />
     </div>
   )
 }
