@@ -17,6 +17,7 @@ import {
   isRunBillingError,
   mergeStepStates,
   startRun,
+  RunStartError,
   type StepUiState,
 } from "@/lib/run-engine"
 import { isPreviewOnly } from "@/lib/demo-mode"
@@ -47,6 +48,7 @@ type UseInferenceRunProgressArgs = {
   refreshBilling: (opts?: AccountRefreshOpts) => Promise<void>
   resetInputs?: () => void
   flushPendingSave?: () => Promise<void>
+  onProjectNotFound?: (projectId: ProjectId) => void
   projectLlmProviders?: import("@/lib/custom-llm-providers").CustomLlmProviderDef[]
 }
 
@@ -65,6 +67,7 @@ export function useInferenceRunProgress({
   refreshBilling,
   resetInputs,
   flushPendingSave,
+  onProjectNotFound,
   projectLlmProviders,
 }: UseInferenceRunProgressArgs) {
   const [phase, setPhase] = useState<RunPhase>(RunPhase.Idle)
@@ -274,6 +277,7 @@ export function useInferenceRunProgress({
       activeTrackIdRef.current = null
       if (jobGen !== activeJobGenRef.current || !mountedRef.current) return
       if (isRunBillingError(e)) refreshBilling({ force: true }).catch(console.error)
+      if (e instanceof RunStartError && e.status === 404) onProjectNotFound?.(projectId)
       setError((e as Error).message)
       setPhase(RunPhase.Idle)
     } finally {

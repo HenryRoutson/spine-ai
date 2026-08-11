@@ -2,6 +2,7 @@ import { LegacyModuleKind, ModuleKind } from "@/lib/types"
 import type { RunStepKind } from "@/lib/types"
 
 // AI : kinds users can add in the builder / pipeline assistant (quote is auto-managed).
+// AI : TODO (assemble-stage-A) — add ModuleKind.Assemble here + stepRequiresNote when kind lands.
 export const USER_ADDABLE_MODULE_KINDS = [
   ModuleKind.Input,
   ModuleKind.Llm,

@@ -8,7 +8,7 @@ import { recordActivityEvent } from "@/lib/server/user_activity";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
 import { computeRunFingerprintForRequest, findMatchingRun } from "@/lib/server/run_fingerprint";
-import { refreshBundledSeedDocsForRun } from "@/lib/server/store";
+import { refreshBundledSeedDocsForRun, resolveStoreProject } from "@/lib/server/store";
 import {
   MAX_CONCURRENT_RUNS_PER_USER,
   countActiveJobs,
@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
   if (!projectId) {
     return apiError("projectId or scope=account required", HTTP.BAD_REQUEST);
   }
-  if (!store.project(projectId)) {
+  if (!(await resolveStoreProject(store, projectId))) {
     return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
   }
 
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
 
   await ensureModelOptionsFresh();
 
-  if (!store.project(pid)) {
+  if (!(await resolveStoreProject(store, pid))) {
     apiLog.warn(`unknown project`, { projectId: pid });
     return apiError(unknownProject(pid), HTTP.NOT_FOUND);
   }

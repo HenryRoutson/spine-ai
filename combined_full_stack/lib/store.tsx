@@ -81,6 +81,7 @@ import { readBillingSnapshot, writeBillingSnapshot } from "@/lib/billing-snapsho
 import { readEarningsSnapshot, writeEarningsSnapshot } from "@/lib/earnings-snapshot-cache"
 import { warmMarketplaceListings } from "@/lib/warm-run-data"
 import { warmSettingsAccount, warmSettingsTeams } from "@/lib/warm-settings-data"
+import { useTeamRealtime } from "@/lib/use-team-realtime"
 import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
 import { setDemoMode } from "@/lib/demo-mode"
 import { NoProjectsPage } from "@/components/no-projects-page"
@@ -316,6 +317,8 @@ interface StoreState {
   clearSaveError: () => void
   // AI : flush debounced project save immediately — call before startRun to avoid stale server state.
   flushPendingSave: () => Promise<void>
+  // AI : run/save 404 unknown project — drop ghost cache and return to picker.
+  reportMissingProject: (projectId: string) => void
   patchProject: (patch: Partial<Project>) => void
 }
 
@@ -821,6 +824,28 @@ export function StoreProvider({
     applyState(await fetchState(projectId), projectId)
   }, [activeProjectId, applyState, fetchState, refreshBilling, refreshEarnings])
 
+  // AI : Realtime on shared-pointer tables — pull /api/state so warm-cache lag cannot 404 runs.
+  useTeamRealtime({
+    enabled: mode === StoreMode.Workspace || mode === StoreMode.Picker,
+    onProjectsChanged: () => {
+      if (!hydratedRef.current) return
+      refresh().catch(console.error)
+    },
+    onRunsChanged: () => {
+      if (!hydratedRef.current || !activeProjectId) return
+      void fetchProjectRuns(activeProjectId)
+        .then((runs) => {
+          setState((prev) => (prev ? { ...prev, runs } : prev))
+        })
+        .catch(console.error)
+    },
+    onMembershipChanged: () => {
+      if (!hydratedRef.current) return
+      refresh().catch(console.error)
+      warmSettingsTeams().catch(console.error)
+    },
+  })
+
   useEffect(() => {
     stateLoadGenRef.current += 1
     const loadGen = stateLoadGenRef.current
@@ -1005,6 +1030,19 @@ export function StoreProvider({
     await persistProject(pending.id, pending.body)
   }, [persistProject])
 
+  // AI : inference/save hit unknown project — same eviction path as runs prefetch 404.
+  const reportMissingProject = useCallback(
+    (projectId: string) => {
+      if (pendingSaveRef.current?.id === projectId) {
+        if (saveTimer.current) clearTimeout(saveTimer.current)
+        saveTimer.current = null
+        pendingSaveRef.current = null
+      }
+      evictStaleProject(projectId, setState, setActiveProjectId, clearSaveError)
+    },
+    [clearSaveError],
+  )
+
   const postNewProject = useCallback((body: { templateId?: string; cloneFrom?: string }) => {
     return apiJson<Project>(API_ROUTES.projects, {
       method: "POST",
@@ -1151,6 +1189,9 @@ export function StoreProvider({
   const addDoc = useCallback(async (file: File, label: DocLabel, projectId?: string) => {
     const blocked = confidentialUploadWarning(file.name)
     if (blocked) throw new Error(blocked)
+    const pid = projectId ?? activeProjectId
+    const target = state?.projects.find((p) => p.id === pid)
+    if (target?.teamReadOnly) throw new Error("This team project is read-only for your role.")
 
     const form = new FormData()
     form.append("file", file)
@@ -1158,7 +1199,6 @@ export function StoreProvider({
     if (projectId) form.append("projectId", projectId)
     const doc = await apiJson<DocRef>(API_ROUTES.docs, { method: "POST", body: form })
     invalidateDocText(doc.id)
-    const pid = projectId ?? activeProjectId
 
     setState((prev) => {
       if (!prev) return prev
@@ -1194,9 +1234,9 @@ export function StoreProvider({
     }
 
     return doc
-  }, [activeProjectId, persistProject])
+  }, [activeProjectId, persistProject, state?.projects])
 
-  // AI : TODO — team members on shared projects bill the team owner; gate uploads when teamReadOnly.
+  // AI : shared-pointer uploads stay on the owner's project — read-only members cannot add docs.
   const addDocContent = useCallback(
     async (
       name: string,
@@ -1208,6 +1248,9 @@ export function StoreProvider({
     ) => {
       const blocked = confidentialUploadWarning(name)
       if (blocked) throw new Error(blocked)
+      const pidGate = projectId ?? activeProjectId
+      const target = state?.projects.find((p) => p.id === pidGate)
+      if (target?.teamReadOnly) throw new Error("This team project is read-only for your role.")
 
       const doc = await apiJson<DocRef>(API_ROUTES.docsContent, {
         method: "POST",
@@ -1255,11 +1298,13 @@ export function StoreProvider({
 
       return doc
     },
-    [activeProjectId, persistProject],
+    [activeProjectId, persistProject, state?.projects],
   )
 
   const removeDoc = useCallback(async (docId: DocId, projectId?: string) => {
     const pid = projectId ?? activeProjectId
+    const target = state?.projects.find((p) => p.id === pid)
+    if (target?.teamReadOnly) throw new Error("This team project is read-only for your role.")
     const q = pid ? `?projectId=${encodeURIComponent(pid)}` : ""
     await apiJson<{ ok: true }>(`${API_ROUTES.doc(docId)}${q}`, { method: "DELETE" })
     invalidateDocText(docId)
@@ -1286,7 +1331,7 @@ export function StoreProvider({
         projects: nextProjects,
       }
     })
-  }, [activeProjectId])
+  }, [activeProjectId, state?.projects])
 
   const setDocProjects = useCallback(async (docId: DocId, projectIds: ProjectId[]) => {
     const { projectIds: saved } = await apiJson<{ projectIds: ProjectId[] }>(API_ROUTES.doc(docId), {
@@ -1526,6 +1571,7 @@ export function StoreProvider({
       saveError,
       clearSaveError,
       flushPendingSave,
+      reportMissingProject,
       patchProject,
     }
   }, [
@@ -1563,6 +1609,7 @@ export function StoreProvider({
     saveError,
     clearSaveError,
     flushPendingSave,
+    reportMissingProject,
     patchProject,
     addProject,
     cloneFromTemplate,

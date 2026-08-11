@@ -316,9 +316,14 @@ export function TeamSettings() {
                       : `Share “${project.name}” with ${activeTeam.name}`}
                   </Button>
                 )}
+                {projectSharedWithTeam && !project?.teamReadOnly && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Shared as a pointer — one project row under your account; teammates sync live via Realtime.
+                  </p>
+                )}
                 {project?.teamReadOnly && (
                   <p className="text-xs text-muted-foreground">
-                    This project is shared with your team (read-only for your role).
+                    Shared pointer from another member (read-only for your role). Edits sync when the owner saves.
                   </p>
                 )}
               </>

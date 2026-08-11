@@ -23,6 +23,7 @@ type UseInferenceRunArgs = {
   updateRunNotes: (runId: PipelineRun["id"], notes: string | undefined) => Promise<void>
   refreshBilling: () => Promise<void>
   flushPendingSave?: () => Promise<void>
+  onProjectNotFound?: (projectId: ProjectId) => void
 }
 
 export function useInferenceRun({
@@ -37,6 +38,7 @@ export function useInferenceRun({
   updateRunNotes,
   refreshBilling,
   flushPendingSave,
+  onProjectNotFound,
 }: UseInferenceRunArgs) {
   const resetRunOnSwitchRef = useRef<() => void>(() => {})
   const onProjectSwitch = useCallback(() => {
@@ -102,6 +104,7 @@ export function useInferenceRun({
     updateRunNotes,
     refreshBilling,
     flushPendingSave,
+    onProjectNotFound,
     projectLlmProviders: project.llmProviders,
   })
 

@@ -112,6 +112,8 @@ export interface StructureModel {
   shared?: boolean; // AI : injected into every project — not persisted per project
   locked?: boolean; // AI : read-only in Structure UI — cannot rename, edit fields, or delete
   sourceDocId?: DocId; // AI : document this structure was inferred from — links back in Structure tab
+  // AI : TODO (assemble-stage-D) — params?: string[] + Ref args for parameterized structs (Report[T]).
+  // AI :   Stage A derive stays monomorphic auto models; see lib/server/assemble-roadmap.ts.
 }
 
 // AI : standalone reusable type — not a struct with fields; referenced by name in type expressions.
@@ -122,6 +124,7 @@ export interface TypeAlias {
   expr: TypeExpr;
   shared?: boolean; // AI : injected into every project — not persisted per project
   locked?: boolean; // AI : read-only in Structure UI
+  // AI : TODO (assemble-stage-C) — params?: string[] + subst in expandNamedTypeExpr (Pair[A,B] aliases).
 }
 
 // AI : string values are the persisted wire/DB format — do not rename.
@@ -146,6 +149,9 @@ export enum ModuleKind {
   ExampleSelect = "example-select", // AI : LLM relevance filter per list item — chain_of_thought + is_relevant, not embedding RAG
   Quote = "quote", // AI : deterministic — resolve LLM quote strings → source-linked spans
   Transform = "transform",
+  // AI : TODO (assemble-stage-A) — add ModuleKind.Assemble (zip from spine + state labels → flat product).
+  // AI :   Combine = new upload ⊕ one state structure; Assemble = N computed outputs → product.
+  // AI :   Do not extend Combine into a list of LLM sources — see lib/server/assemble-roadmap.ts.
   Combine = "combine",
   Chunk = "chunk", // AI : split text / document into list chunks (generated TS)
   Merge = "merge", // AI : recursive structural merge — dict deep, list concat/union/dedupe, per-path rules
@@ -265,6 +271,9 @@ export interface PipelineModule { // TODO this is bad, it contains multiple poss
   mergeCustom?: string; // merge step — optional custom TS (input) => … overrides policy
   mergeStateLabel?: string; // merge step — prior step label whose output is merged with spine input
   mergeWrapListField?: string; // merge step — when spine is list[T], wrap as { field: T[] } before merge
+  // AI : TODO (assemble-stage-A) — assembleBindings?: Record<field_name, spine | { kind: "state"; label }>.
+  // AI : TODO (assemble-stage-A-derive) — auto outStructure from binding TypeExprs (flat product, not zip∘zip).
+  // AI : TODO (assemble-stage-A-path) — optional path sources; prefer original labels over nested assemble reads.
   // AI : example-select — cached-prefix relevance filter (see lib/example-select.ts defaults)
   exampleContextLabel?: string; // prior step label supplying {description} text
   exampleContextField?: string; // optional dot path within that step output
@@ -364,9 +373,9 @@ export interface Project {
   lastOpenedAt?: number; // AI : ms since epoch — updated when user opens/switches to this project
   documentation?: string; // AI : freeform markdown — prepended to every agent/assistant prompt call to prevent regressions
   langfuseExport?: boolean; // AI : when true + LANGFUSE_* env set, pipeline runs mirror to Langfuse as secondary telemetry
-  teamId?: import("@/lib/team-types").team_id_string; // AI : when set, team members can view/run; bills team owner
-  teamReadOnly?: boolean; // AI : true when loaded from another member's account — client disables edits
-  teamProjectOwnerId?: import("./require_auth").user_id_string; // AI : runtime-only — owner's user_id when viewing a shared team project
+  teamId?: import("@/lib/team-types").team_id_string; // AI : shared pointer — team members view/run this owner row; bills team owner
+  teamReadOnly?: boolean; // AI : runtime — true when loaded via another member's ownership (pointer)
+  teamProjectOwnerId?: import("./require_auth").user_id_string; // AI : runtime — owner's user_id for shared-pointer projects
 }
 
 export enum StrategyKind {
@@ -723,6 +732,7 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     label: "Transform",
     description: "Deterministic reshape — list→object wrap needs a list field on the output structure, or custom TS code",
   },
+  // AI : TODO (assemble-stage-A) — MODULE_META entry for Assemble: "Zip spine + state labels into one structure".
   [ModuleKind.Combine]: { label: "Combine Inputs", description: "Merge a new input with the pipeline state" },
   [ModuleKind.Chunk]: {
     label: "Chunk",

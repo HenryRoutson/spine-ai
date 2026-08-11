@@ -21,6 +21,12 @@ export async function GET(req: NextRequest) {
   if (ctx instanceof NextResponse) return ctx;
   const { store } = ctx;
 
+  // AI : warm cache can miss projects created on another instance — resync before painting the shell.
+  await store.syncProjectsFromDb?.();
+  await store.syncDocsFromDb?.();
+  // AI : team shared-pointer runs (any member) land via RLS — resync so Logging/Inference stay current.
+  await store.syncRunsFromDb?.();
+
   const projectId = req.nextUrl.searchParams.get("projectId") as ProjectId | null;
   const projects = userProjectsFrom(store.projects()).map(migrateProjectModules);
   const project = resolveActiveProject(projects, projectId);

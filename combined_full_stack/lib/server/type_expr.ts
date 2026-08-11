@@ -18,6 +18,11 @@ import { withBuiltinTypeAliases } from "./builtin_types";
 // AI : TODO (linter-first) — TypeExpr → generated models.py / models.rs only; delete parallel zod/cardinality
 // AI :   logic once pyright + cargo check (or clippy) validate spine + custom-code on every save/CI.
 // AI : TODO (linter-first) — set/map/union/generic: express in generated Py/Rust, not hand-rolled TS in validity.ts.
+// AI : TODO (assemble-stage-B) — typeExprAssignable beyond typeExprEqual (optional widen, alias expand).
+// AI : TODO (assemble-stage-C) — parametric TypeAlias subst; outType may be Pair[A,B] not only Ref.
+// AI : TODO (assemble-stage-D) — Ref { modelId, args } for parameterized StructureModel.
+// AI : TODO (assemble-stage-E) — polymorphic Assemble signatures in generated exports (needs C/D).
+// AI :   Full staged plan: lib/server/assemble-roadmap.ts (grep TODO (assemble).
 export type PrimName = "text" | "int" | "float" | "bool" | "datetime" | "json";
 
 // AI : string values are the persisted wire format in typeExpr JSON — do not rename.
@@ -74,7 +79,7 @@ function byId(models: StructureModel[]): Map<StructureModelId, StructureModel> {
   return new Map(models.map((m) => [m.id, m]));
 }
 
-export function fieldTypeToExpr(field: ModelFieldLegacyTypePick): TypeExpr {
+export function fieldTypeToExpr(field: ModelFieldLegacyTypePick): TypeExpr { // TODO this looks bad and hardcoded
   switch (field.type) {
     case "text":
       return { kind: TypeExprKind.Prim, name: "text" };

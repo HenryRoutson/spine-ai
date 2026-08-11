@@ -171,6 +171,9 @@ function stepAcceptsSpineType(
   models: StructureModel[],
 ): boolean {
   // AI : TODO (linter-first) — delete when spine compat is cargo/pyright on generated orchestrator only.
+  // AI : TODO (assemble-stage-B) — use typeExprAssignable here once assemble/spine share assignability.
+  // AI : TODO (assemble-stage-A) — computeAssembleInvalid (bindings, labelsInScope, field types).
+  // AI : TODO (assemble-flat-state) — warn assemble←assemble when original labels are still in scope.
   if (typeExprEqual(expected, actual)) return true;
   // AI : passthrough steps read pipeline state by label — spine type at this index is not their contract.
   if (m.kind === ModuleKind.Output || m.kind === ModuleKind.Assert || m.kind === ModuleKind.HumanReview || m.kind === ModuleKind.Quote) return true;

@@ -239,6 +239,8 @@ export function buildAssistantStructuredResponsePromptBlock(): string {
 }
 
 export function buildPipelineRulesPromptBlock(globalModel: ModelId): string {
+  // AI : TODO (assemble-stage-A) — add Assemble prompt rules: zip state labels → flat product; not Combine;
+  // AI :   dynamic N → llm-batch; avoid zip∘zip; see lib/server/assemble-roadmap.ts.
   return `Pipeline rules:
 - Pipelines are strictly linear. Each step must consume ONLY the previous step's output — never an earlier structure with the same model name. combine is the exception: it reads pipeline state (by structure name) plus the document input immediately before it.
 - Every step needs an output structure (structureOut). Input steps only need structureOut.

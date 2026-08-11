@@ -159,9 +159,12 @@ export class SupabaseStore implements Store {
     });
   }
 
-  async init(): Promise<void> {
-    const docsQ = this.db.from("docs").select("*").order("uploaded_at", { ascending: false }).eq("user_id", this.scopedUserId);
-    const projectsWithTeam = await this.db.from("projects").select("data, team_id, user_id").eq("user_id", this.scopedUserId);
+  // AI : owned + team-shared rows — same shape as init / syncProjectsFromDb.
+  private async fetchAccessibleProjects(): Promise<Project[]> {
+    const projectsWithTeam = await this.db
+      .from("projects")
+      .select("data, team_id, user_id")
+      .eq("user_id", this.scopedUserId);
     let projects;
     if (projectsWithTeam.error?.message?.includes("team_id")) {
       this.hasProjectTeamIdColumn = false;
@@ -172,9 +175,6 @@ export class SupabaseStore implements Store {
       this.hasProjectTeamIdColumn = true;
       projects = projectsWithTeam;
     }
-
-    const docs = await docsQ;
-    if (docs.error) throw docs.error;
 
     const ownedProjects = (projects.data ?? []).map((row) => {
       const data = row.data as Project;
@@ -216,13 +216,128 @@ export class SupabaseStore implements Store {
       }
     }
 
-    this.state.projects = [...ownedProjects, ...sharedTeamProjects];
+    return [...ownedProjects, ...sharedTeamProjects];
+  }
+
+  // AI : warm lambdas miss projects created on another instance — re-read before state/runs 404.
+  async syncProjectsFromDb(): Promise<void> {
+    const fromDb = await this.fetchAccessibleProjects();
+    const dbIds = new Set(fromDb.map((p) => p.id));
+    const pendingIds = new Set(this.pendingProjectUpserts.keys());
+    const keepLocalCreates = this.state.projects.filter(
+      (p) => this.createdProjectIds.has(p.id) && !dbIds.has(p.id),
+    );
+    this.state.projects = [
+      ...fromDb.map((dbP) => {
+        if (!pendingIds.has(dbP.id)) return dbP;
+        return this.state.projects.find((p) => p.id === dbP.id) ?? dbP;
+      }),
+      ...keepLocalCreates,
+    ];
+    for (const id of [...this.projectIdsAtInit]) {
+      if (!dbIds.has(id) && !this.createdProjectIds.has(id)) this.projectIdsAtInit.delete(id);
+    }
+    for (const id of dbIds) this.projectIdsAtInit.add(id);
+  }
+
+  async ensureProject(id: ProjectId): Promise<Project | undefined> {
+    const hit = this.project(id);
+    if (hit) return hit;
+    await this.syncProjectsFromDb();
+    return this.project(id);
+  }
+
+  // AI : no user_id filter — RLS returns own runs + runs on team-shared project pointers.
+  private async fetchAccessibleRunRows(): Promise<RunRow[]> {
+    let runsWithFpQ = this.db
+      .from("runs")
+      .select("project_id, started_at, data, fingerprint")
+      .order("started_at", { ascending: false });
+    const runsWithFp = await runsWithFpQ;
+    if (runsWithFp.error?.message?.includes("fingerprint")) {
+      this.hasFingerprintColumn = false;
+      const runsLegacy = await this.db
+        .from("runs")
+        .select("project_id, started_at, data")
+        .order("started_at", { ascending: false });
+      if (runsLegacy.error) throw runsLegacy.error;
+      return (runsLegacy.data ?? []) as RunRow[];
+    }
+    if (runsWithFp.error) throw runsWithFp.error;
+    this.hasFingerprintColumn = true;
+    return (runsWithFp.data ?? []) as RunRow[];
+  }
+
+  private ingestRunRows(runRows: RunRow[], opts?: { mergeLocal?: boolean }): void {
+    const nextRuns: PipelineRun[] = [];
+    const nextProjects: Record<string, ProjectId> = {};
+    for (const row of runRows) {
+      const run = row.data as PipelineRun;
+      const fingerprint = (row.fingerprint ?? run.fingerprint) as RunFingerprint | undefined;
+      if (fingerprint) run.fingerprint = fingerprint;
+      nextRuns.push(run);
+      nextProjects[run.id] = row.project_id as ProjectId;
+      if (this.hasFingerprintColumn && fingerprint && !row.fingerprint) {
+        this.queueRest(() => this.db.from("runs").update({ fingerprint }).eq("id", run.id));
+      }
+    }
+    if (opts?.mergeLocal) {
+      const dbIds = new Set(nextRuns.map((r) => r.id));
+      for (const run of this.state.runs) {
+        if (dbIds.has(run.id)) continue;
+        nextRuns.push(run);
+        const projectId = this.state.runProjects[run.id];
+        if (projectId) nextProjects[run.id] = projectId;
+      }
+    }
+    nextRuns.sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
+    this.state.runs = nextRuns;
+    this.state.runProjects = nextProjects;
+  }
+
+  async syncRunsFromDb(): Promise<void> {
+    const rows = await this.fetchAccessibleRunRows();
+    this.ingestRunRows(rows, { mergeLocal: true });
+  }
+
+  // AI : RLS docs_select includes owner docs for team-shared project pointers.
+  async syncDocsFromDb(): Promise<void> {
+    const docs = await this.db.from("docs").select("*").order("uploaded_at", { ascending: false });
+    if (docs.error) return;
+    const seen = new Set<DocId>();
+    const nextDocs: DocRef[] = [];
+    const nextContents = new Map<DocId, string>();
+    for (const row of (docs.data ?? []) as DocDbRow[]) {
+      const doc = docRefFromDbRow(row);
+      if (seen.has(doc.id)) continue;
+      seen.add(doc.id);
+      nextDocs.push(doc);
+      nextContents.set(doc.id, row.content);
+    }
+    // AI : keep platform seed_docs overlays that are not also user rows.
+    for (const doc of this.state.docs) {
+      if (!this.platformSeedDocIds.has(doc.id) || seen.has(doc.id)) continue;
+      nextDocs.push(doc);
+      const content = this.state.contents.get(doc.id);
+      if (content !== undefined) nextContents.set(doc.id, content);
+    }
+    this.state.docs = nextDocs;
+    this.state.contents = nextContents;
+  }
+
+  async init(): Promise<void> {
+    const docsQ = this.db.from("docs").select("*").order("uploaded_at", { ascending: false }).eq("user_id", this.scopedUserId);
+    const accessible = await this.fetchAccessibleProjects();
+    const docs = await docsQ;
+    if (docs.error) throw docs.error;
+
+    this.state.projects = accessible;
     this.projectIdsAtInit = new Set(this.state.projects.map((p) => p.id));
 
     const docRows: DocDbRow[] = [...((docs.data ?? []) as DocDbRow[])];
     const sharedOwnerIds = [
       ...new Set(
-        sharedTeamProjects
+        accessible
           .map((p) => p.teamProjectOwnerId)
           .filter((id): id is user_id_string => !!id),
       ),
@@ -242,31 +357,9 @@ export class SupabaseStore implements Store {
           }
         }
       }
-      // AI : TODO — load owner runs for shared team projects so members see shared run history.
     }
 
-    let runRows: RunRow[] = [];
-    let runsWithFpQ = this.db
-      .from("runs")
-      .select("project_id, started_at, data, fingerprint")
-      .order("started_at", { ascending: false });
-    runsWithFpQ = runsWithFpQ.eq("user_id", this.scopedUserId);
-    const runsWithFp = await runsWithFpQ;
-    if (runsWithFp.error?.message?.includes("fingerprint")) {
-      this.hasFingerprintColumn = false;
-      let runsLegacyQ = this.db
-        .from("runs")
-        .select("project_id, started_at, data")
-        .order("started_at", { ascending: false });
-      runsLegacyQ = runsLegacyQ.eq("user_id", this.scopedUserId);
-      const runsLegacy = await runsLegacyQ;
-      if (runsLegacy.error) throw runsLegacy.error;
-      runRows = (runsLegacy.data ?? []) as RunRow[];
-    } else {
-      if (runsWithFp.error) throw runsWithFp.error;
-      this.hasFingerprintColumn = true;
-      runRows = (runsWithFp.data ?? []) as RunRow[];
-    }
+    const runRows = await this.fetchAccessibleRunRows();
 
     for (const row of docRows) {
       const doc = docRefFromDbRow(row);
@@ -281,16 +374,7 @@ export class SupabaseStore implements Store {
     }
     this.purgeStaleUserBundledDocsFromMemory();
 
-    for (const row of runRows) {
-      const run = row.data as PipelineRun;
-      const fingerprint = (row.fingerprint ?? run.fingerprint) as RunFingerprint | undefined;
-      if (fingerprint) run.fingerprint = fingerprint;
-      this.state.runs.push(run);
-      this.state.runProjects[run.id] = row.project_id as ProjectId;
-      if (this.hasFingerprintColumn && fingerprint && !row.fingerprint) {
-        this.queueRest(() => this.db.from("runs").update({ fingerprint }).eq("id", run.id));
-      }
-    }
+    this.ingestRunRows(runRows);
 
     const vision = await this.db.from("doc_vision_cache").select("*").eq("user_id", this.scopedUserId);
     if (vision.error) {
@@ -575,7 +659,7 @@ export class SupabaseStore implements Store {
   }
 
   addRun(projectId: ProjectId, run: PipelineRun): void {
-    // AI : TODO — persist shared-project runs under teamProjectOwnerId so owners see member runs.
+    // AI : shared pointer — run row stays under the runner; team peers see it via project_id + RLS.
     this.state.runProjects[run.id] = projectId;
     this.state.runs = [run, ...this.state.runs];
     this.queueRest(() =>
@@ -612,14 +696,16 @@ export class SupabaseStore implements Store {
   // AI : drop project upserts when another request deleted the row after this store loaded.
   private async dropConcurrentlyDeletedProjects(): Promise<void> {
     if (this.pendingProjectUpserts.size === 0) return;
-    const { data, error } = await this.db.from("projects").select("id").eq("user_id", this.scopedUserId);
-    if (error) return;
-    const dbIds = new Set((data ?? []).map((row) => row.id as ProjectId));
     for (const id of [...this.pendingProjectUpserts.keys()]) {
       if (this.createdProjectIds.has(id)) continue;
-      if (this.projectIdsAtInit.has(id) && !dbIds.has(id)) {
+      if (!this.projectIdsAtInit.has(id)) continue;
+      // AI : query by id — team-shared rows live under the owner's user_id, not ours.
+      const { data, error } = await this.db.from("projects").select("id").eq("id", id).maybeSingle();
+      if (error) continue;
+      if (!data) {
         this.pendingProjectUpserts.delete(id);
         this.state.projects = this.state.projects.filter((p) => p.id !== id);
+        this.projectIdsAtInit.delete(id);
       }
     }
   }

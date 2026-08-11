@@ -249,6 +249,11 @@ export function ProjectPickerPage() {
                         <>
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="text-sm font-medium">{p.name}</span>
+                            {p.teamId ? (
+                              <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[9px] uppercase text-muted-foreground">
+                                {p.teamReadOnly ? "shared · view" : "shared"}
+                              </span>
+                            ) : null}
                           </div>
                           <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
                             {p.kind} · {p.modules.length} steps · {p.modules.filter((m) => m.kind === "input").length}{" "}

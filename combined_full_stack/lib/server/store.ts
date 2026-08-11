@@ -179,6 +179,21 @@ export interface Store {
   flush(): Promise<void>;
   /** AI : Supabase — bundled examples come from public.seed_docs, not per-user docs rows. */
   usesPlatformSeedDocs?(): boolean;
+  /** AI : warm cache may lag another instance — re-read accessible projects from DB. */
+  syncProjectsFromDb?(): Promise<void>;
+  /** AI : warm cache miss — refetch this id (via sync) before API 404. */
+  ensureProject?(id: ProjectId): Promise<Project | undefined>;
+  /** AI : re-read runs visible via RLS (own + team-shared project pointers). */
+  syncRunsFromDb?(): Promise<void>;
+  /** AI : re-read docs visible via RLS (own + shared-owner pointers). */
+  syncDocsFromDb?(): Promise<void>;
+}
+
+// AI : prefer memory, then DB sync on warm SupabaseStore — JsonStore has no lag.
+export async function resolveStoreProject(store: Store, id: ProjectId): Promise<Project | undefined> {
+  const hit = store.project(id);
+  if (hit) return hit;
+  return store.ensureProject?.(id);
 }
 
 // AI : pull models + module graph from a bundled template — keep per-step model/prompt overrides.

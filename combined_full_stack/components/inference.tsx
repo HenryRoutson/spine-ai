@@ -134,6 +134,7 @@ export function Inference() {
     addDocContent,
     removeDoc,
     updateRunTest,
+    reportMissingProject,
   } = useStore()
   const { setActiveWindow, openLogging } = useAppShell()
   const { maybeAutoDiagnose } = useDiagnosisAgents()
@@ -198,6 +199,7 @@ export function Inference() {
     updateRunNotes,
     refreshBilling,
     flushPendingSave,
+    onProjectNotFound: reportMissingProject,
   })
 
   const linkedTestForEval =
