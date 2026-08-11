@@ -7,13 +7,15 @@ import {
   sanitizeClientStepPayload,
   truncateClientStepText,
 } from "@/lib/client-step-payload"
+import { JobLogLevel } from "@/lib/run-types"
+import { CustomCodeLanguage } from "@/lib/types"
 
 describe("client-step-payload", () => {
   it("truncates oversized error and log lines", () => {
     const huge = "x".repeat(20_000)
     const sanitized = sanitizeClientStepPayload({
       error: huge,
-      clientLogs: [{ at: 0, level: "error", line: huge }],
+      clientLogs: [{ at: 0, level: JobLogLevel.Error, tag: "test", line: huge }],
     })
     expect(sanitized.error!.length).toBeLessThanOrEqual(MAX_CLIENT_STEP_ERROR_CHARS)
     expect(sanitized.clientLogs![0]!.line.length).toBeLessThanOrEqual(MAX_CLIENT_LOG_LINE_CHARS)
@@ -32,7 +34,7 @@ describe("client-step-payload", () => {
     const line = formatCustomCodeFailureLog(
       {
         attemptIndex: 0,
-        language: "typescript",
+        language: CustomCodeLanguage.TypeScript,
         code: "(input) => input",
         error: "boom",
         input,

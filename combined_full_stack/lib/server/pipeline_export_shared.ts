@@ -3,6 +3,7 @@ import { buildCustomFnSource } from "@/lib/custom_code";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { usesPassthroughStructure } from "@/lib/module-kinds";
 import { modelExportIdentifierGo, modelExportIdentifierRust, rustFieldIdent } from "@/lib/structure-shape";
+import { webhookStepUsesPipelineState } from "@/lib/webhook-step";
 import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
 import {
@@ -58,6 +59,45 @@ export type ExportCommentStyle = "//" | "#";
 
 export function exportComment(style: ExportCommentStyle, body: string): string {
   return `${style} ${body}`;
+}
+
+// AI : comment a source line once — avoid // // / # # when the line is already commented.
+export function asExportCommentLine(style: ExportCommentStyle, line: string): string {
+  const t = line.trimStart();
+  if (style === "//" && t.startsWith("//")) return t;
+  if (style === "#" && t.startsWith("#")) return t;
+  return exportComment(style, line);
+}
+
+export function commentForeignCode(
+  style: ExportCommentStyle,
+  langLabel: string,
+  code: string,
+  via?: string,
+): string {
+  const header = via
+    ? `${langLabel} (not inlined — ${via}):`
+    : `${langLabel} (not inlined):`;
+  return [exportComment(style, header), ...code.split("\n").map((l) => asExportCommentLine(style, l))].join(
+    "\n",
+  );
+}
+
+// AI : detect real state reads — strip comment lines so foreign code comments don't force a live state param.
+export function stepBodyUsesPipelineState(
+  style: ExportCommentStyle,
+  body: string,
+  m?: PipelineModule,
+): boolean {
+  if (m?.kind === ModuleKind.Webhook && webhookStepUsesPipelineState(m)) return true;
+  return body
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith(style))
+    .some((line) =>
+      /\bstate\s*\[|\bstate\.(get|insert)\b|__assert\(input,\s*state\)|__compiled\.length >= 2|\btransform\(input,\s*state\)/.test(
+        line,
+      ),
+    );
 }
 
 export function reshapeStepComment(
@@ -644,15 +684,94 @@ export function generateAssembleStepBodyPy(m: PipelineModule, _project: Project,
 }
 
 export function generateParallelStepBodyTs(m: PipelineModule, outTs: string): string {
-  const branches = m.parallelBranches ?? [];
+  const branches = (m.parallelBranches ?? []).filter((b) => b.field.trim());
   const calls = branches.map(
     (b) =>
-      `${JSON.stringify(b.field)}: await llmStructured(${JSON.stringify(b.prompt || "Process the input.")} + "\\n\\nINPUT DATA:\\n" + JSON.stringify(input), /* schema for ${b.outStructureId} */ {} as never)`,
+      `${JSON.stringify(b.field.trim())}: await llmStructured(${JSON.stringify(b.prompt || "Process the input.")} + "\\n\\nINPUT DATA:\\n" + JSON.stringify(input), /* schema for ${b.outStructureId} */ {} as never)`,
   );
   return [
     exportComment("//", parallelBranchesComment()),
     `const assembled = { ${calls.join(", ")} };`,
     `return assembled as ${outTs};`,
+  ].join("\n");
+}
+
+export function generateParallelStepBodyPy(m: PipelineModule, outPy: string): string {
+  const branches = (m.parallelBranches ?? []).filter((b) => b.field.trim());
+  const entries = branches.map((b) => {
+    const prompt = JSON.stringify(b.prompt || "Process the input.");
+    return `    ${JSON.stringify(b.field.trim())}: await llm_structured(${prompt} + "\\n\\nINPUT DATA:\\n" + json.dumps(input, default=str), None),`;
+  });
+  return [
+    exportComment("#", parallelBranchesComment()),
+    "assembled = {",
+    ...entries,
+    "}",
+    `return cast(${outPy}, cast(object, assembled))`,
+  ].join("\n");
+}
+
+export function generateParallelStepBodyRust(m: PipelineModule, outRust: string): string {
+  const branches = (m.parallelBranches ?? []).filter((b) => b.field.trim());
+  const inserts = branches.map((b) => {
+    const prompt = exportStringLiteral(b.prompt || "Process the input.");
+    return [
+      `{`,
+      `    let prompt = format!("{}\\n\\nINPUT DATA:\\n{}", ${prompt}, serde_json::to_string_pretty(&input)?);`,
+      `    let schema = serde_json::json!({}); // schema for ${b.outStructureId}`,
+      `    let value = llm_structured(&prompt, &schema).await?;`,
+      `    map.insert(${JSON.stringify(b.field.trim())}.to_string(), value);`,
+      `}`,
+    ].join("\n");
+  });
+  return [
+    exportComment("//", parallelBranchesComment()),
+    "let mut map = serde_json::Map::new();",
+    ...inserts,
+    `let out: ${outRust} = serde_json::from_value(Value::Object(map))?;`,
+    "Ok(out)",
+  ].join("\n");
+}
+
+export function generateParallelStepBodyGo(m: PipelineModule, outGo: string): string {
+  const branches = (m.parallelBranches ?? []).filter((b) => b.field.trim());
+  const zero = `*new(${outGo})`;
+  const assigns = branches.flatMap((b) => {
+    const prompt = exportStringLiteral(b.prompt || "Process the input.");
+    const field = JSON.stringify(b.field.trim());
+    return [
+      `{`,
+      `\tinJSON, err := json.MarshalIndent(input, "", "  ")`,
+      `\tif err != nil {`,
+      `\t\treturn ${zero}, err`,
+      `\t}`,
+      `\tuserPrompt := ${prompt} + "\\n\\nINPUT DATA:\\n" + string(inJSON)`,
+      `\tschema := json.RawMessage([]byte("{}")) // schema for ${b.outStructureId}`,
+      `\tvalue, err := llmStructured(userPrompt, schema)`,
+      `\tif err != nil {`,
+      `\t\treturn ${zero}, err`,
+      `\t}`,
+      `\tvar decoded any`,
+      `\tif err := json.Unmarshal(value, &decoded); err != nil {`,
+      `\t\treturn ${zero}, err`,
+      `\t}`,
+      `\tpayload[${field}] = decoded`,
+      `}`,
+    ];
+  });
+  return [
+    exportComment("//", parallelBranchesComment()),
+    "payload := map[string]any{}",
+    ...assigns,
+    "b, err := json.Marshal(payload)",
+    "if err != nil {",
+    `\treturn ${zero}, err`,
+    "}",
+    `var merged ${outGo}`,
+    "if err := json.Unmarshal(b, &merged); err != nil {",
+    `\treturn ${zero}, err`,
+    "}",
+    "return merged, nil",
   ].join("\n");
 }
 
@@ -690,19 +809,29 @@ export function generateAssembleStepBodyRust(m: PipelineModule, project: Project
 export function generateAssembleStepBodyGo(m: PipelineModule, project: Project, outGo: string): string {
   const bindings = m.assembleBindings ?? {};
   const zero = `*new(${outGo})`;
-  const assigns = Object.entries(bindings).map(([name, source]) => {
-    let rhs: string;
-    if (source.kind === "spine") rhs = "input";
-    else if (source.kind === "state") rhs = `state[${JSON.stringify(source.label.trim())}]`;
-    else {
-      rhs =
-        source.from === "spine" ? "input" : `state[${JSON.stringify(source.from.label.trim())}]`;
-      // AI : path dig is left to runtime helper in full Go export; export stores root for now.
+  const preambles: string[] = [];
+  const assigns = Object.entries(bindings).map(([name, source], i) => {
+    const tmp = `__asm${i}`;
+    if (source.kind === "spine") {
+      preambles.push(`${tmp} := any(input)`);
+    } else if (source.kind === "state") {
+      preambles.push(`${tmp} := state[${JSON.stringify(source.label.trim())}]`);
+    } else {
+      const root =
+        source.from === "spine" ? "any(input)" : `state[${JSON.stringify(source.from.label.trim())}]`;
+      preambles.push(`${tmp} := ${root}`);
+      const parts = source.path.split(".").map((p) => p.trim()).filter(Boolean);
+      for (const part of parts) {
+        preambles.push(
+          `if __m, ok := ${tmp}.(map[string]any); ok { ${tmp} = __m[${JSON.stringify(part)}] } else { ${tmp} = nil }`,
+        );
+      }
     }
-    return `\t${JSON.stringify(name)}: ${rhs},`;
+    return `\t${JSON.stringify(name)}: ${tmp},`;
   });
   return [
     exportComment("//", assembleZipComment()),
+    ...preambles,
     "payload := map[string]any{",
     ...assigns,
     "}",

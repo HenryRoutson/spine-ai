@@ -5,6 +5,7 @@ import {
   assertPassthroughComment,
   assertValidateComment,
   chatbotComment,
+  commentForeignCode,
   exampleSelectComment,
   exportComment,
   exportFileMetaComments,
@@ -15,18 +16,19 @@ import {
   indentExportBlock,
   llmBatchComment,
   makeUniqueStepFnName,
-  parallelBranchesComment,
   passthroughCustomComment,
   primaryExportCustomCode,
   quoteLinkComment,
   reshapeStepComment,
   snapshotComment,
+  stepBodyUsesPipelineState,
   structuredLlmComment,
   withExportLineCountMeta,
   exportSpineInGo,
   exportSpineOutGo,
   generateCombineStepBodyGo,
   generateAssembleStepBodyGo,
+  generateParallelStepBodyGo,
   generateInputStepBodyGo,
   generateOrchestratorGo,
   modelName,
@@ -34,7 +36,7 @@ import {
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsGo, type ExportRuntimeNeeds } from "./pipeline_export_setup";
 import { pipelineStateGoType } from "./pipeline_state";
-import { exportWebhookStepBodyGo, webhookStepUsesPipelineState } from "@/lib/webhook-step";
+import { exportWebhookStepBodyGo } from "@/lib/webhook-step";
 import { isMergeModuleKind } from "@/lib/module-kinds";
 import { MODULE_META, ModuleKind } from "./types";
 import { stepEmitsList } from "./type_expr";
@@ -43,13 +45,6 @@ import type { PipelineModule, Project } from "./types";
 // AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
 
 const C = "//" as const;
-
-function commentForeignCode(code: string, langLabel: string): string {
-  return [
-    `// ${langLabel} (not inlined — port or call via cgo/FFI):`,
-    ...code.split("\n").map((line) => `// ${line}`),
-  ].join("\n");
-}
 
 function goImports(needs: ExportRuntimeNeeds, project: Project): string {
   const pkgs = new Set<string>(["encoding/json", "sync"]);
@@ -93,8 +88,10 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
     if (custom) {
       return [
         commentForeignCode(
-          custom.code,
+          C,
           `${custom.language === "python" ? "Python" : "TypeScript"} custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
+          custom.code,
+          "port or call via cgo/FFI",
         ),
         ...passthrough,
       ].join("\n");
@@ -283,11 +280,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
     case ModuleKind.Assemble:
       return generateAssembleStepBodyGo(m, project, outGo);
     case ModuleKind.Parallel:
-      return [
-        exportComment(C, parallelBranchesComment()),
-        `var merged ${outGo}`,
-        "return merged, nil",
-      ].join("\n");
+      return generateParallelStepBodyGo(m, outGo);
     case ModuleKind.Transform: {
       const custom = primaryExportCustomCode(m);
       const passthrough = [
@@ -303,7 +296,12 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
       ];
       if (custom) {
         return [
-          commentForeignCode(custom.code, custom.language === "python" ? "Python transform" : "TypeScript transform"),
+          commentForeignCode(
+            C,
+            custom.language === "python" ? "Python transform" : "TypeScript transform",
+            custom.code,
+            "port or call via cgo/FFI",
+          ),
           ...passthrough,
         ].join("\n");
       }
@@ -316,7 +314,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
       const entries = assertEntriesForModule(m);
       if (entries[0]?.code.trim()) {
         return [
-          commentForeignCode(entries[0].code, `${entries[0].language} assert`),
+          commentForeignCode(C, `${entries[0].language} assert`, entries[0].code, "port or call via cgo/FFI"),
           exportComment(C, assertValidateComment()),
           "return input, nil",
         ].join("\n");
@@ -334,7 +332,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
     case ModuleKind.Chatbot:
       return [
         exportComment(C, chatbotComment()),
-        "result, err := WaitForChatbotSession(input)",
+        `result, err := WaitForChatbotSession(input, ${exportStringLiteral(m.chatbotMode ?? "until-exit")})`,
         "if err != nil {",
         `\treturn ${zero}, err`,
         "}",
@@ -347,15 +345,6 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
     default:
       return "return input, nil";
   }
-}
-
-function stepBodyUsesPipelineState(body: string, m?: PipelineModule): boolean {
-  if (m?.kind === ModuleKind.Webhook && webhookStepUsesPipelineState(m)) return true;
-  // AI : real state reads only — ignore commented lines.
-  return body
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("//"))
-    .some((line) => /\bstate\[/.test(line));
 }
 
 // AI : indentExportBlock uses spaces — convert leading spaces to tabs for idiomatic Go.
@@ -382,7 +371,7 @@ function generateStepFnGo(
   const outGo = exportSpineOutGo(m, project, index);
   const meta = MODULE_META[m.kind];
   const body = generateStepBody(m, project, outGo, inGo);
-  const stateParam = stepBodyUsesPipelineState(body, m) ? "state" : "_state";
+  const stateParam = stepBodyUsesPipelineState(C, body, m) ? "state" : "_state";
   const docLines = [
     `// ${m.label.replace(/\*\//g, "*\\/")}`,
     `// Kind: ${meta.label}`,

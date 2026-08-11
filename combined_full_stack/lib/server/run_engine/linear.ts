@@ -1,6 +1,7 @@
 import { invariant } from "@/lib/assert";
 import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds";
 import { compactPreview } from "@/lib/text-preview";
+import { labelAsStateKey } from "../pipeline_state";
 import { inputTypeLabel } from "../../inference-input";
 import { assertInputMatchesDescription, InputDescriptionRejectedError, shouldCheckInputDescription } from "../input_description_check";
 import { collectLogsDuring, withStepModuleContext } from "../job_log_sink";
@@ -347,7 +348,7 @@ export async function runLinearStepsFrom(
 
     if (status !== "error") {
       ctx.outputs.set(m.id, result.value);
-      ctx.byLabel[m.label] = snapshotForByLabel(m, result.value);
+      ctx.byLabel[labelAsStateKey(m.label)] = snapshotForByLabel(m, result.value);
       const structId = m.outStructureId ?? (m.kind === "output" || m.kind === "assert" || m.kind === "human-review" ? m.inStructureId : undefined);
       if (structId) ctx.byModel.set(structId, result.value);
       ctx.prevModuleId = m.id;

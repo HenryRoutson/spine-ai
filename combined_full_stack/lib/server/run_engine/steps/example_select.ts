@@ -10,6 +10,7 @@ import {
   exampleReasonField,
 } from "@/lib/example-select";
 import { buildExampleSelectVerdicts } from "@/lib/example-select-verdicts";
+import { labelAsStateKey } from "../../pipeline_state";
 import type { PipelineModule } from "../../types";
 import { llmCallBudget, materializeHints, materializeStepOutput, modelById, prevModuleFor } from "../helpers";
 import { requireLinearInput } from "../context";
@@ -66,7 +67,7 @@ export async function execExampleSelectStep(m: PipelineModule, ctx: RunCtx, log:
   const contextLabel = m.exampleContextLabel?.trim();
   if (!contextLabel) throw new Error(`example-select step ${m.id} needs exampleContextLabel`);
 
-  const contextValue = ctx.byLabel[contextLabel];
+  const contextValue = ctx.byLabel[labelAsStateKey(contextLabel)];
   if (contextValue === undefined) {
     throw new Error(`example-select step ${m.id}: no output for context label "${contextLabel}"`);
   }

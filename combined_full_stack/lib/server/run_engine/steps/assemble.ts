@@ -14,9 +14,14 @@ export async function execAssembleStep(m: PipelineModule, ctx: RunCtx, log: RunL
   const value: Record<string, unknown> = {}
   for (const [field, source] of Object.entries(bindings)) {
     const resolved = resolveAssembleSourceValue(source, spine, ctx.byLabel)
-    if (resolved === undefined && source.kind !== "path") {
+    if (resolved === undefined) {
       if (source.kind === "state") {
         throw new Error(`assemble "${m.label}": state["${source.label}"] missing`)
+      }
+      if (source.kind === "path") {
+        const from =
+          source.from === "spine" ? "spine" : `state["${source.from.label}"]`
+        throw new Error(`assemble "${m.label}": path "${source.path}" from ${from} missing`)
       }
     }
     value[field] = resolved

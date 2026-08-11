@@ -394,15 +394,16 @@ export function ChatbotPanel({
   }
 
   // AI : open with an assistant message driven by the locked prompt.
+  // AI : mark bootstrapped only after success so Strict Mode remount can retry.
   useEffect(() => {
     if (bootstrapped.current || !promptText || !jobId) return
-    bootstrapped.current = true
     let cancelled = false
     setBusy(true)
     void (async () => {
       try {
         const reply = await fetchAssistantReply([])
         if (cancelled) return
+        bootstrapped.current = true
         setTranscript([{ role: "assistant", content: reply }])
       } catch (e) {
         if (!cancelled) setError((e as Error).message)

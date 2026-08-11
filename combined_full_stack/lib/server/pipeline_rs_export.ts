@@ -5,6 +5,7 @@ import {
   assertPassthroughComment,
   assertValidateComment,
   chatbotComment,
+  commentForeignCode,
   exampleSelectComment,
   exportComment,
   exportFileMetaComments,
@@ -14,18 +15,19 @@ import {
   indentExportBlock,
   llmBatchComment,
   makeUniqueStepFnName,
-  parallelBranchesComment,
   passthroughCustomComment,
   primaryExportCustomCode,
   quoteLinkComment,
   reshapeStepComment,
   snapshotComment,
+  stepBodyUsesPipelineState,
   structuredLlmComment,
   withExportLineCountMeta,
   exportSpineInRust,
   exportSpineOutRust,
   generateCombineStepBodyRust,
   generateAssembleStepBodyRust,
+  generateParallelStepBodyRust,
   generateInputStepBodyRust,
   generateOrchestratorRust,
   modelName,
@@ -33,7 +35,7 @@ import {
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsRust } from "./pipeline_export_setup";
 import { pipelineStateRustType } from "./pipeline_state";
-import { exportWebhookStepBodyRust, webhookStepUsesPipelineState } from "@/lib/webhook-step";
+import { exportWebhookStepBodyRust } from "@/lib/webhook-step";
 import { isMergeModuleKind } from "@/lib/module-kinds";
 import { MODULE_META, ModuleKind } from "./types";
 import { stepEmitsList } from "./type_expr";
@@ -43,13 +45,6 @@ import type { PipelineModule, Project } from "./types";
 // AI : TODO (linter-first) — exported .rs is the lint target (cargo check on full pipeline export + user custom code).
 
 const C = "//" as const;
-
-function commentForeignCode(code: string, langLabel: string): string {
-  return [
-    `// ${langLabel} (not inlined — port or call via FFI):`,
-    ...code.split("\n").map((line) => `// ${line}`),
-  ].join("\n");
-}
 
 function generateStepBody(m: PipelineModule, project: Project, outRust: string, _inRust: string): string {
   const outName = modelName(project, m.outStructureId);
@@ -61,8 +56,10 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
     if (custom) {
       return [
         commentForeignCode(
-          custom.code,
+          C,
           `${custom.language === "python" ? "Python" : "TypeScript"} custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
+          custom.code,
+          "port or call via FFI",
         ),
         `let out: ${outRust} = serde_json::from_value(serde_json::to_value(&input)?)?;`,
         "Ok(out)",
@@ -155,16 +152,17 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
     case ModuleKind.Assemble:
       return generateAssembleStepBodyRust(m, project, outRust);
     case ModuleKind.Parallel:
-      return [
-        exportComment(C, parallelBranchesComment()),
-        `let out: ${outRust} = serde_json::from_value(serde_json::json!({}))?;`,
-        "Ok(out)",
-      ].join("\n");
+      return generateParallelStepBodyRust(m, outRust);
     case ModuleKind.Transform: {
       const custom = primaryExportCustomCode(m);
       if (custom) {
         return [
-          commentForeignCode(custom.code, custom.language === "python" ? "Python transform" : "TypeScript transform"),
+          commentForeignCode(
+            C,
+            custom.language === "python" ? "Python transform" : "TypeScript transform",
+            custom.code,
+            "port or call via FFI",
+          ),
           `let out: ${outRust} = serde_json::from_value(serde_json::to_value(&input)?)?;`,
           "Ok(out)",
         ].join("\n");
@@ -179,7 +177,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
       const entries = assertEntriesForModule(m);
       if (entries[0]?.code.trim()) {
         return [
-          commentForeignCode(entries[0].code, `${entries[0].language} assert`),
+          commentForeignCode(C, `${entries[0].language} assert`, entries[0].code, "port or call via FFI"),
           exportComment(C, assertValidateComment()),
           "Ok(input)",
         ].join("\n");
@@ -207,15 +205,6 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
   }
 }
 
-function stepBodyUsesPipelineState(body: string, m?: PipelineModule): boolean {
-  if (m?.kind === ModuleKind.Webhook && webhookStepUsesPipelineState(m)) return true;
-  // AI : real state reads only — ignore commented lines.
-  return body
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("//"))
-    .some((line) => /\bstate\.(get|insert)\b|\bstate\[/.test(line));
-}
-
 function generateStepFn(
   m: PipelineModule,
   project: Project,
@@ -227,7 +216,7 @@ function generateStepFn(
   const outRust = exportSpineOutRust(m, project, index);
   const meta = MODULE_META[m.kind];
   const body = generateStepBody(m, project, outRust, inRust);
-  const stateParam = stepBodyUsesPipelineState(body, m) ? "state" : "_state";
+  const stateParam = stepBodyUsesPipelineState(C, body, m) ? "state" : "_state";
   const docLines = [
     `/// ${m.label.replace(/\*\//g, "*\\/")}`,
     `/// Kind: ${meta.label}`,

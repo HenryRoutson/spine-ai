@@ -46,6 +46,7 @@ import {
   langfuseTraceUrl,
   resumeLangfusePipelineRun,
 } from "../langfuse_export";
+import { labelAsStateKey } from "../pipeline_state";
 import { modelById, recordStepModel, snapshotForByLabel, stepFailuresFor, stepServerLogs, validatesStepOutputAsList } from "./helpers";
 import { persistArtifacts, persistCustomCodeArtifacts } from "./artifacts";
 import { restoreCtx } from "./context";
@@ -379,7 +380,7 @@ export async function resumeRunPipeline(
   }
   if (status !== "error") {
     ctx.outputs.set(m.id, result.value);
-    ctx.byLabel[m.label] = snapshotForByLabel(m, result.value);
+    ctx.byLabel[labelAsStateKey(m.label)] = snapshotForByLabel(m, result.value);
     const structId = m.outStructureId ?? (m.kind === "output" || m.kind === "assert" ? m.inStructureId : undefined);
     if (structId) ctx.byModel.set(structId, result.value);
     ctx.prevModuleId = m.id;

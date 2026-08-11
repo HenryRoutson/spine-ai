@@ -5,6 +5,7 @@ import {
   assertPassthroughComment,
   assertValidateComment,
   chatbotComment,
+  commentForeignCode,
   exampleSelectComment,
   exportComment,
   exportFileMetaComments,
@@ -14,12 +15,12 @@ import {
   humanReviewComment,
   indentExportBlock,
   llmBatchComment,
-  parallelBranchesComment,
   passthroughCustomComment,
   primaryExportCustomCode,
   quoteLinkComment,
   reshapeStepComment,
   snapshotComment,
+  stepBodyUsesPipelineState,
   stepFnNameFromLabel,
   structuredLlmComment,
   withExportLineCountMeta,
@@ -27,6 +28,7 @@ import {
   exportSpineOutPy,
   generateCombineStepBodyPy,
   generateAssembleStepBodyPy,
+  generateParallelStepBodyPy,
   generateExampleContextLinesPy,
   generateInputStepBodyPy,
   generateOrchestratorPy,
@@ -36,7 +38,7 @@ import {
   pyCustomCodeCall,
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsPy } from "./pipeline_export_setup";
-import { exportWebhookStepBodyPy, webhookStepUsesPipelineState } from "@/lib/webhook-step";
+import { exportWebhookStepBodyPy } from "@/lib/webhook-step";
 import { isMergeModuleKind } from "@/lib/module-kinds";
 import { MODULE_META, ModuleKind } from "./types";
 import { stepEmitsList } from "./type_expr";
@@ -73,8 +75,11 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
     }
     if (custom?.language === "typescript") {
       return [
-        `# TypeScript custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
-        ...custom.code.split("\n").map((line) => `# ${line}`),
+        commentForeignCode(
+          C,
+          `TypeScript custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
+          custom.code,
+        ),
         castOut("input"),
       ].join("\n");
     }
@@ -141,21 +146,14 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
     case ModuleKind.Assemble:
       return generateAssembleStepBodyPy(m, project, outPy);
     case ModuleKind.Parallel:
-      return [
-        exportComment(C, parallelBranchesComment()),
-        castOut("{**{}}"),
-      ].join("\n");
+      return generateParallelStepBodyPy(m, outPy);
     case ModuleKind.Transform: {
       const custom = primaryExportCustomCode(m);
       if (custom?.language === "python") {
         return inlinePythonCustomCode(custom.code, outPy);
       }
       if (custom?.language === "typescript") {
-        return [
-          "# TypeScript transform (not inlined):",
-          ...custom.code.split("\n").map((line) => `# ${line}`),
-          castOut("input"),
-        ].join("\n");
+        return [commentForeignCode(C, "TypeScript transform", custom.code), castOut("input")].join("\n");
       }
       return [
         exportComment(C, reshapeStepComment(m, inName, outName, outPy)),
@@ -175,8 +173,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
       }
       if (entries[0]?.language === "typescript") {
         return [
-          "# TypeScript assert (not inlined):",
-          ...entries[0].code.split("\n").map((line) => `# ${line}`),
+          commentForeignCode(C, "TypeScript assert", entries[0].code),
           castOut("input"),
         ].join("\n");
       }
@@ -203,22 +200,13 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
   }
 }
 
-function stepBodyUsesPipelineState(body: string, m?: PipelineModule): boolean {
-  if (m?.kind === ModuleKind.Webhook && webhookStepUsesPipelineState(m)) return true;
-  // AI : real state reads only — ignore commented lines.
-  return body
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("#"))
-    .some((line) => /\bstate\s*\[|\bstate\.get\b/.test(line));
-}
-
 function generateStepFn(m: PipelineModule, project: Project, index: number): string {
   const fn = stepFnNameFromLabel(m, index);
   const inPy = exportSpineInPy(m, project, index);
   const outPy = exportSpineOutPy(m, project, index);
   const meta = MODULE_META[m.kind];
   const body = generateStepBody(m, project, outPy, inPy);
-  const stateParam = stepBodyUsesPipelineState(body, m) ? "state" : "_state";
+  const stateParam = stepBodyUsesPipelineState(C, body, m) ? "state" : "_state";
   const docLines = [
     m.label,
     `Kind: ${meta.label}`,

@@ -20,7 +20,11 @@ export async function execParallelStep(m: PipelineModule, ctx: RunCtx, log: RunL
   const inputData = requireLinearInput(m, ctx)
   const context = `INPUT DATA:\n${JSON.stringify(inputData, null, 2)}`
 
-  const prompts = branches.map((b) => {
+  // AI : skip empty-field branches — matches deriveParallelStepTypes.
+  const runnableBranches = branches.filter((b) => b.field.trim() && b.outStructureId)
+  if (!runnableBranches.length) throw new Error(`parallel step ${m.id} has no runnable branches`)
+
+  const prompts = runnableBranches.map((b) => {
     const branchOut = modelById(project.models, b.outStructureId)
     if (!branchOut) throw new Error(`parallel branch "${b.field}" missing out structure`)
     const schema = llmSchema(branchOut, project.models, false, project.typeAliases ?? [])
@@ -28,7 +32,7 @@ export async function execParallelStep(m: PipelineModule, ctx: RunCtx, log: RunL
     return { branch: b, schema, userPrompt, prompt: structuredLlmPrompt(userPrompt, schema) }
   })
 
-  const firstModel = branches[0]!.model ?? ctx.model
+  const firstModel = runnableBranches[0]!.model ?? ctx.model
   deferBrowserLlmIfNeeded(
     firstModel,
     ({ providerId, providerModel }) => ({
@@ -37,18 +41,19 @@ export async function execParallelStep(m: PipelineModule, ctx: RunCtx, log: RunL
       prompts: prompts.map((p) => p.prompt),
       jsonMode: true,
       useBatch: true,
-      inputPreview: `${branches.length} parallel LLM branches`,
+      inputPreview: `${prompts.length} parallel LLM branches`,
     }),
     log,
     "parallel — deferring to browser provider",
-    { moduleId: m.id, branches: branches.length },
+    { moduleId: m.id, branches: prompts.length },
   )
 
-  ctx.reportSub?.({ label: "Parallel LLM", current: 0, total: branches.length })
+  ctx.reportSub?.({ label: "Parallel LLM", current: 0, total: prompts.length })
   ctx.stepLlmCalls = []
 
+  let completed = 0
   const rows = await Promise.all(
-    prompts.map(async ({ branch, schema, userPrompt }, i) => {
+    prompts.map(async ({ branch, schema, userPrompt }) => {
       const stepModel = branch.model ?? ctx.model
       const raw = await llmStructured(
         userPrompt,
@@ -61,7 +66,8 @@ export async function execParallelStep(m: PipelineModule, ctx: RunCtx, log: RunL
         },
         log.child(`parallel:${branch.field}`),
       )
-      ctx.reportSub?.({ label: "Parallel LLM", current: i + 1, total: branches.length })
+      completed += 1
+      ctx.reportSub?.({ label: "Parallel LLM", current: completed, total: prompts.length })
       return { field: branch.field.trim(), value: raw }
     }),
   )
@@ -78,10 +84,10 @@ export async function execParallelStep(m: PipelineModule, ctx: RunCtx, log: RunL
     prev,
   )
 
-  log.info(`parallel complete`, { moduleId: m.id, branches: branches.length, outStructure: out.name })
+  log.info(`parallel complete`, { moduleId: m.id, branches: prompts.length, outStructure: out.name })
   return {
     value: merged,
-    preview: `parallel → {${branches.map((b) => `"${b.field}"`).join(", ")}}`,
+    preview: `parallel → {${prompts.map((p) => `"${p.branch.field.trim()}"`).join(", ")}}`,
     json: jsonStringifyStepValue(merged),
     inputPreview: prompts.map((p) => p.prompt).join("\n\n———\n\n"),
     llmCalls: ctx.stepLlmCalls,

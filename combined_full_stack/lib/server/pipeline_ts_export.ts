@@ -5,6 +5,7 @@ import {
   assertPassthroughComment,
   assertValidateComment,
   chatbotComment,
+  commentForeignCode,
   exampleSelectComment,
   exportComment,
   exportFileMetaComments,
@@ -18,6 +19,7 @@ import {
   quoteLinkComment,
   reshapeStepComment,
   snapshotComment,
+  stepBodyUsesPipelineState,
   stepFnNameFromLabel,
   structuredLlmComment,
   withExportLineCountMeta,
@@ -36,7 +38,7 @@ import {
 } from "./pipeline_export_shared";
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsTs } from "./pipeline_export_setup";
 import { isMergeModuleKind } from "@/lib/module-kinds";
-import { exportWebhookStepBodyTs, webhookStepUsesPipelineState } from "@/lib/webhook-step";
+import { exportWebhookStepBodyTs } from "@/lib/webhook-step";
 import { MODULE_META, ModuleKind } from "./types";
 import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
@@ -62,8 +64,11 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
     }
     if (custom?.language === "python") {
       return [
-        `// Python custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
-        `// ${custom.code.split("\n").join("\n// ")}`,
+        commentForeignCode(
+          C,
+          `Python custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
+          custom.code,
+        ),
         `return input as unknown as ${outTs};`,
       ].join("\n");
     }
@@ -129,7 +134,10 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
         return generateCustomCodeStepBodyTs(custom.code, inTs, outTs);
       }
       if (custom?.language === "python") {
-        return [`// Python transform (not inlined):`, `// ${custom.code.split("\n").join("\n// ")}`, `return input as unknown as ${outTs};`].join("\n");
+        return [
+          commentForeignCode(C, "Python transform", custom.code),
+          `return input as unknown as ${outTs};`,
+        ].join("\n");
       }
       return [
         exportComment(C, reshapeStepComment(m, inName, outName, outTs)),
@@ -176,18 +184,13 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
   }
 }
 
-function stepBodyUsesPipelineState(body: string, m?: PipelineModule): boolean {
-  if (m?.kind === ModuleKind.Webhook && webhookStepUsesPipelineState(m)) return true;
-  return /\bstate\s*\[|__assert\(input,\s*state\)|__compiled\.length >= 2/.test(body);
-}
-
 function generateStepFn(m: PipelineModule, project: Project, index: number): string {
   const fn = stepFnNameFromLabel(m, index);
   const inTs = exportSpineInTs(m, project, index);
   const outTs = exportSpineOutTs(m, project, index);
   const meta = MODULE_META[m.kind];
   const body = generateStepBody(m, project, outTs, inTs);
-  const stateParam = stepBodyUsesPipelineState(body, m) ? "state" : "_state";
+  const stateParam = stepBodyUsesPipelineState(C, body, m) ? "state" : "_state";
   const header = [
     `/**`,
     ` * ${m.label.replace(/\*\//g, "*\\/")}`,

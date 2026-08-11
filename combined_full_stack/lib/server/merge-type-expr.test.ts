@@ -6,6 +6,8 @@ import {
   MergeListStrategy,
   MergeScalarStrategy,
   type MergePolicy,
+  type ModuleId,
+  type PipelineModule,
   type StructureModel,
   type StructureModelId,
   FieldType,
@@ -127,12 +129,13 @@ describe("deriveMergeStepTypes with pipeline state", () => {
 
   it("merges state label output with wrapped list spine", () => {
     const modules = [
-      { id: "mod_norm", kind: "custom-code" as const, label: "Normalize Case", cached: true, avgMs: 0, avgCostCents: 0, outStructureId: scopeDesc.id, outType: { kind: "ref" as const, modelId: scopeDesc.id } },
-      { id: "mod_select", kind: "example-select" as const, label: "Select Relevant Examples", cached: true, avgMs: 0, avgCostCents: 0, outStructureId: selected.id, outType: { kind: "list" as const, item: { kind: "ref" as const, modelId: selected.id } } },
+      { id: "mod_norm" as ModuleId, kind: "custom-code" as const, label: "Normalize Case", note: "", cached: true, avgMs: 0, avgCostCents: 0, outStructureId: scopeDesc.id, outType: { kind: "ref" as const, modelId: scopeDesc.id } },
+      { id: "mod_select" as ModuleId, kind: "example-select" as const, label: "Select Relevant Examples", note: "", cached: true, avgMs: 0, avgCostCents: 0, outStructureId: selected.id, outType: { kind: "list" as const, item: { kind: "ref" as const, modelId: selected.id } } },
       {
-        id: "mod_merge",
+        id: "mod_merge" as ModuleId,
         kind: "merge" as const,
         label: "Merge for Draft",
+        note: "",
         cached: true,
         avgMs: 0,
         avgCostCents: 0,
@@ -141,7 +144,7 @@ describe("deriveMergeStepTypes with pipeline state", () => {
         mergeStateLabel: "Normalize Case",
         mergeWrapListField: "selected_examples",
       },
-    ];
+    ] as PipelineModule[];
     const mergeMod = modules[2]!;
     const { module, models: nextModels } = deriveMergeStepTypes(
       mergeMod,
