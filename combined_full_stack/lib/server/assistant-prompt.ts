@@ -47,6 +47,9 @@ export function buildModuleKindsPromptBlock(): string {
   ).join("\n");
 }
 
+// AI : TODO (n8n-stage-G-export) — document n8n step for assistant: pick n8nNodeType from catalog,
+// AI :   fill n8nParameters for resource/operation; never invent node type strings (see n8n-roadmap.ts).
+
 export function buildFieldTypesPromptBlock(): string {
   return FIELD_TYPES.map((t) => `- ${t}`).join("\n");
 }
@@ -241,8 +244,8 @@ export function buildAssistantStructuredResponsePromptBlock(): string {
 export function buildPipelineRulesPromptBlock(globalModel: ModelId): string {
   // AI : Assemble zips state labels → flat product (not Combine); dynamic N → llm-batch; avoid zip∘zip.
   return `Pipeline rules:
-- Pipelines are strictly linear. Each step must consume ONLY the previous step's output — never an earlier structure with the same model name. combine is the exception: it reads pipeline state (by structure name) plus the document input immediately before it. assemble is the other exception: it zips spine + state["Label"] bindings into one flat structure (no LLM).
-- Prefer assemble over custom-code when joining two prior LLM outputs into one object. Prefer N-way assemble over nesting assemble steps. Dynamic N same-schema calls → llm-batch, not assemble.
+- Pipelines are strictly linear. Each step must consume ONLY the previous step's output — never an earlier structure with the same model name. combine is the exception: it reads pipeline state (by structure name) plus the document input immediately before it. assemble is the other exception: it zips spine + state["Label"] (or path) bindings into one flat structure (no LLM). parallel runs fixed LLM branches on the same spine input concurrently and joins into one structure.
+- Prefer assemble over custom-code when joining two prior LLM outputs into one object. Prefer N-way assemble over nesting assemble steps. Prefer parallel when independent LLM extractions share one input and wall-clock matters. Dynamic N same-schema calls → llm-batch, not assemble/parallel.
 - Every step needs an output structure (structureOut). Input steps only need structureOut.
 
 ${buildLinearIoPromptBlock()}
@@ -255,9 +258,10 @@ ${buildLlmCallStrategyPromptBlock()}
 
 - Input steps: set inputType from supported types; optional inputNameContains so only matching filenames fill that slot (useful with multiple inputs).
 - Any step may set inputDescription — before the step runs, a guard LLM rejects input that doesn't match. inputDescription MUST describe what the step RECEIVES as input (the upstream data), not what it produces. For export/output steps (e.g. "Export CSV", "Generate Report"), describe the upstream structured data fields, not the output file format.
-- input, combine, assemble, and llm/llm-batch steps MUST set note (Annotation / purpose) — a short human-readable description of what the step does or what document/data it handles. Never leave note empty on those kinds.
+- input, combine, assemble, parallel, and llm/llm-batch steps MUST set note (Annotation / purpose) — a short human-readable description of what the step does or what document/data it handles. Never leave note empty on those kinds.
 - combine: see Combine Inputs rules above — structureIn is required; side input is explicit input step OR auto-inserted when combine stands alone.
-- assemble: set structureOut (or leave unset for auto-derived product) and assembleBindings mapping each field to spine or a prior step label. At least one binding must be spine.
+- assemble: set structureOut (or leave unset for auto-derived product) and assembleBindings mapping each field to spine, a prior step label, or a path into either. At least one binding must use spine.
+- parallel: fixed author-time branches (field + prompt + structureOut each); shared spine input; server joins into one auto product.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
 - Non-JSON inputs with a typed structureOut get a locked "Parse to structure" LLM step auto-inserted after the input — do NOT emit it yourself.
 - transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically, or use custom-code.

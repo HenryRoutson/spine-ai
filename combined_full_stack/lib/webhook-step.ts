@@ -1,6 +1,9 @@
 import type { PipelineModule } from "@/lib/types";
 import { WebhookMethod } from "@/lib/types";
 
+// AI : TODO (n8n-stage-E-exec) — do NOT fold n8n into webhook; share only URL/env resolve helpers if useful.
+// AI :   N8n step talks to n8n's node catalog + execute API (lib/server/n8n-roadmap.ts), not a raw URL body POST.
+
 export const DEFAULT_WEBHOOK_TIMEOUT_MS = 30_000;
 
 type env_record = Record<string, string | undefined>;

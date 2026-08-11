@@ -63,7 +63,7 @@ export async function runLinearStepsFrom(
     };
     ctx.stepLlmCalls = undefined;
     ctx.stepExtraFailures = undefined;
-    const llmStep = isLlmKind(m.kind);
+    const llmStep = isLlmKind(m.kind) || m.kind === ModuleKind.Parallel;
     ctx.stepCostLimitCents = llmStep ? llmStepCostLimitCents(m) : undefined;
     ctx.stepBaseCents = llmStep ? ledger.totalCents() : undefined;
 

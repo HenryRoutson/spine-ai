@@ -52,6 +52,7 @@ const SeedFileSchema = z.object({
       description: z.string(),
       auto: z.boolean().optional(),
       dynamic: z.boolean().optional(),
+      params: z.array(z.string()).optional(),
       fields: z.array(
         z.object({
           id: z.string(),
@@ -148,7 +149,24 @@ const SeedFileSchema = z.object({
           z.discriminatedUnion("kind", [
             z.object({ kind: z.literal("spine") }),
             z.object({ kind: z.literal("state"), label: z.string() }),
+            z.object({
+              kind: z.literal("path"),
+              from: z.union([z.literal("spine"), z.object({ label: z.string() })]),
+              path: z.string(),
+            }),
           ]),
+        )
+        .optional(),
+      parallelBranches: z
+        .array(
+          z.object({
+            id: z.string(),
+            field: z.string(),
+            prompt: z.string(),
+            outStructureId: z.string(),
+            model: z.string().optional(),
+            note: z.string().optional(),
+          }),
         )
         .optional(),
       mergePolicy: z

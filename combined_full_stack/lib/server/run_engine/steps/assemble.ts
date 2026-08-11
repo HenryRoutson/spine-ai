@@ -3,7 +3,7 @@ import { requireLinearInput } from "../context"
 import { jsonStringifyStepValue } from "../results"
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types"
 import type { PipelineModule } from "../../types"
-import { labelAsStateKey } from "../../pipeline_state"
+import { resolveAssembleSourceValue } from "@/lib/assemble-type-expr"
 
 export async function execAssembleStep(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   const { project } = ctx
@@ -13,15 +13,13 @@ export async function execAssembleStep(m: PipelineModule, ctx: RunCtx, log: RunL
   const bindings = m.assembleBindings ?? {}
   const value: Record<string, unknown> = {}
   for (const [field, source] of Object.entries(bindings)) {
-    if (source.kind === "spine") {
-      value[field] = spine
-      continue
+    const resolved = resolveAssembleSourceValue(source, spine, ctx.byLabel)
+    if (resolved === undefined && source.kind !== "path") {
+      if (source.kind === "state") {
+        throw new Error(`assemble "${m.label}": state["${source.label}"] missing`)
+      }
     }
-    const label = labelAsStateKey(source.label)
-    if (!(label in ctx.byLabel)) {
-      throw new Error(`assemble "${m.label}": state["${label}"] missing`)
-    }
-    value[field] = ctx.byLabel[label]
+    value[field] = resolved
   }
   const prev = prevModuleFor(project.modules, ctx.prevModuleId)
   const merged = materializeStepOutput(m, project, value, materializeHints(m, ctx), prev)

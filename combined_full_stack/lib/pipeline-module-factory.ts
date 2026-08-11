@@ -41,6 +41,7 @@ export type ModuleFactoryOpts = {
   mergePolicy?: import("@/lib/types").MergePolicy
   mergeCustom?: string
   assembleBindings?: import("@/lib/types").PipelineModule["assembleBindings"]
+  parallelBranches?: import("@/lib/types").PipelineModule["parallelBranches"]
 }
 
 // AI : fallback when legacy data omits note on steps that require it.
@@ -65,7 +66,7 @@ export function createPipelineModule(
   const isLlm = isLlmKind(kind)
   const defaultModel = models[0]?.id
   const outStructureId =
-    kind === ModuleKind.Assemble
+    kind === ModuleKind.Assemble || kind === ModuleKind.Parallel
       ? opts.outStructureId
       : usesPassthroughStructure(kind)
         ? opts.outStructureId ?? opts.inStructureId ?? defaultModel
@@ -99,6 +100,7 @@ export function createPipelineModule(
     outStructureId,
     ...(outType ? { outType } : {}),
     assembleBindings: kind === ModuleKind.Assemble ? (opts.assembleBindings ?? {}) : undefined,
+    parallelBranches: kind === ModuleKind.Parallel ? (opts.parallelBranches ?? []) : undefined,
     prompt: isLlm
       ? opts.prompt ?? (kind === ModuleKind.ExampleSelect ? DEFAULT_EXAMPLE_SELECT_PROMPT : "")
       : undefined,
@@ -118,9 +120,13 @@ export function createPipelineModule(
     mergePolicy: kind === ModuleKind.Merge ? (opts.mergePolicy ?? resolveMergePolicy({ kind } as PipelineModule)) : undefined,
     mergeCustom: kind === ModuleKind.Merge ? opts.mergeCustom : undefined,
     model: isLlm ? opts.model ?? globalModel : undefined,
-    costLimitCents: isLlm ? opts.costLimitCents ?? DEFAULT_LLM_STEP_COST_LIMIT_CENTS : undefined,
+    costLimitCents:
+      isLlm || kind === ModuleKind.Parallel
+        ? opts.costLimitCents ?? DEFAULT_LLM_STEP_COST_LIMIT_CENTS
+        : undefined,
     webhookMethod: kind === ModuleKind.Webhook ? (opts.webhookMethod ?? WebhookMethod.Post) : undefined,
     webhookTimeoutMs: kind === ModuleKind.Webhook ? (opts.webhookTimeoutMs ?? DEFAULT_WEBHOOK_TIMEOUT_MS) : undefined,
+    // AI : TODO (n8n-stage-A) — defaults for ModuleKind.N8n (timeout, responseMode "first", empty parameters).
   })
   if (kind === ModuleKind.Chunk || kind === ModuleKind.Merge) {
     return syncListOpsStepModule(base, models).module

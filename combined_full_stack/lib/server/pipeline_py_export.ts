@@ -22,7 +22,7 @@ import {
 import { analyzeExportRuntimeNeeds, generateRuntimeStubsPy } from "./pipeline_export_setup";
 import { exportWebhookStepBodyPy, webhookStepUsesPipelineState } from "@/lib/webhook-step";
 import { isMergeModuleKind } from "@/lib/module-kinds";
-import { MODULE_META } from "./types";
+import { MODULE_META, ModuleKind } from "./types";
 import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
 
@@ -43,7 +43,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
   const castOut = (expr: string): string =>
     inPy === outPy ? `return ${expr}` : `return cast(${outPy}, cast(object, ${expr}))`;
 
-  if (isMergeModuleKind(m.kind) || m.kind === "chunk" || m.kind === "custom-code") {
+  if (isMergeModuleKind(m.kind) || m.kind === ModuleKind.Chunk || m.kind === ModuleKind.CustomCode) {
     const custom = primaryExportCustomCode(m);
     const fallbacks = customCodeEntriesForModule(m);
     if (custom?.language === "python") {
@@ -64,9 +64,9 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
   }
 
   switch (m.kind) {
-    case "input":
+    case ModuleKind.Input:
       return generateInputStepBodyPy(m, outPy);
-    case "llm": {
+    case ModuleKind.Llm: {
       // AI : TODO export — replace schema placeholder with generated JSON Schema from outStructureId.
       const prompt = m.prompt ?? "Process the input.";
       const model = m.model ?? "deepseek-v4";
@@ -78,7 +78,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
         castOut("await llm_structured(user_prompt, schema)"),
       ].join("\n");
     }
-    case "llm-batch": {
+    case ModuleKind.LlmBatch: {
       const prompt = m.prompt ?? "Process the item.";
       const itemsLine = inPy.startsWith("list[") ? "items = input" : "items = input if isinstance(input, list) else [input]";
       return [
@@ -90,7 +90,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
         castOut("await llm_batch_structured(items, prompt_for, schema)"),
       ].join("\n");
     }
-    case "example-select": {
+    case ModuleKind.ExampleSelect: {
       const prompt = m.prompt ?? "Find useful examples…";
       const ctxLabel = m.exampleContextLabel ?? "Context";
       const itemsLine = inPy.startsWith("list[") ? "items = input" : "items = input if isinstance(input, list) else [input]";
@@ -113,16 +113,21 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
         castOut("selected"),
       ].join("\n");
     }
-    case "quote":
+    case ModuleKind.Quote:
       return [
         "# Match LLM quote strings against source document byte offsets (no LLM cost)",
         castOut("resolve_quotes(input, '', '')"),
       ].join("\n");
-    case "combine":
+    case ModuleKind.Combine:
       return generateCombineStepBodyPy(m, project, outPy, inPy);
-    case "assemble":
+    case ModuleKind.Assemble:
       return generateAssembleStepBodyPy(m, project, outPy);
-    case "transform": {
+    case ModuleKind.Parallel:
+      return [
+        "# Parallel LLM branches — run concurrently then join (see runtime)",
+        castOut("{**{}}"),
+      ].join("\n");
+    case ModuleKind.Transform: {
       const custom = primaryExportCustomCode(m);
       if (custom?.language === "python") {
         return inlinePythonCustomCode(custom.code, outPy);
@@ -139,7 +144,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
         castOut("input"),
       ].join("\n");
     }
-    case "assert": {
+    case ModuleKind.Assert: {
       const entries = assertEntriesForModule(m);
       const expectations = project.expectedOutputs ?? {};
       if (entries[0]?.language === "python") {
@@ -159,15 +164,15 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
       }
       return ["# Assert passthrough", castOut("input")].join("\n");
     }
-    case "human-review":
+    case ModuleKind.HumanReview:
       return [
         "# Pause for operator approval in Inference tab",
         "await wait_for_human_review(input)",
         castOut("input"),
       ].join("\n");
-    case "webhook":
+    case ModuleKind.Webhook:
       return exportWebhookStepBodyPy(m, outPy);
-    case "output":
+    case ModuleKind.Output:
       return [`# Snapshot ${outName ?? inName ?? "pipeline output"}`, castOut("input")].join("\n");
     default:
       return castOut("input");
@@ -175,7 +180,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
 }
 
 function stepBodyUsesPipelineState(body: string, m?: PipelineModule): boolean {
-  if (m?.kind === "webhook" && webhookStepUsesPipelineState(m)) return true;
+  if (m?.kind === ModuleKind.Webhook && webhookStepUsesPipelineState(m)) return true;
   // AI : real state reads only — ignore commented lines.
   return body
     .split("\n")

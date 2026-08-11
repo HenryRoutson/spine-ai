@@ -112,7 +112,8 @@ export interface StructureModel {
   shared?: boolean; // AI : injected into every project — not persisted per project
   locked?: boolean; // AI : read-only in Structure UI — cannot rename, edit fields, or delete
   sourceDocId?: DocId; // AI : document this structure was inferred from — links back in Structure tab
-  // AI : TODO (assemble-stage-D) — params?: string[] + Ref args for parameterized structs (Report[T]).
+  // AI : type params — Ref { modelId, args } / Generic Name[T] instantiate field typeExprs.
+  params?: string[];
 }
 
 // AI : standalone reusable type — not a struct with fields; referenced by name in type expressions.
@@ -123,7 +124,8 @@ export interface TypeAlias {
   expr: TypeExpr;
   shared?: boolean; // AI : injected into every project — not persisted per project
   locked?: boolean; // AI : read-only in Structure UI
-  // AI : TODO (assemble-stage-C) — params?: string[] + subst in expandNamedTypeExpr (Pair[A,B] aliases).
+  // AI : parametric alias — Pair[A,B] via Generic name+args → substitute into expr.
+  params?: string[];
 }
 
 // AI : string values are the persisted wire/DB format — do not rename.
@@ -150,13 +152,16 @@ export enum ModuleKind {
   Transform = "transform",
   // AI : zip spine + state["Label"] → flat product (not Combine — that is upload ⊕ one state struct).
   Assemble = "assemble",
+  // AI : fixed author-time LLM branches on same spine input → Promise.all → flat product join.
+  Parallel = "parallel",
   Combine = "combine",
   Chunk = "chunk", // AI : split text / document into list chunks (generated TS)
   Merge = "merge", // AI : recursive structural merge — dict deep, list concat/union/dedupe, per-path rules
   CustomCode = "custom-code",
   Assert = "assert", // AI : validate pipeline state — passthrough spine; code reads step["Label"] keys
   HumanReview = "human-review", // AI : pause in Inference — operator approves or rejects before continuing
-  Webhook = "webhook", // AI : server-side HTTP call — n8n, search APIs, Zapier, internal services
+  Webhook = "webhook", // AI : server-side HTTP call — search APIs, Zapier, internal services (generic URL)
+  // AI : TODO (n8n-stage-A) — add N8n = "n8n" — 1:1 wrap of one n8n node type (see lib/server/n8n-roadmap.ts).
   Output = "output",
 }
 
@@ -219,10 +224,21 @@ export interface MergePolicy {
   rules?: MergePolicyRule[];
 };
 
-// AI : assemble field source — spine = previous step; state = ctx.byLabel[label].
+// AI : assemble field source — spine / state label / dotted path into either.
 export type AssembleSource =
   | { kind: "spine" }
-  | { kind: "state"; label: string };
+  | { kind: "state"; label: string }
+  | { kind: "path"; from: "spine" | { label: string }; path: string };
+
+// AI : parallel branch — one structured LLM call; field becomes a key on the joined product.
+export type ParallelBranch = {
+  id: string;
+  field: string;
+  prompt: string;
+  outStructureId: StructureModelId;
+  model?: ModelId;
+  note?: string;
+};
 
 // AI : one language key per entry — e.g. { "typescript": "(input) => input" } or { "python": "..." }.
 export interface CustomCodeEntry { typescript?: string; python?: string };
@@ -274,8 +290,10 @@ export interface PipelineModule { // TODO this is bad, it contains multiple poss
   mergeCustom?: string; // merge step — optional custom TS (input) => … overrides policy
   mergeStateLabel?: string; // merge step — prior step label whose output is merged with spine input
   mergeWrapListField?: string; // merge step — when spine is list[T], wrap as { field: T[] } before merge
-  // AI : assemble — field name → spine | state["Label"]; auto out model id sm_assemble_<moduleId>
+  // AI : assemble — field name → spine | state["Label"] | path; auto out model id sm_assemble_<moduleId>
   assembleBindings?: Record<string, AssembleSource>;
+  // AI : parallel — fixed LLM branches sharing spine input; joined into auto product
+  parallelBranches?: ParallelBranch[];
   // AI : example-select — cached-prefix relevance filter (see lib/example-select.ts defaults)
   exampleContextLabel?: string; // prior step label supplying {description} text
   exampleContextField?: string; // optional dot path within that step output
@@ -290,6 +308,9 @@ export interface PipelineModule { // TODO this is bad, it contains multiple poss
   webhookTimeoutMs?: number;
   webhookIncludeState?: boolean; // default true — POST { input, state }
   webhookResponsePath?: string; // dot path into JSON response body
+  // AI : TODO (n8n-stage-A) — n8nNodeType / n8nNodeVersion / n8nParameters / n8nCredentialEnv /
+  // AI :   n8nBaseUrlEnv / n8nApiKeyEnv / n8nTimeoutMs / n8nResponseMode / n8nResponsePath
+  // AI :   (1:1 n8n node; catalog from OSS nodes-base — see lib/server/n8n-roadmap.ts).
   // AI : pipeline-managed step — auto-inserted Link Quotes; locked in the builder UI.
   auto?: boolean;
   // metrics (real ones are recomputed from run history, see billing.ts)
@@ -738,6 +759,10 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     label: "Assemble",
     description: "Zip spine + prior step labels into one flat structure (no LLM; not Combine Inputs)",
   },
+  [ModuleKind.Parallel]: {
+    label: "Parallel LLM",
+    description: "Run fixed LLM branches on the same spine input concurrently, then join into one structure",
+  },
   [ModuleKind.Combine]: { label: "Combine Inputs", description: "Merge a new input with the pipeline state" },
   [ModuleKind.Chunk]: {
     label: "Chunk",
@@ -761,8 +786,9 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   },
   [ModuleKind.Webhook]: {
     label: "Webhook",
-    description: "POST spine input to an external URL (n8n, search APIs, Zapier) — server-side, secrets via env vars",
+    description: "POST spine input to an external URL (search APIs, Zapier, custom HTTP) — server-side, secrets via env vars",
   },
+  // AI : TODO (n8n-stage-A) — MODULE_META[ModuleKind.N8n] = { label: "n8n", description: "Run one n8n node (Slack, Gmail, …) via self-hosted n8n" }
   [ModuleKind.Output]: {
     label: "Output",
     description: "Materialize a named snapshot of a structure — not the pipeline's only output; add one anywhere you want an artifact",

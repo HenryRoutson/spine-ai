@@ -20,7 +20,7 @@ import { analyzeExportRuntimeNeeds, generateRuntimeStubsRust } from "./pipeline_
 import { pipelineStateRustType } from "./pipeline_state";
 import { exportWebhookStepBodyRust, webhookStepUsesPipelineState } from "@/lib/webhook-step";
 import { isMergeModuleKind } from "@/lib/module-kinds";
-import { MODULE_META } from "./types";
+import { MODULE_META, ModuleKind } from "./types";
 import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
 
@@ -38,7 +38,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
   const outName = modelName(project, m.outStructureId);
   const inName = modelName(project, m.inStructureId);
 
-  if (isMergeModuleKind(m.kind) || m.kind === "chunk" || m.kind === "custom-code") {
+  if (isMergeModuleKind(m.kind) || m.kind === ModuleKind.Chunk || m.kind === ModuleKind.CustomCode) {
     const custom = primaryExportCustomCode(m);
     const fallbacks = customCodeEntriesForModule(m);
     if (custom) {
@@ -59,9 +59,9 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
   }
 
   switch (m.kind) {
-    case "input":
+    case ModuleKind.Input:
       return generateInputStepBodyRust(m, outRust);
-    case "llm": {
+    case ModuleKind.Llm: {
       const prompt = m.prompt ?? "Process the input.";
       const model = m.model ?? "deepseek-v4";
       return [
@@ -75,7 +75,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
         "Ok(out)",
       ].join("\n");
     }
-    case "llm-batch": {
+    case ModuleKind.LlmBatch: {
       const prompt = m.prompt ?? "Process the item.";
       const itemRust = outRust.startsWith("Vec<") && outRust.endsWith(">") ? outRust.slice(4, -1) : outRust;
       return [
@@ -92,7 +92,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
         "Ok(out)",
       ].join("\n");
     }
-    case "example-select": {
+    case ModuleKind.ExampleSelect: {
       const prompt = m.prompt ?? "Find useful examples…";
       const ctxLabel = m.exampleContextLabel ?? "Context";
       const ctxKey = exportStringLiteral(ctxLabel);
@@ -126,18 +126,24 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
         "Ok(out)",
       ].join("\n");
     }
-    case "quote":
+    case ModuleKind.Quote:
       return [
         "// Match LLM quote strings against source document byte offsets (no LLM cost)",
         "let linked = resolve_quotes(&input, \"\", \"\")?;",
         `let out: ${outRust} = serde_json::from_value(linked)?;`,
         "Ok(out)",
       ].join("\n");
-    case "combine":
+    case ModuleKind.Combine:
       return generateCombineStepBodyRust(m, project, outRust, _inRust);
-    case "assemble":
+    case ModuleKind.Assemble:
       return generateAssembleStepBodyRust(m, project, outRust);
-    case "transform": {
+    case ModuleKind.Parallel:
+      return [
+        "// Parallel LLM branches — join product (see runtime)",
+        `let out: ${outRust} = serde_json::from_value(serde_json::json!({}))?;`,
+        "Ok(out)",
+      ].join("\n");
+    case ModuleKind.Transform: {
       const custom = primaryExportCustomCode(m);
       if (custom) {
         return [
@@ -152,7 +158,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
         "Ok(out)",
       ].join("\n");
     }
-    case "assert": {
+    case ModuleKind.Assert: {
       const entries = assertEntriesForModule(m);
       if (entries[0]?.code.trim()) {
         return [
@@ -163,15 +169,15 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
       }
       return ["// Assert passthrough", "Ok(input)"].join("\n");
     }
-    case "human-review":
+    case ModuleKind.HumanReview:
       return [
         "// Pause for operator approval in Inference tab",
         "wait_for_human_review(&input).await?;",
         "Ok(input)",
       ].join("\n");
-    case "webhook":
+    case ModuleKind.Webhook:
       return exportWebhookStepBodyRust();
-    case "output":
+    case ModuleKind.Output:
       return [`// Snapshot ${outName ?? inName ?? "pipeline output"}`, "Ok(input)"].join("\n");
     default:
       return "Ok(input)";
@@ -179,7 +185,7 @@ function generateStepBody(m: PipelineModule, project: Project, outRust: string, 
 }
 
 function stepBodyUsesPipelineState(body: string, m?: PipelineModule): boolean {
-  if (m?.kind === "webhook" && webhookStepUsesPipelineState(m)) return true;
+  if (m?.kind === ModuleKind.Webhook && webhookStepUsesPipelineState(m)) return true;
   // AI : real state reads only — ignore commented lines.
   return body
     .split("\n")

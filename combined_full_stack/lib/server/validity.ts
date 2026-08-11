@@ -181,7 +181,7 @@ function stepAcceptsSpineType(
   typeAliases: TypeAlias[] = [],
 ): boolean {
   // AI : TODO (linter-first) — delete when spine compat is cargo/pyright on generated orchestrator only.
-  if (typeExprAssignable(expected, actual, typeAliases) || typeExprEqual(expected, actual)) return true;
+  if (typeExprAssignable(expected, actual, typeAliases, models) || typeExprEqual(expected, actual)) return true;
   // AI : passthrough steps read pipeline state by label — spine type at this index is not their contract.
   if (m.kind === ModuleKind.Output || m.kind === ModuleKind.Assert || m.kind === ModuleKind.HumanReview || m.kind === ModuleKind.Quote) return true;
   if (!cardinalityMismatch(expected, actual)) return false;
@@ -190,6 +190,53 @@ function stepAcceptsSpineType(
   // AI : bare transform auto-wraps list[T] into { listField: T[] } when the output structure has a matching list field.
   if (bareTransformCanAutoWrapList(m, actual, models)) return true;
   return false;
+}
+
+function computeParallelInvalid(modules: PipelineModule[], models: StructureModel[]): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  for (const m of modules) {
+    if (m.kind !== ModuleKind.Parallel) continue;
+    const branches = m.parallelBranches ?? [];
+    if (!branches.length) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: "add at least one parallel LLM branch",
+      });
+      continue;
+    }
+    const fields = new Set<string>();
+    for (const b of branches) {
+      if (!b.field.trim()) {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: "each parallel branch needs a field name",
+        });
+      } else if (fields.has(b.field.trim())) {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: `duplicate parallel field "${b.field.trim()}"`,
+        });
+      } else fields.add(b.field.trim());
+      if (!b.outStructureId || !models.some((x) => x.id === b.outStructureId)) {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: `branch "${b.field || "?"}" needs an output structure`,
+        });
+      }
+      if (!b.prompt.trim()) {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: `branch "${b.field || "?"}" needs a prompt`,
+        });
+      }
+    }
+  }
+  return invalid;
 }
 
 function computeAssembleInvalid(
@@ -574,6 +621,9 @@ function computeWebhookInvalid(modules: PipelineModule[]): InvalidMap {
   return invalid;
 }
 
+// AI : TODO (n8n-stage-A-api) — computeN8nInvalid: require n8nNodeType in catalog; reject trigger-only nodes;
+// AI :   require credential env when description.credentials required (see lib/server/n8n-roadmap.ts).
+
 // AI : canonical I/O-validity check — strictly linear except combine (pipeline state + side doc).
 export function computeInvalid(
   modules: PipelineModule[],
@@ -604,6 +654,11 @@ export function computeInvalid(
     invalid.set(moduleId, list);
   }
   for (const [moduleId, issues] of computeAssembleInvalid(modules, models, opts?.typeAliases ?? [])) {
+    const list = invalid.get(moduleId) ?? [];
+    list.push(...issues);
+    invalid.set(moduleId, list);
+  }
+  for (const [moduleId, issues] of computeParallelInvalid(modules, models)) {
     const list = invalid.get(moduleId) ?? [];
     list.push(...issues);
     invalid.set(moduleId, list);

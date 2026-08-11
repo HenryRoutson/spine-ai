@@ -91,7 +91,15 @@ function parseGeneric(name: string, argsStr: string, models: StructureModel[]): 
   }
 
   const model = modelByName(models, name)
-  if (model && args.length === 0) return { kind: "ref", modelId: model.id as StructureModelId }
+  if (model) {
+    if (model.params?.length) {
+      if (args.length !== model.params.length) {
+        throw new Error(`${name} expects ${model.params.length} type argument(s)`)
+      }
+      return { kind: "ref", modelId: model.id as StructureModelId, args }
+    }
+    if (args.length === 0) return { kind: "ref", modelId: model.id as StructureModelId }
+  }
 
   return { kind: "generic", name, args }
 }

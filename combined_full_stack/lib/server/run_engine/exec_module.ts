@@ -7,6 +7,7 @@ import { execLlmStep } from "./steps/llm";
 import { execLlmBatchStep } from "./steps/llm_batch";
 import { execExampleSelectStep } from "./steps/example_select";
 import { execAssembleStep } from "./steps/assemble";
+import { execParallelStep } from "./steps/parallel";
 import {
   execAssertStep,
   execCombineStep,
@@ -20,6 +21,7 @@ import { execWebhookStep } from "./steps/webhook";
 
 export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger): Promise<ExecResult> {
   log.debug(`execModule start`, { moduleId: m.id, kind: m.kind, label: m.label });
+  // AI : TODO (remote-call-maybe-runner) — maybe? shared once|map|all runner; see lib/server/remote-call-roadmap.ts
   switch (m.kind) {
     case ModuleKind.Input:
       return execInputStep(m, ctx, log);
@@ -27,6 +29,8 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
       return execLlmStep(m, ctx, log);
     case ModuleKind.Assemble:
       return execAssembleStep(m, ctx, log);
+    case ModuleKind.Parallel:
+      return execParallelStep(m, ctx, log);
     case ModuleKind.Combine:
       return execCombineStep(m, ctx, log);
     case ModuleKind.Transform:
@@ -49,6 +53,8 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
       return execHumanReviewStep(m, ctx, log);
     case ModuleKind.Webhook:
       return execWebhookStep(m, ctx, log);
+    // AI : TODO (n8n-stage-E-exec) — case ModuleKind.N8n: return execN8nStep(m, ctx, log)
+    // AI :   (ephemeral 1-node workflow against self-hosted n8n; see lib/server/n8n-roadmap.ts).
     default: {
       if (isMergeModuleKind(m.kind)) return execCustomCodeStep(m, ctx, log);
       const unreachable: never = m.kind;

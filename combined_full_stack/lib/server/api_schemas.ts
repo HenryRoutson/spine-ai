@@ -227,8 +227,33 @@ const pipelineModulePatchSchema = z
         z.discriminatedUnion("kind", [
           z.object({ kind: z.literal("spine") }).strict(),
           z.object({ kind: z.literal("state"), label: z.string().max(200) }).strict(),
+          z
+            .object({
+              kind: z.literal("path"),
+              from: z.union([
+                z.literal("spine"),
+                z.object({ label: z.string().max(200) }).strict(),
+              ]),
+              path: z.string().max(512),
+            })
+            .strict(),
         ]),
       )
+      .optional(),
+    parallelBranches: z
+      .array(
+        z
+          .object({
+            id: z.string().max(128),
+            field: z.string().max(200),
+            prompt: z.string().max(MAX_MODULE_STRING_CHARS),
+            outStructureId: z.string().max(128),
+            model: z.string().max(128).optional(),
+            note: z.string().max(4_000).optional(),
+          })
+          .strict(),
+      )
+      .max(32)
       .optional(),
     // AI : example-select — allowlisted on PUT so .strict() does not reject builder saves
     exampleContextLabel: z.string().max(200).optional(),
@@ -241,6 +266,9 @@ const pipelineModulePatchSchema = z
     webhookTimeoutMs: z.number().int().min(1_000).max(600_000).optional(),
     webhookIncludeState: z.boolean().optional(),
     webhookResponsePath: z.string().max(512).optional(),
+    // AI : TODO (n8n-stage-A-api) — allowlist n8nNodeType, n8nNodeVersion, n8nParameters (record),
+    // AI :   n8nCredentialEnv, n8nBaseUrlEnv, n8nApiKeyEnv, n8nTimeoutMs, n8nResponseMode, n8nResponsePath
+    // AI :   (see lib/server/n8n-roadmap.ts).
     useOcr: z.boolean().optional(),
     cached: z.boolean().optional(),
     auto: z.boolean().optional(),
@@ -286,6 +314,7 @@ const structureModelPatchSchema = z
     id: z.string().max(128),
     name: z.string().max(200),
     description: z.string().max(4_000).optional(),
+    params: z.array(z.string().max(64)).max(16).optional(),
     fields: z.array(structureFieldPatchSchema).max(200).optional(),
     auto: z.boolean().optional(),
     dynamic: z.boolean().optional(),

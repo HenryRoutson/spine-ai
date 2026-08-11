@@ -18,6 +18,7 @@ import {
 import { FieldType, ModuleKind } from "./types";
 import type { StepLabel } from "../run-types";
 import type { PipelineModule, Project, StructureModelId, TypeExpr } from "./types";
+import { assemblePolymorphicTsSignature } from "@/lib/type-expr-polymorph";
 
 export type PipelineSetupFile = {
   filename: string;
@@ -503,25 +504,43 @@ export function generateCombineStepBodyTs(m: PipelineModule, project: Project, o
 
 function assembleFieldExprTs(source: import("./types").AssembleSource): string {
   if (source.kind === "spine") return "input";
-  return `state[${JSON.stringify(source.label.trim())}]`;
+  if (source.kind === "state") return `state[${JSON.stringify(source.label.trim())}]`;
+  const root =
+    source.from === "spine" ? "input" : `state[${JSON.stringify(source.from.label.trim())}]`;
+  const parts = source.path.split(".").map((p) => p.trim()).filter(Boolean);
+  return parts.reduce((acc, part) => `(${acc} as Record<string, unknown>)[${JSON.stringify(part)}]`, root);
 }
 
-export function generateAssembleStepBodyTs(m: PipelineModule, _project: Project, outTs: string): string {
+export function generateAssembleStepBodyTs(m: PipelineModule, project: Project, outTs: string): string {
   const bindings = m.assembleBindings ?? {};
   const fieldExprs = Object.entries(bindings).map(
     ([name, source]) => `${name}: ${assembleFieldExprTs(source)}`,
   );
-  return [
+  const poly = assemblePolymorphicTsSignature(m.outType, bindings, project.typeAliases ?? []);
+  const lines = [
     "// Zip spine + pipeline state labels into one flat structure (Assemble)",
+    ...(poly ? [`// polymorphic shape ${poly}`] : []),
     `const assembled = { ${fieldExprs.join(", ")} };`,
     `return assembled as ${outTs};`,
-  ].join("\n");
+  ];
+  return lines.join("\n");
 }
 
-export function generateAssembleStepBodyPy(m: PipelineModule, project: Project, outPy: string): string {
+export function generateAssembleStepBodyPy(m: PipelineModule, _project: Project, outPy: string): string {
   const bindings = m.assembleBindings ?? {};
   const fieldExprs = Object.entries(bindings).map(([name, source]) => {
-    const rhs = source.kind === "spine" ? "input" : `state[${JSON.stringify(source.label.trim())}]`;
+    let rhs: string
+    if (source.kind === "spine") rhs = "input"
+    else if (source.kind === "state") rhs = `state[${JSON.stringify(source.label.trim())}]`
+    else {
+      const root =
+        source.from === "spine" ? "input" : `state[${JSON.stringify(source.from.label.trim())}]`
+      const parts = source.path.split(".").map((p) => p.trim()).filter(Boolean)
+      rhs = root
+      for (const part of parts) {
+        rhs = `(${rhs}.get(${JSON.stringify(part)}) if isinstance(${rhs}, dict) else getattr(${rhs}, ${JSON.stringify(part)}, None))`
+      }
+    }
     return `"${name}": ${rhs}`;
   });
   return [
@@ -530,15 +549,39 @@ export function generateAssembleStepBodyPy(m: PipelineModule, project: Project, 
   ].join("\n");
 }
 
+export function generateParallelStepBodyTs(m: PipelineModule, outTs: string): string {
+  const branches = m.parallelBranches ?? [];
+  const calls = branches.map(
+    (b) =>
+      `${JSON.stringify(b.field)}: await llmStructured(${JSON.stringify(b.prompt || "Process the input.")} + "\\n\\nINPUT DATA:\\n" + JSON.stringify(input), /* schema for ${b.outStructureId} */ {} as never)`,
+  );
+  return [
+    "// Parallel LLM branches on shared spine input, then join",
+    `const assembled = { ${calls.join(", ")} };`,
+    `return assembled as ${outTs};`,
+  ].join("\n");
+}
+
 export function generateAssembleStepBodyRust(m: PipelineModule, project: Project, outRust: string): string {
   const bindings = m.assembleBindings ?? {};
   const rawOutName = modelName(project, m.outStructureId);
   const outName = rawOutName ? modelExportIdentifierRust(rawOutName) : outRust;
   const inserts = Object.entries(bindings).map(([name, source]) => {
-    const rhs =
-      source.kind === "spine"
-        ? "serde_json::to_value(&input)?"
-        : `state.get(${JSON.stringify(source.label.trim())}).cloned().unwrap_or(Value::Null)`;
+    let rhs: string;
+    if (source.kind === "spine") rhs = "serde_json::to_value(&input)?";
+    else if (source.kind === "state") {
+      rhs = `state.get(${JSON.stringify(source.label.trim())}).cloned().unwrap_or(Value::Null)`;
+    } else {
+      const root =
+        source.from === "spine"
+          ? "serde_json::to_value(&input)?"
+          : `state.get(${JSON.stringify(source.from.label.trim())}).cloned().unwrap_or(Value::Null)`;
+      const parts = source.path.split(".").map((p) => p.trim()).filter(Boolean);
+      rhs = root;
+      for (const part of parts) {
+        rhs = `(${rhs}).get(${JSON.stringify(part)}).cloned().unwrap_or(Value::Null)`;
+      }
+    }
     return `map.insert(${JSON.stringify(name)}.to_string(), ${rhs});`;
   });
   return [
@@ -554,10 +597,14 @@ export function generateAssembleStepBodyGo(m: PipelineModule, project: Project, 
   const bindings = m.assembleBindings ?? {};
   const zero = `*new(${outGo})`;
   const assigns = Object.entries(bindings).map(([name, source]) => {
-    const rhs =
-      source.kind === "spine"
-        ? "input"
-        : `state[${JSON.stringify(source.label.trim())}]`;
+    let rhs: string;
+    if (source.kind === "spine") rhs = "input";
+    else if (source.kind === "state") rhs = `state[${JSON.stringify(source.label.trim())}]`;
+    else {
+      rhs =
+        source.from === "spine" ? "input" : `state[${JSON.stringify(source.from.label.trim())}]`;
+      // AI : path dig is left to runtime helper in full Go export; export stores root for now.
+    }
     return `\t${JSON.stringify(name)}: ${rhs},`;
   });
   return [

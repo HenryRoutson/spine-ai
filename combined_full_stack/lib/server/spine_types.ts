@@ -33,7 +33,11 @@ const TypeExprSchemaInner: z.ZodType<TypeExpr> = z.lazy(() =>
     z.object({ kind: z.literal("quote") }),
     z.object({ kind: z.literal("text_quote") }),
     z.object({ kind: z.literal("list"), item: TypeExprSchemaInner }),
-    z.object({ kind: z.literal("ref"), modelId: z.string() }),
+    z.object({
+      kind: z.literal("ref"),
+      modelId: z.string(),
+      args: z.array(TypeExprSchemaInner).optional(),
+    }),
     z.object({ kind: z.literal("file"), inputTypes: z.array(InputTypeSchema).min(1) }),
     z.object({ kind: z.literal("unknown") }),
     z.object({ kind: z.literal("optional"), inner: TypeExprSchemaInner }),
@@ -86,6 +90,7 @@ function legacyEmitsList(m: PipelineModule): boolean {
 
 // AI : derive spine out type when outType not yet persisted (incl. one-time legacy outIsList read).
 export function deriveOutType(m: PipelineModule): TypeExpr | undefined {
+  // AI : TODO (n8n-stage-F-spine) — ModuleKind.N8n: typically outStructureId / json item shape from node output.
   if (m.kind === "merge" && m.outType) return m.outType;
   if (m.kind === "output" || m.kind === "assert" || m.kind === "human-review") {
     const id = m.inStructureId ?? m.outStructureId;

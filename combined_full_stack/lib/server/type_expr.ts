@@ -18,10 +18,7 @@ import { withBuiltinTypeAliases } from "./builtin_types";
 // AI : TODO (linter-first) — TypeExpr → generated models.py / models.rs only; delete parallel zod/cardinality
 // AI :   logic once pyright + cargo check (or clippy) validate spine + custom-code on every save/CI.
 // AI : TODO (linter-first) — set/map/union/generic: express in generated Py/Rust, not hand-rolled TS in validity.ts.
-// AI : TODO (assemble-stage-B) — richer typeExprAssignable (list covariance, unions) — see assemble-roadmap.ts.
-// AI : TODO (assemble-stage-C) — parametric TypeAlias subst; outType may be Pair[A,B] not only Ref.
-// AI : TODO (assemble-stage-D) — Ref { modelId, args } for parameterized StructureModel.
-// AI : TODO (assemble-stage-E) — polymorphic Assemble signatures in generated exports (needs C/D).
+// AI : polymorphism helpers: lib/type-expr-polymorph.ts (assignability, alias/struct params, path types).
 export type PrimName = "text" | "int" | "float" | "bool" | "datetime" | "json";
 
 // AI : string values are the persisted wire format in typeExpr JSON — do not rename.
@@ -51,7 +48,7 @@ export type TypeExpr =
   | { kind: typeof TypeExprKind.Quote }
   | { kind: typeof TypeExprKind.TextQuote }
   | { kind: typeof TypeExprKind.List; item: TypeExpr }
-  | { kind: typeof TypeExprKind.Ref; modelId: StructureModelId }
+  | { kind: typeof TypeExprKind.Ref; modelId: StructureModelId; args?: TypeExpr[] }
   | { kind: typeof TypeExprKind.File; inputTypes: InputType[] }
   | { kind: typeof TypeExprKind.Optional; inner: TypeExpr }
   | { kind: typeof TypeExprKind.Set; item: TypeExpr }
@@ -138,6 +135,7 @@ export function collectTypeExprRefModelIds(expr: TypeExpr): StructureModelId[] {
     switch (e.kind) {
       case TypeExprKind.Ref:
         ids.push(e.modelId);
+        for (const a of e.args ?? []) walk(a);
         break;
       case TypeExprKind.List:
       case TypeExprKind.Set:
@@ -199,6 +197,8 @@ export function expandNamedTypeExpr(expr: TypeExpr, typeAliases: TypeAlias[] = [
         return { ...e, variants: e.variants.map(walk) };
       case TypeExprKind.Generic:
         return { ...e, args: e.args.map(walk) };
+      case TypeExprKind.Ref:
+        return e.args?.length ? { ...e, args: e.args.map(walk) } : e;
       default:
         return e;
     }
@@ -304,8 +304,13 @@ export function typeExprEqual(a: TypeExpr, b: TypeExpr): boolean {
       return b.kind === TypeExprKind.Named && a.name === b.name;
     case TypeExprKind.List:
       return b.kind === TypeExprKind.List && typeExprEqual(a.item, b.item);
-    case TypeExprKind.Ref:
-      return b.kind === TypeExprKind.Ref && a.modelId === b.modelId;
+    case TypeExprKind.Ref: {
+      if (b.kind !== TypeExprKind.Ref || a.modelId !== b.modelId) return false;
+      const aArgs = a.args ?? [];
+      const bArgs = b.args ?? [];
+      if (aArgs.length !== bArgs.length) return false;
+      return aArgs.every((arg, i) => typeExprEqual(arg, bArgs[i]!));
+    }
     case TypeExprKind.File: {
       if (b.kind !== "file") return false;
       const as = [...a.inputTypes].sort().join(",");
@@ -367,8 +372,9 @@ export function formatTypeExpr(expr: TypeExpr, models: StructureModel[] = []): s
     case TypeExprKind.List:
       return `list[${formatTypeExpr(expr.item, models)}]`;
     case TypeExprKind.Ref: {
-      const name = modelName(models, expr.modelId);
-      return name ?? expr.modelId;
+      const name = modelName(models, expr.modelId) ?? expr.modelId;
+      if (!expr.args?.length) return name;
+      return `${name}[${expr.args.map((a) => formatTypeExpr(a, models)).join(", ")}]`;
     }
     case TypeExprKind.File:
       return expr.inputTypes.length === 1
@@ -667,7 +673,9 @@ export function typeExprToPy(expr: TypeExpr, models: StructureModel[] = []): str
       return `list[${typeExprToPy(expr.item, models)}]`;
     case TypeExprKind.Ref: {
       const name = modelName(models, expr.modelId);
-      return name ? modelExportIdentifier(name) : "Any";
+      const base = name ? modelExportIdentifier(name) : "Any";
+      if (!expr.args?.length) return base;
+      return `${base}[${expr.args.map((a) => typeExprToPy(a, models)).join(", ")}]`;
     }
     case TypeExprKind.Optional:
       return `${typeExprToPy(expr.inner, models)} | None`;
@@ -748,7 +756,9 @@ export function typeExprToTs(expr: TypeExpr, models: StructureModel[] = []): str
       return `${typeExprToTs(expr.item, models)}[]`;
     case TypeExprKind.Ref: {
       const name = modelName(models, expr.modelId);
-      return name ? modelExportIdentifier(name) : "unknown";
+      const base = name ? modelExportIdentifier(name) : "unknown";
+      if (!expr.args?.length) return base;
+      return `${base}<${expr.args.map((a) => typeExprToTs(a, models)).join(", ")}>`;
     }
     case TypeExprKind.Optional:
       return `${typeExprToTs(expr.inner, models)} | undefined`;

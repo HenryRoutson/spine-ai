@@ -90,16 +90,37 @@ const moduleSpecSchema = z
         z.discriminatedUnion("kind", [
           z.object({ kind: z.literal("spine") }),
           z.object({ kind: z.literal("state"), label: z.string() }),
+          z.object({
+            kind: z.literal("path"),
+            from: z.union([z.literal("spine"), z.object({ label: z.string() })]),
+            path: z.string(),
+          }),
         ]),
       )
       .optional()
-      .describe("assemble only — field name → spine or { kind: state, label: prior step label }"),
+      .describe(
+        "assemble only — field → spine | { kind: state, label } | { kind: path, from: spine|{label}, path: dotted }",
+      ),
+    // AI : parallel — author-time fixed branches; structureOut names resolve against project models
+    parallelBranches: z
+      .array(
+        z.object({
+          field: z.string(),
+          prompt: z.string(),
+          structureOut: z.string(),
+          model: z.string().optional(),
+          note: z.string().optional(),
+        }),
+      )
+      .max(32)
+      .optional()
+      .describe("parallel only — each branch: product field name, prompt, and structureOut model name"),
   })
   .superRefine((spec, ctx) => {
     if (stepRequiresNote(spec.kind) && !spec.note?.trim()) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "note is required for input, combine, assemble, and llm steps",
+        message: "note is required for input, combine, assemble, parallel, and llm steps",
         path: ["note"],
       });
     }
@@ -141,6 +162,22 @@ const moduleSpecSchema = z
           code: z.ZodIssueCode.custom,
           message: "combine structureIn is the state structure name (e.g. TableRow), not list[TableRow]",
           path: ["structureIn"],
+        });
+      }
+    }
+    if (spec.kind === ModuleKind.Assemble && !spec.assembleBindings) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "assemble requires assembleBindings",
+        path: ["assembleBindings"],
+      });
+    }
+    if (spec.kind === ModuleKind.Parallel) {
+      if (!spec.parallelBranches?.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "parallel requires parallelBranches (at least one)",
+          path: ["parallelBranches"],
         });
       }
     }
@@ -268,6 +305,26 @@ function makeModuleFromSpec(
     defaultOutForKind(spec.kind, models);
   const emitsList = outHint?.isList ?? false;
   const modelId = spec.model && catalogHasModel(spec.model) ? resolveModelId(spec.model) : undefined;
+  // AI : parallel branches resolve structureOut names → model ids; ids assigned at materialize time
+  const parallelBranches =
+    spec.kind === ModuleKind.Parallel
+      ? (spec.parallelBranches ?? []).map((b) => {
+          const hint = parseStructureHint(b.structureOut);
+          const branchOut =
+            resolveStructureIdFromModels(hint?.name ?? b.structureOut, models) ??
+            ("" as StructureModelId);
+          return {
+            id: uid("pbr_"),
+            field: b.field,
+            prompt: b.prompt,
+            outStructureId: branchOut,
+            model:
+              b.model && catalogHasModel(b.model) ? resolveModelId(b.model) : undefined,
+            note: b.note,
+          };
+        })
+      : undefined;
+
   return createPipelineModule(
     {
       id: uid<ModuleId>(),
@@ -279,13 +336,17 @@ function makeModuleFromSpec(
       inputDescription: spec.inputDescription,
       inputMinCount: spec.inputMinCount,
       inStructureId: spec.kind !== "input" ? inId ?? defaultOutForKind(spec.kind, models) : undefined,
-      // AI : assemble without structureOut → auto-derive product from bindings on sync
-      outStructureId: spec.kind === ModuleKind.Assemble && !outHint ? undefined : outId,
+      // AI : assemble/parallel without structureOut → auto-derive product on sync
+      outStructureId:
+        (spec.kind === ModuleKind.Assemble || spec.kind === ModuleKind.Parallel) && !outHint
+          ? undefined
+          : outId,
       emitsList,
       prompt: spec.prompt,
       code: spec.code,
       model: modelId,
       assembleBindings: spec.kind === ModuleKind.Assemble ? spec.assembleBindings : undefined,
+      parallelBranches,
     },
     models,
     globalModel,

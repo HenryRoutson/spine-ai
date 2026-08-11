@@ -24,7 +24,9 @@ type AssembleModuleFieldsProps = {
 function sourceLabel(source: AssembleSource | undefined): string {
   if (!source) return "—"
   if (source.kind === "spine") return "spine"
-  return `state["${source.label}"]`
+  if (source.kind === "state") return `state["${source.label}"]`
+  const from = source.from === "spine" ? "spine" : `state["${source.from.label}"]`
+  return `${from}.${source.path}`
 }
 
 export function AssembleModuleFields({
@@ -96,7 +98,19 @@ export function AssembleModuleFields({
           {fieldNames.map((name) => {
             const source = bindings[name]
             const sourceType =
-              idx >= 0 ? resolveAssembleSourceType(source ?? { kind: "spine" }, prev, modules, idx) : undefined
+              idx >= 0
+                ? resolveAssembleSourceType(source ?? { kind: "spine" }, prev, modules, idx, models)
+                : undefined
+            const selectValue =
+              source?.kind === "path"
+                ? source.from === "spine"
+                  ? "path:spine"
+                  : `path:state:${source.from.label}`
+                : source?.kind === "state"
+                  ? `state:${source.label}`
+                  : source?.kind === "spine"
+                    ? "spine"
+                    : ""
             return (
               <div key={name} className="rounded-md border border-border/60 bg-secondary/10 px-2 py-1.5">
                 <div className="mb-1 flex items-center gap-2">
@@ -130,28 +144,57 @@ export function AssembleModuleFields({
                   )}
                 </div>
                 {edit ? (
-                  <select
-                    className="h-8 w-full rounded-md border border-input bg-background px-2 font-mono text-xs"
-                    value={
-                      source?.kind === "state" ? `state:${source.label}` : source?.kind === "spine" ? "spine" : ""
-                    }
-                    onChange={(e) => {
-                      const v = e.target.value
-                      if (v === "spine") setBinding(name, { kind: "spine" })
-                      else if (v.startsWith("state:")) setBinding(name, { kind: "state", label: v.slice(6) })
-                    }}
-                  >
-                    <option value="">— choose source —</option>
-                    <option value="spine">
-                      spine
-                      {prev ? ` (${formatTypeExpr(stepSpineOutType(prev) ?? { kind: "unknown" }, models)})` : ""}
-                    </option>
-                    {priorLabels.map((label) => (
-                      <option key={label} value={`state:${label}`}>
-                        state[&quot;{label}&quot;]
+                  <>
+                    <select
+                      className="h-8 w-full rounded-md border border-input bg-background px-2 font-mono text-xs"
+                      value={selectValue}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        if (v === "spine") setBinding(name, { kind: "spine" })
+                        else if (v.startsWith("state:")) setBinding(name, { kind: "state", label: v.slice(6) })
+                        else if (v === "path:spine") {
+                          setBinding(name, {
+                            kind: "path",
+                            from: "spine",
+                            path: source?.kind === "path" ? source.path : "field",
+                          })
+                        } else if (v.startsWith("path:state:")) {
+                          setBinding(name, {
+                            kind: "path",
+                            from: { label: v.slice("path:state:".length) },
+                            path: source?.kind === "path" ? source.path : "field",
+                          })
+                        }
+                      }}
+                    >
+                      <option value="">— choose source —</option>
+                      <option value="spine">
+                        spine
+                        {prev ? ` (${formatTypeExpr(stepSpineOutType(prev) ?? { kind: "unknown" }, models)})` : ""}
                       </option>
-                    ))}
-                  </select>
+                      {priorLabels.map((label) => (
+                        <option key={label} value={`state:${label}`}>
+                          state[&quot;{label}&quot;]
+                        </option>
+                      ))}
+                      <option value="path:spine">path from spine…</option>
+                      {priorLabels.map((label) => (
+                        <option key={`path-${label}`} value={`path:state:${label}`}>
+                          path from state[&quot;{label}&quot;]…
+                        </option>
+                      ))}
+                    </select>
+                    {source?.kind === "path" && (
+                      <Input
+                        value={source.path}
+                        onChange={(e) =>
+                          setBinding(name, { ...source, path: e.target.value })
+                        }
+                        placeholder="dot.path"
+                        className="mt-1 h-7 font-mono text-[11px]"
+                      />
+                    )}
+                  </>
                 ) : (
                   <StaticValue mono>{sourceLabel(source)}</StaticValue>
                 )}

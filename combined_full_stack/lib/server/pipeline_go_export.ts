@@ -21,7 +21,7 @@ import { analyzeExportRuntimeNeeds, generateRuntimeStubsGo, type ExportRuntimeNe
 import { pipelineStateGoType } from "./pipeline_state";
 import { exportWebhookStepBodyGo, webhookStepUsesPipelineState } from "@/lib/webhook-step";
 import { isMergeModuleKind } from "@/lib/module-kinds";
-import { MODULE_META } from "./types";
+import { MODULE_META, ModuleKind } from "./types";
 import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
 
@@ -42,7 +42,7 @@ function goImports(needs: ExportRuntimeNeeds, project: Project): string {
     needs.visionOcr ||
     needs.quote ||
     needs.humanReview ||
-    project.modules.some((m) => m.kind === "combine");
+    project.modules.some((m) => m.kind === ModuleKind.Combine);
   if (needsFmt) pkgs.add("fmt");
   if (needs.llm || needs.llmBatch || needs.visionOcr) {
     pkgs.add("bytes");
@@ -59,7 +59,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
   const inName = modelName(project, m.inStructureId);
   const zero = goZeroValue(outGo);
 
-  if (isMergeModuleKind(m.kind) || m.kind === "chunk" || m.kind === "custom-code") {
+  if (isMergeModuleKind(m.kind) || m.kind === ModuleKind.Chunk || m.kind === ModuleKind.CustomCode) {
     const custom = primaryExportCustomCode(m);
     const fallbacks = customCodeEntriesForModule(m);
     const passthrough = [
@@ -86,9 +86,9 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
   }
 
   switch (m.kind) {
-    case "input":
+    case ModuleKind.Input:
       return generateInputStepBodyGo(m, outGo);
-    case "llm": {
+    case ModuleKind.Llm: {
       const prompt = m.prompt ?? "Process the input.";
       const model = m.model ?? "deepseek-v4";
       return [
@@ -111,7 +111,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         `return out, nil`,
       ].join("\n");
     }
-    case "llm-batch": {
+    case ModuleKind.LlmBatch: {
       const prompt = m.prompt ?? "Process the item.";
       const itemGo = outGo.startsWith("[]") ? outGo.slice(2) : outGo;
       return [
@@ -145,7 +145,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         `return out, nil`,
       ].join("\n");
     }
-    case "example-select": {
+    case ModuleKind.ExampleSelect: {
       const prompt = m.prompt ?? "Find useful examples…";
       const ctxLabel = m.exampleContextLabel ?? "Context";
       const ctxKey = exportStringLiteral(ctxLabel);
@@ -248,7 +248,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         `return out, nil`,
       ].join("\n");
     }
-    case "quote":
+    case ModuleKind.Quote:
       return [
         "// Match LLM quote strings against source document byte offsets (no LLM cost)",
         "linked, err := resolveQuotes(input, \"\", \"\")",
@@ -261,11 +261,17 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         "}",
         "return out, nil",
       ].join("\n");
-    case "combine":
+    case ModuleKind.Combine:
       return generateCombineStepBodyGo(m, project, outGo, inGo);
-    case "assemble":
+    case ModuleKind.Assemble:
       return generateAssembleStepBodyGo(m, project, outGo);
-    case "transform": {
+    case ModuleKind.Parallel:
+      return [
+        "// Parallel LLM branches — join product (see runtime)",
+        `var merged ${outGo}`,
+        "return merged, nil",
+      ].join("\n");
+    case ModuleKind.Transform: {
       const custom = primaryExportCustomCode(m);
       const passthrough = [
         `b, err := json.Marshal(input)`,
@@ -289,7 +295,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         ...passthrough,
       ].join("\n");
     }
-    case "assert": {
+    case ModuleKind.Assert: {
       const entries = assertEntriesForModule(m);
       if (entries[0]?.code.trim()) {
         return [
@@ -300,7 +306,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
       }
       return ["// Assert passthrough", "return input, nil"].join("\n");
     }
-    case "human-review":
+    case ModuleKind.HumanReview:
       return [
         "// Pause for operator approval in Inference tab",
         "if err := WaitForHumanReview(input); err != nil {",
@@ -308,9 +314,9 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         "}",
         "return input, nil",
       ].join("\n");
-    case "webhook":
+    case ModuleKind.Webhook:
       return exportWebhookStepBodyGo(m, zero);
-    case "output":
+    case ModuleKind.Output:
       return [`// Snapshot ${outName ?? inName ?? "pipeline output"}`, "return input, nil"].join("\n");
     default:
       return "return input, nil";
@@ -318,7 +324,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
 }
 
 function stepBodyUsesPipelineState(body: string, m?: PipelineModule): boolean {
-  if (m?.kind === "webhook" && webhookStepUsesPipelineState(m)) return true;
+  if (m?.kind === ModuleKind.Webhook && webhookStepUsesPipelineState(m)) return true;
   // AI : real state reads only — ignore commented lines.
   return body
     .split("\n")

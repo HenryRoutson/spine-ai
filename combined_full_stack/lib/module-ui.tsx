@@ -10,6 +10,7 @@ import {
   Merge,
   Shuffle,
   Sparkle,
+  GitBranch,
   Code2,
   Link2,
   Lock,
@@ -52,11 +53,13 @@ export const KIND_ICON: Record<ModuleKind, ModuleIcon> = {
   [ModuleKind.Chunk]: Scissors,
   [ModuleKind.Merge]: Layers,
   [ModuleKind.Assemble]: Layers,
+  [ModuleKind.Parallel]: GitBranch,
   [ModuleKind.Combine]: Merge,
   [ModuleKind.CustomCode]: Code2,
   [ModuleKind.Assert]: ShieldCheck,
   [ModuleKind.HumanReview]: UserCheck,
   [ModuleKind.Webhook]: Webhook,
+  // AI : TODO (n8n-stage-A-ui) — KIND_ICON[ModuleKind.N8n] (distinct from Webhook — catalog connector).
   [ModuleKind.Output]: FileOutput,
 }
 
@@ -70,11 +73,13 @@ export const KIND_COLOR: Record<ModuleKind, string> = {
   [ModuleKind.Chunk]: "text-chart-1",
   [ModuleKind.Merge]: "text-chart-1",
   [ModuleKind.Assemble]: "text-chart-3",
+  [ModuleKind.Parallel]: "text-primary",
   [ModuleKind.Combine]: "text-chart-3",
   [ModuleKind.CustomCode]: "text-chart-1",
   [ModuleKind.Assert]: "text-chart-2",
   [ModuleKind.HumanReview]: "text-chart-1",
   [ModuleKind.Webhook]: "text-chart-4",
+  // AI : TODO (n8n-stage-A-ui) — KIND_COLOR + KIND_SURFACE for ModuleKind.N8n
   [ModuleKind.Output]: "text-output",
 }
 
@@ -89,6 +94,7 @@ export const KIND_SURFACE: Record<ModuleKind, string> = {
   [ModuleKind.Chunk]: "border-chart-1/40 bg-chart-1/10",
   [ModuleKind.Merge]: "border-chart-1/40 bg-chart-1/10",
   [ModuleKind.Assemble]: "border-chart-3/40 bg-chart-3/10",
+  [ModuleKind.Parallel]: "border-primary/40 bg-primary/10",
   [ModuleKind.Combine]: "border-chart-3/40 bg-chart-3/10",
   [ModuleKind.CustomCode]: "border-chart-1/40 bg-chart-1/10",
   [ModuleKind.Assert]: "border-chart-2/40 bg-chart-2/10",

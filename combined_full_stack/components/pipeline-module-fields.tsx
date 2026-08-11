@@ -41,6 +41,7 @@ import { LlmModuleFields } from "@/components/pipeline-fields/llm-fields"
 import { CodeModuleFields } from "@/components/pipeline-fields/code-fields"
 import { ListOpsModuleFields } from "@/components/pipeline-fields/list-ops-fields"
 import { AssembleModuleFields } from "@/components/pipeline-fields/assemble-fields"
+import { ParallelModuleFields } from "@/components/pipeline-fields/parallel-fields"
 import { ExampleSelectModuleFields } from "@/components/pipeline-fields/example-select-fields"
 import { WebhookModuleFields } from "@/components/pipeline-fields/webhook-fields"
 import { InspectorCollapsibleSection } from "@/components/inspector-collapsible-section"
@@ -250,6 +251,7 @@ export function PipelineModuleFields({
       {(selected.kind === ModuleKind.Input ||
         selected.kind === ModuleKind.Combine ||
         selected.kind === ModuleKind.Assemble ||
+        selected.kind === ModuleKind.Parallel ||
         isLlmKind(selected.kind)) && (
         <PipelineField
           label="Annotation / purpose"
@@ -336,7 +338,8 @@ export function PipelineModuleFields({
       {selected.kind !== ModuleKind.Input &&
         selected.kind !== ModuleKind.Output &&
         selected.kind !== ModuleKind.HumanReview &&
-        selected.kind !== ModuleKind.Assemble && (
+        selected.kind !== ModuleKind.Assemble &&
+        selected.kind !== ModuleKind.Parallel && (
         <PipelineField
           label="Output model"
           hint={invalid?.kind === InvalidKind.NoOutput ? "required — step must emit a structure" : undefined}
@@ -369,6 +372,16 @@ export function PipelineModuleFields({
           modules={modules}
           priorLabels={priorLabels}
           edit={!!edit}
+          onUpdate={onUpdate}
+        />
+      )}
+
+      {selected.kind === ModuleKind.Parallel && (
+        <ParallelModuleFields
+          selected={selected}
+          models={models}
+          edit={!!edit}
+          globalModel={globalModel}
           onUpdate={onUpdate}
         />
       )}
@@ -423,6 +436,7 @@ export function PipelineModuleFields({
       {selected.kind === ModuleKind.Webhook && (
         <WebhookModuleFields selected={selected} edit={!!edit} invalid={invalid} onUpdate={onUpdate} />
       )}
+      {/* AI : TODO (n8n-stage-A-ui) — ModuleKind.N8n → N8nModuleFields (node picker + param form from catalog) */}
     </div>
   )
 }

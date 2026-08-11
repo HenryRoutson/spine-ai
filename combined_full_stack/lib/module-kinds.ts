@@ -11,11 +11,13 @@ export const USER_ADDABLE_MODULE_KINDS = [
   ModuleKind.Chunk,
   ModuleKind.Merge,
   ModuleKind.Assemble,
+  ModuleKind.Parallel,
   ModuleKind.Combine,
   ModuleKind.CustomCode,
   ModuleKind.Assert,
   ModuleKind.HumanReview,
   ModuleKind.Webhook,
+  // AI : TODO (n8n-stage-A-ui) — ModuleKind.N8n once kind exists (catalog picker, not generic webhook).
   ModuleKind.Output,
 ] as const satisfies readonly ModuleKind[]
 
@@ -42,6 +44,7 @@ export function stepRequiresNote(kind: ModuleKind): boolean {
     kind === ModuleKind.Input ||
     kind === ModuleKind.Combine ||
     kind === ModuleKind.Assemble ||
+    kind === ModuleKind.Parallel ||
     isLlmKind(kind)
   )
 }
