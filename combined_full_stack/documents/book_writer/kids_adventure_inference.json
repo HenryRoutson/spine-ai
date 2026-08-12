@@ -1,0 +1,6 @@
+{
+  "description": "3-chapter kids adventure — outline → batch chapters → markdown book.",
+  "inputs": {
+    "Brief": "kids_adventure_brief.json"
+  }
+}

@@ -310,7 +310,8 @@ function FieldRow({
           label: `Field · ${field.name || "unnamed"}`,
           fieldPath: field.name || field.id,
           snippet: [
-            fieldTypeLabel(field),
+            // AI : label the FieldType enum — not the whole ModelField object.
+            fieldTypeLabel(field.type),
             field.optional ? "optional" : "required",
             field.description?.trim() || null,
             formatFieldExamplesSummary(exampleStats.positive, exampleStats.negative) || null,

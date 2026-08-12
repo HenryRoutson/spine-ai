@@ -2,7 +2,7 @@ claude code
 cursor 
 n8n
 loveable? (front end)
-Replit? (front end)
+Replit
 llm calls from any company or local
 https://www.baseten.co/ maybe ?
 Langflow - https://www.langflow.org/
@@ -55,7 +55,9 @@ https://dspy.ai/
 https://crewai.com/
 haystack (deepset) - https://haystack.deepset.ai/
 OpenTelemetry
-
-
+https://buildship.com/
+https://help.asana.com/s/article/ai-studio?language=en_US
+https://developers.openai.com/api/docs/guides/agent-builder
+https://docs.cloud.google.com/gemini-enterprise-agent-platform/agents
 
 

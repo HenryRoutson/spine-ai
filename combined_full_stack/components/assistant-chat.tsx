@@ -110,6 +110,9 @@ type AssistantChatProps<TProposal> = {
   /** AI : @ mention menu (steps / models / files / Select UI). */
   mentionOptions?: AssistantMentionOption[]
   onMentionPick?: (option: AssistantMentionOption) => void
+  /** AI : paperclip upload — project docs + pin as project_doc. */
+  onFilesSelected?: (files: File[]) => void
+  filesUploading?: boolean
   /** AI : highlight chat → Quote chip (same pin path as Select UI). */
   onPinUiContext?: (ref: UiContextRef) => void
   /** AI : teammate chats on shared projects — view only */
@@ -146,6 +149,8 @@ export function AssistantChat<TProposal>({
   onComposerAttachmentsConsumed,
   mentionOptions,
   onMentionPick,
+  onFilesSelected,
+  filesUploading = false,
   onPinUiContext,
   readOnly = false,
   readOnlyHint,
@@ -512,6 +517,8 @@ export function AssistantChat<TProposal>({
         }
         mentionOptions={readOnly ? undefined : mentionOptions}
         onMentionPick={readOnly ? undefined : onMentionPick}
+        onFilesSelected={readOnly ? undefined : onFilesSelected}
+        filesUploading={filesUploading}
       />
     </Chat>
   )

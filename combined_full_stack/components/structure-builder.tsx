@@ -1,12 +1,22 @@
 "use client"
 
 // AI : TODO (spec) — per-structure "Quick summarise" button: cheap LLM flags inconsistencies (e.g. document_summary:int).
-import { useEffect, useMemo, useState } from "react"
-import { Plus, Code2, Sparkles, Lock, Braces } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Plus, Code2, Sparkles, Lock, Braces, FileSpreadsheet, Loader2, Upload } from "lucide-react"
 import { StructureExcelEditor } from "@/components/structure-excel-editor"
 import { StructureTypeAliasEditor, TypeAliasTextSync } from "@/components/structure-type-alias-editor"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { PreviewBlockedDialog } from "@/components/preview-blocked-dialog"
 import { useAppShell } from "@/lib/app-shell"
 import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 import { AppPrimarySection } from "@/lib/app-primary-section-labels"
@@ -24,9 +34,15 @@ import {
 import { isLockedStructureModel, isLockedTypeAlias, lockedTypeAliasBanner } from "@/lib/structure"
 import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-validity"
 import { UNSET_TYPE_EXPR } from "@/lib/server/type_expr"
-import { FieldType, type StructureModel, type TypeAlias } from "@/lib/types"
+import { DocLabel, FieldType, InputType, type DocRef, type StructureModel, type StructureModelId, type TypeAlias } from "@/lib/types"
 import { useLockedInteractFlash } from "@/lib/use-locked-interact-flash"
 import { cn } from "@/lib/utils"
+import { isPreviewOnly } from "@/lib/demo-mode"
+import { docsForProject } from "@/lib/project-docs"
+import { isTabularDocType } from "@/lib/doc-structure-infer"
+import { mergeInferredStructuresForDoc, modelsChanged } from "@/lib/sync-doc-structures"
+import { docTextContent, fetchDocText } from "@/lib/doc-text-cache"
+import { inputTypeAccept } from "@/lib/inference-input"
 
 type EditorTarget =
   | { kind: "struct"; id: string }
@@ -37,7 +53,7 @@ type StructureView = "structures" | "code"
 
 export function StructureBuilder() {
   useMarkPrimarySectionReady(AppPrimarySection.Build)
-  const { models, setModels, typeAliases, setTypeAliases, project } = useStore()
+  const { models, setModels, typeAliases, setTypeAliases, project, docs, addDoc } = useStore()
   const teamReadOnly = !!project?.teamReadOnly
   const { focusStructureId, clearFocusStructure } = useAppShell()
   const [target, setTarget] = useState<EditorTarget>(() =>
@@ -47,9 +63,21 @@ export function StructureBuilder() {
   const savedSidebarWidth = useStructureSidebarWidth()
   const [sidebarWidth, setSidebarWidth] = useState(readStructureSidebarWidth)
   useEffect(() => setSidebarWidth(savedSidebarWidth), [savedSidebarWidth])
+  const excelFileRef = useRef<HTMLInputElement>(null)
+  const [deriving, setDeriving] = useState(false)
+  const [deriveError, setDeriveError] = useState<string | null>(null)
+  const [previewBlockedOpen, setPreviewBlockedOpen] = useState(false)
+  // AI : after excel upload / derive, select the new combined (or sole) root struct.
+  const selectAfterDeriveRef = useRef<Set<string> | null>(null)
 
   const selectedStructId = target.kind === "struct" ? target.id : models[0]?.id ?? ""
   const selectedTypeId = target.kind === "type" ? target.id : null
+
+  const projectDocs = useMemo(() => (project ? docsForProject(docs, project) : []), [docs, project])
+  const tabularDocs = useMemo(
+    () => projectDocs.filter((d) => isTabularDocType(d.type, d.name)),
+    [projectDocs],
+  )
 
   // AI : jump here from JSON preview "validates as" links.
   useEffect(() => {
@@ -59,6 +87,29 @@ export function StructureBuilder() {
     setView("structures")
     clearFocusStructure()
   }, [focusStructureId, models, clearFocusStructure])
+
+  useEffect(() => {
+    const before = selectAfterDeriveRef.current
+    if (!before) return
+    const added = models.filter((m) => !before.has(m.id))
+    if (!added.length) {
+      // AI : upload finished with no new shapes (already present) — stop waiting.
+      if (!deriving) selectAfterDeriveRef.current = null
+      return
+    }
+    const referenced = new Set(
+      added.flatMap((m) => m.fields.map((f) => f.ref).filter(Boolean) as string[]),
+    )
+    const roots = added.filter((m) => !referenced.has(m.id))
+    const combined = roots.find((m) =>
+      m.fields.some((f) => f.type === FieldType.ListModel && !!f.ref),
+    )
+    const pick = combined ?? roots[0] ?? added[0]
+    if (!pick) return
+    selectAfterDeriveRef.current = null
+    setTarget({ kind: "struct", id: pick.id })
+    setView("structures")
+  }, [models, deriving])
 
   const selectedType = typeAliases.find((t) => t.id === selectedTypeId)
   const selectedTypeLocked = teamReadOnly || (selectedType ? isLockedTypeAlias(selectedType) : false)
@@ -132,6 +183,57 @@ export function StructureBuilder() {
     setTypeAliases((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
   }
 
+  async function deriveFromUploadedExcel(file: File) {
+    if (teamReadOnly || !project) return
+    if (isPreviewOnly()) {
+      setPreviewBlockedOpen(true)
+      return
+    }
+    setDeriving(true)
+    setDeriveError(null)
+    selectAfterDeriveRef.current = new Set(models.map((m) => m.id))
+    try {
+      await addDoc(file, DocLabel.Inference, project.id)
+    } catch (err) {
+      selectAfterDeriveRef.current = null
+      setDeriveError((err as Error).message || "Upload failed")
+    } finally {
+      setDeriving(false)
+    }
+  }
+
+  async function deriveFromExistingDoc(doc: DocRef) {
+    if (teamReadOnly) return
+    if (isPreviewOnly()) {
+      setPreviewBlockedOpen(true)
+      return
+    }
+    setDeriving(true)
+    setDeriveError(null)
+    selectAfterDeriveRef.current = new Set(models.map((m) => m.id))
+    try {
+      const data = await fetchDocText(doc.id)
+      const content = docTextContent(data)
+      const merged = mergeInferredStructuresForDoc(
+        models,
+        doc,
+        content,
+        () => uid<StructureModelId>(),
+      )
+      if (!modelsChanged(models, merged)) {
+        selectAfterDeriveRef.current = null
+        setDeriveError("No new structures inferred from that file.")
+        return
+      }
+      setModels(merged)
+    } catch (err) {
+      selectAfterDeriveRef.current = null
+      setDeriveError((err as Error).message || "Could not derive structures")
+    } finally {
+      setDeriving(false)
+    }
+  }
+
   return (
     // AI : min-h-0 so flex parent can clip — without it content height blows past the viewport.
     <div className="flex h-full min-h-0 flex-col">
@@ -157,18 +259,84 @@ export function StructureBuilder() {
                 <EntityRailSection
                   title="Structs in project"
                   action={
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-1.5 font-mono text-[9px]"
-                      onClick={addStruct}
-                      disabled={teamReadOnly}
-                    >
-                      <Plus className="h-3 w-3" />
-                    </Button>
+                    <div className="flex items-center gap-0.5">
+                      <input
+                        ref={excelFileRef}
+                        type="file"
+                        className="hidden"
+                        accept={inputTypeAccept([InputType.Excel, InputType.Json])}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          e.target.value = ""
+                          if (file) void deriveFromUploadedExcel(file)
+                        }}
+                      />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          disabled={teamReadOnly || deriving}
+                          className={cn(
+                            buttonVariants({ variant: "ghost", size: "sm" }),
+                            "h-6 px-1.5 font-mono text-[9px]",
+                          )}
+                          title="Derive struct from Excel / CSV / JSON"
+                        >
+                          {deriving ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <FileSpreadsheet className="h-3 w-3" />
+                          )}
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-48">
+                          <DropdownMenuGroup>
+                            <DropdownMenuLabel className="font-mono text-[10px]">
+                              Derive from file
+                            </DropdownMenuLabel>
+                            <DropdownMenuItem
+                              className="gap-2 font-mono text-xs"
+                              onClick={() => excelFileRef.current?.click()}
+                            >
+                              <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                              Upload Excel / CSV / JSON…
+                            </DropdownMenuItem>
+                          </DropdownMenuGroup>
+                          {tabularDocs.length > 0 && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuGroup>
+                                <DropdownMenuLabel className="font-mono text-[10px]">
+                                  Existing project files
+                                </DropdownMenuLabel>
+                                {tabularDocs.slice(0, 12).map((doc) => (
+                                  <DropdownMenuItem
+                                    key={doc.id}
+                                    className="font-mono text-xs"
+                                    title={doc.name}
+                                    onClick={() => void deriveFromExistingDoc(doc)}
+                                  >
+                                    <span className="truncate">{doc.name}</span>
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuGroup>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-1.5 font-mono text-[9px]"
+                        onClick={addStruct}
+                        disabled={teamReadOnly}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                    </div>
                   }
                   className="max-h-[45%] min-h-0"
                 >
+                  {deriveError && (
+                    <p className="mb-1 px-1 font-mono text-[9px] text-destructive">{deriveError}</p>
+                  )}
                   {models.length === 0 && (
                     <p className="px-1 py-2 text-center font-mono text-[10px] text-muted-foreground">
                       no structs yet
@@ -343,6 +511,7 @@ export function StructureBuilder() {
             }
           />
       </div>
+      {previewBlockedOpen ? <PreviewBlockedDialog onClose={() => setPreviewBlockedOpen(false)} /> : null}
     </div>
   )
 }

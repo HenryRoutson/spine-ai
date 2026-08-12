@@ -21,5 +21,9 @@ export const BUILD_SURFACE_NAV: Record<
   { label: string; title: string }
 > = {
   [BuildSurface.Vibe]: APP_PRIMARY_SECTION_NAV[AppPrimarySection.Vibe],
-  [BuildSurface.Editors]: APP_PRIMARY_SECTION_NAV[AppPrimarySection.Build],
+  // AI : "dev" not "Build" — L0 header already owns Build; no explanatory tooltip.
+  [BuildSurface.Editors]: {
+    label: "dev",
+    title: "dev",
+  },
 }

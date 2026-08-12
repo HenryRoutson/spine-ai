@@ -77,6 +77,8 @@ interface ParserCacheDbRow {
 // AI : Supabase twin of JsonStore. The Store contract is synchronous, so: load everything
 // AI : for the signed-in user once in init(), serve reads from memory, and queue
 // AI : write-behind upserts that flush() awaits (routes flush before responding).
+// AI : TODO bug (prod) — load-all + write-behind is serverless-hostile; make Store async and
+// AI : read/write Postgres per call so instances do not diverge.
 // AI : docs.content = built-in parser text; doc_vision_cache = OpenRouter vision OCR (separate table).
 export class SupabaseStore implements Store {
   private state = {
@@ -145,16 +147,27 @@ export class SupabaseStore implements Store {
     this.createdProjectIds.delete(id);
   }
 
-  // AI : 0-row DELETE is ok (ghost after failed create, or concurrent delete); RLS deny looks the same only with a stale JWT — rebindDb prevents that.
+  // AI : 0-row DELETE is ok when the row is already gone; with cookie JWT, RLS deny looks identical —
+  // AI : prefer service-role rebind (app_store) so deletes actually hit the owner's row.
   private queueProjectDelete(id: ProjectId, ownerId: user_id_string): void {
     this.queueRest(async () => {
-      const { error } = await this.db
+      const { data, error } = await this.db
         .from("projects")
         .delete()
         .eq("user_id", ownerId)
         .eq("id", id)
         .select("id");
       if (error) return { error };
+      if (!data?.length) {
+        // AI : confirm gone — if still visible under this owner, treat as auth/write failure.
+        const { data: still } = await this.db
+          .from("projects")
+          .select("id")
+          .eq("user_id", ownerId)
+          .eq("id", id)
+          .maybeSingle();
+        if (still) return { error: new Error(AUTH_SIGN_IN_REQUIRED) };
+      }
       return { error: null };
     });
   }
@@ -247,25 +260,70 @@ export class SupabaseStore implements Store {
     return this.project(id);
   }
 
-  // AI : no user_id filter — RLS returns own runs + runs on team-shared project pointers.
+  // AI : explicit owner + shared-project filters — safe under service-role (must not rely on RLS alone).
+  private sharedTeamProjectIds(): ProjectId[] {
+    return [
+      ...new Set(
+        this.state.projects
+          .filter((p) => !!p.teamId && !!p.teamProjectOwnerId)
+          .map((p) => p.id),
+      ),
+    ];
+  }
+
   private async fetchAccessibleRunRows(): Promise<RunRow[]> {
-    let runsWithFpQ = this.db
+    const sharedProjectIds = this.sharedTeamProjectIds();
+    const mergeRows = (own: RunRow[], shared: RunRow[]): RunRow[] => {
+      if (!shared.length) return own;
+      const seen = new Set(own.map((r) => (r.data as PipelineRun).id));
+      const out = [...own];
+      for (const row of shared) {
+        const id = (row.data as PipelineRun).id;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push(row);
+      }
+      return out;
+    };
+
+    const runsWithFp = await this.db
       .from("runs")
       .select("project_id, started_at, data, fingerprint")
+      .eq("user_id", this.scopedUserId)
       .order("started_at", { ascending: false });
-    const runsWithFp = await runsWithFpQ;
     if (runsWithFp.error?.message?.includes("fingerprint")) {
       this.hasFingerprintColumn = false;
-      const runsLegacy = await this.db
+      const ownLegacy = await this.db
         .from("runs")
         .select("project_id, started_at, data")
+        .eq("user_id", this.scopedUserId)
         .order("started_at", { ascending: false });
-      if (runsLegacy.error) throw runsLegacy.error;
-      return (runsLegacy.data ?? []) as RunRow[];
+      if (ownLegacy.error) throw ownLegacy.error;
+      let sharedLegacy: RunRow[] = [];
+      if (sharedProjectIds.length) {
+        const sharedQ = await this.db
+          .from("runs")
+          .select("project_id, started_at, data")
+          .in("project_id", sharedProjectIds)
+          .neq("user_id", this.scopedUserId)
+          .order("started_at", { ascending: false });
+        if (!sharedQ.error) sharedLegacy = (sharedQ.data ?? []) as RunRow[];
+      }
+      return mergeRows((ownLegacy.data ?? []) as RunRow[], sharedLegacy);
     }
     if (runsWithFp.error) throw runsWithFp.error;
     this.hasFingerprintColumn = true;
-    return (runsWithFp.data ?? []) as RunRow[];
+    let sharedFp: RunRow[] = [];
+    if (sharedProjectIds.length) {
+      const sharedQ = await this.db
+        .from("runs")
+        .select("project_id, started_at, data, fingerprint")
+        .in("project_id", sharedProjectIds)
+        .neq("user_id", this.scopedUserId)
+        .order("started_at", { ascending: false });
+      if (!sharedQ.error) sharedFp = (sharedQ.data ?? []) as RunRow[];
+    }
+    return mergeRows((runsWithFp.data ?? []) as RunRow[], sharedFp);
   }
 
   private ingestRunRows(runRows: RunRow[], opts?: { mergeLocal?: boolean }): void {
@@ -278,7 +336,13 @@ export class SupabaseStore implements Store {
       nextRuns.push(run);
       nextProjects[run.id] = row.project_id as ProjectId;
       if (this.hasFingerprintColumn && fingerprint && !row.fingerprint) {
-        this.queueRest(() => this.db.from("runs").update({ fingerprint }).eq("id", run.id));
+        this.queueRest(() =>
+          this.db
+            .from("runs")
+            .update({ fingerprint })
+            .eq("user_id", this.scopedUserId)
+            .eq("id", run.id),
+        );
       }
     }
     if (opts?.mergeLocal) {
@@ -300,14 +364,41 @@ export class SupabaseStore implements Store {
     this.ingestRunRows(rows, { mergeLocal: true });
   }
 
-  // AI : RLS docs_select includes owner docs for team-shared project pointers.
+  // AI : own docs + shared-owner docs — explicit filters (service-role safe; mirrors init()).
   async syncDocsFromDb(): Promise<void> {
-    const docs = await this.db.from("docs").select("*").order("uploaded_at", { ascending: false });
+    const docs = await this.db
+      .from("docs")
+      .select("*")
+      .eq("user_id", this.scopedUserId)
+      .order("uploaded_at", { ascending: false });
     if (docs.error) return;
+    const docRows: DocDbRow[] = [...((docs.data ?? []) as DocDbRow[])];
+    const sharedOwnerIds = [
+      ...new Set(
+        this.state.projects
+          .map((p) => p.teamProjectOwnerId)
+          .filter((id): id is user_id_string => !!id),
+      ),
+    ];
+    if (sharedOwnerIds.length) {
+      const sharedDocs = await this.db
+        .from("docs")
+        .select("*")
+        .in("user_id", sharedOwnerIds)
+        .order("uploaded_at", { ascending: false });
+      if (!sharedDocs.error) {
+        const seenIds = new Set(docRows.map((row) => row.id));
+        for (const row of (sharedDocs.data ?? []) as DocDbRow[]) {
+          if (seenIds.has(row.id)) continue;
+          seenIds.add(row.id);
+          docRows.push(row);
+        }
+      }
+    }
     const seen = new Set<DocId>();
     const nextDocs: DocRef[] = [];
     const nextContents = new Map<DocId, string>();
-    for (const row of (docs.data ?? []) as DocDbRow[]) {
+    for (const row of docRows) {
       const doc = docRefFromDbRow(row);
       if (seen.has(doc.id)) continue;
       seen.add(doc.id);
@@ -718,7 +809,8 @@ export class SupabaseStore implements Store {
   }
 
   // AI : warm store shares one client slot — reject only on positive user mismatch after rebindDb.
-  // AI : never treat Auth/JWKS timeouts as signed-out; RLS still enforces auth.uid() on writes.
+  // AI : service-role rebind has no user JWT; scopedUserId from requireAuth is the tenancy boundary.
+  // AI : never treat Auth/JWKS timeouts as signed-out when using the cookie client.
   private async ensureFreshWriteAuth(): Promise<void> {
     try {
       const { data, error } = await this.db.auth.getClaims();

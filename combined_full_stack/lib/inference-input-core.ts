@@ -113,3 +113,11 @@ export function inputTypeAccept(type?: InputTypeSpec): string | undefined {
   const exts = types.flatMap((t) => FILE_ACCEPT[t] ?? [])
   return exts.length ? exts.join(",") : undefined
 }
+
+// AI : agent composer / Documents — all uploadable exts (skip web; html rejected server-side).
+export function allUploadAccept(): string {
+  return (Object.entries(FILE_ACCEPT) as [InputType, readonly string[]][])
+    .filter(([t]) => t !== InputType.Web)
+    .flatMap(([, exts]) => [...exts])
+    .join(",")
+}

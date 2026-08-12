@@ -36,10 +36,10 @@ import {
   isMultiDocInputModule,
   type InputDocsAssignment,
 } from "@/lib/inference-input"
+import { inputModuleJsonStructSchema } from "@/lib/inference-json-struct-edit"
 import { inferenceInputIssueClipboard, inferenceInputIssueMessage } from "@/lib/inference-validity"
 import { formatErrorForClipboard } from "@/lib/error-copy"
 import { InferenceInputPickerPopup } from "@/components/inference-input-picker"
-import { InferenceRunPresetMenu, type PresetApplyMeta } from "@/components/inference/inference-run-preset-menu"
 import {
   draftFromSetup,
   draftToSetupContent,
@@ -49,8 +49,6 @@ import {
 import { suggestEditDocName, validateNewDocName } from "@/lib/doc-edit"
 import { Input } from "@/components/ui/input"
 import { useInferenceRun } from "@/lib/use-inference-run"
-import { useInferenceTestEval } from "@/lib/use-inference-test-eval"
-import { TestResults } from "@/components/test-results"
 import { RunNotesPad } from "@/components/run-notes-pad"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
 import { InputCompatPanel } from "@/components/input-compat-panel"
@@ -137,7 +135,6 @@ export function Inference() {
     typeAliases,
     addDocContent,
     removeDoc,
-    updateRunTest,
     reportMissingProject,
   } = useStore()
   const { setActiveWindow, openLogging } = useAppShell()
@@ -158,8 +155,6 @@ export function Inference() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [creatingSetup, setCreatingSetup] = useState(false)
   const [deletingSetupId, setDeletingSetupId] = useState<DocId | null>(null)
-  // AI : when inputs are loaded from a test preset, assert against that file after the run.
-  const [linkedTest, setLinkedTest] = useState<PresetApplyMeta | null>(null)
   const { width: sidebarWidth, setWidth: setSidebarWidth, commitWidth: commitSidebarWidth } =
     usePersistedLeadingWidth(inferenceSidebarSplit)
 
@@ -206,24 +201,6 @@ export function Inference() {
     onProjectNotFound: reportMissingProject,
   })
 
-  const linkedTestForEval =
-    linkedTest?.kind === "test"
-      ? { docId: linkedTest.docId, docName: linkedTest.name }
-      : null
-
-  const { testResults, testEvaluating, testEvalError } = useInferenceTestEval({
-    phase: run.phase,
-    run: run.run,
-    linkedTest: linkedTestForEval,
-    project,
-    modules,
-    models,
-    typeAliases,
-    model: model as ModelId,
-    updateRunTest,
-    refreshBilling,
-  })
-
   const lastAutoDiagnoseRunId = useRef<string | null>(null)
   useEffect(() => {
     if (run.phase !== "done" || !run.run || run.deduped) return
@@ -240,17 +217,8 @@ export function Inference() {
     )
   }, [run.phase, run.run, run.deduped, maybeAutoDiagnose, project.id, docs, project, model])
 
-  const applyPreset = useCallback(
-    (assignment: InputDocsAssignment, meta?: PresetApplyMeta) => {
-      run.applyInputAssignment(assignment)
-      setLinkedTest(meta?.kind === "test" ? meta : null)
-    },
-    [run],
-  )
-
   const applySetupInputs = useCallback(
     (setup: SpineInferenceSetupFile) => {
-      setLinkedTest(null)
       const resolved = resolveInferenceSetupInputs(setup, run.inputModules, projectDocs)
       if (resolved.ok) run.applyInputAssignment(resolved.assignment)
     },
@@ -541,19 +509,9 @@ export function Inference() {
 
               <InferenceRunSection title="Next run" subtitle={nextRunSubtitle} variant="current">
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                      pipeline inputs · {run.inputModules.length} slot{run.inputModules.length === 1 ? "" : "s"}
-                    </p>
-                    <InferenceRunPresetMenu
-                      project={project}
-                      docs={docs}
-                      inputModules={run.inputModules}
-                      inputDocs={run.inputDocs}
-                      disabled={run.phase === "running"}
-                      onApply={applyPreset}
-                    />
-                  </div>
+                  <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    pipeline inputs · {run.inputModules.length} slot{run.inputModules.length === 1 ? "" : "s"}
+                  </p>
                   <div className={run.phase === "running" ? "pointer-events-none opacity-60" : undefined}>
                     {run.inputModules.map((m) => (
                       <InferenceInputSlot
@@ -562,9 +520,17 @@ export function Inference() {
                         outModel={modelName(models, m.outStructureId)}
                         docs={docsForInputModule(run.inputDocs, m.id)}
                         issue={run.inputIssueByModule.get(m.id)}
+                        jsonStruct={inputModuleJsonStructSchema(m, models, typeAliases)}
+                        jsonStructDisabled={run.phase === "running" || !!project?.teamReadOnly}
                         onOpenPicker={() => run.setPickerModuleId(m.id)}
                         onOpenDoc={(docId) => open({ docId, start: 0, end: 0 })}
                         onRemoveDoc={(docId) => run.removeInputDocForModule(m.id, docId)}
+                        onClearSlot={() => {
+                          for (const d of docsForInputModule(run.inputDocs, m.id)) {
+                            run.removeInputDocForModule(m.id, d.id)
+                          }
+                        }}
+                        onJsonStructAssigned={(doc) => run.setInputDocForModule(m.id, doc)}
                       />
                     ))}
                     {run.inputCompatPairs.length > 0 && (
@@ -748,26 +714,6 @@ export function Inference() {
                   >
                     {finalOutputSteps.length > 0 && (
                       <InferenceRunOutputs steps={finalOutputSteps} models={models} />
-                    )}
-
-                    {linkedTestForEval && (testEvaluating || testResults || testEvalError) && (
-                      <div className="space-y-2">
-                        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                          test assertion · {linkedTestForEval.docName}
-                        </p>
-                        {testEvaluating && (
-                          <p className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            Comparing outputs against test expectations…
-                          </p>
-                        )}
-                        {testEvalError && (
-                          <p className="rounded border border-destructive/30 bg-destructive/10 p-2 font-mono text-[11px] text-destructive">
-                            {testEvalError}
-                          </p>
-                        )}
-                        {testResults && <TestResults results={testResults} />}
-                      </div>
                     )}
 
                     {run.run.status !== "ok" && (

@@ -23,6 +23,8 @@ jobs:
           cache-dependency-path: combined_full_stack/package-lock.json
       - name: Install
         run: npm ci
+      # AI : TODO (prod) — add `npm run typecheck` (tsc --noEmit) before tests; it exists as a
+      # AI : script but is not gated. Add eslint once a config exists. Cover billing/auth routes.
       - name: Unit tests
         # AI : offline only — live OpenRouter parity is a separate job (never Next.js / browser).
         run: npm test

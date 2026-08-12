@@ -20,7 +20,8 @@ const createKeyBodySchema = z
   .strict();
 
 export async function GET() {
-  const ctx = await requireAuthStore("billing");
+  // AI : list is a cheap UI read — keep off the billing mutation bucket (20/min shared with balance polls).
+  const ctx = await requireAuthStore("read");
   if (ctx instanceof NextResponse) return ctx;
   const keys = await listUserBillingKeys(ctx.auth.userId);
   return NextResponse.json({ keys });

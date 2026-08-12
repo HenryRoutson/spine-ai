@@ -192,6 +192,20 @@ export function useInferenceDocs({
     })
   }
 
+  // AI : after in-place JSON struct save — content hash id changes; keep the slot pointed at the new row.
+  function replaceAssignedDoc(moduleId: ModuleId, oldDocId: DocId, next: DocRef) {
+    setInputDocs((prev) => {
+      const mod = inputModules.find((m) => m.id === moduleId)
+      if (mod && isMultiDocInputModule(mod)) {
+        return {
+          ...prev,
+          [moduleId]: docsForInputModule(prev, moduleId).map((d) => (d.id === oldDocId ? next : d)),
+        }
+      }
+      return { ...prev, [moduleId]: next }
+    })
+  }
+
   function useSamples() {
     setInputDocs(buildDefaultInputDocs(docs, project, inputModules))
   }
@@ -218,6 +232,7 @@ export function useInferenceDocs({
     inputIssueByModule,
     setInputDocForModule,
     removeInputDocForModule,
+    replaceAssignedDoc,
     useSamples,
     applyInputAssignment,
   }

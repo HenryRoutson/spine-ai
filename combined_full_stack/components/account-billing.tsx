@@ -5,7 +5,7 @@ import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { formatCents } from "@/lib/format"
 import { totalUsageFromRuns } from "@/lib/billing"
-import { useMemo, useState, useEffect, useCallback, useRef } from "react"
+import { useMemo, useState, useEffect, useCallback } from "react"
 import { useWorkspaceBilling } from "@/lib/use-workspace-billing"
 import type { BillingAccountView } from "@/lib/store"
 import { redirectToCheckout } from "@/lib/stripe-client"
@@ -20,9 +20,9 @@ import { isSharedRun } from "@/lib/shared-link-types"
 import type { PipelineRun, Project } from "@/lib/types"
 import {
   readBillingKeysSnapshot,
-  writeBillingKeysSnapshot,
   type BillingKeySnapshot,
 } from "@/lib/billing-keys-snapshot-cache"
+import { fetchBillingKeys } from "@/lib/fetch-billing-keys"
 import { readProjectRunsCache, writeProjectRunsCache } from "@/lib/project-state-cache"
 import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 import { AppPrimarySection } from "@/lib/app-primary-section-labels"
@@ -80,7 +80,6 @@ export function AccountBilling() {
   const [billingKeysBusy, setBillingKeysBusy] = useState(false)
   const [newBillingKey, setNewBillingKey] = useState<string | null>(null)
   const [projectRunsVersion, setProjectRunsVersion] = useState(0)
-  const billingKeysFetchRef = useRef<Promise<void> | null>(null)
 
   useEffect(() => {
     void refreshBillingRuns().catch(console.error)
@@ -136,27 +135,15 @@ export function AccountBilling() {
     }
   }
 
-  const loadBillingKeys = useCallback(async () => {
-    if (billingKeysFetchRef.current) return billingKeysFetchRef.current
+  const loadBillingKeys = useCallback(async (opts?: { force?: boolean }) => {
     const cached = readBillingKeysSnapshot()
     if (cached) setBillingKeys(cached)
-    const run = (async () => {
-      setBillingKeysBusy(!cached?.length)
-      try {
-        const data = await apiJson<{ keys: BillingKeySnapshot[] }>(API_ROUTES.billingKeys)
-        setBillingKeys(data.keys)
-        writeBillingKeysSnapshot(data.keys)
-      } catch {
-        if (!cached) setBillingKeys([])
-      } finally {
-        setBillingKeysBusy(false)
-      }
-    })()
-    billingKeysFetchRef.current = run
+    setBillingKeysBusy(!cached?.length)
     try {
-      await run
+      const keys = await fetchBillingKeys(opts)
+      setBillingKeys(keys)
     } finally {
-      billingKeysFetchRef.current = null
+      setBillingKeysBusy(false)
     }
   }, [])
 
@@ -174,7 +161,7 @@ export function AccountBilling() {
         body: JSON.stringify({ label: "default" }),
       })
       setNewBillingKey(data.key.key)
-      await loadBillingKeys()
+      await loadBillingKeys({ force: true })
     } catch (e) {
       setBanner((e as Error).message)
     } finally {

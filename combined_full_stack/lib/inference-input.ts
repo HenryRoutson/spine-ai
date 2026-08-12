@@ -5,6 +5,7 @@ export {
   inputModuleNeedsOcr,
   inputModuleTypesAreAllJsonNative,
   inputNameRestrictionLabel,
+  allUploadAccept,
   inputTypeAccept,
   inputTypeLabel,
   inputTypesAreAllJsonNative,

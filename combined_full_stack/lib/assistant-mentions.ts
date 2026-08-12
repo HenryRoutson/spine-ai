@@ -114,6 +114,13 @@ function pin(
   return normalizeUiContextRef({ id, kind, label, ...extra })
 }
 
+/** AI : composer upload / @Files — same chip shape the server enriches with doc bytes. */
+export function uiContextRefFromDoc(doc: DocRef): UiContextRef {
+  return pin("project_doc", `doc:${doc.id}`, `File · ${doc.name}`, {
+    snippet: doc.preview || undefined,
+  })
+}
+
 const MAX_RUN_MENTIONS = 12
 
 /** AI : build @-menu rows from the open project (store). */
@@ -237,9 +244,7 @@ export function buildAssistantMentionOptions(args: {
       label: doc.name,
       description: `${label} · ${doc.type} · ${doc.sizeKb}KB`,
       // AI : client preview only — server enrichUiContextRefs replaces with doc bytes.
-      ref: pin("project_doc", `doc:${doc.id}`, `File · ${doc.name}`, {
-        snippet: doc.preview || undefined,
-      }),
+      ref: uiContextRefFromDoc(doc),
     })
   }
 

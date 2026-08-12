@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react"
 import { Loader2, Play } from "lucide-react"
+import { AgentBrowsePanel } from "@/components/agent-browse-panel"
+import { FileDropZone } from "@/components/file-drop-zone"
 import { ProjectAssistantDockPanel } from "@/components/project-assistant-dock"
 import { Button } from "@/components/ui/button"
 import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
@@ -11,11 +13,17 @@ import {
   resolveAssistantInferenceInputs,
   runAssistantInference,
 } from "@/lib/assistant-run"
-import { buildDefaultInputDocs, docsForInputModule, orderedInputModules } from "@/lib/inference-input"
+import { isPreviewOnly } from "@/lib/demo-mode"
+import {
+  buildDefaultInputDocs,
+  docsForInputModule,
+  inputTypeAccept,
+  orderedInputModules,
+} from "@/lib/inference-input"
 import { formatCostCents, formatSecondsShort } from "@/lib/format"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { useStore } from "@/lib/store"
-import { docsForProject } from "@/lib/project-docs"
+import { DocLabel, type ModuleId } from "@/lib/types"
 
 // AI : agent-first Build surface — full project control via chat (+ run options); no workspace tabs.
 export function VibePanel() {
@@ -28,6 +36,7 @@ export function VibePanel() {
     docs,
     runs,
     model,
+    addDoc,
     addRun,
     refresh,
     refreshBilling,
@@ -35,8 +44,9 @@ export function VibePanel() {
   } = useStore()
   const [running, setRunning] = useState(false)
   const [runError, setRunError] = useState<string | null>(null)
+  const [uploadingModule, setUploadingModule] = useState<ModuleId | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
-  const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
   const inputModules = useMemo(() => orderedInputModules(modules), [modules])
   const defaultInputs = useMemo(
     () => buildDefaultInputDocs(docs, project, inputModules),
@@ -86,6 +96,23 @@ export function VibePanel() {
     }
   }
 
+  // AI : Vibe hides Documents — upload here so default inputs / Run can pick them up.
+  async function onUploadForInput(moduleId: ModuleId, file: File) {
+    if (isPreviewOnly()) {
+      setUploadError("Uploads are disabled in preview mode.")
+      return
+    }
+    setUploadingModule(moduleId)
+    setUploadError(null)
+    try {
+      await addDoc(file, DocLabel.Inference, project.id)
+    } catch (err) {
+      setUploadError((err as Error).message || "Upload failed")
+    } finally {
+      setUploadingModule(null)
+    }
+  }
+
   const runDisabledReason = hasHumanGate
     ? "Pipeline needs human review / chatbot — open Inference"
     : invalidCount > 0
@@ -97,86 +124,83 @@ export function VibePanel() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <aside className="flex w-full shrink-0 flex-col gap-4 border-b border-border bg-muted/20 p-4 lg:w-72 lg:border-b-0 lg:border-r">
-          <div>
-            <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              Run
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Describe what you want in the agent, then run when ready.
-            </p>
-          </div>
-
+        <aside className="app-scrollbar flex w-full shrink-0 flex-col gap-3 overflow-y-auto border-b border-border bg-muted/20 p-3 lg:w-72 lg:border-b-0 lg:border-r">
           <Button
             type="button"
             className="w-full justify-start gap-2 font-mono text-[11px]"
             onClick={() => void onRun()}
             disabled={!canRun}
-            title={runDisabledReason ?? "Run pipeline on default inputs"}
+            title={runDisabledReason ?? "Run"}
           >
             {running ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <Play className="h-3.5 w-3.5" />
             )}
-            {running ? "Running…" : "Run pipeline"}
+            {running ? "Running…" : "Run"}
           </Button>
           {runDisabledReason ? (
-            <p className="text-[11px] leading-relaxed text-muted-foreground">{runDisabledReason}</p>
+            <p className="font-mono text-[10px] text-muted-foreground">{runDisabledReason}</p>
           ) : null}
           {runError ? (
-            <p className="text-[11px] leading-relaxed text-destructive">{runError}</p>
+            <p className="font-mono text-[10px] text-destructive">{runError}</p>
           ) : null}
 
-          <div className="space-y-2 rounded-md border border-border bg-background/60 p-3">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="space-y-2 rounded-md border border-border bg-background/60 p-2.5">
+            <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
               Inputs
             </p>
+            {uploadError ? (
+              <p className="font-mono text-[10px] text-destructive">{uploadError}</p>
+            ) : null}
             {inputModules.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No input steps yet.</p>
+              <p className="font-mono text-[10px] text-muted-foreground">—</p>
             ) : (
               <ul className="space-y-2">
                 {inputModules.map((m) => {
                   const assigned = docsForInputModule(defaultInputs, m.id)
+                  const uploading = uploadingModule === m.id
                   return (
-                    <li key={m.id} className="text-xs">
-                      <p className="font-medium text-foreground">{m.label || "Input"}</p>
-                      <p className="text-muted-foreground">
+                    <li key={m.id} className="space-y-1">
+                      <p className="truncate font-mono text-[10px] text-foreground">
+                        {m.label || "Input"}
                         {assigned.length
-                          ? assigned.map((d) => d.name).join(", ")
-                          : "No matching document — ask the agent for test docs"}
+                          ? ` · ${assigned.map((d) => d.name).join(", ")}`
+                          : ""}
                       </p>
+                      <FileDropZone
+                        compact
+                        multiple={false}
+                        accept={inputTypeAccept(m.inputType)}
+                        disabled={uploadingModule !== null && !uploading}
+                        uploading={uploading}
+                        onFiles={(files) => {
+                          const file = files[0]
+                          if (file) void onUploadForInput(m.id, file)
+                        }}
+                        label={assigned.length ? "Drop to replace" : "Drag & drop here"}
+                        browseLabel="Browse"
+                      />
                     </li>
                   )
                 })}
               </ul>
             )}
-            {projectDocs.length > 0 ? (
-              <p className="pt-1 font-mono text-[10px] text-muted-foreground">
-                {projectDocs.length} project file{projectDocs.length === 1 ? "" : "s"} available
-              </p>
-            ) : null}
           </div>
 
-          <div className="space-y-2 rounded-md border border-border bg-background/60 p-3">
-            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-              Last run
-            </p>
-            {lastRun ? (
-              <div className="space-y-1 text-xs">
-                <p className="font-medium text-foreground">
-                  {lastRun.status} · {formatSecondsShort(lastRun.totalMs)} ·{" "}
-                  {formatCostCents(lastRun.billedCents)}
-                </p>
-                <p className="font-mono text-[10px] text-muted-foreground">
-                  {new Date(lastRun.startedAt).toLocaleString()}
-                  {lastRun.source ? ` · ${lastRun.source}` : ""}
-                </p>
-                <p className="truncate font-mono text-[10px] text-muted-foreground">{lastRun.id}</p>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">No runs yet.</p>
-            )}
+          {lastRun ? (
+            <div className="rounded-md border border-border bg-background/60 px-2.5 py-2 font-mono text-[10px] text-muted-foreground">
+              <span className="text-foreground">{lastRun.status}</span>
+              {" · "}
+              {formatSecondsShort(lastRun.totalMs)}
+              {" · "}
+              {formatCostCents(lastRun.billedCents)}
+            </div>
+          ) : null}
+
+          {/* AI : docs + dev tabs — Maximize opens DocViewer; tab chips leave Vibe for that window. */}
+          <div className="rounded-md border border-border bg-background/60 p-2.5">
+            <AgentBrowsePanel />
           </div>
         </aside>
 

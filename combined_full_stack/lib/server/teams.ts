@@ -136,7 +136,9 @@ async function listJsonTeamsForUser(userId: user_id_string): Promise<TeamView[]>
 }
 
 async function listSupabaseTeamsForUser(userId: user_id_string): Promise<TeamView[]> {
-  const db = await createClient();
+  // AI : prefer service role — cookie JWT can leave auth.uid() null on PostgREST (empty membership SELECTs).
+  const admin = await createAdminClient();
+  const db = admin ?? (await createClient());
   const { data: memberships, error: memErr } = await db
     .from("team_members")
     .select("team_id, role, joined_at")

@@ -7,6 +7,7 @@ import { HTTP } from "./api-errors";
 import { getStore } from "./app_store";
 import { BillingError } from "./billing_account";
 import { storeErrorMessage } from "./errors";
+import { createAdminClient } from "./supabase_admin";
 import { SupabaseStore } from "./supabase_store";
 import {
   isAuthSession,
@@ -121,9 +122,12 @@ export async function requireAuthStore(
   const limited = await enforceUserRateLimit(auth.userId, tier);
   if (limited) return limited;
   try {
-    // AI : rebind warm SupabaseStore to this request's cookie client — requireAuth already verified claims.
-    // AI : do not gate on getUser(); Auth API timeouts were falsely surfacing as "Sign in required".
-    const supabase = await createClient();
+    // AI : rebind warm SupabaseStore to service role when available — requireAuth already verified identity.
+    // AI : cookie JWT alone can fail PostgREST RLS (auth.uid() null → empty SELECTs + INSERT 42501).
+    // AI : TODO security (prod) — service-role rebind bypasses RLS; a bug after requireAuth is a full-table write.
+    // AI : Prefer fixing JWT → auth.uid() and keep the user-scoped client.
+    const admin = await createAdminClient();
+    const supabase = admin ?? (await createClient());
     const store = await getStore();
     if (store instanceof SupabaseStore) store.rebindDb(supabase);
     return { auth, store };

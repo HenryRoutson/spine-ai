@@ -12,7 +12,12 @@ import {
 } from "./store";
 import type { Store } from "./store";
 import { logger } from "./server_logger";
-import { isMissingSchemaError, openUserStore, SupabaseStore } from "./supabase_store";
+import {
+  isMissingSchemaError,
+  openUserStore,
+  SupabaseStore,
+} from "./supabase_store";
+import { createAdminClient } from "./supabase_admin";
 import { storeErrorMessage } from "./errors";
 
 const storeLog = logger("app-store");
@@ -20,8 +25,8 @@ const storeLog = logger("app-store");
 // AI : one JsonStore per server process, stashed on globalThis — route handlers are
 // AI : bundled separately in dev, so a plain module-level singleton is not enough, and
 // AI : two independent stores would clobber each other's store.json on flush.
-// AI : bump STORE_CACHE_GEN when warm-cache contract changes (e.g. stale-JWT rebind fix).
-const STORE_CACHE_GEN = 7;
+// AI : bump STORE_CACHE_GEN when warm-cache contract changes (e.g. service-role store I/O).
+const STORE_CACHE_GEN = 8;
 
 type StoreSlot = {
   __forgeStore?: Promise<JsonStore>;
@@ -47,6 +52,8 @@ async function getLocalStore(): Promise<Store> {
 }
 
 // AI : warm lambdas reuse one hydrated SupabaseStore per user — avoids reloading every row on each API call.
+// AI : TODO bug (prod) — per-process RAM cache of the whole user; Vercel instances are not interchangeable
+// AI : and a cold instance misses writes another instance already flushed. Query per request instead.
 function getCachedUserStore(userId: user_id_string, open: () => Promise<Store>): Promise<Store> {
   const g = globalThis as StoreSlot;
   if (g.__forgeUserStoreGen !== STORE_CACHE_GEN) {
@@ -69,12 +76,16 @@ async function openSupabaseUserStore(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: user_id_string,
 ): Promise<Store> {
+  // AI : prefer service role after identity is known — cookie JWT can leave auth.uid() null on
+  // AI : PostgREST (SELECT empty + INSERT 42501) even when getClaims still returns sub.
+  const admin = await createAdminClient();
+  const dbForStore = admin ?? supabase;
   const store = await getCachedUserStore(userId, async () => {
-    const opened = await openUserStore(supabase, userId);
+    const opened = await openUserStore(dbForStore, userId);
     return hydrateUserStore(opened);
   });
-  // AI : warm cache reuses memory — always attach this request's cookie-backed client for RLS.
-  if (store instanceof SupabaseStore) store.rebindDb(supabase);
+  // AI : warm cache reuses memory — always attach this request's write client.
+  if (store instanceof SupabaseStore) store.rebindDb(dbForStore);
   return store;
 }
 

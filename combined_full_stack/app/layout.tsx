@@ -14,6 +14,8 @@ const geistMono = Geist_Mono({
 
 // AI : read Supabase env at request time — static build would bake an empty config otherwise.
 // AI : keep in sync with ROUTE_DYNAMIC in lib/server/route-config.ts.
+// AI : TODO (prod) — add app/error.tsx + app/global-error.tsx and wire Sentry (or equivalent);
+// AI : uncaught UI/server failures currently only hit console / Vercel logs.
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {

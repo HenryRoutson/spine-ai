@@ -1,0 +1,6 @@
+{
+  "description": "4-chapter cozy mystery — outline chapters then llm-batch write each, join to markdown.",
+  "inputs": {
+    "Brief": "short_mystery_brief.json"
+  }
+}

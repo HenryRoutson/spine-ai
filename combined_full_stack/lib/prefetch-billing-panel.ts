@@ -1,6 +1,6 @@
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson } from "@/lib/api-client"
-import { writeBillingKeysSnapshot, type BillingKeySnapshot } from "@/lib/billing-keys-snapshot-cache"
+import { fetchBillingKeys } from "@/lib/fetch-billing-keys"
 import { readBillingRunsCache, writeBillingRunsCache } from "@/lib/project-state-cache"
 import type { PipelineRun } from "@/lib/types"
 
@@ -8,9 +8,8 @@ import type { PipelineRun } from "@/lib/types"
 export function prefetchBillingPanel(): void {
   void import("@/components/billing")
   void import("@/components/billing-spend-chart")
-  void apiJson<{ keys: BillingKeySnapshot[] }>(API_ROUTES.billingKeys)
-    .then((data) => writeBillingKeysSnapshot(data.keys))
-    .catch(() => {})
+  // AI : coalesce/TTL inside fetchBillingKeys — shell + nav mount used to fire 3+ GETs.
+  void fetchBillingKeys()
   if (!readBillingRunsCache()) {
     void apiJson<{ runs: PipelineRun[] }>(API_ROUTES.runsAccount)
       .then((data) => writeBillingRunsCache(data.runs))

@@ -18,6 +18,7 @@ const supabaseKey =
   process.env.SUPABASE_ANON_KEY
 
 // AI : default true — set SESSION_REPLAY_ENABLED=false to disable rrweb recording.
+// AI : TODO privacy (prod) — default this to "false" so hosted deploys opt in, not out.
 const sessionReplayEnabled =
   process.env.SESSION_REPLAY_ENABLED ??
   process.env.NEXT_PUBLIC_SESSION_REPLAY_ENABLED ??

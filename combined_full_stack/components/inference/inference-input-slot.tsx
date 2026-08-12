@@ -1,9 +1,14 @@
 "use client"
 
-import { useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { FileText, FolderOpen, Link2, Loader2, Upload, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import {
+  InferenceJsonStructEditor,
+  type InferenceJsonStructDocSource,
+  type JsonStructFormKind,
+} from "@/components/inference/inference-json-struct-editor"
 import { StepInputDescription, moduleInputDescription } from "@/components/step-input-description"
 import { cn } from "@/lib/utils"
 import {
@@ -13,6 +18,7 @@ import {
   inputMinCountForModule,
   isMultiDocInputModule,
 } from "@/lib/inference-input"
+import type { InferenceJsonStructSchema } from "@/lib/inference-json-struct-edit"
 import type { DocId, DocRef, PipelineModule } from "@/lib/types"
 import { uiContextTargetProps } from "@/lib/ui-context-dom"
 
@@ -21,6 +27,7 @@ type StoreSlotProps = {
   onOpenPicker: () => void
   onOpenDoc: (docId: DocId) => void
   onRemoveDoc?: (docId: DocId) => void
+  onClearSlot?: () => void
 }
 
 type UploadSlotProps = {
@@ -31,13 +38,32 @@ type UploadSlotProps = {
   onRemoveDoc: (docId: DocId) => void
 }
 
+type JsonStructMode = "file" | JsonStructFormKind
+
 export function InferenceInputSlot(props: {
   inputModule: PipelineModule
   outModel?: string
   docs: DocRef[]
   issue?: { message: string }
+  // AI : JSON + typed structureOut — exclusive: from file | branch | create empty.
+  jsonStruct?: InferenceJsonStructSchema | null
+  jsonStructDisabled?: boolean
+  onJsonStructAssigned?: (doc: DocRef) => void
+  // AI : required when rendered outside StoreProvider (consumer share/run shell).
+  jsonStructSource?: InferenceJsonStructDocSource
 } & (StoreSlotProps | UploadSlotProps)) {
-  const { inputModule, outModel, docs, issue, variant = "store", ...rest } = props
+  const {
+    inputModule,
+    outModel,
+    docs,
+    issue,
+    jsonStruct = null,
+    jsonStructDisabled = false,
+    onJsonStructAssigned,
+    jsonStructSource,
+    variant = "store",
+    ...rest
+  } = props
   const inputRef = useRef<HTMLInputElement>(null)
   const min = inputMinCountForModule(inputModule)
   const multi = isMultiDocInputModule(inputModule)
@@ -46,6 +72,40 @@ export function InferenceInputSlot(props: {
   const storeProps = !upload ? (rest as Omit<StoreSlotProps, "variant">) : null
   const defaultFilename = uploadProps?.defaultFilename
   const uploading = uploadProps?.uploading ?? false
+
+  // AI : exclusive modes — never stack file chip + form (that looked like in-place file edit).
+  const jsonModes =
+    !!jsonStruct && !!onJsonStructAssigned && !upload && !multi && !!storeProps
+  const [mode, setMode] = useState<JsonStructMode>("file")
+  const [branchSeed, setBranchSeed] = useState<DocRef | null>(null)
+  const clearSlot = storeProps?.onClearSlot
+  const openPicker = storeProps?.onOpenPicker
+
+  useEffect(() => {
+    // AI : picker assigns into docs — while branching with no seed yet, copy then clear so the form isn't "editing" that file.
+    if (mode !== "branch" || branchSeed || !docs[0] || !clearSlot) return
+    setBranchSeed(docs[0])
+    clearSlot()
+  }, [mode, branchSeed, docs, clearSlot])
+
+  function pickMode(next: JsonStructMode) {
+    if (next === mode || jsonStructDisabled) return
+    if (next === "file") {
+      setBranchSeed(null)
+      setMode("file")
+      return
+    }
+    if (next === "branch") {
+      const seed = docs[0] ?? null
+      setBranchSeed(seed)
+      if (docs.length) clearSlot?.()
+      setMode("branch")
+      return
+    }
+    setBranchSeed(null)
+    if (docs.length) clearSlot?.()
+    setMode("empty")
+  }
 
   return (
     <div
@@ -58,6 +118,7 @@ export function InferenceInputSlot(props: {
         snippet: [
           inputTypeLabel(inputModule.inputType),
           outModel ? `→ ${outModel}${multi ? "[]" : ""}` : null,
+          jsonModes ? `mode:${mode}` : null,
           docs.length ? `${docs.length} doc(s): ${docs.map((d) => d.name).join(", ")}` : "no docs assigned",
           issue?.message ?? null,
         ]
@@ -96,7 +157,76 @@ export function InferenceInputSlot(props: {
         forceVisible={!!issue}
         className="mb-2"
       />
-      {docs.length ? (
+
+      {jsonModes && (
+        <div className="mb-3 flex flex-wrap gap-1 rounded-md border border-border bg-muted/20 p-1">
+          {(
+            [
+              ["file", "From file"],
+              ["branch", "Branch off"],
+              ["empty", "Create empty"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              disabled={jsonStructDisabled}
+              onClick={() => pickMode(id)}
+              className={cn(
+                "rounded px-2.5 py-1 font-mono text-[10px] transition-colors",
+                mode === id
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {jsonModes && mode !== "file" ? (
+        <div className="space-y-2">
+          {mode === "branch" && !branchSeed && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-full bg-transparent"
+              disabled={jsonStructDisabled}
+              onClick={openPicker}
+            >
+              <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> Choose file to branch from
+            </Button>
+          )}
+          {(mode === "empty" || branchSeed) && (
+            <InferenceJsonStructEditor
+              key={`${mode}:${branchSeed?.id ?? "new"}`}
+              kind={mode}
+              schema={jsonStruct!.schema}
+              modelName={jsonStruct!.modelName}
+              seedDoc={mode === "branch" ? branchSeed : null}
+              disabled={jsonStructDisabled}
+              onAssigned={onJsonStructAssigned!}
+              source={jsonStructSource}
+            />
+          )}
+          {mode === "branch" && branchSeed && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 font-mono text-[10px] text-muted-foreground"
+              disabled={jsonStructDisabled}
+              onClick={() => {
+                setBranchSeed(null)
+                clearSlot?.()
+                openPicker?.()
+              }}
+            >
+              Change branch source
+            </Button>
+          )}
+        </div>
+      ) : docs.length ? (
         <div className="space-y-2">
           {docs.map((doc) => (
             <div key={doc.id} className="flex flex-wrap items-center gap-2">

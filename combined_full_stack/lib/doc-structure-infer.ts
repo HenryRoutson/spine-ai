@@ -1,7 +1,7 @@
 import { parseCsv, sanitizeFieldName } from "@/lib/csv-parse"
 import { tryParseJson } from "@/lib/json-utils"
-import { FieldType } from "@/lib/types"
-import type { InputType, ModelField, StructureModel, StructureModelId } from "@/lib/types"
+import { FieldType, InputType } from "@/lib/types"
+import type { ModelField, StructureModel, StructureModelId } from "@/lib/types"
 import type { StructureMatchKind } from "@/lib/structure-match"
 
 export { parseCsv, sanitizeFieldName } from "@/lib/csv-parse"
@@ -29,6 +29,12 @@ export function modelNameFromDocFilename(name: string, suffix = "Row"): string {
   const base = name.replace(/\.[^.]+$/, "")
   const pascal = toPascalCase(base)
   return `${pascal}${suffix}`
+}
+
+// AI : per-sheet row models always get a Sheet… prefix so they stay distinct from the combined workbook type.
+function sheetModelName(sheetName: string): string {
+  const pascal = toPascalCase(sheetName)
+  return pascal ? `Sheet${pascal}` : "SheetRow"
 }
 
 function isPlainObject(val: unknown): val is Record<string, unknown> {
@@ -282,6 +288,63 @@ function isRowArray(value: unknown): value is Record<string, unknown>[] {
   )
 }
 
+// AI : multi-sheet workbook → one combined type (field per sheet) + Sheet-prefixed row companions.
+function inferCombinedWorkbookStructure(
+  sheets: { name: string; rows: Record<string, unknown>[] }[],
+  docName: string,
+  idGen: () => StructureModelId,
+): DerivedDocStructure | null {
+  const companions: StructureModel[] = []
+  const fields: ModelField[] = []
+  const sample: Record<string, unknown> = {}
+  const usedFieldNames = new Set<string>()
+
+  for (const [i, sheet] of sheets.entries()) {
+    const rowName = sheetModelName(sheet.name)
+    const bundle = inferModelsFromRows(
+      sheet.rows,
+      rowName,
+      idGen(),
+      `Inferred from sheet "${sheet.name}" in ${docName}.`,
+      idGen,
+    )
+    if (!bundle) continue
+    companions.push(...bundle.companions, bundle.root)
+
+    let fieldName = sanitizeFieldName(sheet.name)
+    if (usedFieldNames.has(fieldName)) fieldName = `${fieldName}_${i + 1}`
+    usedFieldNames.add(fieldName)
+
+    fields.push({
+      id: `f_${i}`,
+      name: fieldName,
+      type: FieldType.ListModel,
+      ref: bundle.root.id,
+      optional: false,
+      description: `Rows from sheet "${sheet.name}".`,
+    })
+    sample[fieldName] = sheet.rows
+  }
+
+  if (!fields.length) return null
+
+  const combinedName = modelNameFromDocFilename(docName, "") || "Workbook"
+  return toDerived(
+    {
+      root: {
+        id: idGen(),
+        name: combinedName,
+        description: `Combined sheets from ${docName}.`,
+        auto: true,
+        fields,
+      },
+      companions,
+    },
+    sample,
+    "object",
+  )
+}
+
 // AI : infer one or more StructureModels from parsed JSON — tabular arrays become row schemas.
 export function inferStructuresFromJson(
   parsed: unknown,
@@ -290,7 +353,7 @@ export function inferStructuresFromJson(
   opts: { sheetName?: string } = {},
 ): DerivedDocStructure[] {
   const baseName = opts.sheetName
-    ? `${modelNameFromDocFilename(docName, "")}${toPascalCase(opts.sheetName)}Row`
+    ? sheetModelName(opts.sheetName)
     : modelNameFromDocFilename(docName)
 
   if (isRowArray(parsed)) {
@@ -322,9 +385,12 @@ export function inferStructuresFromJson(
     }
     const arrayEntries = Object.entries(rec).filter(([, v]) => isRowArray(v))
     if (arrayEntries.length > 1) {
-      return arrayEntries.flatMap(([sheetName, rows]) =>
-        inferStructuresFromJson(rows, docName, idGen, { sheetName }),
+      const combined = inferCombinedWorkbookStructure(
+        arrayEntries.map(([name, rows]) => ({ name, rows: rows as Record<string, unknown>[] })),
+        docName,
+        idGen,
       )
+      return combined ? [combined] : []
     }
     const rowLike = Object.values(rec).find(isRowArray)
     if (rowLike) {
@@ -362,9 +428,15 @@ export function inferStructuresFromDocContent(
   if (!trimmed) return []
 
   if (rowSets?.length) {
-    return rowSets.flatMap(({ name, rows }) =>
-      inferStructuresFromJson(rows, docName, idGen, { sheetName: name }),
-    )
+    // AI : multi-sheet excel/json → combined workbook type + Sheet-prefixed row models.
+    if (rowSets.length > 1) {
+      const combined = inferCombinedWorkbookStructure(rowSets, docName, idGen)
+      return combined ? [combined] : []
+    }
+    const only = rowSets[0]!
+    // AI : excel sheet names get Sheet… prefix; csv/json single tables keep DocNameRow.
+    const sheetOpts = docType === InputType.Excel ? { sheetName: only.name } : {}
+    return inferStructuresFromJson(only.rows, docName, idGen, sheetOpts)
   }
 
   const parsed = parseDocJson(trimmed)

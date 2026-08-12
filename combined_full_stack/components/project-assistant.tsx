@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { Check, AlertTriangle, FileText, BookOpen, Braces } from "lucide-react"
 import { MultiLangReadonlyCodeViewer, type MultiLangCodeSource } from "@/components/code-viewer"
 import { allModelsToBaml, allModelsToDts, allModelsToGo, allModelsToPydantic, allModelsToRust } from "@/lib/pydantic"
@@ -9,11 +9,12 @@ import { JSON_HEADERS } from "@/lib/api-client"
 import { readPipelineAssistantStream } from "@/lib/assistant-stream-read"
 import { assistantRequestFailed } from "@/lib/assistant-chat-types"
 import { useStore } from "@/lib/store"
-import { ModuleKind, MODULE_META } from "@/lib/types"
+import { DocLabel, ModuleKind, MODULE_META } from "@/lib/types"
 import { AssistantChat, type AssistantChatMessage } from "@/components/assistant-chat"
 import { UiContextChip } from "@/components/ui-context-chip"
 import { Badge } from "@/components/ui/badge"
-import { buildAssistantMentionOptions } from "@/lib/assistant-mentions"
+import { buildAssistantMentionOptions, uiContextRefFromDoc } from "@/lib/assistant-mentions"
+import { isPreviewOnly } from "@/lib/demo-mode"
 import { docLabelDisplay, docsForProject } from "@/lib/project-docs"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { invalidStepMessage } from "@/lib/validity"
@@ -49,6 +50,7 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
     docs,
     runs,
     model: globalModel,
+    addDoc,
     addDocContent,
     applyProjectChanges,
     setDocumentation,
@@ -85,8 +87,31 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
   // AI : Vibe vs Build — prompt awareness only; agent write power stays identical.
   const isVibe = activeWindow === AppWindowId.Vibe
   const humanSurface = isVibe ? "vibe" : "build"
+  const [filesUploading, setFilesUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
+
+  // AI : paperclip → Documents + pin chip so Vibe (no Documents tab) can still attach files.
+  async function handleComposerFiles(files: File[]) {
+    if (!files.length || filesUploading) return
+    if (isPreviewOnly()) {
+      setUploadError("Uploads are disabled in preview mode.")
+      return
+    }
+    setFilesUploading(true)
+    setUploadError(null)
+    try {
+      for (const file of files) {
+        const doc = await addDoc(file, DocLabel.Inference, project.id)
+        pinUiContext(uiContextRefFromDoc(doc))
+      }
+    } catch (err) {
+      setUploadError((err as Error).message || "Upload failed")
+    } finally {
+      setFilesUploading(false)
+    }
+  }
 
   const mentionIssues = useMemo(() => {
     const invalid = computeInvalidForUi(modules, models, typeAliases)
@@ -286,13 +311,22 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
           if (option.ref) pinUiContext(option.ref)
         }}
         onPinUiContext={pinUiContext}
+        onFilesSelected={(files) => void handleComposerFiles(files)}
+        filesUploading={filesUploading}
         composerAttachments={
           // AI : chips only — empty Context tip / Select UI live on dock, not in the composer.
-          uiContextPins.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5 border-b border-border bg-secondary/20 px-3 py-2">
-              {uiContextPins.map((pin) => (
-                <UiContextChip key={pin.id} pin={pin} onRemove={unpinUiContext} />
-              ))}
+          uiContextPins.length > 0 || uploadError ? (
+            <div className="space-y-1.5 border-b border-border bg-secondary/20 px-3 py-2">
+              {uploadError ? (
+                <p className="font-mono text-[10px] text-destructive">{uploadError}</p>
+              ) : null}
+              {uiContextPins.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {uiContextPins.map((pin) => (
+                    <UiContextChip key={pin.id} pin={pin} onRemove={unpinUiContext} />
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : undefined
         }

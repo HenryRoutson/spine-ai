@@ -1,0 +1,402 @@
+{
+  "id": "p_book_writer",
+  "name": "Whole Book Writer",
+  "kind": "writing",
+  "models": [
+    {
+      "id": "m_brief",
+      "name": "BookBrief",
+      "description": "What to write — title, audience, and how many chapters.",
+      "fields": [
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Working book title"
+        },
+        {
+          "id": "f_genre",
+          "name": "genre",
+          "type": "text",
+          "optional": false,
+          "description": "Genre / form e.g. cozy mystery novella"
+        },
+        {
+          "id": "f_audience",
+          "name": "audience",
+          "type": "text",
+          "optional": false,
+          "description": "Intended readers"
+        },
+        {
+          "id": "f_premise",
+          "name": "premise",
+          "type": "text",
+          "optional": false,
+          "description": "One-paragraph premise"
+        },
+        {
+          "id": "f_tone",
+          "name": "tone",
+          "type": "text",
+          "optional": false,
+          "description": "Voice and tone guidance"
+        },
+        {
+          "id": "f_n",
+          "name": "chapter_count",
+          "type": "int",
+          "optional": false,
+          "description": "How many chapters to outline and write (keep small for demos)"
+        }
+      ]
+    },
+    {
+      "id": "m_outline",
+      "name": "ChapterOutline",
+      "description": "One planned chapter from the initial chapter list.",
+      "fields": [
+        {
+          "id": "f_num",
+          "name": "chapter_number",
+          "type": "int",
+          "optional": false,
+          "description": "1-based chapter index"
+        },
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Chapter title"
+        },
+        {
+          "id": "f_synopsis",
+          "name": "synopsis",
+          "type": "text",
+          "optional": false,
+          "description": "What happens in this chapter"
+        },
+        {
+          "id": "f_beats",
+          "name": "key_beats",
+          "type": "list[text]",
+          "optional": false,
+          "description": "2-5 concrete story beats to hit",
+          "minItems": 2,
+          "maxItems": 5
+        }
+      ]
+    },
+    {
+      "id": "m_job",
+      "name": "ChapterJob",
+      "description": "One batch item — chapter outline plus book-level context for the writer.",
+      "fields": [
+        {
+          "id": "f_num",
+          "name": "chapter_number",
+          "type": "int",
+          "optional": false,
+          "description": "1-based chapter index"
+        },
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Chapter title"
+        },
+        {
+          "id": "f_synopsis",
+          "name": "synopsis",
+          "type": "text",
+          "optional": false,
+          "description": "What happens in this chapter"
+        },
+        {
+          "id": "f_beats",
+          "name": "key_beats",
+          "type": "list[text]",
+          "optional": false,
+          "description": "Story beats to hit"
+        },
+        {
+          "id": "f_book",
+          "name": "book_title",
+          "type": "text",
+          "optional": false,
+          "description": "Copied from BookBrief.title"
+        },
+        {
+          "id": "f_genre",
+          "name": "genre",
+          "type": "text",
+          "optional": false,
+          "description": "Copied from BookBrief.genre"
+        },
+        {
+          "id": "f_audience",
+          "name": "audience",
+          "type": "text",
+          "optional": false,
+          "description": "Copied from BookBrief.audience"
+        },
+        {
+          "id": "f_premise",
+          "name": "premise",
+          "type": "text",
+          "optional": false,
+          "description": "Copied from BookBrief.premise"
+        },
+        {
+          "id": "f_tone",
+          "name": "tone",
+          "type": "text",
+          "optional": false,
+          "description": "Copied from BookBrief.tone"
+        },
+        {
+          "id": "f_total",
+          "name": "total_chapters",
+          "type": "int",
+          "optional": false,
+          "description": "Total chapters in the book"
+        }
+      ]
+    },
+    {
+      "id": "m_draft",
+      "name": "ChapterDraft",
+      "description": "One written chapter as markdown body.",
+      "fields": [
+        {
+          "id": "f_num",
+          "name": "chapter_number",
+          "type": "int",
+          "optional": false,
+          "description": "Matches ChapterJob.chapter_number"
+        },
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Chapter title used in the heading"
+        },
+        {
+          "id": "f_md",
+          "name": "markdown",
+          "type": "text",
+          "typeExpr": {
+            "kind": "prim",
+            "name": "markdown"
+          },
+          "optional": false,
+          "description": "Chapter BODY only (paragraphs / lists) — no # book title or ## chapter heading",
+          "deterministic": false
+        }
+      ]
+    },
+    {
+      "id": "m_book",
+      "name": "BookManuscript",
+      "description": "Full book joined into one markdown export.",
+      "fields": [
+        {
+          "id": "f_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Book title"
+        },
+        {
+          "id": "f_n",
+          "name": "chapter_count",
+          "type": "int",
+          "optional": false,
+          "description": "Number of chapters included"
+        },
+        {
+          "id": "f_md",
+          "name": "markdown",
+          "type": "text",
+          "typeExpr": {
+            "kind": "prim",
+            "name": "markdown"
+          },
+          "optional": false,
+          "description": "Complete markdown manuscript ready to save as .md",
+          "deterministic": false
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_input",
+      "kind": "input",
+      "label": "Brief",
+      "inputType": "json",
+      "inputDescription": "JSON BookBrief — title, genre, audience, premise, tone, chapter_count",
+      "outStructureId": "m_brief",
+      "note": "Book parameters: title + how many chapters to write"
+    },
+    {
+      "id": "mod_outline",
+      "kind": "llm",
+      "label": "Outline Chapters",
+      "note": "BookBrief \u2192 list[ChapterOutline]. Initial chapter list for the whole book.",
+      "inputDescription": "BookBrief with title, premise, and chapter_count",
+      "inStructureId": "m_brief",
+      "outStructureId": "m_outline",
+      "prompt": "Plan the full book as an ordered chapter list.\nReturn exactly chapter_count chapters (clamp to 1\u201312 if the brief is extreme).\nEach chapter needs chapter_number (1-based), a vivid title, a short synopsis, and 2\u20135 concrete key_beats.\nKeep arcs coherent across chapters: setup \u2192 rising action \u2192 climax \u2192 resolution for a short book.\nMatch genre, audience, premise, and tone from the brief.",
+      "model": "deepseek-v4",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_outline"
+        }
+      }
+    },
+    {
+      "id": "mod_enrich",
+      "kind": "transform",
+      "label": "Enrich \u2192 Chapter Jobs",
+      "note": "list[ChapterOutline] \u2192 list[ChapterJob] \u2014 attach book-level context from Brief for each batch write.",
+      "inputDescription": "List of ChapterOutline objects from the outline step",
+      "inStructureId": "m_outline",
+      "outStructureId": "m_job",
+      "code": "(chapters, state) => { const brief = state[\"Brief\"] ?? {}; const title = String(brief?.title ?? \"Untitled\"); const genre = String(brief?.genre ?? \"\"); const audience = String(brief?.audience ?? \"\"); const premise = String(brief?.premise ?? \"\"); const tone = String(brief?.tone ?? \"\"); const rows = Array.isArray(chapters) ? chapters : []; const total = rows.length || Math.max(1, Number(brief?.chapter_count) || 1); return rows.map((c, i) => ({ chapter_number: Number(c?.chapter_number) || i + 1, title: String(c?.title ?? `Chapter ${i + 1}`), synopsis: String(c?.synopsis ?? \"\"), key_beats: Array.isArray(c?.key_beats) ? c.key_beats.map(String) : [], book_title: title, genre, audience, premise, tone, total_chapters: total })); }",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_job"
+        }
+      }
+    },
+    {
+      "id": "mod_batch",
+      "kind": "llm-batch",
+      "label": "Write Each Chapter",
+      "note": "list[ChapterJob] \u2192 list[ChapterDraft]. One structured LLM call per chapter (parallel batch).",
+      "inputDescription": "List of ChapterJob objects — outline plus book context",
+      "inStructureId": "m_job",
+      "outStructureId": "m_draft",
+      "prompt": "Write ONE full chapter of the book described by book_title / genre / audience / premise / tone.\nThis is chapter chapter_number of total_chapters titled \"title\".\nFollow the synopsis and hit every key_beat.\nKeep chapter_number and title unchanged.\nReturn markdown as the chapter BODY only: prose paragraphs (and short lists if needed). Do NOT include a # book title or ## chapter heading — those are added when chapters are joined.\nAim for a short novella chapter (~400\u2013900 words). Stay consistent with earlier/later chapter roles implied by chapter_number / total_chapters.",
+      "model": "deepseek-v4",
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_draft"
+        }
+      }
+    },
+    {
+      "id": "mod_join",
+      "kind": "transform",
+      "label": "Assemble Markdown Book",
+      "note": "list[ChapterDraft] \u2192 BookManuscript — single markdown export of the full book.",
+      "inputDescription": "List of ChapterDraft objects with markdown bodies",
+      "inStructureId": "m_draft",
+      "outStructureId": "m_book",
+      "code": "(rows, state) => { const brief = state[\"Brief\"] ?? {}; const title = String(brief?.title ?? \"Untitled\"); const chapters = (Array.isArray(rows) ? rows : []).slice().sort((a, b) => Number(a?.chapter_number) - Number(b?.chapter_number)); const parts = chapters.map((c) => { const n = Number(c?.chapter_number) || 0; const ct = String(c?.title ?? `Chapter ${n}`); const body = String(c?.markdown ?? \"\").trim(); return `## Chapter ${n}: ${ct}\\n\\n${body}`; }); const markdown = [`# ${title}`, \"\", parts.join(\"\\n\\n\")].join(\"\\n\"); return { title, chapter_count: chapters.length, markdown }; }"
+    },
+    {
+      "id": "mod_output",
+      "kind": "output",
+      "label": "Full Book Markdown",
+      "inputDescription": "Single BookManuscript — title, chapter_count, and complete markdown ready to export as .md",
+      "inStructureId": "m_book",
+      "outStructureId": "m_book",
+      "note": "Download markdown from the run output / shared link"
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single_book",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 72,
+      "latencyMs": 12000,
+      "costCents": 40,
+      "passRate": 84
+    },
+    {
+      "id": "s_agent_book",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 88,
+      "latencyMs": 45000,
+      "costCents": 220,
+      "passRate": 94
+    },
+    {
+      "id": "s_cheap_book",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 76,
+      "latencyMs": 28000,
+      "costCents": 28,
+      "passRate": 86
+    }
+  ],
+  "docs": [
+    {
+      "name": "short_mystery_brief.json",
+      "type": "json",
+      "label": "inference",
+      "file": "book_writer/short_mystery_brief.json"
+    },
+    {
+      "name": "kids_adventure_brief.json",
+      "type": "json",
+      "label": "inference",
+      "file": "book_writer/kids_adventure_brief.json"
+    },
+    {
+      "name": "short_mystery_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "book_writer/short_mystery_inference.json"
+    },
+    {
+      "name": "kids_adventure_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "book_writer/kids_adventure_inference.json"
+    },
+    {
+      "name": "book_writer_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "book_writer/book_writer_testing.json"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Short Mystery Novella",
+      "description": "4-chapter cozy mystery — outline chapters then llm-batch write each, join to markdown",
+      "inputs": {
+        "Brief": "short_mystery_brief.json"
+      }
+    },
+    {
+      "name": "Kids Adventure",
+      "description": "3-chapter kids adventure — outline \u2192 batch chapters \u2192 markdown book",
+      "inputs": {
+        "Brief": "kids_adventure_brief.json"
+      }
+    }
+  ]
+}

@@ -23,7 +23,8 @@ import { InferenceStepTracePanel } from "@/components/inference/inference-step-t
 import { MIN_RUN_BALANCE_CENTS } from "@/lib/billing_config"
 import { useDocViewer } from "@/lib/doc-viewer"
 import { docsForInputModule } from "@/lib/inference-input"
-import { uploadDocForOwnPipeline } from "@/lib/own-pipeline-docs"
+import { inputModuleJsonStructSchema } from "@/lib/inference-json-struct-edit"
+import { uploadDocContentForOwnPipeline, uploadDocForOwnPipeline } from "@/lib/own-pipeline-docs"
 import { pipelineFinalOutputSteps } from "@/lib/step-doc"
 import { useInferenceRun } from "@/lib/use-inference-run"
 import { useOwnPipelineData } from "@/lib/use-own-pipeline-data"
@@ -32,7 +33,7 @@ import { useWorkspaceBilling } from "@/lib/use-workspace-billing"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { modelName } from "@/lib/validity"
 import { formatErrorForClipboard } from "@/lib/error-copy"
-import { DocLabel, type DocId, DocRef, ModuleId, PipelineModule, PipelineRun, ProjectId } from "@/lib/types"
+import { DocLabel, type DocId, DocRef, InputType, ModuleId, PipelineModule, PipelineRun, ProjectId } from "@/lib/types"
 import { RunPhase } from "@/lib/run-phase"
 
 type OwnPipelineRunPanelProps = {
@@ -133,15 +134,46 @@ export function OwnPipelineRunPanel({
       if (data.isBuilderActive) {
         return await data.builder!.addDoc(file, DocLabel.Inference, project.id)
       }
-      const doc = await uploadDocForOwnPipeline(file, project)
-      const nextProject = {
-        ...project,
-        seedDocNames: project.seedDocNames?.includes(doc.name)
-          ? project.seedDocNames
-          : [...(project.seedDocNames ?? []), doc.name],
-      }
+      const { doc, project: nextProject } = await uploadDocForOwnPipeline(file, project)
       data.patchLocalProject(nextProject)
       data.patchLocalDocs([doc, ...data.docs.filter((d) => d.id !== doc.id && d.name !== doc.name)])
+      return doc
+    },
+    [data, project],
+  )
+
+  const addDocContent = useCallback(
+    async (
+      name: string,
+      type: InputType,
+      content: string,
+      _label: DocLabel,
+      _projectId?: string,
+      replaceDocId?: DocId,
+    ): Promise<DocRef> => {
+      if (!project) throw new Error("Pipeline not loaded")
+      if (data.isBuilderActive) {
+        return await data.builder!.addDocContent(
+          name,
+          type,
+          content,
+          DocLabel.Inference,
+          project.id,
+          replaceDocId,
+        )
+      }
+      const { doc, project: nextProject } = await uploadDocContentForOwnPipeline(
+        name,
+        type,
+        content,
+        project,
+        replaceDocId,
+      )
+      data.patchLocalProject(nextProject)
+      data.patchLocalDocs([
+        doc,
+        ...data.docs.filter((d) => d.id !== replaceDocId && d.id !== doc.id && d.name !== doc.name),
+      ])
       return doc
     },
     [data, project],
@@ -217,9 +249,22 @@ export function OwnPipelineRunPanel({
             outModel={outModelFor(m)}
             docs={docsForInputModule(runHook.inputDocs, m.id)}
             issue={runHook.inputIssueByModule.get(m.id)}
+            jsonStruct={inputModuleJsonStructSchema(m, data.models, project.typeAliases ?? [])}
+            jsonStructDisabled={runHook.phase === RunPhase.Running || !!project.teamReadOnly}
+            jsonStructSource={{
+              docs: data.docs,
+              project,
+              addDocContent,
+            }}
             onOpenPicker={() => runHook.setPickerModuleId(m.id)}
             onOpenDoc={(docId) => openDoc({ docId, start: 0, end: 0 })}
             onRemoveDoc={(docId) => runHook.removeInputDocForModule(m.id, docId)}
+            onClearSlot={() => {
+              for (const d of docsForInputModule(runHook.inputDocs, m.id)) {
+                runHook.removeInputDocForModule(m.id, d.id)
+              }
+            }}
+            onJsonStructAssigned={(doc) => runHook.setInputDocForModule(m.id, doc)}
           />
         ))}
       </div>

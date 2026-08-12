@@ -112,14 +112,66 @@ export function ProjectAssistantDockPanel({ embedded = false }: ProjectAssistant
       )}
       {...{ [UI_CONTEXT_ATTR.ignore]: "" }}
     >
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <div className="min-w-0">
-          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Agent</p>
-          {ownerSubtitle ? (
-            <p className="truncate font-mono text-[9px] text-muted-foreground">{ownerSubtitle}</p>
-          ) : null}
+      {/* AI : tabs + actions in one row — drop redundant AGENT label and duplicate +. */}
+      <div className="flex items-stretch border-b border-border">
+        <div className="app-scrollbar flex min-w-0 flex-1 items-stretch gap-0.5 overflow-x-auto px-1 py-1">
+          {openChatIds.length === 0 ? (
+            <p className="px-2 py-1 font-mono text-[10px] text-muted-foreground">No open agents</p>
+          ) : (
+            openChatIds.map((tabId) => {
+              const active = tabId === activeChatId
+              const busy = tabBusy(tabId)
+              return (
+                <div
+                  key={tabId}
+                  className={cn(
+                    "group flex max-w-[11rem] shrink-0 items-center rounded-md border",
+                    active
+                      ? "border-primary/40 bg-primary/5"
+                      : "border-transparent hover:border-border hover:bg-secondary/40",
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      selectChat(tabId)
+                      setHistoryOpen(false)
+                    }}
+                    className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left"
+                    title={tabTitle(tabId)}
+                  >
+                    {busy ? (
+                      <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
+                    ) : (
+                      <Sparkles className="h-3 w-3 shrink-0 text-muted-foreground" />
+                    )}
+                    <span className="truncate font-mono text-[10px] text-foreground">
+                      {tabTitle(tabId)}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="mr-0.5 rounded p-1 text-muted-foreground opacity-70 hover:bg-secondary hover:text-foreground group-hover:opacity-100"
+                    aria-label={`Close ${tabTitle(tabId)}`}
+                    title="Close tab"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      closeOpenChat(tabId)
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )
+            })
+          )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1 border-l border-border px-1">
+          {ownerSubtitle ? (
+            <p className="max-w-[7rem] truncate px-1 font-mono text-[9px] text-muted-foreground">
+              {ownerSubtitle}
+            </p>
+          ) : null}
           {/* AI : Vibe has sparse Select UI targets — keep Select on dock/build only. */}
           {!embedded ? (
             <Button
@@ -188,76 +240,6 @@ export function ProjectAssistantDockPanel({ embedded = false }: ProjectAssistant
             </Button>
           ) : null}
         </div>
-      </div>
-
-      {/* AI : horizontal open-agent tabs — multiple agents can stream at once. */}
-      <div className="flex items-stretch border-b border-border">
-        <div className="app-scrollbar flex min-w-0 flex-1 items-stretch gap-0.5 overflow-x-auto px-1 py-1">
-          {openChatIds.length === 0 ? (
-            <p className="px-2 py-1 font-mono text-[10px] text-muted-foreground">No open agents</p>
-          ) : (
-            openChatIds.map((tabId) => {
-              const active = tabId === activeChatId
-              const busy = tabBusy(tabId)
-              return (
-                <div
-                  key={tabId}
-                  className={cn(
-                    "group flex max-w-[11rem] shrink-0 items-center rounded-md border",
-                    active
-                      ? "border-primary/40 bg-primary/5"
-                      : "border-transparent hover:border-border hover:bg-secondary/40",
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      selectChat(tabId)
-                      setHistoryOpen(false)
-                    }}
-                    className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left"
-                    title={tabTitle(tabId)}
-                  >
-                    {busy ? (
-                      <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary" />
-                    ) : (
-                      <Sparkles className="h-3 w-3 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="truncate font-mono text-[10px] text-foreground">
-                      {tabTitle(tabId)}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="mr-0.5 rounded p-1 text-muted-foreground opacity-70 hover:bg-secondary hover:text-foreground group-hover:opacity-100"
-                    aria-label={`Close ${tabTitle(tabId)}`}
-                    title="Close tab"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      closeOpenChat(tabId)
-                    }}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              )
-            })
-          )}
-        </div>
-        <Button
-          type="button"
-          size="icon-sm"
-          variant="ghost"
-          className="m-1 shrink-0"
-          onClick={() => {
-            newChat()
-            setHistoryOpen(false)
-          }}
-          aria-label="New agent tab"
-          title="New agent tab"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </Button>
       </div>
 
       {historyOpen && (

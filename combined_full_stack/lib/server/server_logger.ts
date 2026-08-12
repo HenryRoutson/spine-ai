@@ -28,6 +28,7 @@ function formatCtx(ctx?: LogCtx): string {
 }
 
 // AI : tagged console + optional FileLog — one logger per subsystem / run.
+// AI : TODO (prod) — no crash reporting; error() should also post to Sentry (or equivalent) in hosted deploys.
 export class ServerLogger {
   constructor(
     private tag: string,

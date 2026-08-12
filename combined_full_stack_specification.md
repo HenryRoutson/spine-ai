@@ -45,6 +45,7 @@ please make a sepearte page for selecting the project where you don't have to ch
 
   4. Parallel llm example. Run llm calls in parallel. Simplest example where llms answer 10 trivia questions at the same time and return a list of answers.
 
+  5. Whole book writer. Start from a book brief, LLM an initial chapter list, then batch-LLM write each chapter in parallel and join into one markdown manuscript ready to export as `.md`.
 
 
 
@@ -89,6 +90,9 @@ csv won't work if examples have commas
 you need to ensure that the examples actually validate as the structure you say they are. you sholdn't be able to just have random text in a json field or number field
 you probably need a popup to open the list of examples in a json editor, doesn't work in a single cell. 
 atomic_code/edit_given_struct/edit_given_struct.html
+
+add a file upload location to derive a new structure from excel, an existing file. make the combined type which has each field as a sheet and each sheet should also be added with a sheet prefix
+
 
 # Pipeline
 
@@ -312,6 +316,7 @@ All inputs are shown with the option to select documents.
 documents are filtered based on if they adhere to the restrictions of the input model like file type or json structure. 
 So you can either say, i only want pdfs or i only want json which is of this structure. 
 files are already uploaded into documents, and you can select from these, with filtering based on name and extension completed.
+**JSON structure inputs** — when an input slot is JSON with a typed structureOut (not Document), choose one mode: From file (store pick), Branch off (copy values into a form; source file untouched), or Create empty (schema defaults). Apply writes a new file and assigns it — never looks like in-place editing of the selected store file.
 there is a run button,
 when you click it a live server log appears. when the run is completed there is a button directing users to the logging tab. server logs displayed should be broken down by step in the pipeline.
 there is a text field to put a description of why you are doing this run which you can edit in logging and saerch for later to organiase your runs.

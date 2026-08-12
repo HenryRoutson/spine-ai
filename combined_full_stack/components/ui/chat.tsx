@@ -19,6 +19,8 @@ import {
   Workflow,
   X,
 } from "lucide-react"
+import { FileDropZone } from "@/components/file-drop-zone"
+import { allUploadAccept } from "@/lib/inference-input"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -196,6 +198,9 @@ type ChatInputProps = {
   /** AI : @ menu candidates (steps / models / files / Select UI). */
   mentionOptions?: AssistantMentionOption[]
   onMentionPick?: (option: AssistantMentionOption) => void
+  // AI : paperclip → project docs + @file pin (Vibe / Agent composer).
+  onFilesSelected?: (files: File[]) => void
+  filesUploading?: boolean
 }
 
 const MENTION_GROUP_ICON: Record<
@@ -333,10 +338,13 @@ function ChatInput({
   onPastesChange,
   mentionOptions,
   onMentionPick,
+  onFilesSelected,
+  filesUploading = false,
 }: ChatInputProps) {
   const pasteList = pastes ?? []
   const pasteChipsEnabled = Boolean(onPastesChange)
   const mentionsEnabled = Boolean(mentionOptions && onMentionPick)
+  const fileUploadEnabled = Boolean(onFilesSelected)
   const sendEnabled =
     canSend ?? Boolean(value.trim() || pasteList.length > 0)
   // AI : ClipboardEvent has no modifiers — track Shift for Cmd/Ctrl+Shift+V plain insert.
@@ -477,6 +485,19 @@ function ChatInput({
           {pasteList.map((p) => (
             <PastedChip key={p.id} attachment={p} onRemove={disabled ? undefined : removePaste} />
           ))}
+        </div>
+      ) : null}
+      {fileUploadEnabled && onFilesSelected ? (
+        <div className="px-3 pt-2">
+          <FileDropZone
+            compact
+            accept={allUploadAccept()}
+            disabled={disabled}
+            uploading={filesUploading}
+            onFiles={onFilesSelected}
+            label="Drag & drop files here"
+            browseLabel="Browse files"
+          />
         </div>
       ) : null}
       <div className="relative flex gap-2 p-3">
