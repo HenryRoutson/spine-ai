@@ -59,7 +59,7 @@ function ChatHeader({ className, ...props }: React.ComponentProps<"div">) {
 function ChatList({ className, children, ...props }: React.ComponentProps<"div">) {
   return (
     <ScrollArea className={cn("h-full min-h-0 flex-1", className)} {...props}>
-      <div data-slot="chat-list" className="space-y-4 p-4">
+      <div data-slot="chat-list" className="space-y-3 px-3 py-3">
         {children}
       </div>
     </ScrollArea>
@@ -68,14 +68,15 @@ function ChatList({ className, children, ...props }: React.ComponentProps<"div">
 
 type ChatBubbleVariant = "user" | "assistant"
 
+// AI : Cursor-like neutrals — muted surfaces, no sky tint.
 const bubbleVariantClass: Record<ChatBubbleVariant, string> = {
-  user: "border-border bg-secondary/70",
-  assistant: "border-sky-500/35 bg-sky-500/15",
+  user: "border-border/70 bg-muted/60",
+  assistant: "border-border/40 bg-transparent",
 }
 
 const avatarVariantClass: Record<ChatBubbleVariant, string> = {
-  user: "border-border bg-secondary",
-  assistant: "border-sky-400/40 bg-sky-500/25",
+  user: "border-border bg-muted",
+  assistant: "border-border/60 bg-muted/40",
 }
 
 type ChatMessageProps = React.ComponentProps<"div"> & {
@@ -89,7 +90,7 @@ function ChatMessage({ variant, className, children, ...props }: ChatMessageProp
       data-slot="chat-message"
       data-variant={variant}
       className={cn(
-        "flex gap-2 animate-in fade-in duration-300",
+        "flex w-full gap-2 animate-in fade-in duration-300",
         isUser ? "slide-in-from-right-4 flex-row-reverse" : "slide-in-from-left-4 flex-row",
         className,
       )}
@@ -109,7 +110,8 @@ function ChatBubble({ variant, className, children, ...props }: ChatBubbleProps)
     <div
       data-slot="chat-bubble"
       className={cn(
-        "min-w-0 max-w-[92%] rounded-lg border px-3 py-2",
+        // AI : fill the chat column — no artificial 92% cap.
+        "min-w-0 w-full flex-1 rounded-lg border px-3 py-2",
         bubbleVariantClass[variant],
         className,
       )}
@@ -138,7 +140,7 @@ function ChatBubbleAvatar({ variant, className, ...props }: ChatBubbleAvatarProp
       {variant === "user" ? (
         <User className="h-3.5 w-3.5 text-muted-foreground" />
       ) : (
-        <Bot className="h-3.5 w-3.5 text-sky-300" />
+        <Bot className="h-3.5 w-3.5 text-muted-foreground" />
       )}
     </div>
   )
@@ -163,7 +165,7 @@ function ChatTypingIndicator({ label = "Thinking…", className }: ChatTypingInd
   return (
     <div
       data-slot="chat-typing-indicator"
-      className={cn("flex items-center gap-2 font-mono text-[10px] text-sky-200/70", className)}
+      className={cn("flex items-center gap-2 font-mono text-[10px] text-muted-foreground", className)}
     >
       <Loader2 className="h-3.5 w-3.5 animate-spin" />
       {label}
@@ -507,8 +509,8 @@ function ChatInput({
                         className={cn(
                           "flex w-full items-start gap-2 px-2.5 py-1.5 text-left font-mono transition-colors",
                           active
-                            ? "bg-sky-500/20 text-foreground"
-                            : "text-foreground/90 hover:bg-muted",
+                            ? "bg-muted text-foreground"
+                            : "text-foreground/90 hover:bg-muted/60",
                         )}
                         onMouseDown={(ev) => {
                           // AI : prevent textarea blur before click registers.

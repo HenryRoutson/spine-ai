@@ -13,21 +13,18 @@ import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 function DebugEntryRow({ entry }: { entry: AssistantDebugEntry }) {
   switch (entry.kind) {
     case AssistantDebugKind.Phase:
+      // AI : "thinking" phase is implied by the thinking stream — skip the redundant label.
+      if (entry.phase === "thinking") return null
       return (
-        <p className="font-mono text-[9px] uppercase tracking-wider text-primary">
+        <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
           {entry.phase}
         </p>
       )
     case AssistantDebugKind.Thinking:
       return (
-        <div>
-          <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-            Thinking
-          </p>
-          <p className="font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
-            {entry.text}
-          </p>
-        </div>
+        <p className="font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
+          {entry.text}
+        </p>
       )
     case AssistantDebugKind.LlmResponse:
       return (
@@ -123,9 +120,8 @@ export function AssistantDebugPanel({
 
   return (
     <div className={cn("rounded-lg border border-border/60 bg-secondary/20 px-3 py-2", className)}>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">Debug trace</p>
-        {showCopyButton && (
+      {showCopyButton ? (
+        <div className="mb-2 flex justify-end">
           <Button
             type="button"
             variant="ghost"
@@ -136,21 +132,16 @@ export function AssistantDebugPanel({
             {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
             {copied ? "Copied" : "Copy all"}
           </Button>
-        )}
-      </div>
+        </div>
+      ) : null}
       <div className="max-h-64 space-y-3 overflow-y-auto">
         {showLiveThinking && (
-          <div>
-            <p className="mb-1 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-              Thinking
-            </p>
-            <p className="font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
-              {liveThinking}
-              {thinkingActive && (
-                <span className="inline-block animate-pulse text-primary">▍</span>
-              )}
-            </p>
-          </div>
+          <p className="font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-muted-foreground">
+            {liveThinking}
+            {thinkingActive && (
+              <span className="inline-block animate-pulse text-muted-foreground">▍</span>
+            )}
+          </p>
         )}
         {entries.map((entry, i) => (
           <DebugEntryRow key={`${entry.kind}-${i}`} entry={entry} />

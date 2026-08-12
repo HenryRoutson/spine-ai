@@ -441,7 +441,7 @@ export function AssistantChat<TProposal>({
                     {showDebug && m.debugTrace && m.debugTrace.length > 0 && (
                       <AssistantDebugPanel
                         entries={m.debugTrace}
-                        className="mt-3 border-sky-400/25 bg-sky-950/35"
+                        className="mt-3 border-border/50 bg-muted/30"
                         showCopyButton={false}
                       />
                     )}
@@ -459,29 +459,27 @@ export function AssistantChat<TProposal>({
                       entries={debugTrace}
                       liveThinking={liveThinking}
                       thinkingActive={loadingPhase === "thinking"}
-                      className="border-sky-400/25 bg-sky-950/35"
+                      className="border-border/50 bg-muted/30"
                       showCopyButton={false}
                     />
                   ) : liveThinking ? (
-                    <div>
-                      <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-sky-200/70">
-                        Thinking
-                      </p>
-                      <p className="max-h-40 overflow-y-auto font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-foreground/80">
-                        {liveThinking}
-                        {loadingPhase === "thinking" && (
-                          <span className="inline-block animate-pulse text-sky-300">▍</span>
-                        )}
-                      </p>
-                    </div>
+                    <p className="max-h-40 overflow-y-auto font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-foreground/80">
+                      {liveThinking}
+                      {loadingPhase === "thinking" && (
+                        <span className="inline-block animate-pulse text-muted-foreground">▍</span>
+                      )}
+                    </p>
                   ) : null}
                   {liveResponse && (
                     <p className="text-xs leading-relaxed whitespace-pre-wrap">
                       {liveResponse}
-                      <span className="inline-block animate-pulse text-sky-300">▍</span>
+                      <span className="inline-block animate-pulse text-muted-foreground">▍</span>
                     </p>
                   )}
-                  <ChatTypingIndicator label={loadingText} />
+                  {/* AI : skip "thinking…" spinner when the stream itself is already visible. */}
+                  {!(liveThinking && loadingPhase === "thinking") && (
+                    <ChatTypingIndicator label={loadingText} />
+                  )}
                 </ChatBubble>
               </ChatMessage>
             )}
