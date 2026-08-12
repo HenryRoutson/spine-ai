@@ -11,6 +11,7 @@ import {
 } from "@/lib/workspace-validity-ui"
 import { cn } from "@/lib/utils"
 import { prefetchWorkspacePanel } from "@/lib/prefetch-workspace-panel"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
 
 type AppWindowNavProps = {
   activeWindow: AppWindowId
@@ -52,6 +53,12 @@ export function AppWindowNav({ activeWindow, onSelect, validity, items = BUILDER
               issue && "text-destructive hover:bg-destructive/10",
               disabled && "cursor-not-allowed opacity-50",
             )}
+            {...uiContextTargetProps({
+              kind: "generic",
+              id: `window:${item.id}`,
+              label: `Tab · ${item.label}`,
+              snippet: issue ? `issue: ${issue}` : active ? "active workspace tab" : "workspace tab",
+            })}
           >
             {issue ? (
               <AlertTriangle className="h-3 w-3 shrink-0" />

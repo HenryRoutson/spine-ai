@@ -9,6 +9,7 @@ import { formatTypeExprPy, tryParseTypeExprString } from "@/lib/type-expr-parse"
 import { TypeAliasPreview } from "@/components/type-expr-preview"
 import type { StructureModel, TypeAlias } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
 
 export function StructureTypeAliasEditor({
   alias,
@@ -28,7 +29,20 @@ export function StructureTypeAliasEditor({
   onLockedInteract?: () => void
 }) {
   return (
-    <div className="space-y-5">
+    <div
+      className="space-y-5"
+      {...uiContextTargetProps({
+        kind: "type_alias",
+        id: `type:${alias.id}`,
+        label: `Type · ${alias.name || "unnamed"}`,
+        snippet: [
+          alias.description?.trim() || null,
+          formatTypeExprPy(alias.expr, models) || null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      })}
+    >
       <div className="flex items-start gap-3">
         <div className="flex-1 space-y-2">
           <Input

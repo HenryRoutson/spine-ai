@@ -11,10 +11,16 @@ import {
   type ReactNode,
 } from "react"
 import type { AssistantChatMessage } from "@/components/assistant-chat"
+import { UiContextSelectOverlay } from "@/components/ui-context-select-overlay"
 import { API_ROUTES } from "@/lib/api-routes"
 import { JSON_HEADERS, apiJson } from "@/lib/api-client"
 import type { AssistantStreamingDraft } from "@/lib/assistant-chat-types"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
+import {
+  dedupeUiContextRefs,
+  MAX_UI_CONTEXT_ITEMS,
+  type UiContextRef,
+} from "@/lib/ui-context-types"
 
 export type AssistantChatSummary = {
   id: string
@@ -23,6 +29,37 @@ export type AssistantChatSummary = {
   createdAt: number
   updatedAt: number
   messageCount: number
+  userId: string
+  ownerEmail: string | null
+  isMine: boolean
+}
+
+/** AI : short label for shared-project history — email local-part, or You. */
+export function chatOwnerLabel(chat: Pick<AssistantChatSummary, "isMine" | "ownerEmail">): string {
+  if (chat.isMine) return "You"
+  const email = chat.ownerEmail?.trim()
+  if (!email) return "Teammate"
+  const at = email.indexOf("@")
+  return at > 0 ? email.slice(0, at) : email
+}
+
+function optimisticChatSummary(
+  id: string,
+  projectId: string,
+  title: string,
+  messageCount: number,
+): AssistantChatSummary {
+  return {
+    id,
+    projectId,
+    title,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    messageCount,
+    userId: "",
+    ownerEmail: null,
+    isMine: true,
+  }
 }
 
 type ProjectAssistantSession = {
@@ -34,6 +71,8 @@ type ProjectAssistantSession = {
   setAssistantBusy: (busy: boolean) => void
   chats: AssistantChatSummary[]
   activeChatId: string | null
+  /** AI : false when viewing a teammate's chat on a shared project */
+  activeChatIsMine: boolean
   chatsLoading: boolean
   selectChat: (chatId: string) => void
   newChat: () => void
@@ -44,6 +83,13 @@ type ProjectAssistantContextValue = {
   open: boolean
   setOpen: (open: boolean) => void
   toggle: () => void
+  selectMode: boolean
+  setSelectMode: (on: boolean) => void
+  toggleSelectMode: () => void
+  uiContextPins: UiContextRef[]
+  pinUiContext: (ref: UiContextRef) => void
+  unpinUiContext: (id: string) => void
+  clearUiContextPins: () => void
   ensureProjectChats: (projectId: string, initialMessage: string) => Promise<void>
   getSession: (projectId: string, initialMessage: string) => ProjectAssistantSession
 }
@@ -113,6 +159,8 @@ export { formatChatDate, groupChatsByMonth }
 
 export function ProjectAssistantProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
+  const [selectMode, setSelectMode] = useState(false)
+  const [uiContextPins, setUiContextPins] = useState<UiContextRef[]>([])
   const [messagesByChat, setMessagesByChat] = useState<
     Record<string, AssistantChatMessage<ProjectProposal>[]>
   >({})
@@ -134,6 +182,20 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
   chatsByProjectRef.current = chatsByProject
 
   const toggle = useCallback(() => setOpen((v) => !v), [])
+  const toggleSelectMode = useCallback(() => {
+    setSelectMode((v) => {
+      const next = !v
+      if (next) setOpen(true)
+      return next
+    })
+  }, [])
+  const pinUiContext = useCallback((ref: UiContextRef) => {
+    setUiContextPins((prev) => dedupeUiContextRefs([ref, ...prev]).slice(0, MAX_UI_CONTEXT_ITEMS))
+  }, [])
+  const unpinUiContext = useCallback((id: string) => {
+    setUiContextPins((prev) => prev.filter((p) => p.id !== id))
+  }, [])
+  const clearUiContextPins = useCallback(() => setUiContextPins([]), [])
 
   const persistMessages = useCallback(
     (chatId: string, messages: AssistantChatMessage<ProjectProposal>[]) => {
@@ -188,7 +250,8 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
           `${API_ROUTES.assistantChats}?projectId=${encodeURIComponent(projectId)}`,
         )
         let nextChats = chats
-        let activeId = chats[0]?.id
+        // AI : open your own thread first — don't land in a teammate's read-only chat.
+        let activeId = chats.find((c) => c.isMine)?.id
 
         if (!activeId) {
           const localId = `${projectId}-local-${Date.now()}`
@@ -201,14 +264,14 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
               body: JSON.stringify({ projectId, messages: welcome }),
             },
           )
-          nextChats = [chat]
+          nextChats = mergeChatSummaries(chats, [chat])
           activeId = chat.id
           setMessagesByChat((prev) => ({
             ...prev,
             [chat.id]: chat.messages?.length ? chat.messages : welcome,
           }))
         } else {
-          const top = chats[0]
+          const top = chats.find((c) => c.id === activeId) ?? chats[0]
           const { chat } = await apiJson<{
             chat: AssistantChatSummary & { messages: AssistantChatMessage<ProjectProposal>[] }
           }>(API_ROUTES.assistantChat(top.id))
@@ -238,14 +301,7 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
         setChatsByProject((prev) => ({
           ...prev,
           [projectId]: [
-            {
-              id: localId,
-              projectId,
-              title: "Current chat",
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-              messageCount: 1,
-            },
+            optimisticChatSummary(localId, projectId, "Current chat", 1),
             ...(prev[projectId] ?? []),
           ],
         }))
@@ -305,14 +361,7 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
       setChatsByProject((prev) => ({
         ...prev,
         [projectId]: [
-          {
-            id: localId,
-            projectId,
-            title: "New chat",
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            messageCount: welcome.length,
-          },
+          optimisticChatSummary(localId, projectId, "New chat", welcome.length),
           ...(prev[projectId] ?? []),
         ],
       }))
@@ -410,6 +459,9 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
     (projectId: string, initialMessage: string): ProjectAssistantSession => {
       const activeChatId = activeChatByProject[projectId] ?? null
       const initial = initialMessageByProject.current.get(projectId) ?? initialMessage
+      const chats = chatsByProject[projectId] ?? []
+      const activeSummary = activeChatId ? chats.find((c) => c.id === activeChatId) : undefined
+      const activeChatIsMine = activeSummary?.isMine ?? true
       const messages =
         (activeChatId && messagesByChat[activeChatId]) ||
         (activeChatId ? defaultMessages(activeChatId, initial) : [])
@@ -417,6 +469,9 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
       const setMessages: ProjectAssistantSession["setMessages"] = (updater) => {
         const chatId = activeChatByProjectRef.current[projectId]
         if (!chatId) return
+        const owned =
+          (chatsByProjectRef.current[projectId] ?? []).find((c) => c.id === chatId)?.isMine ?? true
+        if (!owned) return
         setMessagesByChat((prev) => {
           const current = prev[chatId] ?? defaultMessages(chatId, initial)
           const next = typeof updater === "function" ? updater(current) : updater
@@ -467,8 +522,9 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
             return { ...prev, [chatId]: true }
           })
         },
-        chats: chatsByProject[projectId] ?? [],
+        chats,
         activeChatId,
+        activeChatIsMine,
         chatsLoading: loadingByProject[projectId] ?? !loadStarted.current.has(projectId),
         selectChat: (chatId) => void selectChat(projectId, chatId),
         newChat: () => void newChat(projectId, initialMessage),
@@ -485,12 +541,39 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
   }, [])
 
   const value = useMemo(
-    () => ({ open, setOpen, toggle, ensureProjectChats, getSession }),
-    [ensureProjectChats, getSession, open, toggle],
+    () => ({
+      open,
+      setOpen,
+      toggle,
+      selectMode,
+      setSelectMode,
+      toggleSelectMode,
+      uiContextPins,
+      pinUiContext,
+      unpinUiContext,
+      clearUiContextPins,
+      ensureProjectChats,
+      getSession,
+    }),
+    [
+      clearUiContextPins,
+      ensureProjectChats,
+      getSession,
+      open,
+      pinUiContext,
+      selectMode,
+      toggle,
+      toggleSelectMode,
+      uiContextPins,
+      unpinUiContext,
+    ],
   )
 
   return (
-    <ProjectAssistantContext.Provider value={value}>{children}</ProjectAssistantContext.Provider>
+    <ProjectAssistantContext.Provider value={value}>
+      {children}
+      <UiContextSelectOverlay />
+    </ProjectAssistantContext.Provider>
   )
 }
 

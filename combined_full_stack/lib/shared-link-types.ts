@@ -10,6 +10,26 @@ export type SharedLinkDefaultDoc = {
   type?: InputType;
 };
 
+// AI : creator-configurable Embed chrome — sites pick what fits their page.
+export type EmbedDelivery = "iframe" | "script" | "both";
+export type EmbedTheme = "light" | "dark" | "system";
+
+export type EmbedOptions = {
+  delivery: EmbedDelivery;
+  heightPx: number;
+  theme: EmbedTheme;
+  hideBranding: boolean;
+  postMessageEvents: boolean;
+};
+
+export const DEFAULT_EMBED_OPTIONS: EmbedOptions = {
+  delivery: "both",
+  heightPx: 640,
+  theme: "system",
+  hideBranding: false,
+  postMessageEvents: false,
+};
+
 export type SharedLinkRecord = {
   id: SharedLinkId;
   projectId: Project["id"];
@@ -27,6 +47,9 @@ export type SharedLinkRecord = {
   createdAt: number;
   enabled: boolean;
   revoked: boolean;
+  // AI : non-empty + emb_ id ⇒ website Embed deployment (origin-bound).
+  allowedOrigins: string[];
+  embedOptions: EmbedOptions;
 };
 
 export type SharedLinkPublicView = Pick<
@@ -40,6 +63,8 @@ export type SharedLinkPublicView = Pick<
   | "defaultDocs"
   | "billingMultiple"
   | "flatFeeCents"
+  | "allowedOrigins"
+  | "embedOptions"
 > & {
   modules: Project["modules"];
   models: Project["models"];

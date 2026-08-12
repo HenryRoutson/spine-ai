@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react"
 import { cn } from "@/lib/utils"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
+import type { UiContextKind } from "@/lib/ui-context-types"
 
 // AI : page-local entity lists — visually distinct from L1 app top nav (muted inset rail).
 
@@ -48,6 +50,12 @@ type EntityRailItemProps = {
   children: ReactNode
   className?: string
   disabled?: boolean
+  uiContext?: {
+    kind: UiContextKind
+    id: string
+    label: string
+    snippet?: string
+  }
 }
 
 export function EntityRailItem({
@@ -56,8 +64,17 @@ export function EntityRailItem({
   children,
   className,
   disabled,
+  uiContext,
 }: EntityRailItemProps) {
   const Tag = onClick ? "button" : "div"
+  const ctx = uiContext
+    ? uiContextTargetProps({
+        kind: uiContext.kind,
+        id: uiContext.id,
+        label: uiContext.label,
+        snippet: uiContext.snippet,
+      })
+    : undefined
   return (
     <Tag
       type={onClick ? "button" : undefined}
@@ -71,6 +88,7 @@ export function EntityRailItem({
         disabled && "pointer-events-none opacity-50",
         className,
       )}
+      {...ctx}
     >
       {children}
     </Tag>

@@ -33,7 +33,9 @@ import {
   type SharedLinkId,
 } from "./types";
 import { logger } from "./server_logger";
-import type { SharedLinkDefaultDoc, SharedLinkRecord } from "@/lib/shared-link-types";
+import type { SharedLinkDefaultDoc, SharedLinkRecord, EmbedOptions } from "@/lib/shared-link-types";
+import { DEFAULT_EMBED_OPTIONS } from "@/lib/shared-link-types";
+import { isEmbedLinkId, normalizeEmbedOrigins } from "@/lib/server/embed_origins";
 
 export type { SharedLinkDefaultDoc, SharedLinkRecord };
 
@@ -84,9 +86,33 @@ function toExactSpendCents(cents: number): number {
 const linkLog = logger("shared-links");
 
 const SHARED_LINK_PREFIX = "pub_";
+const EMBED_LINK_PREFIX = "emb_";
 
 function isServerless(): boolean {
   return !!process.env.VERCEL;
+}
+
+function normalizeEmbedOptions(raw: unknown): EmbedOptions {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Partial<EmbedOptions>;
+  return {
+    delivery: o.delivery === "iframe" || o.delivery === "script" || o.delivery === "both"
+      ? o.delivery
+      : DEFAULT_EMBED_OPTIONS.delivery,
+    heightPx:
+      typeof o.heightPx === "number" && Number.isFinite(o.heightPx)
+        ? Math.min(2400, Math.max(240, Math.round(o.heightPx)))
+        : DEFAULT_EMBED_OPTIONS.heightPx,
+    theme: o.theme === "light" || o.theme === "dark" || o.theme === "system"
+      ? o.theme
+      : DEFAULT_EMBED_OPTIONS.theme,
+    hideBranding: o.hideBranding === true,
+    postMessageEvents: o.postMessageEvents === true,
+  };
+}
+
+function originsFromRow(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return normalizeEmbedOrigins(raw.map(String));
 }
 
 // AI : SECURITY — deploy mutations require service role after RLS hardening; no user-session fallback.
@@ -188,6 +214,10 @@ export function newSharedLinkId(): SharedLinkId {
   return uid<SharedLinkId>(SHARED_LINK_PREFIX);
 }
 
+export function newEmbedLinkId(): SharedLinkId {
+  return uid<SharedLinkId>(EMBED_LINK_PREFIX);
+}
+
 export function newSessionId(): string {
   return randomBytes(16).toString("hex");
 }
@@ -208,6 +238,8 @@ function loadLocalLink(id: SharedLinkId): StoredSharedLink | null {
     ),
     flatFeeCents: normalizeFlatFeeCents(row.flatFeeCents ?? row.markupFixedCents ?? 0),
     enabled: row.enabled !== false,
+    allowedOrigins: originsFromRow(row.allowedOrigins),
+    embedOptions: normalizeEmbedOptions(row.embedOptions),
   };
 }
 
@@ -256,6 +288,8 @@ async function loadSupabaseLink(id: SharedLinkId): Promise<StoredSharedLink | nu
     createdAt: data.created_at,
     enabled: data.enabled !== false,
     revoked: data.revoked,
+    allowedOrigins: originsFromRow(data.allowed_origins),
+    embedOptions: normalizeEmbedOptions(data.embed_options),
   };
 }
 
@@ -309,6 +343,8 @@ export async function listSharedLinksForOwner(ownerId: user_id_string): Promise<
       createdAt: row.created_at,
       enabled: row.enabled !== false,
       revoked: row.revoked,
+      allowedOrigins: originsFromRow(row.allowed_origins),
+      embedOptions: normalizeEmbedOptions(row.embed_options),
     }),
   );
 }
@@ -331,6 +367,8 @@ function toPublicRecord(row: StoredSharedLink): SharedLinkRecord {
     createdAt: row.createdAt,
     enabled: row.enabled !== false,
     revoked: row.revoked,
+    allowedOrigins: row.allowedOrigins ?? [],
+    embedOptions: normalizeEmbedOptions(row.embedOptions),
   };
 }
 
@@ -345,14 +383,23 @@ export type PublishSharedLinkInput = {
   flatFeeCents?: number;
   defaultDocsByModule: Partial<Record<ModuleId, DocId[]>>;
   store: Store;
+  kind?: "link" | "embed";
+  allowedOrigins?: string[];
+  embedOptions?: Partial<EmbedOptions>;
 };
 
 export async function publishSharedLink(input: PublishSharedLinkInput): Promise<SharedLinkRecord> {
-  const id = newSharedLinkId();
+  const isEmbed = input.kind === "embed";
+  const allowedOrigins = isEmbed ? normalizeEmbedOrigins(input.allowedOrigins ?? []) : [];
+  if (isEmbed && allowedOrigins.length === 0) {
+    throw new Error("Embed requires at least one allowed origin");
+  }
+  const id = isEmbed ? newEmbedLinkId() : newSharedLinkId();
   const fundingMode = input.fundingMode ?? SharedLinkFundingMode.SharerPays;
   const billingMultiple = normalizeBillingMultiple(input.billingMultiple);
   const flatFeeCents = normalizeFlatFeeCents(input.flatFeeCents);
   assertValidSharedLinkPricing(fundingMode, billingMultiple, flatFeeCents);
+  const embedOptions = normalizeEmbedOptions(isEmbed ? input.embedOptions : undefined);
 
   const snapshot = migrateProjectModules(structuredClone(input.project));
   const defaultDocs: SharedLinkDefaultDoc[] = [];
@@ -408,6 +455,8 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     createdAt: Date.now(),
     enabled: true,
     revoked: false,
+    allowedOrigins,
+    embedOptions,
   };
 
   if (!isServerless()) saveLocalLink(row);
@@ -437,8 +486,41 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
     revoked: false,
     run_count: 0,
     created_at: row.createdAt,
+    allowed_origins: row.allowedOrigins,
+    embed_options: row.embedOptions,
   });
   if (error) {
+    // AI : pre-migration DBs lack embed columns — retry without them; local JSON still has full row.
+    const missingEmbedCols =
+      /allowed_origins|embed_options/i.test(error.message) || isMissingSchemaError(error);
+    if (missingEmbedCols && !isServerless()) {
+      linkLog.warn(`embed columns missing — upsert without them + local save`, {
+        error: error.message,
+      });
+      const { error: retryErr } = await db.from("shared_links").upsert({
+        id: row.id,
+        owner_id: row.ownerId,
+        project_id: row.projectId,
+        snapshot: row.snapshot,
+        default_docs: row.defaultDocs,
+        default_model: row.defaultModel ?? null,
+        funding_mode: row.fundingMode,
+        viewer_name_required: row.viewerNameRequired,
+        spend_limit_cents: row.spendLimitCents ?? null,
+        total_spend_cents: row.totalSpendCents,
+        billing_multiple: row.billingMultiple,
+        markup_fixed_cents: row.flatFeeCents,
+        markup_bps: 0,
+        enabled: true,
+        revoked: false,
+        run_count: 0,
+        created_at: row.createdAt,
+      });
+      if (!retryErr) {
+        saveLocalLink(row);
+        return toPublicRecord(row);
+      }
+    }
     if (isServerless() || !isMissingSchemaError(error)) {
       throw new Error(`shared link persistence failed: ${error.message}`);
     }
@@ -500,6 +582,40 @@ export async function updateSharedLinkSpendLimit(
     await db
       .from("shared_links")
       .update({ spend_limit_cents: normalized ?? null })
+      .eq("id", id)
+      .eq("owner_id", ownerId);
+  }
+  return toPublicRecord(link);
+}
+
+// AI : Embed allowlist / chrome updates — only for emb_ deployments.
+export async function updateSharedLinkEmbedSettings(
+  ownerId: user_id_string,
+  id: SharedLinkId,
+  patch: { allowedOrigins?: string[]; embedOptions?: Partial<EmbedOptions> },
+): Promise<SharedLinkRecord | null> {
+  const link = await getSharedLink(id);
+  if (!link || link.ownerId !== ownerId) return null;
+  if (!isEmbedLinkId(link.id) && (link.allowedOrigins?.length ?? 0) === 0) {
+    throw new Error("Only Embed deployments support origin / chrome settings");
+  }
+  if (patch.allowedOrigins !== undefined) {
+    const next = normalizeEmbedOrigins(patch.allowedOrigins);
+    if (next.length === 0) throw new Error("Embed requires at least one allowed origin");
+    link.allowedOrigins = next;
+  }
+  if (patch.embedOptions !== undefined) {
+    link.embedOptions = normalizeEmbedOptions({ ...link.embedOptions, ...patch.embedOptions });
+  }
+  saveLocalLink(link);
+  const db = await supabaseForSharedLinks();
+  if (db) {
+    await db
+      .from("shared_links")
+      .update({
+        allowed_origins: link.allowedOrigins,
+        embed_options: link.embedOptions,
+      })
       .eq("id", id)
       .eq("owner_id", ownerId);
   }
@@ -639,6 +755,9 @@ export function publicLinkView(link: StoredSharedLink) {
     models: link.snapshot.models,
     spendLimitReached: sharedLinkSpendLimitReached(link),
     disabled: link.enabled === false,
+    // AI : SECURITY — omit allowlist from public GET so attackers cannot copy origins for Referer spoof mint.
+    allowedOrigins: [],
+    embedOptions: normalizeEmbedOptions(link.embedOptions),
   };
 }
 

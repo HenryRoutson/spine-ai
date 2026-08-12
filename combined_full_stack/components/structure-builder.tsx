@@ -181,6 +181,12 @@ export function StructureBuilder() {
                         setTarget({ kind: "struct", id: m.id })
                         setView("structures")
                       }}
+                      uiContext={{
+                        kind: "model",
+                        id: `model:${m.id}`,
+                        label: `Structure · ${m.name}`,
+                        snippet: m.description || `${m.fields.length} fields`,
+                      }}
                     >
                       <div className="flex w-full items-center justify-between gap-1">
                         <div className="min-w-0">
@@ -230,6 +236,12 @@ export function StructureBuilder() {
                       onClick={() => {
                         setTarget({ kind: "type", id: t.id })
                         setView("structures")
+                      }}
+                      uiContext={{
+                        kind: "type_alias",
+                        id: `type:${t.id}`,
+                        label: `Type · ${t.name}`,
+                        snippet: t.description,
                       }}
                     >
                       <div className="flex items-center gap-2">

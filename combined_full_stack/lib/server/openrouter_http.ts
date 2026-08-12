@@ -3,7 +3,7 @@
 import { Agent, fetch as undiciFetch, type Dispatcher } from "undici";
 import { FailureKind } from "./types";
 import { type ServerLogger, logger } from "./server_logger";
-import { DEEPSEEK_SLUG, OPENROUTER_AUTH_KEY_URL, OPENROUTER_CHAT_URL } from "./openrouter_slugs";
+import { DEEPSEEK_SLUG, OPENROUTER_AUTH_KEY_URL, resolveOpenRouterChatUrl, resolveOpenRouterSeed } from "./openrouter_slugs";
 import "./config";
 
 const orLog = logger("openrouter");
@@ -38,6 +38,8 @@ export interface ChatOptions {
   system?: string;
   temperature?: number;
   maxTokens?: number;
+  /** OpenRouter seed — same seed + params → deterministic replies when the model supports it. */
+  seed?: number;
   promptIndex?: number;
   round?: number;
   onUsage?: (usage: RawUsage) => void;
@@ -192,6 +194,7 @@ type VisionUserContent =
   | { type: "image_url"; image_url: { url: string } };
 
 function buildMessagesBody(messages: ChatMessage[], opts: ChatOptions, jsonMode: JsonModeOn, stream = false): string {
+  const seed = opts.seed ?? resolveOpenRouterSeed();
   const payload = [
     ...(opts.system ? [{ role: "system" as const, content: opts.system }] : []),
     ...messages,
@@ -201,7 +204,9 @@ function buildMessagesBody(messages: ChatMessage[], opts: ChatOptions, jsonMode:
     messages: payload,
     temperature: opts.temperature ?? 0,
     max_tokens: opts.maxTokens ?? DEFAULT_MAX_TOKENS,
-    provider: { allow_fallbacks: false },
+    // AI : seeded parity runs — allow provider failover when flash is rate-limited upstream.
+    provider: { allow_fallbacks: seed != null },
+    ...(seed != null ? { seed } : {}),
     ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
     ...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
   });
@@ -232,14 +237,15 @@ async function httpPost(
   dispatcher?: Dispatcher,
 ): Promise<{ res: Response; latencyMs: number }> {
   const t0 = Date.now();
+  const url = resolveOpenRouterChatUrl();
   const res = dispatcher
-    ? await undiciFetch(OPENROUTER_CHAT_URL, {
+    ? await undiciFetch(url, {
         method: "POST",
         headers: openRouterHeaders(apiKey()),
         body,
         dispatcher,
       })
-    : await fetch(OPENROUTER_CHAT_URL, {
+    : await fetch(url, {
         method: "POST",
         headers: openRouterHeaders(apiKey()),
         body,
@@ -465,7 +471,7 @@ export async function fetchStreamingChat(
   for (let attempt = 0; attempt < MAX_CHAT_ATTEMPTS; attempt++) {
     log.debug(`stream attempt`, { attempt: attempt + 1, max: MAX_CHAT_ATTEMPTS });
     const t0 = Date.now();
-    const res = await fetch(OPENROUTER_CHAT_URL, {
+    const res = await fetch(resolveOpenRouterChatUrl(), {
       method: "POST",
       headers: openRouterHeaders(apiKey()),
       body,

@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useRef } from "react"
-import { X, FileText } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { X, FileText, Pencil } from "lucide-react"
 import { useDocViewer, type DocViewMode } from "@/lib/doc-viewer"
 import { useOptionalStore } from "@/lib/store"
 import { resolveSpan } from "@/lib/doc-span"
@@ -9,6 +9,7 @@ import { useDocViewerData } from "@/lib/use-doc-viewer-data"
 import { useDocFetchScope } from "@/lib/use-doc-fetch-scope"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
 import { DocViewerLoading } from "@/components/doc-viewer-loading"
+import { DocEditDialog } from "@/components/doc-edit-dialog"
 import { cn } from "@/lib/utils"
 import { DataDownloadMenu } from "@/components/data-download-menu"
 import { JsonPreviewPanel } from "@/components/json-preview-panel"
@@ -16,7 +17,14 @@ import { MarkupView } from "@/components/highlight"
 import { docViewerTabs, docViewTabLabel, isPdfDoc, markupKindForDoc } from "@/lib/doc-content"
 import { MarkupKind } from "@/lib/markup-kinds"
 import { isTabularDocType } from "@/lib/doc-structure-infer"
+import { isStructuredEditableDoc } from "@/lib/doc-edit"
+import { isTestingFileName } from "@/lib/testing-files"
+import { isInferenceSetupFileName } from "@/lib/inference-setup-files"
 import { isDownloadableJson } from "@/lib/json-utils"
+import { isPreviewOnly } from "@/lib/demo-mode"
+import { PreviewBlockedDialog } from "@/components/preview-blocked-dialog"
+import { useOptionalAppShell, AppWindowId } from "@/lib/app-shell"
+import { Button } from "@/components/ui/button"
 import type { DocId, DocRef } from "@/lib/types"
 
 const TAB_LABEL: Record<DocViewMode, string> = {
@@ -34,9 +42,12 @@ function tabLabel(mode: DocViewMode, doc: Pick<DocRef, "name" | "type"> | undefi
 export function DocViewer() {
   const { target, close } = useDocViewer()
   const store = useOptionalStore()
+  const shell = useOptionalAppShell()
   const docs = store?.docs ?? []
   const models = store?.models ?? []
   const markRef = useRef<HTMLSpanElement>(null)
+  const [editDoc, setEditDoc] = useState<DocRef | null>(null)
+  const [previewBlockedOpen, setPreviewBlockedOpen] = useState(false)
 
   const docId = target?.docId ?? null
   const docRef = docId ? docs.find((d) => d.id === docId) : undefined
@@ -65,6 +76,30 @@ export function DocViewer() {
   const tabularDoc = docRef ? isTabularDocType(docRef.type, docRef.name) : false
   const displayText =
     view === "vision" ? (visionEntries[visionIndex]?.text ?? "") : (parserText ?? "")
+  const canEdit =
+    !!docRef &&
+    (isTestingFileName(docRef.name) ||
+      isInferenceSetupFileName(docRef.name) ||
+      isStructuredEditableDoc(docRef))
+
+  function startEdit() {
+    if (!docRef) return
+    if (isPreviewOnly()) {
+      setPreviewBlockedOpen(true)
+      return
+    }
+    if (isTestingFileName(docRef.name)) {
+      shell?.openTesting(docRef.name)
+      close()
+      return
+    }
+    if (isInferenceSetupFileName(docRef.name)) {
+      shell?.setActiveWindow(AppWindowId.Inference)
+      close()
+      return
+    }
+    setEditDoc(docRef)
+  }
 
   useEffect(() => {
     if (!docId || parserText === null || view !== "parser" || !markRef.current) return
@@ -90,6 +125,7 @@ export function DocViewer() {
   const after = displayText.slice(span.end)
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex justify-end">
       <button
         aria-label="Close document viewer"
@@ -129,6 +165,17 @@ export function DocViewer() {
                   </button>
                 ))}
               </div>
+            )}
+            {canEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 bg-transparent"
+                onClick={startEdit}
+                title="Edit as a new file"
+              >
+                <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+              </Button>
             )}
             <button
               onClick={close}
@@ -231,5 +278,16 @@ export function DocViewer() {
         </div>
       </aside>
     </div>
+    {previewBlockedOpen ? <PreviewBlockedDialog onClose={() => setPreviewBlockedOpen(false)} /> : null}
+    {editDoc ? (
+      <DocEditDialog
+        doc={editDoc}
+        onClose={() => setEditDoc(null)}
+        onSaved={() => {
+          setEditDoc(null)
+        }}
+      />
+    ) : null}
+    </>
   )
 }

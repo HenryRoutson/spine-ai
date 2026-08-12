@@ -15,6 +15,8 @@ export {
 
 export { OPENROUTER_PROVIDER_ID, OpenRouterProvider, getOpenRouterProvider } from "./providers/openrouter";
 export { CustomLlmProvider } from "./providers/custom";
+export { SeedLlmProvider, getSeedLlmProvider, SEED_LLM_PROVIDER_ID } from "./providers/seed";
+export { seedLlmReply, seedOpenAiChatCompletion } from "./seed_response";
 
 export {
   registerLlmProviderFactory,

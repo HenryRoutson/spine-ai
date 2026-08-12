@@ -41,6 +41,7 @@ import { formatCostCents, formatSecondsShort } from "@/lib/format"
 import { runBilledCents, runTotalMs } from "@/lib/run-metrics"
 import { WARNING_TEXT_CLASS, INSPECTOR_SECTION_BORDER_CLASS, INSPECTOR_SECTION_TITLE_CLASS } from "@/lib/ui-classes"
 import { cn } from "@/lib/utils"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -323,6 +324,13 @@ export function PipelineBuilder() {
                         "flex items-center justify-between rounded-lg border bg-card/50 px-3 py-2",
                         INSPECTOR_SECTION_BORDER_CLASS,
                       )}
+                      {...uiContextTargetProps({
+                        kind: "pipeline_step",
+                        id: `step:${selected.id}`,
+                        label: selected.label?.trim() || MODULE_META[selected.kind].label,
+                        moduleId: selected.id,
+                        snippet: `${MODULE_META[selected.kind].label} · ${selected.kind}`,
+                      })}
                     >
                       <span className={INSPECTOR_SECTION_TITLE_CLASS}>
                         {MODULE_META[selected.kind].label}

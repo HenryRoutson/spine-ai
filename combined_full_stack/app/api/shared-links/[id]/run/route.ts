@@ -55,6 +55,12 @@ import {
   SharedLinkDisabledError,
   SharedLinkSpendLimitError,
 } from "@/lib/server/shared_links";
+import { isEmbedLinkId } from "@/lib/server/embed_origins";
+import {
+  embedSessionParentAllowed,
+  readEmbedSessionHeader,
+  verifyEmbedSessionToken,
+} from "@/lib/server/embed_session";
 import {
   loadDefaultDocContent,
   overlayStoreForSharedRun,
@@ -131,7 +137,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!linkId) return apiError("link not found", 404);
 
   // AI : TODO security — sharer_pays credit drain: IP-bucketed shared_run (5/10m) is rotatable;
-  // AI : add CAPTCHA / viewer auth / mandatory spend caps / anomaly kill-switch on publish.
+  // AI : embed session token blocks spoofed parentOrigin; CAPTCHA / spend caps still needed vs distributed drain.
   const ip = clientIpFromHeaders(req.headers);
   const runLimitKey = `shared-run:${linkId}:${ip}` as RateLimitKey;
   const runLimited = await checkRateLimit(runLimitKey, "shared_run");
@@ -148,6 +154,23 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const parsed = await parseRequestJson(req, sharedLinkRunBodySchema, {});
   if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
   const body = parsed;
+
+  // AI : Embed anti-theft — HMAC from /embed/[id] via header (or body fallback). Never trust parentOrigin.
+  if (isEmbedLinkId(link.id) || (link.allowedOrigins?.length ?? 0) > 0) {
+    const token = readEmbedSessionHeader(req) ?? body.embedSessionToken;
+    const claims = verifyEmbedSessionToken(link.id, token);
+    if (
+      !claims ||
+      !embedSessionParentAllowed(claims.parentOrigin, link.allowedOrigins ?? [], req.nextUrl.origin)
+    ) {
+      return apiError(
+        "This embed is not allowed on this website. Ask the publisher to add your origin.",
+        403,
+        "embed_origin_denied",
+      );
+    }
+  }
+
   if (link.viewerNameRequired && !body.viewerName?.trim()) {
     return apiError("name required", 400);
   }

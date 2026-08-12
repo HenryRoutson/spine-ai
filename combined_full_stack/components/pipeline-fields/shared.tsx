@@ -9,6 +9,7 @@ import { isLlmKind } from "@/lib/module-kinds"
 import { llmStepEmitsList } from "@/lib/spine-type"
 import { cn } from "@/lib/utils"
 import { INSPECTOR_SECTION_BORDER_CLASS, INSPECTOR_SECTION_TITLE_CLASS, WARNING_TEXT_CLASS } from "@/lib/ui-classes"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
 import {
   type PipelineModule,
   type StructureModel,
@@ -56,17 +57,35 @@ export function PipelineField({
   hintTone = "warning",
   children,
   defaultOpen = true,
+  moduleId,
+  fieldPath,
+  snippet,
 }: {
   label: string
   hint?: string
   hintTone?: "warning" | "error"
   children: React.ReactNode
   defaultOpen?: boolean
+  moduleId?: string
+  fieldPath?: string
+  snippet?: string
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const path = fieldPath ?? label
+  const ctx = uiContextTargetProps({
+    kind: "inspector_field",
+    id: `field:${moduleId ?? "sel"}:${path}`,
+    label: moduleId ? `${label}` : label,
+    moduleId,
+    fieldPath: path,
+    snippet: snippet ?? hint,
+  })
 
   return (
-    <div className={cn("min-w-0 rounded-lg border bg-card/50", INSPECTOR_SECTION_BORDER_CLASS)}>
+    <div
+      className={cn("min-w-0 rounded-lg border bg-card/50", INSPECTOR_SECTION_BORDER_CLASS)}
+      {...ctx}
+    >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

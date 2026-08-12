@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
-import { Check, AlertTriangle, Copy, FileText, BookOpen, Braces } from "lucide-react"
+import { Check, AlertTriangle, Copy, Crosshair, FileText, BookOpen, Braces, X } from "lucide-react"
 import { MultiLangReadonlyCodeViewer, type MultiLangCodeSource } from "@/components/code-viewer"
 import { allModelsToBaml, allModelsToDts, allModelsToGo, allModelsToPydantic, allModelsToRust } from "@/lib/pydantic"
 import { API_ROUTES } from "@/lib/api-routes"
@@ -9,15 +9,19 @@ import { JSON_HEADERS } from "@/lib/api-client"
 import { readPipelineAssistantStream } from "@/lib/assistant-stream-read"
 import { assistantRequestFailed } from "@/lib/assistant-chat-types"
 import { useStore } from "@/lib/store"
-import { MODULE_META } from "@/lib/types"
+import { ModuleKind, MODULE_META } from "@/lib/types"
 import { AssistantChat, type AssistantChatMessage } from "@/components/assistant-chat"
+import { UiContextChip } from "@/components/ui-context-chip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { docLabelDisplay } from "@/lib/project-docs"
+import { buildAssistantMentionOptions } from "@/lib/assistant-mentions"
+import { docLabelDisplay, docsForProject } from "@/lib/project-docs"
+import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
+import { invalidStepMessage } from "@/lib/validity"
 import { formatProjectAssistantConversation } from "@/lib/format-project-assistant-copy"
 import { copyTextToClipboard } from "@/lib/clipboard"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
-import { useProjectAssistantSession } from "@/lib/project-assistant-context"
+import { chatOwnerLabel, useProjectAssistant, useProjectAssistantSession } from "@/lib/project-assistant-context"
 import {
   PROJECT_ASSISTANT_INITIAL_MESSAGE,
   PROJECT_ASSISTANT_STARTERS,
@@ -44,15 +48,62 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
     refresh,
     refreshBilling,
   } = useStore()
-  const { messages, setMessages, activeChatId, setStreamingDraft, streamingDraft, setAssistantBusy } =
+  const { messages, setMessages, activeChatId, setStreamingDraft, streamingDraft, setAssistantBusy, activeChatIsMine, chats } =
     useProjectAssistantSession(project.id, PROJECT_ASSISTANT_INITIAL_MESSAGE)
+  const {
+    uiContextPins,
+    pinUiContext,
+    unpinUiContext,
+    clearUiContextPins,
+    selectMode,
+    setSelectMode,
+    setOpen,
+    toggleSelectMode,
+  } = useProjectAssistant()
   const [conversationCopied, setConversationCopied] = useState(false)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
+
+  const mentionIssues = useMemo(() => {
+    const invalid = computeInvalidForUi(modules, models, typeAliases)
+    const out: { id: string; label: string; message: string; moduleId?: string }[] = []
+    for (const [moduleId, issues] of invalid) {
+      const mod = modules.find((m) => m.id === moduleId)
+      const stepLabel = mod?.label || MODULE_META[mod?.kind ?? ModuleKind.Input].label || "Step"
+      issues.forEach((issue, issueIndex) => {
+        const message = invalidStepMessage(issue, models, modules)
+        // AI : kind alone can collide (e.g. multiple StructureField) — index keeps React keys / dedupe distinct.
+        out.push({
+          id: `invalid:${moduleId}:${issue.kind}:${issueIndex}`,
+          label: `${stepLabel} · ${issue.kind}`,
+          message,
+          moduleId,
+        })
+      })
+    }
+    return out
+  }, [modules, models, typeAliases])
+
+  const mentionOptions = useMemo(
+    () =>
+      buildAssistantMentionOptions({
+        modules,
+        models,
+        typeAliases,
+        docs: projectDocs,
+        issues: mentionIssues,
+      }),
+    [modules, models, typeAliases, projectDocs, mentionIssues],
+  )
 
   const conversationCopyText = useMemo(
     () => formatProjectAssistantConversation(messages, streamingDraft),
     [messages, streamingDraft],
   )
+
+  const activeChat = chats.find((c) => c.id === activeChatId)
+  const teammateLabel = activeChat && !activeChatIsMine ? chatOwnerLabel(activeChat) : null
 
   async function copyConversation() {
     await copyTextToClipboard(conversationCopyText)
@@ -87,8 +138,16 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
       <AssistantChat<ProjectProposal>
         key={activeChatId ?? project.id}
         title="Agent"
-        subtitle={`${modules.length} steps · ${models.length} models · ${typeAliases.length} types · ${docs.length} docs`}
+        subtitle={
+          teammateLabel
+            ? `${teammateLabel}'s chat · view only`
+            : `${modules.length} steps · ${models.length} models · ${typeAliases.length} types · ${docs.length} docs`
+        }
         showDebug
+        readOnly={!activeChatIsMine}
+        readOnlyHint={
+          teammateLabel ? `View only — ${teammateLabel}'s chat. Start a new chat to reply.` : undefined
+        }
         headerActions={
           <Button
             type="button"
@@ -108,7 +167,7 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
         }
         initialMessage={PROJECT_ASSISTANT_INITIAL_MESSAGE}
         starters={PROJECT_ASSISTANT_STARTERS}
-        placeholder="Describe structures, pipeline, and test documents…"
+        placeholder="Describe… or type @ to mention steps, models, files"
         loadingLabel={(phase) =>
           phase === "retrying"
             ? "retrying…"
@@ -120,12 +179,66 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
         onMessagesChange={setMessages}
         onStreamingDraftChange={setStreamingDraft}
         onLoadingChange={setAssistantBusy}
+        uiContextPins={uiContextPins}
+        canSendWithoutText={uiContextPins.length > 0}
+        onComposerAttachmentsConsumed={clearUiContextPins}
+        mentionOptions={mentionOptions}
+        onMentionPick={(option) => {
+          if (option.action === "select_ui") {
+            // AI : setSelectMode alone does not open the dock — mirror toggleSelectMode.
+            setOpen(true)
+            setSelectMode(true)
+            return
+          }
+          if (option.ref) pinUiContext(option.ref)
+        }}
+        composerAttachments={
+          <div className="space-y-2 border-b border-border bg-secondary/20 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                Context{uiContextPins.length > 0 ? ` · ${uiContextPins.length}` : ""}
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant={selectMode ? "secondary" : "outline"}
+                className="h-7 gap-1 px-2 font-mono text-[10px]"
+                onClick={toggleSelectMode}
+                title={selectMode ? "Exit select mode (Esc)" : "Select UI for agent"}
+                aria-label={selectMode ? "Exit select mode" : "Select UI for agent"}
+              >
+                <Crosshair className="h-3.5 w-3.5" />
+                {selectMode ? "Selecting…" : "Select UI"}
+              </Button>
+            </div>
+            {uiContextPins.length === 0 ? (
+              <p className="font-mono text-[10px] text-muted-foreground">
+                {selectMode
+                  ? "App clicks are paused. Hover highlights · click to pin · Esc exits."
+                  : "Type @ to mention, or Select UI to pin — no copy-paste."}
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {uiContextPins.map((pin) => (
+                  <UiContextChip key={pin.id} pin={pin} onRemove={unpinUiContext} />
+                ))}
+              </div>
+            )}
+          </div>
+        }
         onApprove={async (msg) => {
           if (!msg.proposal) return
           await applyProposal(msg.proposal)
         }}
         onReject={() => {}}
-        requestAssistant={async (text, history, { setLoadingPhase, onThinkingDelta, onMessageDelta, onDebugEntry }) => {
+        requestAssistant={async (
+          text,
+          history,
+          { setLoadingPhase, onThinkingDelta, onMessageDelta, onDebugEntry, uiContext },
+        ) => {
+          // AI : Paste chips already appear in message/history as <pasted>…</pasted> from AssistantChat.
+          // AI : uiContext is snapshotted at send — don't read live pins (cleared after success).
+          const pins = uiContext ?? []
           const res = await fetch(API_ROUTES.projectAssistant, {
             method: "POST",
             headers: JSON_HEADERS,
@@ -135,6 +248,7 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
               history,
               model: globalModel,
               stream: true,
+              ...(pins.length > 0 ? { uiContext: pins } : {}),
             }),
           })
           if (!res.ok) {

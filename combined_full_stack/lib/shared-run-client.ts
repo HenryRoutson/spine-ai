@@ -19,6 +19,17 @@ import type {
 import type { SharedLinkPublicView } from "@/lib/shared-link-types"
 import type { ClientStepSpec } from "@/lib/run-types"
 
+// AI : must match EMBED_SESSION_HEADER on the server.
+const EMBED_SESSION_HEADER = "x-embed-session"
+
+function withEmbedSession(
+  headers: HeadersInit | undefined,
+  embedSessionToken?: string,
+): HeadersInit | undefined {
+  if (!embedSessionToken) return headers
+  return { ...(headers ?? {}), [EMBED_SESSION_HEADER]: embedSessionToken }
+}
+
 export async function fetchSharedLink(id: string): Promise<SharedLinkPublicView> {
   const res = await fetch(API_ROUTES.sharedLink(id), FETCH_NO_STORE)
   const body = await parseFetchJson<{ link: SharedLinkPublicView; error?: string }>(
@@ -33,11 +44,16 @@ export async function uploadSharedDoc(
   linkId: string,
   moduleId: ModuleId,
   file: File,
+  embedSessionToken?: string,
 ): Promise<DocRef> {
   const form = new FormData()
   form.set("file", file)
   form.set("moduleId", moduleId)
-  const res = await fetch(API_ROUTES.sharedLinkDocs(linkId), { method: "POST", body: form })
+  const res = await fetch(API_ROUTES.sharedLinkDocs(linkId), {
+    method: "POST",
+    body: form,
+    headers: withEmbedSession(undefined, embedSessionToken),
+  })
   return parseFetchJson<DocRef>(res, "upload shared doc")
 }
 
@@ -45,10 +61,11 @@ export async function startSharedRun(
   linkId: string,
   inputDocsByModule: Partial<Record<ModuleId, DocId[]>>,
   viewerName?: string,
+  embedSessionToken?: string,
 ): Promise<{ jobId: RunJobId; progressToken: string }> {
   const res = await fetch(API_ROUTES.sharedLinkRun(linkId), {
     method: "POST",
-    headers: JSON_HEADERS,
+    headers: withEmbedSession(JSON_HEADERS, embedSessionToken),
     body: JSON.stringify({ inputDocsByModule, viewerName }),
   })
   return parseFetchJson<{ jobId: RunJobId; progressToken: string }>(res, "start shared run")

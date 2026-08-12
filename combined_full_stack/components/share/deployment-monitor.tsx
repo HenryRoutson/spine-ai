@@ -46,7 +46,7 @@ export function DeploymentSpendLimitEditor({
         spendLimitCents = Math.round(parsed * 100)
       }
       const route =
-        item.kind === "link" ? API_ROUTES.sharedLink(row.id) : API_ROUTES.hostedApi(row.id)
+        item.kind === "api" ? API_ROUTES.hostedApi(row.id) : API_ROUTES.sharedLink(row.id)
       await apiJson(route, {
         method: "PATCH",
         headers: JSON_HEADERS,

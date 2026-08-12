@@ -27,6 +27,8 @@ import {
   ChatTypingIndicator,
 } from "@/components/ui/chat"
 import { cn } from "@/lib/utils"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
+import { truncateUiContextText } from "@/lib/ui-context-types"
 import { copyTextToClipboard } from "@/lib/clipboard"
 import { formatErrorForClipboard } from "@/lib/error-copy"
 import type { RunErrorDisplay } from "@/lib/run-errors"
@@ -182,9 +184,17 @@ export function RunErrorSummary({
       detail: display.detail,
       context: display.stepLabel ? { "Pipeline step": display.stepLabel } : undefined,
     })
+  const ctx = uiContextTargetProps({
+    kind: "run_error",
+    id: `run-error:${display.stepLabel ?? "run"}:${truncateUiContextText(display.message, 40)}`,
+    label: display.stepLabel
+      ? `Run error · ${display.stepLabel}`
+      : display.title || "Run error",
+    snippet: copyText,
+  })
 
   return (
-    <div className={cn("mx-auto max-w-md space-y-3", className)}>
+    <div className={cn("mx-auto max-w-md space-y-3", className)} {...ctx}>
       <div>
         <p className="text-sm font-medium text-destructive">{display.title}</p>
         <p className="mt-2 text-sm leading-relaxed text-foreground">{display.message}</p>
@@ -243,7 +253,15 @@ export function ErrorBanner({
   }
 
   return (
-    <div className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2">
+    <div
+      className="flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2"
+      {...uiContextTargetProps({
+        kind: "run_error",
+        id: `error-banner:${truncateUiContextText(text, 48)}`,
+        label: uiLocation,
+        snippet: copyText ?? text,
+      })}
+    >
       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
       <p className="min-w-0 flex-1 font-mono text-[11px] text-destructive">{text}</p>
       <Button

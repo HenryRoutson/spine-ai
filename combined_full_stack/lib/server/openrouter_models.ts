@@ -101,6 +101,8 @@ export async function getModelOptions(): Promise<ModelOption[]> {
 }
 
 export async function ensureModelOptionsFresh(): Promise<void> {
+  // AI : seed LLM parity tests run offline — skip live /models fetch.
+  if (process.env.LLM_PROVIDER?.trim() === "seed") return;
   await getModelOptions();
 }
 

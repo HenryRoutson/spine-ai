@@ -110,7 +110,8 @@ function toTeamView(team: StoredTeam, userId: user_id_string, emails: Map<string
   };
 }
 
-async function emailsForUserIds(ids: user_id_string[]): Promise<Map<string, string | null>> {
+// AI : shared with assistant chat owner labels — auth emails are the only display names we have.
+export async function emailsForUserIds(ids: user_id_string[]): Promise<Map<string, string | null>> {
   const map = new Map<string, string | null>();
   if (!ids.length) return map;
   const admin = await createAdminClient();

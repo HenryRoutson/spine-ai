@@ -22,7 +22,7 @@ export function runsForDeployment(
   const id = item.row.id;
   const matched = runs
     .filter((run) =>
-      item.kind === "link" ? run.sharedLinkId === id : run.hostedApiId === id,
+      item.kind === "api" ? run.hostedApiId === id : run.sharedLinkId === id,
     )
     .sort((a, b) => b.startedAt - a.startedAt);
   return limit == null ? matched : matched.slice(0, limit);

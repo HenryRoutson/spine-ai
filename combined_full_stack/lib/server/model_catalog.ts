@@ -1,6 +1,6 @@
 // AI : curated picker — ModelId (demo) maps to provider + providerModel; slug kept for OpenRouter billing.
 import type { ModelId, OpenRouterSlug, LlmProviderId, ProviderModelId } from "./types";
-import { DEEPSEEK_SLUG, OPENROUTER_PROVIDER_ID } from "./openrouter_slugs";
+import { DEEPSEEK_SLUG, DEEPSEEK_FLASH_SLUG, OPENROUTER_PROVIDER_ID } from "./openrouter_slugs";
 
 export type ModelCatalogEntry = {
   id: ModelId;
@@ -22,6 +22,7 @@ function catalogRow(
 export const MODEL_CATALOG: ModelCatalogEntry[] = [
   catalogRow("qwen-2.5-72b", "Qwen 2.5 72B", "qwen/qwen-2.5-72b-instruct" as OpenRouterSlug),
   catalogRow("deepseek-v4", "DeepSeek V4", DEEPSEEK_SLUG as OpenRouterSlug),
+  catalogRow("deepseek-v4-flash", "DeepSeek V4 Flash", DEEPSEEK_FLASH_SLUG as OpenRouterSlug),
   catalogRow("glm-5.2", "GLM 5.2", "z-ai/glm-5.2" as OpenRouterSlug),
   catalogRow("gpt-5-mini", "GPT-5 mini", "openai/gpt-4o-mini" as OpenRouterSlug),
   catalogRow("claude-opus-4.6", "Claude Opus 4.6", "anthropic/claude-opus-4.1" as OpenRouterSlug),

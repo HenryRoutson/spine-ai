@@ -22,18 +22,24 @@ import {
   ImageIcon,
   Hash,
   Eye,
+  Pencil,
   Search,
   TriangleAlert,
   SquareCheck,
 } from "lucide-react"
 import { isTestingFileName } from "@/lib/testing-files"
+import { isInferenceSetupFileName } from "@/lib/inference-setup-files"
+import { isStructuredEditableDoc } from "@/lib/doc-edit"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
+import { DocEditDialog } from "@/components/doc-edit-dialog"
 import { PreviewBlockedDialog } from "@/components/preview-blocked-dialog"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
 import { isPreviewOnly } from "@/lib/demo-mode"
+import { AppWindowId } from "@/lib/app-window-id"
 import { DocLabel } from "@/lib/types"
 import type { DocRef, InputType } from "@/lib/types"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
 
 const TYPE_ICON: Record<InputType, typeof FileText> = {
   pdf: FileText,
@@ -50,7 +56,7 @@ const TYPE_ICON: Record<InputType, typeof FileText> = {
 export function Documents() {
   const { docs, addDoc, removeDoc, project, projects } = useStore()
   const { open, close, target } = useDocViewer()
-  const { focusDocId, clearFocusDoc } = useAppShell()
+  const { focusDocId, clearFocusDoc, openTesting, setActiveWindow } = useAppShell()
   const fileRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState("")
   const [filter, setFilter] = useState<DocLabel | "all">("all")
@@ -58,6 +64,7 @@ export function Documents() {
   const [lastDedup, setLastDedup] = useState<string | null>(null)
   const [uploadWarning, setUploadWarning] = useState<string | null>(null)
   const [previewBlockedOpen, setPreviewBlockedOpen] = useState(false)
+  const [editDoc, setEditDoc] = useState<DocRef | null>(null)
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<DocRef>()
 
   // AI : scroll to and highlight a doc when opened from Inference / Logging links.
@@ -121,6 +128,25 @@ export function Documents() {
       await removeDoc(doc.id, project.id)
       if (target?.docId === doc.id) close()
     })
+  }
+
+  // AI : test/setup files keep their specialized editors; other JSON forks via structured Save-as.
+  function handleEdit(doc: DocRef, e: React.MouseEvent) {
+    e.stopPropagation()
+    if (isPreviewOnly()) {
+      setPreviewBlockedOpen(true)
+      return
+    }
+    if (isTestingFileName(doc.name)) {
+      openTesting(doc.name)
+      return
+    }
+    if (isInferenceSetupFileName(doc.name)) {
+      setActiveWindow(AppWindowId.Inference)
+      return
+    }
+    if (!isStructuredEditableDoc(doc)) return
+    setEditDoc(doc)
   }
 
   const displayDocs = mergeWithGhosts(filtered)
@@ -212,6 +238,12 @@ export function Documents() {
                   focusDocId === doc.id && "bg-primary/10 ring-1 ring-primary/30",
                   deleting && "opacity-60",
                 )}
+                {...uiContextTargetProps({
+                  kind: "project_doc",
+                  id: `doc:${doc.id}`,
+                  label: isTest ? `Test · ${doc.name}` : `File · ${doc.name}`,
+                  snippet: `${doc.label} · ${doc.type} · ${doc.sizeKb} KB · ${doc.id}`,
+                })}
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border bg-card">
                   <Icon className="h-4 w-4 text-primary" />
@@ -254,6 +286,25 @@ export function Documents() {
                 >
                   <Eye className="mr-1.5 h-3.5 w-3.5" /> View
                 </Button>
+                {(isTestingFileName(doc.name) ||
+                  isInferenceSetupFileName(doc.name) ||
+                  isStructuredEditableDoc(doc)) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={(e) => handleEdit(doc, e)}
+                    title={
+                      isTestingFileName(doc.name)
+                        ? "Open in Testing"
+                        : isInferenceSetupFileName(doc.name)
+                          ? "Open in Inference"
+                          : "Edit as a new file"
+                    }
+                  >
+                    <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
+                  </Button>
+                )}
                 <DeleteButton
                   variant="ghost"
                   size="icon-sm"
@@ -268,6 +319,7 @@ export function Documents() {
         </ul>
       </ScrollArea>
       {previewBlockedOpen ? <PreviewBlockedDialog onClose={() => setPreviewBlockedOpen(false)} /> : null}
+      {editDoc ? <DocEditDialog doc={editDoc} onClose={() => setEditDoc(null)} /> : null}
     </div>
   )
 }

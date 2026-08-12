@@ -69,6 +69,7 @@ const nextConfig = {
     ].join("; ")
     const demoFrameAncestors =
       "frame-ancestors 'self' https://spine-ai.dev https://www.spine-ai.dev http://localhost:* https://localhost:*"
+    // AI : /embed/* framing is set per-deployment in proxy (creator allowlist) — keep global SAMEORIGIN elsewhere.
     const baseSecurityHeaders = [
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
@@ -76,7 +77,7 @@ const nextConfig = {
     ]
     return [
       {
-        source: "/((?!demo).*)",
+        source: "/((?!demo|embed).*)",
         headers: [
           ...baseSecurityHeaders,
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
@@ -88,6 +89,14 @@ const nextConfig = {
         headers: [
           ...baseSecurityHeaders,
           { key: "Content-Security-Policy", value: `${csp}; ${demoFrameAncestors}` },
+        ],
+      },
+      {
+        source: "/embed/:path*",
+        headers: [
+          ...baseSecurityHeaders,
+          // AI : frame-ancestors appended in proxy from allowed_origins; CSP base without open framing.
+          { key: "Content-Security-Policy", value: csp },
         ],
       },
     ]

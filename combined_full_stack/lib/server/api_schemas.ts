@@ -18,6 +18,13 @@ import {
   type SharedLinkId,
 } from "@/lib/server/types";
 import { MAX_ASSISTANT_MESSAGE_CHARS } from "./assistant-route";
+import {
+  MAX_UI_CONTEXT_FIELD_PATH_CHARS,
+  MAX_UI_CONTEXT_ITEMS,
+  MAX_UI_CONTEXT_LABEL_CHARS,
+  MAX_UI_CONTEXT_SNIPPET_CHARS,
+  UI_CONTEXT_KINDS,
+} from "@/lib/ui-context-types";
 
 export const MAX_FEEDBACK_MESSAGE_CHARS = 8_000;
 export const MAX_CLIENT_STEP_OUTPUT_CHARS = 2_000_000;
@@ -32,7 +39,8 @@ const MAX_MODULE_STRING_CHARS = 64_000;
 const MAX_MODULE_PAYLOAD_CHARS = 120_000;
 const MAX_STRUCTURE_PAYLOAD_CHARS = 50_000;
 
-export const sharedLinkIdSchema = z.string().regex(/^pub_[a-z0-9]{10,32}$/i);
+// AI : pub_ = public link, emb_ = website Embed (same shared_links table + run stack).
+export const sharedLinkIdSchema = z.string().regex(/^(pub|emb)_[a-z0-9]{10,32}$/i);
 export const hostedApiIdSchema = z.string().regex(/^api_[a-z0-9]{10,32}$/i);
 export const marketplaceListingIdSchema = z.string().regex(/^mkt_[a-z0-9]{10,32}$/i);
 export const teamIdSchema = z.string().regex(/^team_[a-z0-9]{10,32}$/i);
@@ -581,6 +589,16 @@ export const abtestBodySchema = z
   })
   .strict();
 
+const embedOptionsSchema = z
+  .object({
+    delivery: z.enum(["iframe", "script", "both"]).optional(),
+    heightPx: z.number().int().min(240).max(2400).optional(),
+    theme: z.enum(["light", "dark", "system"]).optional(),
+    hideBranding: z.boolean().optional(),
+    postMessageEvents: z.boolean().optional(),
+  })
+  .strict();
+
 export const createSharedLinkBodySchema = z
   .object({
     projectId: projectIdSchema,
@@ -591,8 +609,22 @@ export const createSharedLinkBodySchema = z
     billingMultiple: z.number().min(1).max(100).optional(),
     flatFeeCents: z.number().min(0).max(100_000).optional(),
     defaultDocsByModule: inputDocsByModuleSchema,
+    // AI : kind embed ⇒ emb_ id + required allowedOrigins (anti-theft allowlist).
+    kind: z.enum(["link", "embed"]).optional(),
+    allowedOrigins: z.array(z.string().trim().min(1).max(256)).max(32).optional(),
+    embedOptions: embedOptionsSchema.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.kind !== "embed") return;
+    if (!data.allowedOrigins?.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Embed requires at least one allowed origin",
+        path: ["allowedOrigins"],
+      });
+    }
+  });
 
 export const createMarketplaceListingBodySchema = z
   .object({
@@ -621,17 +653,28 @@ export const updateDeploymentBodySchema = z
   .object({
     spendLimitCents: z.number().min(0).nullable().optional(),
     enabled: z.boolean().optional(),
+    allowedOrigins: z.array(z.string().trim().min(1).max(256)).max(32).optional(),
+    embedOptions: embedOptionsSchema.optional(),
   })
   .strict()
-  .refine((data) => data.spendLimitCents !== undefined || data.enabled !== undefined, {
-    message: "Provide spendLimitCents and/or enabled",
-  });
+  .refine(
+    (data) =>
+      data.spendLimitCents !== undefined ||
+      data.enabled !== undefined ||
+      data.allowedOrigins !== undefined ||
+      data.embedOptions !== undefined,
+    {
+      message: "Provide spendLimitCents, enabled, allowedOrigins, and/or embedOptions",
+    },
+  );
 
 export const sharedLinkRunBodySchema = z
   .object({
     inputDocsByModule: inputDocsByModuleSchema,
     viewerName: z.string().max(200).optional(),
     sessionId: z.string().max(128).optional(),
+    // AI : HMAC from /embed/[id] — never trust client-asserted parentOrigin for allowlist auth.
+    embedSessionToken: z.string().min(16).max(512).optional(),
   })
   .strict();
 
@@ -675,6 +718,21 @@ export const sharedLinkClientStepBodySchema = z
   .strict()
   .refine((d) => d.output !== undefined || !!d.error, { message: "output or error required" });
 
+const uiContextRefSchema = z.object({
+  id: z.string().trim().min(1).max(120),
+  kind: z.enum(UI_CONTEXT_KINDS),
+  label: z.string().trim().min(1).max(MAX_UI_CONTEXT_LABEL_CHARS),
+  moduleId: z.string().trim().min(1).max(120).optional(),
+  fieldPath: z.string().trim().min(1).max(MAX_UI_CONTEXT_FIELD_PATH_CHARS).optional(),
+  snippet: z.string().max(MAX_UI_CONTEXT_SNIPPET_CHARS).optional(),
+});
+
+const storedPastedAttachmentSchema = z.object({
+  id: z.string().max(128),
+  name: z.string().max(256),
+  text: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS),
+});
+
 const assistantChatMessageSchema = z.object({
   id: z.string().max(128),
   role: z.enum(["user", "assistant"]),
@@ -685,6 +743,9 @@ const assistantChatMessageSchema = z.object({
   retryCount: z.number().int().min(0).max(100).optional(),
   validationErrors: z.string().max(4_000).nullable().optional(),
   debugTrace: z.array(z.unknown()).max(200).optional(),
+  // AI : restore paste / Select UI chips after reload (content already has <pasted> for the LLM).
+  pastes: z.array(storedPastedAttachmentSchema).max(MAX_UI_CONTEXT_ITEMS).optional(),
+  uiContext: z.array(uiContextRefSchema).max(MAX_UI_CONTEXT_ITEMS).optional(),
 });
 
 export const assistantChatCreateBodySchema = z
@@ -727,15 +788,21 @@ const chatTurnSchema = z.object({
   content: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS),
 });
 
+// AI : Paste chips serialize client-side into message as <pasted>…</pasted> (no schema field).
 export const assistantRequestBodySchema = z
   .object({
     projectId: projectIdSchema,
-    message: z.string().trim().min(1).max(MAX_ASSISTANT_MESSAGE_CHARS),
+    message: z.string().max(MAX_ASSISTANT_MESSAGE_CHARS),
     history: z.array(chatTurnSchema).max(ASSISTANT_HISTORY_LIMIT * 2).optional(),
     model: z.string().max(128).optional(),
     stream: z.boolean().optional(),
+    uiContext: z.array(uiContextRefSchema).max(MAX_UI_CONTEXT_ITEMS).optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (d) => d.message.trim().length > 0 || (d.uiContext?.length ?? 0) > 0,
+    { message: "message or uiContext required" },
+  );
 
 export function formatZodError(err: z.ZodError): string {
   return err.issues.map((i) => i.message).join("; ") || "Invalid request body";

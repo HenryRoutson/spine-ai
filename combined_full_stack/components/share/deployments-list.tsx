@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Copy, Globe, Loader2, Power, RefreshCw, ScrollText, Trash2, TrendingDown, TrendingUp, Zap } from "lucide-react"
+import { Copy, Globe, Loader2, PanelTop, Power, RefreshCw, ScrollText, Trash2, TrendingDown, TrendingUp, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DeploymentSpendLimitEditor } from "@/components/share/deployment-monitor"
 import type { ActivityFilter } from "@/components/share/deployment-activity-page"
@@ -13,6 +13,7 @@ import {
   deploymentRowsForProject,
   liveDeploymentRows,
   partitionDeploymentRows,
+  type DeploymentKind,
   type DeploymentRow,
 } from "@/lib/deployment-funding"
 import type { HostedApiRecord } from "@/lib/hosted-api-types"
@@ -28,9 +29,20 @@ function linkUrl(id: string): string {
   return `${window.location.origin}/run/${id}`
 }
 
+function embedUrl(id: string): string {
+  if (typeof window === "undefined") return `/embed/${id}`
+  return `${window.location.origin}/embed/${id}`
+}
+
 function apiInvokeUrl(id: string): string {
   if (typeof window === "undefined") return API_ROUTES.hostedApiInvoke(id)
   return `${window.location.origin}${API_ROUTES.hostedApiInvoke(id)}`
+}
+
+function deploymentUrl(item: DeploymentRow): string {
+  if (item.kind === "api") return apiInvokeUrl(item.row.id)
+  if (item.kind === "embed") return embedUrl(item.row.id)
+  return linkUrl(item.row.id)
 }
 
 function spendLabel(amount: number, limit: number | undefined, isAsset: boolean): string {
@@ -70,21 +82,24 @@ function DeploymentRowCard({
   toggling: string | null
   isLiability: boolean
   onCopy: (url: string) => void
-  onToggleEnabled: (kind: "link" | "api", id: string, enabled: boolean) => void
-  onTakeDown: (kind: "link" | "api", id: string) => void
+  onToggleEnabled: (kind: DeploymentKind, id: string, enabled: boolean) => void
+  onTakeDown: (kind: DeploymentKind, id: string) => void
   onRefresh: () => void
   onViewActivity: (filter: ActivityFilter) => void
 }) {
   const { row } = item
   const isAsset = deploymentIsAsset(item)
-  const isLink = item.kind === "link"
+  const isApi = item.kind === "api"
+  const isEmbed = item.kind === "embed"
   const isEnabled = row.enabled !== false
-  const url = isLink ? linkUrl(row.id) : apiInvokeUrl(row.id)
-  const callCount = isLink ? (row as SharedLinkRecord).runCount : (row as HostedApiRecord).requestCount
+  const url = deploymentUrl(item)
+  const callCount = isApi ? (row as HostedApiRecord).requestCount : (row as SharedLinkRecord).runCount
   const limit = row.spendLimitCents
   const spent = row.totalSpendCents
   const atLimit = limit != null && spent >= limit
   const actionBusy = revoking === row.id || toggling === row.id
+  const kindLabel = isApi ? "api" : isEmbed ? "embed" : "link"
+  const origins = !isApi ? (row as SharedLinkRecord).allowedOrigins ?? [] : []
 
   return (
     <li
@@ -96,14 +111,16 @@ function DeploymentRowCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
-            {isLink ? (
-              <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            ) : (
+            {isApi ? (
               <Zap className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            ) : isEmbed ? (
+              <PanelTop className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            ) : (
+              <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
             )}
             <span className="truncate text-xs font-medium">{row.name}</span>
             <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase text-muted-foreground">
-              {isLink ? "link" : "api"}
+              {kindLabel}
             </span>
             {atLimit && (
               <span className="shrink-0 rounded bg-destructive/15 px-1.5 py-0.5 text-[9px] text-destructive">
@@ -117,17 +134,21 @@ function DeploymentRowCard({
             )}
           </div>
           <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-            {callCount} {isLink ? "runs" : "requests"} · {spendLabel(spent, limit, isAsset)}
+            {callCount} {isApi ? "requests" : "runs"} · {spendLabel(spent, limit, isAsset)}
           </p>
           <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-            {isLink
-              ? linkFundingLabel(row as SharedLinkRecord)
-              : `${callerFundsHostedApi((row as HostedApiRecord).fundingMode) ? "caller pays" : "you pay"} · ${pricingLabel(
+            {isApi
+              ? `${callerFundsHostedApi((row as HostedApiRecord).fundingMode) ? "caller pays" : "you pay"} · ${pricingLabel(
                   (row as HostedApiRecord).billingMultiple,
                   (row as HostedApiRecord).flatFeeCents,
-                )}`}
-            {!isLink && ` · key ${(row as HostedApiRecord).apiKeyPrefix}…`}
+                )} · key ${(row as HostedApiRecord).apiKeyPrefix}…`
+              : linkFundingLabel(row as SharedLinkRecord)}
           </p>
+          {isEmbed && origins.length > 0 && (
+            <p className="mt-0.5 truncate font-mono text-[9px] text-muted-foreground">
+              origins: {origins.join(", ")}
+            </p>
+          )}
           <code className="mt-1 block truncate font-mono text-[9px] text-foreground/80">{url}</code>
           {isLiability && (
             <DeploymentSpendLimitEditor item={item} onSaved={() => void onRefresh()} />
@@ -211,8 +232,8 @@ function DeploymentSection({
   revoking: string | null
   toggling: string | null
   onCopy: (url: string) => void
-  onToggleEnabled: (kind: "link" | "api", id: string, enabled: boolean) => void
-  onTakeDown: (kind: "link" | "api", id: string) => void
+  onToggleEnabled: (kind: DeploymentKind, id: string, enabled: boolean) => void
+  onTakeDown: (kind: DeploymentKind, id: string) => void
   onRefresh: () => void
   onViewActivity: (filter: ActivityFilter) => void
   emptyMessage: string
@@ -294,12 +315,12 @@ export function DeploymentsList({
     [links, apis, projectId],
   )
 
-  async function takeDown(kind: "link" | "api", id: string) {
+  async function takeDown(kind: DeploymentKind, id: string) {
     if (!window.confirm("Delete this deployment permanently? This cannot be undone.")) return
     setRevoking(id)
     setError(null)
     try {
-      const route = kind === "link" ? API_ROUTES.sharedLink(id) : API_ROUTES.hostedApi(id)
+      const route = kind === "api" ? API_ROUTES.hostedApi(id) : API_ROUTES.sharedLink(id)
       await apiJson(route, { method: "DELETE" })
       await load()
     } catch (e) {
@@ -309,11 +330,11 @@ export function DeploymentsList({
     }
   }
 
-  async function toggleEnabled(kind: "link" | "api", id: string, enabled: boolean) {
+  async function toggleEnabled(kind: DeploymentKind, id: string, enabled: boolean) {
     setToggling(id)
     setError(null)
     try {
-      const route = kind === "link" ? API_ROUTES.sharedLink(id) : API_ROUTES.hostedApi(id)
+      const route = kind === "api" ? API_ROUTES.hostedApi(id) : API_ROUTES.sharedLink(id)
       await apiJson(route, {
         method: "PATCH",
         headers: JSON_HEADERS,

@@ -1,12 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { History, Loader2, Plus, Sparkles, X } from "lucide-react"
+import { Crosshair, History, Loader2, Plus, Sparkles, X } from "lucide-react"
 import { ProjectAssistant } from "@/components/project-assistant"
 import { Button } from "@/components/ui/button"
 import { AnimatedRemovalItem } from "@/components/animated-removal-item"
 import { DeleteButton } from "@/components/delete-button"
 import {
+  chatOwnerLabel,
   formatChatDate,
   groupChatsByMonth,
   useProjectAssistant,
@@ -16,6 +17,7 @@ import {
 import { PROJECT_ASSISTANT_INITIAL_MESSAGE } from "@/lib/project-assistant-types"
 import { useStore } from "@/lib/store"
 import { useAnimatedRemoval } from "@/lib/use-animated-removal"
+import { UI_CONTEXT_ATTR } from "@/lib/ui-context-dom"
 import { cn } from "@/lib/utils"
 
 export function ProjectAssistantDockToggle() {
@@ -44,19 +46,46 @@ export function ProjectAssistantDockToggle() {
 }
 
 export function ProjectAssistantDockPanel() {
-  const { toggle } = useProjectAssistant()
+  const { toggle, setSelectMode, selectMode, toggleSelectMode, uiContextPins } =
+    useProjectAssistant()
   const { project } = useStore()
-  const { chats, activeChatId, chatsLoading, selectChat, newChat, deleteChat } =
+  const { chats, activeChatId, chatsLoading, selectChat, newChat, deleteChat, activeChatIsMine } =
     useProjectAssistantSession(project.id, PROJECT_ASSISTANT_INITIAL_MESSAGE)
   const [historyOpen, setHistoryOpen] = useState(false)
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<AssistantChatSummary>()
   const displayChats = mergeWithGhosts(chats)
+  const activeChat = chats.find((c) => c.id === activeChatId)
+  const ownerSubtitle =
+    activeChat && !activeChatIsMine ? `${chatOwnerLabel(activeChat)}'s chat` : null
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-l border-border bg-background shadow-xl">
+    <div
+      className="flex h-full min-h-0 flex-col border-l border-border bg-background shadow-xl"
+      {...{ [UI_CONTEXT_ATTR.ignore]: "" }}
+    >
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Agent</p>
+        <div className="min-w-0">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Agent</p>
+          {ownerSubtitle ? (
+            <p className="truncate font-mono text-[9px] text-muted-foreground">{ownerSubtitle}</p>
+          ) : null}
+        </div>
         <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            size="sm"
+            variant={selectMode ? "secondary" : "outline"}
+            className="h-7 gap-1 px-2 font-mono text-[10px]"
+            onClick={toggleSelectMode}
+            aria-label={selectMode ? "Exit select UI mode" : "Select UI for agent"}
+            title={selectMode ? "Exit select UI mode (Esc)" : "Select UI for agent"}
+          >
+            <Crosshair className="h-3.5 w-3.5" />
+            {selectMode ? "Selecting…" : "Select"}
+            {uiContextPins.length > 0 ? (
+              <span className="rounded bg-primary/20 px-1 text-[9px]">{uiContextPins.length}</span>
+            ) : null}
+          </Button>
           <Button
             type="button"
             size="icon-sm"
@@ -84,7 +113,10 @@ export function ProjectAssistantDockPanel() {
             type="button"
             size="icon-sm"
             variant="ghost"
-            onClick={toggle}
+            onClick={() => {
+              setSelectMode(false)
+              toggle()
+            }}
             aria-label="Close assistant"
             title="Close assistant"
           >
@@ -135,22 +167,25 @@ export function ProjectAssistantDockPanel() {
                           >
                             <p className="truncate font-mono text-[10px] text-foreground">{chat.title}</p>
                             <p className="font-mono text-[9px] text-muted-foreground">
-                              {formatChatDate(chat.updatedAt)} · {chat.messageCount} msgs
+                              {chatOwnerLabel(chat)} · {formatChatDate(chat.updatedAt)} ·{" "}
+                              {chat.messageCount} msgs
                             </p>
                           </button>
-                          <DeleteButton
-                            type="button"
-                            size="icon-sm"
-                            variant="ghost"
-                            className="shrink-0 text-muted-foreground hover:text-destructive"
-                            deleting={deleting}
-                            label={`Delete chat ${chat.title}`}
-                            title="Delete chat"
-                            onClick={(e: React.MouseEvent) => {
-                              e.stopPropagation()
-                              void runDelete(chat, displayChats, () => deleteChat(chat.id))
-                            }}
-                          />
+                          {chat.isMine ? (
+                            <DeleteButton
+                              type="button"
+                              size="icon-sm"
+                              variant="ghost"
+                              className="shrink-0 text-muted-foreground hover:text-destructive"
+                              deleting={deleting}
+                              label={`Delete chat ${chat.title}`}
+                              title="Delete chat"
+                              onClick={(e: React.MouseEvent) => {
+                                e.stopPropagation()
+                                void runDelete(chat, displayChats, () => deleteChat(chat.id))
+                              }}
+                            />
+                          ) : null}
                         </AnimatedRemovalItem>
                       )
                     })}

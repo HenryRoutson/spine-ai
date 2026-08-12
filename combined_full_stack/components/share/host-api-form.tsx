@@ -16,6 +16,7 @@ import type { DocId, DocRef, ModuleId, Project } from "@/lib/types"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { copyTextToClipboard } from "@/lib/clipboard"
 
+// AI : Share Embed path is separate — keep deploy keys server-side; document custom UI = caller backend + this API, website UI drop-in = Embed (origin allowlist).
 const API_FUNDING_OPTIONS = [
   {
     value: HostedApiFundingMode.OwnerPays,

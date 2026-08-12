@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react"
 import { AppChromeHeader } from "@/components/app-chrome-header"
 import { AppWindowNav } from "@/components/app-window-nav"
 import { ProjectSelector } from "@/components/project-selector"
-import { isAccountWindow } from "@/lib/app-nav-config"
+import { BUILDER_NAV_ITEMS, isAccountWindow } from "@/lib/app-nav-config"
 import { handlePrimarySectionChange, resolvePrimarySection } from "@/lib/app-primary-section"
 import {
   PrimarySectionOpeningProvider,
@@ -38,6 +38,7 @@ import { FeedbackButton } from "@/components/feedback-button"
 import { ProjectAssistantDockLayout } from "@/components/project-assistant-dock-layout"
 import { ProjectAssistantDockToggle } from "@/components/project-assistant-dock"
 import { DiagnosisAgentHub } from "@/components/diagnosis-agents/diagnosis-agent-hub"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
 import { RunningJobsHub } from "@/components/running-jobs-hub"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { isPreviewOnly } from "@/lib/demo-mode"
@@ -197,7 +198,15 @@ function CachedShellWindowPanels({
     <>
       {panelIds
         .filter((windowId) => mounted.has(windowId))
-        .map((windowId) => (
+        .map((windowId) => {
+          const label =
+            BUILDER_NAV_ITEMS.find((item) => item.id === windowId)?.label ??
+            (windowId === AppWindowId.Billing
+              ? "Billing"
+              : windowId === AppWindowId.Settings
+                ? "Settings"
+                : String(windowId))
+          return (
           <div
             key={windowId}
             className={cn(
@@ -205,10 +214,17 @@ function CachedShellWindowPanels({
               windowId !== activeWindow && "hidden",
             )}
             aria-hidden={windowId !== activeWindow}
+            {...uiContextTargetProps({
+              kind: "generic",
+              id: `window-panel:${windowId}`,
+              label: `Panel · ${label}`,
+              snippet: `Workspace panel: ${label}`,
+            })}
           >
             {renderWindowPanel(windowId)}
           </div>
-        ))}
+          )
+        })}
     </>
   )
 }

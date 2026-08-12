@@ -14,7 +14,15 @@ import {
 } from "@/lib/assistant-chat-types"
 import { appendAssistantDebugEntry } from "@/lib/assistant-debug"
 import { buildAssistantHistory } from "@/lib/assistant-history"
+import {
+  composeMessageWithPastes,
+  typedTextFromComposedMessage,
+  type PastedAttachment,
+} from "@/lib/pasted-attachment"
+import type { AssistantMentionOption } from "@/lib/assistant-mentions"
+import type { UiContextRef } from "@/lib/ui-context-types"
 import { AssistantDebugPanel } from "@/components/assistant-debug-panel"
+import { UiContextChip } from "@/components/ui-context-chip"
 import { Button } from "@/components/ui/button"
 import {
   Chat,
@@ -26,12 +34,18 @@ import {
   ChatList,
   ChatMessage,
   ChatTypingIndicator,
+  PastedChip,
 } from "@/components/ui/chat"
 
+// AI : pastes: Cursor-style chips via @assistant-ui/react SimpleTextAttachmentAdapter; wire form uses <pasted>.
 export type AssistantChatMessage<TProposal> = {
   id: string
   role: AssistantChatRole
   content: string
+  /** AI : paste chips for bubble UI; content already includes <pasted> for the LLM / history. */
+  pastes?: PastedAttachment[]
+  /** AI : UI picks pinned at send — shown as chips in the bubble (also sent as uiContext[]). */
+  uiContext?: UiContextRef[]
   proposal?: TProposal
   status?: ProposalStatus
   invalidCount?: number
@@ -68,6 +82,8 @@ type AssistantChatProps<TProposal> = {
       onThinkingDelta: (delta: string) => void
       onMessageDelta: (delta: string) => void
       onDebugEntry: (entry: AssistantDebugEntry) => void
+      /** AI : snapshot of pins at send — avoid racing clearUiContextPins */
+      uiContext?: UiContextRef[]
     },
   ) => Promise<AssistantRequestResult<TProposal>>
   /** AI : shared session — when set, chat history persists across tab mounts */
@@ -79,6 +95,20 @@ type AssistantChatProps<TProposal> = {
   onLoadingChange?: (loading: boolean) => void
   /** AI : actions tied to the active agent instance (e.g. copy conversation) */
   headerActions?: ReactNode
+  /** AI : ui-context / paste chips row above the textarea */
+  composerAttachments?: ReactNode
+  /** AI : live pins from select mode — snapshotted onto the user message at send */
+  uiContextPins?: UiContextRef[]
+  /** AI : true when chips alone are enough to send */
+  canSendWithoutText?: boolean
+  /** AI : clear pins after a successful turn */
+  onComposerAttachmentsConsumed?: () => void
+  /** AI : @ mention menu (steps / models / files / Select UI). */
+  mentionOptions?: AssistantMentionOption[]
+  onMentionPick?: (option: AssistantMentionOption) => void
+  /** AI : teammate chats on shared projects — view only */
+  readOnly?: boolean
+  readOnlyHint?: string
 }
 
 export function AssistantChat<TProposal>({
@@ -98,6 +128,14 @@ export function AssistantChat<TProposal>({
   onStreamingDraftChange,
   onLoadingChange,
   headerActions,
+  composerAttachments,
+  uiContextPins = [],
+  canSendWithoutText = false,
+  onComposerAttachmentsConsumed,
+  mentionOptions,
+  onMentionPick,
+  readOnly = false,
+  readOnlyHint,
 }: AssistantChatProps<TProposal>) {
   const [internalMessages, setInternalMessages] = useState<AssistantChatMessage<TProposal>[]>([
     { id: uid(), role: "assistant", content: initialMessage },
@@ -105,6 +143,7 @@ export function AssistantChat<TProposal>({
   const messages = controlledMessages ?? internalMessages
   const setMessages = onMessagesChange ?? setInternalMessages
   const [input, setInput] = useState("")
+  const [pastes, setPastes] = useState<PastedAttachment[]>([])
   const [loading, setLoadingState] = useState(false)
   const setLoading = (value: boolean) => {
     setLoadingState(value)
@@ -146,9 +185,11 @@ export function AssistantChat<TProposal>({
     })
   }
 
-  async function send(text: string) {
-    const trimmed = text.trim()
-    if (!trimmed || loading) return
+  async function send(text: string, sendPastes: PastedAttachment[] = pastes) {
+    if (readOnly) return
+    const composed = composeMessageWithPastes(text, sendPastes)
+    if (loading) return
+    if (!composed.trim() && !canSendWithoutText) return
 
     if (pending) {
       setMessages((prev) =>
@@ -158,9 +199,24 @@ export function AssistantChat<TProposal>({
       )
     }
 
-    const userMsg: AssistantChatMessage<TProposal> = { id: uid(), role: "user", content: trimmed }
+    // AI : snapshot pins at send so clearUiContextPins / race can't drop them from the request.
+    const pinsAtSend = uiContextPins
+    // AI : chips-only + ui-context can send with empty typed text; keep a visible bubble label.
+    const displayContent =
+      composed.trim() ||
+      (pinsAtSend.length > 0 || canSendWithoutText ? "(selected UI context)" : "")
+    if (!displayContent) return
+
+    const userMsg: AssistantChatMessage<TProposal> = {
+      id: uid(),
+      role: "user",
+      content: displayContent,
+      pastes: sendPastes.length > 0 ? sendPastes : undefined,
+      uiContext: pinsAtSend.length > 0 ? pinsAtSend : undefined,
+    }
     setMessages((prev) => [...prev, userMsg])
     setInput("")
+    setPastes([])
     setLoading(true)
     setLoadingPhase("thinking")
     setLiveThinking("")
@@ -170,10 +226,12 @@ export function AssistantChat<TProposal>({
     setErrorDebugTrace([])
     onStreamingDraftChange?.(emptyStreamingDraft())
 
-    const history = buildAssistantHistory([...messages, userMsg], ASSISTANT_HISTORY_LIMIT)
+    const history = buildAssistantHistory(messages, ASSISTANT_HISTORY_LIMIT)
+    // AI : API message is wire form (includes <pasted>); empty typed + ui-context still sends "".
+    const apiMessage = composed.trim() ? composed : text.trim()
 
     try {
-      const data = await requestAssistant(trimmed, history, {
+      const data = await requestAssistant(apiMessage, history, {
         setLoadingPhase,
         onThinkingDelta: (delta) => {
           setLiveThinking((prev) => prev + delta)
@@ -190,6 +248,7 @@ export function AssistantChat<TProposal>({
           }))
         },
         onDebugEntry: handleDebugEntry,
+        uiContext: pinsAtSend,
       })
       const assistantMsg: AssistantChatMessage<TProposal> = {
         id: uid(),
@@ -203,9 +262,14 @@ export function AssistantChat<TProposal>({
         status: data.proposal ? "pending" : undefined,
       }
       setMessages((prev) => [...prev, assistantMsg])
+      onComposerAttachmentsConsumed?.()
     } catch (err) {
       const msg = err instanceof Error ? err.message : ASSISTANT_REQUEST_FAILED
       setError(msg)
+      // AI : drop optimistic bubble + restore composer so retry isn't a duplicate send.
+      setMessages((prev) => prev.filter((m) => m.id !== userMsg.id))
+      setPastes(sendPastes)
+      setInput(text)
       setDebugTrace((trace) => {
         const next = appendAssistantDebugEntry(trace, { kind: "error", error: msg })
         setErrorDebugTrace(next)
@@ -258,7 +322,7 @@ export function AssistantChat<TProposal>({
           <button
             key={s}
             type="button"
-            onClick={() => void send(s)}
+            onClick={() => void send(s, [])}
             className="rounded-full border border-border bg-secondary/40 px-2.5 py-1 font-mono text-[9px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
           >
             {s}
@@ -283,11 +347,27 @@ export function AssistantChat<TProposal>({
       <ChatList>
         {messages.map((m) => {
           const variant = m.role === "user" ? "user" : "assistant"
+          const typed =
+            m.role === "user" && m.pastes?.length
+              ? typedTextFromComposedMessage(m.content, m.pastes)
+              : m.content
           return (
             <ChatMessage key={m.id} variant={variant}>
               <ChatBubbleAvatar variant={variant} />
               <ChatBubble variant={variant}>
-                <ChatBubbleContent>{m.content}</ChatBubbleContent>
+                {m.role === "user" &&
+                ((m.pastes && m.pastes.length > 0) ||
+                  (m.uiContext && m.uiContext.length > 0)) ? (
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {m.uiContext?.map((pin) => (
+                      <UiContextChip key={pin.id} pin={pin} />
+                    ))}
+                    {m.pastes?.map((p) => (
+                      <PastedChip key={p.id} attachment={p} />
+                    ))}
+                  </div>
+                ) : null}
+                {typed ? <ChatBubbleContent>{typed}</ChatBubbleContent> : null}
                 {m.proposal && (
                   <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3">
                     {renderProposal(m)}
@@ -387,10 +467,18 @@ export function AssistantChat<TProposal>({
       <ChatInput
         value={input}
         onChange={setInput}
-        onSend={() => void send(input)}
-        placeholder={placeholder}
-        disabled={loading}
-        footer={starterFooter}
+        pastes={pastes}
+        onPastesChange={setPastes}
+        onSend={() => void send(input, pastes)}
+        placeholder={readOnly ? (readOnlyHint ?? "View only — this is a teammate's chat") : placeholder}
+        disabled={loading || readOnly}
+        footer={readOnly ? undefined : starterFooter}
+        attachments={readOnly ? undefined : composerAttachments}
+        canSend={
+          !readOnly && (Boolean(input.trim()) || pastes.length > 0 || canSendWithoutText)
+        }
+        mentionOptions={readOnly ? undefined : mentionOptions}
+        onMentionPick={readOnly ? undefined : onMentionPick}
       />
     </Chat>
   )

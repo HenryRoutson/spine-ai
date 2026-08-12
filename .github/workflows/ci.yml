@@ -1,0 +1,35 @@
+# CI — unit tests; live OpenRouter parity when OPENROUTER_API_KEY is available
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+defaults:
+  run:
+    working-directory: combined_full_stack
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: combined_full_stack/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Unit tests
+        # AI : offline only — live OpenRouter parity is a separate job (never Next.js / browser).
+        run: npm test
+      - name: Live parity (flash + seed)
+        if: ${{ secrets.OPENROUTER_API_KEY != '' }}
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENROUTER_SEED: "42"
+          PARITY_QUIET: "1"
+        run: npm run test:parity

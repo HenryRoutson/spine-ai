@@ -6,6 +6,7 @@ import { modelExportIdentifierGo, modelExportIdentifierRust, rustFieldIdent } fr
 import { webhookStepUsesPipelineState } from "@/lib/webhook-step";
 import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
+import { migrateProjectModules } from "./validity";
 import {
   labelToPyKey,
   stepEmitsList,
@@ -30,8 +31,10 @@ export type PipelineSetupFile = {
 export type ExportCustomCode = { language: string; code: string };
 
 // AI : normalize project models before codegen so built-in Document resolves everywhere.
+// AI : migrate like the UI run engine — assert placement + managed steps must match hosted order.
 export function prepareExportProject(project: Project): Project {
-  return { ...project, models: withSharedModels(project.models) };
+  const migrated = migrateProjectModules(project);
+  return { ...migrated, models: withSharedModels(migrated.models) };
 }
 
 // AI : shared by py / ts / rust / go / baml pipeline exporters — keep step bodies DRY across languages.

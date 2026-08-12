@@ -15,6 +15,7 @@ import {
   type PipelineAssistantOpts,
   type PipelineAssistantResult,
 } from "./pipeline_assistant"
+import { enrichUiContextRefs } from "./ui_context_enrich"
 import { logger } from "./server_logger"
 import type { BillingUserKey } from "./billing_account"
 import { UnknownModelError, parseRequestModel } from "./model_catalog"
@@ -101,8 +102,13 @@ export async function runBilledProjectAssistant(
   let caught: unknown
   let billedCents = 0
 
+  // AI : @file / Select UI pins — load doc bytes + live step/model defs before the prompt.
+  const enrichedOpts: PipelineAssistantOpts | undefined = opts?.uiContext?.length
+    ? { ...opts, uiContext: enrichUiContextRefs(store, project, opts.uiContext) }
+    : opts
+
   try {
-    result = await proposeProjectChange(project, trimmed, history, model, opts)
+    result = await proposeProjectChange(project, trimmed, history, model, enrichedOpts)
   } catch (err) {
     caught = err
   } finally {

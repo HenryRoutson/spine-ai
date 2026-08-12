@@ -25,6 +25,7 @@ import { Switch } from "@/components/ui/switch"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import { useLockedInteractFlash } from "@/lib/use-locked-interact-flash"
 import { cn } from "@/lib/utils"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
 
 type StructureExcelEditorProps = {
   selectedId: string
@@ -301,7 +302,23 @@ function FieldRow({
 
   return (
     <>
-      <tr className={cn("group", stripe && "bg-secondary/15")}>
+      <tr
+        className={cn("group", stripe && "bg-secondary/15")}
+        {...uiContextTargetProps({
+          kind: "inspector_field",
+          id: `field:${selectedId}:${field.name || field.id}`,
+          label: `Field · ${field.name || "unnamed"}`,
+          fieldPath: field.name || field.id,
+          snippet: [
+            fieldTypeLabel(field),
+            field.optional ? "optional" : "required",
+            field.description?.trim() || null,
+            formatFieldExamplesSummary(exampleStats.positive, exampleStats.negative) || null,
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        })}
+      >
         <td className="border-b border-r border-border bg-secondary/25 px-1 py-0 text-center text-[10px] text-muted-foreground">
           {rowIdx + 1}
         </td>

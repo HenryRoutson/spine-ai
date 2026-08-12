@@ -36,6 +36,7 @@ type SharedRunPanelProps = {
   onRunComplete?: () => void
   insufficientCredit?: boolean
   onOpenBilling?: () => void
+  embedSessionToken?: string
 }
 
 export function SharedRunPanel({
@@ -46,12 +47,14 @@ export function SharedRunPanel({
   onRunComplete,
   insufficientCredit = false,
   onOpenBilling,
+  embedSessionToken,
 }: SharedRunPanelProps) {
   const run = useSharedInferenceRun(
     link,
     linkId,
     { isAuthenticated, onAuthRequired },
     onRunComplete,
+    embedSessionToken,
   )
   const [downloadBusy, setDownloadBusy] = useState(false)
   const [downloadError, setDownloadError] = useState<string | null>(null)

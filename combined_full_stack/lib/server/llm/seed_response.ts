@@ -1,0 +1,255 @@
+// AI : deterministic seed LLM replies — shared by server provider + OpenAI-compatible mock HTTP.
+// AI : Schema-aware fill from prompt context so UI (schema-first) and exports (schema-last) match.
+
+export type JsonSchemaNode = {
+  type?: string | string[];
+  properties?: Record<string, JsonSchemaNode>;
+  items?: JsonSchemaNode | JsonSchemaNode[];
+  required?: string[];
+  anyOf?: JsonSchemaNode[];
+  oneOf?: JsonSchemaNode[];
+  enum?: unknown[];
+  description?: string;
+};
+
+type JsonValue = null | boolean | number | string | JsonValue[] | { [k: string]: JsonValue };
+
+function asTypeList(type: string | string[] | undefined): string[] {
+  if (!type) return [];
+  return Array.isArray(type) ? type : [type];
+}
+
+function primaryType(schema: JsonSchemaNode): string | undefined {
+  const types = asTypeList(schema.type).filter((t) => t !== "null");
+  return types[0];
+}
+
+// AI : pull the JSON Schema block that structured prompts embed (UI or export wording).
+export function extractJsonSchemaFromPrompt(prompt: string): JsonSchemaNode | null {
+  const marker = /Respond with ONLY a JSON value that validates against this JSON Schema:\s*/i;
+  const m = prompt.match(marker);
+  if (!m || m.index == null) return null;
+  const after = prompt.slice(m.index + m[0].length).trimStart();
+  return parseBalancedJson(after) as JsonSchemaNode | null;
+}
+
+// AI : prefer INPUT DATA / ITEM payloads; else last JSON object/array in the prompt (batch item, example).
+export function extractContextFromPrompt(prompt: string): JsonValue | null {
+  for (const marker of [/INPUT DATA:\s*/i, /ITEM:\s*/i, /EXAMPLE:\s*/i]) {
+    const m = prompt.match(marker);
+    if (m && m.index != null) {
+      const after = prompt.slice(m.index + m[0].length).trimStart();
+      const parsed = parseBalancedJson(after);
+      if (parsed != null) return parsed;
+    }
+  }
+  return findLastJsonValue(prompt);
+}
+
+function parseBalancedJson(text: string): JsonValue | null {
+  const start = text.search(/[{[]/);
+  if (start < 0) return null;
+  return parseBalancedJsonSimple(text, start);
+}
+
+function parseBalancedJsonSimple(text: string, start: number): JsonValue | null {
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]!;
+    if (inString) {
+      if (escape) escape = false;
+      else if (ch === "\\") escape = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === "{" || ch === "[") depth++;
+    else if (ch === "}" || ch === "]") {
+      depth--;
+      if (depth === 0) {
+        try {
+          return JSON.parse(text.slice(start, i + 1)) as JsonValue;
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function findLastJsonValue(prompt: string): JsonValue | null {
+  let last: JsonValue | null = null;
+  for (let i = 0; i < prompt.length; i++) {
+    if (prompt[i] === "{" || prompt[i] === "[") {
+      const parsed = parseBalancedJsonSimple(prompt, i);
+      if (parsed != null) last = parsed;
+    }
+  }
+  return last;
+}
+
+function contextRecord(context: JsonValue | null): Record<string, JsonValue> {
+  if (context && typeof context === "object" && !Array.isArray(context)) {
+    return context as Record<string, JsonValue>;
+  }
+  return {};
+}
+
+function contextText(context: JsonValue | null): string {
+  if (typeof context === "string") return context;
+  const rec = contextRecord(context);
+  for (const key of ["text", "content", "body", "description", "summary", "title"]) {
+    const v = rec[key];
+    if (typeof v === "string" && v.trim()) return v;
+  }
+  if (context == null) return "";
+  try {
+    return JSON.stringify(context);
+  } catch {
+    return String(context);
+  }
+}
+
+function isSummaryish(name: string): boolean {
+  return /^(summary|body|reason|explanation|chain_of_thought|analysis|description|note|comment)$/i.test(
+    name,
+  );
+}
+
+function fillSchema(schema: JsonSchemaNode, context: JsonValue | null, fieldName = ""): JsonValue {
+  if (schema.enum?.length) return schema.enum[0] as JsonValue;
+
+  const variants = schema.anyOf ?? schema.oneOf;
+  if (variants?.length) return fillSchema(variants[0]!, context, fieldName);
+
+  const t = primaryType(schema);
+  const rec = contextRecord(context);
+
+  if (t === "object" || schema.properties) {
+    const props = schema.properties ?? {};
+    const out: Record<string, JsonValue> = {};
+    for (const [key, prop] of Object.entries(props)) {
+      if (key in rec) out[key] = rec[key]!;
+      else out[key] = fillSchema(prop, context, key);
+    }
+    return out;
+  }
+
+  if (t === "array") {
+    const items = Array.isArray(schema.items) ? schema.items[0] : schema.items;
+    if (Array.isArray(context) && items) {
+      return context.map((row) => fillSchema(items, row, fieldName));
+    }
+    if (items) return [fillSchema(items, context, fieldName)];
+    return [];
+  }
+
+  if (t === "boolean") {
+    // AI : example-select relevance — include candidates so pipelines stay complete under seed LLM.
+    if (/relevant|include|match|pass|ok|success/i.test(fieldName)) return true;
+    return false;
+  }
+
+  if (t === "integer" || t === "number") {
+    const v = rec[fieldName];
+    if (typeof v === "number") return v;
+    return 0;
+  }
+
+  if (t === "string" || !t) {
+    const v = rec[fieldName];
+    if (typeof v === "string") return v;
+    if (isSummaryish(fieldName)) {
+      const src = contextText(context);
+      return src ? `Summary of: ${src}` : "seed";
+    }
+    if (fieldName === "id" && typeof rec.id === "string") return rec.id;
+    if (fieldName === "id" && typeof rec.id === "number") return String(rec.id);
+    return fieldName ? `seed:${fieldName}` : "seed";
+  }
+
+  if (t === "null") return null;
+  return null;
+}
+
+function schemaIsEmpty(schema: JsonSchemaNode | null): boolean {
+  if (!schema) return true;
+  if (schema.properties && Object.keys(schema.properties).length) return false;
+  if (schema.items) return false;
+  if (schema.anyOf?.length || schema.oneOf?.length) return false;
+  if (schema.type && schema.type !== "object") return false;
+  return true;
+}
+
+/** When export stubs emit `schema = {}`, invent a useful object from ITEM/INPUT context. */
+function fillFromContextOnly(context: JsonValue | null): JsonValue {
+  if (context && typeof context === "object" && !Array.isArray(context)) {
+    const rec = context as Record<string, JsonValue>;
+    const out: Record<string, JsonValue> = {};
+    if (rec.id !== undefined) out.id = rec.id;
+    const text =
+      typeof rec.text === "string"
+        ? rec.text
+        : typeof rec.content === "string"
+          ? rec.content
+          : typeof rec.body === "string"
+            ? rec.body
+            : contextText(context);
+    if (text) out.summary = `Summary of: ${text}`;
+    else if (typeof rec.summary === "string") out.summary = rec.summary;
+    // AI : relevance-style prompts without schema — keep boolean fields stable.
+    if (typeof rec.is_relevant === "boolean") out.is_relevant = rec.is_relevant;
+    if (Object.keys(out).length) return out;
+    return { summary: text ? `Summary of: ${text}` : "seed" };
+  }
+  if (Array.isArray(context)) return context.map((row) => fillFromContextOnly(row));
+  if (typeof context === "string") return { summary: `Summary of: ${context}` };
+  return {};
+}
+
+/** Deterministic chat completion body for a single prompt. */
+export function seedLlmReply(prompt: string, jsonMode = true): string {
+  const schema = extractJsonSchemaFromPrompt(prompt);
+  const context = extractContextFromPrompt(prompt);
+  if (schema && !schemaIsEmpty(schema)) {
+    return JSON.stringify(fillSchema(schema, context));
+  }
+  if (jsonMode) {
+    return JSON.stringify(fillFromContextOnly(context));
+  }
+  const src = contextText(context);
+  return src ? `Summary of: ${src}` : "seed";
+}
+
+/** OpenAI-compatible chat.completions payload. */
+export function seedOpenAiChatCompletion(body: {
+  messages?: { role?: string; content?: unknown }[];
+  response_format?: { type?: string };
+}): { id: string; choices: { message: { role: "assistant"; content: string } }[]; usage: object } {
+  const parts: string[] = [];
+  for (const msg of body.messages ?? []) {
+    const c = msg.content;
+    if (typeof c === "string") parts.push(c);
+    else if (Array.isArray(c)) {
+      for (const block of c) {
+        if (block && typeof block === "object" && "text" in block && typeof (block as { text: unknown }).text === "string") {
+          parts.push((block as { text: string }).text);
+        }
+      }
+    }
+  }
+  const prompt = parts.join("\n\n");
+  const jsonMode = body.response_format?.type === "json_object" || /JSON Schema/i.test(prompt);
+  const content = seedLlmReply(prompt, jsonMode);
+  return {
+    id: "seed-chatcmpl",
+    choices: [{ message: { role: "assistant", content } }],
+    usage: { prompt_tokens: Math.ceil(prompt.length / 4), completion_tokens: Math.ceil(content.length / 4) },
+  };
+}

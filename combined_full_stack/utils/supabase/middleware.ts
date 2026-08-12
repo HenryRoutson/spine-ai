@@ -5,6 +5,7 @@ import { isPublicApiPath } from "@/lib/api-routes";
 import { checkRateLimit, clientIpFromHeaders } from "@/lib/rate_limit";
 import { type RateLimitKey, publicApiTier } from "@/lib/rate_limit_config";
 import { HTTP } from "@/lib/server/api-errors";
+import { frameAncestorsCsp, isEmbedLinkId, normalizeEmbedOrigins } from "@/lib/server/embed_origins";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { sanitizeRedirectPath } from "@/utils/sanitize_redirect";
 
@@ -12,6 +13,7 @@ const PUBLIC_PATHS = [
   "/login",
   "/auth/callback",
   "/run",
+  "/embed",
   "/demo",
   "/privacy",
   "/terms",
@@ -30,6 +32,60 @@ function isPublicApiPathLocal(pathname: string, method: string): boolean {
 
 function copySessionCookies(from: NextResponse, to: NextResponse): void {
   from.cookies.getAll().forEach((cookie) => to.cookies.set(cookie));
+}
+
+// AI : per-embed frame-ancestors via REST (Edge-safe — avoid supabase-js/ws in proxy).
+async function fetchEmbedAllowedOrigins(embedId: string): Promise<string[]> {
+  const env = getSupabasePublicEnv();
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!env || !serviceKey) return [];
+  try {
+    const url = new URL(`${env.url}/rest/v1/shared_links`);
+    url.searchParams.set("id", `eq.${embedId}`);
+    url.searchParams.set("revoked", "eq.false");
+    url.searchParams.set("select", "allowed_origins");
+    const res = await fetch(url.toString(), {
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const rows = (await res.json()) as Array<{ allowed_origins?: string[] | null }>;
+    return normalizeEmbedOrigins((rows[0]?.allowed_origins ?? []).map(String));
+  } catch {
+    return [];
+  }
+}
+
+async function applyEmbedFrameHeaders(request: NextRequest, response: NextResponse): Promise<NextResponse> {
+  const match = request.nextUrl.pathname.match(/^\/embed\/((?:emb|pub)_[a-z0-9]+)$/i);
+  if (!match) return response;
+  const embedId = match[1]!;
+  let origins = await fetchEmbedAllowedOrigins(embedId);
+  if (origins.length === 0 && isEmbedLinkId(embedId)) {
+    origins = [
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://localhost:3001",
+      "http://127.0.0.1:3001",
+    ];
+  }
+  const ancestors = origins.length > 0 ? frameAncestorsCsp(origins) : "frame-ancestors 'none'";
+  const existing = response.headers.get("Content-Security-Policy");
+  if (existing) {
+    const without = existing
+      .split(";")
+      .map((p) => p.trim())
+      .filter((p) => p && !p.toLowerCase().startsWith("frame-ancestors"));
+    response.headers.set("Content-Security-Policy", [...without, ancestors].join("; "));
+  } else {
+    response.headers.set("Content-Security-Policy", ancestors);
+  }
+  response.headers.delete("X-Frame-Options");
+  return response;
 }
 
 function redirectUnauthenticated(
@@ -81,7 +137,9 @@ export async function updateSession(request: NextRequest) {
     if (!isApiRoute && !isPublic) {
       return NextResponse.redirect(new URL("/login", request.url));
     }
-    return NextResponse.next({ request });
+    const bare = NextResponse.next({ request });
+    if (pathname.startsWith("/embed/")) return applyEmbedFrameHeaders(request, bare);
+    return bare;
   }
 
   let supabaseResponse = NextResponse.next({ request });
@@ -144,6 +202,10 @@ export async function updateSession(request: NextRequest) {
     const redirectResponse = NextResponse.redirect(nextUrl);
     copySessionCookies(supabaseResponse, redirectResponse);
     return redirectResponse;
+  }
+
+  if (pathname.startsWith("/embed/")) {
+    return applyEmbedFrameHeaders(request, supabaseResponse);
   }
 
   return supabaseResponse;

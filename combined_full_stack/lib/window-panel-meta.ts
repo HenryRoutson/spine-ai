@@ -59,6 +59,7 @@ export enum ShareSection {
 export enum PublishTab {
   Link = "link",
   Api = "api",
+  Embed = "embed",
   Marketplace = "marketplace",
 }
 
@@ -136,7 +137,7 @@ const BUILDER_WINDOW_HEADERS: Record<AppWindowId, WindowHeaderCopy> = {
   documents: {
     step: AppWindowStepLabel.Documents,
     title: AppWindowTitle.Documents,
-    description: "Content-addressed storage for this pipeline — upload, share, and manage inference inputs.",
+    description: "Content-addressed storage — upload, view, and fork-edit JSON as a new named file.",
   },
   docs: {
     step: AppWindowStepLabel.Docs,

@@ -113,6 +113,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         `\treturn ${zero}, err`,
         `}`,
         `userPrompt := ${exportStringLiteral(prompt)} + "\\n\\nINPUT DATA:\\n" + string(inJSON)`,
+        // AI : TODO (parity) — emit real JSON schema from outStructure; empty {} breaks live LLM asserts.
         `schema := json.RawMessage([]byte("{}")) // JSON schema for ${outName ?? "output"}`,
         `value, err := llmStructured(userPrompt, schema)`,
         `if err != nil {`,
@@ -142,6 +143,7 @@ function generateStepBody(m: PipelineModule, project: Project, outGo: string, in
         `} else {`,
         `\titems = []json.RawMessage{inJSON}`,
         `}`,
+        // AI : TODO (parity) — emit real JSON schema from outStructure.
         `schema := json.RawMessage([]byte("{}")) // JSON schema for ${outName ?? "output"}`,
         `out := make([]${itemGo}, 0, len(items))`,
         `for _, item := range items {`,

@@ -43,6 +43,13 @@ export class ServerLogger {
   }
 
   private emit(level: LogLevel, msg: string, ctx?: LogCtx): void {
+    // AI : PARITY_QUIET / FORGE_LOG_LEVEL=error — keep live parity from flooding the terminal / Cursor UI.
+    const min = process.env.PARITY_QUIET === "1" ? JobLogLevel.Error : process.env.FORGE_LOG_LEVEL?.trim();
+    if (min === "error" || min === JobLogLevel.Error) {
+      if (level !== JobLogLevel.Error) return;
+    } else if (min === "warn" || min === JobLogLevel.Warn) {
+      if (level === JobLogLevel.Debug || level === JobLogLevel.Info) return;
+    }
     const line = `[${ts()}] [${level.toUpperCase()}] [${this.tag}] ${msg}${formatCtx(ctx)}`;
     const fn = level === "error" ? console.error : level === "warn" ? console.warn : console.log;
     fn(line);

@@ -13,6 +13,12 @@ import {
   wantsValidationFix,
 } from "./assistant-shared";
 import {
+  defaultMessageForUiContextOnly,
+  dedupeUiContextRefs,
+  buildUiContextPromptBlock,
+  type UiContextRef,
+} from "@/lib/ui-context-types";
+import {
   buildProjectAssistantSystemPrompt,
   buildProjectContextBlock,
   resolveAssistantUserMessage,
@@ -273,6 +279,7 @@ export type PipelineAssistantResult = {
 export type PipelineAssistantOpts = {
   fixValidationErrors?: string;
   fixAttempt?: number;
+  uiContext?: UiContextRef[];
   onThinkingDelta?: (delta: string) => void;
   onPhase?: (phase: "thinking" | "structuring" | "retrying") => void;
   onThinkingDone?: (text: string) => void;
@@ -479,6 +486,7 @@ function buildThinkingUserPrompt(
   history: ChatTurn[],
   globalModel: ModelId,
   liveValidation: string,
+  uiContext?: UiContextRef[],
 ): string {
   const modelsBlock = project.models.length
     ? project.models.map((m) => `- ${m.name}: ${m.description ?? "(no description)"}`).join("\n")
@@ -500,9 +508,10 @@ function buildThinkingUserPrompt(
     liveValidation,
     "Current pipeline validation errors (address these if the user wants fixes):",
   );
+  const uiBlock = buildUiContextPromptBlock(uiContext);
   return `Project: ${project.name} (${project.kind})
 Default model: ${globalModel}
-${historyBlock}${validationBlock}
+${historyBlock}${validationBlock}${uiBlock}
 Structure models:
 ${modelsBlock}
 
@@ -547,7 +556,8 @@ function buildUserPrompt(
   const thinkingBlock = thinking?.trim()
     ? `\nYour prior reasoning (use this; do not repeat it in message):\n${thinking.trim()}\n`
     : "";
-  return `${buildProjectContextBlock(project, globalModel, history, `${currentValidationBlock}${thinkingBlock}${fixBlock}${forceFixBlock}`)}
+  const uiBlock = buildUiContextPromptBlock(opts?.uiContext);
+  return `${buildProjectContextBlock(project, globalModel, history, `${uiBlock}${currentValidationBlock}${thinkingBlock}${fixBlock}${forceFixBlock}`)}
 User request: ${userMessage}`;
 }
 
@@ -682,13 +692,16 @@ export async function proposePipelineChange(
   const ledger = new UsageLedger();
   let fixErrors = opts?.fixValidationErrors;
   let fixAttempt = opts?.fixAttempt ?? 0;
+  const uiContext = dedupeUiContextRefs(opts?.uiContext ?? []);
+  const effectiveMessage =
+    message.trim() || defaultMessageForUiContextOnly(uiContext);
 
   const liveValidation = formatPipelineValidationErrors(
     project.modules,
     project.models,
     project.typeAliases ?? [],
   );
-  const forceFix = !fixErrors && !!liveValidation && wantsValidationFix(message);
+  const forceFix = !fixErrors && !!liveValidation && wantsValidationFix(effectiveMessage);
 
   let thinking = "";
   let llmAttempt = 0;
@@ -696,7 +709,14 @@ export async function proposePipelineChange(
     if (!fixErrors && !forceFix) {
       opts?.onPhase?.("thinking");
       thinking = await llmStreamString(
-        buildThinkingUserPrompt(project, message, history, globalModel, liveValidation),
+        buildThinkingUserPrompt(
+          project,
+          effectiveMessage,
+          history,
+          globalModel,
+          liveValidation,
+          uiContext,
+        ),
         {
           model: globalModel,
           ledger,
@@ -715,12 +735,13 @@ export async function proposePipelineChange(
     let raw = await llmStreamStructured(
       buildUserPrompt(
         project,
-        message,
+        effectiveMessage,
         history,
         globalModel,
         {
           fixValidationErrors: fixErrors,
           fixAttempt: fixAttempt || undefined,
+          uiContext,
         },
         thinking,
         liveValidation,
@@ -772,12 +793,13 @@ export async function proposePipelineChange(
       raw = await llmStructured(
         buildUserPrompt(
           retryProject,
-          message,
+          effectiveMessage,
           history,
           globalModel,
           {
             fixValidationErrors: fixErrors,
             fixAttempt,
+            uiContext,
           },
           thinking,
           liveValidation,

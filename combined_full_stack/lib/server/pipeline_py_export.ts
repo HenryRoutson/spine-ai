@@ -97,6 +97,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
         exportComment(C, structuredLlmComment(outName ?? outPy, stepEmitsList(m))),
         `_model = ${exportStringLiteral(model)}`,
         `user_prompt = ${exportStringLiteral(prompt)} + "\\n\\nINPUT DATA:\\n" + json.dumps(input, indent=2, default=str)`,
+        // AI : TODO (parity) — emit real JSON schema from outStructure; None/{} breaks live LLM asserts.
         `schema = None  # JSON schema for ${outName ?? "output"}`,
         castOut("await llm_structured(user_prompt, schema)"),
       ].join("\n");
@@ -109,6 +110,7 @@ function generateStepBody(m: PipelineModule, project: Project, outPy: string, in
         itemsLine,
         `def prompt_for(item: Any) -> str:`,
         `    return ${exportStringLiteral(prompt)} + "\\n\\nITEM:\\n" + json.dumps(item, indent=2)`,
+        // AI : TODO (parity) — emit real JSON schema from outStructure.
         `schema = None  # JSON schema for ${outName ?? "output"}`,
         castOut("await llm_batch_structured(items, prompt_for, schema)"),
       ].join("\n");

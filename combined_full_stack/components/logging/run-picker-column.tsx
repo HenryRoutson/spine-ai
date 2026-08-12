@@ -89,7 +89,25 @@ export function RunPickerColumn({
           <ul className="space-y-0.5">
             {filtered.map((run) => (
               <li key={run.id}>
-                <EntityRailItem active={selectedId === run.id} onClick={() => onSelect(run.id)}>
+                <EntityRailItem
+                  active={selectedId === run.id}
+                  onClick={() => onSelect(run.id)}
+                  uiContext={{
+                    kind: run.status === "ok" ? "generic" : "run_error",
+                    id: `run:${run.id}`,
+                    label: `Run · ${runInputLabel(run)}`,
+                    snippet: [
+                      run.status,
+                      run.model,
+                      formatSecondsShort(runTotalMs(run)),
+                      formatCostCents(runBilledCents(run)),
+                      run.id,
+                      run.notes ? compactPreview(run.notes, PREVIEW_RUN_NOTES_CHARS) : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · "),
+                  }}
+                >
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate font-mono text-xs text-foreground">{runInputLabel(run)}</span>

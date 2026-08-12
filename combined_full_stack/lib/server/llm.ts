@@ -20,6 +20,7 @@ export interface CallContext {
   ledger: UsageLedger;
   system?: string;
   maxTokens?: number;
+  seed?: number;
   promptIndex?: number;
   round?: number;
   llmCalls?: LlmCallRecord[];
@@ -32,11 +33,18 @@ export interface CallContext {
 function chatOpts(ctx: CallContext, log?: ServerLogger): LlmCallOptions {
   const routed = parseRoutedModel(ctx.model);
   const entry = catalogEntry(routed.modelId);
+  const seed =
+    ctx.seed ??
+    (process.env.OPENROUTER_SEED?.trim()
+      ? Number(process.env.OPENROUTER_SEED)
+      : undefined);
   return {
     providerId: routed.providerId,
     providerModel: entry.providerModel,
     system: ctx.system,
     maxTokens: ctx.maxTokens,
+    seed: Number.isFinite(seed) ? Math.trunc(seed!) : undefined,
+    temperature: 0,
     promptIndex: ctx.promptIndex,
     round: ctx.round,
     onUsage: (u) => {

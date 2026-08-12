@@ -1,5 +1,33 @@
 
+create fully non technical buiild view. 
+
+
+
 PRIORITY
+
+
+Cursor-style @ mentions in Agent composer:
+- Type @ → filtered list (Select UI, Issues, steps, models, types, files); pick pins a context chip
+- Same uiContext[] request path as Select UI; kinds include project_doc / model / type_alias / invalid_issue
+- Server enrichUiContextRefs loads doc bytes + live step/model defs before the LLM prompt
+- Kind-specific chips in composer + user bubbles (ui-context-chip.tsx)
+- See // AI : TODO (assistant-@-mention) for follow-ons: file tags/notes always-on; TipTap caret-anchored menu
+
+Cursor-style UI context picker (avoid copy-paste into agent):
+- Crosshair select mode from agent dock: hover highlight, click pins UI region as context chip
+- App-owned targets (not raw DOM): pipeline step, inspector field, IO mismatch, inference error/run slice
+- Store pins in project-assistant context; serialize uiContext[] on assistant request; inject prompt block
+- Prefer smallest meaningful target under pointer; multi-pin chips removable; size-cap snippets
+- See // AI : TODO (ui-context-picker) in assistant-chat, dock, api_schemas, assistant-prompt, pipeline-builder, inference-run-chrome, pipeline-fields/shared
+
+Cursor-style pasted chips in agent chat (differentiate paste for the LLM):
+- Paste → removable chip/attachment above ChatInput (not inline <pasted> in the textarea)
+- Chosen lib: @assistant-ui/react Composer.Attachments + text AttachmentAdapter
+- Also consider later: Prompt Kit PromptInput, TipTap atoms, Lexical DecoratorNode (refs in ChatInput TODO)
+- On send: typed text + each chip serialized as <pasted>…</pasted> so the model sees paste vs typed
+- Share chip row UX with ui-context-picker; kind differs (paste vs ui pin)
+- See // AI : TODO (pasted-chip) in chat.tsx, assistant-chat, assistant-history, assistant-prompt, api_schemas, project-assistant
+- Follow-on (separate): edit-inside-paste boundaries + extract JSON/Python from <pasted> regions
 
 
 Thinking of errors when running the homework assessment pipeline,
@@ -57,6 +85,27 @@ i do like the idea of pure stateless functions, need to label which are which an
 note you can test if something is deterministic if you run it twice. with an llm.
 
 embed into websites as an option for sharing
+  [done mvp] Publish → Embed tab; emb_ shared_links + allowed_origins; /embed/[id]; iframe/script snippets
+  [done mvp] origin allowlist + parentOrigin check on run; CSP frame-ancestors in proxy; no API keys in HTML
+  remaining: CAPTCHA / tighter rate limits for owner-pays embeds; edit origins UI in deployments list; richer postMessage events
+  [done] embed session HMAC on /embed mint + required on /run (no spoofable parentOrigin); allowlist redacted from public GET
+  Embed vs Link vs API explanation in Share UI (when each fits; websites pick via config, not one path)
+
+  Embed deployment config options (creator / site picks what suits them):
+  - delivery: iframe snippet and/or JS loader script (both available; site chooses)
+  - allowed origins / domain allowlist (required for anti-theft; editable; revoke / rotate id)
+  - optional path allowlist, referrer strictness
+  - funding: reuse link-style modes (you pay anon / you pay + sign-in / viewer pays) + spend limit + enable/disable
+  - abuse controls: rate limits, optional CAPTCHA for owner-pays, max runs/day
+  - UI chrome: height, theme, hide branding, mobile sizing
+  - events: optional postMessage run lifecycle (started / finished / error) for host page integration
+  - custom UI path: document Hosted API from *their* server (no open CORS on invoke for browser keys)
+
+  Security / infra for Embed:
+  - /embed/[id] (or equivalent) with per-embed frame-ancestors from allowlist (override global SAMEORIGIN only for embed routes)
+  - origin-bound short-lived embed session for run/progress (not hosted API key)
+  - re-check Origin on embed run APIs; cloned snippets on other domains fail
+  - deployments list: manage embeds like links/APIs (copy snippet, toggle, spend, take down)
 
 
 
@@ -299,6 +348,8 @@ there should be checks for duplicate requests, trying not to waste inference. to
 
 
 Create hidden bounaries for when something is pasted and when they edit inside the paste and extract json and python - create as a seperate project
+  → superseded UI approach: Cursor-style pasted chips (// AI : TODO (pasted-chip)); this line remains the
+    follow-on for edit-stable paste regions + JSON/Python extraction from <pasted> blocks.
 
 
 you should always have the ability to view the whole pipeline as code, 
@@ -321,6 +372,16 @@ Target: generate models.py + pipeline_types.py (or .rs equivalents), lint with p
 - [ ] generatePipelineTypesRust → pipeline_types.rs + models.rs (type_codegen.ts)
 - [ ] scripts/typecheck_project.ts: --cargo, pyright as default; remove computeInvalid once linter covers spine IO
 - [ ] lintPipelineExportPy (pyright) + lintPipelineExportRust (cargo check) — primary CI; TS export lint secondary
+- [x] seed LLM + UI↔TS export parity (vitest + GitHub Actions); expand HARD_PARITY_SEEDS; Py/Rust/Go via OPENROUTER_BASE_URL → `npm run seed-llm`
+- [x] live parity uses OpenRouter DeepSeek V4 Flash + OPENROUTER_SEED (temp 0) via repo `.env` key — not the offline mock
+- [x] parity is headless (`run_engine` + export only) via `npm run test:parity` — excluded from `npm test` so it won't flood the terminal / brick the UI view
+- [ ] parity FIX: emit real JSON schemas in TS/Py/Rust/Go LLM export stubs (today `schema = {}` / `None`) — root cause of live soft mismatches vs UI
+- [ ] parity FIX: after schemas land, re-enable HARD_PARITY_SEEDS (start with small seeds, then all) so soft mismatches become hard fails
+- [ ] parity FIX: UI↔export step mismatches still soft-failing on Match Transactions / Enrich Bug / Draft Scope / Populate Workpaper / tutoring LaTeX etc. — verify once schemas exist
+- [ ] parity FIX: OpenRouter empty-content / slow seeds (audit_sampler, billed_work_catalog_select, example_select_demo, gps_site_profiling, homework_grader, tutoring_styled_batch timed out @5m) — abort in-flight work on soft budget, backoff on empty/429
+- [ ] parity FIX: Py/Rust/Go automated parity (TS-only for most seeds today)
+- [ ] parity FIX: tutoring_random_fill / tutoring_styled_batch testing.json need expectedOutputs (validate_tests currently skipped)
+- [ ] parity FIX: sla_breach default input filename vs required "sla_uptime" substring mismatch in harness assignment
 - [ ] UI Types tab: view generated .py/.rs, show pyright/cargo diagnostics (see docs/new_type_system_plan.md)
 - [ ] Delete stepAcceptsSpineType, cardinalityMismatch, bareTransformCanAutoWrapList when orchestrator is typed Py/Rust
 - [ ] Runtime validateStepOutput → pydantic from generated models, not zodFromModel

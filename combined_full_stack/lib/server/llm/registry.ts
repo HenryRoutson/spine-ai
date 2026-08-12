@@ -3,6 +3,7 @@ import { catalogEntry, type ModelCatalogEntry } from "../model_catalog";
 import type { ModelId } from "../../types";
 import { CustomLlmProvider } from "./providers/custom";
 import { getOpenRouterProvider } from "./providers/openrouter";
+import { getSeedLlmProvider, SEED_LLM_PROVIDER_ID } from "./providers/seed";
 import { OPENROUTER_PROVIDER_ID } from "../openrouter_slugs";
 import {
   type CustomLlmProviderConfig,
@@ -21,9 +22,22 @@ function envProviderId(): LlmProviderId {
   return (raw || DEFAULT_LLM_PROVIDER_ID) as LlmProviderId;
 }
 
+function seedMode(): boolean {
+  return process.env.LLM_PROVIDER?.trim() === SEED_LLM_PROVIDER_ID;
+}
+
 function registerBuiltins(): void {
   if (factories.has(DEFAULT_LLM_PROVIDER_ID)) return;
+
+  // AI : LLM_PROVIDER=seed — replace OpenRouter so catalog models stay resolvable offline.
+  if (seedMode()) {
+    factories.set(DEFAULT_LLM_PROVIDER_ID, getSeedLlmProvider);
+    factories.set(SEED_LLM_PROVIDER_ID as LlmProviderId, getSeedLlmProvider);
+    return;
+  }
+
   factories.set(DEFAULT_LLM_PROVIDER_ID, getOpenRouterProvider);
+  factories.set(SEED_LLM_PROVIDER_ID as LlmProviderId, getSeedLlmProvider);
 
   const customUrl = process.env.CUSTOM_LLM_API_URL?.trim();
   if (customUrl) {
@@ -77,6 +91,7 @@ export function resolveProviderForModel(modelId: ModelId | undefined): {
 
 export function clearLlmProviderCache(): void {
   instances.clear();
+  factories.clear();
 }
 
 export function isServerLlmProvider(id: LlmProviderId): boolean {

@@ -32,6 +32,7 @@ export type LlmTransportOptions = {
   system?: string;
   temperature?: number;
   maxTokens?: number;
+  seed?: number;
   promptIndex?: number;
   round?: number;
   onUsage?: (usage: RawUsage) => void;

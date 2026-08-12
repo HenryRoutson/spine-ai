@@ -40,6 +40,7 @@ export function useSharedInferenceRun(
   linkId: string,
   auth?: SharedRunAuth,
   onRunComplete?: () => void,
+  embedSessionToken?: string,
 ) {
   const modules = link.modules
   const inputModules = useMemo(() => orderedInputModules(modules), [modules])
@@ -148,6 +149,7 @@ export function useSharedInferenceRun(
         linkId,
         byModule,
         viewerName.trim() || undefined,
+        embedSessionToken,
       )
       if (jobGen !== activeJobGenRef.current) return
       setJobId(jid)

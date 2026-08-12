@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = await parseRequestJson(req, assistantRequestBodySchema);
   if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
-  const { projectId, message, history = [], stream = false } = parsed;
+  const { projectId, message, history = [], stream = false, uiContext } = parsed;
 
   const modelOrErr = parseAssistantRequestModel(parsed.model);
   if (modelOrErr instanceof NextResponse) return modelOrErr;
@@ -38,11 +38,13 @@ export async function POST(req: NextRequest) {
     projectId,
     messageChars: message.length,
     historyTurns: history.length,
+    uiContextCount: uiContext?.length ?? 0,
     model,
     stream,
   });
 
   const trimmedHistory = trimAssistantHistory(history);
+  const assistantOptsBase = uiContext?.length ? { uiContext } : undefined;
 
   try {
     if (!stream) {
@@ -52,6 +54,7 @@ export async function POST(req: NextRequest) {
         message,
         trimmedHistory,
         model,
+        assistantOptsBase,
       );
       if (result instanceof NextResponse) return result;
       return NextResponse.json(result);
@@ -71,6 +74,7 @@ export async function POST(req: NextRequest) {
             trimmedHistory,
             model,
             {
+              ...assistantOptsBase,
               onThinkingDelta: (text) =>
                 push({ type: ASSISTANT_STREAM_EVENT.THINKING_DELTA, text }),
               onThinkingDone: (text) =>

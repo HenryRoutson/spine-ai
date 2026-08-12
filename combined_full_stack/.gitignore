@@ -7,4 +7,5 @@ public/monaco/
 *.tsbuildinfo
 next-env.d.ts
 .typecheck/
+.parity-cache/
 .next/dev/trace-turbopack

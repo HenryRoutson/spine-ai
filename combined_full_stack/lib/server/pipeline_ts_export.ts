@@ -87,6 +87,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
         `const _model = ${typeof model === "string" && model.startsWith("/*") ? `"deepseek-v4"` : JSON.stringify(model)};`,
         `void _model;`,
         `const userPrompt = ${JSON.stringify(prompt)} + "\\n\\nINPUT DATA:\\n" + JSON.stringify(input, null, 2);`,
+        // AI : TODO (parity) — emit real JSON Schema from outStructure (zod/json-schema); empty {} breaks live LLM asserts.
         `const schema = /* JSON schema for ${outName ?? "output"} */ {};`,
         `return await llmStructured<${outTs}>(userPrompt, schema);`,
       ].join("\n");
@@ -98,6 +99,7 @@ function generateStepBody(m: PipelineModule, project: Project, outTs: string, in
         exportComment(C, llmBatchComment(outName ?? outTs)),
         "const items = Array.isArray(input) ? input : [input];",
         `const promptFor = (item: unknown) => ${JSON.stringify(prompt)} + "\\n\\nITEM:\\n" + JSON.stringify(item, null, 2);`,
+        // AI : TODO (parity) — emit real JSON Schema from outStructure; empty {} breaks live LLM batch asserts.
         `const schema = /* JSON schema for ${outName ?? "output"} */ {};`,
         `return await llmBatchStructured<${itemTs}>(items, promptFor, schema);`,
       ].join("\n");

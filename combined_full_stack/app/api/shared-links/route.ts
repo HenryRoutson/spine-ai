@@ -46,9 +46,13 @@ export async function POST(req: NextRequest) {
       flatFeeCents: body.flatFeeCents,
       defaultDocsByModule: (body.defaultDocsByModule ?? {}) as Partial<Record<ModuleId, DocId[]>>,
       store: ctx.store,
+      kind: body.kind,
+      allowedOrigins: body.allowedOrigins,
+      embedOptions: body.embedOptions,
     });
-    apiLog.info(`published shared link`, { linkId: link.id, projectId: body.projectId });
-    return NextResponse.json({ link, url: `/run/${link.id}` });
+    apiLog.info(`published shared link`, { linkId: link.id, projectId: body.projectId, kind: body.kind ?? "link" });
+    const url = body.kind === "embed" || link.id.startsWith("emb_") ? `/embed/${link.id}` : `/run/${link.id}`;
+    return NextResponse.json({ link, url });
   } catch (err) {
     apiLog.error(`POST failed`, { error: (err as Error).message });
     return apiError((err as Error).message || "failed to create link", 500);

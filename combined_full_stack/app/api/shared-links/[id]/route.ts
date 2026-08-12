@@ -7,8 +7,10 @@ import {
   revokeSharedLink,
   setSharedLinkEnabled,
   SharedLinkSpendLimitTooLowError,
+  updateSharedLinkEmbedSettings,
   updateSharedLinkSpendLimit,
 } from "@/lib/server/shared_links";
+import type { SharedLinkRecord } from "@/lib/shared-link-types";
 
 export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
@@ -40,7 +42,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
   const parsed = await parseRequestJson(req, updateDeploymentBodySchema);
   if ("validationError" in parsed) return apiError(parsed.validationError, 400);
 
-  let result: Awaited<ReturnType<typeof setSharedLinkEnabled>> = null;
+  let result: SharedLinkRecord | null = null;
 
   // AI : validate spend limit before toggling enabled so PATCH stays atomic.
   if (parsed.spendLimitCents !== undefined) {
@@ -56,6 +58,18 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: strin
         return apiError(err.message, 400, "spend_limit_too_low");
       }
       throw err;
+    }
+  }
+
+  if (parsed.allowedOrigins !== undefined || parsed.embedOptions !== undefined) {
+    try {
+      result = await updateSharedLinkEmbedSettings(authCtx.auth.userId, linkId, {
+        allowedOrigins: parsed.allowedOrigins,
+        embedOptions: parsed.embedOptions,
+      });
+      if (!result) return apiError("link not found", 404);
+    } catch (err) {
+      return apiError((err as Error).message, 400);
     }
   }
 

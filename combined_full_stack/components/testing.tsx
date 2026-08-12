@@ -29,11 +29,14 @@ import {
   TestFileEditor,
   type TestDraft,
 } from "@/components/testing-editor"
+import { suggestEditDocName, validateNewDocName } from "@/lib/doc-edit"
+import { Input } from "@/components/ui/input"
 import { GoToLoggingButton } from "@/components/inference/inference-run-chrome"
 import { RunStopButton, RunWithStopButton } from "@/components/run-with-stop-button"
 import { WindowHeader } from "@/components/window-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -549,9 +552,14 @@ function staleLoadFailedContent(content: string): string | null {
     }
   }
 
-  // AI : content-hash ids change on edit — replace in one request, keyed by stable doc name.
-  async function saveEdit(state: TestDocState, draft: string): Promise<DocId | null> {
+  // AI : files are immutable — edits fork under a new name (never replaceDocId).
+  async function saveEdit(state: TestDocState, draft: string, newName: string): Promise<DocId | null> {
     setActionError(null)
+    const nameErr = validateNewDocName(newName, state.doc.name, projectDocs)
+    if (nameErr) {
+      setActionError(nameErr)
+      return null
+    }
     const parsed = parseTestFile(draft)
     if (!parsed.ok) {
       setActionError(parsed.error)
@@ -559,12 +567,11 @@ function staleLoadFailedContent(content: string): string | null {
     }
     try {
       const doc = await addDocContent(
-        state.doc.name,
+        newName.trim(),
         InputType.Json,
         draft,
         DocLabel.Training,
         project.id,
-        state.doc.id,
       )
       setDirtyContentByName((prev) => {
         const { [state.doc.name]: _gone, ...rest } = prev
@@ -574,7 +581,7 @@ function staleLoadFailedContent(content: string): string | null {
         const { [state.doc.id]: _old, ...rest } = prev
         return { ...rest, [doc.id]: draft }
       })
-      selectTest(doc.id, state.doc.name)
+      selectTest(doc.id, doc.name)
       return doc.id
     } catch (err) {
       setActionError((err as Error).message)
@@ -582,18 +589,22 @@ function staleLoadFailedContent(content: string): string | null {
     }
   }
 
-  // AI : one-click Run — unsaved form edits are saved first, then the run targets the new doc id.
-  async function saveAndRun(state: TestDocState, contentToSave: string | null) {
+  // AI : one-click Run — unsaved form edits are saved as a new file first, then the run targets that id.
+  async function saveAndRun(state: TestDocState, contentToSave: string | null, newName: string | null) {
     let target = state
     if (contentToSave !== null) {
+      if (!newName) {
+        setActionError("Choose a new file name before saving")
+        return
+      }
       const parsed = parseTestFile(contentToSave)
       if (!parsed.ok) {
         setActionError(parsed.error)
         return
       }
-      const newId = await saveEdit(state, contentToSave)
+      const newId = await saveEdit(state, contentToSave, newName)
       if (!newId) return
-      target = { ...state, doc: { ...state.doc, id: newId }, content: contentToSave, test: parsed.test }
+      target = { ...state, doc: { ...state.doc, id: newId, name: newName.trim() }, content: contentToSave, test: parsed.test }
     }
     await runTest(target)
   }
@@ -968,6 +979,18 @@ function staleLoadFailedContent(content: string): string | null {
                             type="button"
                             onClick={() => selectTest(t.doc.id, t.doc.name)}
                             className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-1 py-1 text-left hover:bg-accent"
+                            {...uiContextTargetProps({
+                              kind: "project_doc",
+                              id: `doc:${t.doc.id}`,
+                              label: `Test · ${t.doc.name}`,
+                              snippet: [
+                                verdictTooltip,
+                                validationBadge ? `validation: ${validationBadge}` : null,
+                                isRunning ? "running" : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · "),
+                            })}
                           >
                             <Tooltip>
                               <TooltipTrigger
@@ -1017,12 +1040,12 @@ function staleLoadFailedContent(content: string): string | null {
           <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
             {selected ? (
               <TestDetail
-                key={selected.doc.name} // AI : stable test filename — doc id changes on content-hash edits
+                key={selected.doc.name} // AI : stable until Save-as renames; remount resets draft
                 state={selected}
                 project={project}
                 projectDocs={projectDocs}
-                onSaveEdit={(draft) => void saveEdit(selected, draft)}
-                onRun={(contentToSave) => void saveAndRun(selected, contentToSave)}
+                onSaveEdit={(draft, newName) => void saveEdit(selected, draft, newName)}
+                onRun={(contentToSave, newName) => void saveAndRun(selected, contentToSave, newName)}
                 onStop={() => stopTest(selected.doc.name)}
                 onRetryLoad={() => loadTestDoc(selected.doc.id, true)}
                 onDirtyContentChange={onDirtyContentChange}
@@ -1222,8 +1245,8 @@ function TestDetail({
   state: TestDocState
   project: Project
   projectDocs: DocRef[]
-  onSaveEdit: (draft: string) => void
-  onRun: (contentToSave: string | null) => void
+  onSaveEdit: (draft: string, newName: string) => void
+  onRun: (contentToSave: string | null, newName: string | null) => void
   onStop: () => void
   onRetryLoad: () => void
   onDirtyContentChange: (docName: doc_name_string, content: string | null) => void
@@ -1240,18 +1263,19 @@ function TestDetail({
   modules: PipelineModule[]
 }) {
   const { openLogging } = useAppShell()
-  // AI : the form edits a TestDraft in place — Run auto-saves unsaved edits first, so the
-  // AI : primary button is always available. Broken (unparseable) files fall back to a fix-it textarea.
+  // AI : form edits a TestDraft — Save forks under a new name (files stay immutable).
   const [draft, setDraft] = useState<TestDraft | null>(null)
   const [initialSig, setInitialSig] = useState<string | null>(null)
   const [fixDraft, setFixDraft] = useState<string | null>(null)
+  const [saveAsName, setSaveAsName] = useState(() => suggestEditDocName(state.doc.name, projectDocs))
 
-  // AI : resync form when the underlying file changes (load, save, or content-hash id swap).
+  // AI : resync form when the underlying file changes (load, save-as, or content-hash id swap).
   useEffect(() => {
     setDraft(null)
     setInitialSig(null)
     setFixDraft(null)
-  }, [state.doc.id])
+    setSaveAsName(suggestEditDocName(state.doc.name, projectDocs))
+  }, [state.doc.id, state.doc.name, projectDocs])
 
   useEffect(() => {
     if (state.content === undefined || state.parseError || !state.test) return
@@ -1262,6 +1286,7 @@ function TestDetail({
 
   const dirty = draft !== null && JSON.stringify(draft) !== initialSig
   const serialized = draft ? draftToContent(draft, project) : null
+  const nameError = dirty || state.parseError ? validateNewDocName(saveAsName, state.doc.name, projectDocs) : null
   const draftBlocked = draft === null || serialized === null || draftHasErrors(draft, project, projectDocs)
   const expectFailure = state.test?.expectFailure
   const resultsVerdict =
@@ -1285,7 +1310,9 @@ function TestDetail({
       ? "fix invalid JSON values first"
       : draft && draftHasErrors(draft, project, projectDocs)
         ? "fix the errors marked in red first"
-        : undefined
+        : dirty && nameError
+          ? nameError
+          : undefined
 
   // AI : step key → actual output from the last run so the form can capture it
   const actuals = useMemo(() => {
@@ -1334,6 +1361,20 @@ function TestDetail({
               </span>
             )}
           </h3>
+          {dirty && (
+            <div className="mt-2 max-w-md space-y-1">
+              <p className="font-mono text-[10px] text-muted-foreground">
+                Files are immutable — save as a new name
+              </p>
+              <Input
+                value={saveAsName}
+                onChange={(e) => setSaveAsName(e.target.value)}
+                className="h-7 font-mono text-[11px]"
+                spellCheck={false}
+              />
+              {nameError && <p className="font-mono text-[10px] text-destructive">{nameError}</p>}
+            </div>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {dirty && (
@@ -1342,7 +1383,10 @@ function TestDetail({
                 size="sm"
                 variant="outline"
                 className="h-8 bg-transparent"
-                onClick={() => initialSig && setDraft(JSON.parse(initialSig) as TestDraft)}
+                onClick={() => {
+                  if (initialSig) setDraft(JSON.parse(initialSig) as TestDraft)
+                  setSaveAsName(suggestEditDocName(state.doc.name, projectDocs))
+                }}
               >
                 Discard
               </Button>
@@ -1350,22 +1394,22 @@ function TestDetail({
                 size="sm"
                 variant="outline"
                 className="h-8 bg-transparent"
-                disabled={serialized === null}
-                title={serialized === null ? "fix invalid JSON values first" : undefined}
-                onClick={() => serialized && onSaveEdit(serialized)}
+                disabled={serialized === null || !!nameError}
+                title={nameError ?? (serialized === null ? "fix invalid JSON values first" : undefined)}
+                onClick={() => serialized && onSaveEdit(serialized, saveAsName)}
               >
-                Save
+                Save as
               </Button>
             </>
           )}
           {!state.parseError && !state.loadError && (
             <RunWithStopButton
               running={runPhase === "running"}
-              onRun={() => onRun(dirty ? serialized : null)}
+              onRun={() => onRun(dirty ? serialized : null, dirty ? saveAsName : null)}
               onStop={() => onStop()}
-              disabled={runDisabled || draftBlocked}
+              disabled={runDisabled || draftBlocked || (!!dirty && !!nameError)}
               title={runTitle}
-              label={dirty ? "Save & run" : "Run test"}
+              label={dirty ? "Save as & run" : "Run test"}
               stopTitle="Stop this test run"
             />
           )}
@@ -1394,16 +1438,29 @@ function TestDetail({
         // AI : recovery path only — a hand-broken file can't render as a form, so let the user fix the text.
         <div className="space-y-2">
           <p className="rounded border border-destructive/30 bg-destructive/10 p-2 font-mono text-[11px] text-destructive">
-            {state.parseError} — fix the file below and save.
+            {state.parseError} — fix the file below and save as a new name.
           </p>
+          <Input
+            value={saveAsName}
+            onChange={(e) => setSaveAsName(e.target.value)}
+            className="h-7 font-mono text-[11px]"
+            spellCheck={false}
+            placeholder="new_file_testing.json"
+          />
+          {nameError && <p className="font-mono text-[10px] text-destructive">{nameError}</p>}
           <Textarea
             value={fixDraft ?? state.content ?? ""}
             onChange={(e) => setFixDraft(e.target.value)}
             className="min-h-[360px] font-mono text-[11px]"
             spellCheck={false}
           />
-          <Button size="sm" className="h-8" disabled={fixDraft === null} onClick={() => fixDraft && onSaveEdit(fixDraft)}>
-            Save fixed file
+          <Button
+            size="sm"
+            className="h-8"
+            disabled={fixDraft === null || !!nameError}
+            onClick={() => fixDraft && onSaveEdit(fixDraft, saveAsName)}
+          >
+            Save as new file
           </Button>
         </div>
       ) : (

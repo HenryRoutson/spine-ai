@@ -73,6 +73,7 @@ export const API_ROUTES = {
   hostedApi: (id: string) => `/api/hosted-apis/${id}`,
   hostedApiInvoke: (id: string) => `/api/hosted-apis/${id}/invoke`,
   hostedApiProgress: (id: string) => `/api/hosted-apis/${id}/progress`,
+  // AI : Embed reuses shared-links APIs + /embed/[id] UI (origin allowlist on emb_ rows).
   landingDemoBuild: "/api/landing-demo/build-pipeline",
   landingDemoSignup: "/api/landing-demo/signup",
   landingDemoSessionReplay: "/api/landing-demo/session-replay",

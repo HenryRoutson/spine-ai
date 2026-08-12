@@ -28,6 +28,7 @@ import { DeleteButton } from "@/components/delete-button"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
 import {
   docsForInputModule,
   resolveRunInputDocIds,
@@ -45,6 +46,8 @@ import {
   InferenceSetupEditor,
   type SetupDraft,
 } from "@/components/inference-setup-editor"
+import { suggestEditDocName, validateNewDocName } from "@/lib/doc-edit"
+import { Input } from "@/components/ui/input"
 import { useInferenceRun } from "@/lib/use-inference-run"
 import { useInferenceTestEval } from "@/lib/use-inference-test-eval"
 import { TestResults } from "@/components/test-results"
@@ -307,21 +310,26 @@ export function Inference() {
     }
   }
 
-  async function saveEdit(state: SetupDocState, draft: string): Promise<DocId | null> {
+  async function saveEdit(state: SetupDocState, draft: string, newName: string): Promise<DocId | null> {
     setActionError(null)
+    const nameErr = validateNewDocName(newName, state.doc.name, projectDocs)
+    if (nameErr) {
+      setActionError(nameErr)
+      return null
+    }
     const parsed = parseInferenceSetupFile(draft)
     if (!parsed.ok) {
       setActionError(parsed.error)
       return null
     }
     try {
+      // AI : files are immutable — fork under a new name; never replaceDocId.
       const doc = await addDocContent(
-        state.doc.name,
+        newName.trim(),
         InputType.Json,
         draft,
         DocLabel.Inference,
         project.id,
-        state.doc.id,
       )
       setContents((prev) => {
         const { [state.doc.id]: _old, ...rest } = prev
@@ -483,6 +491,12 @@ export function Inference() {
                             type="button"
                             onClick={() => selectSetup(s.doc.id)}
                             className="flex min-w-0 flex-1 items-start gap-2 rounded-md px-1 py-1 text-left hover:bg-accent"
+                            {...uiContextTargetProps({
+                              kind: "project_doc",
+                              id: `doc:${s.doc.id}`,
+                              label: `Setup · ${setupDisplayName(s.doc.name)}`,
+                              snippet: `status: ${badge.label}`,
+                            })}
                           >
                             <Layers className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                             <span
@@ -520,7 +534,7 @@ export function Inference() {
                   state={selected}
                   project={project}
                   projectDocs={projectDocs}
-                  onSaveEdit={(draft) => void saveEdit(selected, draft)}
+                  onSaveEdit={(draft, newName) => void saveEdit(selected, draft, newName)}
                   onApplyInputs={applySetupInputs}
                 />
               )}
@@ -841,11 +855,18 @@ function SetupDetail({
   state: SetupDocState
   project: Project
   projectDocs: DocRef[]
-  onSaveEdit: (draft: string) => void
+  onSaveEdit: (draft: string, newName: string) => void
   onApplyInputs: (setup: SpineInferenceSetupFile) => void
 }) {
   const [draft, setDraft] = useState<SetupDraft | null>(null)
   const [initialSig, setInitialSig] = useState<string | null>(null)
+  const [saveAsName, setSaveAsName] = useState(() => suggestEditDocName(state.doc.name, projectDocs))
+
+  useEffect(() => {
+    setDraft(null)
+    setInitialSig(null)
+    setSaveAsName(suggestEditDocName(state.doc.name, projectDocs))
+  }, [state.doc.id, state.doc.name, projectDocs])
 
   useEffect(() => {
     if (draft === null && state.setup) {
@@ -857,6 +878,7 @@ function SetupDetail({
 
   const dirty = draft !== null && JSON.stringify(draft) !== initialSig
   const serialized = draft ? draftToSetupContent(draft) : null
+  const nameError = dirty ? validateNewDocName(saveAsName, state.doc.name, projectDocs) : null
 
   return (
     <div className="space-y-4 rounded-lg border border-border bg-card/30 p-4">
@@ -866,6 +888,20 @@ function SetupDetail({
             <Layers className="h-4 w-4 text-primary" />
             <span className="truncate font-mono">{setupDisplayName(state.doc.name)}</span>
           </h3>
+          {dirty && (
+            <div className="mt-2 max-w-md space-y-1">
+              <p className="font-mono text-[10px] text-muted-foreground">
+                Files are immutable — save as a new name
+              </p>
+              <Input
+                value={saveAsName}
+                onChange={(e) => setSaveAsName(e.target.value)}
+                className="h-7 font-mono text-[11px]"
+                spellCheck={false}
+              />
+              {nameError && <p className="font-mono text-[10px] text-destructive">{nameError}</p>}
+            </div>
+          )}
           {state.issues.length > 0 && (
             <ul className="mt-2 space-y-1">
               {state.issues.map((issue, i) => (
@@ -892,7 +928,10 @@ function SetupDetail({
                 size="sm"
                 variant="outline"
                 className="h-8 bg-transparent"
-                onClick={() => initialSig && setDraft(JSON.parse(initialSig) as SetupDraft)}
+                onClick={() => {
+                  if (initialSig) setDraft(JSON.parse(initialSig) as SetupDraft)
+                  setSaveAsName(suggestEditDocName(state.doc.name, projectDocs))
+                }}
               >
                 Discard
               </Button>
@@ -900,10 +939,11 @@ function SetupDetail({
                 size="sm"
                 variant="outline"
                 className="h-8 bg-transparent"
-                disabled={serialized === null}
-                onClick={() => serialized && onSaveEdit(serialized)}
+                disabled={serialized === null || !!nameError}
+                title={nameError ?? undefined}
+                onClick={() => serialized && onSaveEdit(serialized, saveAsName)}
               >
-                Save setup
+                Save as
               </Button>
             </>
           )}

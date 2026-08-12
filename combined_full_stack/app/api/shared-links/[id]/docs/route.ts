@@ -22,9 +22,19 @@ import {
   sessionUploadCount,
 } from "@/lib/server/shared-link-session";
 import { secureSessionCookieOptions } from "@/lib/server/cookie_options";
+import { isEmbedLinkId } from "@/lib/server/embed_origins";
+import {
+  embedSessionParentAllowed,
+  readEmbedSessionHeader,
+  verifyEmbedSessionToken,
+} from "@/lib/server/embed_session";
 import type { ModuleId } from "@/lib/server/types";
 
 const SESSION_COOKIE = "shared_run_session";
+
+function requiresEmbedSession(link: { id: string; allowedOrigins?: string[] | null }): boolean {
+  return isEmbedLinkId(link.id) || (link.allowedOrigins?.length ?? 0) > 0;
+}
 
 // AI : TODO security — uploads are session-cookie only (no sign-in); tighten caps, add CAPTCHA, or require
 // AI : auth for high-volume links to reduce storage-DoS on public shared deployments.
@@ -42,6 +52,22 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const link = await getSharedLink(linkId);
   if (!link) return apiError("link not found", 404);
+
+  // AI : Embed anti-theft — same session gate as run (blocks off-site upload/storage abuse).
+  if (requiresEmbedSession(link)) {
+    const token = readEmbedSessionHeader(req);
+    const verified = verifyEmbedSessionToken(link.id, token);
+    if (
+      !verified ||
+      !embedSessionParentAllowed(verified.parentOrigin, link.allowedOrigins ?? [], req.nextUrl.origin)
+    ) {
+      return apiError(
+        "This embed is not allowed on this website. Ask the publisher to add your origin.",
+        403,
+        "embed_origin_denied",
+      );
+    }
+  }
 
   const form = await req.formData();
   const file = form.get("file");

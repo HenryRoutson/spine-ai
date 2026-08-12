@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlertTriangle, Boxes, Globe, ScrollText, Store, Users, Workflow, Zap } from "lucide-react"
+import { AlertTriangle, Boxes, Globe, PanelTop, ScrollText, Store, Users, Workflow, Zap } from "lucide-react"
 import {
   DeploymentActivityPage,
   type ActivityFilter,
@@ -12,6 +12,7 @@ import { MarketplaceBrowsePanel } from "@/components/share/marketplace-browse-pa
 import { MarketplacePublishForm } from "@/components/share/marketplace-publish-form"
 import { MyPipelinesPanel } from "@/components/share/my-pipelines-panel"
 import { OwnPipelineRunner } from "@/components/share/own-pipeline-runner"
+import { ShareEmbedForm } from "@/components/share/share-embed-form"
 import { ShareLinkForm } from "@/components/share/share-link-form"
 import { SharedLinkRunner } from "@/components/share/shared-link-runner"
 import { SharedWithMePanel } from "@/components/share/shared-with-me-panel"
@@ -286,6 +287,19 @@ export function SharePage() {
                     type="button"
                     className={cn(
                       "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors",
+                      tab === PublishTab.Embed
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => setTab(PublishTab.Embed)}
+                  >
+                    <PanelTop className="h-3.5 w-3.5" />
+                    Embed
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1.5 text-xs font-medium transition-colors",
                       tab === PublishTab.Marketplace
                         ? "bg-background text-foreground shadow-sm"
                         : "text-muted-foreground hover:text-foreground",
@@ -306,6 +320,13 @@ export function SharePage() {
                   />
                 ) : tab === PublishTab.Api ? (
                   <HostApiForm
+                    project={builder.project}
+                    docs={builder.docs}
+                    inferenceInputDocIds={builder.inferenceInputDocIds}
+                    onCreated={() => setRefreshToken((n) => n + 1)}
+                  />
+                ) : tab === PublishTab.Embed ? (
+                  <ShareEmbedForm
                     project={builder.project}
                     docs={builder.docs}
                     inferenceInputDocIds={builder.inferenceInputDocIds}

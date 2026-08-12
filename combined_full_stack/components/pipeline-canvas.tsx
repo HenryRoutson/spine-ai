@@ -26,6 +26,8 @@ import {
 } from "@/lib/module-ui"
 import { ModuleKind, type ModuleId, type PipelineModule, type RunStepStatus, type StructureModel } from "@/lib/types"
 import { inputTypeLabel } from "@/lib/inference-input"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
+import { truncateUiContextText } from "@/lib/ui-context-types"
 import {
   invalidStepMessage,
   ioMismatchAtModuleIndex,
@@ -183,7 +185,14 @@ function SegmentRow({
                   ),
           )}
         >
-          <StepButton onClick={() => onSelect?.(combine.id)} className="flex w-full items-start gap-2 text-left">
+          <StepButton
+            onClick={() => onSelect?.(combine.id)}
+            className="flex w-full items-start gap-2 text-left"
+            moduleId={combine.id}
+            label={combine.label}
+            kind={ModuleKind.Combine}
+            snippet={combine.note}
+          >
             <StepIndex index={index} />
             <KindIcon kind={ModuleKind.Combine} />
             <StepBody
@@ -215,6 +224,10 @@ function SegmentRow({
           )}
           <StepButton
             onClick={() => onSelect?.(input.id)}
+            moduleId={input.id}
+            label={input.label}
+            kind={ModuleKind.Input}
+            snippet={input.note}
             className={cn(
               "mt-2 flex w-full items-start gap-3 rounded-md border bg-card px-3 py-2.5 text-left transition-colors",
               selectedId === input.id
@@ -243,6 +256,10 @@ function SegmentRow({
           {parse && (
             <StepButton
               onClick={() => onSelect?.(parse.id)}
+              moduleId={parse.id}
+              label={parse.label}
+              kind={ModuleKind.Llm}
+              snippet={parse.note}
               className={cn(
                 "mt-2 flex w-full items-start gap-3 rounded-md border border-dashed border-chart-3/50 bg-chart-3/5 px-3 py-2.5 text-left transition-colors",
                 selectedId === parse.id
@@ -274,6 +291,8 @@ function SegmentRow({
               ? invalidStepMessage(combineIssue!, models, modules)
               : combineIoMsg
           }
+          moduleId={combine.id}
+          label={combine.label}
         />
         {renderInsertAfter?.(insertAt, { blocked, connectionInvalid }) ?? (
           <PipelineConnector invalid={connectionInvalid} />
@@ -301,6 +320,10 @@ function SegmentRow({
           <div className="relative w-full max-w-xs">
             <StepButton
               onClick={() => onSelect?.(m.id)}
+              moduleId={m.id}
+              label={m.label}
+              kind={ModuleKind.Output}
+              snippet={m.note}
               className={cn(
                 "flex w-full flex-col items-center gap-1.5 rounded-lg border border-dashed px-4 py-3 text-center transition-colors",
                 "border-output/50 bg-output/5 shadow-sm",
@@ -349,6 +372,8 @@ function SegmentRow({
           show={isInvalid}
           message={isInvalid ? invalidStepMessage(stepIssue!, models, modules) : undefined}
           className="max-w-xs"
+          moduleId={m.id}
+          label={m.label}
         />
         {renderInsertAfter?.(insertAt, { blocked, connectionInvalid }) ?? (
           <PipelineConnector invalid={connectionInvalid} />
@@ -361,6 +386,10 @@ function SegmentRow({
     <div className="mx-auto flex w-full flex-col items-center">
       <StepButton
         onClick={() => onSelect?.(m.id)}
+        moduleId={m.id}
+        label={m.label}
+        kind={m.kind}
+        snippet={m.note}
         className={cn(
           "group relative flex w-full items-start gap-3 rounded-lg border bg-card px-3.5 py-3 text-left transition-colors",
           locked && (autoStruct ? "border-dashed border-chart-3/50 bg-chart-3/5" : "border-dashed border-chart-2/50 bg-chart-2/5"),
@@ -427,6 +456,8 @@ function SegmentRow({
       <InvalidMessage
         show={isInvalid}
         message={isInvalid ? invalidStepMessage(stepIssue!, models, modules) : undefined}
+        moduleId={m.id}
+        label={m.label}
       />
       {!isInvalid && stepWarnings?.length ? (
         <div className="mt-1 space-y-0.5">
@@ -501,13 +532,31 @@ function StepButton({
   onClick,
   className,
   children,
+  moduleId,
+  label,
+  kind,
+  snippet,
 }: {
   onClick?: () => void
   className?: string
   children: React.ReactNode
+  moduleId?: ModuleId | string
+  label?: string
+  kind?: string
+  snippet?: string
 }) {
+  const ctx =
+    moduleId && label
+      ? uiContextTargetProps({
+          kind: "pipeline_step",
+          id: `step:${moduleId}`,
+          label: `${label}${kind ? ` (${kind})` : ""}`,
+          moduleId: String(moduleId),
+          snippet,
+        })
+      : undefined
   return (
-    <button type="button" onClick={onClick} className={className}>
+    <button type="button" onClick={onClick} className={className} {...ctx}>
       {children}
     </button>
   )
@@ -548,14 +597,30 @@ function InvalidMessage({
   show,
   message,
   className,
+  moduleId,
+  label,
 }: {
   show?: boolean
   message?: string
   className?: string
+  moduleId?: ModuleId | string
+  label?: string
 }) {
   if (!show || !message) return null
+  const ctx = moduleId
+    ? uiContextTargetProps({
+        kind: "invalid_issue",
+        id: `invalid:${moduleId}:${truncateUiContextText(message, 40)}`,
+        label: label ? `${label} · invalid` : "Invalid step",
+        moduleId: String(moduleId),
+        snippet: message,
+      })
+    : undefined
   return (
-    <p className={cn("mt-1 text-center font-mono text-[10px] text-destructive", className)}>
+    <p
+      className={cn("mt-1 text-center font-mono text-[10px] text-destructive", className)}
+      {...ctx}
+    >
       {message}
     </p>
   )

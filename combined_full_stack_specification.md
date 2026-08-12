@@ -422,6 +422,16 @@ you should be able to share the pipeline with all the details of the pipeline it
 please add a share to marketplace button in the share tab, where you can put on the marketplace with a price or for free. There should be a marketplace where you can search for pipelines.
 
 
+
+# Agent 
+
+The agent tab is connected with MCP and openrouter to frontier models. 
+need to add chips for pastes and selecting a part of the UI. have a cursor style UI selector to reference some part of the UI. 
+ensure you use an existing library if possible.
+
+you should be able to see chats of people in your team or working on your project.
+
+
 # logging
 The logging tab contains all the history. each log is either red or green depending on if it passed or failed.
 you can search for runs, based on descriptions provided and editable when selecting the run.
@@ -497,6 +507,7 @@ Exported pipelines (`connector_server.ts`, Python runners) do not auto-include L
 
 the documents tab contains all documents and their size with the ability to view them. you can also view pdf documents markdown in raw text or as formatted or as the original pdf and the same for word and other more complex documents. 
 csv, excel, json can all be viewed as json, excel or in original text.
+**Edit (immutable)** — JSON / tabular files can be edited in a schema-guided form (matched structure when available). The source file is never overwritten; saving requires a new file name and creates a new content-hash row.
 flag and block uploads if they contain 'confidential' until you click approve
 
 uploading a new document will check if it matches any of the existing structs and display this. you have the option to add any new structures in the document.

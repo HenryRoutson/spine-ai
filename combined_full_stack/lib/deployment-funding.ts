@@ -5,13 +5,20 @@ import type { SharedLinkRecord } from "./shared-link-types";
 
 export type DeploymentRow =
   | { kind: "link"; row: SharedLinkRecord }
+  | { kind: "embed"; row: SharedLinkRecord }
   | { kind: "api"; row: HostedApiRecord };
+
+export type DeploymentKind = DeploymentRow["kind"];
+
+function isEmbedRecord(row: SharedLinkRecord): boolean {
+  return /^emb_/i.test(row.id) || (row.allowedOrigins?.length ?? 0) > 0;
+}
 
 // AI : assets bill viewers/callers — liabilities bill the publisher.
 export function deploymentIsAsset(item: DeploymentRow): boolean {
-  return item.kind === "link"
-    ? viewerFundsSharedRun(item.row.fundingMode)
-    : callerFundsHostedApi(item.row.fundingMode);
+  return item.kind === "api"
+    ? callerFundsHostedApi(item.row.fundingMode)
+    : viewerFundsSharedRun(item.row.fundingMode);
 }
 
 export function deploymentIsLiability(item: DeploymentRow): boolean {
@@ -23,7 +30,13 @@ export function liveDeploymentRows(
   apis: HostedApiRecord[],
 ): DeploymentRow[] {
   return [
-    ...links.filter((l) => !l.revoked).map((row) => ({ kind: "link" as const, row })),
+    ...links
+      .filter((l) => !l.revoked)
+      .map((row) =>
+        isEmbedRecord(row)
+          ? ({ kind: "embed" as const, row })
+          : ({ kind: "link" as const, row }),
+      ),
     ...apis.filter((a) => !a.revoked).map((row) => ({ kind: "api" as const, row })),
   ].sort((a, b) => b.row.createdAt - a.row.createdAt);
 }

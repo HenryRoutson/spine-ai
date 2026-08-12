@@ -14,6 +14,7 @@ import {
   isMultiDocInputModule,
 } from "@/lib/inference-input"
 import type { DocId, DocRef, PipelineModule } from "@/lib/types"
+import { uiContextTargetProps } from "@/lib/ui-context-dom"
 
 type StoreSlotProps = {
   variant?: "store"
@@ -47,7 +48,23 @@ export function InferenceInputSlot(props: {
   const uploading = uploadProps?.uploading ?? false
 
   return (
-    <div className={cn("rounded-lg border bg-card p-3", issue ? "border-destructive/50" : "border-border")}>
+    <div
+      className={cn("rounded-lg border bg-card p-3", issue ? "border-destructive/50" : "border-border")}
+      {...uiContextTargetProps({
+        kind: "pipeline_step",
+        id: `step:${inputModule.id}`,
+        label: `Input · ${inputModule.label}`,
+        moduleId: inputModule.id,
+        snippet: [
+          inputTypeLabel(inputModule.inputType),
+          outModel ? `→ ${outModel}${multi ? "[]" : ""}` : null,
+          docs.length ? `${docs.length} doc(s): ${docs.map((d) => d.name).join(", ")}` : "no docs assigned",
+          issue?.message ?? null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      })}
+    >
       <div className="mb-2 flex flex-wrap items-center gap-1.5">
         <span className="text-xs font-medium">{inputModule.label}</span>
         <Badge variant="outline" className="font-mono text-[9px] capitalize">
