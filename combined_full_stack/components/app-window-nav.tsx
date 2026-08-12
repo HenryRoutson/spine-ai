@@ -1,5 +1,6 @@
 "use client"
 
+import type { ReactNode } from "react"
 import { AlertTriangle } from "lucide-react"
 import { BUILDER_WORKSPACE_NAV_ITEMS, CONSUMER_NAV_ITEMS, type AppNavItem } from "@/lib/app-nav-config"
 import type { AppWindowId } from "@/lib/app-shell"
@@ -18,10 +19,19 @@ type AppWindowNavProps = {
   onSelect: (window: AppWindowId) => void
   validity?: WorkspaceValidity
   items?: AppNavItem[]
+  // AI : Agent lives on Build workspace chrome (not L0 header) to separate from Vibe.
+  // AI : TODO (vibe) — hide Agent trailing when hide-developer-tools is on (Build nav gone).
+  trailing?: ReactNode
 }
 
 // AI : flat numbered horizontal workspace tabs — replaces area + sub-nav layers.
-export function AppWindowNav({ activeWindow, onSelect, validity, items = BUILDER_WORKSPACE_NAV_ITEMS }: AppWindowNavProps) {
+export function AppWindowNav({
+  activeWindow,
+  onSelect,
+  validity,
+  items = BUILDER_WORKSPACE_NAV_ITEMS,
+  trailing,
+}: AppWindowNavProps) {
   return (
     <nav
       aria-label="Workspace"
@@ -70,6 +80,7 @@ export function AppWindowNav({ activeWindow, onSelect, validity, items = BUILDER
           </button>
         )
       })}
+      {trailing ? <div className="ml-auto flex shrink-0 items-center gap-2">{trailing}</div> : null}
     </nav>
   )
 }

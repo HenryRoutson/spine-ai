@@ -1,6 +1,7 @@
 // AI : client shim for the real server run engine — POST /api/runs starts the pipeline,
 // AI : then the Inference tab polls progress until the persisted PipelineRun arrives.
 // AI : user-authored transform/custom steps run here in the browser (never on the server).
+// AI : assistant / Vibe approve-to-run uses source: assistant via lib/assistant-run.ts.
 import { invariant } from "@/lib/assert"
 import {
   CustomCodeExhaustedError,
@@ -21,7 +22,7 @@ import {
   truncateClientStepText,
   type ClientStepSubmitPayload,
 } from "@/lib/client-step-payload"
-import { readApiErrorBody, formatApiError, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
+import { readApiErrorBody, formatApiError, logApiFailure, JSON_HEADERS, FETCH_NO_STORE } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { RATE_LIMITS } from "@/lib/rate_limit_config"
 import type {
@@ -131,6 +132,7 @@ function retryAfterMs(res: Response): number {
 }
 
 function throwApiError(context: string, res: Response, body: Awaited<ReturnType<typeof readApiErrorBody>>): never {
+  logApiFailure(context, res, body)
   throw new RunStartError(formatApiError(context, res, body), res.status, body?.code)
 }
 
@@ -146,7 +148,7 @@ export async function startRun(
   inputDocIds: DocId[] = [],
   inputDocsByModule?: Partial<Record<ModuleId, DocId[]>>,
   allowDuplicateRuns = false,
-  source?: RunSource.Testing,
+  source?: RunSource.Testing | RunSource.Assistant,
 ): Promise<StartRunResult> {
   const res = await fetch(API_ROUTES.runs, {
     method: "POST",
@@ -163,6 +165,7 @@ export async function startRun(
   })
   if (!res.ok) {
     const body = await readApiErrorBody(res)
+    logApiFailure(API_ROUTES.runs, res, body, "POST")
     throw new RunStartError(
       formatApiError(
         `Failed to start pipeline for project ${projectId}, doc ${inputDocId}, model ${model}`,

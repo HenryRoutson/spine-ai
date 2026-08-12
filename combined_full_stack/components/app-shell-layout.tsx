@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react"
 import { AppChromeHeader } from "@/components/app-chrome-header"
 import { AppWindowNav } from "@/components/app-window-nav"
 import { ProjectSelector } from "@/components/project-selector"
-import { BUILDER_NAV_ITEMS, isAccountWindow } from "@/lib/app-nav-config"
+import { BUILDER_NAV_ITEMS, hidesWorkspaceNav, isAccountWindow } from "@/lib/app-nav-config"
 import { handlePrimarySectionChange, resolvePrimarySection } from "@/lib/app-primary-section"
 import {
   PrimarySectionOpeningProvider,
@@ -27,6 +27,7 @@ import { SharedRunDocScopeProvider } from "@/lib/shared-run-doc-scope"
 import { ProjectPickerPage } from "@/components/project-picker-page"
 import { ProjectPickerSkeleton, StoreShellSkeleton } from "@/components/store-shell-skeletons"
 import { AppPrimarySection } from "@/lib/app-primary-section-labels"
+import { useHideDeveloperTools } from "@/lib/developer-tools-settings"
 import { PanelLoading } from "@/components/panel-loading"
 import {
   BillingPanelSkeleton,
@@ -96,6 +97,9 @@ const DocumentationPanel = dynamic(
   () => import("@/components/documentation").then((m) => ({ default: m.Documentation })),
   { loading: () => <PanelLoading label="loading docs…" /> },
 )
+const VibePanel = dynamic(() => import("@/components/vibe-panel").then((m) => ({ default: m.VibePanel })), {
+  loading: () => <PanelLoading label="loading vibe…" /> },
+)
 
 function ProjectSwitchOverlay({ projectName }: { projectName: string }) {
   return (
@@ -132,6 +136,7 @@ const BUILDER_PANEL_IDS: AppWindowId[] = [
   AppWindowId.Docs,
   AppWindowId.ProjectBilling,
   AppWindowId.ProjectSettings,
+  AppWindowId.Vibe,
   AppWindowId.Billing,
   AppWindowId.Settings,
 ]
@@ -162,6 +167,8 @@ function renderWindowPanel(windowId: AppWindowId): ReactNode {
       return <ProjectBilling />
     case AppWindowId.ProjectSettings:
       return <ProjectSettings />
+    case AppWindowId.Vibe:
+      return <VibePanel />
     case AppWindowId.Billing:
       return <Billing />
     case AppWindowId.Settings:
@@ -428,13 +435,19 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
     () => computeWorkspaceValidity(modules, models, typeAliases, !!project?.teamReadOnly),
     [modules, models, typeAliases, project?.teamReadOnly],
   )
+  const hideDeveloperTools = useHideDeveloperTools()
   const primarySection = resolvePrimarySection(AppMode.Build, activeWindow)
-  const showWorkspaceNav = !isAccountWindow(activeWindow)
+  const showWorkspaceNav = !hidesWorkspaceNav(activeWindow)
   const { openingSection, beginOpening } = usePrimarySectionOpening()
   useSyncPrimarySectionReady(primarySection)
 
   const onPrimarySectionChange = useCallback(
     (section: Parameters<typeof handlePrimarySectionChange>[0]) => {
+      // AI : Build is hidden when developer tools are off — keep people on Vibe.
+      if (hideDeveloperTools && section === AppPrimarySection.Build) {
+        setActiveWindow(AppWindowId.Vibe)
+        return
+      }
       wrapPrimarySectionChange(section, primarySection, beginOpening, () => {
         handlePrimarySectionChange(
           section,
@@ -446,7 +459,7 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
         )
       })
     },
-    [activeWindow, beginOpening, primarySection, setActiveWindow],
+    [activeWindow, beginOpening, hideDeveloperTools, primarySection, setActiveWindow],
   )
 
   useEffect(() => {
@@ -454,6 +467,13 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
     if (params.has("teamInvite")) setActiveWindow(AppWindowId.Settings)
     else if (params.has("session_id") || params.has("canceled")) setActiveWindow(AppWindowId.Billing)
   }, [setActiveWindow])
+
+  // AI : default shell opens Structure — bounce technical workspace to Vibe when tools are hidden.
+  useEffect(() => {
+    if (!hideDeveloperTools) return
+    if (primarySection !== AppPrimarySection.Build) return
+    setActiveWindow(AppWindowId.Vibe)
+  }, [hideDeveloperTools, primarySection, setActiveWindow])
 
   const warmedAllPanelsRef = useRef(false)
 
@@ -490,7 +510,6 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
             !embed && (
               <>
                 <RunningJobsHub />
-                <ProjectAssistantDockToggle />
                 <DiagnosisAgentHub />
                 <FeedbackButton />
               </>
@@ -503,10 +522,12 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
             activeWindow={activeWindow}
             onSelect={setActiveWindow}
             validity={validity}
+            trailing={!embed ? <ProjectAssistantDockToggle /> : null}
           />
         ) : null}
 
-        {embed ? (
+        {/* AI : TODO (vibe) — when leaving Vibe, optionally re-open Build dock if it was open before. */}
+        {embed || primarySection === AppPrimarySection.Vibe ? (
           <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden" id="main-content">
             {projectLoading && <ProjectSwitchOverlay projectName={project.name} />}
             <div className="flex min-h-0 flex-1 flex-col">

@@ -7,6 +7,8 @@ import {
   Boxes,
   Crosshair,
   FileText,
+  Layers,
+  Quote,
   Workflow,
   X,
 } from "lucide-react"
@@ -18,10 +20,12 @@ const KIND_ICON: Record<UiContextKind, ComponentType<{ className?: string }>> = 
   inspector_field: Crosshair,
   invalid_issue: AlertTriangle,
   run_error: AlertTriangle,
+  prompt_cache: Layers,
   generic: Crosshair,
   project_doc: FileText,
   model: Boxes,
   type_alias: Braces,
+  chat_quote: Quote,
 }
 
 type UiContextChipProps = {
@@ -37,7 +41,9 @@ export function UiContextChip({ pin, onRemove, className }: UiContextChipProps) 
       ? "border-destructive/40 bg-destructive/10"
       : pin.kind === "project_doc"
         ? "border-amber-400/40 bg-amber-500/10"
-        : "border-sky-400/50 bg-sky-500/15"
+        : pin.kind === "chat_quote"
+          ? "border-violet-400/40 bg-violet-500/10"
+          : "border-sky-400/50 bg-sky-500/15"
 
   return (
     <span

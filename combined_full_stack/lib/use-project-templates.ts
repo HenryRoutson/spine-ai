@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { FETCH_CREDENTIALS, formatApiError, readApiErrorBody } from "@/lib/api-client"
+import { FETCH_CREDENTIALS, formatApiError, logApiFailure, readApiErrorBody } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import type { ProjectId } from "@/lib/types"
 
@@ -33,7 +33,8 @@ export function useProjectTemplates() {
         })
         if (!res.ok) {
           const body = await readApiErrorBody(res)
-          throw new Error(formatApiError(API_ROUTES.projectTemplates, res, body))
+          logApiFailure(API_ROUTES.projectTemplates, res, body, "GET")
+          throw new Error(formatApiError(`GET ${API_ROUTES.projectTemplates}`, res, body))
         }
         const reader = res.body?.getReader()
         if (!reader) throw new Error("Template stream unavailable")

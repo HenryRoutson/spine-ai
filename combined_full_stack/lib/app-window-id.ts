@@ -12,6 +12,8 @@ export const AppWindowId = {
   Docs: "docs",
   ProjectBilling: "project-billing",
   ProjectSettings: "project-settings",
+  // AI : L0 Vibe — agent-first build surface (full project control via chat; optional run).
+  Vibe: "vibe",
   Billing: "billing",
   Settings: "settings",
 } as const

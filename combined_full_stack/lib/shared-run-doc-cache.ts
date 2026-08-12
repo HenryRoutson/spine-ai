@@ -1,7 +1,7 @@
 "use client"
 
 import { API_ROUTES } from "@/lib/api-routes"
-import { FETCH_CREDENTIALS, formatApiError, readApiErrorBody } from "@/lib/api-client"
+import { FETCH_CREDENTIALS, formatApiError, logApiFailure, readApiErrorBody } from "@/lib/api-client"
 import { docTextContent, type doc_text_payload } from "@/lib/doc-text-cache"
 
 type shared_run_doc_cache_row = {
@@ -85,7 +85,9 @@ export async function fetchSharedRunDocText(
   const url = API_ROUTES.sharedLinkDocText(linkId, docId, { layer, sessionId })
   const res = await fetch(url, { credentials: FETCH_CREDENTIALS })
   if (!res.ok) {
-    throw new Error(formatApiError(url, res, await readApiErrorBody(res)))
+    const body = await readApiErrorBody(res)
+    logApiFailure(url, res, body, "GET")
+    throw new Error(formatApiError(`GET ${url}`, res, body))
   }
   const data = (await res.json()) as doc_text_payload
   if (layer === "parser") {

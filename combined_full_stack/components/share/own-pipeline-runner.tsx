@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback } from "react"
-import { ArrowLeft, Workflow } from "lucide-react"
+import { ArrowLeft, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { OwnPipelineRunPanel } from "@/components/share/own-pipeline-run-panel"
@@ -38,7 +38,7 @@ export function OwnPipelineRunner({ projectId, onBack }: OwnPipelineRunnerProps)
           <ArrowLeft className="h-3.5 w-3.5" />
           My pipelines
         </Button>
-        <Workflow className="h-4 w-4 text-primary" />
+        <User className="h-4 w-4 text-primary" />
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-semibold">{project?.name ?? projectId}</h2>
           <p className="truncate text-xs text-muted-foreground">Your pipeline</p>

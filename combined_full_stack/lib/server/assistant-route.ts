@@ -2,6 +2,14 @@
 
 import { NextResponse } from "next/server"
 import { ASSISTANT_HISTORY_LIMIT } from "@/lib/assistant-chat-types"
+import {
+  buildLastFailedRunPromptBlock,
+  buildRecentRunsSummaryPromptBlock,
+  lastFailedRunForAssistant,
+  recentRunsForAssistant,
+  type AssistantRunSummary,
+} from "@/lib/assistant-observe"
+import { docsForProject } from "@/lib/project-docs"
 import { apiError, billingResponse } from "./api_context"
 import { HTTP, MESSAGE_REQUIRED, unknownProject } from "./api-errors"
 import {
@@ -15,6 +23,7 @@ import {
   type PipelineAssistantOpts,
   type PipelineAssistantResult,
 } from "./pipeline_assistant"
+import type { AssistantHumanSurface, AssistantTestDocCatalogEntry } from "./assistant-prompt"
 import { enrichUiContextRefs } from "./ui_context_enrich"
 import { logger } from "./server_logger"
 import type { BillingUserKey } from "./billing_account"
@@ -36,6 +45,36 @@ export type AssistantRequestBody = {
   history?: ChatTurn[]
   model?: ModelId
   stream?: boolean
+  // AI : optional — Vibe vs Build awareness for prompt only.
+  humanSurface?: AssistantHumanSurface
+}
+
+const MAX_TEST_DOC_PREVIEW_CHARS = 200
+
+// AI : Testing-tab visibility for the agent (same catalog on Vibe and Build).
+function buildTestDocsCatalog(store: Store, project: Project): AssistantTestDocCatalogEntry[] {
+  return docsForProject(store.docs(), project).map((d) => ({
+    id: d.id,
+    name: d.name,
+    type: d.type,
+    label: d.label,
+    sizeKb: d.sizeKb,
+    preview: (d.preview ?? "").slice(0, MAX_TEST_DOC_PREVIEW_CHARS),
+  }))
+}
+
+function buildObserveOpts(
+  store: Store,
+  project: Project,
+  humanSurface?: AssistantHumanSurface,
+): {
+  recentRuns?: AssistantRunSummary[]
+  lastFailedRun?: AssistantRunSummary | null
+} {
+  const recentRuns = recentRunsForAssistant(store.runs(project.id), project.id)
+  const lastFailedRun =
+    humanSurface === "vibe" ? lastFailedRunForAssistant(store.runs(project.id), project.id) : null
+  return { recentRuns, lastFailedRun }
 }
 
 export function trimAssistantHistory(history: ChatTurn[]): ChatTurn[] {
@@ -67,7 +106,11 @@ export function requireProjectOr404(
   const project = store.project(projectId)
   if (!project) {
     log.warn(`unknown project`, { projectId })
-    return apiError(unknownProject(projectId), HTTP.NOT_FOUND)
+    return apiError(unknownProject(projectId), HTTP.NOT_FOUND, "unknown_project", {
+      resource: `project:${projectId}`,
+      detail:
+        "Project missing from store (deleted, never created, or not visible to this user/team).",
+    })
   }
   return project
 }
@@ -103,9 +146,17 @@ export async function runBilledProjectAssistant(
   let billedCents = 0
 
   // AI : @file / Select UI pins — load doc bytes + live step/model defs before the prompt.
-  const enrichedOpts: PipelineAssistantOpts | undefined = opts?.uiContext?.length
-    ? { ...opts, uiContext: enrichUiContextRefs(store, project, opts.uiContext) }
-    : opts
+  const observe = buildObserveOpts(store, project, opts?.humanSurface)
+  const enrichedOpts: PipelineAssistantOpts = {
+    ...opts,
+    ...(opts?.uiContext?.length
+      ? { uiContext: enrichUiContextRefs(store, project, opts.uiContext) }
+      : {}),
+    // AI : always attach Testing catalog — Vibe must not lose Build visibility.
+    testDocsCatalog: opts?.testDocsCatalog ?? buildTestDocsCatalog(store, project),
+    recentRuns: opts?.recentRuns ?? observe.recentRuns,
+    lastFailedRun: opts?.lastFailedRun ?? observe.lastFailedRun,
+  }
 
   try {
     result = await proposeProjectChange(project, trimmed, history, model, enrichedOpts)

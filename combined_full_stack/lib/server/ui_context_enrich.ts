@@ -1,14 +1,21 @@
 // AI : fill @ / Select UI pins with store-backed content before the LLM prompt (never trust client snippets alone).
 
 import {
+  formatExampleSelectDesignTimeCacheSnippet,
+  formatRunErrorPinSnippet,
+  formatRunStepPromptCacheSnippet,
+  runIdFromUiContextId,
+} from "@/lib/assistant-observe"
+import { runHasErrors } from "@/lib/run-error-log"
+import {
   dedupeUiContextRefs,
   normalizeUiContextRef,
   truncateUiContextText,
   MAX_UI_CONTEXT_SNIPPET_CHARS,
   type UiContextRef,
 } from "@/lib/ui-context-types"
+import { ModuleKind, type DocId, type Project, type ProjectId } from "./types"
 import type { Store } from "./store"
-import type { DocId, Project } from "./types"
 
 function docIdFromRef(ref: UiContextRef): DocId | null {
   const raw = ref.id.startsWith("doc:") ? ref.id.slice(4) : ref.id
@@ -31,6 +38,10 @@ function typeIdFromRef(ref: UiContextRef): string {
 
 function stepIdFromRef(ref: UiContextRef): string {
   return ref.moduleId ?? (ref.id.startsWith("step:") ? ref.id.slice(5) : ref.id)
+}
+
+function findProjectRun(store: Store, projectId: ProjectId, runId: string) {
+  return store.runs(projectId).find((r) => r.id === runId)
 }
 
 /** AI : prefer server doc bytes / live project defs over client preview snippets. */
@@ -104,6 +115,73 @@ export function enrichUiContextRefs(
         label: `${step.label} (${step.kind})`,
         snippet: snippet || undefined,
       })
+    }
+
+    // AI : full server run (not slim client list) — includes serverLogs for error pins.
+    if (
+      ref.kind === "run_error" ||
+      (ref.kind === "generic" && (ref.id.startsWith("run:") || ref.id.startsWith("run-error:")))
+    ) {
+      const runId = runIdFromUiContextId(ref.id)
+      if (!runId) return ref
+      const run = findProjectRun(store, project.id, runId)
+      if (!run) return ref
+      const snippet = formatRunErrorPinSnippet(run)
+      return normalizeUiContextRef({
+        ...ref,
+        kind: runHasErrors(run) ? "run_error" : "generic",
+        id: `run:${run.id}`,
+        label: `Run · ${run.status} · ${run.id.slice(0, 8)}`,
+        snippet: snippet || ref.snippet,
+      })
+    }
+
+    if (ref.kind === "prompt_cache") {
+      const moduleId = stepIdFromRef(ref)
+      const step = project.modules.find((m) => m.id === moduleId)
+      if (step?.kind === ModuleKind.ExampleSelect && step.prompt?.trim()) {
+        return normalizeUiContextRef({
+          ...ref,
+          moduleId: step.id,
+          id: ref.id.startsWith("cache:") ? ref.id : `cache:${step.id}`,
+          label: `Cache · ${step.label}`,
+          snippet: formatExampleSelectDesignTimeCacheSnippet(step.label, step.prompt),
+        })
+      }
+      // AI : runtime — id cache:run:${runId}:step:${moduleId} or fieldPath runId.
+      const runId =
+        ref.fieldPath?.startsWith("run:")
+          ? ref.fieldPath.slice(4)
+          : ref.id.startsWith("cache:run:")
+            ? ref.id.slice("cache:run:".length).split(":step:")[0]
+            : null
+      const runStepId =
+        ref.moduleId ??
+        (ref.id.includes(":step:") ? ref.id.split(":step:")[1] : null)
+      if (runId && runStepId) {
+        const run = findProjectRun(store, project.id, runId)
+        const runStep = run?.steps.find((s) => s.moduleId === runStepId)
+        if (runStep) {
+          return normalizeUiContextRef({
+            ...ref,
+            moduleId: runStep.moduleId,
+            label: `Cache · ${runStep.label}`,
+            snippet: formatRunStepPromptCacheSnippet(runStep),
+          })
+        }
+      }
+      if (step?.prompt?.trim()) {
+        return normalizeUiContextRef({
+          ...ref,
+          moduleId: step.id,
+          label: `Cache · ${step.label}`,
+          snippet: truncateUiContextText(
+            `Prompt template (no multi-candidate cache yet):\n${step.prompt}`,
+            MAX_UI_CONTEXT_SNIPPET_CHARS,
+          ),
+        })
+      }
+      return ref
     }
 
     return ref

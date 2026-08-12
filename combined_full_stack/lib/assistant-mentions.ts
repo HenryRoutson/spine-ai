@@ -1,8 +1,13 @@
 // AI : @-mention catalog for the agent composer — keyboard pins into the same UiContextRef chips as Select UI.
 
+import {
+  modulesWithPromptCache,
+  runMentionLabel,
+} from "@/lib/assistant-observe"
 import { docLabelDisplay } from "@/lib/project-docs"
-import type { DocRef, PipelineModule, StructureModel, TypeAlias } from "@/lib/types"
-import { MODULE_META } from "@/lib/types"
+import { runHasErrors } from "@/lib/run-error-log"
+import type { DocRef, PipelineModule, PipelineRun, StructureModel, TypeAlias } from "@/lib/types"
+import { MODULE_META, ModuleKind } from "@/lib/types"
 import {
   type UiContextKind,
   type UiContextRef,
@@ -15,6 +20,8 @@ export type AssistantMentionGroup =
   | "Types"
   | "Files"
   | "Issues"
+  | "Runs"
+  | "Cache"
   | "Actions"
 
 export type AssistantMentionAction = "select_ui"
@@ -80,6 +87,8 @@ export function groupMentionOptions(
   const order: AssistantMentionGroup[] = [
     "Actions",
     "Issues",
+    "Runs",
+    "Cache",
     "Steps",
     "Models",
     "Types",
@@ -105,6 +114,8 @@ function pin(
   return normalizeUiContextRef({ id, kind, label, ...extra })
 }
 
+const MAX_RUN_MENTIONS = 12
+
 /** AI : build @-menu rows from the open project (store). */
 export function buildAssistantMentionOptions(args: {
   modules: PipelineModule[]
@@ -112,6 +123,7 @@ export function buildAssistantMentionOptions(args: {
   typeAliases: TypeAlias[]
   docs: DocRef[]
   issues?: AssistantMentionIssue[]
+  runs?: PipelineRun[]
   includeSelectUiAction?: boolean
 }): AssistantMentionOption[] {
   const out: AssistantMentionOption[] = []
@@ -136,6 +148,45 @@ export function buildAssistantMentionOptions(args: {
       ref: pin("invalid_issue", issue.id, issue.label, {
         moduleId: issue.moduleId,
         snippet: issue.message,
+      }),
+    })
+  }
+
+  const runs = (args.runs ?? [])
+    .slice()
+    .sort((a, b) => {
+      const ae = runHasErrors(a) ? 0 : 1
+      const be = runHasErrors(b) ? 0 : 1
+      if (ae !== be) return ae - be
+      return b.startedAt - a.startedAt
+    })
+    .slice(0, MAX_RUN_MENTIONS)
+  for (const run of runs) {
+    const failed = runHasErrors(run)
+    out.push({
+      id: `run:${run.id}`,
+      group: "Runs",
+      label: failed ? `Error · ${run.id.slice(0, 8)}` : `Ok · ${run.id.slice(0, 8)}`,
+      description: runMentionLabel(run),
+      ref: pin(failed ? "run_error" : "generic", `run:${run.id}`, `Run · ${run.status}`, {
+        snippet: runMentionLabel(run),
+      }),
+    })
+  }
+
+  for (const m of modulesWithPromptCache(args.modules)) {
+    const kindLabel = MODULE_META[m.kind]?.label ?? m.kind
+    out.push({
+      id: `cache:${m.id}`,
+      group: "Cache",
+      label: m.label || kindLabel,
+      description:
+        m.kind === ModuleKind.ExampleSelect
+          ? "Design-time cached prefix preview"
+          : "Prompt / cache preview",
+      ref: pin("prompt_cache", `cache:${m.id}`, `Cache · ${m.label || kindLabel}`, {
+        moduleId: m.id,
+        snippet: m.prompt?.slice(0, 400) || undefined,
       }),
     })
   }

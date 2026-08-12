@@ -22,6 +22,7 @@ import {
 import type { AssistantMentionOption } from "@/lib/assistant-mentions"
 import type { UiContextRef } from "@/lib/ui-context-types"
 import { AssistantDebugPanel } from "@/components/assistant-debug-panel"
+import { ChatQuoteSelection } from "@/components/chat-quote-selection"
 import { UiContextChip } from "@/components/ui-context-chip"
 import { Button } from "@/components/ui/button"
 import {
@@ -106,9 +107,15 @@ type AssistantChatProps<TProposal> = {
   /** AI : @ mention menu (steps / models / files / Select UI). */
   mentionOptions?: AssistantMentionOption[]
   onMentionPick?: (option: AssistantMentionOption) => void
+  /** AI : highlight chat → Quote chip (same pin path as Select UI). */
+  onPinUiContext?: (ref: UiContextRef) => void
   /** AI : teammate chats on shared projects — view only */
   readOnly?: boolean
   readOnlyHint?: string
+  /** AI : Vibe trims chrome — hide bubble avatars */
+  showAvatars?: boolean
+  /** AI : Vibe keeps Copy only — hide Agent title / stats row */
+  showHeaderMeta?: boolean
 }
 
 export function AssistantChat<TProposal>({
@@ -134,8 +141,11 @@ export function AssistantChat<TProposal>({
   onComposerAttachmentsConsumed,
   mentionOptions,
   onMentionPick,
+  onPinUiContext,
   readOnly = false,
   readOnlyHint,
+  showAvatars = true,
+  showHeaderMeta = true,
 }: AssistantChatProps<TProposal>) {
   const [internalMessages, setInternalMessages] = useState<AssistantChatMessage<TProposal>[]>([
     { id: uid(), role: "assistant", content: initialMessage },
@@ -158,6 +168,7 @@ export function AssistantChat<TProposal>({
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const quoteRootRef = useRef<HTMLDivElement>(null)
 
   const pending = [...messages].reverse().find((m) => m.proposal && m.status === "pending")
 
@@ -331,138 +342,154 @@ export function AssistantChat<TProposal>({
       </div>
     ) : null
 
+  const quoteEnabled = Boolean(onPinUiContext) && !readOnly
+
   return (
     <Chat className="h-full">
-      <ChatHeader>
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-            <p className="truncate text-sm font-medium">{title}</p>
-          </div>
-          {headerActions}
-        </div>
-        <p className="mt-1 font-mono text-[10px] text-muted-foreground">{subtitle}</p>
-      </ChatHeader>
+      {showHeaderMeta || headerActions ? (
+        <ChatHeader>
+          {showHeaderMeta ? (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+                  <p className="truncate text-sm font-medium">{title}</p>
+                </div>
+                {headerActions}
+              </div>
+              <p className="mt-1 font-mono text-[10px] text-muted-foreground">{subtitle}</p>
+            </>
+          ) : (
+            <div className="flex items-center justify-end gap-2">{headerActions}</div>
+          )}
+        </ChatHeader>
+      ) : null}
 
-      <ChatList>
-        {messages.map((m) => {
-          const variant = m.role === "user" ? "user" : "assistant"
-          const typed =
-            m.role === "user" && m.pastes?.length
-              ? typedTextFromComposedMessage(m.content, m.pastes)
-              : m.content
-          return (
-            <ChatMessage key={m.id} variant={variant}>
-              <ChatBubbleAvatar variant={variant} />
-              <ChatBubble variant={variant}>
-                {m.role === "user" &&
-                ((m.pastes && m.pastes.length > 0) ||
-                  (m.uiContext && m.uiContext.length > 0)) ? (
-                  <div className="mb-2 flex flex-wrap gap-1.5">
-                    {m.uiContext?.map((pin) => (
-                      <UiContextChip key={pin.id} pin={pin} />
-                    ))}
-                    {m.pastes?.map((p) => (
-                      <PastedChip key={p.id} attachment={p} />
-                    ))}
-                  </div>
-                ) : null}
-                {typed ? <ChatBubbleContent>{typed}</ChatBubbleContent> : null}
-                {m.proposal && (
-                  <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3">
-                    {renderProposal(m)}
-                    {m.status === "pending" && (
-                      <div className="mt-3 flex gap-2">
-                        <Button
-                          size="sm"
-                          className="h-7 flex-1 gap-1.5 text-[11px]"
-                          disabled={approvingId === m.id || rejectingId === m.id}
-                          onClick={() => void approve(m)}
-                        >
-                          {approvingId === m.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Check className="h-3 w-3" />
-                          )}
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 flex-1 gap-1.5 text-[11px]"
-                          disabled={approvingId === m.id || rejectingId === m.id}
-                          onClick={() => void reject(m)}
-                        >
-                          {rejectingId === m.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <X className="h-3 w-3" />
-                          )}
-                          Reject
-                        </Button>
+      <ChatQuoteSelection
+        enabled={quoteEnabled}
+        containerRef={quoteRootRef}
+        onQuote={(ref) => onPinUiContext?.(ref)}
+      >
+          <ChatList>
+            {messages.map((m) => {
+              const variant = m.role === "user" ? "user" : "assistant"
+              const typed =
+                m.role === "user" && m.pastes?.length
+                  ? typedTextFromComposedMessage(m.content, m.pastes)
+                  : m.content
+              return (
+                <ChatMessage key={m.id} variant={variant}>
+                  {showAvatars ? <ChatBubbleAvatar variant={variant} /> : null}
+                  <ChatBubble variant={variant}>
+                    {m.role === "user" &&
+                    ((m.pastes && m.pastes.length > 0) ||
+                      (m.uiContext && m.uiContext.length > 0)) ? (
+                      <div className="mb-2 flex flex-wrap gap-1.5">
+                        {m.uiContext?.map((pin) => (
+                          <UiContextChip key={pin.id} pin={pin} />
+                        ))}
+                        {m.pastes?.map((p) => (
+                          <PastedChip key={p.id} attachment={p} />
+                        ))}
+                      </div>
+                    ) : null}
+                    {typed ? <ChatBubbleContent>{typed}</ChatBubbleContent> : null}
+                    {m.proposal && (
+                      <div className="mt-3 rounded-md border border-primary/30 bg-primary/5 p-3">
+                        {renderProposal(m)}
+                        {m.status === "pending" && (
+                          <div className="mt-3 flex gap-2">
+                            <Button
+                              size="sm"
+                              className="h-7 flex-1 gap-1.5 text-[11px]"
+                              disabled={approvingId === m.id || rejectingId === m.id}
+                              onClick={() => void approve(m)}
+                            >
+                              {approvingId === m.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3" />
+                              )}
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 flex-1 gap-1.5 text-[11px]"
+                              disabled={approvingId === m.id || rejectingId === m.id}
+                              onClick={() => void reject(m)}
+                            >
+                              {rejectingId === m.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <X className="h-3 w-3" />
+                              )}
+                              Reject
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
-                {showDebug && m.debugTrace && m.debugTrace.length > 0 && (
-                  <AssistantDebugPanel
-                    entries={m.debugTrace}
-                    className="mt-3 border-sky-400/25 bg-sky-950/35"
-                    showCopyButton={false}
-                  />
-                )}
-              </ChatBubble>
-            </ChatMessage>
-          )
-        })}
-
-        {loading && (
-          <ChatMessage variant="assistant">
-            <ChatBubbleAvatar variant="assistant" />
-            <ChatBubble variant="assistant" className="space-y-3">
-              {showDebug && (debugTrace.length > 0 || liveThinking) ? (
-                <AssistantDebugPanel
-                  entries={debugTrace}
-                  liveThinking={liveThinking}
-                  thinkingActive={loadingPhase === "thinking"}
-                  className="border-sky-400/25 bg-sky-950/35"
-                  showCopyButton={false}
-                />
-              ) : liveThinking ? (
-                <div>
-                  <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-sky-200/70">
-                    Thinking
-                  </p>
-                  <p className="max-h-40 overflow-y-auto font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-foreground/80">
-                    {liveThinking}
-                    {loadingPhase === "thinking" && (
-                      <span className="inline-block animate-pulse text-sky-300">▍</span>
+                    {showDebug && m.debugTrace && m.debugTrace.length > 0 && (
+                      <AssistantDebugPanel
+                        entries={m.debugTrace}
+                        className="mt-3 border-sky-400/25 bg-sky-950/35"
+                        showCopyButton={false}
+                      />
                     )}
-                  </p>
-                </div>
-              ) : null}
-              {liveResponse && (
-                <p className="text-xs leading-relaxed whitespace-pre-wrap">
-                  {liveResponse}
-                  <span className="inline-block animate-pulse text-sky-300">▍</span>
-                </p>
-              )}
-              <ChatTypingIndicator label={loadingText} />
-            </ChatBubble>
-          </ChatMessage>
-        )}
+                  </ChatBubble>
+                </ChatMessage>
+              )
+            })}
 
-        {error && (
-          <div className="space-y-2 px-2">
-            <p className="font-mono text-[10px] text-destructive">{error}</p>
-            {showDebug && errorDebugTrace.length > 0 && (
-              <AssistantDebugPanel entries={errorDebugTrace} showCopyButton={false} />
+            {loading && (
+              <ChatMessage variant="assistant">
+                {showAvatars ? <ChatBubbleAvatar variant="assistant" /> : null}
+                <ChatBubble variant="assistant" className="space-y-3">
+                  {showDebug && (debugTrace.length > 0 || liveThinking) ? (
+                    <AssistantDebugPanel
+                      entries={debugTrace}
+                      liveThinking={liveThinking}
+                      thinkingActive={loadingPhase === "thinking"}
+                      className="border-sky-400/25 bg-sky-950/35"
+                      showCopyButton={false}
+                    />
+                  ) : liveThinking ? (
+                    <div>
+                      <p className="mb-1.5 font-mono text-[9px] uppercase tracking-wider text-sky-200/70">
+                        Thinking
+                      </p>
+                      <p className="max-h-40 overflow-y-auto font-mono text-[10px] leading-relaxed whitespace-pre-wrap text-foreground/80">
+                        {liveThinking}
+                        {loadingPhase === "thinking" && (
+                          <span className="inline-block animate-pulse text-sky-300">▍</span>
+                        )}
+                      </p>
+                    </div>
+                  ) : null}
+                  {liveResponse && (
+                    <p className="text-xs leading-relaxed whitespace-pre-wrap">
+                      {liveResponse}
+                      <span className="inline-block animate-pulse text-sky-300">▍</span>
+                    </p>
+                  )}
+                  <ChatTypingIndicator label={loadingText} />
+                </ChatBubble>
+              </ChatMessage>
             )}
-          </div>
-        )}
 
-        <div ref={bottomRef} />
-      </ChatList>
+            {error && (
+              <div className="space-y-2 px-2">
+                <p className="font-mono text-[10px] text-destructive">{error}</p>
+                {showDebug && errorDebugTrace.length > 0 && (
+                  <AssistantDebugPanel entries={errorDebugTrace} showCopyButton={false} />
+                )}
+              </div>
+            )}
+
+            <div ref={bottomRef} />
+          </ChatList>
+      </ChatQuoteSelection>
 
       <ChatInput
         value={input}

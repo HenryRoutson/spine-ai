@@ -382,6 +382,13 @@ export const feedbackBodySchema = z.object({
   message: z.string().trim().min(FEEDBACK_MIN_CHARS).max(MAX_FEEDBACK_MESSAGE_CHARS),
 });
 
+// AI : confirmEmail must match the signed-in address — typed confirm for irreversible wipe.
+export const deleteAccountBodySchema = z
+  .object({
+    confirmEmail: z.string().trim().email().max(320),
+  })
+  .strict();
+
 export const createProjectBodySchema = z
   .object({
     templateId: projectIdSchema.optional(),
@@ -797,6 +804,8 @@ export const assistantRequestBodySchema = z
     model: z.string().max(128).optional(),
     stream: z.boolean().optional(),
     uiContext: z.array(uiContextRefSchema).max(MAX_UI_CONTEXT_ITEMS).optional(),
+    // AI : Vibe vs Build — prompt awareness only; never gates agent write power.
+    humanSurface: z.enum(["vibe", "build"]).optional(),
   })
   .strict()
   .refine(

@@ -27,6 +27,7 @@ import {
   PROJECT_ASSISTANT_STARTERS,
   type ProjectProposal,
 } from "@/lib/project-assistant-types"
+import { useAppShell, AppWindowId } from "@/lib/app-shell"
 import { cn } from "@/lib/utils"
 
 type ProjectAssistantProps = {
@@ -60,6 +61,10 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
     setOpen,
     toggleSelectMode,
   } = useProjectAssistant()
+  const { activeWindow } = useAppShell()
+  // AI : Vibe vs Build — prompt awareness only; agent write power stays identical.
+  const isVibe = activeWindow === AppWindowId.Vibe
+  const humanSurface = isVibe ? "vibe" : "build"
   const [conversationCopied, setConversationCopied] = useState(false)
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -143,6 +148,8 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
             ? `${teammateLabel}'s chat · view only`
             : `${modules.length} steps · ${models.length} models · ${typeAliases.length} types · ${docs.length} docs`
         }
+        showAvatars={!isVibe}
+        showHeaderMeta={!isVibe}
         showDebug
         readOnly={!activeChatIsMine}
         readOnlyHint={
@@ -192,30 +199,36 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
           }
           if (option.ref) pinUiContext(option.ref)
         }}
+        onPinUiContext={pinUiContext}
         composerAttachments={
           <div className="space-y-2 border-b border-border bg-secondary/20 px-3 py-2">
             <div className="flex items-center justify-between gap-2">
               <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
                 Context{uiContextPins.length > 0 ? ` · ${uiContextPins.length}` : ""}
               </p>
-              <Button
-                type="button"
-                size="sm"
-                variant={selectMode ? "secondary" : "outline"}
-                className="h-7 gap-1 px-2 font-mono text-[10px]"
-                onClick={toggleSelectMode}
-                title={selectMode ? "Exit select mode (Esc)" : "Select UI for agent"}
-                aria-label={selectMode ? "Exit select mode" : "Select UI for agent"}
-              >
-                <Crosshair className="h-3.5 w-3.5" />
-                {selectMode ? "Selecting…" : "Select UI"}
-              </Button>
+              {/* AI : Select UI stays on Build / dock — Vibe uses @ mentions / Quote. */}
+              {!isVibe ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={selectMode ? "secondary" : "outline"}
+                  className="h-7 gap-1 px-2 font-mono text-[10px]"
+                  onClick={toggleSelectMode}
+                  title={selectMode ? "Exit select mode (Esc)" : "Select UI for agent"}
+                  aria-label={selectMode ? "Exit select mode" : "Select UI for agent"}
+                >
+                  <Crosshair className="h-3.5 w-3.5" />
+                  {selectMode ? "Selecting…" : "Select UI"}
+                </Button>
+              ) : null}
             </div>
             {uiContextPins.length === 0 ? (
               <p className="font-mono text-[10px] text-muted-foreground">
                 {selectMode
                   ? "App clicks are paused. Hover highlights · click to pin · Esc exits."
-                  : "Type @ to mention, or Select UI to pin — no copy-paste."}
+                  : isVibe
+                    ? "Highlight chat to Quote, or type @ to mention steps, models, or files."
+                    : "Highlight chat to Quote, type @ to mention, or Select UI — no copy-paste."}
               </p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
@@ -248,6 +261,7 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
               history,
               model: globalModel,
               stream: true,
+              humanSurface,
               ...(pins.length > 0 ? { uiContext: pins } : {}),
             }),
           })

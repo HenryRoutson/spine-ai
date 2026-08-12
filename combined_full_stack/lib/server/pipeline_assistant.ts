@@ -19,10 +19,19 @@ import {
   type UiContextRef,
 } from "@/lib/ui-context-types";
 import {
+  buildHumanSurfacePromptBlock,
   buildProjectAssistantSystemPrompt,
   buildProjectContextBlock,
+  buildTestDocsCatalogPromptBlock,
   resolveAssistantUserMessage,
+  type AssistantHumanSurface,
+  type AssistantTestDocCatalogEntry,
 } from "./assistant-prompt";
+import {
+  buildLastFailedRunPromptBlock,
+  buildRecentRunsSummaryPromptBlock,
+  type AssistantRunSummary,
+} from "@/lib/assistant-observe";
 import { stripBuiltinTypeAliases } from "./builtin_types";
 import {
   computeInvalid,
@@ -220,6 +229,17 @@ const docSpecSchema = z.object({
   label: z.enum([DocLabel.Inference, DocLabel.Training]).optional(),
 });
 
+const proposedActionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("run_inference"),
+    // AI : omit docs → client uses current / default inference assignment.
+  }),
+  z.object({
+    type: z.literal("run_test"),
+    testDocName: z.string().min(1).max(256).optional(),
+  }),
+]);
+
 const assistantResponseSchema = z.object({
   message: z.string().describe("Short user-facing summary — not a design doc"),
   // AI : full replacement wins when non-null; use modulePatch for targeted edits to 1–3 steps.
@@ -241,12 +261,15 @@ const assistantResponseSchema = z.object({
   documentationUpdate: z.string().max(48_000).nullable(),
   // AI : rename only when project is still "Untitled Pipeline" — server enforces.
   projectNameUpdate: z.string().max(120).nullable(),
+  // AI : client runs these after approve — never claim finished in this turn.
+  proposedActions: z.array(proposedActionSchema).max(3).nullish(),
 });
 
 export type PipelineAssistantModuleSpec = z.infer<typeof moduleSpecSchema>;
 export type PipelineAssistantModulePatchEntry = z.infer<typeof modulePatchEntrySchema>;
 export type PipelineAssistantModelSpec = z.infer<typeof modelSpecSchema>;
 export type ProjectAssistantDocSpec = z.infer<typeof docSpecSchema>;
+export type AssistantProposedAction = z.infer<typeof proposedActionSchema>;
 
 export type PipelineAssistantProposal = {
   modules: PipelineModule[];
@@ -255,6 +278,7 @@ export type PipelineAssistantProposal = {
   docs: ProjectAssistantDocSpec[];
   documentation: string;
   projectName?: string;
+  proposedActions?: AssistantProposedAction[];
   changed: {
     modules: boolean;
     models: boolean;
@@ -262,6 +286,7 @@ export type PipelineAssistantProposal = {
     docs: boolean;
     documentation: boolean;
     name?: boolean;
+    actions?: boolean;
   };
 };
 
@@ -280,6 +305,12 @@ export type PipelineAssistantOpts = {
   fixValidationErrors?: string;
   fixAttempt?: number;
   uiContext?: UiContextRef[];
+  // AI : Vibe vs Build — awareness only; never reduces write power.
+  humanSurface?: AssistantHumanSurface;
+  // AI : Testing-tab catalog so Vibe agent sees the same docs list as Build.
+  testDocsCatalog?: AssistantTestDocCatalogEntry[];
+  recentRuns?: AssistantRunSummary[];
+  lastFailedRun?: AssistantRunSummary | null;
   onThinkingDelta?: (delta: string) => void;
   onPhase?: (phase: "thinking" | "structuring" | "retrying") => void;
   onThinkingDone?: (text: string) => void;
@@ -487,6 +518,10 @@ function buildThinkingUserPrompt(
   globalModel: ModelId,
   liveValidation: string,
   uiContext?: UiContextRef[],
+  humanSurface?: AssistantHumanSurface,
+  testDocsCatalog?: AssistantTestDocCatalogEntry[],
+  recentRuns?: AssistantRunSummary[],
+  lastFailedRun?: AssistantRunSummary | null,
 ): string {
   const modelsBlock = project.models.length
     ? project.models.map((m) => `- ${m.name}: ${m.description ?? "(no description)"}`).join("\n")
@@ -509,9 +544,13 @@ function buildThinkingUserPrompt(
     "Current pipeline validation errors (address these if the user wants fixes):",
   );
   const uiBlock = buildUiContextPromptBlock(uiContext);
+  const surfaceBlock = buildHumanSurfacePromptBlock(humanSurface);
+  const testDocsBlock = buildTestDocsCatalogPromptBlock(testDocsCatalog ?? []);
+  const recentRunsBlock = buildRecentRunsSummaryPromptBlock(recentRuns ?? []);
+  const lastFailedBlock = buildLastFailedRunPromptBlock(lastFailedRun ?? null);
   return `Project: ${project.name} (${project.kind})
 Default model: ${globalModel}
-${historyBlock}${validationBlock}${uiBlock}
+${historyBlock}${surfaceBlock}${validationBlock}${uiBlock}${testDocsBlock}${recentRunsBlock}${lastFailedBlock}
 Structure models:
 ${modelsBlock}
 
@@ -557,7 +596,11 @@ function buildUserPrompt(
     ? `\nYour prior reasoning (use this; do not repeat it in message):\n${thinking.trim()}\n`
     : "";
   const uiBlock = buildUiContextPromptBlock(opts?.uiContext);
-  return `${buildProjectContextBlock(project, globalModel, history, `${uiBlock}${currentValidationBlock}${thinkingBlock}${fixBlock}${forceFixBlock}`)}
+  const surfaceBlock = buildHumanSurfacePromptBlock(opts?.humanSurface);
+  const testDocsBlock = buildTestDocsCatalogPromptBlock(opts?.testDocsCatalog ?? []);
+  const recentRunsBlock = buildRecentRunsSummaryPromptBlock(opts?.recentRuns ?? []);
+  const lastFailedBlock = buildLastFailedRunPromptBlock(opts?.lastFailedRun ?? null);
+  return `${buildProjectContextBlock(project, globalModel, history, `${surfaceBlock}${uiBlock}${testDocsBlock}${recentRunsBlock}${lastFailedBlock}${currentValidationBlock}${thinkingBlock}${fixBlock}${forceFixBlock}`)}
 User request: ${userMessage}`;
 }
 
@@ -579,13 +622,16 @@ function materializeProposal(
     !!trimmedNameUpdate &&
     isUnnamedProjectName(project.name) &&
     trimmedNameUpdate !== project.name;
+  const proposedActions = (raw.proposedActions ?? []).filter(Boolean);
+  const hasActions = proposedActions.length > 0;
   if (
     !hasPipelineChange &&
     !hasModelChange &&
     !hasTypeAliasChange &&
     !hasDocChange &&
     !hasDocumentationChange &&
-    !hasNameChange
+    !hasNameChange &&
+    !hasActions
   ) {
     return null;
   }
@@ -620,8 +666,10 @@ function materializeProposal(
       docs: hasDocChange,
       documentation: hasDocumentationChange,
       name: hasNameChange,
+      actions: hasActions,
     },
     ...(hasNameChange ? { projectName: trimmedNameUpdate } : {}),
+    ...(hasActions ? { proposedActions } : {}),
   };
 }
 
@@ -716,6 +764,10 @@ export async function proposePipelineChange(
           globalModel,
           liveValidation,
           uiContext,
+          opts?.humanSurface,
+          opts?.testDocsCatalog,
+          opts?.recentRuns,
+          opts?.lastFailedRun,
         ),
         {
           model: globalModel,

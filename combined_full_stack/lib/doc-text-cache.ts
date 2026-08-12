@@ -1,5 +1,5 @@
 import { API_ROUTES } from "@/lib/api-routes"
-import { FETCH_CREDENTIALS, formatApiError, readApiErrorBody } from "@/lib/api-client"
+import { FETCH_CREDENTIALS, formatApiError, logApiFailure, readApiErrorBody } from "@/lib/api-client"
 import { isDemoMode } from "@/lib/demo-mode"
 import { fetchSharedRunDocText } from "@/lib/shared-run-doc-cache"
 
@@ -58,7 +58,9 @@ async function fetchDocTextOnce(docId: string, layer: doc_text_layer): Promise<d
       continue
     }
 
-    throw new Error(formatApiError(url, res, await readApiErrorBody(res)))
+    const body = await readApiErrorBody(res)
+    logApiFailure(url, res, body, "GET")
+    throw new Error(formatApiError(`GET ${url}`, res, body))
   }
 }
 

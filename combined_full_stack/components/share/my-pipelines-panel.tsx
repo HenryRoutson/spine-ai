@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { AlertTriangle, Play, Workflow } from "lucide-react"
+import { AlertTriangle, Play, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { readAccountStateCache } from "@/lib/project-state-cache"
@@ -53,7 +53,7 @@ export function MyPipelinesPanel({ onRun }: MyPipelinesPanelProps) {
                 {runBlocked ? (
                   <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
                 ) : (
-                  <Workflow className="h-4 w-4 shrink-0 text-primary" />
+                  <User className="h-4 w-4 shrink-0 text-primary" />
                 )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{p.name}</p>

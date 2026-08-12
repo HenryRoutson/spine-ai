@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { Check, LogOut } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { Check, LogOut, Search } from "lucide-react"
 import { createClient } from "@/utils/supabase/client"
 import { useWorkspaceModel } from "@/lib/use-workspace-model"
 import { ModelSelector } from "@/components/model-selector"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { JsonHighlight } from "@/components/highlight"
 import { ResizableSplit } from "@/components/resizable-split"
 import { settingsNavSplit } from "@/lib/layout-split-settings"
@@ -69,6 +70,11 @@ import {
   readQuickProjectDelete,
   writeQuickProjectDelete,
 } from "@/lib/project-delete-settings"
+import {
+  DEFAULT_HIDE_DEVELOPER_TOOLS,
+  readHideDeveloperTools,
+  writeHideDeveloperTools,
+} from "@/lib/developer-tools-settings"
 import { AppPrimarySection } from "@/lib/app-primary-section-labels"
 import { useMarkPrimarySectionReady } from "@/lib/primary-section-opening"
 
@@ -111,21 +117,31 @@ function SyntaxThemePreview({ theme }: { theme: JsonViewerSyntaxThemeId }) {
   )
 }
 
+// AI : keywords help search match toggle labels / synonyms beyond the section title
 const SETTINGS_SECTIONS = [
-  { id: "settings-team", label: "Team" },
-  { id: "settings-account", label: "Account" },
-  { id: "settings-model", label: "Default model" },
-  { id: "settings-llm-providers", label: "LLM providers" },
-  { id: "settings-json-reader", label: "JSON reader" },
-  { id: "settings-json-syntax", label: "JSON syntax" },
-  { id: "settings-logging", label: "Run logging" },
-  { id: "settings-pipeline", label: "Pipeline" },
-  { id: "settings-inference", label: "Inference" },
-  { id: "settings-colors", label: "Status colours" },
-  { id: "settings-data-cache", label: "Data cache" },
-  { id: "settings-projects", label: "Projects" },
-  { id: "settings-privacy", label: "Privacy" },
+  { id: "settings-team", label: "Team", keywords: "join invite members workspace billing credits" },
+  { id: "settings-account", label: "Account", keywords: "email sign out logout login delete" },
+  { id: "settings-model", label: "Default model", keywords: "llm provider pipeline steps" },
+  { id: "settings-llm-providers", label: "LLM providers", keywords: "api key openai anthropic keys" },
+  { id: "settings-json-reader", label: "JSON reader", keywords: "human view document viewer" },
+  { id: "settings-json-syntax", label: "JSON syntax", keywords: "colours colors theme vscode structure" },
+  { id: "settings-logging", label: "Run logging", keywords: "server logs input descriptions collapse" },
+  { id: "settings-pipeline", label: "Pipeline", keywords: "input descriptions validation builder" },
+  { id: "settings-inference", label: "Inference", keywords: "output steps duplicate runs billing" },
+  { id: "settings-colors", label: "Status colours", keywords: "colors ok error retry charts palette" },
+  { id: "settings-data-cache", label: "Data cache", keywords: "clear storage browser" },
+  { id: "settings-projects", label: "Projects", keywords: "quick delete picker list" },
+  { id: "settings-developer", label: "Developer tools", keywords: "build vibe hide structures testing" },
+  { id: "settings-privacy", label: "Privacy", keywords: "data retention delete account" },
 ] as const
+
+type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]["id"]
+
+function sectionMatchesQuery(section: (typeof SETTINGS_SECTIONS)[number], query: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  return `${section.label} ${section.keywords}`.toLowerCase().includes(q)
+}
 
 export function Settings() {
   useMarkPrimarySectionReady(AppPrimarySection.Settings)
@@ -144,9 +160,21 @@ export function Settings() {
   const [allowDuplicateRuns, setAllowDuplicateRuns] = useState(DEFAULT_ALLOW_DUPLICATE_RUNS)
   const [colorScheme, setColorScheme] = useState<ColorSchemeId>(DEFAULT_COLOR_SCHEME)
   const [quickProjectDelete, setQuickProjectDelete] = useState(DEFAULT_QUICK_PROJECT_DELETE)
+  const [hideDeveloperTools, setHideDeveloperTools] = useState(DEFAULT_HIDE_DEVELOPER_TOOLS)
   const [llmProvidersOpen, setLlmProvidersOpen] = useState(false)
+  const [sectionQuery, setSectionQuery] = useState("")
   const { width: navWidth, setWidth: setNavWidth, commitWidth: commitNavWidth } =
     usePersistedLeadingWidth(settingsNavSplit)
+
+  const visibleSections = useMemo(
+    () => SETTINGS_SECTIONS.filter((s) => sectionMatchesQuery(s, sectionQuery)),
+    [sectionQuery],
+  )
+  const visibleIds = useMemo(
+    () => new Set<SettingsSectionId>(visibleSections.map((s) => s.id)),
+    [visibleSections],
+  )
+  const showSection = (id: SettingsSectionId) => visibleIds.has(id)
 
   useEffect(() => {
     if (isDemoMode()) {
@@ -169,6 +197,7 @@ export function Settings() {
     setAllowDuplicateRuns(readAllowDuplicateRuns())
     setColorScheme(readColorScheme())
     setQuickProjectDelete(readQuickProjectDelete())
+    setHideDeveloperTools(readHideDeveloperTools())
   }, [])
 
   useEffect(() => {
@@ -238,6 +267,10 @@ export function Settings() {
     setQuickProjectDelete(enabled)
   }
 
+  function pickHideDeveloperTools(hide: boolean) {
+    writeHideDeveloperTools(hide)
+    setHideDeveloperTools(hide)
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -251,27 +284,51 @@ export function Settings() {
         leading={
           <nav className="flex h-full flex-col gap-0.5 overflow-y-auto p-2">
             <p className="px-2 py-1.5 font-mono text-[10px] uppercase text-muted-foreground">sections</p>
-            {SETTINGS_SECTIONS.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() =>
-                  s.id === "settings-llm-providers"
-                    ? setLlmProvidersOpen(true)
-                    : document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })
-                }
-                className="rounded-md px-2.5 py-2 text-left font-mono text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-              >
-                {s.label}
-              </button>
-            ))}
+            {visibleSections.length === 0 ? (
+              <p className="px-2.5 py-2 font-mono text-[11px] text-muted-foreground">No matching sections.</p>
+            ) : (
+              visibleSections.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() =>
+                    s.id === "settings-llm-providers"
+                      ? setLlmProvidersOpen(true)
+                      : document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
+                  className="rounded-md px-2.5 py-2 text-left font-mono text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                >
+                  {s.label}
+                </button>
+              ))
+            )}
           </nav>
         }
         trailing={
           <div className="min-h-0 flex-1 overflow-auto p-5">
             <div className="mx-auto flex max-w-lg flex-col gap-4">
-          <TeamSettings />
+              <div className="sticky top-0 z-10 -mx-1 bg-background/95 px-1 pb-1 backdrop-blur-sm">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={sectionQuery}
+                    onChange={(e) => setSectionQuery(e.target.value)}
+                    placeholder="Search settings…"
+                    className="h-9 pl-8 font-mono text-xs"
+                    aria-label="Search settings"
+                  />
+                </div>
+              </div>
 
+              {visibleSections.length === 0 ? (
+                <p className="rounded-lg border border-border bg-card px-4 py-6 text-center text-sm text-muted-foreground">
+                  No settings match &ldquo;{sectionQuery.trim()}&rdquo;.
+                </p>
+              ) : null}
+
+          {showSection("settings-team") ? <TeamSettings /> : null}
+
+          {showSection("settings-account") ? (
           <section id="settings-account" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Account</h3>
@@ -306,7 +363,9 @@ export function Settings() {
             </div>
             )}
           </section>
+          ) : null}
 
+          {showSection("settings-model") ? (
           <section id="settings-model" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Default model</h3>
@@ -318,9 +377,13 @@ export function Settings() {
               <ModelSelector value={model} onChange={setModel} />
             </div>
           </section>
+          ) : null}
 
-          <LlmProvidersSettingsSummary onOpen={() => setLlmProvidersOpen(true)} />
+          {showSection("settings-llm-providers") ? (
+            <LlmProvidersSettingsSummary onOpen={() => setLlmProvidersOpen(true)} />
+          ) : null}
 
+          {showSection("settings-json-reader") ? (
           <section id="settings-json-reader" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">JSON reader</h3>
@@ -351,7 +414,9 @@ export function Settings() {
               })}
             </div>
           </section>
+          ) : null}
 
+          {showSection("settings-json-syntax") ? (
           <section id="settings-json-syntax" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">JSON side panel syntax</h3>
@@ -385,7 +450,9 @@ export function Settings() {
               })}
             </div>
           </section>
+          ) : null}
 
+          {showSection("settings-logging") ? (
           <section id="settings-logging" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Run logging</h3>
@@ -420,7 +487,9 @@ export function Settings() {
               </span>
             </label>
           </section>
+          ) : null}
 
+          {showSection("settings-pipeline") ? (
           <section id="settings-pipeline" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Pipeline</h3>
@@ -442,7 +511,9 @@ export function Settings() {
               </span>
             </label>
           </section>
+          ) : null}
 
+          {showSection("settings-inference") ? (
           <section id="settings-inference" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Inference</h3>
@@ -477,7 +548,9 @@ export function Settings() {
               </span>
             </label>
           </section>
+          ) : null}
 
+          {showSection("settings-colors") ? (
           <section id="settings-colors" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Status colours</h3>
@@ -515,9 +588,11 @@ export function Settings() {
               })}
             </div>
           </section>
+          ) : null}
 
-          <SettingsDataCache />
+          {showSection("settings-data-cache") ? <SettingsDataCache /> : null}
 
+          {showSection("settings-projects") ? (
           <section id="settings-projects" className="rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Projects</h3>
@@ -540,10 +615,38 @@ export function Settings() {
               </span>
             </label>
           </section>
+          ) : null}
 
+          {showSection("settings-developer") ? (
+          <section id="settings-developer" className="rounded-lg border border-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+              <h3 className="text-sm font-semibold">Developer tools</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Optional visual editors — the Vibe agent already has full project control.
+              </p>
+            </div>
+            <label className="flex cursor-pointer items-start gap-3 px-4 py-3">
+              <Switch
+                checked={hideDeveloperTools}
+                onCheckedChange={(checked) => pickHideDeveloperTools(!!checked)}
+                className="mt-0.5"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">Hide developer tools</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  When on, the Build tab is hidden so you build with Vibe. The agent can still create and edit
+                  structures, pipelines, testing docs, and project docs. Turn off only for the visual editors.
+                </span>
+              </span>
+            </label>
+          </section>
+          ) : null}
+
+          {showSection("settings-privacy") ? (
           <div id="settings-privacy">
             <PrivacySettings />
           </div>
+          ) : null}
             </div>
           </div>
         }

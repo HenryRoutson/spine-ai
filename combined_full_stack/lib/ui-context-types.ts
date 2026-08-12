@@ -10,6 +10,10 @@ export type UiContextKind =
   | "project_doc"
   | "model"
   | "type_alias"
+  // AI : prompt-cache prefix stats (design-time example-select or runtime step prompts).
+  | "prompt_cache"
+  // AI : highlight agent chat text → quote chip (no copy-paste).
+  | "chat_quote"
 
 export type UiContextRef = {
   id: string
@@ -34,7 +38,32 @@ export const UI_CONTEXT_KINDS = [
   "project_doc",
   "model",
   "type_alias",
+  "prompt_cache",
+  "chat_quote",
 ] as const satisfies readonly UiContextKind[]
+
+// AI : stable id so re-quoting the same span dedupes in the chip row.
+function chatQuoteHash(text: string): string {
+  let h = 2166136261
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return (h >>> 0).toString(36)
+}
+
+/** AI : pin from a chat message selection (Vibe / Agent). */
+export function uiContextRefFromChatQuote(selected: string): UiContextRef | null {
+  const snippet = truncateUiContextText(selected.replace(/\r\n/g, "\n"), MAX_UI_CONTEXT_SNIPPET_CHARS)
+  if (!snippet) return null
+  const preview = truncateUiContextText(snippet.replace(/\s+/g, " "), 48)
+  return {
+    id: `chat-quote:${chatQuoteHash(snippet)}`,
+    kind: "chat_quote",
+    label: `Quote · ${preview}`,
+    snippet,
+  }
+}
 
 export function truncateUiContextText(text: string, max: number): string {
   const t = text.trim()
@@ -90,7 +119,7 @@ export function buildUiContextPromptBlock(refs: UiContextRef[] | undefined): str
     return `${i + 1}. ${r.label} (${meta})${snip}`
   })
   // AI : TODO (assistant-@-mention) — distinguish click-select vs @-mention wording in the prompt header.
-  return `Selected UI / @-mention context (user pinned these — treat as primary focus):\n${lines.join("\n")}\n\n`
+  return `Selected UI / @-mention / chat-quote context (user pinned these — treat as primary focus):\n${lines.join("\n")}\n\n`
 }
 
 export function defaultMessageForUiContextOnly(refs: UiContextRef[]): string {

@@ -6,6 +6,15 @@ create fully non technical buiild view.
 PRIORITY
 
 
+Agent observe + run (parity with Build Logging / Inference / cache preview):
+  [done] Phase 0 — enrich run_error + @Runs + prompt_cache pins + recent run summaries
+  [done] Phase 1 — vibe last-failed auto summary; full server run enrich
+  [done] Phase 2 — proposedActions run_inference + Vibe Run / inputs / last-run (source assistant)
+  [ ] Phase 3 — approve-to-run testing + follow-up verdict chat turn
+  [ ] Phase 4 — optional read tools / MCP
+  See lib/assistant-observe.ts, lib/assistant-run.ts, ui_context_enrich, vibe-panel
+
+
 Cursor-style @ mentions in Agent composer:
 - Type @ → filtered list (Select UI, Issues, steps, models, types, files); pick pins a context chip
 - Same uiContext[] request path as Select UI; kinds include project_doc / model / type_alias / invalid_issue
@@ -18,6 +27,7 @@ Cursor-style UI context picker (avoid copy-paste into agent):
 - App-owned targets (not raw DOM): pipeline step, inspector field, IO mismatch, inference error/run slice
 - Store pins in project-assistant context; serialize uiContext[] on assistant request; inject prompt block
 - Prefer smallest meaningful target under pointer; multi-pin chips removable; size-cap snippets
+- Highlight agent chat text → floating Quote → chat_quote chip (same uiContext path)
 - See // AI : TODO (ui-context-picker) in assistant-chat, dock, api_schemas, assistant-prompt, pipeline-builder, inference-run-chrome, pipeline-fields/shared
 
 Cursor-style pasted chips in agent chat (differentiate paste for the LLM):

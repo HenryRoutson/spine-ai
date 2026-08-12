@@ -43,6 +43,9 @@ export function prefetchWorkspacePanel(windowId: AppWindowId): void {
     case AppWindowId.ProjectSettings:
       void import("@/components/project-settings")
       break
+    case AppWindowId.Vibe:
+      void import("@/components/vibe-panel")
+      break
     case AppWindowId.Billing:
       void import("@/components/billing")
       break

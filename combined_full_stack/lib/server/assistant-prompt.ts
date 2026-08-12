@@ -307,7 +307,52 @@ export function buildDocumentRulesPromptBlock(): string {
 - Match inputNameContains on input steps when you create docs for specific slots (e.g. input expects "vendor_a" → name file vendor_a_terms.txt).
 - Keep each doc under ~8k characters; prefer 1–3 representative samples over large corpora.
 - Cannot create binary formats (PDF, Word, Excel, images) — use plain-text stand-ins and set inputType to text, or tell the user to upload binaries manually.
-- When no test docs are needed, set docs to null.`;
+- When no test docs are needed, set docs to null.
+- The user prompt lists current inference/test documents (name/type/label/preview). Use @ / Select UI pins for full file bytes when needed.`;
+}
+
+// AI : Vibe hides Build tabs for humans — agent must stay Build-complete (same visibility + write power).
+export function buildAgentControlParityPromptBlock(): string {
+  return `Agent control (always — identical on Vibe and Build):
+- You have the SAME write power as the full Build human UI: structure models, type aliases, pipeline steps, project Docs markdown, inference test documents, and (when unnamed) project name.
+- You always receive the live project JSON the Structure / Pipeline / Docs tabs show (aliases, models, pipeline with spineExpects/spineEmits, validation errors) plus a Testing-tab catalog of inference documents.
+- Never tell the user to open Build, Structure, Pipeline, Testing, Inference, or developer tools to make a change you can propose. Propose the change yourself and let them approve.
+- Build workspace tabs are optional visual/manual editors; Vibe hides those tabs for the human but does NOT reduce your capabilities.
+- Human UI map (for "where is X?" questions only): Structure (models + type aliases), Pipeline (steps), Testing (synthetic docs), Inference (run), Docs (project markdown), Documents (uploaded files), Logging (runs), Share (links/embed).
+- You may receive recent run summaries and (on Vibe) the last failed run summary. Prefer @Runs / @Cache pins for full error logs and prompt-cache prefixes — do not invent log contents.
+- You may propose proposedActions to run inference or testing after the user approves. Never claim a run finished in the same turn as the proposal.`;
+}
+
+export type AssistantHumanSurface = "vibe" | "build"
+
+export function buildHumanSurfacePromptBlock(surface?: AssistantHumanSurface): string {
+  if (surface !== "vibe") return ""
+  return `Human UI surface: Vibe (agent-first). The human does not see Structure/Pipeline/Testing/Inference workspace tabs right now. You still have full Build-equivalent control — propose structures, types, pipeline, documentation, and test documents directly. Do not ask them to switch tabs or turn on developer tools to edit the project. Prefer plain-language summaries in message.
+
+`
+}
+
+export type AssistantTestDocCatalogEntry = {
+  id: string
+  name: string
+  type: string
+  label: string
+  sizeKb: number
+  preview: string
+}
+
+export function buildTestDocsCatalogPromptBlock(docs: AssistantTestDocCatalogEntry[]): string {
+  const catalog = docs.map((d) => ({
+    id: d.id,
+    name: d.name,
+    type: d.type,
+    label: d.label,
+    sizeKb: d.sizeKb,
+    preview: d.preview,
+  }))
+  return `Current inference/test documents (${catalog.length}) — Testing tab catalog; pin a doc (@file / Select UI) for full content:
+${JSON.stringify(catalog, null, 2)}
+`
 }
 
 /** AI : blank / placeholder-only projects — landing + first app message share greenfield user prompt. */
@@ -346,7 +391,7 @@ export function resolveAssistantUserMessage(
 
 /** AI : few-shot response shapes — teach valid spine wiring; same block for landing + in-app system prompt. */
 export function buildFewShotPromptBlock(): string {
-  return `Few-shot examples (match this response JSON shape — structure names not ids; set modulePatch and typeAliases to null unless needed):
+  return `Few-shot examples (match this response JSON shape — structure names not ids; set modulePatch, typeAliases, and proposedActions to null unless needed):
 
 Example 1 — many unstructured files → spreadsheet rows (map; list is already CSV/XLSX-exportable)
 Task: "Convert hundreds of unstructured receipts into a single Excel file"
@@ -616,6 +661,8 @@ You can propose changes to ALL of the following in one response:
 4. Project documentation (markdown — keeps the Docs tab accurate as the pipeline evolves)
 5. Test documents (text/json files linked to this project for inference)
 6. Project name (only when the project is still unnamed — see Project naming rules)
+
+${buildAgentControlParityPromptBlock()}
 
 Module kinds:
 ${buildModuleKindsPromptBlock()}

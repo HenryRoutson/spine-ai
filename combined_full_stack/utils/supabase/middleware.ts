@@ -108,8 +108,16 @@ async function publicApiRateLimit(request: NextRequest, pathname: string): Promi
   const key = `ip:${ip}:${tier}` as RateLimitKey;
   const hit = await checkRateLimit(key, tier);
   if (hit.ok) return null;
+  // AI : include path + tier so prod consoles aren't just "keys:1 Failed to load resource 429".
   return NextResponse.json(
-    { error: "Too many requests — try again shortly.", code: "rate_limited" },
+    {
+      error: `Too many requests for ${pathname} (tier: ${tier}) — retry in ${hit.retryAfterSec}s.`,
+      code: "rate_limited",
+      detail: `resource=${pathname} tier=${tier} retryAfterSec=${hit.retryAfterSec}`,
+      resource: pathname,
+      tier,
+      retryAfterSec: hit.retryAfterSec,
+    },
     { status: HTTP.TOO_MANY_REQUESTS, headers: { "Retry-After": String(hit.retryAfterSec) } },
   );
 }

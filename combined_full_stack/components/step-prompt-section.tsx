@@ -18,6 +18,7 @@ type StepPromptSectionProps = {
   inputPreview?: string
   inputPreviewItems?: InputPreviewItem[]
   sourceDocId?: DocId
+  runId?: string
   className?: string
 }
 
@@ -29,6 +30,7 @@ export function StepPromptSection({
   inputPreview,
   inputPreviewItems,
   sourceDocId: sourceDocIdProp,
+  runId,
   className,
 }: StepPromptSectionProps) {
   const [popup, setPopup] = useState<PopupPayload | null>(null)
@@ -73,6 +75,10 @@ export function StepPromptSection({
           inputPreview={resolvedPreview}
           inputPreviewItems={resolvedItems}
           sourceDocId={sourceDocId}
+          runStep={step}
+          runId={runId}
+          moduleId={step?.moduleId}
+          stepLabel={label}
         />
       </IoSection>
       {popup && <PopupModal payload={popup} onClose={() => setPopup(null)} />}

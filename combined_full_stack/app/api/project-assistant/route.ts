@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = await parseRequestJson(req, assistantRequestBodySchema);
   if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
-  const { projectId, message, history = [], stream = false, uiContext } = parsed;
+  const { projectId, message, history = [], stream = false, uiContext, humanSurface } = parsed;
 
   const modelOrErr = parseAssistantRequestModel(parsed.model);
   if (modelOrErr instanceof NextResponse) return modelOrErr;
@@ -39,12 +39,16 @@ export async function POST(req: NextRequest) {
     messageChars: message.length,
     historyTurns: history.length,
     uiContextCount: uiContext?.length ?? 0,
+    humanSurface: humanSurface ?? "build",
     model,
     stream,
   });
 
   const trimmedHistory = trimAssistantHistory(history);
-  const assistantOptsBase = uiContext?.length ? { uiContext } : undefined;
+  const assistantOptsBase = {
+    ...(uiContext?.length ? { uiContext } : {}),
+    ...(humanSurface ? { humanSurface } : {}),
+  };
 
   try {
     if (!stream) {

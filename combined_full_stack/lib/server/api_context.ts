@@ -17,8 +17,21 @@ import {
 } from "./require_auth";
 import type { Store } from "./store";
 
-export function apiError(message: string, status: number, code?: string): NextResponse {
-  return NextResponse.json(code ? { error: message, code } : { error: message }, { status });
+export function apiError(
+  message: string,
+  status: number,
+  code?: string,
+  extra?: { detail?: string; resource?: string },
+): NextResponse {
+  return NextResponse.json(
+    {
+      error: message,
+      ...(code ? { code } : {}),
+      ...(extra?.detail ? { detail: extra.detail } : {}),
+      ...(extra?.resource ? { resource: extra.resource } : {}),
+    },
+    { status },
+  );
 }
 
 export function storeAuthError(err: unknown): NextResponse {
@@ -28,7 +41,13 @@ export function storeAuthError(err: unknown): NextResponse {
   return apiError(message, HTTP.INTERNAL);
 }
 
-export function rateLimitResponse(retryAfterSec: number, misconfigured = false): NextResponse {
+export type RateLimitMeta = { tier?: RateLimitTier; resource?: string };
+
+export function rateLimitResponse(
+  retryAfterSec: number,
+  misconfigured = false,
+  meta?: RateLimitMeta,
+): NextResponse {
   if (misconfigured) {
     return apiError(
       "Rate limiting unavailable — set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN on Vercel (or RATE_LIMIT_BACKEND=memory).",
@@ -36,8 +55,24 @@ export function rateLimitResponse(retryAfterSec: number, misconfigured = false):
       "rate_limit_unconfigured",
     );
   }
+  const resource = meta?.resource;
+  const tier = meta?.tier;
+  const where = resource ? ` for ${resource}` : tier ? ` (tier: ${tier})` : "";
   return NextResponse.json(
-    { error: "Too many requests — try again shortly.", code: "rate_limited" },
+    {
+      error: `Too many requests${where} — retry in ${retryAfterSec}s.`,
+      code: "rate_limited",
+      detail: [
+        resource ? `resource=${resource}` : null,
+        tier ? `tier=${tier}` : null,
+        `retryAfterSec=${retryAfterSec}`,
+      ]
+        .filter(Boolean)
+        .join(" "),
+      resource,
+      tier,
+      retryAfterSec,
+    },
     { status: HTTP.TOO_MANY_REQUESTS, headers: { "Retry-After": String(retryAfterSec) } },
   );
 }
@@ -45,16 +80,18 @@ export function rateLimitResponse(retryAfterSec: number, misconfigured = false):
 export async function enforceUserRateLimit(
   userId: user_id_string,
   tier: RateLimitTier,
+  resource?: string,
 ): Promise<NextResponse | null> {
   const key = `user:${userId}:${tier}` as RateLimitKey;
   const hit = await checkRateLimit(key, tier);
   if (hit.ok) return null;
-  return rateLimitResponse(hit.retryAfterSec, hit.misconfigured);
+  return rateLimitResponse(hit.retryAfterSec, hit.misconfigured, { tier, resource });
 }
 
 export async function enforceIpRateLimit(
   req: Request,
   tier: RateLimitTier,
+  resource?: string,
 ): Promise<NextResponse | null> {
   // AI : SECURITY — skip only in true local-dev (never Vercel), so hosted demos stay capped.
   // AI : TODO security — if a hosted box ever runs NODE_ENV=development, landing demo tiers become
@@ -69,7 +106,10 @@ export async function enforceIpRateLimit(
   const key = `ip:${ip}:${tier}` as RateLimitKey;
   const hit = await checkRateLimit(key, tier);
   if (hit.ok) return null;
-  return rateLimitResponse(hit.retryAfterSec, hit.misconfigured);
+  return rateLimitResponse(hit.retryAfterSec, hit.misconfigured, {
+    tier,
+    resource: resource ?? (req instanceof Request ? new URL(req.url).pathname : undefined),
+  });
 }
 
 // AI : one entry point for routes that need both session identity and the data store.

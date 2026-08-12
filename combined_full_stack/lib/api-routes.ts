@@ -40,6 +40,7 @@ export const API_ROUTES = {
   testingEvaluate: "/api/testing-evaluate",
   docsContent: "/api/docs/content",
   feedback: "/api/feedback",
+  account: "/api/account",
   activity: "/api/activity",
   sessionReplay: "/api/session-replay",
   sessionReplayById: (id: string) => `/api/session-replay/${id}`,

@@ -13,6 +13,7 @@ export enum AppWindowStepLabel {
   Docs = "10 / Docs",
   ProjectBilling = "11 / Billing",
   ProjectSettings = "12 / Settings",
+  Vibe = "· / Vibe",
   Billing = "· / Billing",
   Settings = "· / Settings",
   Earnings = "Earnings",
@@ -34,6 +35,7 @@ export enum AppWindowTitle {
   Docs = "Documentation",
   ProjectBilling = "Project spend",
   ProjectSettings = "Project settings",
+  Vibe = "Vibe",
   Billing = "Account billing",
   Settings = "Settings",
   Earnings = "Earnings account",
@@ -153,6 +155,11 @@ const BUILDER_WINDOW_HEADERS: Record<AppWindowId, WindowHeaderCopy> = {
     step: AppWindowStepLabel.ProjectSettings,
     title: AppWindowTitle.ProjectSettings,
     description: "Rename, review, or permanently delete this project.",
+  },
+  vibe: {
+    step: AppWindowStepLabel.Vibe,
+    title: AppWindowTitle.Vibe,
+    description: "Talk to the agent to build the full project — structures, pipeline, docs, and run.",
   },
   billing: {
     step: AppWindowStepLabel.Billing,

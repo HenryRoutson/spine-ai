@@ -1,15 +1,17 @@
-// AI : L0 primary nav ids — single source for Run / Build / Billing / Settings routing.
+// AI : L0 primary nav ids — single source for Run / Build / Vibe / Billing / Settings routing.
 export enum AppPrimarySection {
   Run = "run",
   Build = "build",
+  Vibe = "vibe",
   Billing = "billing",
   Settings = "settings",
 }
 
-// AI : L0 nav copy — single source for Run / Build / Billing / Settings titles.
+// AI : L0 nav copy — single source for Run / Build / Vibe / Billing / Settings titles.
 export enum AppPrimarySectionTitle {
   Run = "Run",
   Build = "Build",
+  Vibe = "Vibe",
   Billing = "Billing",
   Settings = "Settings",
 }
@@ -25,6 +27,10 @@ export const APP_PRIMARY_SECTION_NAV: Record<
   [AppPrimarySection.Build]: {
     label: AppPrimarySectionTitle.Build,
     title: "Create and edit your own pipelines",
+  },
+  [AppPrimarySection.Vibe]: {
+    label: AppPrimarySectionTitle.Vibe,
+    title: "Agent-first build — full project control via chat",
   },
   [AppPrimarySection.Billing]: {
     label: AppPrimarySectionTitle.Billing,

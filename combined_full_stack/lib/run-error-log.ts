@@ -1,4 +1,5 @@
 // AI : extract error-only slices from pipeline runs — for copy, view, and diagnosis context.
+// AI : also used by ui_context_enrich for run_error pins (formatRunErrorPinSnippet).
 
 import { failuresFromLlmCalls } from "@/lib/llm-distribution"
 import { formatCostCents, formatSecondsShort } from "@/lib/format"

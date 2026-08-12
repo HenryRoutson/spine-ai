@@ -70,11 +70,17 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const { id: rawId } = await ctx.params;
   const projectId = parseProjectId(rawId);
-  if (!projectId) return apiError(unknownProject(rawId), HTTP.NOT_FOUND);
+  if (!projectId) return apiError(unknownProject(rawId), HTTP.NOT_FOUND, "unknown_project", {
+    resource: `project:${rawId}`,
+    detail: "Invalid or missing project id in URL.",
+  });
   const project = store.project(projectId);
   if (!project) {
     apiLog.warn(`PUT /api/projects — unknown`, { projectId });
-    return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
+    return apiError(unknownProject(projectId), HTTP.NOT_FOUND, "unknown_project", {
+      resource: `project:${projectId}`,
+      detail: "Project missing from store (deleted, never created, or not visible to this user/team).",
+    });
   }
   const writeErr = teamProjectWriteError(project);
   if (writeErr) return apiError(writeErr, HTTP.FORBIDDEN);
@@ -116,10 +122,16 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
 
   const { id: rawId } = await ctx.params;
   const projectId = parseProjectId(rawId);
-  if (!projectId) return apiError(unknownProject(rawId), HTTP.NOT_FOUND);
+  if (!projectId) return apiError(unknownProject(rawId), HTTP.NOT_FOUND, "unknown_project", {
+    resource: `project:${rawId}`,
+    detail: "Invalid or missing project id in URL.",
+  });
   if (!store.project(projectId)) {
     apiLog.warn(`DELETE /api/projects — unknown`, { projectId });
-    return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
+    return apiError(unknownProject(projectId), HTTP.NOT_FOUND, "unknown_project", {
+      resource: `project:${projectId}`,
+      detail: "Project missing from store (deleted, never created, or not visible to this user/team).",
+    });
   }
   const project = store.project(projectId)!;
   const writeErr = teamProjectWriteError(project);

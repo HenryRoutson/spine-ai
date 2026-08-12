@@ -430,6 +430,11 @@ need to add chips for pastes and selecting a part of the UI. have a cursor style
 ensure you use an existing library if possible.
 
 you should be able to see chats of people in your team or working on your project.
+pastes should create a chip not raw text
+you should be able to select parts of the UI with a highligers for llm context
+you should be able to highlight parts of the agent chat and it be added as context without copy paste. 
+you should have files as context or any part of the UI with @...
+
 
 
 # logging

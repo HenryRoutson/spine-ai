@@ -178,6 +178,15 @@ export function isAccountWindow(window: AppWindowId): boolean {
   return ACCOUNT_WINDOW_IDS.has(window)
 }
 
+export function isVibeWindow(window: AppWindowId): boolean {
+  return window === AppWindowId.Vibe
+}
+
+// AI : L0 overlays that replace workspace tabs (account + non-technical vibe).
+export function hidesWorkspaceNav(window: AppWindowId): boolean {
+  return isAccountWindow(window) || isVibeWindow(window)
+}
+
 export const CONSUMER_NAV_ITEMS: AppNavItem[] = [
   { id: AppWindowId.Share, label: AppPrimarySectionTitle.Run, hint: "01", icon: Users },
 ]
@@ -192,6 +201,7 @@ export function windowToArea(window: AppWindowId, consumer = false): AppArea {
     case AppWindowId.Pipeline:
     case AppWindowId.Testing:
     case AppWindowId.Inference:
+    case AppWindowId.Vibe:
       return AppArea.Build
     case AppWindowId.Share:
     case AppWindowId.Earnings:

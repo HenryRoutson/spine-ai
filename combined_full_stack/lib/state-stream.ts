@@ -1,4 +1,4 @@
-import { FETCH_CREDENTIALS, formatApiError, readApiErrorBody } from "@/lib/api-client"
+import { FETCH_CREDENTIALS, formatApiError, logApiFailure, readApiErrorBody } from "@/lib/api-client"
 import type { DocRef, ModelOptionPublic, PipelineRun, Project } from "@/lib/types"
 
 export const STATE_STREAM_EVENT = {
@@ -28,7 +28,11 @@ export async function readStateStream(
   signal?: AbortSignal,
 ): Promise<StateStreamChunk> {
   const res = await fetch(url, { credentials: FETCH_CREDENTIALS, signal })
-  if (!res.ok) throw new Error(formatApiError(url, res, await readApiErrorBody(res)))
+  if (!res.ok) {
+    const body = await readApiErrorBody(res)
+    logApiFailure(url, res, body, "GET")
+    throw new Error(formatApiError(`GET ${url}`, res, body))
+  }
 
   const type = res.headers.get("content-type") ?? ""
   if (!type.includes("ndjson")) {

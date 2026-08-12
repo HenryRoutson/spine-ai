@@ -54,7 +54,10 @@ export async function POST(req: NextRequest) {
   });
 
   if (projectId && !store.project(projectId)) {
-    return apiError(unknownProject(projectId), HTTP.NOT_FOUND);
+    return apiError(unknownProject(projectId), HTTP.NOT_FOUND, "unknown_project", {
+      resource: `project:${projectId}`,
+      detail: `Cannot attach upload "${uploadFile.name}" — project missing from store.`,
+    });
   }
 
   const bytes = new Uint8Array(await uploadFile.arrayBuffer());

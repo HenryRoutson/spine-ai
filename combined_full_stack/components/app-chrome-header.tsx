@@ -53,7 +53,8 @@ export function AppChromeHeader({
 
       <AppPrimaryNav value={primarySection} onChange={onPrimarySectionChange} openingSection={openingSection} />
 
-      {primarySection === AppPrimarySection.Build && projectSlot ? (
+      {(primarySection === AppPrimarySection.Build || primarySection === AppPrimarySection.Vibe) &&
+      projectSlot ? (
         <>
           <div className="h-6 w-px shrink-0 bg-border" />
           {projectSlot}

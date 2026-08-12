@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { AlertTriangle, Boxes, Globe, PanelTop, ScrollText, Store, Users, Workflow, Zap } from "lucide-react"
+import { AlertTriangle, Boxes, Globe, PanelTop, ScrollText, Store, User, Users, Zap } from "lucide-react"
 import {
   DeploymentActivityPage,
   type ActivityFilter,
@@ -83,7 +83,7 @@ export function SharePage() {
               )}
               onClick={() => setSection(ShareSection.MyPipelines)}
             >
-              <Workflow className="h-3.5 w-3.5" />
+              <User className="h-3.5 w-3.5" />
               {ShareTabLabel.MyPipelines}
             </button>
             <button
@@ -160,7 +160,7 @@ export function SharePage() {
             )}
             onClick={() => setSection(ShareSection.MyPipelines)}
           >
-            <Workflow className="h-3.5 w-3.5" />
+            <User className="h-3.5 w-3.5" />
             {ShareTabLabel.MyPipelines}
           </button>
           <button

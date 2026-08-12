@@ -45,7 +45,12 @@ export function ProjectAssistantDockToggle() {
   )
 }
 
-export function ProjectAssistantDockPanel() {
+type ProjectAssistantDockPanelProps = {
+  // AI : Vibe embeds agent full-pane — no dock chrome / close / Select UI.
+  embedded?: boolean
+}
+
+export function ProjectAssistantDockPanel({ embedded = false }: ProjectAssistantDockPanelProps) {
   const { toggle, setSelectMode, selectMode, toggleSelectMode, uiContextPins } =
     useProjectAssistant()
   const { project } = useStore()
@@ -60,7 +65,10 @@ export function ProjectAssistantDockPanel() {
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col border-l border-border bg-background shadow-xl"
+      className={cn(
+        "flex h-full min-h-0 flex-col bg-background",
+        !embedded && "border-l border-border shadow-xl",
+      )}
       {...{ [UI_CONTEXT_ATTR.ignore]: "" }}
     >
       <div className="flex items-center justify-between border-b border-border px-3 py-2">
@@ -71,21 +79,24 @@ export function ProjectAssistantDockPanel() {
           ) : null}
         </div>
         <div className="flex items-center gap-1">
-          <Button
-            type="button"
-            size="sm"
-            variant={selectMode ? "secondary" : "outline"}
-            className="h-7 gap-1 px-2 font-mono text-[10px]"
-            onClick={toggleSelectMode}
-            aria-label={selectMode ? "Exit select UI mode" : "Select UI for agent"}
-            title={selectMode ? "Exit select UI mode (Esc)" : "Select UI for agent"}
-          >
-            <Crosshair className="h-3.5 w-3.5" />
-            {selectMode ? "Selecting…" : "Select"}
-            {uiContextPins.length > 0 ? (
-              <span className="rounded bg-primary/20 px-1 text-[9px]">{uiContextPins.length}</span>
-            ) : null}
-          </Button>
+          {/* AI : Vibe has sparse Select UI targets — keep Select on dock/build only. */}
+          {!embedded ? (
+            <Button
+              type="button"
+              size="sm"
+              variant={selectMode ? "secondary" : "outline"}
+              className="h-7 gap-1 px-2 font-mono text-[10px]"
+              onClick={toggleSelectMode}
+              aria-label={selectMode ? "Exit select UI mode" : "Select UI for agent"}
+              title={selectMode ? "Exit select UI mode (Esc)" : "Select UI for agent"}
+            >
+              <Crosshair className="h-3.5 w-3.5" />
+              {selectMode ? "Selecting…" : "Select"}
+              {uiContextPins.length > 0 ? (
+                <span className="rounded bg-primary/20 px-1 text-[9px]">{uiContextPins.length}</span>
+              ) : null}
+            </Button>
+          ) : null}
           <Button
             type="button"
             size="icon-sm"
@@ -109,19 +120,21 @@ export function ProjectAssistantDockPanel() {
           >
             <Plus className="h-4 w-4" />
           </Button>
-          <Button
-            type="button"
-            size="icon-sm"
-            variant="ghost"
-            onClick={() => {
-              setSelectMode(false)
-              toggle()
-            }}
-            aria-label="Close assistant"
-            title="Close assistant"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+          {!embedded ? (
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              onClick={() => {
+                setSelectMode(false)
+                toggle()
+              }}
+              aria-label="Close assistant"
+              title="Close assistant"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          ) : null}
         </div>
       </div>
 

@@ -46,6 +46,7 @@ import {
   FETCH_CREDENTIALS,
   formatApiError,
   JSON_HEADERS,
+  logApiFailure,
   readApiErrorBody,
 } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
@@ -480,6 +481,8 @@ export function StoreProvider({
         const res = await fetch(API_ROUTES.billing, { credentials: FETCH_CREDENTIALS })
         if (res.status === 429) {
           const retryAfterSec = Number(res.headers.get("Retry-After"))
+          const body = await readApiErrorBody(res)
+          logApiFailure(API_ROUTES.billing, res, body, "GET")
           billingRateLimitedUntilRef.current =
             Date.now() +
             (Number.isFinite(retryAfterSec) && retryAfterSec > 0 ? retryAfterSec * 1000 : 60_000)
@@ -488,7 +491,7 @@ export function StoreProvider({
         if (res.status === 503) return
         if (!res.ok) {
           const body = await readApiErrorBody(res)
-          console.error(formatApiError(API_ROUTES.billing, res, body))
+          logApiFailure(API_ROUTES.billing, res, body, "GET")
           return
         }
         const data = (await res.json()) as BillingAccountView
@@ -564,12 +567,15 @@ export function StoreProvider({
       const url = `${API_ROUTES.runs}?projectId=${encodeURIComponent(projectId)}`
       const res = await fetch(url, { credentials: FETCH_CREDENTIALS })
       if (res.status === 404) {
+        const body = await readApiErrorBody(res)
+        logApiFailure(url, res, body, "GET")
         evictStaleProject(projectId, setState, setActiveProjectId)
         return [] as PipelineRun[]
       }
       if (!res.ok) {
         const body = await readApiErrorBody(res)
-        throw new Error(formatApiError(url, res, body))
+        logApiFailure(url, res, body, "GET")
+        throw new Error(formatApiError(`GET ${url}`, res, body))
       }
       const data = (await res.json()) as { runs: PipelineRun[] }
       writeProjectRunsCache(projectId, data.runs)

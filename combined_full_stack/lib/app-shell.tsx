@@ -15,6 +15,7 @@ import { openLlmProvidersSettings, scrollToSettingsSection } from "@/lib/setting
 import type { SharedRunDocScope } from "@/lib/shared-run-doc-scope"
 import type { DocId, StructureModelId } from "@/lib/types"
 import { AppWindowId as AppWindow } from "@/lib/app-window-id"
+import { readHideDeveloperTools } from "@/lib/developer-tools-settings"
 
 export * from "@/lib/app-window-id"
 
@@ -60,7 +61,11 @@ interface AppShellState {
 const AppShellContext = createContext<AppShellState | null>(null)
 
 export function AppShellProvider({ children }: { children: ReactNode }) {
-  const [activeWindow, setActiveWindow] = useState<WindowId>(AppWindow.Structure)
+  // AI : vibe-first — skip Structure when developer tools are hidden.
+  // AI : TODO (vibe) — persist last L0 surface (Vibe vs Build tab) across reloads.
+  const [activeWindow, setActiveWindow] = useState<WindowId>(() =>
+    readHideDeveloperTools() ? AppWindow.Vibe : AppWindow.Structure,
+  )
   const [focusDocId, setFocusDocId] = useState<DocId | null>(null)
   const [focusRunId, setFocusRunId] = useState<string | null>(null)
   const [focusRunAnchor, setFocusRunAnchor] = useState<LoggingFocusAnchor | null>(null)

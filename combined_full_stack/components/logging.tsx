@@ -525,6 +525,7 @@ export function Logging() {
                             <StepPromptSection
                               step={step}
                               label={step.label}
+                              runId={active?.id}
                               className={STEP_TRACE_IO_INDENT_MARGIN}
                             />
                           ) : (
