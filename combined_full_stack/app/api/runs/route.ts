@@ -79,7 +79,12 @@ export async function POST(req: NextRequest) {
   const parsed = await parseRequestJson(req, runBodySchema);
   if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
   const { projectId, inputDocId, inputDocIds, inputDocsByModule, model, allowDuplicateRuns, source } = parsed;
-  const runSource = source === "testing" ? RunSource.Testing : undefined;
+  const runSource =
+    source === "testing"
+      ? RunSource.Testing
+      : source === "assistant"
+        ? RunSource.Assistant
+        : undefined;
   const pid = projectId as ProjectId;
   const primaryDocId = inputDocId as DocId;
 

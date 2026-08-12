@@ -9,6 +9,8 @@ import {
   ClipboardPaste,
   Crosshair,
   FileText,
+  History,
+  Layers,
   Loader2,
   Maximize2,
   AlertTriangle,
@@ -200,6 +202,8 @@ const MENTION_GROUP_ICON: Record<
 > = {
   Actions: Crosshair,
   Issues: AlertTriangle,
+  Runs: History,
+  Cache: Layers,
   Steps: Workflow,
   Models: Boxes,
   Types: Braces,

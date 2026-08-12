@@ -156,6 +156,8 @@ export async function runBilledProjectAssistant(
     testDocsCatalog: opts?.testDocsCatalog ?? buildTestDocsCatalog(store, project),
     recentRuns: opts?.recentRuns ?? observe.recentRuns,
     lastFailedRun: opts?.lastFailedRun ?? observe.lastFailedRun,
+    // AI : Phase 4 observe tools need store inside proposePipelineChange.
+    store: opts?.store ?? store,
   }
 
   try {

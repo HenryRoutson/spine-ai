@@ -32,6 +32,15 @@ import {
   buildRecentRunsSummaryPromptBlock,
   type AssistantRunSummary,
 } from "@/lib/assistant-observe";
+import {
+  buildObservePlanSystemPrompt,
+  buildObservePlanUserPrompt,
+  buildObserveToolResultsPromptBlock,
+  executeObserveTools,
+  observeToolPlanSchema,
+  shouldPlanObserveTools,
+} from "./assistant_observe_tools";
+import type { Store } from "./store";
 import { stripBuiltinTypeAliases } from "./builtin_types";
 import {
   computeInvalid,
@@ -311,8 +320,12 @@ export type PipelineAssistantOpts = {
   testDocsCatalog?: AssistantTestDocCatalogEntry[];
   recentRuns?: AssistantRunSummary[];
   lastFailedRun?: AssistantRunSummary | null;
+  // AI : Phase 4 — store-backed read tools (get_run / cache / logs) inside the propose loop.
+  store?: Store;
+  // AI : injected after observe-tool planning; not set by callers.
+  observeToolResults?: string;
   onThinkingDelta?: (delta: string) => void;
-  onPhase?: (phase: "thinking" | "structuring" | "retrying") => void;
+  onPhase?: (phase: "thinking" | "observing" | "structuring" | "retrying") => void;
   onThinkingDone?: (text: string) => void;
   // AI : streams the assistant message text as it arrives during the structuring phase.
   onMessageDelta?: (delta: string) => void;
@@ -600,7 +613,10 @@ function buildUserPrompt(
   const testDocsBlock = buildTestDocsCatalogPromptBlock(opts?.testDocsCatalog ?? []);
   const recentRunsBlock = buildRecentRunsSummaryPromptBlock(opts?.recentRuns ?? []);
   const lastFailedBlock = buildLastFailedRunPromptBlock(opts?.lastFailedRun ?? null);
-  return `${buildProjectContextBlock(project, globalModel, history, `${surfaceBlock}${uiBlock}${testDocsBlock}${recentRunsBlock}${lastFailedBlock}${currentValidationBlock}${thinkingBlock}${fixBlock}${forceFixBlock}`)}
+  const observeBlock = opts?.observeToolResults?.trim()
+    ? `\n${opts.observeToolResults.trim()}\n`
+    : "";
+  return `${buildProjectContextBlock(project, globalModel, history, `${surfaceBlock}${uiBlock}${testDocsBlock}${recentRunsBlock}${lastFailedBlock}${observeBlock}${currentValidationBlock}${thinkingBlock}${fixBlock}${forceFixBlock}`)}
 User request: ${userMessage}`;
 }
 
@@ -780,21 +796,69 @@ export async function proposePipelineChange(
       opts?.onThinkingDone?.(thinking);
     }
 
+    // AI : Phase 4 — optional read-tool round before structuring (store required).
+    let observeToolResults = opts?.observeToolResults;
+    if (
+      !fixErrors &&
+      !forceFix &&
+      opts?.store &&
+      shouldPlanObserveTools(effectiveMessage, uiContext)
+    ) {
+      opts.onPhase?.("observing");
+      try {
+        const plan = await llmStructured(
+          buildObservePlanUserPrompt({
+            message: effectiveMessage,
+            thinking,
+            recentRuns: opts.recentRuns,
+            lastFailedRun: opts.lastFailedRun,
+            uiContext,
+          }),
+          observeToolPlanSchema,
+          {
+            model: globalModel,
+            ledger,
+            system: buildObservePlanSystemPrompt(),
+            maxTokens: 512,
+            onStructuredFailure: (detail) => {
+              llmAttempt += 1;
+              opts?.onStructuredFailure?.({
+                attempt: llmAttempt,
+                failureKind: detail.kind,
+                error: detail.error,
+              });
+            },
+          },
+        );
+        llmAttempt += 1;
+        opts?.onLlmResponse?.("observe-plan", plan);
+        if (plan.tools.length) {
+          const results = executeObserveTools(opts.store, project, plan.tools);
+          observeToolResults = buildObserveToolResultsPromptBlock(results);
+        }
+      } catch {
+        // AI : observe planning is best-effort — structuring continues without tools.
+      }
+    }
+
     opts?.onPhase?.("structuring");
     const msgExtractor = opts?.onMessageDelta
       ? makeMessageExtractor(opts.onMessageDelta)
       : null;
+    const promptOpts: PipelineAssistantOpts = {
+      ...opts,
+      fixValidationErrors: fixErrors,
+      fixAttempt: fixAttempt || undefined,
+      uiContext,
+      observeToolResults,
+    };
     let raw = await llmStreamStructured(
       buildUserPrompt(
         project,
         effectiveMessage,
         history,
         globalModel,
-        {
-          fixValidationErrors: fixErrors,
-          fixAttempt: fixAttempt || undefined,
-          uiContext,
-        },
+        promptOpts,
         thinking,
         liveValidation,
         forceFix,
@@ -849,6 +913,7 @@ export async function proposePipelineChange(
           history,
           globalModel,
           {
+            ...promptOpts,
             fixValidationErrors: fixErrors,
             fixAttempt,
             uiContext,

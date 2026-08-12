@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
-import { Check, AlertTriangle, FileText, BookOpen, Braces, X } from "lucide-react"
+import { Check, AlertTriangle, FileText, BookOpen, Braces } from "lucide-react"
 import { MultiLangReadonlyCodeViewer, type MultiLangCodeSource } from "@/components/code-viewer"
 import { allModelsToBaml, allModelsToDts, allModelsToGo, allModelsToPydantic, allModelsToRust } from "@/lib/pydantic"
 import { API_ROUTES } from "@/lib/api-routes"
@@ -13,7 +13,6 @@ import { ModuleKind, MODULE_META } from "@/lib/types"
 import { AssistantChat, type AssistantChatMessage } from "@/components/assistant-chat"
 import { UiContextChip } from "@/components/ui-context-chip"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { buildAssistantMentionOptions } from "@/lib/assistant-mentions"
 import { docLabelDisplay, docsForProject } from "@/lib/project-docs"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
@@ -24,6 +23,14 @@ import {
   PROJECT_ASSISTANT_STARTERS,
   type ProjectProposal,
 } from "@/lib/project-assistant-types"
+import {
+  formatAssistantInferenceVerdict,
+  formatAssistantTestVerdict,
+  resolveAssistantInferenceInputs,
+  runAssistantInference,
+  runAssistantTest,
+} from "@/lib/assistant-run"
+import { uid } from "@/lib/id"
 import { useAppShell, AppWindowId } from "@/lib/app-shell"
 import { cn } from "@/lib/utils"
 
@@ -40,6 +47,7 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
     models,
     typeAliases,
     docs,
+    runs,
     model: globalModel,
     addDocContent,
     applyProjectChanges,
@@ -47,6 +55,9 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
     renameProject,
     refresh,
     refreshBilling,
+    addRun,
+    updateRunTest,
+    flushPendingSave,
   } = useStore()
   const { getChatBindings, chats } = useProjectAssistantSession(
     project.id,
@@ -105,13 +116,25 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
         typeAliases,
         docs: projectDocs,
         issues: mentionIssues,
+        runs,
       }),
-    [modules, models, typeAliases, projectDocs, mentionIssues],
+    [modules, models, typeAliases, projectDocs, mentionIssues, runs],
   )
 
   const chatSummary =
     chats.find((c) => c.id === resolvedChatId) ?? chats.find((c) => c.id === chatId)
   const teammateLabel = chatSummary && !isMine ? chatOwnerLabel(chatSummary) : null
+
+  function appendFollowUp(content: string) {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: uid(),
+        role: "assistant" as const,
+        content,
+      },
+    ])
+  }
 
   async function applyProposal(proposal: ProjectProposal) {
     if (proposal.changed.name && proposal.projectName) {
@@ -130,6 +153,86 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
     if (proposal.changed.docs) {
       for (const spec of proposal.docs) {
         await addDocContent(spec.name, spec.type, spec.content, spec.label, project.id)
+      }
+    }
+
+    const actions = proposal.proposedActions ?? []
+    if (!actions.length) return
+
+    const nextModules = proposal.changed.modules ? proposal.modules : modules
+    const nextProject = {
+      ...project,
+      modules: nextModules,
+      models: proposal.changed.models ? proposal.models : models,
+      typeAliases: proposal.changed.typeAliases ? proposal.typeAliases : typeAliases,
+    }
+
+    for (const action of actions) {
+      if (action.type === "run_inference") {
+        if (
+          !window.confirm(
+            "Apply done. Run the pipeline now on the default / assigned input documents?",
+          )
+        ) {
+          continue
+        }
+        const resolved = resolveAssistantInferenceInputs({
+          project: nextProject,
+          modules: nextModules,
+          docs,
+          model: globalModel,
+        })
+        if (!resolved.ok) {
+          appendFollowUp(`Could not start pipeline run: ${resolved.reason}`)
+          continue
+        }
+        try {
+          setAssistantBusy(true)
+          await flushPendingSave?.()
+          const { run } = await runAssistantInference({
+            project: nextProject,
+            modules: nextModules,
+            docs,
+            model: globalModel,
+            inputDocs: resolved.inputDocs,
+          })
+          addRun(run)
+          void refreshBilling()
+          void refresh()
+          appendFollowUp(formatAssistantInferenceVerdict(run))
+        } catch (err) {
+          appendFollowUp(`Pipeline run failed: ${(err as Error).message || "unknown error"}`)
+        } finally {
+          setAssistantBusy(false)
+        }
+        continue
+      }
+
+      if (action.type === "run_test") {
+        const label = action.testDocName?.trim()
+          ? `Run test file "${action.testDocName}" now?`
+          : "Run the first *_testing.json file now?"
+        if (!window.confirm(`Apply done. ${label}`)) continue
+        try {
+          setAssistantBusy(true)
+          const result = await runAssistantTest({
+            project: nextProject,
+            modules: nextModules,
+            docs,
+            model: globalModel,
+            testDocName: action.testDocName,
+            flushPendingSave,
+          })
+          addRun(result.run)
+          await updateRunTest(result.run.id, result.persistedTest).catch(console.error)
+          void refreshBilling()
+          void refresh()
+          appendFollowUp(formatAssistantTestVerdict(result))
+        } catch (err) {
+          appendFollowUp(`Test run failed: ${(err as Error).message || "unknown error"}`)
+        } finally {
+          setAssistantBusy(false)
+        }
       }
     }
   }
@@ -153,13 +256,15 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
         }
         initialMessage={PROJECT_ASSISTANT_INITIAL_MESSAGE}
         starters={PROJECT_ASSISTANT_STARTERS}
-        placeholder="Describe… or type @ to mention steps, models, files"
+        placeholder="Describe… or type @ to mention steps, runs, cache, files"
         loadingLabel={(phase) =>
           phase === "retrying"
             ? "retrying…"
             : phase === "structuring"
               ? "designing project…"
-              : "thinking…"
+              : phase === "observing"
+                ? "reading runs…"
+                : "thinking…"
         }
         messages={messages}
         onMessagesChange={setMessages}
@@ -246,7 +351,9 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
                 docs: (data.proposal.docs?.length ?? 0) > 0,
                 documentation: false,
                 name: !!data.proposal.projectName,
+                actions: (data.proposal.proposedActions?.length ?? 0) > 0,
               },
+              proposedActions: data.proposal.proposedActions,
             }
           }
           return data
@@ -265,6 +372,7 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
   const showDocs = p.changed?.docs ?? (p.docs?.length ?? 0) > 0
   const showDocumentation = p.changed?.documentation ?? false
   const showName = p.changed?.name ?? !!p.projectName
+  const showActions = (p.proposedActions?.length ?? 0) > 0
   const proposalTypes = p.typeAliases ?? []
   const proposalModels = p.models ?? []
 
@@ -344,6 +452,14 @@ function ProjectProposalPreview({ msg }: { msg: AssistantChatMessage<ProjectProp
             docs tab
           </Badge>
         )}
+        {showActions &&
+          (p.proposedActions ?? []).map((action, i) => (
+            <Badge key={`${action.type}-${i}`} variant="outline" className="font-mono text-[9px]">
+              {action.type === "run_inference"
+                ? "run pipeline"
+                : `run test${action.testDocName ? ` · ${action.testDocName}` : ""}`}
+            </Badge>
+          ))}
         {msg.retryCount != null && msg.retryCount > 0 && (
           <Badge variant="outline" className="font-mono text-[9px] text-muted-foreground">
             retried {msg.retryCount}×

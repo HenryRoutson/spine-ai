@@ -48,4 +48,5 @@ export const PROJECT_ASSISTANT_STARTERS = [
   "Create inference test documents that match my input steps",
   "Fix validation errors and simplify this project",
   "Run the pipeline on the default test documents",
+  "Run my *_testing.json suite and report the verdict",
 ]

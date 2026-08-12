@@ -79,7 +79,13 @@ export async function buildLandingPipelineFromTask(
       onThinkingDelta: hooks?.onThinkingDelta,
       onThinkingDone: hooks?.onThinkingDone,
       onMessageDelta: hooks?.onMessageDelta,
-      onPhase: hooks?.onPhase,
+      onPhase: hooks?.onPhase
+        ? (phase) => {
+            // AI : landing stream has no "observing" wire phase — skip silently.
+            if (phase === "observing") return
+            hooks.onPhase?.(phase)
+          }
+        : undefined,
     });
     const proposal = result.proposal;
 

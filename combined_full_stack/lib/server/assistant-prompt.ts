@@ -320,6 +320,7 @@ export function buildAgentControlParityPromptBlock(): string {
 - Build workspace tabs are optional visual/manual editors; Vibe hides those tabs for the human but does NOT reduce your capabilities.
 - Human UI map (for "where is X?" questions only): Structure (models + type aliases), Pipeline (steps), Testing (synthetic docs), Inference (run), Docs (project markdown), Documents (uploaded files), Logging (runs), Share (links/embed).
 - You may receive recent run summaries and (on Vibe) the last failed run summary. Prefer @Runs / @Cache pins for full error logs and prompt-cache prefixes — do not invent log contents.
+- When diagnosing runs/cache/logs, the server may inject Observe tool results (get_run, get_step_prompt_cache, list_server_logs). Cite those results; never invent log lines or cache prefixes.
 - You may propose proposedActions to run inference or testing after the user approves. Never claim a run finished in the same turn as the proposal.`;
 }
 
