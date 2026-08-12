@@ -19,7 +19,7 @@ import { docsForProject } from "@/lib/project-docs"
 
 // AI : agent-first Build surface — full project control via chat (+ run options); no workspace tabs.
 export function VibePanel() {
-  useMarkPrimarySectionReady(AppPrimarySection.Vibe)
+  useMarkPrimarySectionReady(AppPrimarySection.Build)
   const {
     project,
     modules,

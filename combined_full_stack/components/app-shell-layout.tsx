@@ -7,8 +7,10 @@ import { Loader2 } from "lucide-react"
 import { AppChromeHeader } from "@/components/app-chrome-header"
 import { AppWindowNav } from "@/components/app-window-nav"
 import { ProjectSelector } from "@/components/project-selector"
-import { BUILDER_NAV_ITEMS, hidesWorkspaceNav, isAccountWindow } from "@/lib/app-nav-config"
+import { BUILDER_NAV_ITEMS, isAccountWindow, isVibeWindow } from "@/lib/app-nav-config"
 import { handlePrimarySectionChange, resolvePrimarySection } from "@/lib/app-primary-section"
+import { BuildSurfaceNav } from "@/components/build-surface-nav"
+import { resolveBuildSurface, windowForBuildSurface, type BuildSurface } from "@/lib/build-surface"
 import {
   PrimarySectionOpeningProvider,
   usePrimarySectionOpening,
@@ -437,17 +439,18 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
   )
   const hideDeveloperTools = useHideDeveloperTools()
   const primarySection = resolvePrimarySection(AppMode.Build, activeWindow)
-  const showWorkspaceNav = !hidesWorkspaceNav(activeWindow)
+  const isVibe = isVibeWindow(activeWindow)
+  const isAccount = isAccountWindow(activeWindow)
+  const buildSurface = resolveBuildSurface(activeWindow)
+  // AI : surface toggle shares Build chrome; workspace tabs only on editors surface.
+  const showSurfaceToggle = !embed && !hideDeveloperTools && !isAccount
+  const showWorkspaceTabs = !isAccount && !isVibe
+  const showWorkspaceChrome = showSurfaceToggle || showWorkspaceTabs
   const { openingSection, beginOpening } = usePrimarySectionOpening()
   useSyncPrimarySectionReady(primarySection)
 
   const onPrimarySectionChange = useCallback(
     (section: Parameters<typeof handlePrimarySectionChange>[0]) => {
-      // AI : Build is hidden when developer tools are off — keep people on Vibe.
-      if (hideDeveloperTools && section === AppPrimarySection.Build) {
-        setActiveWindow(AppWindowId.Vibe)
-        return
-      }
       wrapPrimarySectionChange(section, primarySection, beginOpening, () => {
         handlePrimarySectionChange(
           section,
@@ -459,7 +462,14 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
         )
       })
     },
-    [activeWindow, beginOpening, hideDeveloperTools, primarySection, setActiveWindow],
+    [activeWindow, beginOpening, primarySection, setActiveWindow],
+  )
+
+  const onBuildSurfaceChange = useCallback(
+    (surface: BuildSurface) => {
+      setActiveWindow(windowForBuildSurface(surface))
+    },
+    [setActiveWindow],
   )
 
   useEffect(() => {
@@ -468,12 +478,13 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
     else if (params.has("session_id") || params.has("canceled")) setActiveWindow(AppWindowId.Billing)
   }, [setActiveWindow])
 
-  // AI : default shell opens Structure — bounce technical workspace to Vibe when tools are hidden.
+  // AI : hide developer tools → force Vibe surface inside Build (L0 Build stays).
   useEffect(() => {
     if (!hideDeveloperTools) return
     if (primarySection !== AppPrimarySection.Build) return
+    if (isVibe) return
     setActiveWindow(AppWindowId.Vibe)
-  }, [hideDeveloperTools, primarySection, setActiveWindow])
+  }, [hideDeveloperTools, isVibe, primarySection, setActiveWindow])
 
   const warmedAllPanelsRef = useRef(false)
 
@@ -517,17 +528,23 @@ function BuilderShellLayoutInner({ variant = "default" }: { variant?: "default" 
           }
         />
 
-        {showWorkspaceNav ? (
+        {showWorkspaceChrome ? (
           <AppWindowNav
             activeWindow={activeWindow}
             onSelect={setActiveWindow}
             validity={validity}
-            trailing={!embed ? <ProjectAssistantDockToggle /> : null}
+            leading={
+              showSurfaceToggle ? (
+                <BuildSurfaceNav value={buildSurface} onChange={onBuildSurfaceChange} />
+              ) : null
+            }
+            showItems={showWorkspaceTabs}
+            trailing={!embed && showWorkspaceTabs ? <ProjectAssistantDockToggle /> : null}
           />
         ) : null}
 
         {/* AI : TODO (vibe) — when leaving Vibe, optionally re-open Build dock if it was open before. */}
-        {embed || primarySection === AppPrimarySection.Vibe ? (
+        {embed || isVibe ? (
           <main className="relative flex min-h-0 flex-1 flex-col overflow-hidden" id="main-content">
             {projectLoading && <ProjectSwitchOverlay projectName={project.name} />}
             <div className="flex min-h-0 flex-1 flex-col">

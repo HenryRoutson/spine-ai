@@ -1,6 +1,6 @@
 "use client"
 
-import { CreditCard, Hammer, Loader2, Play, Settings, Sparkles } from "lucide-react"
+import { CreditCard, Hammer, Loader2, Play, Settings } from "lucide-react"
 import { APP_PRIMARY_SECTION_NAV, AppPrimarySection } from "@/lib/app-primary-section-labels"
 import { prefetchBillingPanel } from "@/lib/prefetch-billing-panel"
 import { prefetchBuildPanel } from "@/lib/prefetch-build-panel"
@@ -8,7 +8,6 @@ import { prefetchRunPanel } from "@/lib/prefetch-run-panel"
 import { prefetchSettingsPanel } from "@/lib/prefetch-settings-panel"
 import { prefetchWorkspacePanel } from "@/lib/prefetch-workspace-panel"
 import { AppWindowId } from "@/lib/app-window-id"
-import { useHideDeveloperTools } from "@/lib/developer-tools-settings"
 import { useOptionalConsumerStore, useOptionalStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 import { useCallback, useEffect } from "react"
@@ -22,12 +21,10 @@ type AppPrimaryNavProps = {
   className?: string
 }
 
-// AI : L0 — Run, Build, Vibe, Billing, and Settings at the same level (spec navigation model).
+// AI : L0 — Run, Build, Billing, Settings (Vibe lives under Build as a surface toggle).
 export function AppPrimaryNav({ value, onChange, openingSection = null, className }: AppPrimaryNavProps) {
-  const hideDeveloperTools = useHideDeveloperTools()
   const warmRun = useWarmRun()
   const warmBuild = useWarmBuild()
-  const warmVibe = useWarmVibe()
   const warmBilling = useWarmBilling()
   const warmSettings = useWarmSettings()
 
@@ -52,23 +49,13 @@ export function AppPrimaryNav({ value, onChange, openingSection = null, classNam
         icon={Play}
         {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Run]}
       />
-      {!hideDeveloperTools ? (
-        <PrimaryButton
-          active={value === AppPrimarySection.Build}
-          loading={openingSection === AppPrimarySection.Build}
-          onClick={() => onChange(AppPrimarySection.Build)}
-          onWarm={warmBuild}
-          icon={Hammer}
-          {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Build]}
-        />
-      ) : null}
       <PrimaryButton
-        active={value === AppPrimarySection.Vibe}
-        loading={openingSection === AppPrimarySection.Vibe}
-        onClick={() => onChange(AppPrimarySection.Vibe)}
-        onWarm={warmVibe}
-        icon={Sparkles}
-        {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Vibe]}
+        active={value === AppPrimarySection.Build}
+        loading={openingSection === AppPrimarySection.Build}
+        onClick={() => onChange(AppPrimarySection.Build)}
+        onWarm={warmBuild}
+        icon={Hammer}
+        {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Build]}
       />
       <PrimaryButton
         active={value === AppPrimarySection.Billing}
@@ -134,12 +121,6 @@ function PrimaryButton({
 }
 
 function useWarmBuild() {
-  return useCallback(() => {
-    prefetchBuildPanel()
-  }, [])
-}
-
-function useWarmVibe() {
   return useCallback(() => {
     prefetchWorkspacePanel(AppWindowId.Vibe)
     prefetchBuildPanel()

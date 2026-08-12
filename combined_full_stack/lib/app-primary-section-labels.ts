@@ -1,4 +1,4 @@
-// AI : L0 primary nav ids — single source for Run / Build / Vibe / Billing / Settings routing.
+// AI : L0 primary nav ids — Run / Build / Billing / Settings (Vibe is Build sub-surface copy only).
 export enum AppPrimarySection {
   Run = "run",
   Build = "build",
@@ -7,7 +7,7 @@ export enum AppPrimarySection {
   Settings = "settings",
 }
 
-// AI : L0 nav copy — single source for Run / Build / Vibe / Billing / Settings titles.
+// AI : L0 + Build-surface copy — Vibe label reused by BuildSurfaceNav, not L0.
 export enum AppPrimarySectionTitle {
   Run = "Run",
   Build = "Build",

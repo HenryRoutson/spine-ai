@@ -53,5 +53,13 @@ export function StructureCodeView({
     [models, typeAliases],
   )
 
-  return <MultiLangReadonlyCodeViewer sources={sources} defaultLanguage="python" />
+  // AI : fill the Structures trailing pane — default min(60vh,28rem) leaves the split undersized / clipped.
+  return (
+    <MultiLangReadonlyCodeViewer
+      sources={sources}
+      defaultLanguage="python"
+      editorHeight="100%"
+      className="min-h-0 min-w-0 flex-1 overflow-hidden"
+    />
+  )
 }

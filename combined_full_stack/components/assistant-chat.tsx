@@ -92,6 +92,9 @@ type AssistantChatProps<TProposal> = {
   onMessagesChange?: React.Dispatch<React.SetStateAction<AssistantChatMessage<TProposal>[]>>
   /** AI : mirrors in-flight stream for conversation copy while loading */
   onStreamingDraftChange?: React.Dispatch<React.SetStateAction<AssistantStreamingDraft | null>>
+  /** AI : resume loading UI after remount (e.g. local→server chat id migrate). */
+  resumeBusy?: boolean
+  resumeStreamingDraft?: AssistantStreamingDraft | null
   /** AI : survives panel close — parent can track busy state for header affordance */
   onLoadingChange?: (loading: boolean) => void
   /** AI : actions tied to the active agent instance (e.g. copy conversation) */
@@ -114,7 +117,7 @@ type AssistantChatProps<TProposal> = {
   readOnlyHint?: string
   /** AI : Vibe trims chrome — hide bubble avatars */
   showAvatars?: boolean
-  /** AI : Vibe keeps Copy only — hide Agent title / stats row */
+  /** AI : Vibe hides Agent title / stats — Copy lives on the dock header */
   showHeaderMeta?: boolean
 }
 
@@ -133,6 +136,8 @@ export function AssistantChat<TProposal>({
   messages: controlledMessages,
   onMessagesChange,
   onStreamingDraftChange,
+  resumeBusy = false,
+  resumeStreamingDraft = null,
   onLoadingChange,
   headerActions,
   composerAttachments,
@@ -154,15 +159,18 @@ export function AssistantChat<TProposal>({
   const setMessages = onMessagesChange ?? setInternalMessages
   const [input, setInput] = useState("")
   const [pastes, setPastes] = useState<PastedAttachment[]>([])
-  const [loading, setLoadingState] = useState(false)
+  // AI : hydrate from session when remounting a still-streaming agent tab.
+  const [loading, setLoadingState] = useState(resumeBusy)
   const setLoading = (value: boolean) => {
     setLoadingState(value)
     onLoadingChange?.(value)
   }
   const [loadingPhase, setLoadingPhase] = useState<AssistantLoadingPhase>("thinking")
-  const [liveThinking, setLiveThinking] = useState("")
-  const [liveResponse, setLiveResponse] = useState("")
-  const [debugTrace, setDebugTrace] = useState<AssistantDebugEntry[]>([])
+  const [liveThinking, setLiveThinking] = useState(resumeStreamingDraft?.liveThinking ?? "")
+  const [liveResponse, setLiveResponse] = useState(resumeStreamingDraft?.content ?? "")
+  const [debugTrace, setDebugTrace] = useState<AssistantDebugEntry[]>(
+    resumeStreamingDraft?.debugTrace ?? [],
+  )
   const [error, setError] = useState<string | null>(null)
   const [errorDebugTrace, setErrorDebugTrace] = useState<AssistantDebugEntry[]>([])
   const [approvingId, setApprovingId] = useState<string | null>(null)

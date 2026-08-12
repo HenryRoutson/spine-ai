@@ -62,7 +62,7 @@ const AppShellContext = createContext<AppShellState | null>(null)
 
 export function AppShellProvider({ children }: { children: ReactNode }) {
   // AI : vibe-first — skip Structure when developer tools are hidden.
-  // AI : TODO (vibe) — persist last L0 surface (Vibe vs Build tab) across reloads.
+  // AI : TODO (vibe) — persist last Build surface (Vibe vs editors) across reloads.
   const [activeWindow, setActiveWindow] = useState<WindowId>(() =>
     readHideDeveloperTools() ? AppWindow.Vibe : AppWindow.Structure,
   )

@@ -62,21 +62,44 @@ function optimisticChatSummary(
   }
 }
 
-type ProjectAssistantSession = {
+type ChatMessageUpdater = React.Dispatch<
+  React.SetStateAction<AssistantChatMessage<ProjectProposal>[]>
+>
+type StreamingDraftUpdater = React.Dispatch<React.SetStateAction<AssistantStreamingDraft | null>>
+
+/** AI : chat-scoped bindings so parallel agents keep writing to the chat that started the turn. */
+export type ProjectAssistantChatBindings = {
+  chatId: string
   messages: AssistantChatMessage<ProjectProposal>[]
-  setMessages: React.Dispatch<React.SetStateAction<AssistantChatMessage<ProjectProposal>[]>>
+  setMessages: ChatMessageUpdater
   streamingDraft: AssistantStreamingDraft | null
-  setStreamingDraft: React.Dispatch<React.SetStateAction<AssistantStreamingDraft | null>>
+  setStreamingDraft: StreamingDraftUpdater
   assistantBusy: boolean
   setAssistantBusy: (busy: boolean) => void
+  isMine: boolean
+}
+
+type ProjectAssistantSession = {
+  messages: AssistantChatMessage<ProjectProposal>[]
+  setMessages: ChatMessageUpdater
+  streamingDraft: AssistantStreamingDraft | null
+  setStreamingDraft: StreamingDraftUpdater
+  assistantBusy: boolean
+  setAssistantBusy: (busy: boolean) => void
+  /** AI : true if any open/history chat is streaming — dock toggle indicator. */
+  anyAssistantBusy: boolean
   chats: AssistantChatSummary[]
+  /** AI : Cursor-style open agent tabs (subset of chats); history lists all. */
+  openChatIds: string[]
   activeChatId: string | null
   /** AI : false when viewing a teammate's chat on a shared project */
   activeChatIsMine: boolean
   chatsLoading: boolean
   selectChat: (chatId: string) => void
   newChat: () => void
+  closeOpenChat: (chatId: string) => void
   deleteChat: (chatId: string) => Promise<void>
+  getChatBindings: (chatId: string) => ProjectAssistantChatBindings
 }
 
 type ProjectAssistantContextValue = {
@@ -157,6 +180,12 @@ function groupChatsByMonth(chats: AssistantChatSummary[]): AssistantChatMonthGro
 
 export { formatChatDate, groupChatsByMonth }
 
+function ensureIdInOpenTabs(openIds: string[] | undefined, chatId: string): string[] {
+  const prev = openIds ?? []
+  if (prev.includes(chatId)) return prev
+  return [...prev, chatId]
+}
+
 export function ProjectAssistantProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const [selectMode, setSelectMode] = useState(false)
@@ -169,6 +198,7 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
   >({})
   const [assistantBusyByChat, setAssistantBusyByChat] = useState<Record<string, boolean>>({})
   const [chatsByProject, setChatsByProject] = useState<Record<string, AssistantChatSummary[]>>({})
+  const [openChatIdsByProject, setOpenChatIdsByProject] = useState<Record<string, string[]>>({})
   const [activeChatByProject, setActiveChatByProject] = useState<Record<string, string>>({})
   const [loadingByProject, setLoadingByProject] = useState<Record<string, boolean>>({})
   const loadStarted = useRef(new Set<string>())
@@ -176,10 +206,49 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
   const initialMessageByProject = useRef(new Map<string, string>())
   const activeChatByProjectRef = useRef(activeChatByProject)
   activeChatByProjectRef.current = activeChatByProject
+  const openChatIdsByProjectRef = useRef(openChatIdsByProject)
+  openChatIdsByProjectRef.current = openChatIdsByProject
   const messagesByChatRef = useRef(messagesByChat)
   messagesByChatRef.current = messagesByChat
   const chatsByProjectRef = useRef(chatsByProject)
   chatsByProjectRef.current = chatsByProject
+  // AI : local-* → server id while a turn may still be in flight on the old id.
+  const chatIdAliasRef = useRef<Record<string, string>>({})
+
+  const resolveChatId = useCallback((chatId: string): string => {
+    let cur = chatId
+    const seen = new Set<string>()
+    while (chatIdAliasRef.current[cur] && !seen.has(cur)) {
+      seen.add(cur)
+      cur = chatIdAliasRef.current[cur]!
+    }
+    return cur
+  }, [])
+
+  const migrateChatId = useCallback((fromId: string, toId: string) => {
+    if (fromId === toId) return
+    chatIdAliasRef.current[fromId] = toId
+    // AI : keep open-tab / active ids stable (local-*) so mounted agents are not remounted mid-stream.
+    setMessagesByChat((prev) => {
+      if (!(fromId in prev)) return prev
+      const next = { ...prev, [toId]: prev[toId] ?? prev[fromId] }
+      delete next[fromId]
+      return next
+    })
+    setStreamingDraftByChat((prev) => {
+      if (!(fromId in prev)) return prev
+      const next = { ...prev, [toId]: prev[toId] ?? prev[fromId] }
+      delete next[fromId]
+      return next
+    })
+    setAssistantBusyByChat((prev) => {
+      if (!(fromId in prev)) return prev
+      const next = { ...prev }
+      if (prev[fromId]) next[toId] = true
+      delete next[fromId]
+      return next
+    })
+  }, [])
 
   const toggle = useCallback(() => setOpen((v) => !v), [])
   const toggleSelectMode = useCallback(() => {
@@ -296,6 +365,10 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
           if (prev[projectId]) return prev
           return { ...prev, [projectId]: activeId! }
         })
+        setOpenChatIdsByProject((prev) => {
+          if ((prev[projectId] ?? []).length > 0) return prev
+          return { ...prev, [projectId]: [activeId!] }
+        })
       } catch {
         const localId = `${projectId}-local-${Date.now()}`
         setChatsByProject((prev) => ({
@@ -308,6 +381,10 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
         setActiveChatByProject((prev) => {
           if (prev[projectId]) return prev
           return { ...prev, [projectId]: localId }
+        })
+        setOpenChatIdsByProject((prev) => {
+          if ((prev[projectId] ?? []).length > 0) return prev
+          return { ...prev, [projectId]: [localId] }
         })
         setMessagesByChat((prev) => ({
           ...prev,
@@ -322,29 +399,40 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
 
   const selectChat = useCallback(
     async (projectId: string, chatId: string) => {
-      setActiveChatByProject((prev) => ({ ...prev, [projectId]: chatId }))
-      if (messagesByChatRef.current[chatId]) return
+      // AI : history pick opens a horizontal tab (Cursor-style) without dropping other agents.
+      const openIds = openChatIdsByProjectRef.current[projectId] ?? []
+      const existingTab = openIds.find(
+        (id) => id === chatId || resolveChatId(id) === chatId,
+      )
+      const tabId = existingTab ?? chatId
+      setOpenChatIdsByProject((prev) => ({
+        ...prev,
+        [projectId]: ensureIdInOpenTabs(prev[projectId], tabId),
+      }))
+      setActiveChatByProject((prev) => ({ ...prev, [projectId]: tabId }))
+      const resolvedId = resolveChatId(tabId)
+      if (messagesByChatRef.current[resolvedId] || messagesByChatRef.current[tabId]) return
       const initialMessage = initialMessageByProject.current.get(projectId) ?? ""
       try {
         const { chat } = await apiJson<{
           chat: AssistantChatSummary & { messages: AssistantChatMessage<ProjectProposal>[] }
-        }>(API_ROUTES.assistantChat(chatId))
+        }>(API_ROUTES.assistantChat(resolvedId))
         setMessagesByChat((prev) => ({
           ...prev,
-          [chatId]:
-            prev[chatId] ??
+          [resolvedId]:
+            prev[resolvedId] ??
             (chat.messages?.length > 0
               ? chat.messages
-              : defaultMessages(chatId, initialMessage)),
+              : defaultMessages(resolvedId, initialMessage)),
         }))
       } catch {
         setMessagesByChat((prev) => ({
           ...prev,
-          [chatId]: prev[chatId] ?? defaultMessages(chatId, initialMessage),
+          [resolvedId]: prev[resolvedId] ?? defaultMessages(resolvedId, initialMessage),
         }))
       }
     },
-    [],
+    [resolveChatId],
   )
 
   const newChat = useCallback(
@@ -357,6 +445,10 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
 
       // AI : switch UI immediately so new chat feels instant even while POST is in flight.
       setActiveChatByProject((prev) => ({ ...prev, [projectId]: localId }))
+      setOpenChatIdsByProject((prev) => ({
+        ...prev,
+        [projectId]: ensureIdInOpenTabs(prev[projectId], localId),
+      }))
       setMessagesByChat((prev) => ({ ...prev, [localId]: welcome }))
       setChatsByProject((prev) => ({
         ...prev,
@@ -381,10 +473,12 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
             [chat],
           ),
         }))
-        setActiveChatByProject((prev) => ({ ...prev, [projectId]: chat.id }))
+        // AI : leave active/open on localId; alias + message migrate keep the mounted agent alive.
+        migrateChatId(localId, chat.id)
         let migratedMessages = defaultMessages(chat.id, initialMessage)
         setMessagesByChat((prev) => {
-          migratedMessages = prev[localId] ?? defaultMessages(chat.id, initialMessage)
+          migratedMessages =
+            prev[chat.id] ?? prev[localId] ?? defaultMessages(chat.id, initialMessage)
           const next = { ...prev, [chat.id]: migratedMessages }
           delete next[localId]
           return next
@@ -394,51 +488,64 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
         // AI : keep the optimistic local chat when persistence is unavailable.
       }
     },
-    [cancelPendingSave, persistMessages],
+    [cancelPendingSave, migrateChatId, persistMessages],
   )
 
   const deleteChat = useCallback(
     async (projectId: string, chatId: string, initialMessage: string) => {
-      const pendingSave = saveTimers.current.get(chatId)
+      const resolvedId = resolveChatId(chatId)
+      const pendingSave = saveTimers.current.get(resolvedId)
       if (pendingSave) {
         clearTimeout(pendingSave)
-        saveTimers.current.delete(chatId)
+        saveTimers.current.delete(resolvedId)
       }
 
-      const isLocalOnly = chatId.includes("-local")
+      const isLocalOnly = resolvedId.includes("-local")
       if (!isLocalOnly) {
         try {
-          await apiJson(API_ROUTES.assistantChat(chatId), { method: "DELETE" })
+          await apiJson(API_ROUTES.assistantChat(resolvedId), { method: "DELETE" })
         } catch {
           return
         }
       }
 
-      const wasActive = activeChatByProjectRef.current[projectId] === chatId
-      const remaining = (chatsByProjectRef.current[projectId] ?? []).filter((c) => c.id !== chatId)
+      const openIds = openChatIdsByProjectRef.current[projectId] ?? []
+      const tabsForChat = openIds.filter(
+        (id) => id === chatId || id === resolvedId || resolveChatId(id) === resolvedId,
+      )
+      const wasActive = tabsForChat.includes(activeChatByProjectRef.current[projectId] ?? "")
+      const remaining = (chatsByProjectRef.current[projectId] ?? []).filter(
+        (c) => c.id !== chatId && c.id !== resolvedId,
+      )
+      const remainingOpen = openIds.filter((id) => !tabsForChat.includes(id))
 
       setMessagesByChat((prev) => {
         const next = { ...prev }
         delete next[chatId]
+        delete next[resolvedId]
+        for (const tabId of tabsForChat) delete next[tabId]
         return next
       })
       setStreamingDraftByChat((prev) => {
-        if (!(chatId in prev)) return prev
         const next = { ...prev }
         delete next[chatId]
+        delete next[resolvedId]
+        for (const tabId of tabsForChat) delete next[tabId]
         return next
       })
       setAssistantBusyByChat((prev) => {
-        if (!(chatId in prev)) return prev
         const next = { ...prev }
         delete next[chatId]
+        delete next[resolvedId]
+        for (const tabId of tabsForChat) delete next[tabId]
         return next
       })
       setChatsByProject((prev) => ({ ...prev, [projectId]: remaining }))
+      setOpenChatIdsByProject((prev) => ({ ...prev, [projectId]: remainingOpen }))
 
       if (!wasActive) return
 
-      const nextActiveId = remaining[0]?.id
+      const nextActiveId = remainingOpen[remainingOpen.length - 1] ?? remaining[0]?.id
       if (nextActiveId) {
         setActiveChatByProject((prev) => ({ ...prev, [projectId]: nextActiveId }))
         void selectChat(projectId, nextActiveId)
@@ -452,6 +559,29 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
       })
       void newChat(projectId, initialMessage)
     },
+    [newChat, resolveChatId, selectChat],
+  )
+
+  const closeOpenChat = useCallback(
+    (projectId: string, chatId: string, initialMessage: string) => {
+      const openIds = openChatIdsByProjectRef.current[projectId] ?? []
+      if (!openIds.includes(chatId)) return
+      const remainingOpen = openIds.filter((id) => id !== chatId)
+      const wasActive = activeChatByProjectRef.current[projectId] === chatId
+
+      // AI : last tab close → new agent; drop closed id first so newChat doesn't keep it open.
+      setOpenChatIdsByProject((prev) => ({ ...prev, [projectId]: remainingOpen }))
+
+      if (remainingOpen.length === 0) {
+        void newChat(projectId, initialMessage)
+        return
+      }
+
+      if (!wasActive) return
+      const nextActiveId = remainingOpen[remainingOpen.length - 1]!
+      setActiveChatByProject((prev) => ({ ...prev, [projectId]: nextActiveId }))
+      void selectChat(projectId, nextActiveId)
+    },
     [newChat, selectChat],
   )
 
@@ -460,78 +590,138 @@ export function ProjectAssistantProvider({ children }: { children: ReactNode }) 
       const activeChatId = activeChatByProject[projectId] ?? null
       const initial = initialMessageByProject.current.get(projectId) ?? initialMessage
       const chats = chatsByProject[projectId] ?? []
-      const activeSummary = activeChatId ? chats.find((c) => c.id === activeChatId) : undefined
+      const openChatIdsRaw = openChatIdsByProject[projectId] ?? []
+      // AI : keep active in tabs even if state briefly lags after load/migrate.
+      const openChatIds =
+        activeChatId && !openChatIdsRaw.includes(activeChatId)
+          ? [...openChatIdsRaw, activeChatId]
+          : openChatIdsRaw
+      const activeSummary = activeChatId
+        ? chats.find((c) => c.id === resolveChatId(activeChatId)) ??
+          chats.find((c) => c.id === activeChatId)
+        : undefined
       const activeChatIsMine = activeSummary?.isMine ?? true
       const messages =
-        (activeChatId && messagesByChat[activeChatId]) ||
-        (activeChatId ? defaultMessages(activeChatId, initial) : [])
+        (activeChatId && messagesByChat[resolveChatId(activeChatId)]) ||
+        (activeChatId ? defaultMessages(resolveChatId(activeChatId), initial) : [])
 
-      const setMessages: ProjectAssistantSession["setMessages"] = (updater) => {
-        const chatId = activeChatByProjectRef.current[projectId]
-        if (!chatId) return
-        const owned =
-          (chatsByProjectRef.current[projectId] ?? []).find((c) => c.id === chatId)?.isMine ?? true
-        if (!owned) return
-        setMessagesByChat((prev) => {
-          const current = prev[chatId] ?? defaultMessages(chatId, initial)
-          const next = typeof updater === "function" ? updater(current) : updater
-          persistMessages(chatId, next)
-          setChatsByProject((chatsPrev) => {
-            const list = chatsPrev[projectId]
-            if (!list) return chatsPrev
-            const firstUser = next.find((m) => m.role === "user")
-            const title = firstUser ? firstUser.content.trim().slice(0, 60) : "New chat"
-            return {
-              ...chatsPrev,
-              [projectId]: list.map((c) =>
-                c.id === chatId
-                  ? { ...c, title, messageCount: next.length, updatedAt: Date.now() }
-                  : c,
-              ),
-            }
+      const bindChat = (chatId: string): ProjectAssistantChatBindings => {
+        const resolvedId = resolveChatId(chatId)
+        const summary = chats.find((c) => c.id === resolvedId)
+        const isMine = summary?.isMine ?? true
+        const chatMessages = messagesByChat[resolvedId] ?? defaultMessages(resolvedId, initial)
+
+        const setMessages: ChatMessageUpdater = (updater) => {
+          const targetId = resolveChatId(chatId)
+          const owned =
+            (chatsByProjectRef.current[projectId] ?? []).find((c) => c.id === targetId)?.isMine ??
+            true
+          if (!owned) return
+          setMessagesByChat((prev) => {
+            const current = prev[targetId] ?? defaultMessages(targetId, initial)
+            const next = typeof updater === "function" ? updater(current) : updater
+            persistMessages(targetId, next)
+            setChatsByProject((chatsPrev) => {
+              const list = chatsPrev[projectId]
+              if (!list) return chatsPrev
+              const firstUser = next.find((m) => m.role === "user")
+              const title = firstUser ? firstUser.content.trim().slice(0, 60) : "New chat"
+              return {
+                ...chatsPrev,
+                [projectId]: list.map((c) =>
+                  c.id === targetId
+                    ? { ...c, title, messageCount: next.length, updatedAt: Date.now() }
+                    : c,
+                ),
+              }
+            })
+            return { ...prev, [targetId]: next }
           })
-          return { ...prev, [chatId]: next }
-        })
-      }
+        }
 
-      return {
-        messages,
-        setMessages,
-        streamingDraft: activeChatId ? (streamingDraftByChat[activeChatId] ?? null) : null,
-        setStreamingDraft: (updater) => {
-          const chatId = activeChatByProjectRef.current[projectId]
-          if (!chatId) return
+        const setStreamingDraft: StreamingDraftUpdater = (updater) => {
+          const targetId = resolveChatId(chatId)
           setStreamingDraftByChat((prev) => {
-            const current = prev[chatId] ?? null
+            const current = prev[targetId] ?? null
             const next = typeof updater === "function" ? updater(current) : updater
             if (next === current) return prev
-            return { ...prev, [chatId]: next }
+            return { ...prev, [targetId]: next }
           })
-        },
-        assistantBusy: activeChatId ? (assistantBusyByChat[activeChatId] ?? false) : false,
-        setAssistantBusy: (busy) => {
-          const chatId = activeChatByProjectRef.current[projectId]
-          if (!chatId) return
+        }
+
+        const setAssistantBusy = (busy: boolean) => {
+          const targetId = resolveChatId(chatId)
           setAssistantBusyByChat((prev) => {
-            if (!busy && !(chatId in prev)) return prev
+            if (!busy && !(targetId in prev)) return prev
             if (!busy) {
               const next = { ...prev }
-              delete next[chatId]
+              delete next[targetId]
               return next
             }
-            return { ...prev, [chatId]: true }
+            return { ...prev, [targetId]: true }
           })
-        },
+        }
+
+        return {
+          chatId: resolvedId,
+          messages: chatMessages,
+          setMessages,
+          streamingDraft: streamingDraftByChat[resolvedId] ?? null,
+          setStreamingDraft,
+          assistantBusy: assistantBusyByChat[resolvedId] ?? false,
+          setAssistantBusy,
+          isMine,
+        }
+      }
+
+      const activeBindings = activeChatId
+        ? bindChat(activeChatId)
+        : {
+            chatId: "",
+            messages,
+            setMessages: (() => {}) as ChatMessageUpdater,
+            streamingDraft: null,
+            setStreamingDraft: (() => {}) as StreamingDraftUpdater,
+            assistantBusy: false,
+            setAssistantBusy: () => {},
+            isMine: true,
+          }
+
+      return {
+        messages: activeBindings.messages,
+        setMessages: activeBindings.setMessages,
+        streamingDraft: activeBindings.streamingDraft,
+        setStreamingDraft: activeBindings.setStreamingDraft,
+        assistantBusy: activeBindings.assistantBusy,
+        setAssistantBusy: activeBindings.setAssistantBusy,
+        anyAssistantBusy: Object.values(assistantBusyByChat).some(Boolean),
         chats,
+        openChatIds,
         activeChatId,
         activeChatIsMine,
         chatsLoading: loadingByProject[projectId] ?? !loadStarted.current.has(projectId),
         selectChat: (chatId) => void selectChat(projectId, chatId),
         newChat: () => void newChat(projectId, initialMessage),
+        closeOpenChat: (chatId) => closeOpenChat(projectId, chatId, initialMessage),
         deleteChat: (chatId) => deleteChat(projectId, chatId, initialMessage),
+        getChatBindings: bindChat,
       }
     },
-    [activeChatByProject, assistantBusyByChat, chatsByProject, deleteChat, loadingByProject, messagesByChat, newChat, persistMessages, selectChat, streamingDraftByChat],
+    [
+      activeChatByProject,
+      assistantBusyByChat,
+      chatsByProject,
+      closeOpenChat,
+      deleteChat,
+      loadingByProject,
+      messagesByChat,
+      newChat,
+      openChatIdsByProject,
+      persistMessages,
+      resolveChatId,
+      selectChat,
+      streamingDraftByChat,
+    ],
   )
 
   useEffect(() => {

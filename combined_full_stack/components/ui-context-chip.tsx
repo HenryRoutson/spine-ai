@@ -36,13 +36,14 @@ type UiContextChipProps = {
 
 export function UiContextChip({ pin, onRemove, className }: UiContextChipProps) {
   const Icon = KIND_ICON[pin.kind] ?? Crosshair
+  // AI : chat_quote stays neutral — no accent tint
   const tone =
     pin.kind === "invalid_issue" || pin.kind === "run_error"
       ? "border-destructive/40 bg-destructive/10"
       : pin.kind === "project_doc"
         ? "border-amber-400/40 bg-amber-500/10"
         : pin.kind === "chat_quote"
-          ? "border-violet-400/40 bg-violet-500/10"
+          ? "border-border bg-muted/40"
           : "border-sky-400/50 bg-sky-500/15"
 
   return (

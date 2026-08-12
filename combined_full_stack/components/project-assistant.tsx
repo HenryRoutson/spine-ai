@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
-import { Check, AlertTriangle, Copy, Crosshair, FileText, BookOpen, Braces, X } from "lucide-react"
+import { useMemo } from "react"
+import { Check, AlertTriangle, FileText, BookOpen, Braces, X } from "lucide-react"
 import { MultiLangReadonlyCodeViewer, type MultiLangCodeSource } from "@/components/code-viewer"
 import { allModelsToBaml, allModelsToDts, allModelsToGo, allModelsToPydantic, allModelsToRust } from "@/lib/pydantic"
 import { API_ROUTES } from "@/lib/api-routes"
@@ -18,9 +18,6 @@ import { buildAssistantMentionOptions } from "@/lib/assistant-mentions"
 import { docLabelDisplay, docsForProject } from "@/lib/project-docs"
 import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
 import { invalidStepMessage } from "@/lib/validity"
-import { formatProjectAssistantConversation } from "@/lib/format-project-assistant-copy"
-import { copyTextToClipboard } from "@/lib/clipboard"
-import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { chatOwnerLabel, useProjectAssistant, useProjectAssistantSession } from "@/lib/project-assistant-context"
 import {
   PROJECT_ASSISTANT_INITIAL_MESSAGE,
@@ -32,9 +29,11 @@ import { cn } from "@/lib/utils"
 
 type ProjectAssistantProps = {
   className?: string
+  /** AI : open agent tab id — keeps this instance mounted while other agents run. */
+  chatId: string
 }
 
-export function ProjectAssistant({ className }: ProjectAssistantProps) {
+export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
   const {
     project,
     modules,
@@ -49,24 +48,32 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
     refresh,
     refreshBilling,
   } = useStore()
-  const { messages, setMessages, activeChatId, setStreamingDraft, streamingDraft, setAssistantBusy, activeChatIsMine, chats } =
-    useProjectAssistantSession(project.id, PROJECT_ASSISTANT_INITIAL_MESSAGE)
+  const { getChatBindings, chats } = useProjectAssistantSession(
+    project.id,
+    PROJECT_ASSISTANT_INITIAL_MESSAGE,
+  )
+  const {
+    chatId: resolvedChatId,
+    messages,
+    setMessages,
+    streamingDraft,
+    setStreamingDraft,
+    setAssistantBusy,
+    assistantBusy,
+    isMine,
+  } = getChatBindings(chatId)
   const {
     uiContextPins,
     pinUiContext,
     unpinUiContext,
     clearUiContextPins,
-    selectMode,
     setSelectMode,
     setOpen,
-    toggleSelectMode,
   } = useProjectAssistant()
   const { activeWindow } = useAppShell()
   // AI : Vibe vs Build — prompt awareness only; agent write power stays identical.
   const isVibe = activeWindow === AppWindowId.Vibe
   const humanSurface = isVibe ? "vibe" : "build"
-  const [conversationCopied, setConversationCopied] = useState(false)
-  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const projectDocs = useMemo(() => docsForProject(docs, project), [docs, project])
 
@@ -102,20 +109,9 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
     [modules, models, typeAliases, projectDocs, mentionIssues],
   )
 
-  const conversationCopyText = useMemo(
-    () => formatProjectAssistantConversation(messages, streamingDraft),
-    [messages, streamingDraft],
-  )
-
-  const activeChat = chats.find((c) => c.id === activeChatId)
-  const teammateLabel = activeChat && !activeChatIsMine ? chatOwnerLabel(activeChat) : null
-
-  async function copyConversation() {
-    await copyTextToClipboard(conversationCopyText)
-    setConversationCopied(true)
-    if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
-    copyTimerRef.current = setTimeout(() => setConversationCopied(false), COPY_FEEDBACK_MS)
-  }
+  const chatSummary =
+    chats.find((c) => c.id === resolvedChatId) ?? chats.find((c) => c.id === chatId)
+  const teammateLabel = chatSummary && !isMine ? chatOwnerLabel(chatSummary) : null
 
   async function applyProposal(proposal: ProjectProposal) {
     if (proposal.changed.name && proposal.projectName) {
@@ -141,7 +137,7 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
   return (
     <div className={cn("flex h-full flex-col", className)}>
       <AssistantChat<ProjectProposal>
-        key={activeChatId ?? project.id}
+        key={chatId}
         title="Agent"
         subtitle={
           teammateLabel
@@ -151,26 +147,9 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
         showAvatars={!isVibe}
         showHeaderMeta={!isVibe}
         showDebug
-        readOnly={!activeChatIsMine}
+        readOnly={!isMine}
         readOnlyHint={
           teammateLabel ? `View only — ${teammateLabel}'s chat. Start a new chat to reply.` : undefined
-        }
-        headerActions={
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 font-mono text-[9px]"
-            onClick={() => void copyConversation()}
-            title="Copy full conversation (human + agent + debug)"
-          >
-            {conversationCopied ? (
-              <Check className="h-3 w-3" />
-            ) : (
-              <Copy className="h-3 w-3" />
-            )}
-            {conversationCopied ? "Copied" : "Copy"}
-          </Button>
         }
         initialMessage={PROJECT_ASSISTANT_INITIAL_MESSAGE}
         starters={PROJECT_ASSISTANT_STARTERS}
@@ -185,6 +164,8 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
         messages={messages}
         onMessagesChange={setMessages}
         onStreamingDraftChange={setStreamingDraft}
+        resumeBusy={assistantBusy}
+        resumeStreamingDraft={streamingDraft}
         onLoadingChange={setAssistantBusy}
         uiContextPins={uiContextPins}
         canSendWithoutText={uiContextPins.length > 0}
@@ -201,43 +182,14 @@ export function ProjectAssistant({ className }: ProjectAssistantProps) {
         }}
         onPinUiContext={pinUiContext}
         composerAttachments={
-          <div className="space-y-2 border-b border-border bg-secondary/20 px-3 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <p className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                Context{uiContextPins.length > 0 ? ` · ${uiContextPins.length}` : ""}
-              </p>
-              {/* AI : Select UI stays on Build / dock — Vibe uses @ mentions / Quote. */}
-              {!isVibe ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={selectMode ? "secondary" : "outline"}
-                  className="h-7 gap-1 px-2 font-mono text-[10px]"
-                  onClick={toggleSelectMode}
-                  title={selectMode ? "Exit select mode (Esc)" : "Select UI for agent"}
-                  aria-label={selectMode ? "Exit select mode" : "Select UI for agent"}
-                >
-                  <Crosshair className="h-3.5 w-3.5" />
-                  {selectMode ? "Selecting…" : "Select UI"}
-                </Button>
-              ) : null}
+          // AI : chips only — empty Context tip / Select UI live on dock, not in the composer.
+          uiContextPins.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5 border-b border-border bg-secondary/20 px-3 py-2">
+              {uiContextPins.map((pin) => (
+                <UiContextChip key={pin.id} pin={pin} onRemove={unpinUiContext} />
+              ))}
             </div>
-            {uiContextPins.length === 0 ? (
-              <p className="font-mono text-[10px] text-muted-foreground">
-                {selectMode
-                  ? "App clicks are paused. Hover highlights · click to pin · Esc exits."
-                  : isVibe
-                    ? "Highlight chat to Quote, or type @ to mention steps, models, or files."
-                    : "Highlight chat to Quote, type @ to mention, or Select UI — no copy-paste."}
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {uiContextPins.map((pin) => (
-                  <UiContextChip key={pin.id} pin={pin} onRemove={unpinUiContext} />
-                ))}
-              </div>
-            )}
-          </div>
+          ) : undefined
         }
         onApprove={async (msg) => {
           if (!msg.proposal) return

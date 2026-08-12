@@ -38,7 +38,6 @@ import {
   readQuickProjectDelete,
 } from "@/lib/project-delete-settings"
 import { useBrowserPrefEvent } from "@/lib/use-browser-pref-event"
-import { useHideDeveloperTools } from "@/lib/developer-tools-settings"
 import type { Project, ProjectId } from "@/lib/types"
 
 export function ProjectPickerPage() {
@@ -63,9 +62,8 @@ export function ProjectPickerPage() {
   const { activeWindow, setActiveWindow } = useAppShell()
   const { isDeleting, isExiting, runDelete, mergeWithGhosts } = useAnimatedRemoval<Project>()
   const quickDelete = useBrowserPrefEvent(PROJECT_DELETE_SETTINGS_CHANGED_EVENT, readQuickProjectDelete)
-  const hideDeveloperTools = useHideDeveloperTools()
-  // AI : picker sits in build mode — highlight Vibe when Build is hidden.
-  const pickerPrimarySection = hideDeveloperTools ? AppPrimarySection.Vibe : AppPrimarySection.Build
+  // AI : picker is L0 Build — Vibe is chosen after open via Build surface (or hide-dev-tools default).
+  const pickerPrimarySection = AppPrimarySection.Build
   const displayProjects = mergeWithGhosts(projects)
 
   useEffect(() => {
@@ -141,22 +139,11 @@ export function ProjectPickerPage() {
         openingSection={openingSection}
         onPrimarySectionChange={(section) => {
           wrapPrimarySectionChange(section, pickerPrimarySection, beginOpening, () => {
-            if (section === AppPrimarySection.Build) {
-              if (hideDeveloperTools) {
-                setActiveWindow(AppWindowId.Vibe)
-                navigateToBuildMode()
-                markSectionReady(AppPrimarySection.Vibe)
-                return
-              }
+            if (section === AppPrimarySection.Build || section === AppPrimarySection.Vibe) {
+              // AI : Vibe is Build sub-surface — picker stays until a project is opened.
+              if (section === AppPrimarySection.Vibe) setActiveWindow(AppWindowId.Vibe)
               navigateToBuildMode()
               markSectionReady(AppPrimarySection.Build)
-              return
-            }
-            if (section === AppPrimarySection.Vibe) {
-              // AI : TODO (vibe) — open most recent project into Vibe when leaving picker.
-              setActiveWindow(AppWindowId.Vibe)
-              navigateToBuildMode()
-              markSectionReady(AppPrimarySection.Vibe)
               return
             }
             if (section === AppPrimarySection.Run) {

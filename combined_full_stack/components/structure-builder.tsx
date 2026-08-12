@@ -133,7 +133,8 @@ export function StructureBuilder() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    // AI : min-h-0 so flex parent can clip — without it content height blows past the viewport.
+    <div className="flex h-full min-h-0 flex-col">
       {teamReadOnly && (
         <div className="border-b border-border bg-muted/40 px-4 py-2.5">
           <p className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
@@ -143,16 +144,16 @@ export function StructureBuilder() {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         <ResizableSplit
-            className="min-h-0 flex-1"
+            className="h-full min-h-0 flex-1"
             leadingWidth={sidebarWidth}
             onLeadingWidthChange={setSidebarWidth}
             onLeadingWidthCommit={writeStructureSidebarWidth}
             minLeading={STRUCTURE_SIDEBAR_MIN}
             maxLeading={STRUCTURE_SIDEBAR_MAX}
             leading={
-              <EntityRail className="min-h-0 w-full flex-1">
+              <EntityRail className="h-full min-h-0 w-full flex-1">
                 <EntityRailSection
                   title="Structs in project"
                   action={
@@ -166,7 +167,7 @@ export function StructureBuilder() {
                       <Plus className="h-3 w-3" />
                     </Button>
                   }
-                  className="max-h-[45%] shrink-0"
+                  className="max-h-[45%] min-h-0"
                 >
                   {models.length === 0 && (
                     <p className="px-1 py-2 text-center font-mono text-[10px] text-muted-foreground">
@@ -270,7 +271,7 @@ export function StructureBuilder() {
               </EntityRail>
             }
             trailing={
-              <>
+              <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                 {view === "code" ? (
                   <StructureCodeView models={models} typeAliases={typeAliases} />
                 ) : target.kind === "type" && selectedType ? (
@@ -338,7 +339,7 @@ export function StructureBuilder() {
                     onSelectId={(id) => setTarget({ kind: "struct", id })}
                   />
                 )}
-              </>
+              </div>
             }
           />
       </div>

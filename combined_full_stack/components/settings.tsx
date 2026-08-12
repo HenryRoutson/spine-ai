@@ -622,7 +622,7 @@ export function Settings() {
             <div className="border-b border-border px-4 py-3">
               <h3 className="text-sm font-semibold">Developer tools</h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Optional visual editors — the Vibe agent already has full project control.
+                Optional visual editors under Build — Vibe already has full project control.
               </p>
             </div>
             <label className="flex cursor-pointer items-start gap-3 px-4 py-3">
@@ -634,8 +634,9 @@ export function Settings() {
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium">Hide developer tools</span>
                 <span className="mt-0.5 block text-xs text-muted-foreground">
-                  When on, the Build tab is hidden so you build with Vibe. The agent can still create and edit
-                  structures, pipelines, testing docs, and project docs. Turn off only for the visual editors.
+                  When on, Build stays on Vibe and the Build↔Vibe surface toggle is hidden. The agent can still
+                  create and edit structures, pipelines, testing docs, and project docs. Turn off to switch into
+                  the visual editors.
                 </span>
               </span>
             </label>
