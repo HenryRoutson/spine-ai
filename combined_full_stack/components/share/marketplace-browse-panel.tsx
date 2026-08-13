@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useContext, useEffect, useState } from "react"
 import { Loader2, Search, Store, Trash2 } from "lucide-react"
 import {
   MarketplaceDetailSkeleton,
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { API_ROUTES } from "@/lib/api-routes"
 import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { openProjectInWorkspace } from "@/lib/active-project-session"
+import { ProjectPickerContext } from "@/lib/store"
 import { readMarketplaceSnapshot } from "@/lib/marketplace-snapshot-cache"
 import { seedProjectInStateSnapshot } from "@/lib/state-snapshot-cache"
 import { fetchMarketplaceListings } from "@/lib/warm-run-data"
@@ -40,6 +41,7 @@ export function MarketplaceBrowsePanel({
   const [detailLoading, setDetailLoading] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const picker = useContext(ProjectPickerContext)
 
   const load = useCallback(async (q: string) => {
     const cached = !q.trim() ? readMarketplaceSnapshot() : null
@@ -94,10 +96,13 @@ export function MarketplaceBrowsePanel({
         API_ROUTES.marketplaceClone(id),
         { method: "POST", headers: JSON_HEADERS },
       )
-      seedProjectInStateSnapshot(body.project)
-      openProjectInWorkspace(body.project.id as ProjectId)
+      if (picker) picker.ingestCreatedProject(body.project)
+      else seedProjectInStateSnapshot(body.project)
+      // AI : picker embed stays on the gallery; Share/Run marketplace still opens the copy.
+      if (!embedded) openProjectInWorkspace(body.project.id as ProjectId)
     } catch (e) {
       setActionError((e as Error).message)
+    } finally {
       setBusyId(null)
     }
   }

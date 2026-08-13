@@ -241,10 +241,7 @@ export function Inference() {
     setDeletingSetupId(docId)
     try {
       await removeDoc(docId, project.id)
-      if (selectedId === docId) {
-        setSelectedId(null)
-        setLinkedTest(null)
-      }
+      if (selectedId === docId) setSelectedId(null)
       setContents((prev) => {
         const { [docId]: _removed, ...rest } = prev
         return rest
@@ -369,7 +366,7 @@ export function Inference() {
               New setup
             </Button>
             {run.phase !== "idle" ? (
-              <Button variant="outline" size="sm" className="bg-transparent" onClick={() => { setLinkedTest(null); run.reset() }} disabled={run.phase === "running"}>
+              <Button variant="outline" size="sm" className="bg-transparent" onClick={() => run.reset()} disabled={run.phase === "running"}>
                 <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Reset
               </Button>
             ) : null}

@@ -19,6 +19,7 @@ import {
 import { AppMode, navigateToBuildMode, navigateToRunMode } from "@/lib/app-mode-nav"
 import { CONSUMER_NAV_ITEMS } from "@/lib/app-nav-config"
 import { AppShellKind, useAppShellKind } from "@/lib/app-shell-kind"
+import { readActiveProjectSession } from "@/lib/active-project-session"
 import { ProjectPickerContext, useConsumerStore, useOptionalConsumerStore, useOptionalStore, useStore } from "@/lib/store"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { useAppShell } from "@/lib/app-shell"
@@ -251,7 +252,7 @@ function WarmShellSlot({
   skeleton: ReactNode
   children: ReactNode
 }) {
-  if (warm && ready) {
+  if (ready && (warm || show)) {
     return (
       <div className={cn("h-dvh", !show && "hidden")} aria-hidden={!show}>
         {children}
@@ -305,6 +306,8 @@ function AppShellLayoutInner({ variant = "default" }: { variant?: "default" | "e
   useEffect(() => {
     if (shellKind !== AppShellKind.Builder) return
     if (builder) return
+    // AI : create/open writes session before the store context exists — wait, don't bounce to picker.
+    if (readActiveProjectSession()) return
     if (!consumer && !picker) return
     navigateToProjectPicker()
   }, [shellKind, builder, consumer, picker, navigateToProjectPicker])

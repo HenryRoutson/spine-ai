@@ -84,7 +84,7 @@ export function ProjectPickerPage() {
   async function handleCreateBlank() {
     setBusy("blank")
     try {
-      await addProject()
+      await addProject({ open: false })
     } finally {
       setBusy(null)
     }
@@ -93,7 +93,7 @@ export function ProjectPickerPage() {
   async function handleCloneTemplate(templateId: ProjectId) {
     setBusy(templateId)
     try {
-      await cloneFromTemplate(templateId)
+      await cloneFromTemplate(templateId, { open: false })
     } finally {
       setBusy(null)
     }
@@ -102,7 +102,7 @@ export function ProjectPickerPage() {
   async function handleCloneProject(id: string) {
     setBusy(`clone-${id}`)
     try {
-      await cloneProject(id)
+      await cloneProject(id, { open: false })
     } finally {
       setBusy(null)
     }
@@ -348,7 +348,7 @@ export function ProjectPickerPage() {
             <ExampleTemplateGrid
               busyId={busy}
               onClone={(id) => void handleCloneTemplate(id)}
-              cloneLabel="Clone & open"
+              cloneLabel="Clone"
             />
           </section>
         </div>

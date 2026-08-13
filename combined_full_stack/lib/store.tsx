@@ -62,7 +62,6 @@ import {
 } from "@/lib/active-project-session"
 import { navigateToBuildWorkspace, navigateToProjectPicker } from "@/lib/app-mode-nav"
 import { registerStoreNavigationBridge } from "@/lib/store-navigation-bridge"
-import { mostRecentlyOpenedProject } from "@/lib/project-active"
 import { dedupeDocsNewestByName } from "@/lib/project-docs"
 import { readStateSnapshot, seedProjectInStateSnapshot, writeStateSnapshot } from "@/lib/state-snapshot-cache"
 import { queueBackgroundProjectPrefetches } from "@/lib/background-project-prefetch"
@@ -85,8 +84,9 @@ import { warmSettingsAccount, warmSettingsTeams } from "@/lib/warm-settings-data
 import { useTeamRealtime } from "@/lib/use-team-realtime"
 import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
 import { setDemoMode } from "@/lib/demo-mode"
-import { NoProjectsPage } from "@/components/no-projects-page"
 import { ProjectPickerSkeleton, StoreShellSkeleton } from "@/components/store-shell-skeletons"
+
+export type ProjectCreateOpts = { open?: boolean }
 
 export enum StoreMode {
   Workspace = "workspace",
@@ -253,9 +253,9 @@ interface StoreState {
   projects: Project[]
   activeProjectId: string
   setActiveProjectId: (id: string) => void
-  addProject: () => Promise<Project>
-  cloneFromTemplate: (templateId: string) => Promise<Project>
-  cloneProject: (projectId: string) => Promise<Project>
+  addProject: (opts?: ProjectCreateOpts) => Promise<Project>
+  cloneFromTemplate: (templateId: string, opts?: ProjectCreateOpts) => Promise<Project>
+  cloneProject: (projectId: string, opts?: ProjectCreateOpts) => Promise<Project>
   resyncExamples: () => Promise<number>
   renameProject: (id: string, name: string) => void
   deleteProject: (id: string) => Promise<void>
@@ -325,9 +325,10 @@ interface StoreState {
 
 export interface ProjectPickerStoreState {
   projects: Project[]
-  addProject: () => Promise<Project>
-  cloneFromTemplate: (templateId: string) => Promise<Project>
-  cloneProject: (projectId: string) => Promise<Project>
+  addProject: (opts?: ProjectCreateOpts) => Promise<Project>
+  cloneFromTemplate: (templateId: string, opts?: ProjectCreateOpts) => Promise<Project>
+  cloneProject: (projectId: string, opts?: ProjectCreateOpts) => Promise<Project>
+  ingestCreatedProject: (project: Project) => void
   resyncExamples: () => Promise<number>
   renameProject: (id: string, name: string) => void
   deleteProject: (id: string) => Promise<void>
@@ -351,8 +352,8 @@ export interface ConsumerStoreState {
   setModel: (m: string) => void
   modelOptions: ModelOptionPublic[]
   openProject: (id: ProjectId) => void
-  addProject: () => Promise<Project>
-  cloneFromTemplate: (templateId: string) => Promise<Project>
+  addProject: (opts?: ProjectCreateOpts) => Promise<Project>
+  cloneFromTemplate: (templateId: string, opts?: ProjectCreateOpts) => Promise<Project>
   saveError: string | null
   clearSaveError: () => void
   stateSyncing: boolean
@@ -439,6 +440,28 @@ export function StoreProvider({
   const stateLoadGenRef = useRef(0)
   // AI : filter stale refetches that still list projects the user already deleted this session.
   const deletedProjectIdsRef = useRef(new Set<string>())
+  // AI : full payloads — id-only sets cannot restore a create if applyState runs before setState flushes.
+  const createdProjectsRef = useRef(new Map<string, Project>())
+
+  // AI : prod GET /api/state lags POST/DELETE (warm-instance + realtime). Never let that snapshot drop local creates or resurrect tombstones.
+  const overlayOptimisticProjects = useCallback((projects: Project[]): Project[] => {
+    const tombstones = deletedProjectIdsRef.current
+    const created = createdProjectsRef.current
+    const visible = projects.filter((p) => !tombstones.has(p.id))
+    const ids = new Set(visible.map((p) => p.id))
+    const pending: Project[] = []
+    for (const p of created.values()) {
+      if (!ids.has(p.id) && !tombstones.has(p.id)) pending.push(p)
+    }
+    return [...pending, ...visible]
+  }, [])
+
+  const confirmCreatedProjects = useCallback((serverProjects: Project[]): void => {
+    const created = createdProjectsRef.current
+    for (const id of [...created.keys()]) {
+      if (serverProjects.some((p) => p.id === id)) created.delete(id)
+    }
+  }, [])
 
   const clearSaveError = useCallback(() => setSaveError(null), [])
 
@@ -569,7 +592,10 @@ export function StoreProvider({
       if (res.status === 404) {
         const body = await readApiErrorBody(res)
         logApiFailure(url, res, body, "GET")
-        evictStaleProject(projectId, setState, setActiveProjectId)
+        // AI : a just-created project can 404 on another prod instance — don't evict it.
+        if (!createdProjectsRef.current.has(projectId)) {
+          evictStaleProject(projectId, setState, setActiveProjectId)
+        }
         return [] as PipelineRun[]
       }
       if (!res.ok) {
@@ -615,7 +641,7 @@ export function StoreProvider({
         })
         const data = await fetchState(projectId, onChunk, signal)
         writeAccountStateCache({
-          projects: data.projects,
+          projects: overlayOptimisticProjects(data.projects),
           docs: data.docs,
           modelOptions: data.modelOptions,
         })
@@ -640,14 +666,14 @@ export function StoreProvider({
 
       const data = await fetchState(projectId, onChunk, signal)
       writeAccountStateCache({
-        projects: data.projects,
+        projects: overlayOptimisticProjects(data.projects),
         docs: data.docs,
         modelOptions: data.modelOptions,
       })
       if (projectId) writeProjectRunsCache(projectId, data.runs)
       return data
     },
-    [fetchState, fetchProjectRuns],
+    [fetchState, fetchProjectRuns, overlayOptimisticProjects],
   )
 
   const prefetchProject = useCallback(
@@ -670,11 +696,8 @@ export function StoreProvider({
   const applyState = useCallback(
     (data: ServerState, projectId: string) => {
       setLoadError(null)
-      const tombstones = deletedProjectIdsRef.current
-      for (const id of [...tombstones]) {
-        if (!data.projects.some((p) => p.id === id)) tombstones.delete(id)
-      }
-      const visibleProjects = data.projects.filter((p) => !tombstones.has(p.id))
+      confirmCreatedProjects(data.projects)
+      const visibleProjects = overlayOptimisticProjects(data.projects)
       setState((prev) => {
         // AI : keep in-flight lastOpenedAt when refetch races the open-stamp PUT
         const mergedProjects = visibleProjects.map((p) => {
@@ -690,16 +713,27 @@ export function StoreProvider({
           allRuns: data.allRuns.length ? data.allRuns : (prev?.allRuns ?? []),
         }
       })
+      writeAccountStateCache({
+        projects: visibleProjects,
+        docs: dedupeDocsNewestByName(data.docs),
+        modelOptions: data.modelOptions,
+      })
       // AI : workspace — only auto-open a project when sessionStorage says so (returning builders).
       if (mode === StoreMode.Workspace) {
-        const resolved =
-          projectId && visibleProjects.some((p) => p.id === projectId) ? projectId : ""
+        const known = !!projectId && visibleProjects.some((p) => p.id === projectId)
+        const resolved = known ? projectId : ""
         const hadUnknownProject = !!projectId && !resolved
-        setActiveProjectId(resolved)
-        if (resolved) writeActiveProjectSession(resolved as ProjectId)
-        else clearActiveProjectSession()
+        if (known) {
+          setActiveProjectId(resolved)
+          writeActiveProjectSession(resolved as ProjectId)
+        } else if (!hadUnknownProject) {
+          setActiveProjectId("")
+          clearActiveProjectSession()
+        }
         // AI : stale session pointed at a deleted/missing project — builder shell would skeleton forever.
         if (hadUnknownProject) {
+          setActiveProjectId("")
+          clearActiveProjectSession()
           clearProjectStateCache(projectId)
           pruneStaleProjectFromAccountCache(projectId)
           if (pendingSaveRef.current?.id === projectId) {
@@ -727,7 +761,7 @@ export function StoreProvider({
         if (resolved) setActiveProjectId(resolved)
       }
     },
-    [mode],
+    [confirmCreatedProjects, mode, overlayOptimisticProjects],
   )
 
   const stampProjectOpened = useCallback(
@@ -895,7 +929,9 @@ export function StoreProvider({
       (chunk) => {
         if (!alive || loadGen !== stateLoadGenRef.current) return
         setState((prev) => ({
-          projects: chunk.projects ?? prev?.projects ?? [],
+          projects: chunk.projects
+            ? overlayOptimisticProjects(chunk.projects)
+            : (prev?.projects ?? []),
           docs: chunk.docs ? dedupeDocsNewestByName(chunk.docs) : (prev?.docs ?? []),
           runs: chunk.runs ?? prev?.runs ?? [],
           allRuns: prev?.allRuns ?? [],
@@ -996,6 +1032,7 @@ export function StoreProvider({
   useEffect(() => {
     if (mode !== StoreMode.Workspace || !state || projectLoading || stateSyncing) return
     if (!activeProjectId || project) return
+    if (createdProjectsRef.current.has(activeProjectId)) return
     setActiveProjectId("")
     clearActiveProjectSession()
     navigateToProjectPicker()
@@ -1049,36 +1086,34 @@ export function StoreProvider({
     [clearSaveError],
   )
 
-  const postNewProject = useCallback((body: { templateId?: string; cloneFrom?: string }) => {
+  const ingestCreatedProject = useCallback((fresh: Project) => {
+    const stamped = { ...fresh, lastOpenedAt: Date.now() }
+    createdProjectsRef.current.set(fresh.id, stamped)
+    deletedProjectIdsRef.current.delete(fresh.id)
+    seedProjectInStateSnapshot(stamped)
+    upsertProjectInAccountCache(stamped)
+    writeProjectRunsCache(fresh.id, [])
+    setState((prev) => {
+      if (!prev) return prev
+      return { ...prev, projects: overlayOptimisticProjects(prev.projects) }
+    })
+    return stamped
+  }, [overlayOptimisticProjects])
+
+  const postNewProject = useCallback((
+    body: { templateId?: string; cloneFrom?: string },
+    opts?: ProjectCreateOpts,
+  ) => {
+    const open = opts?.open !== false
     return apiJson<Project>(API_ROUTES.projects, {
       method: "POST",
       headers: JSON_HEADERS,
       body: JSON.stringify(body),
     })
       .then(async (fresh) => {
-        const stamped = { ...fresh, lastOpenedAt: Date.now() }
-        // AI : keep account cache + session snapshot in sync before project-switch effects run.
-        seedProjectInStateSnapshot(stamped)
-        upsertProjectInAccountCache(stamped)
-        if (mode === StoreMode.Picker) {
-          setState((prev) => {
-            if (!prev) return prev
-            if (prev.projects.some((p) => p.id === fresh.id)) return prev
-            return { ...prev, projects: [stamped, ...prev.projects] }
-          })
-          selectActiveProject(fresh.id, { skipPersist: true })
-          navigateToBuildWorkspace(fresh.id as ProjectId)
-          return fresh
-        }
-        // AI : insert before select so activeProjectId never points at a missing row (consumer-shell flash).
-        setState((prev) => {
-          if (!prev) return prev
-          if (prev.projects.some((p) => p.id === fresh.id)) return prev
-          return { ...prev, projects: [stamped, ...prev.projects] }
-        })
-        setProjectLoading(true)
+        ingestCreatedProject(fresh)
+        if (!open) return fresh
         selectActiveProject(fresh.id, { skipPersist: true })
-        // AI : workspace create (e.g. NoProjectsPage) must enter builder shell — session alone leaves consumer/run UI.
         navigateToBuildWorkspace(fresh.id as ProjectId)
         // AI : clone may ingest/rename bundled seed docs server-side — reload docs + backfilled seedDocNames.
         await refresh(fresh.id)
@@ -1088,17 +1123,20 @@ export function StoreProvider({
         setSaveError(err instanceof Error ? err.message : "Failed to create project")
         throw err
       })
-  }, [mode, refresh, selectActiveProject])
+  }, [ingestCreatedProject, refresh, selectActiveProject])
 
-  const addProject = useCallback(() => postNewProject({}), [postNewProject])
+  const addProject = useCallback(
+    (opts?: ProjectCreateOpts) => postNewProject({}, opts),
+    [postNewProject],
+  )
 
   const cloneFromTemplate = useCallback(
-    (templateId: string) => postNewProject({ templateId }),
+    (templateId: string, opts?: ProjectCreateOpts) => postNewProject({ templateId }, opts),
     [postNewProject],
   )
 
   const cloneProjectById = useCallback(
-    (cloneFrom: string) => postNewProject({ cloneFrom }),
+    (cloneFrom: string, opts?: ProjectCreateOpts) => postNewProject({ cloneFrom }, opts),
     [postNewProject],
   )
 
@@ -1131,65 +1169,51 @@ export function StoreProvider({
   const deleteProject = useCallback(
     (id: string): Promise<void> => {
       // AI : drop stale prefetches and debounced saves so a project switch cannot resurrect this row.
+      const pendingCreated = createdProjectsRef.current.get(id)
       deletedProjectIdsRef.current.add(id)
+      createdProjectsRef.current.delete(id)
+      pruneStaleProjectFromAccountCache(id)
       clearProjectStateCache(id)
       prefetchCache.current.delete(id)
-      stateLoadGenRef.current += 1
       if (pendingSaveRef.current?.id === id) {
         if (saveTimer.current) clearTimeout(saveTimer.current)
         saveTimer.current = null
         pendingSaveRef.current = null
       }
 
-      const applyLocalDelete = () => {
-        let nextActiveId: string | undefined
-        let emptied = false
-        setState((prev) => {
-          if (!prev) return prev
-          const nextProjects = prev.projects.filter((p) => p.id !== id)
-          emptied = nextProjects.length === 0
-          if (activeProjectId === id) nextActiveId = mostRecentlyOpenedProject(nextProjects)?.id
-          return { ...prev, projects: nextProjects }
-        })
-        stateLoadGenRef.current += 1
-        if (nextActiveId) selectActiveProject(nextActiveId)
-        else if (emptied) {
-          setActiveProjectId("")
-          clearActiveProjectSession()
-        }
+      let removed: Project | undefined
+      setState((prev) => {
+        if (!prev) return prev
+        removed = prev.projects.find((p) => p.id === id)
+        return { ...prev, projects: overlayOptimisticProjects(prev.projects.filter((p) => p.id !== id)) }
+      })
+      // AI : only leave the builder if this delete removed the project on screen — not a later in-flight DELETE.
+      if (activeProjectId === id) {
+        setActiveProjectId("")
+        clearActiveProjectSession()
+        navigateToProjectPicker()
       }
 
-      if (mode === StoreMode.Demo) {
-        applyLocalDelete()
-        return Promise.resolve()
-      }
+      if (mode === StoreMode.Demo) return Promise.resolve()
 
-      return apiJson<{ ok: true }>(API_ROUTES.project(id), { method: "DELETE" })
-        .then(() => {
-          // AI : deleting the last project is allowed — zero projects renders NoProjectsPage below.
-          let nextActiveId: string | undefined
-          let emptied = false
+      // AI : resolve immediately so the picker can clone again — prod DELETE latency used to apply the
+      // AI : removal later and wipe clones that landed in between.
+      void apiJson<{ ok: true }>(API_ROUTES.project(id), { method: "DELETE" }).catch((err) => {
+        deletedProjectIdsRef.current.delete(id)
+        if (pendingCreated) createdProjectsRef.current.set(id, pendingCreated)
+        const restored = pendingCreated ?? removed
+        if (restored) {
           setState((prev) => {
             if (!prev) return prev
-            const nextProjects = prev.projects.filter((p) => p.id !== id)
-            emptied = nextProjects.length === 0
-            if (activeProjectId === id) nextActiveId = mostRecentlyOpenedProject(nextProjects)?.id
-            return { ...prev, projects: nextProjects }
+            if (prev.projects.some((p) => p.id === id)) return prev
+            return { ...prev, projects: overlayOptimisticProjects([restored, ...prev.projects]) }
           })
-          stateLoadGenRef.current += 1
-          if (nextActiveId) selectActiveProject(nextActiveId)
-          else if (emptied) {
-            setActiveProjectId("")
-            clearActiveProjectSession()
-          }
-        })
-        .catch((err) => {
-          deletedProjectIdsRef.current.delete(id)
-          setSaveError(err instanceof Error ? err.message : "Failed to delete project")
-          throw err
-        })
+        }
+        setSaveError(err instanceof Error ? err.message : "Failed to delete project")
+      })
+      return Promise.resolve()
     },
-    [activeProjectId, mode, selectActiveProject],
+    [activeProjectId, mode, overlayOptimisticProjects],
   )
 
   const addDoc = useCallback(async (file: File, label: DocLabel, projectId?: string) => {
@@ -1672,6 +1696,7 @@ export function StoreProvider({
       addProject,
       cloneFromTemplate,
       cloneProject: cloneProjectById,
+      ingestCreatedProject,
       resyncExamples,
       renameProject,
       deleteProject,
@@ -1687,6 +1712,7 @@ export function StoreProvider({
     addProject,
     cloneFromTemplate,
     cloneProjectById,
+    ingestCreatedProject,
     resyncExamples,
     renameProject,
     deleteProject,
@@ -1748,25 +1774,7 @@ export function StoreProvider({
     )
   }
 
-  // AI : opening a project not yet in state — keep loading, don't flash the consumer shell.
-  if (mode === StoreMode.Workspace && !project && activeProjectId && (projectLoading || stateSyncing)) {
-    return (
-      <>
-        {saveErrorBanner}
-        <StoreShellSkeleton />
-      </>
-    )
-  }
-
-  // AI : zero projects — picker UI only; AppShellLayout tabs call useStore() and must not mount here.
-  if (mode === StoreMode.Workspace && migratedProjects.length === 0 && !projectLoading) {
-    return (
-      <>
-        {saveErrorBanner}
-        <NoProjectsPage onCreateBlank={addProject} onCloneTemplate={cloneFromTemplate} />
-      </>
-    )
-  }
+  // AI : keep AppShellLayout mounted while a project loads — replacing it with a skeleton unmounts the picker.
 
   let wrapped = children
   if (pickerValue) {
