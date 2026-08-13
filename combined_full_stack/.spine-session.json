@@ -5,34 +5,125 @@
       "name": "cli pipeline",
       "kind": "blank",
       "createdAt": 1786602626595,
-      "lastOpenedAt": 1786602641118,
-      "models": [],
+      "lastOpenedAt": 1786628281038,
+      "models": [
+        {
+          "id": "927424d20c9c4d0185dd48d9",
+          "name": "Summary",
+          "description": "A concise one-paragraph summary of a document.",
+          "fields": [
+            {
+              "id": "0985cab9d5234a6fbd7c6560",
+              "name": "text",
+              "optional": false,
+              "description": "The summary paragraph",
+              "type": "text"
+            }
+          ]
+        }
+      ],
       "modules": [
         {
-          "id": "mod_blank_in_p_5932d2d53bcc4fd287ad77f0",
+          "id": "8b74a4b1646e4d369a729dc1",
           "kind": "input",
-          "label": "Input",
-          "note": "Pipeline input document",
-          "inputType": "text",
+          "label": "Document Input",
+          "note": "Text document to be summarized",
           "cached": true,
-          "avgMs": 80,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputType": "text",
+          "inputDescription": "Text document to summarize",
+          "outStructureId": "m_builtin_document",
+          "outType": {
+            "kind": "ref",
+            "modelId": "m_builtin_document"
+          }
+        },
+        {
+          "id": "mod_struct_8b74a4b1646e4d369a729dc1",
+          "kind": "llm",
+          "auto": true,
+          "label": "Parse to structure · Document Input",
+          "note": "Auto · Document → Summary · LLM maps uploaded content into your structure.",
+          "inStructureId": "m_builtin_document",
+          "outStructureId": "927424d20c9c4d0185dd48d9",
+          "inType": {
+            "kind": "ref",
+            "modelId": "m_builtin_document"
+          },
+          "outType": {
+            "kind": "ref",
+            "modelId": "927424d20c9c4d0185dd48d9"
+          },
+          "prompt": "Extract structured data from the uploaded document into the Summary schema. Use only content from the document.",
+          "model": "openrouter:deepseek-v4",
+          "costLimitCents": 100,
+          "cached": true,
+          "avgMs": 0,
           "avgCostCents": 0
         },
         {
-          "id": "mod_blank_out_p_5932d2d53bcc4fd287ad77f0",
+          "id": "329c18fe3a444e4fb36081be",
+          "kind": "llm",
+          "label": "Summarize",
+          "note": "Generate one-paragraph summary",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "Document to summarize",
+          "inStructureId": "927424d20c9c4d0185dd48d9",
+          "outStructureId": "927424d20c9c4d0185dd48d9",
+          "outType": {
+            "kind": "ref",
+            "modelId": "927424d20c9c4d0185dd48d9"
+          },
+          "prompt": "Summarize this document in one concise paragraph. Focus on key points and main ideas.",
+          "model": "openrouter:deepseek-v4",
+          "costLimitCents": 100,
+          "inType": {
+            "kind": "ref",
+            "modelId": "927424d20c9c4d0185dd48d9"
+          }
+        },
+        {
+          "id": "41280e98429d42edaf6ed4a8",
           "kind": "output",
-          "label": "Output",
+          "label": "Summary Output",
           "note": "",
           "cached": true,
-          "avgMs": 40,
-          "avgCostCents": 0
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "Generated summary paragraph",
+          "inStructureId": "927424d20c9c4d0185dd48d9",
+          "outStructureId": "927424d20c9c4d0185dd48d9",
+          "outType": {
+            "kind": "ref",
+            "modelId": "927424d20c9c4d0185dd48d9"
+          },
+          "inType": {
+            "kind": "ref",
+            "modelId": "927424d20c9c4d0185dd48d9"
+          }
         }
       ],
-      "strategies": []
+      "strategies": [],
+      "documentation": "# Document Summarizer\n\nSimple pipeline that takes text documents and produces concise one-paragraph summaries.\n\n## Pipeline Steps\n1. **Document Input**: Upload a text document\n2. **Summarize**: LLM generates a one-paragraph summary\n3. **Summary Output**: Final summarized output\n\n## Usage\nUpload text documents to get concise summaries focusing on key points."
     }
   ],
-  "docs": [],
-  "docContents": {},
+  "docs": [
+    {
+      "id": "sha_504621569078cd8e",
+      "name": "sample_document.txt",
+      "type": "text",
+      "label": "inference",
+      "sizeKb": 1,
+      "uploadedAt": 1786628504752,
+      "preview": "The quick brown fox jumps over the lazy dog. This well-known sentence contains all the letters in the English alphabet. It is often used for typing practice and"
+    }
+  ],
+  "docContents": {
+    "sha_504621569078cd8e": "The quick brown fox jumps over the lazy dog. This well-known sentence contains all the letters in the English alphabet. It is often used for typing practice and testing fonts. The earliest known use of this phrase dates back to the late 19th century."
+  },
   "runs": [],
   "activeProjectId": "p_5932d2d53bcc4fd287ad77f0",
   "model": "openrouter:deepseek-v4",
@@ -43,31 +134,130 @@
       "name": "cli pipeline",
       "kind": "blank",
       "createdAt": 1786602626595,
-      "lastOpenedAt": 1786602626595,
-      "models": [],
+      "lastOpenedAt": 1786628281038,
+      "models": [
+        {
+          "id": "927424d20c9c4d0185dd48d9",
+          "name": "Summary",
+          "description": "A concise one-paragraph summary of a document.",
+          "fields": [
+            {
+              "id": "0985cab9d5234a6fbd7c6560",
+              "name": "text",
+              "optional": false,
+              "description": "The summary paragraph",
+              "type": "text"
+            }
+          ]
+        }
+      ],
       "modules": [
         {
-          "id": "mod_blank_in_p_5932d2d53bcc4fd287ad77f0",
+          "id": "8b74a4b1646e4d369a729dc1",
           "kind": "input",
-          "label": "Input",
-          "note": "Pipeline input document",
-          "inputType": "text",
+          "label": "Document Input",
+          "note": "Text document to be summarized",
           "cached": true,
-          "avgMs": 80,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputType": "text",
+          "inputDescription": "Text document to summarize",
+          "outStructureId": "m_builtin_document",
+          "outType": {
+            "kind": "ref",
+            "modelId": "m_builtin_document"
+          }
+        },
+        {
+          "id": "mod_struct_8b74a4b1646e4d369a729dc1",
+          "kind": "llm",
+          "auto": true,
+          "label": "Parse to structure · Document Input",
+          "note": "Auto · Document → Summary · LLM maps uploaded content into your structure.",
+          "inStructureId": "m_builtin_document",
+          "outStructureId": "927424d20c9c4d0185dd48d9",
+          "inType": {
+            "kind": "ref",
+            "modelId": "m_builtin_document"
+          },
+          "outType": {
+            "kind": "ref",
+            "modelId": "927424d20c9c4d0185dd48d9"
+          },
+          "prompt": "Extract structured data from the uploaded document into the Summary schema. Use only content from the document.",
+          "model": "openrouter:deepseek-v4",
+          "costLimitCents": 100,
+          "cached": true,
+          "avgMs": 0,
           "avgCostCents": 0
         },
         {
-          "id": "mod_blank_out_p_5932d2d53bcc4fd287ad77f0",
+          "id": "329c18fe3a444e4fb36081be",
+          "kind": "llm",
+          "label": "Summarize",
+          "note": "Generate one-paragraph summary",
+          "cached": true,
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "Document to summarize",
+          "inStructureId": "927424d20c9c4d0185dd48d9",
+          "outStructureId": "927424d20c9c4d0185dd48d9",
+          "outType": {
+            "kind": "ref",
+            "modelId": "927424d20c9c4d0185dd48d9"
+          },
+          "prompt": "Summarize this document in one concise paragraph. Focus on key points and main ideas.",
+          "model": "openrouter:deepseek-v4",
+          "costLimitCents": 100,
+          "inType": {
+            "kind": "ref",
+            "modelId": "927424d20c9c4d0185dd48d9"
+          }
+        },
+        {
+          "id": "41280e98429d42edaf6ed4a8",
           "kind": "output",
-          "label": "Output",
+          "label": "Summary Output",
           "note": "",
           "cached": true,
-          "avgMs": 40,
-          "avgCostCents": 0
+          "avgMs": 0,
+          "avgCostCents": 0,
+          "inputDescription": "Generated summary paragraph",
+          "inStructureId": "927424d20c9c4d0185dd48d9",
+          "outStructureId": "927424d20c9c4d0185dd48d9",
+          "outType": {
+            "kind": "ref",
+            "modelId": "927424d20c9c4d0185dd48d9"
+          },
+          "inType": {
+            "kind": "ref",
+            "modelId": "927424d20c9c4d0185dd48d9"
+          }
         }
       ],
-      "strategies": []
+      "strategies": [],
+      "documentation": "# Document Summarizer\n\nSimple pipeline that takes text documents and produces concise one-paragraph summaries.\n\n## Pipeline Steps\n1. **Document Input**: Upload a text document\n2. **Summarize**: LLM generates a one-paragraph summary\n3. **Summary Output**: Final summarized output\n\n## Usage\nUpload text documents to get concise summaries focusing on key points."
     }
   ],
-  "deletedProjectIds": []
+  "deletedProjectIds": [],
+  "chat": [
+    {
+      "role": "user",
+      "content": "please create a project to summarise a list of documents in a single paragraph."
+    },
+    {
+      "role": "assistant",
+      "content": "I'll create a document summarizer pipeline that takes text documents and produces concise one-paragraph summaries. The pipeline will have 3 steps: input → LLM summarization → output."
+    }
+  ],
+  "pendingProposal": null,
+  "modelOptions": [],
+  "billingRuns": [],
+  "billingAccount": null,
+  "earningsAccount": null,
+  "cacheEntries": [],
+  "saveError": null,
+  "shareLinkIds": [],
+  "hostedApiIds": [],
+  "docProjectIds": {}
 }

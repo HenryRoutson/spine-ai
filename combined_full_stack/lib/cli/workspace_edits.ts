@@ -7,7 +7,7 @@ import type { ModelId, PipelineModule, StructureModel, StructureModelId, TypeAli
 import type { SpineSession } from "@/lib/core/session"
 import { uid } from "@/lib/id"
 import { makeModule } from "@/lib/pipeline-module-factory"
-import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"
+import { USER_ADDABLE_MODULE_KINDS, usesPassthroughStructure } from "@/lib/module-kinds"
 import { loadProjectContext } from "@/lib/cli/project_context"
 import { SEEDS_DIR, type SeedDocSpec } from "@/lib/server/seed"
 import { allModelsToPydantic } from "@/lib/server/pydantic"
@@ -213,6 +213,20 @@ export function patchStep(
   if (!found) throw new Error(`unknown step ${idOrLabel}`)
   session.setModules(modules)
   return found
+}
+
+export function assignStepStructure(session: SpineSession, stepId: string, modelNameOrId: string): StructureModel {
+  const model = session.models.find((m) => m.name === modelNameOrId || m.id === modelNameOrId)
+  if (!model) throw new Error(`unknown model ${modelNameOrId}`)
+  const step = session.modules.find((m) => m.id === stepId || m.label === stepId)
+  if (!step) throw new Error(`unknown step ${stepId}`)
+  const ids = { inStructureId: model.id, outStructureId: model.id }
+  patchStep(
+    session,
+    step.id,
+    usesPassthroughStructure(step.kind) || step.kind === ModuleKind.Output ? ids : { outStructureId: model.id },
+  )
+  return model
 }
 
 export function removeStep(session: SpineSession, idOrLabel: string): void {

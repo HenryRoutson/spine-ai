@@ -18,6 +18,9 @@ describe("Ink TUI", () => {
     expect(frame).toContain("empty")
     expect(frame).toContain("Projects")
     expect(frame).toContain("1:structure")
+    expect(frame).toContain("search commands")
+    expect(frame).toContain("New project")
+    expect(frame).toContain("create a project")
   })
 
   it("renders the same session mutations as the React store / session CLI", () => {
@@ -54,6 +57,100 @@ describe("Ink TUI", () => {
       />,
     )
     expect(frame).toContain("rename: New Name")
+    expect(frame).toContain("enter to save")
+  })
+
+  it("command palette lists matching actions", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const snap = session.getSnapshot()
+    const frame = renderToString(
+      <WorkspaceView
+        snap={snap}
+        pipeline={toPipelineView(snap)}
+        validation={toValidationView(snap)}
+        docs={toDocsView(snap)}
+        testing={toTestingView(snap)}
+        agent={toAgentView(snap)}
+        logs={toLogsView(snap)}
+        tab="pipeline"
+        selectedProjectId={snap.activeProjectId}
+        prompt={{ kind: "command", buffer: "model", selected: 0 }}
+      />,
+    )
+    expect(frame).toContain("Add model")
+    expect(frame).toContain("fixes Input / Output")
+  })
+
+  it("step prompt suggests llm from a prefix", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const snap = session.getSnapshot()
+    const frame = renderToString(
+      <WorkspaceView
+        snap={snap}
+        pipeline={toPipelineView(snap)}
+        validation={toValidationView(snap)}
+        docs={toDocsView(snap)}
+        testing={toTestingView(snap)}
+        agent={toAgentView(snap)}
+        logs={toLogsView(snap)}
+        tab="pipeline"
+        selectedProjectId={snap.activeProjectId}
+        prompt={{ kind: "step", buffer: "ll", selected: 0 }}
+      />,
+    )
+    expect(frame).toContain("add step: ll")
+    expect(frame).toContain("llm")
+    expect(frame).toContain("LLM Call")
+  })
+
+  it("shows Configure step and the selected step inspector", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const snap = session.getSnapshot()
+    const pipeline = toPipelineView(snap)
+    const frame = renderToString(
+      <WorkspaceView
+        snap={snap}
+        pipeline={pipeline}
+        validation={toValidationView(snap)}
+        docs={toDocsView(snap)}
+        testing={toTestingView(snap)}
+        agent={toAgentView(snap)}
+        logs={toLogsView(snap)}
+        tab="pipeline"
+        selectedProjectId={snap.activeProjectId}
+        prompt={null}
+        pane="steps"
+      />,
+    )
+    expect(frame).toContain("Configure step")
+    expect(frame).toContain("Looking at:")
+    expect(frame).toContain("press e")
+  })
+
+  it("pick-step lists pipeline steps to inspect", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const snap = session.getSnapshot()
+    const frame = renderToString(
+      <WorkspaceView
+        snap={snap}
+        pipeline={toPipelineView(snap)}
+        validation={toValidationView(snap)}
+        docs={toDocsView(snap)}
+        testing={toTestingView(snap)}
+        agent={toAgentView(snap)}
+        logs={toLogsView(snap)}
+        tab="pipeline"
+        selectedProjectId={snap.activeProjectId}
+        prompt={{ kind: "pick-step", buffer: "", selected: 0 }}
+      />,
+    )
+    expect(frame).toContain("look at step:")
+    expect(frame).toContain("Input")
+    expect(frame).toContain("Output")
   })
 
   it("tui --once goes through the CLI dispatcher without hanging", async () => {
