@@ -61,4 +61,5 @@ https://developers.openai.com/api/docs/guides/agent-builder
 https://docs.cloud.google.com/gemini-enterprise-agent-platform/agents
 https://www.xano.com/
 https://www.zite.com/
+https://vercel.com/blog/agent-stack
 
