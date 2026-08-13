@@ -40,6 +40,8 @@ export async function defaultAgentPropose(
   history: SessionChatTurn[],
   model: string,
 ): Promise<PipelineAssistantResult> {
+  // AI : TODO (cli-parity vs Vibe) — React also passes store (observe tools), testDocsCatalog,
+  // AI :   recentRuns / lastFailedRun, uiContext, streaming onThinkingDelta / onMessageDelta, billing ledger.
   return proposePipelineChange(project, message, history, model as ModelId, { humanSurface: "vibe" })
 }
 
@@ -89,6 +91,7 @@ export async function askAgent(
       if (opts.apply) session.applyPendingProposal()
     }
     const actions = proposal?.proposedActions?.map((a) => a.type) ?? []
+    // AI : TODO (cli-parity) — React runAssistantInference / run_test after approve; CLI only records the names.
     return {
       ok: true,
       command: "agent ask",

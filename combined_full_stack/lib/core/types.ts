@@ -33,6 +33,9 @@ export type SessionSnapshot = {
   deletedProjectIds: string[]
   chat: SessionChatTurn[]
   pendingProposal: ProjectProposal | null
+  // AI : TODO (cli-parity vs React store) — snapshot still omits: strategies, modelOptions,
+  // AI :   billingRuns / billingAccount / earningsAccount, chats[] (Vibe threads), team membership,
+  // AI :   saveError, inference presets, cache entries, share/hosted-api ids.
 }
 
 export type ProjectPatch = {

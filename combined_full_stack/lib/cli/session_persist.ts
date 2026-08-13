@@ -1,4 +1,5 @@
 // AI : file-backed session so sequential `spine session` commands share the React-like store.
+// AI : TODO (cli-parity) — React persists via /api/projects + Supabase realtime; this is a local JSON file.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"

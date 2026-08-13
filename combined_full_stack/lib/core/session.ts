@@ -106,6 +106,10 @@ function nextNumberedCloneName(baseName: string, existingNames: Iterable<string>
 }
 
 export class SpineSession {
+  // AI : TODO (cli-parity vs useStore) — missing methods: cloneFromTemplate, resyncExamples,
+  // AI :   addDoc(File), setDocProjects, addRun, updateRunNotes, updateRunTest, hydrateRunDetail,
+  // AI :   startRun / runTest, flushPendingSave (Supabase PUT), refreshBilling / refreshEarnings,
+  // AI :   setStrategies, persist original bytes, prefetchProject.
   private snap: SessionSnapshot
   private readonly listeners = new Set<() => void>()
   private readonly persist: PersistPort | undefined
@@ -350,9 +354,11 @@ export class SpineSession {
   }
 
   setInferenceInputDocIds(docs: Partial<Record<ModuleId, DocId | DocId[]>>): void {
+    // AI : TODO (cli-parity) — Inference tab assigns docs per Input step then startRun; ids are stored unused.
     this.commit({ ...this.snap, inferenceInputDocIds: docs })
   }
 
+  // AI : TODO (cli-parity) — React addDoc POSTs /api/docs (content-hash + Storage); this is local-only text.
   addDocContent(input: AddDocContentInput): DocRef {
     const id = hashContent(input.content)
     const existing = this.snap.docs.find((d) => d.id === id)
@@ -411,9 +417,9 @@ export class SpineSession {
   }
 
   ingestRemoteRuns(remote: PipelineRun[]): void {
+    // AI : TODO (cli-parity) — no addRun / updateRunNotes / updateRunTest; Logging hydrates step traces.
     this.commit({ ...this.snap, runs: overlayOptimisticRuns(remote) })
   }
-
   appendChat(turn: SessionChatTurn): void {
     this.commit({ ...this.snap, chat: [...this.snap.chat, turn] })
   }
@@ -423,6 +429,7 @@ export class SpineSession {
   }
 
   // AI : same delta apply as project-assistant.tsx — local; hosted run actions stay with the caller.
+  // AI : TODO (cli-parity) — do not execute proposedActions (run_inference / run_test); React does after confirm.
   applyProposal(proposal: ProjectProposal): void {
     const project = this.requireProject()
     if (proposal.changed.name && proposal.projectName) {
@@ -463,6 +470,7 @@ export class SpineSession {
   }
 
   attachRealtime(port: RealtimePort, handlers?: Partial<TeamRealtimeHandlers>, debounceMs = 0): () => void {
+    // AI : TODO (cli-parity) — React useTeamRealtime watches projects/docs/runs/team_members; CLI never connects.
     this.realtimeStop?.()
     const stop = attachRealtimePort(port, {
       onProjectsChanged: handlers?.onProjectsChanged ?? (() => undefined),

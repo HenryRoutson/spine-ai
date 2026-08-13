@@ -1,4 +1,6 @@
 // AI : CLI adapter for the in-app project agent (proposePipelineChange + local apply).
+// AI : TODO (cli-parity) — React has four assistants (project/Vibe, structure, testing, diagnosis).
+// AI :   CLI only exposes the project agent. No streaming TUI deltas, no chat threads per project.
 
 import { readFileSync } from "node:fs"
 import { createSpineSession } from "@/lib/core/session"

@@ -15,6 +15,8 @@ import { validateTestAgainstProject } from "@/lib/cli/validate_test"
 import type { CliCommandResult, CliIssue } from "@/lib/cli/types"
 
 export function addNamedModel(session: SpineSession, name: string): StructureModel {
+  // AI : TODO (cli-parity vs Structure tab) — no field CRUD, optional/examples/negatives/deterministic,
+  // AI :   nested models, type aliases, pydantic/zod preview, AI summarise, excel-derive, lock handling.
   const trimmed = name.trim()
   if (!trimmed) throw new Error("model name is empty")
   const model: StructureModel = {
@@ -84,6 +86,8 @@ export function parseAddableKind(raw: string): ModuleKind | undefined {
 }
 
 export function addPipelineStep(session: SpineSession, kind: ModuleKind, label?: string): PipelineModule[] {
+  // AI : TODO (cli-parity vs Pipeline tab) — no per-step field edit (prompt/code/webhook/chunk/merge/
+  // AI :   human-review/chatbot), reorder/delete, spine wiring, custom-code CodeHost, export bundle.
   const models = session.models
   const globalModel = session.model as ModelId
   const modules = session.modules
@@ -104,6 +108,8 @@ export function addPipelineStep(session: SpineSession, kind: ModuleKind, label?:
 }
 
 export function validateSessionTests(session: SpineSession): CliCommandResult {
+  // AI : TODO (cli-parity vs Testing tab) — validate alignment only; does not startRun, pinpoint diffs,
+  // AI :   or LLM-judge probabilistic fields. No auto-approve human-review like components/testing.tsx.
   const project = session.project
   if (!project) {
     return {

@@ -110,6 +110,8 @@ export const askAgentAction = defineAction({
   },
 })
 
+// AI : TODO (cli-parity vs React / MCP Bar B) — register startRun, runTest, addDoc File, exportPipeline,
+// AI :   shareLink, hostedApi, billing, cacheGet, humanReview, customCode. askAgent.run is a stub.
 export const SESSION_ACTIONS = [
   addProjectAction,
   renameProjectAction,

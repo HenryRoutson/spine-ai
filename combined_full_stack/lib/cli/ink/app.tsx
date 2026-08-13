@@ -35,6 +35,8 @@ function parseTabKey(input: string): TuiTab | undefined {
 }
 
 export function SpineTui({ session, sessionPath, interactive = true, initialTab = "build" }: SpineTuiProps) {
+  // AI : TODO (cli-parity vs React shell) — no Structure/Inference/Share/Earnings/Cache/Documents/
+  // AI :   Billing/Settings tabs; no markdown split preview; no file picker; no mermaid; no sign-in.
   const snap = useSpineSnapshot(session)
   const { exit } = useApp()
   const [selectedId, setSelectedId] = useState(snap.activeProjectId)

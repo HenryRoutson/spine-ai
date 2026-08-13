@@ -116,9 +116,13 @@ export type LogsView = {
 
 export type TuiTab = "build" | "docs" | "tests" | "agent" | "logs"
 
+// AI : TODO (cli-parity vs React tabs) — add structure, inference, share, earnings, cache,
+// AI :   documents, billing, settings (and consumer Run). build ≈ projects+pipeline; agent ≈ Vibe;
+// AI :   tests validate only; logs has no step traces / cache / billing charts.
 export const TUI_TABS: TuiTab[] = ["build", "docs", "tests", "agent", "logs"]
 
 export function toDocsView(snap: SessionSnapshot): DocsView {
+  // AI : TODO (cli-parity vs Docs tab) — no markdown preview/split editor.
   const project = snap.projects.find((p) => p.id === snap.activeProjectId) ?? snap.projects[0]
   return {
     markdown: project?.documentation ?? "",
@@ -131,6 +135,7 @@ export function toDocsView(snap: SessionSnapshot): DocsView {
   }
 }
 
+// AI : TODO (cli-parity) — Testing tab also runs suites, diffs expected vs actual, LLM-judges probabilistic fields.
 export function toTestingView(snap: SessionSnapshot): TestingView {
   return {
     tests: snap.docs
@@ -156,6 +161,7 @@ export function toAgentView(snap: SessionSnapshot): AgentView {
   }
 }
 
+// AI : TODO (cli-parity) — Logging tab: per-step traces, cache hits, Langfuse links, test verdicts, run notes.
 export function toLogsView(snap: SessionSnapshot): LogsView {
   return {
     runs: snap.runs.map((r) => ({

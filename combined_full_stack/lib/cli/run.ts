@@ -15,6 +15,13 @@ import { runAgentCommand } from "@/lib/cli/agent_cli"
 import { runDemoCommand } from "@/lib/cli/demo"
 import type { CliCommandResult } from "@/lib/cli/types"
 
+// AI : TODO (cli-parity vs React UI) — missing subcommands matching app tabs / store:
+// AI :   inference startRun + input assignment, testing run (not just validate), cache inspect,
+// AI :   logging hydrateRunDetail / notes, documents File upload + OCR/PDF, structure field CRUD +
+// AI :   type-alias editor + pydantic/zod preview, pipeline step-field edit + export bundle,
+// AI :   share/marketplace/hosted APIs, earnings, billing, settings, sign-in, consumer Run mode,
+// AI :   Node custom-code host, human-review elicitation, diagnosis + structure + testing assistants,
+// AI :   Supabase persist/realtime (file persist only), team read-only, strategies / A-B.
 export const SPINE_CLI_HELP = `spine — validate Spine projects and run the headless workspace / agent
 
 Usage:

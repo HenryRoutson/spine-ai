@@ -1,4 +1,5 @@
 // AI : launches the CLI session the way the React store is used — plus a realtime overlay check.
+// AI : TODO (cli-parity) — demo does not walk inference, testing run, share, billing, or agent ask.
 
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"

@@ -143,6 +143,7 @@ export function WorkspaceView({
             documentation={selected?.documentation}
           />
         ) : tab === "docs" ? (
+          // AI : TODO (cli-parity vs Docs + Documents tabs) — no markdown preview/split, no File upload, OCR, labels, project binding.
           <Box flexDirection="column" flexGrow={1}>
             <Text bold>Docs</Text>
             {docs.markdown ? <Text dimColor>{docs.markdown.slice(0, 160)}</Text> : <Text dimColor>no markdown</Text>}
@@ -158,6 +159,7 @@ export function WorkspaceView({
             )}
           </Box>
         ) : tab === "tests" ? (
+          // AI : TODO (cli-parity vs Testing tab) — list only; no run, git-diff expected vs actual, expectFailure.
           <Box flexDirection="column" flexGrow={1}>
             <Text bold>Tests</Text>
             {testing.tests.length === 0 ? (
@@ -186,6 +188,7 @@ export function WorkspaceView({
             ) : null}
           </Box>
         ) : (
+          // AI : TODO (cli-parity vs Logging + Cache) — no step traces, cache hits, Langfuse, billing charts.
           <Box flexDirection="column" flexGrow={1}>
             <Text bold>Logs</Text>
             {logs.runs.length === 0 ? (

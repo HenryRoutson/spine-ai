@@ -1,4 +1,6 @@
 // AI : CLI adapter over SpineSession — method names match useStore().
+// AI : TODO (cli-parity) — no session start-run / run-test / export / cache / share / billing /
+// AI :   structure field edit / type-alias / pydantic preview / upload / sign-in / settings.
 
 import { DocLabel, InputType } from "@/lib/types"
 import { createSpineSession } from "@/lib/core/session"
