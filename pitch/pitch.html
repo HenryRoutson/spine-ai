@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Spine — Lovable for AI engineering</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* AI : palette lifted from landing_page/app/globals.css so the deck reads as the same product */
+  :root{
+    color-scheme: dark;
+    --background:#000000;
+    --foreground:#fafafa;
+    --panel:#0a0a0a;
+    --panel-raised:#121212;
+    --line:#1a1a1a;
+    --line-bright:#fafafa1f;
+    --accent:#4ade80;
+    --accent-dim:#4ade8040;
+    --warn:#f59e0b;
+    --danger:#ef4444;
+    --muted:#a3a3a3;
+    --muted-dim:#737373;
+    --max:1200px;
+  }
+
+  *{ box-sizing:border-box; }
+  html{ scroll-behavior:smooth; }
+  body{
+    margin:0;
+    background:var(--background);
+    color:var(--foreground);
+    font-family:"Geist", system-ui, -apple-system, "Segoe UI", Helvetica, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    font-size:16px;
+    line-height:1.6;
+  }
+  ::selection{ background:var(--accent-dim); }
+
+  /* AI : film grain overlay — same trick as the live landing page */
+  body::before{
+    content:"";
+    position:fixed; inset:0; pointer-events:none; z-index:60; opacity:.035;
+    background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  a{ color:inherit; }
+  .mono{ font-family:"Geist Mono", ui-monospace, SFMono-Regular, monospace; }
+
+  /* ---------- scroll progress ---------- */
+  #progress{
+    position:fixed; top:0; left:0; height:2px; width:0%;
+    background:var(--foreground); z-index:70; transition:width .08s linear;
+  }
+
+  /* ---------- nav ---------- */
+  header.nav{
+    position:sticky; top:0; z-index:50;
+    border-bottom:1px solid var(--line);
+    background:rgba(0,0,0,.9);
+    backdrop-filter:blur(8px);
+  }
+  header.nav .inner{
+    max-width:var(--max); margin:0 auto;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 20px;
+  }
+  .spine-logo{ display:inline-flex; align-items:center; gap:10px; text-decoration:none; }
+  .spine-mark-wrap{
+    display:flex; align-items:center; justify-content:center;
+    width:32px; height:32px; border:1px solid var(--line-bright); background:var(--panel);
+  }
+  .spine-mark{
+    --mark-size:20px; --spine-w:2.5px; --node-w:11px; --node-h:2.5px;
+    --mark-fg:var(--foreground); --mark-fg-dim:#fafafa40;
+    position:relative; width:var(--mark-size); height:var(--mark-size); flex:none;
+  }
+  .spine-mark::before{
+    content:""; position:absolute; left:50%; top:-2px; bottom:-2px;
+    width:var(--spine-w); transform:translateX(-50%); border-radius:999px;
+    background:linear-gradient(180deg,var(--mark-fg-dim) 0%,var(--mark-fg) 42%,var(--mark-fg) 58%,var(--mark-fg-dim) 100%);
+    box-shadow:0 0 18px var(--mark-fg-dim);
+  }
+  .spine-mark .node{
+    position:absolute; left:50%; width:var(--node-w); height:var(--node-h);
+    transform:translateX(-50%); border-radius:999px; background:var(--mark-fg); opacity:.92;
+  }
+  .spine-mark .node:nth-child(1){ top:3px; opacity:.55; }
+  .spine-mark .node:nth-child(2){ top:50%; margin-top:-1.25px; width:calc(var(--node-w) + 5px); box-shadow:0 0 10px var(--mark-fg-dim); }
+  .spine-mark .node:nth-child(3){ bottom:3px; opacity:.55; }
+  .spine-wordmark{ font-size:14px; font-weight:600; letter-spacing:-.03em; }
+
+  .nav-links{ display:flex; align-items:center; gap:26px; }
+  .nav-links a{ font-size:13px; color:var(--muted); text-decoration:none; transition:color .15s; }
+  .nav-links a:hover, .nav-links a.active{ color:var(--foreground); }
+  @media (max-width:900px){ .nav-links{ display:none; } }
+
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    border-radius:5px; background:var(--foreground); color:#0a0a0a;
+    font-size:14px; font-weight:500; padding:10px 20px;
+    text-decoration:none; transition:opacity .15s;
+  }
+  .btn:hover{ opacity:.88; }
+  .btn.lg{ font-size:17px; padding:14px 32px; }
+  .btn.ghost{ background:transparent; color:var(--foreground); border:1px solid var(--line-bright); }
+  .btn.ghost:hover{ background:var(--panel-raised); }
+
+  /* ---------- layout rails ---------- */
+  .rail{ max-width:var(--max); margin:0 auto; border-left:1px solid var(--line); border-right:1px solid var(--line); }
+  section.block{ border-bottom:1px solid var(--line); padding:64px 48px; }
+  @media (max-width:760px){ section.block{ padding:44px 22px; } }
+
+  .eyebrow{
+    font-family:"Geist Mono", monospace; font-size:11px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--muted-dim); margin:0 0 18px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .eyebrow::after{ content:""; flex:1; height:1px; background:var(--line); }
+
+  h1{ font-size:clamp(38px,6vw,54px); font-weight:400; line-height:1.06; letter-spacing:-.03em; margin:0; }
+  h2{ font-size:clamp(26px,3.6vw,38px); font-weight:400; line-height:1.12; letter-spacing:-.025em; margin:0 0 20px; }
+  h3{ font-size:17px; font-weight:600; letter-spacing:-.01em; margin:0 0 8px; }
+  p{ margin:0 0 16px; color:var(--muted); max-width:62ch; }
+  p.lead{ font-size:clamp(17px,2vw,20px); line-height:1.55; color:var(--muted); max-width:56ch; }
+  strong{ color:var(--foreground); font-weight:600; }
+  .fg{ color:var(--foreground); }
+
+  /* ---------- hero ---------- */
+  .hero{ display:grid; grid-template-columns:1.05fr .95fr; gap:48px; align-items:center; }
+  @media (max-width:900px){ .hero{ grid-template-columns:1fr; gap:32px; } }
+  .hero-sub{ margin-top:22px; font-size:19px; color:var(--muted); max-width:44ch; }
+  .credit{ display:flex; flex-direction:column; gap:10px; margin-top:36px; }
+  .credit span{ font-size:12px; color:var(--muted-dim); }
+  .credit b{ color:var(--muted); font-weight:500; letter-spacing:.06em; }
+
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:22px;
+  }
+  .card.raised{ background:var(--panel-raised); }
+
+  .pitchline{
+    border:1px solid var(--line-bright); border-radius:12px; background:var(--panel);
+    padding:26px 26px 24px;
+  }
+  .pitchline .k{ font-family:"Geist Mono", monospace; font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--muted-dim); }
+  .pitchline .v{ font-size:26px; letter-spacing:-.02em; margin-top:8px; color:var(--foreground); line-height:1.25; }
+  .pitchline hr{ border:0; border-top:1px solid var(--line); margin:20px 0; }
+  .pitchline p{ margin:0; font-size:14.5px; }
+
+  .scrollcue{ margin-top:40px; font-family:"Geist Mono", monospace; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted-dim); display:flex; align-items:center; gap:10px; }
+  .scrollcue .arrow{ animation:bob 1.8s ease-in-out infinite; display:inline-block; }
+  @keyframes bob{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(4px); } }
+
+  /* ---------- grids ---------- */
+  .grid{ display:grid; gap:16px; }
+  .g2{ grid-template-columns:repeat(2,1fr); }
+  .g3{ grid-template-columns:repeat(3,1fr); }
+  .g4{ grid-template-columns:repeat(4,1fr); }
+  @media (max-width:900px){ .g3,.g4{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:620px){ .g2,.g3,.g4{ grid-template-columns:1fr; } }
+
+  .stat .k{ font-family:"Geist Mono", monospace; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted-dim); }
+  .stat .v{ font-size:30px; font-weight:600; letter-spacing:-.03em; margin:8px 0 4px; color:var(--foreground); }
+  .stat .n{ font-size:12.5px; color:var(--muted-dim); line-height:1.45; }
+
+  /* numbered differentiator cards */
+  .num-card{ position:relative; padding-top:26px; }
+  .num-card .num{
+    font-family:"Geist Mono", monospace; font-size:11px; color:var(--muted-dim);
+    letter-spacing:.14em; position:absolute; top:20px; left:22px;
+  }
+  .num-card h3{ margin-top:22px; }
+  .num-card p{ font-size:14.5px; margin-bottom:0; }
+
+  .kill{ color:var(--muted); font-size:14.5px; }
+  .kill .bad{ color:#f87171; }
+  .kill .good{ color:var(--accent); }
+
+  ul.clean{ margin:0; padding-left:18px; color:var(--muted); }
+  ul.clean li{ margin-bottom:8px; font-size:14.5px; }
+  ul.clean li::marker{ color:var(--muted-dim); }
+
+  /* ---------- product shots ---------- */
+  figure.shot{ margin:0; }
+  .frame{
+    border:1px solid var(--line); border-radius:12px; background:var(--panel);
+    overflow:hidden; cursor:zoom-in; transition:border-color .18s, transform .18s;
+  }
+  .frame:hover{ border-color:var(--line-bright); }
+  .frame .bar{
+    display:flex; align-items:center; gap:6px; padding:9px 13px;
+    border-bottom:1px solid var(--line); background:var(--panel-raised);
+  }
+  .dot{ width:9px; height:9px; border-radius:50%; }
+  .frame .bar .label{
+    margin-left:8px; font-family:"Geist Mono", monospace; font-size:10px;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--muted-dim);
+  }
+  .frame img{ display:block; width:100%; height:auto; }
+  figcaption{ margin-top:12px; font-size:13.5px; color:var(--muted-dim); line-height:1.5; max-width:70ch; }
+  figcaption b{ color:var(--muted); font-weight:500; }
+
+  /* ---------- table ---------- */
+  .table-wrap{ overflow-x:auto; border:1px solid var(--line); border-radius:12px; background:var(--panel); }
+  table{ width:100%; border-collapse:collapse; font-size:13px; min-width:820px; }
+  thead th{
+    text-align:left; font-family:"Geist Mono", monospace; font-size:10px; font-weight:500;
+    letter-spacing:.1em; text-transform:uppercase; color:var(--muted-dim);
+    padding:14px 12px; border-bottom:1px solid var(--line); white-space:nowrap; vertical-align:bottom;
+  }
+  thead th:not(:first-child){ text-align:center; }
+  tbody td{ padding:11px 12px; border-bottom:1px solid var(--line); color:var(--muted); }
+  tbody td:not(:first-child){ text-align:center; }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:rgba(255,255,255,.028); }
+  tbody tr.us{ background:rgba(74,222,128,.05); }
+  tbody tr.us td{ color:var(--foreground); }
+  tbody tr.us td:first-child{ font-weight:600; }
+  .pill{ display:inline-block; min-width:38px; font-size:10.5px; font-family:"Geist Mono", monospace; padding:3px 8px; border-radius:999px; border:1px solid var(--line); }
+  .pill.y{ color:var(--accent); border-color:var(--accent-dim); background:rgba(74,222,128,.08); }
+  .pill.p{ color:var(--warn); border-color:rgba(245,158,11,.28); background:rgba(245,158,11,.07); }
+  .pill.n{ color:var(--muted-dim); }
+
+  /* ---------- market ---------- */
+  .market{ display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  @media (max-width:900px){ .market{ grid-template-columns:1fr; } }
+  .market-row{ display:flex; align-items:baseline; gap:14px; padding:16px 0; border-bottom:1px solid var(--line); }
+  .market-row:last-child{ border-bottom:none; }
+  .market-row .tag{ font-family:"Geist Mono", monospace; font-size:11px; letter-spacing:.14em; color:var(--muted-dim); width:52px; flex:none; }
+  .market-row .amt{ font-size:26px; font-weight:600; letter-spacing:-.02em; width:110px; flex:none; }
+  .market-row .desc{ font-size:13px; color:var(--muted-dim); line-height:1.45; }
+
+  /* ---------- accordion ---------- */
+  details.acc{ border:1px solid var(--line); border-radius:10px; background:var(--panel); margin-top:12px; }
+  details.acc summary{
+    cursor:pointer; list-style:none; padding:14px 18px;
+    display:flex; align-items:center; gap:12px; font-size:14px; color:var(--muted);
+  }
+  details.acc summary::-webkit-details-marker{ display:none; }
+  details.acc summary:hover{ color:var(--foreground); }
+  details.acc summary .chev{ margin-left:auto; color:var(--muted-dim); transition:transform .18s; }
+  details.acc[open] summary .chev{ transform:rotate(180deg); }
+  details.acc .body{ padding:0 18px 18px; border-top:1px solid var(--line); padding-top:16px; }
+  details.acc .body p{ font-size:14px; }
+  details.acc .body p:last-child{ margin-bottom:0; }
+
+  /* ---------- timeline ---------- */
+  .tl{ position:relative; padding-left:26px; }
+  .tl::before{ content:""; position:absolute; left:5px; top:6px; bottom:6px; width:1px; background:var(--line); }
+  .tl-item{ position:relative; padding-bottom:22px; }
+  .tl-item:last-child{ padding-bottom:0; }
+  .tl-item::before{
+    content:""; position:absolute; left:-24px; top:7px; width:9px; height:9px; border-radius:50%;
+    background:var(--panel); border:1px solid var(--muted-dim);
+  }
+  .tl-item.now::before{ background:var(--accent); border-color:var(--accent); box-shadow:0 0 10px var(--accent-dim); }
+  .tl-item .when{ font-family:"Geist Mono", monospace; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted-dim); }
+  .tl-item .what{ font-size:14.5px; color:var(--muted); margin-top:4px; }
+
+  /* ---------- misc bits ---------- */
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{
+    font-family:"Geist Mono", monospace; font-size:11px; letter-spacing:.06em;
+    padding:6px 11px; border:1px solid var(--line); border-radius:999px; color:var(--muted-dim);
+  }
+  .chip.on{ color:var(--accent); border-color:var(--accent-dim); background:rgba(74,222,128,.06); }
+  .quote{
+    border-left:2px solid var(--line-bright); padding:4px 0 4px 20px;
+    font-size:17px; color:var(--muted); max-width:56ch;
+  }
+  svg.diagram{ display:block; width:100%; height:auto; overflow:visible; }
+  svg.diagram.capped{ max-width:420px; margin:0 auto; }
+
+  /* ---------- landscape scatter (ported from ai_eng_landscape_3.html) ---------- */
+  .chart-host{ overflow-x:auto; margin-top:14px; }
+  .chart-host svg{ display:block; width:100%; min-width:640px; height:auto; overflow:visible; }
+  .chart-grid{ stroke:var(--line); stroke-width:1; shape-rendering:crispEdges; }
+  .chart-axis{ stroke:#3d3d3d; stroke-width:1; shape-rendering:crispEdges; }
+  .chart-tick{ fill:var(--muted-dim); font-size:10.5px; font-family:"Geist Mono", monospace; }
+  .chart-axis-title{ fill:var(--muted); font-size:11.5px; font-weight:600; }
+  .chart-pt{ fill:var(--accent); cursor:pointer; }
+  .chart-pt-ring{ fill:none; stroke:var(--panel); stroke-width:2px; pointer-events:none; }
+  .chart-pt-imputed{ fill:none; stroke:var(--muted-dim); stroke-width:1.4px; stroke-dasharray:2.5 2; pointer-events:none; }
+  .chart-pt-label{ fill:var(--foreground); font-size:11px; pointer-events:none; }
+
+  .chart-legends{
+    display:flex; flex-wrap:wrap; gap:32px; align-items:flex-start;
+    margin-top:18px; padding-top:16px; border-top:1px solid var(--line);
+  }
+  .legend-title{ font-size:11px; color:var(--muted); margin-bottom:8px; font-weight:600; }
+  .alpha-grad{ width:170px; height:12px; border-radius:3px; border:1px solid var(--line-bright); }
+  .alpha-ticks{
+    display:flex; justify-content:space-between; width:170px; margin-top:4px;
+    font-family:"Geist Mono", monospace; font-size:10px; color:var(--muted-dim);
+  }
+  .shape-legend{ display:flex; flex-direction:column; gap:7px; font-size:12px; color:var(--muted); }
+  .shape-row{ display:flex; align-items:center; gap:9px; }
+  .swatch-solid, .swatch-ring{ width:12px; height:12px; border-radius:50%; flex:none; }
+  .swatch-solid{ background:var(--accent); opacity:.85; }
+  /* AI : outline rather than border — box-sizing:border-box would eat a 1.4px border at 12px */
+  .swatch-ring{ background:var(--accent); opacity:.45; outline:1.4px dashed var(--muted-dim); outline-offset:2px; }
+  .swatch-line{ width:16px; height:0; border-top:1.6px dashed var(--muted-dim); flex:none; }
+
+  #chartTip{
+    position:fixed; pointer-events:none; z-index:75; opacity:0; transition:opacity .08s ease;
+    background:var(--panel-raised); border:1px solid var(--line-bright); border-radius:8px;
+    padding:11px 13px; font-size:12px; color:var(--foreground); max-width:290px;
+    box-shadow:0 6px 24px rgba(0,0,0,.6);
+  }
+  #chartTip .tt-name{ font-weight:650; font-size:13px; margin-bottom:2px; }
+  #chartTip .tt-cat{ color:var(--muted-dim); font-size:10.5px; margin-bottom:8px; }
+  #chartTip .tt-row{ display:flex; justify-content:space-between; gap:14px; margin-bottom:3px; }
+  #chartTip .tt-k{ color:var(--muted); }
+  #chartTip .tt-v{ font-weight:600; font-variant-numeric:tabular-nums; }
+  #chartTip .tt-desc{ margin-top:8px; color:var(--muted); line-height:1.45; font-size:11.5px; }
+  #chartTip .tt-flag{ margin-top:7px; color:var(--muted-dim); font-size:10px; line-height:1.4; }
+
+  /* ---------- reveal on scroll ---------- */
+  .rv{ opacity:0; transform:translateY(14px); transition:opacity .6s ease, transform .6s ease; }
+  .rv.in{ opacity:1; transform:none; }
+  @media (prefers-reduced-motion:reduce){ .rv{ opacity:1; transform:none; transition:none; } html{ scroll-behavior:auto; } }
+
+  /* ---------- lightbox ---------- */
+  #lightbox{
+    position:fixed; inset:0; z-index:80; display:none; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.94); padding:32px; cursor:zoom-out; backdrop-filter:blur(4px);
+  }
+  #lightbox.on{ display:flex; }
+  #lightbox img{ max-width:100%; max-height:100%; border:1px solid var(--line); border-radius:8px; }
+
+  footer.end{ max-width:var(--max); margin:0 auto; border-left:1px solid var(--line); border-right:1px solid var(--line); padding:28px 48px 60px; }
+  footer.end p{ font-size:12px; color:var(--muted-dim); margin:0; }
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<header class="nav">
+  <div class="inner">
+    <a class="spine-logo" href="#top" aria-label="Spine">
+      <span class="spine-mark-wrap">
+        <span class="spine-mark" aria-hidden="true"><span class="node"></span><span class="node"></span><span class="node"></span></span>
+      </span>
+      <span class="spine-wordmark">Spine</span>
+    </a>
+    <nav class="nav-links">
+      <a href="#problem">Problem</a>
+      <a href="#whynow">Why now</a>
+      <a href="#solution">Solution</a>
+      <a href="#different">Differentiation</a>
+      <a href="#product">Product</a>
+      <a href="#market">Market</a>
+      <a href="#traction">Traction</a>
+      <a href="#ask">Ask</a>
+    </nav>
+    <a class="btn" href="https://www.spine-ai-app.dev/" target="_blank" rel="noopener">Try now</a>
+  </div>
+</header>
+
+<main class="rail" id="top">
+
+  <!-- ============ HERO ============ -->
+  <section class="block">
+    <div class="hero">
+      <div>
+        <h1>AI engineering is hard.<br />It shouldn&rsquo;t be.</h1>
+        <p class="hero-sub">Vibe coding for AI engineering. Build production-grade LLM backends without being technical &mdash; we handle the hosting and automate the engineering.</p>
+        <div style="margin-top:32px; display:flex; gap:12px; flex-wrap:wrap;">
+          <a class="btn lg" href="https://www.spine-ai-app.dev/" target="_blank" rel="noopener">Try now</a>
+          <a class="btn lg ghost" href="#problem">Read the pitch</a>
+        </div>
+        <div class="credit">
+          <span>developed by engineers from <b>KPMG</b></span>
+          <span>built at the <b>ANTLER</b> hackathon &middot; independent, not funded</span>
+        </div>
+      </div>
+
+      <div class="pitchline rv">
+        <div class="k">One line</div>
+        <div class="v">Lovable for AI engineering.</div>
+        <hr />
+        <div class="k">Who&rsquo;s building it</div>
+        <p style="margin-top:8px;">
+          <strong>Henry</strong> &mdash; AI engineer at KPMG, in a team of ~12 with 5 PhDs.
+          Production financial automation with AI, and lead on the team&rsquo;s shared library of
+          internal code infrastructure.
+        </p>
+      </div>
+    </div>
+
+    <div class="scrollcue"><span class="arrow">&darr;</span> scroll</div>
+  </section>
+
+  <!-- ============ PROBLEM ============ -->
+  <section class="block" id="problem">
+    <p class="eyebrow">01 &mdash; The problem</p>
+    <h2>Companies are cutting AI spend<br />because the results aren&rsquo;t there.</h2>
+    <p class="lead">
+      Large companies jumped the gun on technology that needed more time to mature &mdash; on both the model
+      and the software side. Meanwhile small startups can&rsquo;t implement interpretable, accurate, cost-efficient
+      AI without spending $200k a year on a single engineer.
+    </p>
+
+    <div class="grid g3 rv" style="margin-top:36px;">
+      <div class="card stat">
+        <div class="k">Requirement</div>
+        <div class="v">Interpretable</div>
+        <div class="n">Embedding RAG is a black box. When it fails, nobody can say why.</div>
+      </div>
+      <div class="card stat">
+        <div class="k">Requirement</div>
+        <div class="v">Accurate</div>
+        <div class="n">Production quality bars, not demo quality bars.</div>
+      </div>
+      <div class="card stat">
+        <div class="k">Requirement</div>
+        <div class="v">Cost-efficient</div>
+        <div class="n">Per-run economics that survive contact with real volume.</div>
+      </div>
+    </div>
+
+    <div class="card rv" style="margin-top:16px; border-color:var(--line-bright);">
+      <div class="quote">
+        I was contacted on LinkedIn for contract work paying <span class="fg">$160k for 6 months</span> &mdash;
+        with less than a single year of experience.
+      </div>
+      <p style="margin:16px 0 0; font-size:14px;">
+        Demand for high-quality AI engineering is extremely high. Companies are cutting funding anyway,
+        because they can&rsquo;t get results at a price that makes sense.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ ICP ============ -->
+  <section class="block" id="icp">
+    <p class="eyebrow">02 &mdash; Who feels it most</p>
+    <div class="grid g2" style="align-items:center; gap:40px;">
+      <div>
+        <h2>Technical founders of &lsquo;AI-native&rsquo; companies<br />without AI-engineering experience.</h2>
+        <p class="lead">
+          They can ship a product. They can&rsquo;t ship a reliable LLM backend. And they&rsquo;re at risk of
+          losing their company within months without one.
+        </p>
+      </div>
+      <div class="card rv">
+        <div class="chips">
+          <span class="chip on">AI-native startups</span>
+          <span class="chip on">Technical founders</span>
+          <span class="chip on">No AI-eng hire</span>
+          <span class="chip">Agencies</span>
+          <span class="chip">SMBs shipping AI features</span>
+        </div>
+        <p style="margin:20px 0 0; font-size:14.5px;">
+          The alternative on the table today is a <span class="fg">$150&ndash;200k</span> AI engineer,
+          a 3-month hiring cycle, and no guarantee of production quality at the end of it.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ WHY NOW ============ -->
+  <section class="block" id="whynow">
+    <p class="eyebrow">03 &mdash; Why now</p>
+    <h2>The budget shifted to low cost at high scale,<br />and the models finally allow it.</h2>
+    <p class="lead">
+      Two things changed at once. Buyers stopped paying for expensive AI, and the cheap models got good enough
+      to serve them.
+    </p>
+
+    <div class="grid g2 rv" style="margin-top:32px; gap:16px;">
+      <div class="card num-card">
+        <span class="num">SHIFT 01</span>
+        <h3>Demand moved to cost per run</h3>
+        <p class="kill">
+          Large enterprises are cutting AI spend, and so are the custom AI solutions sold to them as subscription
+          products. What they want now is <span class="good">low cost at high scale</span> &mdash; which is exactly
+          the axis a frontier-model agent loop loses on.
+        </p>
+      </div>
+      <div class="card num-card">
+        <span class="num">SHIFT 02</span>
+        <h3>Flash-class models are mature</h3>
+        <p class="kill">
+          Small models are now good enough for segmented, typed tasks. Running inference is
+          <span class="good">dramatically cheaper than two years ago</span> &mdash; but only if the system is built
+          to use them, which is the engineering problem we automate.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SOLUTION ============ -->
+  <section class="block" id="solution">
+    <p class="eyebrow">04 &mdash; The solution</p>
+    <h2>Build production systems<br />while being non-technical.</h2>
+    <p class="lead">
+      We offer vibe coding for AI engineering. You describe what you want; we handle the hosting and
+      automate the backend development with AI, using deep production experience baked into the platform.
+    </p>
+
+    <!-- AI : flow diagram — prompt to deployed backend, mirrors the actual product tabs -->
+    <div class="card rv" style="margin-top:32px; padding:34px 26px;">
+      <svg class="diagram" viewBox="0 0 1080 148" role="img" aria-label="Flow from prompt to deployed backend">
+        <defs>
+          <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+            <path d="M0,0 L8,4.5 L0,9 z" fill="#737373" />
+          </marker>
+        </defs>
+        <g font-family="Geist Mono, monospace">
+          <!-- node 1 -->
+          <rect x="4" y="52" width="176" height="86" rx="9" fill="#121212" stroke="#1a1a1a" />
+          <text x="92" y="84" fill="#fafafa" font-size="13.5" text-anchor="middle" font-family="Geist, sans-serif">Describe it</text>
+          <text x="92" y="106" fill="#737373" font-size="11" text-anchor="middle">plain english</text>
+          <line x1="188" y1="95" x2="216" y2="95" stroke="#737373" stroke-width="1.2" marker-end="url(#ar)" />
+
+          <!-- node 2 -->
+          <rect x="224" y="52" width="176" height="86" rx="9" fill="#121212" stroke="#1a1a1a" />
+          <text x="312" y="84" fill="#fafafa" font-size="13.5" text-anchor="middle" font-family="Geist, sans-serif">Typed structures</text>
+          <text x="312" y="106" fill="#737373" font-size="11" text-anchor="middle">schema enforced</text>
+          <line x1="408" y1="95" x2="436" y2="95" stroke="#737373" stroke-width="1.2" marker-end="url(#ar)" />
+
+          <!-- node 3 -->
+          <rect x="444" y="52" width="176" height="86" rx="9" fill="#121212" stroke="#1a1a1a" />
+          <text x="532" y="84" fill="#fafafa" font-size="13.5" text-anchor="middle" font-family="Geist, sans-serif">Modular pipeline</text>
+          <text x="532" y="106" fill="#737373" font-size="11" text-anchor="middle">cached steps</text>
+          <line x1="628" y1="95" x2="656" y2="95" stroke="#737373" stroke-width="1.2" marker-end="url(#ar)" />
+
+          <!-- node 4 -->
+          <rect x="664" y="52" width="176" height="86" rx="9" fill="#121212" stroke="#1a1a1a" />
+          <text x="752" y="84" fill="#fafafa" font-size="13.5" text-anchor="middle" font-family="Geist, sans-serif">Traced runs</text>
+          <text x="752" y="106" fill="#737373" font-size="11" text-anchor="middle">step-level eval</text>
+          <line x1="848" y1="95" x2="876" y2="95" stroke="#737373" stroke-width="1.2" marker-end="url(#ar)" />
+
+          <!-- node 5 -->
+          <rect x="884" y="52" width="192" height="86" rx="9" fill="#0f1a12" stroke="#4ade8040" />
+          <text x="980" y="84" fill="#4ade80" font-size="13.5" text-anchor="middle" font-family="Geist, sans-serif">Deployed</text>
+          <text x="980" y="106" fill="#737373" font-size="11" text-anchor="middle">link &middot; api &middot; excel</text>
+
+          <text x="4" y="26" fill="#737373" font-size="10.5" letter-spacing="1.6">YOU DO THIS</text>
+          <text x="444" y="26" fill="#737373" font-size="10.5" letter-spacing="1.6">WE DO THIS</text>
+          <text x="884" y="26" fill="#737373" font-size="10.5" letter-spacing="1.6">SHIPPED</text>
+          <line x1="4" y1="34" x2="180" y2="34" stroke="#1a1a1a" />
+          <line x1="444" y1="34" x2="840" y2="34" stroke="#1a1a1a" />
+          <line x1="884" y1="34" x2="1076" y2="34" stroke="#1a1a1a" />
+        </g>
+      </svg>
+    </div>
+
+    <div class="grid g3 rv" style="margin-top:16px;">
+      <div class="card">
+        <h3>It hands off to real developers</h3>
+        <p style="font-size:14.5px; margin-bottom:0;">
+          Vibe-coded solutions can be passed straight to developers, who then have full control over the
+          low-level implementation details. The output is code, not a locked flowchart.
+        </p>
+      </div>
+      <div class="card">
+        <h3>A tenth of a cent per run</h3>
+        <p style="font-size:14.5px; margin-bottom:0;">
+          We often run inference at a tenth or a hundredth of a cent per run &mdash; by avoiding agent-harness
+          overhead and segmenting tasks so Flash-class models can do the work instead of the frontier.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Parity is weeks away, not years</h3>
+        <p style="font-size:14.5px; margin-bottom:0;">
+          On the feature set that matters, we could close to parity with companies valued around $100M in a
+          couple of weeks of development.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DIFFERENTIATION ============ -->
+  <section class="block" id="different">
+    <p class="eyebrow">05 &mdash; Differentiation</p>
+    <h2>We&rsquo;re very opinionated about AI engineering,<br />and it&rsquo;s built into the platform.</h2>
+
+    <div class="grid g2 rv" style="margin-top:32px;">
+      <div class="card num-card">
+        <span class="num">01</span>
+        <h3>Chain of thought, everywhere</h3>
+        <p class="kill">
+          <span class="bad">Embedding RAG is uninterpretable</span> &mdash; impossible to debug and fix.
+          We emit a chain-of-thought trace at every step. When a test case diverges, we feed that trace back in:
+          <span class="good">quick fixes, often automatic</span>.
+        </p>
+      </div>
+      <div class="card num-card">
+        <span class="num">02</span>
+        <h3>Agents only where required</h3>
+        <p class="kill">
+          Agents are useful, but in production they&rsquo;re <span class="bad">more variable and expensive</span>,
+          especially on small tasks. Inference while testing our product has often been
+          <span class="good">under a single cent</span> &mdash; no 30k-token overhead like Claude Code.
+        </p>
+      </div>
+      <div class="card num-card">
+        <span class="num">03</span>
+        <h3>Modular blocks, not blobs</h3>
+        <p class="kill">
+          Claude Code is great, but it creates <span class="bad">tangled blobs of code</span> rather than separate
+          interpretable steps. We build modular blocks, often from pre-built steps, and
+          <span class="good">cache them</span> for cost efficiency.
+        </p>
+      </div>
+      <div class="card num-card">
+        <span class="num">04</span>
+        <h3>Structured responses do three jobs</h3>
+        <p class="kill">
+          Typed, structured output <span class="good">catches bugs early</span>, lets
+          <span class="good">smaller models</span> do work the frontier would otherwise be needed for, and
+          saves the user from manually prompting at all &mdash; the schema generates the prompt.
+        </p>
+      </div>
+    </div>
+
+    <!-- AI : the 37x number is the sharpest single stat in the deck — give it its own visual -->
+    <div class="grid g2 rv" style="margin-top:16px; gap:16px; align-items:stretch;">
+      <div class="card">
+        <div class="stat"><div class="k">Cost per equivalent task</div></div>
+        <svg class="diagram" viewBox="0 0 520 172" role="img" aria-label="Agent cost versus direct response cost" style="margin-top:18px;">
+          <g font-family="Geist Mono, monospace" font-size="11.5">
+            <text x="0" y="26" fill="#a3a3a3">Agent loop</text>
+            <rect x="0" y="36" width="500" height="30" rx="4" fill="#ef4444" opacity="0.22" />
+            <rect x="0" y="36" width="500" height="30" rx="4" fill="none" stroke="#ef444455" />
+            <text x="490" y="56" fill="#f87171" text-anchor="end" font-size="13">up to 37&times;</text>
+
+            <text x="0" y="106" fill="#a3a3a3">Direct structured response</text>
+            <rect x="0" y="116" width="13.5" height="30" rx="4" fill="#4ade80" opacity="0.5" />
+            <text x="26" y="136" fill="#4ade80" font-size="13">1&times;</text>
+          </g>
+        </svg>
+        <p style="margin:16px 0 0; font-size:13px; color:var(--muted-dim);">
+          By some measurements agents run 37&times; the cost of a direct chatbot response. Agents stay available
+          in Spine &mdash; they just aren&rsquo;t the default.
+          <a href="https://www.youtube.com/watch?v=8ji5vURIllM&amp;t=267s" target="_blank" rel="noopener"
+             style="color:var(--muted); text-decoration:underline; text-underline-offset:3px;">source &rarr;</a>
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="stat"><div class="k">Code shape</div></div>
+        <svg class="diagram" viewBox="0 0 520 172" role="img" aria-label="Tangled blob versus modular cached steps" style="margin-top:18px;">
+          <g font-family="Geist Mono, monospace" font-size="11">
+            <text x="0" y="16" fill="#737373">CLAUDE CODE</text>
+            <path d="M20,60 C70,20 110,96 160,52 C205,14 190,92 140,84 C90,76 130,36 62,44 C24,48 44,86 96,66 C150,46 108,26 40,70"
+                  fill="none" stroke="#f87171" stroke-width="1.5" opacity=".8" />
+            <text x="0" y="122" fill="#737373">one blob &middot; hard to isolate a failure</text>
+
+            <line x1="256" y1="6" x2="256" y2="140" stroke="#1a1a1a" />
+
+            <text x="290" y="16" fill="#737373">SPINE</text>
+            <g fill="#0f1a12" stroke="#4ade8055">
+              <rect x="290" y="34" width="46" height="34" rx="6" />
+              <rect x="356" y="34" width="46" height="34" rx="6" />
+              <rect x="422" y="34" width="46" height="34" rx="6" />
+              <rect x="290" y="80" width="46" height="34" rx="6" />
+              <rect x="356" y="80" width="46" height="34" rx="6" />
+              <rect x="422" y="80" width="46" height="34" rx="6" />
+            </g>
+            <g stroke="#4ade8033" stroke-width="1.2">
+              <line x1="336" y1="51" x2="356" y2="51" /><line x1="402" y1="51" x2="422" y2="51" />
+              <line x1="336" y1="97" x2="356" y2="97" /><line x1="402" y1="97" x2="422" y2="97" />
+            </g>
+            <text x="290" y="136" fill="#737373">typed steps &middot; cached &middot; individually traceable</text>
+          </g>
+        </svg>
+        <p style="margin:16px 0 0; font-size:13px; color:var(--muted-dim);">
+          Structured output makes error tracing and isolation automatic &mdash; the key inhibitor to raw
+          Claude Code vibe coding.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PRODUCT ============ -->
+  <section class="block" id="product">
+    <p class="eyebrow">06 &mdash; Technical deep dive</p>
+    <h2>The product, today.</h2>
+    <p class="lead">
+      Two weeks of full-time development, 120k lines of code, a fully chargeable Stripe-integrated product, and a
+      prototype vibe-coding agent. Click any shot to enlarge.
+    </p>
+
+    <div class="grid" style="gap:44px; margin-top:40px;">
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/vibe_tab.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Vibe &mdash; describe what you want to build</span>
+          </div>
+          <img src="images/vibe_tab.png" alt="Spine vibe tab, an agent chat that proposes structures, pipeline steps and test documents" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>The vibe agent.</b> It proposes structures, pipeline steps with correct wiring, docs and sample test
+          documents, then applies them on approval. Invalid pipelines are caught and retried automatically before
+          you ever see them. This is the surface we&rsquo;re betting on for non-technical founders.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/dev_page_1_zoomed.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Build &mdash; typed structures</span>
+          </div>
+          <img src="images/dev_page_1_zoomed.png" alt="Structure editor with typed fields, descriptions, examples, min-max and required flags, plus reusable type aliases" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>Typed schema enforcement.</b> Fields, types, descriptions, examples, min&ndash;max and required flags,
+          with reusable type aliases like <span class="mono">quote_span_t</span> shared across the project.
+          Structures generate the prompts, so most users never write one.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/dev_page_2_zoomed.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Build &mdash; pipeline</span>
+          </div>
+          <img src="images/dev_page_2_zoomed.png" alt="Pipeline builder wiring typed steps together, showing average run time, cost per run and cached step count" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>Modular pipeline.</b> Each step is separate, cached and independently inspectable. This is a real legal
+          evaluation pipeline &mdash; typed input to typed output at every hop, mixing LLM calls with custom code, running at
+          <b>$0.002384 per run with 8 steps cached</b>. Per-step models are chosen per task, so the extraction step here
+          runs on DeepSeek rather than a frontier model.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/download_code.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Export &mdash; eject the whole pipeline</span>
+          </div>
+          <img src="images/download_code.png" alt="Pipeline export dialog offering TypeScript, Python, Rust, Go, BAML, a gRPC connector, an inference UI and setup files" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>This is the developer handoff.</b> Pipeline code in TypeScript, Python, Rust, Go or BAML, plus a gRPC
+          connector, an inference UI with the step trace, sample documents and setup files &mdash; no secrets in the
+          generated code. A non-technical founder builds it here; their engineer takes the code and owns every
+          low-level detail from then on.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/visualised_logging.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Logging &mdash; step-level run trace</span>
+          </div>
+          <img src="images/visualised_logging.png" alt="Per-step run trace with input and output token distributions, latency, retries and per-step cost" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>This is what interpretability actually looks like.</b> Per-step cost ($0.001 range), input/output size
+          and latency distributions across attempts, validation results, and recovered retries called out explicitly
+          &mdash; &ldquo;3 failures were automatically retried, the step still succeeded&rdquo;. When a test case diverges,
+          this trace is what gets fed back for the fix.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/integrated_file_system_1.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Documents &mdash; integrated file system</span>
+          </div>
+          <img src="images/integrated_file_system_1.png" alt="Document picker filtering the store by type and filename rule, showing excluded files with the reason" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>Typing extends to files.</b> Inputs declare what they accept, so the store filters itself and shows
+          you <em>why</em> a document was excluded rather than failing at runtime.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/excel_view_for_non_technical.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Output &mdash; native excel view</span>
+          </div>
+          <img src="images/excel_view_for_non_technical.png" alt="Structured output rendered as a spreadsheet table with tree, table and JSON toggles" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>Excel natively.</b> Because output is typed, the same result renders as a tree, a table or JSON.
+          Non-technical users get a spreadsheet; engineers get the JSON.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/one_click_deploy_api_or_website.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Share &mdash; one-click deploy</span>
+          </div>
+          <img src="images/one_click_deploy_api_or_website.png" alt="Deployment panel with link, API and marketplace tabs, who-pays selection and live deployment spend caps" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>Hosting is the whole point.</b> Ship a public run page, an API, or a marketplace listing &mdash;
+          and choose who pays, with spend caps. A Claude Code user still has to solve this themselves.
+        </figcaption>
+      </figure>
+
+      <figure class="shot rv">
+        <div class="frame" data-zoom="images/pricing.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Billing &mdash; live</span>
+          </div>
+          <img src="images/pricing.png" alt="Billing and pricing surface, live and chargeable" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>Chargeable today.</b> Stripe, billing, credits and inference markup are already wired &mdash; this
+          isn&rsquo;t a prototype with a waitlist behind it.
+        </figcaption>
+      </figure>
+
+    </div>
+  </section>
+
+  <!-- ============ PROGRESS ============ -->
+  <section class="block" id="progress-section">
+    <p class="eyebrow">07 &mdash; Development progress</p>
+    <div class="grid g2" style="gap:40px; align-items:start;">
+      <div>
+        <h2>Two weeks, 120k lines,<br />a chargeable product.</h2>
+        <p class="lead">
+          Our future development focus is an agent that can guide someone non-technical to a highly reliable
+          backend. Data comes out as Excel natively, and error tracing and isolation are automated by the
+          structured approach.
+        </p>
+      </div>
+      <div class="card rv">
+        <div class="tl">
+          <div class="tl-item">
+            <div class="when">Shipped</div>
+            <div class="what">Typed structures, modular pipelines, step-level eval harness, run observability, code eject to Python / TypeScript.</div>
+          </div>
+          <div class="tl-item">
+            <div class="when">Shipped</div>
+            <div class="what">Hosting, public run links, API deploy, Stripe billing with inference markup, creator monetization.</div>
+          </div>
+          <div class="tl-item now">
+            <div class="when">Now &mdash; prototype</div>
+            <div class="what">Vibe coding agent: describe it, agent proposes and applies the whole project.</div>
+          </div>
+          <div class="tl-item">
+            <div class="when">Next</div>
+            <div class="what">Agent that walks a non-technical founder to a production-reliable backend, end to end.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid g4 rv" style="margin-top:32px;">
+      <div class="card stat"><div class="k">Build time</div><div class="v">2 wks</div><div class="n">full-time, solo</div></div>
+      <div class="card stat"><div class="k">Codebase</div><div class="v">120k</div><div class="n">lines of code</div></div>
+      <div class="card stat"><div class="k">Measured run</div><div class="v">$0.0024</div><div class="n">legal eval pipeline, 8 steps cached</div></div>
+      <div class="card stat"><div class="k">Status</div><div class="v">Live</div><div class="n">Stripe-integrated, bugs pending</div></div>
+    </div>
+  </section>
+
+  <!-- ============ COMPETITORS ============ -->
+  <section class="block" id="competitors">
+    <p class="eyebrow">08 &mdash; Competitors</p>
+    <h2>~90 companies mapped.<br />The leader does $13M ARR.</h2>
+    <p class="lead">
+      We&rsquo;ve conducted extensive competitor analysis and used a subset of their products. The highest-ARR
+      product in the category is Relevance AI at $13M.
+    </p>
+
+    <div class="grid g2 rv" style="margin-top:28px; gap:16px;">
+      <div class="card">
+        <h3>Relevance AI &mdash; $13M ARR</h3>
+        <p style="font-size:14.5px; margin-bottom:0;">
+          From my experience at KPMG, I know Relevance AI isn&rsquo;t used in production and wouldn&rsquo;t be taken
+          seriously to do that. It&rsquo;s used exclusively for non-technical client demos &mdash; and it still requires
+          the development team to build those demos.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Dify.ai &mdash; $3M ARR, $180M valuation</h3>
+        <p style="font-size:14.5px; margin-bottom:0;">
+          A closer product to Spine. More developer features than Relevance AI, around 450k lines of code, launched
+          roughly 3 years ago. This is the realistic gravity of the category &mdash; and the bar to beat.
+        </p>
+      </div>
+    </div>
+
+    <!-- AI : show rather than assert that the category leader is demo-ware -->
+    <div class="grid g2 rv" style="margin-top:32px; gap:16px;">
+      <figure class="shot">
+        <div class="frame" data-zoom="images/relevance_AI.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Relevance AI &mdash; the builder</span>
+          </div>
+          <img src="images/relevance_AI.png" alt="Relevance AI agent builder: a single free-text prompt box, a model picker, tools and a knowledge drag-and-drop panel" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>The whole build surface is a prompt box.</b> One free-text instruction, a model picker, a tool toggle
+          and a drag-and-drop knowledge panel. There are no types, no per-step boundaries and nothing to trace
+          when an answer comes back wrong.
+        </figcaption>
+      </figure>
+      <figure class="shot">
+        <div class="frame" data-zoom="images/relevance_share.png">
+          <div class="bar">
+            <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+            <span class="label">Relevance AI &mdash; the output</span>
+          </div>
+          <img src="images/relevance_share.png" alt="Relevance AI share dialog: chat UI, embed snippet, shareable link and styling options with a mock conversation" loading="lazy" />
+        </div>
+        <figcaption>
+          <b>And the output is a styled chat widget.</b> Primary colour, starting prompts, a mock conversation, and
+          &ldquo;chats on the free plan are cleared after 30 days&rdquo;. This is a demo tool that happens to do
+          $13M ARR &mdash; which tells you how little the category has had to deliver so far.
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="card rv" style="margin-top:32px;">
+      <h3>ARR vs. valuation, opacity = similarity, with fitted trend</h3>
+      <p style="font-size:12.5px; color:var(--muted-dim); margin-bottom:0; max-width:none;">
+        X = ARR ($M, log). Y = valuation ($M, log). Solid dot = both figures disclosed or estimated directly.
+        Dashed-ring dot = one axis modelled from the ~25.4&times; median peer valuation:ARR multiple.
+        Dashed line = power-law least-squares fit, valuation &asymp; 16.6 &times; ARR<sup>0.83</sup> (R&sup2; = 0.47, n = 8).
+        Filtered from the full 52-tool research pass to those scoring similarity &ge; 7/10 against the brief,
+        with n8n removed and Relevance AI added back in. 3 tools with neither figure public are omitted. Hover a point for detail.
+      </p>
+
+      <div class="chart-host" id="landscapeChart"></div>
+
+      <div class="chart-legends">
+        <div>
+          <div class="legend-title">Similarity to brief (opacity)</div>
+          <div class="alpha-grad" id="alphaGrad"></div>
+          <div class="alpha-ticks"><span>0</span><span>5</span><span>10</span></div>
+        </div>
+        <div>
+          <div class="legend-title">Data quality</div>
+          <div class="shape-legend">
+            <div class="shape-row"><span class="swatch-solid"></span> Both figures disclosed / estimated</div>
+            <div class="shape-row"><span class="swatch-ring"></span> One axis modelled (peer multiple)</div>
+            <div class="shape-row"><span class="swatch-line"></span> <span>Fitted trend: val &asymp; 16.6 &times; ARR<sup>0.83</sup></span></div>
+          </div>
+        </div>
+      </div>
+
+      <p style="margin:18px 0 0; font-size:11.5px; color:var(--muted-dim); max-width:none;">
+        Note: Gumloop is plotted at its pre-Series-B $1.1M ARR estimate, which is now stale &mdash;
+        it is above $10M following the $50M round. The fit is not re-run for it.
+      </p>
+    </div>
+
+    <h3 style="margin:44px 0 6px; font-size:15px;">Feature comparison</h3>
+    <p style="font-size:13px; color:var(--muted-dim); margin-bottom:16px;">A small subset of high-level features across the landscape.</p>
+    <div class="table-wrap rv">
+      <table>
+        <thead>
+          <tr>
+            <th>Platform</th>
+            <th>Visual<br />builder</th>
+            <th>Typed schema<br />enforcement</th>
+            <th>Multi-language<br />code eject</th>
+            <th>Step-level<br />eval harness</th>
+            <th>Run<br />observability</th>
+            <th>Creator<br />monetization</th>
+            <th>Self-host /<br />custom LLM</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="us">
+            <td>Spine</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill y">Yes</span></td><td><span class="pill y">Yes</span></td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill y">Yes</span></td><td><span class="pill y">Yes</span></td>
+            <td><span class="pill p">Part</span></td>
+          </tr>
+          <tr>
+            <td>Dify AI</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill p">Part</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill p">Part</span></td><td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill y">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Vellum AI</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill y">Yes</span></td><td><span class="pill p">Part</span></td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill n">&mdash;</span></td>
+          </tr>
+          <tr>
+            <td>StackAI</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill p">Part</span></td><td><span class="pill p">Part</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill p">Part</span></td>
+          </tr>
+          <tr>
+            <td>Windmill</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill p">Part</span></td><td><span class="pill p">Part</span></td>
+            <td><span class="pill n">&mdash;</span></td><td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill y">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Relevance AI</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill n">&mdash;</span></td><td><span class="pill p">Part</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill n">&mdash;</span></td>
+          </tr>
+          <tr>
+            <td>Gumloop</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill n">&mdash;</span></td><td><span class="pill p">Part</span></td><td><span class="pill p">Part</span></td>
+            <td><span class="pill n">&mdash;</span></td>
+          </tr>
+          <tr>
+            <td>BoundaryML</td>
+            <td><span class="pill n">&mdash;</span></td><td><span class="pill y">Yes</span></td><td><span class="pill y">Yes</span></td>
+            <td><span class="pill p">Part</span></td><td><span class="pill p">Part</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill y">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Flowise</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill n">&mdash;</span></td><td><span class="pill p">Part</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill y">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Langflow</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill n">&mdash;</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill n">&mdash;</span></td><td><span class="pill p">Part</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill y">Yes</span></td>
+          </tr>
+          <tr>
+            <td>Wordware</td>
+            <td><span class="pill y">Yes</span></td><td><span class="pill p">Part</span></td><td><span class="pill n">&mdash;</span></td>
+            <td><span class="pill n">&mdash;</span></td><td><span class="pill p">Part</span></td><td><span class="pill p">Part</span></td>
+            <td><span class="pill n">&mdash;</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:14px; font-size:12.5px; color:var(--muted-dim);">
+      Full 52-tool research pass, ARR vs. valuation vs. similarity:
+      <a href="ai_eng_landscape_3.html" style="color:var(--muted); text-decoration:underline; text-underline-offset:3px;">open the landscape chart &rarr;</a>
+    </p>
+  </section>
+
+  <!-- ============ MARKET ============ -->
+  <section class="block" id="market">
+    <p class="eyebrow">09 &mdash; TAM / SAM / SOM</p>
+    <h2>TAM SAM SOM</h2>
+    <p class="lead">
+      TAM $25B &middot; SAM $3.5B &middot; SOM $8M base, $40M bull &mdash; ARR by month 36. Split, because the two legs
+      carry opposite risk profiles and a single blended number hides both.
+    </p>
+
+    <div class="market rv" style="margin-top:32px;">
+      <div class="grid" style="gap:16px;">
+        <div class="card">
+          <h3>Consumer &mdash; the outcome</h3>
+          <p style="font-size:14px;">
+            Prompt-to-app at $4.7B, growing 38% a year. The only leg with demonstrated distribution velocity:
+            Lovable went $200M &rarr; $500M ARR in seven months, Bolt hit $40M in five.
+            <span class="fg">$100M ARR is 7% of this SAM.</span> Low confidence, uncapped &mdash; this is the leg
+            that returns a fund.
+          </p>
+          <p style="font-size:14px; margin-bottom:0; color:var(--muted-dim);">
+            Which means Lovable, Replit and Bolt are competitors, not metaphors. They generate apps; we generate
+            backends that run at a third of a cent per document.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Enterprise &mdash; the floor</h3>
+          <p style="font-size:14px;">
+            LLMOps ($7.1B), agent platforms ($5.3B excluding the hyperscalers) and AI implementation services
+            ($14B), de-duplicated. Contract revenue: 150&ndash;300 teams at $8&ndash;15k plus two to four
+            implementations at $200k&ndash;1M.
+          </p>
+          <p style="font-size:14px; margin-bottom:0; color:var(--muted-dim);">
+            High confidence, capped near the $1&ndash;13M peer base rate. This is the leg that means we don&rsquo;t die.
+          </p>
+        </div>
+      </div>
+
+      <!-- AI : nested squares — area is roughly proportional to log scale, not linear, or SOM would be invisible -->
+      <div class="card" style="padding:30px;">
+        <svg class="diagram capped" viewBox="0 0 420 300" role="img" aria-label="Nested TAM SAM SOM diagram">
+          <g font-family="Geist Mono, monospace">
+            <rect x="10" y="10" width="400" height="280" rx="12" fill="#0d1410" stroke="#1f2a22" />
+            <text x="26" y="34" fill="#737373" font-size="10.5" letter-spacing="1.5">TAM</text>
+            <text x="26" y="56" fill="#fafafa" font-size="18">$25B</text>
+
+            <rect x="70" y="86" width="280" height="180" rx="10" fill="#12241a" stroke="#2c4436" />
+            <text x="86" y="110" fill="#737373" font-size="10.5" letter-spacing="1.5">SAM</text>
+            <text x="86" y="132" fill="#fafafa" font-size="16">$3.5B</text>
+
+            <rect x="126" y="150" width="168" height="100" rx="8" fill="#16321f" stroke="#4ade8055" />
+            <text x="142" y="174" fill="#4ade80" font-size="10.5" letter-spacing="1.5">SOM</text>
+            <text x="142" y="196" fill="#4ade80" font-size="15">$8M base</text>
+            <text x="142" y="216" fill="#4ade8099" font-size="12.5">$40M bull</text>
+            <text x="142" y="236" fill="#737373" font-size="10">by month 36</text>
+          </g>
+        </svg>
+        <p style="margin:16px 0 0; font-size:11.5px; color:var(--muted-dim);">Areas indicative, not to linear scale.</p>
+      </div>
+    </div>
+
+    <details class="acc rv">
+      <summary>How the split is derived &mdash; and what can kill it <span class="chev">&#9662;</span></summary>
+      <div class="body">
+        <p>
+          <strong>Consumer cut.</strong> Prompt-to-app and vibe coding is $4.7B in 2026 at a 38% CAGR, reaching ~$17B by
+          2030. Mordor&rsquo;s no-code AI platform print of $4.88B is the same budget line arriving independently at the
+          same place. SAM is that market after a ~65% geography cut for NA / Western Europe / ANZ and a further cut to the
+          builders who need a backend rather than a front end &mdash; ~$1.5B. Bottom-up: ~150k reachable teams at a
+          $2&ndash;3k blended self-serve price (peers run $59&ndash;159/mo) with inference markup on top.
+        </p>
+        <p>
+          <strong>Enterprise cut.</strong> LLMOps software at $7.1B (TBRC), agent platforms at $5.3B on the narrow
+          definition that excludes Azure/AWS/Google, and AI implementation services at $14B. These overlap heavily;
+          de-duplicated the layer is ~$20B, growing to ~$68B by 2030. SAM is $20B &times; ~65% geography &times; ~15% for
+          buyer and wedge &asymp; $2B &mdash; we do not win the F500, they buy Databricks or Big Four. Bottom-up agrees:
+          ~40k reachable funded and mid-market teams at a ~$25k ACV is ~$1B of software, plus ~$1B of productisable
+          implementation spend.
+        </p>
+        <p>
+          <strong>Why the base clears the peer mark.</strong> The direct peer cohort clusters between $1M and $13M ARR:
+          Dify $3M at three years, Relevance AI $12.6M, Vellum $3.5M, StackAI $2.9M (acquired by Asana for $75M). An $8M
+          base is above Dify&rsquo;s three-year figure because Dify is pure software with no services leg &mdash;
+          $200k&ndash;1M implementation contracts are booked revenue, not PLG revenue. That is the whole justification,
+          and it only becomes visible once the legs are separated.
+        </p>
+        <p>
+          <strong>What can kill this.</strong> Two things. If founders keep shipping backends in Claude Code, the
+          enterprise tooling leg collapses to the visual-builder niche &mdash; already only ~$40&ndash;70M of captured
+          ARR. And services compresses the multiple: implementation runs 30&ndash;40% margin and managed services
+          50&ndash;65% against 70&ndash;80% for software, and investors mark services at 1&ndash;2&times; revenue against
+          10&ndash;25&times; for software. Services funds the consumer motion; it is deliberately not the growth story.
+        </p>
+      </div>
+    </details>
+  </section>
+
+  <!-- ============ TRACTION ============ -->
+  <section class="block" id="traction">
+    <p class="eyebrow">10 &mdash; Traction</p>
+    <div class="grid g2" style="gap:40px; align-items:start;">
+      <div>
+        <h2>Traction</h2>
+        <p class="lead">
+          For context: I was planning on pivoting and have come back to this idea, so I haven&rsquo;t put time
+          into traction until the last day and a half. I&rsquo;d rather show you the raw findings than dress up
+          the little there is.
+        </p>
+      </div>
+      <div class="grid rv" style="gap:16px;">
+        <div class="card">
+          <h3>Industry connections</h3>
+          <p style="font-size:14.5px; margin-bottom:0;">
+            NAB, KPMG, and AI-engineering agencies &mdash; a phone call away.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Founder interviews &mdash; validated pain</h3>
+          <p style="font-size:14.5px; margin-bottom:0;">
+            Startup founders with severe and urgent pain around AI engineering. The finding that matters:
+            <span class="fg">they had not heard of chain of thought or prompt caching</span> &mdash; two of the
+            most critical tools in the discipline. That gap is the product.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card rv" style="margin-top:16px; border-color:var(--line-bright);">
+      <h3>The disconfirming result, stated plainly</h3>
+      <p style="font-size:14.5px; max-width:none;">
+        I ran user interviews with two enterprise developers. Both are building solutions from scratch with
+        Cursor or Claude Code. In no way is that a bad choice for them &mdash; they are engineers, and the
+        tools are excellent.
+      </p>
+      <p style="font-size:14.5px; margin-bottom:0; max-width:none;">
+        The implication cuts both ways. It confirms that our buyer is
+        <span class="fg">the founder without AI-engineering experience, not the enterprise developer</span>.
+        And it suggests the valuations in this category may not be backed by real enterprise adoption &mdash;
+        which is exactly why we plan against the $1&ndash;13M ARR base rate rather than the headline multiples.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ PRICING ============ -->
+  <section class="block" id="pricing">
+    <p class="eyebrow">11 &mdash; Pricing</p>
+    <h2>Free with inference markup first.<br />Three revenue legs after.</h2>
+    <p class="lead">
+      Initially free with an inference markup, to get maximum user feedback. Then a synergistic, multi-pronged
+      approach where each leg feeds the next.
+    </p>
+
+    <div class="grid g3 rv" style="margin-top:32px;">
+      <div class="card num-card">
+        <span class="num">LEG 01</span>
+        <h3>Vibe coding product</h3>
+        <p>Consumer-facing. The name-brand driver &mdash; this is what produces distribution.</p>
+      </div>
+      <div class="card num-card">
+        <span class="num">LEG 02</span>
+        <h3>Enterprise dev tooling</h3>
+        <p>Development tooling and vibe coding for teams already building, monetising the traffic the consumer product brings.</p>
+      </div>
+      <div class="card num-card">
+        <span class="num">LEG 03</span>
+        <h3>Enterprise consulting</h3>
+        <p>For companies needing enterprise development without a dedicated engineering team. De-risks the early years.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MOAT ============ -->
+  <section class="block" id="moat">
+    <p class="eyebrow">12 &mdash; The moat</p>
+    <div class="grid g2" style="gap:40px; align-items:start;">
+      <div>
+        <h2>Make money first,<br />build a moat later.</h2>
+        <p class="lead">
+          Claude eats our product with time &mdash; that was my original reason for pivoting. I want to be
+          straightforward about it rather than pretend otherwise.
+        </p>
+      </div>
+      <div class="card rv" style="border-color:var(--line-bright);">
+        <p style="font-size:15px;">
+          Today a Claude Code user still has to handle deployment themselves, until Anthropic clones our product.
+          Until then we are the <span class="fg">lowest-friction way to engineer a backend</span>.
+        </p>
+        <p style="font-size:15px; margin-bottom:0;">
+          No product is truly safe from a superintelligent Claude 10. Adapting to market demand is the best plan.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THE ASK ============ -->
+  <section class="block" id="ask">
+    <p class="eyebrow">13 &mdash; The ask</p>
+    <div class="grid g2" style="gap:40px; align-items:start;">
+      <div>
+        <h2>$200k for 5%,<br />at a $4M valuation.</h2>
+        <p class="lead">
+          We require minimal funding or runway. The product is built, hosted and already chargeable &mdash;
+          this is not a raise to reach a first version.
+        </p>
+      </div>
+      <div class="grid rv" style="gap:16px;">
+        <div class="pitchline">
+          <div class="k">Raising</div>
+          <div class="v">$200,000</div>
+          <hr />
+          <div class="k">For</div>
+          <div class="v">5% equity</div>
+          <hr />
+          <div class="k">Valuation</div>
+          <div class="v">$4,000,000</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CLOSE ============ -->
+  <section class="block" id="close" style="padding-top:80px; padding-bottom:80px;">
+    <h2 style="font-size:clamp(30px,4.6vw,46px);">Lovable for AI engineering.</h2>
+    <p class="lead" style="margin-bottom:32px;">
+      Production-grade LLM backends, built by people who aren&rsquo;t AI engineers.
+      Hosted, traced, typed, and cheap enough to run.
+    </p>
+    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+      <a class="btn lg" href="https://www.spine-ai-app.dev/" target="_blank" rel="noopener">Try now</a>
+      <a class="btn lg ghost" href="#top">Back to top</a>
+    </div>
+    <div class="credit" style="margin-top:40px;">
+      <span>developed by engineers from <b>KPMG</b></span>
+      <span>built at the <b>ANTLER</b> hackathon &middot; independent, not funded</span>
+    </div>
+  </section>
+
+</main>
+
+<footer class="end">
+  <p>&copy; 2026 Spine. All rights reserved.</p>
+</footer>
+
+<div id="lightbox" role="dialog" aria-modal="true" aria-label="Enlarged screenshot"><img alt="" /></div>
+<div id="chartTip"></div>
+
+<script>
+  const progress = document.getElementById("progress");
+
+  // AI : reveal by measuring rather than IntersectionObserver — an anchor jump skips
+  // past elements entirely, and observed-but-never-intersected blocks stay invisible.
+  let pending = Array.from(document.querySelectorAll(".rv"));
+
+  const onScroll = () => {
+    const h = document.documentElement.scrollHeight - window.innerHeight;
+    progress.style.width = (h > 0 ? (window.scrollY / h) * 100 : 0) + "%";
+
+    pending = pending.filter((el) => {
+      if (el.getBoundingClientRect().top >= window.innerHeight - 60) return true;
+      el.classList.add("in");
+      return false;
+    });
+  };
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  onScroll();
+
+  // AI : nav highlight follows the section currently filling the viewport
+  const navLinks = Array.from(document.querySelectorAll(".nav-links a"));
+  const targets = navLinks
+    .map((a) => document.querySelector(a.getAttribute("href")))
+    .filter(Boolean);
+  const spy = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((e) => {
+        if (!e.isIntersecting) return;
+        navLinks.forEach((a) =>
+          a.classList.toggle("active", a.getAttribute("href") === "#" + e.target.id)
+        );
+      });
+    },
+    { rootMargin: "-45% 0px -50% 0px" }
+  );
+  targets.forEach((t) => spy.observe(t));
+
+  // AI : click-to-zoom on product shots
+  const lightbox = document.getElementById("lightbox");
+  const lightboxImg = lightbox.querySelector("img");
+  document.querySelectorAll("[data-zoom]").forEach((frame) => {
+    frame.addEventListener("click", () => {
+      lightboxImg.src = frame.getAttribute("data-zoom");
+      lightbox.classList.add("on");
+      document.body.style.overflow = "hidden";
+    });
+  });
+  const closeLightbox = () => {
+    lightbox.classList.remove("on");
+    document.body.style.overflow = "";
+  };
+  lightbox.addEventListener("click", closeLightbox);
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeLightbox();
+  });
+
+  // AI : landscape scatter — ported from ai_eng_landscape_3.html. Only the 8 plotted
+  // tools are carried over; the omitted 3 and the sortable table stay on that page.
+  const LANDSCAPE = [
+    { name: "Relevance AI", category: "No-code AI agent builder", valuation: 37.8, arr: 12.6, similarity: 6, valImputed: false, arrImputed: false, desc: "No-code platform for building and deploying multi-agent 'AI workforces'; added back in below the \u22657 cutoff by request." },
+    { name: "Flowise", category: "Visual LLM workflow builder", valuation: 2.3, arr: 1, similarity: 8, valImputed: false, arrImputed: false, desc: "Open-source drag-and-drop LLM/agent workflow builder, self-hostable." },
+    { name: "Gumloop", category: "No-code AI workflow builder", valuation: 27.97, arr: 1.1, similarity: 8, valImputed: true, arrImputed: false, desc: "No-code platform for building and sharing AI agents that run multi-step workflow tasks." },
+    { name: "Dify AI", category: "LLM app dev platform", valuation: 180, arr: 7.08, similarity: 7, valImputed: false, arrImputed: true, desc: "Open-source visual agentic-workflow builder plus production infra (RAG, tools, deploy/API)." },
+    { name: "BoundaryML (BAML)", category: "Typed LLM output / codegen", valuation: 8.39, arr: 0.33, similarity: 8, valImputed: true, arrImputed: false, desc: "Language and toolchain for typed, structured LLM output \u2014 strong overlap on the types and code-export theme." },
+    { name: "Vellum AI", category: "LLM app dev platform", valuation: 89.01, arr: 3.5, similarity: 7, valImputed: true, arrImputed: false, desc: "Build, test, evaluate and deploy production LLM apps \u2014 workflow orchestration, eval and monitoring." },
+    { name: "StackAI", category: "No-code AI agent platform", valuation: 75, arr: 2.9, similarity: 7, valImputed: false, arrImputed: false, desc: "No-code enterprise AI agent/workflow platform. Acquired by Asana for $75M, May 2026." },
+    { name: "Windmill", category: "Script-to-workflow platform", valuation: 68.66, arr: 2.7, similarity: 7, valImputed: true, arrImputed: false, desc: "Open-source platform turning scripts into workflows, internal apps and UIs, with AI-agent/MCP tool support." },
+  ];
+
+  const MEDIAN_MULT = 25.4;
+  const FIT = { a: 16.624249790948344, b: 0.8344969334824385 };
+  const ARR_DOMAIN = [0.1, 100];
+  const VAL_DOMAIN = [1, 1000];
+
+  // hand-tuned label offsets to dodge the tight StackAI / Windmill / Vellum cluster
+  const LABEL_OFFSETS = {
+    "Relevance AI": { dx: 10, dy: 4 },
+    "Dify AI": { dx: 10, dy: -10 },
+    "Vellum AI": { dx: 12, dy: -8 },
+    StackAI: { dx: -10, dy: -14, anchor: "end" },
+    Windmill: { dx: -10, dy: 19, anchor: "end" },
+    Gumloop: { dx: 10, dy: 4 },
+    "BoundaryML (BAML)": { dx: 10, dy: 4 },
+    Flowise: { dx: 10, dy: -10 },
+  };
+
+  const W = 1140, H = 560, M = { top: 20, right: 30, bottom: 52, left: 66 };
+  const plotW = W - M.left - M.right;
+  const plotH = H - M.top - M.bottom;
+
+  const logPos = (v, domain) =>
+    (Math.log10(v) - Math.log10(domain[0])) / (Math.log10(domain[1]) - Math.log10(domain[0]));
+  const xScale = (arr) => M.left + logPos(arr, ARR_DOMAIN) * plotW;
+  const yScale = (val) => M.top + (1 - logPos(val, VAL_DOMAIN)) * plotH;
+  const alphaFor = (sim) => 0.2 + 0.72 * (sim / 10);
+  const fmtMoney = (m) =>
+    m == null ? "—" : "$" + m.toLocaleString(undefined, { maximumFractionDigits: m < 10 ? 2 : 0 }) + "M";
+
+  let chart = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="ARR versus valuation for comparable AI engineering tools">`;
+
+  [0.1, 1, 10, 100].forEach((v) => {
+    const x = xScale(v);
+    chart += `<line class="chart-grid" x1="${x}" x2="${x}" y1="${M.top}" y2="${M.top + plotH}"></line>`;
+    chart += `<text class="chart-tick" x="${x}" y="${M.top + plotH + 16}" text-anchor="middle">${v}</text>`;
+  });
+  [1, 10, 100, 1000].forEach((v) => {
+    const y = yScale(v);
+    chart += `<line class="chart-grid" x1="${M.left}" x2="${M.left + plotW}" y1="${y}" y2="${y}"></line>`;
+    chart += `<text class="chart-tick" x="${M.left - 8}" y="${y + 3}" text-anchor="end">${v}</text>`;
+  });
+  chart += `<line class="chart-axis" x1="${M.left}" x2="${M.left + plotW}" y1="${M.top + plotH}" y2="${M.top + plotH}"></line>`;
+  chart += `<line class="chart-axis" x1="${M.left}" x2="${M.left}" y1="${M.top}" y2="${M.top + plotH}"></line>`;
+  chart += `<text class="chart-axis-title" x="${M.left + plotW / 2}" y="${H - 8}" text-anchor="middle">ARR, $M (log scale)</text>`;
+  chart += `<text class="chart-axis-title" transform="translate(16,${M.top + plotH / 2}) rotate(-90)" text-anchor="middle">Valuation, $M (log scale)</text>`;
+
+  const STEPS = 40;
+  let trend = "";
+  for (let i = 0; i <= STEPS; i++) {
+    const logx = Math.log10(ARR_DOMAIN[0]) + (i / STEPS) * (Math.log10(ARR_DOMAIN[1]) - Math.log10(ARR_DOMAIN[0]));
+    const arrVal = Math.pow(10, logx);
+    const valVal = Math.min(VAL_DOMAIN[1], Math.max(VAL_DOMAIN[0], FIT.a * Math.pow(arrVal, FIT.b)));
+    trend += (i === 0 ? "M" : "L") + xScale(arrVal).toFixed(1) + "," + yScale(valVal).toFixed(1) + " ";
+  }
+  chart += `<path d="${trend}" fill="none" stroke="#737373" stroke-width="1.6" stroke-dasharray="5 4" opacity="0.75"></path>`;
+
+  LANDSCAPE.forEach((d, i) => {
+    const cx = xScale(d.arr), cy = yScale(d.valuation), r = 8;
+    const lbl = LABEL_OFFSETS[d.name];
+    chart += `<g class="pt-group" data-i="${i}">`;
+    chart += `<circle class="chart-pt" cx="${cx}" cy="${cy}" r="${r}" style="opacity:${alphaFor(d.similarity).toFixed(2)}"></circle>`;
+    chart += `<circle class="chart-pt-ring" cx="${cx}" cy="${cy}" r="${r}"></circle>`;
+    if (d.valImputed || d.arrImputed) {
+      chart += `<circle class="chart-pt-imputed" cx="${cx}" cy="${cy}" r="${r + 2.5}"></circle>`;
+    }
+    if (lbl) {
+      chart += `<text class="chart-pt-label" x="${cx + lbl.dx}" y="${cy + lbl.dy}" text-anchor="${lbl.anchor || "start"}">${d.name.replace(/\s*\(.*?\)\s*/g, "")}</text>`;
+    }
+    chart += `</g>`;
+  });
+
+  chart += `</svg>`;
+  document.getElementById("landscapeChart").innerHTML = chart;
+
+  const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+  const rgba = (hex, a) => {
+    const h = hex.replace("#", "");
+    return `rgba(${parseInt(h.substring(0, 2), 16)},${parseInt(h.substring(2, 4), 16)},${parseInt(h.substring(4, 6), 16)},${a})`;
+  };
+  document.getElementById("alphaGrad").style.background =
+    `linear-gradient(90deg, ${rgba(accent, alphaFor(0))}, ${rgba(accent, alphaFor(10))})`;
+
+  const chartTip = document.getElementById("chartTip");
+  document.querySelectorAll(".pt-group").forEach((g) => {
+    const d = LANDSCAPE[+g.dataset.i];
+    g.addEventListener("mousemove", (e) => {
+      let flag = "";
+      if (d.valImputed) flag = `Valuation modelled from ARR × ${MEDIAN_MULT}x peer multiple, not independently disclosed.`;
+      if (d.arrImputed) flag = `ARR modelled from valuation ÷ ${MEDIAN_MULT}x peer multiple, not independently disclosed.`;
+      chartTip.innerHTML = `
+        <div class="tt-name">${d.name}</div>
+        <div class="tt-cat">${d.category}</div>
+        <div class="tt-row"><span class="tt-k">Valuation</span><span class="tt-v">${fmtMoney(d.valuation)}${d.valImputed ? " *" : ""}</span></div>
+        <div class="tt-row"><span class="tt-k">ARR</span><span class="tt-v">${fmtMoney(d.arr)}${d.arrImputed ? " *" : ""}</span></div>
+        <div class="tt-row"><span class="tt-k">Similarity</span><span class="tt-v">${d.similarity}/10</span></div>
+        <div class="tt-desc">${d.desc}</div>
+        ${flag ? `<div class="tt-flag">* ${flag}</div>` : ""}`;
+      chartTip.style.opacity = 1;
+      // AI : flip the tooltip to the left / above the cursor near the window edges
+      const box = chartTip.getBoundingClientRect();
+      const x = e.clientX + 16 + box.width > window.innerWidth ? e.clientX - box.width - 16 : e.clientX + 16;
+      const y = e.clientY + 16 + box.height > window.innerHeight ? e.clientY - box.height - 16 : e.clientY + 16;
+      chartTip.style.left = Math.max(8, x) + "px";
+      chartTip.style.top = Math.max(8, y) + "px";
+    });
+    g.addEventListener("mouseleave", () => {
+      chartTip.style.opacity = 0;
+    });
+  });
+</script>
+</body>
+</html>
