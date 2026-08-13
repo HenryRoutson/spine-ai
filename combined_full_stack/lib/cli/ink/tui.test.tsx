@@ -4,7 +4,7 @@ import { createSpineSession } from "@/lib/core/session"
 import { addNamedModel } from "@/lib/cli/workspace_edits"
 import { renderSpineTuiString, shouldLaunchInteractiveTui, runTuiCommand } from "@/lib/cli/ink/launch"
 import { WorkspaceView } from "@/lib/cli/ink/workspace-view"
-import { toPipelineView, toValidationView } from "@/lib/core/view"
+import { toAgentView, toDocsView, toLogsView, toPipelineView, toTestingView, toValidationView } from "@/lib/core/view"
 import { runSpineCli } from "@/lib/cli/run"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -17,6 +17,7 @@ describe("Ink TUI", () => {
     expect(frame).toContain("Spine")
     expect(frame).toContain("empty")
     expect(frame).toContain("Projects")
+    expect(frame).toContain("1:build")
   })
 
   it("renders the same session mutations as the React store / session CLI", () => {
@@ -43,6 +44,11 @@ describe("Ink TUI", () => {
         snap={snap}
         pipeline={toPipelineView(snap)}
         validation={toValidationView(snap)}
+        docs={toDocsView(snap)}
+        testing={toTestingView(snap)}
+        agent={toAgentView(snap)}
+        logs={toLogsView(snap)}
+        tab="build"
         selectedProjectId={snap.activeProjectId}
         prompt={{ kind: "rename", buffer: "New Name" }}
       />,
@@ -76,5 +82,16 @@ describe("Ink TUI", () => {
     const result = await runTuiCommand({ once: true })
     expect(result.ok).toBe(true)
     expect(String(result.data?.human)).toContain("Spine")
+  })
+
+  it("tui --once --tab agent shows the agent panel", async () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    session.appendChat({ role: "user", content: "Add a Finding structure" })
+    session.appendChat({ role: "assistant", content: "I'll propose a Finding model." })
+    const frame = renderSpineTuiString(session, "memory", { tab: "agent" })
+    expect(frame).toContain("Agent")
+    expect(frame).toContain("Finding")
+    expect(frame).toContain("4:agent")
   })
 })

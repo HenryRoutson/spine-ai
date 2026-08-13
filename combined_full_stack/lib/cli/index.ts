@@ -12,6 +12,7 @@ export {
 export { validateSetupCommand } from "@/lib/cli/validate_setup"
 export { runSpineCli, SPINE_CLI_HELP } from "@/lib/cli/run"
 export { runSessionCommand } from "@/lib/cli/session_cli"
+export { runAgentCommand } from "@/lib/cli/agent_cli"
 export { runDemoCommand } from "@/lib/cli/demo"
 export { runTuiCommand, renderSpineTuiString } from "@/lib/cli/ink/launch"
 export { profileLandingCommand, formatLandingProfileHuman } from "@/lib/cli/profile_landing"

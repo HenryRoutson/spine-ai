@@ -89,10 +89,14 @@ but it often creates tangled blobs of code rather than separate interpretable st
 Our platform creates modular blocks of code, often handled with pre-built steps, and caches these to achieve greater cost efficiency.
 
 4. 
-structured responses catch bugs early,
+structured backends catch bugs early,
 allow smaller models to be used,
 and save you from manually prompting
 
+5. 
+the key to unlocking fast adoption,
+is a full vibe coding UI with no learning curve.
+None of the competitors have adopted this UI.
 
 
 # Development progress

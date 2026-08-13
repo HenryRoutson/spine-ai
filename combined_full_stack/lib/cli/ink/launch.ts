@@ -7,9 +7,22 @@ import { createThrowingEgress } from "@/lib/core/transport"
 import { createFilePersist, resolveSessionPath } from "@/lib/cli/session_persist"
 import type { CliCommandResult } from "@/lib/cli/types"
 import { spineTuiTree } from "@/lib/cli/ink/app"
+import { TUI_TABS, type TuiTab } from "@/lib/core/view"
 
-export function renderSpineTuiString(session: SpineSession, sessionPath?: string, columns = 80): string {
-  return renderToString(spineTuiTree({ session, sessionPath, interactive: false }), { columns })
+export function parseTuiTab(raw?: string): TuiTab {
+  if (raw && (TUI_TABS as readonly string[]).includes(raw)) return raw as TuiTab
+  return "build"
+}
+
+export function renderSpineTuiString(
+  session: SpineSession,
+  sessionPath?: string,
+  opts: { columns?: number; tab?: TuiTab } = {},
+): string {
+  return renderToString(
+    spineTuiTree({ session, sessionPath, interactive: false, initialTab: opts.tab ?? "build" }),
+    { columns: opts.columns ?? 80 },
+  )
 }
 
 export function shouldLaunchInteractiveTui(
@@ -28,16 +41,24 @@ export async function runTuiCommand(flags: Record<string, string | boolean>): Pr
   })
 
   if (!shouldLaunchInteractiveTui(flags)) {
-    const frame = renderSpineTuiString(session, sessionPath)
+    const tab = parseTuiTab(typeof flags.tab === "string" ? flags.tab : undefined)
+    const frame = renderSpineTuiString(session, sessionPath, { tab })
     return {
       ok: true,
       command: "tui",
       issues: [],
-      data: { human: frame, sessionPath, interactive: false },
+      data: { human: frame, sessionPath, interactive: false, tab },
     }
   }
 
-  const instance = render(spineTuiTree({ session, sessionPath, interactive: true }))
+  const instance = render(
+    spineTuiTree({
+      session,
+      sessionPath,
+      interactive: true,
+      initialTab: parseTuiTab(typeof flags.tab === "string" ? flags.tab : undefined),
+    }),
+  )
   await instance.waitUntilExit()
   return {
     ok: true,

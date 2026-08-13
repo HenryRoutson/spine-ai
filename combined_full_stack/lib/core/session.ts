@@ -6,7 +6,7 @@ import { UNNAMED_PROJECT_NAME } from "@/lib/project-assistant-types"
 import { findQuote } from "@/lib/quotes"
 import { stripBuiltinTypeAliases, stripSharedModels, withBuiltinTypeAliases, withSharedModels } from "@/lib/structure"
 import { syncManagedPipelineSteps } from "@/lib/structure-parse-steps"
-import { DEFAULT_MODEL, InputType, ModuleKind } from "@/lib/types"
+import { DEFAULT_MODEL, DocLabel, InputType, ModuleKind } from "@/lib/types"
 import type {
   DocId,
   DocRef,
@@ -26,6 +26,7 @@ import {
   type TeamRealtimeHandlers,
 } from "@/lib/core/realtime"
 import { toQuoteView, toValidationView, type QuoteView, type ValidationView } from "@/lib/core/view"
+import type { ProjectProposal } from "@/lib/project-assistant-types"
 import type {
   AddDocContentInput,
   EgressPort,
@@ -33,6 +34,7 @@ import type {
   PersistPort,
   ProjectCreateOpts,
   ProjectPatch,
+  SessionChatTurn,
   SessionSnapshot,
 } from "@/lib/core/types"
 
@@ -42,7 +44,7 @@ export type SpineSessionOpts = {
   now?: () => number
 }
 
-function emptySnapshot(): SessionSnapshot {
+export function emptySessionSnapshot(): SessionSnapshot {
   return {
     projects: [],
     docs: [],
@@ -53,6 +55,8 @@ function emptySnapshot(): SessionSnapshot {
     inferenceInputDocIds: {},
     pendingCreates: [],
     deletedProjectIds: [],
+    chat: [],
+    pendingProposal: null,
   }
 }
 
@@ -113,7 +117,7 @@ export class SpineSession {
     this.persist = opts.persist
     this.egress = opts.egress
     this.now = opts.now ?? Date.now
-    this.snap = opts.persist?.load() ?? emptySnapshot()
+    this.snap = { ...emptySessionSnapshot(), ...(opts.persist?.load() ?? {}) }
   }
 
   getSnapshot(): SessionSnapshot {
@@ -165,6 +169,14 @@ export class SpineSession {
 
   get model(): string {
     return this.snap.model
+  }
+
+  get chat(): SessionChatTurn[] {
+    return this.snap.chat
+  }
+
+  get pendingProposal(): ProjectProposal | null {
+    return this.snap.pendingProposal
   }
 
   private commit(next: SessionSnapshot): void {
@@ -223,6 +235,29 @@ export class SpineSession {
       ...structuredClone(body),
       id,
       name: nextNumberedCloneName(source.name, this.snap.projects.map((p) => p.name)),
+      createdAt: now,
+      lastOpenedAt: now,
+      teamId: undefined,
+    }
+    const pendingCreates = [...this.snap.pendingCreates, fresh]
+    this.commit({
+      ...this.snap,
+      projects: overlayOptimisticProjects([...this.snap.projects, fresh], pendingCreates, this.snap.deletedProjectIds),
+      pendingCreates,
+      activeProjectId: open ? fresh.id : this.snap.activeProjectId,
+    })
+    return fresh
+  }
+
+  // AI : load a seed/disk project into the session without going through blankProject.
+  ingestProject(source: Project, opts?: ProjectCreateOpts): Project {
+    const open = opts?.open !== false
+    const id = uid<ProjectId>("p_")
+    const now = this.now()
+    const { teamReadOnly: _ro, teamProjectOwnerId: _owner, ...body } = source
+    const fresh: Project = {
+      ...structuredClone(body),
+      id,
       createdAt: now,
       lastOpenedAt: now,
       teamId: undefined,
@@ -377,6 +412,54 @@ export class SpineSession {
 
   ingestRemoteRuns(remote: PipelineRun[]): void {
     this.commit({ ...this.snap, runs: overlayOptimisticRuns(remote) })
+  }
+
+  appendChat(turn: SessionChatTurn): void {
+    this.commit({ ...this.snap, chat: [...this.snap.chat, turn] })
+  }
+
+  setPendingProposal(proposal: ProjectProposal | null): void {
+    this.commit({ ...this.snap, pendingProposal: proposal })
+  }
+
+  // AI : same delta apply as project-assistant.tsx — local; hosted run actions stay with the caller.
+  applyProposal(proposal: ProjectProposal): void {
+    const project = this.requireProject()
+    if (proposal.changed.name && proposal.projectName) {
+      this.renameProject(project.id, proposal.projectName)
+    }
+    if (proposal.changed.models || proposal.changed.modules || proposal.changed.typeAliases) {
+      this.applyProjectChanges({
+        ...(proposal.changed.models ? { models: proposal.models } : {}),
+        ...(proposal.changed.modules ? { modules: proposal.modules } : {}),
+        ...(proposal.changed.typeAliases ? { typeAliases: proposal.typeAliases } : {}),
+      })
+    }
+    if (proposal.changed.documentation) {
+      this.setDocumentation(proposal.documentation)
+    }
+    if (proposal.changed.docs) {
+      for (const spec of proposal.docs) {
+        this.addDocContent({
+          name: spec.name,
+          type: spec.type,
+          content: spec.content,
+          label: spec.label ?? DocLabel.Inference,
+        })
+      }
+    }
+    this.commit({ ...this.snap, pendingProposal: null })
+  }
+
+  applyPendingProposal(): boolean {
+    const proposal = this.snap.pendingProposal
+    if (!proposal) return false
+    this.applyProposal(proposal)
+    return true
+  }
+
+  rejectPendingProposal(): void {
+    this.commit({ ...this.snap, pendingProposal: null })
   }
 
   attachRealtime(port: RealtimePort, handlers?: Partial<TeamRealtimeHandlers>, debounceMs = 0): () => void {

@@ -13,10 +13,13 @@ import type {
   StructureModel,
   TypeAlias,
 } from "@/lib/types"
+import type { ProjectProposal } from "@/lib/project-assistant-types"
 
 export type locality_t = "local" | "remote" | "local-first"
 
 export type ProjectCreateOpts = { open?: boolean }
+
+export type SessionChatTurn = { role: "user" | "assistant"; content: string }
 
 export type SessionSnapshot = {
   projects: Project[]
@@ -28,6 +31,8 @@ export type SessionSnapshot = {
   inferenceInputDocIds: Partial<Record<ModuleId, DocId | DocId[]>>
   pendingCreates: Project[]
   deletedProjectIds: string[]
+  chat: SessionChatTurn[]
+  pendingProposal: ProjectProposal | null
 }
 
 export type ProjectPatch = {

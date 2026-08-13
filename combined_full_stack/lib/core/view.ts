@@ -5,7 +5,9 @@ import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-v
 import { invalidStepMessage } from "@/lib/server/validity-messages"
 import { withSharedModels } from "@/lib/structure"
 import { quoteHref, type QuoteMatch } from "@/lib/quotes"
-import type { SessionSnapshot } from "@/lib/core/types"
+import { isTestingFileName } from "@/lib/testing-files"
+import { derivePipelineMermaid } from "@/lib/pipeline-mermaid"
+import type { SessionChatTurn, SessionSnapshot } from "@/lib/core/types"
 
 export type PipelineStepView = {
   id: string
@@ -91,6 +93,85 @@ export function toValidationView(snap: SessionSnapshot): ValidationView {
   return { ok: issues.length === 0, issues }
 }
 
+export type DocsView = {
+  markdown: string
+  docs: { name: string; type: string; label: string; sizeKb: number }[]
+}
+
+export type TestingView = {
+  tests: { name: string; label: string }[]
+}
+
+export type AgentView = {
+  turns: SessionChatTurn[]
+  pendingChanged: string[]
+  pendingName?: string
+  lastMessage: string
+  proposedActions: string[]
+}
+
+export type LogsView = {
+  runs: { id: string; status: string; source: string }[]
+}
+
+export type TuiTab = "build" | "docs" | "tests" | "agent" | "logs"
+
+export const TUI_TABS: TuiTab[] = ["build", "docs", "tests", "agent", "logs"]
+
+export function toDocsView(snap: SessionSnapshot): DocsView {
+  const project = snap.projects.find((p) => p.id === snap.activeProjectId) ?? snap.projects[0]
+  return {
+    markdown: project?.documentation ?? "",
+    docs: snap.docs.map((d) => ({
+      name: d.name,
+      type: d.type,
+      label: d.label,
+      sizeKb: d.sizeKb,
+    })),
+  }
+}
+
+export function toTestingView(snap: SessionSnapshot): TestingView {
+  return {
+    tests: snap.docs
+      .filter((d) => isTestingFileName(d.name))
+      .map((d) => ({ name: d.name, label: d.label })),
+  }
+}
+
+export function toAgentView(snap: SessionSnapshot): AgentView {
+  const pending = snap.pendingProposal
+  const pendingChanged = pending
+    ? (Object.entries(pending.changed) as [string, boolean | undefined][])
+        .filter(([, v]) => v)
+        .map(([k]) => k)
+    : []
+  const last = [...snap.chat].reverse().find((t) => t.role === "assistant")
+  return {
+    turns: snap.chat,
+    pendingChanged,
+    pendingName: pending?.projectName,
+    lastMessage: last?.content ?? "",
+    proposedActions: pending?.proposedActions?.map((a) => a.type) ?? [],
+  }
+}
+
+export function toLogsView(snap: SessionSnapshot): LogsView {
+  return {
+    runs: snap.runs.map((r) => ({
+      id: r.id,
+      status: r.status,
+      source: String(r.source ?? ""),
+    })),
+  }
+}
+
+export function toMermaidView(snap: SessionSnapshot): string {
+  const project = snap.projects.find((p) => p.id === snap.activeProjectId) ?? snap.projects[0]
+  if (!project) return "flowchart LR\n  empty[No project]"
+  return derivePipelineMermaid(project.modules, project.models)
+}
+
 export function toQuoteView(match: QuoteMatch): QuoteView {
   return {
     text: match.text,
@@ -111,6 +192,8 @@ export function toSessionSummary(snap: SessionSnapshot): {
   runCount: number
   pendingCreates: number
   deletedProjectIds: string[]
+  chatTurns: number
+  hasPendingProposal: boolean
 } {
   const active = snap.projects.find((p) => p.id === snap.activeProjectId)
   return {
@@ -121,5 +204,7 @@ export function toSessionSummary(snap: SessionSnapshot): {
     runCount: snap.runs.length,
     pendingCreates: snap.pendingCreates.length,
     deletedProjectIds: snap.deletedProjectIds,
+    chatTurns: snap.chat.length,
+    hasPendingProposal: snap.pendingProposal != null,
   }
 }

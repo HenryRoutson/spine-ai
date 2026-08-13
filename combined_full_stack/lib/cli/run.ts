@@ -11,10 +11,11 @@ import {
 import { loadContextAndValidateSetup } from "@/lib/cli/validate_setup"
 import { profileLandingCommand } from "@/lib/cli/profile_landing"
 import { runSessionCommand } from "@/lib/cli/session_cli"
+import { runAgentCommand } from "@/lib/cli/agent_cli"
 import { runDemoCommand } from "@/lib/cli/demo"
 import type { CliCommandResult } from "@/lib/cli/types"
 
-export const SPINE_CLI_HELP = `spine — validate Spine projects and test files without React
+export const SPINE_CLI_HELP = `spine — validate Spine projects and run the headless workspace / agent
 
 Usage:
   npx tsx scripts/spine-cli.ts validate project <seed.json> [--json]
@@ -23,8 +24,9 @@ Usage:
   npx tsx scripts/spine-cli.ts validate setup --project <seed.json> --file <setup.json> [--json]
   npx tsx scripts/spine-cli.ts parse test --file <test.json> [--json]
   npx tsx scripts/spine-cli.ts profile landing [--days 30] [--limit 50] [--backfill-local] [--json]
-  npx tsx scripts/spine-cli.ts session <list|add-project|open|rename|delete|set-docs|add-model|add-doc|validate|snapshot|actions> [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts tui [--session <path>] [--once] [--offline] [--json]
+  npx tsx scripts/spine-cli.ts session <list|add-project|open|rename|clone|delete|import-seed|seeds|set-docs|add-model|add-step|add-doc|docs|pipeline|mermaid|tests|logs|link-quotes|validate|snapshot|actions> [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts agent <ask|apply|reject|history|apply-file> [--message "..."] [--apply] [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts tui [--session <path>] [--once] [--tab build|docs|tests|agent|logs] [--offline] [--json]
   npx tsx scripts/spine-cli.ts demo [--json]
 
 Flags:
@@ -34,8 +36,12 @@ Flags:
   --limit   max recent calls in landing profile (default 50)
   --backfill-local  sync data/landing_page_demo.json into Supabase before profiling
   --session path to .spine-session.json (or SPINE_SESSION_PATH)
-  --offline  local-only; egress throws (session/demo/tui)
+  --offline  local-only; egress throws (session/demo/tui). agent ask is blocked.
   --once    Ink TUI: print one frame and exit (CI / non-TTY default)
+  --tab     Ink TUI starting tab
+  --message agent ask prompt
+  --apply   agent ask: apply the proposal immediately
+  --file    seed JSON, proposal JSON, or test file
 
 Exit codes:
   0  success / no validation errors
@@ -155,6 +161,10 @@ export async function runSpineCli(argv: string[]): Promise<CliCommandResult> {
 
   if (cmd === "session") {
     return runSessionCommand(positional, flags)
+  }
+
+  if (cmd === "agent") {
+    return runAgentCommand(positional, flags)
   }
 
   if (cmd === "demo") {

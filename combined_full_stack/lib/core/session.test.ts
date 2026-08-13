@@ -112,4 +112,46 @@ describe("SpineSession React-like API", () => {
     expect(() => store.addProject({ open: true })).not.toThrow(EgressBlockedError)
     expect(() => store.validation()).not.toThrow()
   })
+
+  it("applyProposal matches the in-app approve path", () => {
+    const store = createSpineSession()
+    store.addProject({ open: true })
+    const model: StructureModel = {
+      id: uid<StructureModelId>("m_"),
+      name: "Finding",
+      description: "",
+      fields: [
+        { id: uid("f_"), name: "summary", type: FieldType.Text, optional: false, description: "" },
+      ],
+    }
+    store.setPendingProposal({
+      modules: store.modules,
+      models: [model],
+      typeAliases: [],
+      docs: [
+        {
+          name: "lease.txt",
+          type: InputType.Text,
+          content: "insured premises",
+          label: DocLabel.Inference,
+        },
+      ],
+      documentation: "Agent wrote this",
+      projectName: "Lease Review",
+      changed: {
+        modules: false,
+        models: true,
+        typeAliases: false,
+        docs: true,
+        documentation: true,
+        name: true,
+      },
+    })
+    expect(store.applyPendingProposal()).toBe(true)
+    expect(store.project?.name).toBe("Lease Review")
+    expect(store.project?.models.map((m) => m.name)).toEqual(["Finding"])
+    expect(store.documentation).toBe("Agent wrote this")
+    expect(store.docs.some((d) => d.name === "lease.txt")).toBe(true)
+    expect(store.pendingProposal).toBeNull()
+  })
 })

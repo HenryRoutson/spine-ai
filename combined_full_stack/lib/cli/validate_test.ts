@@ -13,6 +13,7 @@ import {
 } from "@/lib/test-expect-failure"
 import { loadProjectContext, readTextFile, type ProjectContext } from "@/lib/cli/project_context"
 import type { CliCommandResult, CliIssue } from "@/lib/cli/types"
+import type { DocRef, Project } from "@/lib/types"
 
 function toCliIssues(issues: TestFileIssue[]): CliIssue[] {
   return issues.map((i) => ({ level: i.level, where: i.where, message: i.message }))
@@ -41,10 +42,12 @@ export function parseTestCommand(testPath: string): CliCommandResult {
   }
 }
 
-export function validateTestContent(
-  ctx: ProjectContext,
+export function validateTestAgainstProject(
+  project: Project,
+  docRefs: DocRef[],
   content: string,
   testLabel: string,
+  loadDocByName: (name: string) => string | undefined,
 ): CliCommandResult {
   const parsed = parseTestFile(content)
   if (!parsed.ok) {
@@ -52,32 +55,24 @@ export function validateTestContent(
       ok: false,
       command: "validate test",
       issues: [{ level: "error", where: testLabel, message: parsed.error }],
-      data: { projectName: ctx.project.name, testFile: testLabel },
+      data: { projectName: project.name, testFile: testLabel },
     }
   }
-  const issues = toCliIssues(validateTestFile(parsed.test, ctx.project, ctx.docRefs))
-  const contentByDocId = loadTestInputContents(parsed.test, ctx.project.modules, ctx.docRefs, (name) => {
-    const spec = ctx.seed.docSpecs.find((d) => d.name === name)
-    return spec ? readTextFile(spec.path) : undefined
-  })
-  const expectCheck = verifyExpectFailurePrecondition(
-    parsed.test,
-    ctx.project,
-    ctx.docRefs,
-    contentByDocId,
-  )
+  const issues = toCliIssues(validateTestFile(parsed.test, project, docRefs))
+  const contentByDocId = loadTestInputContents(parsed.test, project.modules, docRefs, loadDocByName)
+  const expectCheck = verifyExpectFailurePrecondition(parsed.test, project, docRefs, contentByDocId)
   if (expectCheck && !expectCheck.ok) {
     issues.push({ level: "error", where: "expectFailure", message: expectCheck.message })
   } else if (expectCheck) {
     issues.push({ level: "warning", where: "expectFailure", message: expectCheck.message })
   }
-  const alignment = analyzeTestPipelineAlignment(parsed.test, ctx.project)
+  const alignment = analyzeTestPipelineAlignment(parsed.test, project)
   return {
     ok: !issues.some((i) => i.level === "error"),
     command: "validate test",
     issues,
     data: {
-      projectName: ctx.project.name,
+      projectName: project.name,
       testFile: testLabel,
       alignment: {
         orphanedExpected: alignment.orphanedExpected,
@@ -88,6 +83,23 @@ export function validateTestContent(
       },
     },
   }
+}
+
+export function validateTestContent(
+  ctx: ProjectContext,
+  content: string,
+  testLabel: string,
+): CliCommandResult {
+  return validateTestAgainstProject(
+    ctx.project,
+    ctx.docRefs,
+    content,
+    testLabel,
+    (name) => {
+      const spec = ctx.seed.docSpecs.find((d) => d.name === name)
+      return spec ? readTextFile(spec.path) : undefined
+    },
+  )
 }
 
 export function validateTestCommand(ctx: ProjectContext, testPath: string): CliCommandResult {

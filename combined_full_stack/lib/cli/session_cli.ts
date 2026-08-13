@@ -3,11 +3,27 @@
 import { DocLabel, InputType } from "@/lib/types"
 import { createSpineSession } from "@/lib/core/session"
 import { createThrowingEgress } from "@/lib/core/transport"
-import { toPipelineView, toSessionSummary, toValidationView } from "@/lib/core/view"
+import {
+  toAgentView,
+  toDocsView,
+  toLogsView,
+  toMermaidView,
+  toPipelineView,
+  toSessionSummary,
+  toTestingView,
+  toValidationView,
+} from "@/lib/core/view"
 import { SESSION_ACTION_IDS } from "@/lib/core/actions"
 import type { CliCommandResult } from "@/lib/cli/types"
 import { createFilePersist, resolveSessionPath } from "@/lib/cli/session_persist"
-import { addNamedModel } from "@/lib/cli/workspace_edits"
+import {
+  addNamedModel,
+  addPipelineStep,
+  importSeed,
+  listSeedIds,
+  parseAddableKind,
+  validateSessionTests,
+} from "@/lib/cli/workspace_edits"
 
 export const SPINE_SESSION_HELP = `session — headless workspace (same method names as useStore)
 
@@ -16,10 +32,20 @@ Usage:
   npx tsx scripts/spine-cli.ts session add-project [--open] [--session <path>] [--json]
   npx tsx scripts/spine-cli.ts session open <id> [--session <path>] [--json]
   npx tsx scripts/spine-cli.ts session rename --name <name> [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts session clone [id] [--session <path>] [--json]
   npx tsx scripts/spine-cli.ts session delete <id> [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts session import-seed --file <seed.json|id> [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts session seeds [--json]
   npx tsx scripts/spine-cli.ts session set-docs --text <markdown> [--session <path>] [--json]
   npx tsx scripts/spine-cli.ts session add-model --name <Name> [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts session add-step --kind <llm|input|...> [--label <Label>] [--session <path>] [--json]
   npx tsx scripts/spine-cli.ts session add-doc --name <file> --text <content> [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts session docs [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts session pipeline [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts session mermaid [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts session tests [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts session logs [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts session link-quotes --quote <text> --doc <name|id> [--session <path>] [--json]
   npx tsx scripts/spine-cli.ts session validate [--session <path>] [--json]
   npx tsx scripts/spine-cli.ts session snapshot [--session <path>] [--json]
   npx tsx scripts/spine-cli.ts session actions [--json]
@@ -99,6 +125,33 @@ export function runSessionCommand(
     return ok("session delete", { action: "deleteProject", summary: toSessionSummary(session.getSnapshot()) })
   }
 
+  if (sub === "clone") {
+    const id = positional[2] ?? flagString(flags, "id") ?? session.activeProjectId
+    if (!id) return usage("session clone requires an active project or <id>")
+    const cloned = session.cloneProject(id, { open: flags.open !== false })
+    return ok("session clone", {
+      action: "cloneProject",
+      project: { id: cloned.id, name: cloned.name },
+      summary: toSessionSummary(session.getSnapshot()),
+    })
+  }
+
+  if (sub === "seeds") {
+    return ok("session seeds", { seeds: listSeedIds() })
+  }
+
+  if (sub === "import-seed") {
+    const file = flagString(flags, "file") ?? positional[2]
+    if (!file) return usage("session import-seed requires --file <seed.json|id>")
+    const project = importSeed(session, file)
+    return ok("session import-seed", {
+      action: "ingestProject",
+      project: { id: project.id, name: project.name },
+      summary: toSessionSummary(session.getSnapshot()),
+      pipeline: toPipelineView(session.getSnapshot()),
+    })
+  }
+
   if (sub === "set-docs") {
     const text = flagString(flags, "text")
     if (text == null) return usage("session set-docs requires --text")
@@ -113,6 +166,19 @@ export function runSessionCommand(
     return ok("session add-model", {
       action: "applyProjectChanges",
       models: session.project?.models.map((m) => m.name) ?? [],
+    })
+  }
+
+  if (sub === "add-step") {
+    const kindRaw = flagString(flags, "kind")
+    if (!kindRaw) return usage("session add-step requires --kind")
+    const kind = parseAddableKind(kindRaw)
+    if (!kind) return usage(`unknown step kind: ${kindRaw}`)
+    const added = addPipelineStep(session, kind, flagString(flags, "label"))
+    return ok("session add-step", {
+      action: "setModules",
+      added: added.map((m) => ({ id: m.id, kind: m.kind, label: m.label })),
+      pipeline: toPipelineView(session.getSnapshot()),
     })
   }
 
@@ -137,6 +203,49 @@ export function runSessionCommand(
       issues: view.issues.map((i) => ({ level: i.level, where: i.where, message: i.message })),
       data: { action: "validate", pipeline: toPipelineView(session.getSnapshot()) },
     }
+  }
+
+  if (sub === "docs") {
+    return ok("session docs", { docs: toDocsView(session.getSnapshot()) })
+  }
+
+  if (sub === "pipeline") {
+    const snap = session.getSnapshot()
+    return ok("session pipeline", {
+      pipeline: toPipelineView(snap),
+      validation: toValidationView(snap),
+      mermaid: toMermaidView(snap),
+    })
+  }
+
+  if (sub === "mermaid") {
+    const chart = toMermaidView(session.getSnapshot())
+    return ok("session mermaid", { mermaid: chart, human: chart })
+  }
+
+  if (sub === "tests") {
+    return validateSessionTests(session)
+  }
+
+  if (sub === "logs") {
+    return ok("session logs", { logs: toLogsView(session.getSnapshot()), agent: toAgentView(session.getSnapshot()) })
+  }
+
+  if (sub === "link-quotes") {
+    const quote = flagString(flags, "quote")
+    const docKey = flagString(flags, "doc")
+    if (!quote || !docKey) return usage("session link-quotes requires --quote and --doc")
+    const snap = session.getSnapshot()
+    const doc = snap.docs.find((d) => d.id === docKey || d.name === docKey)
+    if (!doc) return usage(`unknown doc: ${docKey}`)
+    const sourceText = flagString(flags, "text") ?? snap.docContents[doc.id]
+    if (!sourceText) return usage(`no content for doc: ${doc.name}`)
+    const linked = session.linkQuotes({ quote, sourceText, docId: doc.id })
+    return ok("session link-quotes", { action: "linkQuotes", quote: linked })
+  }
+
+  if (sub === "testing-view") {
+    return ok("session testing-view", { testing: toTestingView(session.getSnapshot()) })
   }
 
   return usage(`unknown session command: ${sub}`)

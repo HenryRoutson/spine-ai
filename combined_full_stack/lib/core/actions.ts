@@ -84,6 +84,32 @@ export const linkQuotesAction = defineAction({
   run: (session, input) => session.linkQuotes({ ...input, docId: input.docId as never }),
 })
 
+export const ingestProjectAction = defineAction({
+  id: "ingestProject",
+  label: "Ingest a project (seed/clone)",
+  locality: "local",
+  input: z.object({}),
+  run: (session) => session.project,
+})
+
+export const applyProposalAction = defineAction({
+  id: "applyProposal",
+  label: "Apply pending agent proposal",
+  locality: "local",
+  input: z.object({}),
+  run: (session) => session.applyPendingProposal(),
+})
+
+export const askAgentAction = defineAction({
+  id: "askAgent",
+  label: "Ask the project agent (LLM)",
+  locality: "remote",
+  input: z.object({ message: z.string() }),
+  run: () => {
+    throw new Error("askAgent is remote — use spine agent ask")
+  },
+})
+
 export const SESSION_ACTIONS = [
   addProjectAction,
   renameProjectAction,
@@ -92,6 +118,9 @@ export const SESSION_ACTIONS = [
   setDocumentationAction,
   validateProjectAction,
   linkQuotesAction,
+  ingestProjectAction,
+  applyProposalAction,
+  askAgentAction,
 ] as const
 
 export const SESSION_ACTION_IDS = SESSION_ACTIONS.map((a) => a.id)
