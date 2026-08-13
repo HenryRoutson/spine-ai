@@ -9,6 +9,7 @@ import { runSpineCli } from "@/lib/cli/run"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { DocLabel, InputType, ModuleKind, RunSource, RunStatus, RunStepStatus, RunTestStepStatus } from "@/lib/types"
 
 describe("Ink TUI", () => {
   it("renderToString shows an empty workspace", () => {
@@ -190,5 +191,198 @@ describe("Ink TUI", () => {
     expect(frame).toContain("Vibe")
     expect(frame).toContain("Finding")
     expect(frame).toContain("vibe")
+  })
+
+  it("groups tabs by area and shows usability annotations", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const pipeline = renderSpineTuiString(session, "memory", { tab: "pipeline" })
+    expect(pipeline).toContain("Build")
+    expect(pipeline).toContain("1:structure")
+    expect(pipeline).toContain("2:pipeline")
+    expect(pipeline).toContain("Linear Pipeline")
+    expect(pipeline).toContain("Each step declares its input and output model")
+    expect(pipeline).toContain("annotation:")
+
+    const logging = renderSpineTuiString(session, "memory", { tab: "logging" }).replace(/\s+/g, " ")
+    expect(logging).toContain("Observe")
+    expect(logging).toContain("7:logging")
+    expect(logging).toContain("Run History")
+    expect(logging).toContain("full per-step trace")
+    expect(logging).toContain("press i to run inference")
+  })
+
+  it("logging tab inspects a run with cost, duration, and highlighted I/O", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    session.addRun({
+      id: "run_inspect" as never,
+      startedAt: Date.now() - 5_000,
+      status: RunStatus.Ok,
+      totalMs: 2400,
+      billedCents: 1.2,
+      savedCents: 0.3,
+      model: "test-model",
+      notes: "vendor total check",
+      source: RunSource.App,
+      steps: [
+        {
+          moduleId: "m1" as never,
+          kind: ModuleKind.Llm,
+          label: "Extract",
+          status: RunStepStatus.Ok,
+          ms: 2100,
+          costCents: 1.2,
+          inputPreview: "",
+          outputPreview: "",
+          outputJson: '{"vendor":"Acme","total":12.5}',
+        },
+      ],
+    })
+    const frame = renderSpineTuiString(session, "memory", { tab: "logs" })
+    expect(frame).toContain("Extract")
+    expect(frame).toContain("vendor total check")
+    expect(frame).toContain("$0.012")
+    expect(frame).toContain("2.4s")
+    expect(frame).toContain("Looking at:")
+    expect(frame).toContain("Acme")
+    expect(frame).toContain("cache saved")
+  })
+
+  it("logging shows error traces in red-path copy", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    session.addRun({
+      id: "run_err" as never,
+      startedAt: Date.now(),
+      status: RunStatus.Error,
+      totalMs: 800,
+      billedCents: 0,
+      savedCents: 0,
+      model: "test-model",
+      source: RunSource.App,
+      steps: [
+        {
+          moduleId: "m2" as never,
+          kind: ModuleKind.Llm,
+          label: "Extract",
+          status: RunStepStatus.Error,
+          ms: 800,
+          costCents: 0,
+          inputPreview: "",
+          outputPreview: "schema failed: total",
+        },
+      ],
+    })
+    const logs = toLogsView(session.getSnapshot())
+    expect(logs.errorCount).toBe(1)
+    expect(logs.runs[0]?.hasErrors).toBe(true)
+    expect(logs.runs[0]?.stepRows[0]?.error).toContain("schema failed")
+    const frame = renderSpineTuiString(session, "memory", { tab: "logging" })
+    expect(frame).toContain("schema failed")
+    expect(frame).toContain("Extract")
+  })
+
+  it("testing tab shows pass/fail verdicts from logged runs", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    session.addDocContent({
+      name: "test_1_testing.json",
+      type: InputType.Text,
+      label: DocLabel.Inference,
+      content: '{"description":"x","inputs":{},"expectedOutputs":{}}',
+    })
+    session.addRun({
+      id: "run_test" as never,
+      startedAt: Date.now(),
+      status: RunStatus.Ok,
+      totalMs: 100,
+      billedCents: 0,
+      savedCents: 0,
+      model: "test-model",
+      source: RunSource.Testing,
+      test: {
+        testDocName: "test_1_testing.json",
+        results: [{ label: "Output", status: RunTestStepStatus.Fail, diffPath: "total" }],
+      },
+      steps: [],
+    })
+    const frame = renderSpineTuiString(session, "memory", { tab: "testing" })
+    expect(frame).toContain("Pipeline Tests")
+    expect(frame).toContain("test_1_testing.json")
+    expect(frame).toContain("fail")
+    expect(frame).toContain("press t")
+  })
+
+  it("inference tab lists input slots by step label", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const doc = session.addDocContent({
+      name: "receipt.txt",
+      type: InputType.Text,
+      label: DocLabel.Inference,
+      content: "Acme $12",
+    })
+    const input = session.modules.find((m) => m.kind === ModuleKind.Input)
+    if (input) session.setInferenceInputDocIds({ [input.id]: doc.id })
+    const frame = renderSpineTuiString(session, "memory", { tab: "inference" })
+    expect(frame).toContain("Run Pipeline")
+    expect(frame).toContain("Input")
+    expect(frame).toContain("receipt.txt")
+    expect(frame).toContain("Logging")
+  })
+
+  it("command palette includes run inference and logging filter", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    const snap = session.getSnapshot()
+    const frame = renderToString(
+      <WorkspaceView
+        snap={snap}
+        pipeline={toPipelineView(snap)}
+        validation={toValidationView(snap)}
+        docs={toDocsView(snap)}
+        testing={toTestingView(snap)}
+        agent={toAgentView(snap)}
+        logs={toLogsView(snap)}
+        tab="logging"
+        selectedProjectId={snap.activeProjectId}
+        prompt={{ kind: "command", buffer: "run", selected: 0 }}
+      />,
+    )
+    expect(frame).toContain("Run inference")
+    expect(frame).toContain("appears in Logging")
+  })
+
+  it("pick-run lists runs to inspect", () => {
+    const session = createSpineSession()
+    session.addProject({ open: true })
+    session.addRun({
+      id: "run_pick" as never,
+      startedAt: Date.now(),
+      status: RunStatus.Ok,
+      totalMs: 50,
+      billedCents: 0,
+      savedCents: 0,
+      model: "test-model",
+      steps: [],
+    })
+    const snap = session.getSnapshot()
+    const frame = renderToString(
+      <WorkspaceView
+        snap={snap}
+        pipeline={toPipelineView(snap)}
+        validation={toValidationView(snap)}
+        docs={toDocsView(snap)}
+        testing={toTestingView(snap)}
+        agent={toAgentView(snap)}
+        logs={toLogsView(snap)}
+        tab="logging"
+        selectedProjectId={snap.activeProjectId}
+        prompt={{ kind: "pick-run", buffer: "", selected: 0 }}
+      />,
+    )
+    expect(frame).toContain("look at run:")
+    expect(frame).toContain("ok")
   })
 })

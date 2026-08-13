@@ -212,6 +212,11 @@ server.tool(
   async (args) => textContent(sessionLogs(args.sessionPath)),
 )
 
+// AI : TODO (gui-parity) — MCP still lacks vs GUI/CLI:
+// AI :   ask_agent (vibe/structure/testing/diagnose) — use `spine agent ask` then apply_project_changes
+// AI :   add-project / add-step / assign-structure / add-doc / assign-input
+// AI :   share mint, billing checkout, run cancel, hydrate run detail
+
 async function main() {
   const transport = new StdioServerTransport()
   await server.connect(transport)

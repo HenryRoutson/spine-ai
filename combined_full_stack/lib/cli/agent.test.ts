@@ -174,6 +174,18 @@ describe("spine agent CLI", () => {
         "--offline",
       ])
       expect(field.ok, JSON.stringify(field.issues)).toBe(true)
+      const assigned = await runSpineCli([
+        "session",
+        "assign-structure",
+        "--id",
+        "Extract",
+        "--model",
+        "Finding",
+        "--session",
+        sessionPath,
+        "--offline",
+      ])
+      expect(assigned.ok, JSON.stringify(assigned.issues)).toBe(true)
       const blocked = await runSpineCli(["session", "start-run", "--session", sessionPath, "--offline"])
       expect(blocked.ok).toBe(false)
     } finally {

@@ -2,12 +2,36 @@
 
 import { MODULE_META, type ModuleKind } from "@/lib/types"
 import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"
-import { TUI_TAB_ALIASES, TUI_TABS, type PipelineView, type TuiTab, type ValidationView } from "@/lib/core/view"
+import {
+  TUI_TAB_ALIASES,
+  TUI_TAB_HOTKEY,
+  TUI_TABS,
+  type LogsView,
+  type PipelineView,
+  type TestingView,
+  type TuiTab,
+  type ValidationView,
+} from "@/lib/core/view"
 import { isLlmKind } from "@/lib/module-kinds"
 
 export const TUI_SUGGEST_LIMIT = 7
 
-export type TuiCommandId = "new-project" | "configure-step" | "rename" | "add-model" | "add-step" | "vibe" | "apply" | "reject" | "delete" | "quit" | `tab-${TuiTab}`
+export type TuiCommandId =
+  | "new-project"
+  | "configure-step"
+  | "rename"
+  | "add-model"
+  | "add-step"
+  | "vibe"
+  | "apply"
+  | "reject"
+  | "delete"
+  | "run-inference"
+  | "run-test"
+  | "errors-only"
+  | "set-docs"
+  | "quit"
+  | `tab-${TuiTab}`
 
 export type TuiCommand = {
   id: TuiCommandId
@@ -24,9 +48,13 @@ export type TuiCommandContext = {
   hasProject: boolean
   hasProposal: boolean
   hasSteps?: boolean
+  tab?: TuiTab
+  hasRuns?: boolean
+  hasTests?: boolean
+  validationOk?: boolean
 }
 
-export type TuiPane = "projects" | "steps"
+export type TuiPane = "projects" | "steps" | "runs" | "tests" | "inputs"
 
 export type StepEditId = "label" | "prompt" | "note" | "structure" | "remove"
 
@@ -51,6 +79,9 @@ export type TuiPrompt =
   | { kind: "pick-step"; buffer: string; selected?: number }
   | { kind: "edit-step"; stepId: string; buffer: string; selected?: number }
   | { kind: "step-field"; stepId: string; field: Exclude<StepEditId, "remove">; buffer: string; selected?: number }
+  | { kind: "pick-run"; buffer: string; selected?: number }
+  | { kind: "pick-test"; buffer: string; selected?: number }
+  | { kind: "docs"; buffer: string; selected?: number }
   | { kind: "command"; buffer: string; selected?: number }
   | null
 
@@ -60,6 +91,10 @@ const ACTION_COMMANDS: TuiCommand[] = [
   { id: "add-model", key: "m", aliases: ["model", "structure", "schema"], label: "Add model", hint: "Named structure — fixes Input / Output", needsProject: true },
   { id: "add-step", key: "s", aliases: ["step", "llm", "module"], label: "Add step", hint: "Insert llm, combine, chunk, …", needsProject: true },
   { id: "vibe", key: "a", aliases: ["vibe", "agent", "ask"], label: "Ask vibe", hint: "Describe a change in plain language", needsProject: true },
+  { id: "run-inference", key: "i", aliases: ["run", "infer", "inference"], label: "Run inference", hint: "Execute the pipeline — appears in Logging", needsProject: true },
+  { id: "run-test", key: "t", aliases: ["test", "testing"], label: "Run test", hint: "Run *_testing.json and record the verdict", needsProject: true },
+  { id: "errors-only", key: "f", aliases: ["filter", "errors", "failed"], label: "Toggle errors-only", hint: "Filter Logging to failing runs" },
+  { id: "set-docs", key: "w", aliases: ["docs", "readme", "markdown", "write"], label: "Edit docs", hint: "Project markdown prepended to vibe prompts", needsProject: true },
   { id: "rename", key: "r", aliases: ["rename", "name"], label: "Rename project", hint: "Change the selected project name", needsProject: true },
   { id: "apply", key: "y", aliases: ["apply", "accept"], label: "Apply proposal", hint: "Accept the pending vibe diff", needsProposal: true },
   { id: "reject", key: "d", aliases: ["reject", "dismiss"], label: "Reject proposal", hint: "Drop the pending vibe diff", needsProposal: true },
@@ -67,15 +102,22 @@ const ACTION_COMMANDS: TuiCommand[] = [
   { id: "quit", key: "q", aliases: ["quit", "exit"], label: "Quit", hint: "Leave the TUI" },
 ]
 
-const TAB_COMMANDS: TuiCommand[] = TUI_TABS.map((tab, i) => ({
+const TAB_COMMANDS: TuiCommand[] = TUI_TABS.map((tab) => ({
   id: `tab-${tab}` as const,
-  key: String(i + 1),
+  key: TUI_TAB_HOTKEY[tab],
   aliases: [tab, ...Object.entries(TUI_TAB_ALIASES).flatMap(([alias, mapped]) => (mapped === tab ? [alias] : []))],
   label: `Go to ${tab}`,
   hint: `Switch tab`,
 }))
 
 export const TUI_COMMANDS: TuiCommand[] = [...ACTION_COMMANDS, ...TAB_COMMANDS]
+
+// AI : TODO (gui-parity) — TUI still lacks vs GUI:
+// AI :   structure/testing/diagnosis agents (CLI has spine agent structure|testing|diagnose)
+// AI :   kind-specific step fields (webhook URL, parallel branches, chatbot mode, cache, model-per-step)
+// AI :   rich structure editing (field types/examples, Excel derive, type aliases)
+// AI :   share/marketplace mint, billing checkout, teams, human-review pause, Node custom-code host
+// AI :   binary doc upload/remove, inference *_setup.json, run cancel, logging compare/hydrate
 
 export const EXAMPLE_MODEL_NAMES = ["Receipt", "Invoice", "Contract", "Finding"] as const
 
@@ -136,9 +178,14 @@ export function suggestModelNames(query: string): string[] {
 export function suggestedCommandId(ctx: TuiCommandContext & { projectCount: number; validation: ValidationView }): TuiCommandId | null {
   if (ctx.projectCount === 0) return "new-project"
   if (ctx.hasProposal) return "apply"
+  if (ctx.tab === "logging" && !ctx.hasRuns) return "run-inference"
+  if (ctx.tab === "testing" && ctx.hasTests) return "run-test"
+  if (ctx.tab === "inference" && ctx.validation.ok) return "run-inference"
+  if (ctx.tab === "docs") return "set-docs"
   if (ctx.hasSteps && ctx.validation.issues.length) return "configure-step"
   const msg = ctx.validation.issues[0]?.message
   if (msg && /output model|structure to materialize/i.test(msg)) return "add-model"
+  if (ctx.tab === "structure" && /structure|model/i.test(msg ?? "")) return "add-model"
   return null
 }
 
@@ -147,9 +194,18 @@ export function nextActionHint(ctx: TuiCommandContext & { projectCount: number; 
   const msg = ctx.validation.issues[0]?.message
   if (id === "new-project") return "next: create a project — press n, or type / new"
   if (id === "apply") return "next: apply the vibe proposal — press y, or / apply"
+  if (id === "run-inference") {
+    if (ctx.tab === "logging") return "next: run inference — press i  (then watch the trace here)"
+    return "next: run the pipeline — press i  (results land in Logging)"
+  }
+  if (id === "run-test") return "next: run the selected test — press t"
+  if (id === "set-docs") return "next: write project docs — press w, or e on this tab"
   if (id === "configure-step") return `next: configure a step — press e  (${msg})`
   if (id === "add-model") return `next: add a model — press m  (${msg})`
   if (id === "vibe") return `next: ask vibe to fix this — press a  (${msg})`
+  if (ctx.tab === "logging") return "↑↓ switch run   e inspect   f errors-only   i run"
+  if (ctx.tab === "testing") return "↑↓ switch test   t run   e pick"
+  if (ctx.tab === "inference") return "i run pipeline   results appear in Logging (7)"
   return "↑↓ switch step   e configure   / search"
 }
 
@@ -159,10 +215,45 @@ export function resolveSelectedStepId(pipeline: PipelineView | null, current: st
   return steps.find((s) => s.invalid.length)?.id ?? steps[0]?.id ?? ""
 }
 
+export function resolveSelectedRunId(logs: LogsView, current: string, errorsOnly: boolean): string {
+  const runs = errorsOnly ? logs.runs.filter((r) => r.hasErrors) : logs.runs
+  if (current && runs.some((r) => r.id === current)) return current
+  return runs.find((r) => r.hasErrors)?.id ?? runs[0]?.id ?? ""
+}
+
+export function resolveSelectedTestName(testing: TestingView, current: string): string {
+  const tests = testing.tests
+  if (current && tests.some((t) => t.name === current)) return current
+  return tests.find((t) => t.verdict === "fail")?.name ?? tests[0]?.name ?? ""
+}
+
+export function defaultPaneForTab(tab: TuiTab): TuiPane {
+  if (tab === "pipeline") return "steps"
+  if (tab === "logging") return "runs"
+  if (tab === "testing") return "tests"
+  if (tab === "inference") return "inputs"
+  return "projects"
+}
+
 export function suggestPipelineSteps(query: string, pipeline: PipelineView | null): PipelineView["steps"] {
   const steps = pipeline?.steps ?? []
   const q = query.trim().toLowerCase()
   const matched = q ? steps.filter((s) => `${s.label} ${s.kind} ${s.invalid.join(" ")}`.toLowerCase().includes(q)) : steps
+  return matched.slice(0, TUI_SUGGEST_LIMIT)
+}
+
+export function suggestLogRuns(query: string, logs: LogsView, errorsOnly: boolean): LogsView["runs"] {
+  const runs = errorsOnly ? logs.runs.filter((r) => r.hasErrors) : logs.runs
+  const q = query.trim().toLowerCase()
+  const matched = q
+    ? runs.filter((r) => `${r.id} ${r.status} ${r.inputLabel} ${r.notes ?? ""} ${r.testDoc ?? ""} ${r.errorSummary ?? ""}`.toLowerCase().includes(q))
+    : runs
+  return matched.slice(0, TUI_SUGGEST_LIMIT)
+}
+
+export function suggestTests(query: string, testing: TestingView): TestingView["tests"] {
+  const q = query.trim().toLowerCase()
+  const matched = q ? testing.tests.filter((t) => `${t.name} ${t.verdict}`.toLowerCase().includes(q)) : testing.tests
   return matched.slice(0, TUI_SUGGEST_LIMIT)
 }
 

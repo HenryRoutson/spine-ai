@@ -11,7 +11,8 @@ import type {
   ValidationView,
 } from "@/lib/core/view"
 import {
-  TUI_TABS,
+  TUI_TAB_META,
+  areaForTuiTab,
   toBillingView,
   toCacheView,
   toEarningsView,
@@ -25,19 +26,24 @@ import {
   commandAvailable,
   nextActionHint,
   resolveSelectedStepId,
+  resolveSelectedTestName,
   selectedIndex,
   suggestedCommandId,
   suggestAgentPrompts,
   suggestCommands,
+  suggestLogRuns,
   suggestModelAssign,
   suggestModelNames,
   suggestPipelineSteps,
   suggestStepEdits,
   suggestStepKinds,
+  suggestTests,
   type TuiCommand,
   type TuiPane,
   type TuiPrompt,
 } from "@/lib/cli/ink/commands"
+import { AreaTabBar, PanelHeader } from "@/lib/cli/ink/panel-chrome"
+import { LoggingPanel } from "@/lib/cli/ink/logging-view"
 
 export type { TuiPrompt }
 
@@ -56,25 +62,18 @@ export type WorkspaceViewProps = {
   agentBusy?: boolean
   selectedStepId?: string
   pane?: TuiPane
+  selectedRunId?: string
+  errorsOnly?: boolean
+  selectedTestName?: string
+  runBusy?: boolean
+  statusMsg?: string
 }
 
-function TabBar({ tab }: { tab: TuiTab }) {
-  return (
-    <Box flexWrap="wrap">
-      {TUI_TABS.map((t, i) => (
-        <Text key={t} color={t === tab ? "cyan" : undefined} inverse={t === tab}>
-          {` ${i + 1}:${t} `}
-        </Text>
-      ))}
-    </Box>
-  )
-}
-
-function Lines({ title, rows }: { title: string; rows: string[] }) {
+function Lines({ title, rows, empty }: { title: string; rows: string[]; empty?: string }) {
   return (
     <Box flexDirection="column" flexGrow={1}>
       <Text bold>{title}</Text>
-      {rows.length === 0 ? <Text dimColor>empty</Text> : rows.map((row) => <Text key={row}>{row}</Text>)}
+      {rows.length === 0 ? <Text dimColor>{empty ?? "empty"}</Text> : rows.map((row) => <Text key={row}>{row}</Text>)}
     </Box>
   )
 }
@@ -104,6 +103,7 @@ function BuildPanel({
   const selected = pipeline?.steps.find((s) => s.id === stepId)
   return (
     <Box flexDirection="column" flexGrow={1}>
+      <PanelHeader tab="pipeline" />
       <Text bold inverse={pane === "steps"}>
         Pipeline: {pipeline?.title ?? "(none)"}
       </Text>
@@ -122,7 +122,7 @@ function BuildPanel({
         <Box marginTop={1} flexDirection="column">
           <Text bold>Looking at: {selected.label}</Text>
           <Text dimColor>prompt: {promptPreview || "(none)"}</Text>
-          <Text dimColor>note: {notePreview || "(none)"}</Text>
+          <Text dimColor>annotation: {notePreview || "(none)"}</Text>
           <Text dimColor>structure: {structureName || "(none)"}</Text>
           {selected.invalid.slice(0, 3).map((line) => (
             <Text key={line} color="red">
@@ -167,6 +167,11 @@ export function WorkspaceView({
   agentBusy,
   selectedStepId,
   pane = "steps",
+  selectedRunId,
+  errorsOnly = false,
+  selectedTestName,
+  runBusy,
+  statusMsg,
 }: WorkspaceViewProps) {
   const selected = snap.projects.find((p) => p.id === selectedProjectId)
   const stepId = resolveSelectedStepId(pipeline, selectedStepId ?? "")
@@ -180,13 +185,14 @@ export function WorkspaceView({
         </Text>
         <Text dimColor>  tui  </Text>
         <Text dimColor>{sessionPath ?? "memory"}</Text>
-        <Text dimColor>  {tab}</Text>
+        <Text dimColor>  {areaForTuiTab(tab)}/{tab}</Text>
+        {runBusy ? <Text color="yellow">  running…</Text> : null}
       </Box>
       <Box marginTop={1}>
-        <TabBar tab={tab} />
+        <AreaTabBar tab={tab} />
       </Box>
       <Box marginTop={1} flexDirection="row">
-        <Box flexDirection="column" width={36} marginRight={2}>
+        <Box flexDirection="column" width={28} marginRight={2}>
           <Text bold inverse={pane === "projects"}>
             Projects
           </Text>
@@ -196,7 +202,7 @@ export function WorkspaceView({
             snap.projects.map((p) => {
               const active = p.id === selectedProjectId
               return (
-                <Text key={p.id} color={active ? "green" : undefined} inverse={active}>
+                <Text key={p.id} color={active ? "green" : undefined} inverse={active && pane === "projects"}>
                   {active ? "> " : "  "}
                   {p.name}
                   {p.id === snap.activeProjectId ? " *" : ""}
@@ -218,96 +224,257 @@ export function WorkspaceView({
             structureName={structureName}
           />
         ) : tab === "structure" ? (
-          <Lines
-            title="Structure"
-            rows={[
-              ...toStructureView(snap).models.map((m) => `${m.name}  ${m.fields.join(", ") || "(no fields)"}`),
-              ...toStructureView(snap).aliases.map((a) => `alias ${a}`),
-            ]}
-          />
+          <StructurePanel snap={snap} />
         ) : tab === "docs" ? (
-          <Box flexDirection="column" flexGrow={1}>
-            <Text bold>Docs</Text>
-            {docs.preview ? <Text dimColor>{docs.preview}</Text> : <Text dimColor>no markdown</Text>}
-          </Box>
+          <DocsPanel docs={docs} />
         ) : tab === "documents" ? (
-          <Lines
-            title="Documents"
-            rows={docs.docs.map((d) => `${d.name}  ${d.label} ${d.sizeKb}kb`)}
-          />
+          <DocumentsPanel docs={docs} />
         ) : tab === "testing" ? (
-          <Lines title="Testing" rows={testing.tests.map((t) => t.name)} />
+          <TestingPanel testing={testing} selectedTestName={selectedTestName} pane={pane} />
         ) : tab === "vibe" ? (
-          <Box flexDirection="column" flexGrow={1}>
-            <Text bold>Vibe</Text>
-            {agentBusy ? <Text color="yellow">thinking...</Text> : null}
-            {agent.turns.slice(-6).map((t, i) => (
-              <Text key={`${t.role}-${i}`} color={t.role === "assistant" ? "cyan" : undefined}>
-                {t.role === "user" ? "> " : "< "}
-                {t.content.slice(0, 200)}
-              </Text>
-            ))}
-            {agent.pendingChanged.length ? (
-              <Text color="yellow">pending: {agent.pendingChanged.join(", ")} — y apply / d reject</Text>
-            ) : (
-              <Text dimColor>no pending proposal</Text>
-            )}
-            {agent.proposedActions.length ? (
-              <Text dimColor>actions: {agent.proposedActions.join(", ")}</Text>
-            ) : null}
-          </Box>
+          <VibePanel agent={agent} agentBusy={agentBusy} />
         ) : tab === "logging" ? (
-          <Lines
-            title="Logging"
-            rows={logs.runs.map((r) =>
-              [r.status, r.id, r.notes, r.testDoc, r.langfuse, `${r.steps} steps`].filter(Boolean).join("  "),
-            )}
-          />
+          <LoggingPanel logs={logs} selectedRunId={selectedRunId} errorsOnly={errorsOnly} pane={pane} />
         ) : tab === "inference" ? (
-          <Lines
-            title="Inference"
-            rows={toInferenceView(snap).assignments.map((a) => `${a.moduleId}: ${a.docIds.join(",") || "(none)"}`)}
-          />
+          <InferencePanel snap={snap} runBusy={runBusy} />
         ) : tab === "share" ? (
-          <Lines
-            title="Share"
+          <AnnotatedLines
+            tab="share"
             rows={[
               ...toShareView(snap).shareLinkIds.map((id) => `link ${id}`),
               ...toShareView(snap).hostedApiIds.map((id) => `api ${id}`),
             ]}
           />
         ) : tab === "cache" ? (
-          <Lines title="Cache" rows={toCacheView(snap).entries.map((e) => e.key)} />
+          <AnnotatedLines
+            tab="cache"
+            rows={toCacheView(snap).entries.map((e) => (e.stepLabel ? `${e.stepLabel}  ${e.key}` : e.key))}
+          />
         ) : tab === "billing" ? (
-          <Lines
-            title="Billing"
-            rows={[toBillingView(snap) ? `${toBillingView(snap)!.balanceCents}¢` : "no account — session pull / SPINE_API_URL"]}
-          />
+          <MoneyPanel kind="billing" snap={snap} />
         ) : tab === "earnings" ? (
-          <Lines
-            title="Earnings"
-            rows={[toEarningsView(snap) ? `${toEarningsView(snap)!.balanceCents}¢` : "no account — session pull / SPINE_API_URL"]}
-          />
+          <MoneyPanel kind="earnings" snap={snap} />
         ) : (
-          <Lines
-            title="Settings"
-            rows={[
-              `model ${toSettingsView(snap).model}`,
-              toSettingsView(snap).saveError ?? "save ok",
-              `${toSettingsView(snap).modelOptionCount} model options`,
-            ]}
-          />
+          <SettingsPanel snap={snap} />
         )}
       </Box>
       <Box marginTop={1} flexDirection="column">
+        {statusMsg ? <Text color="yellow">{statusMsg}</Text> : null}
         <PromptFooter
           snap={snap}
           validation={validation}
           prompt={prompt}
           pipeline={pipeline}
           selectedStepId={stepId}
+          tab={tab}
+          logs={logs}
+          testing={testing}
+          errorsOnly={errorsOnly}
         />
       </Box>
+    </Box>
+  )
+}
+
+function AnnotatedLines({ tab, rows }: { tab: TuiTab; rows: string[] }) {
+  const meta = TUI_TAB_META[tab]
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      <PanelHeader tab={tab} />
+      <Lines title={meta.title} rows={rows} empty={meta.empty} />
+    </Box>
+  )
+}
+
+function StructurePanel({ snap }: { snap: SessionSnapshot }) {
+  const view = toStructureView(snap)
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      <PanelHeader tab="structure" />
+      {view.models.length === 0 && view.aliases.length === 0 ? (
+        <Text dimColor>{TUI_TAB_META.structure.empty}</Text>
+      ) : (
+        view.models.map((m) => (
+          <Box key={m.name} flexDirection="column">
+            <Text bold>{m.name}</Text>
+            {m.fields.length === 0 ? (
+              <Text dimColor>  (no fields)</Text>
+            ) : (
+              m.fields.map((f) => (
+                <Text key={`${m.name}.${f}`}>
+                  {"  "}
+                  <Text color="cyan">{f.split(":")[0]}</Text>
+                  <Text dimColor>:{f.split(":").slice(1).join(":")}</Text>
+                </Text>
+              ))
+            )}
+          </Box>
+        ))
+      )}
+      {view.aliases.map((a) => (
+        <Text key={a} dimColor>
+          alias {a}
+        </Text>
+      ))}
+      <Text dimColor>m add model</Text>
+    </Box>
+  )
+}
+
+function DocsPanel({ docs }: { docs: DocsView }) {
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      <PanelHeader tab="docs" />
+      {docs.preview ? <Text>{docs.preview}</Text> : <Text dimColor>{TUI_TAB_META.docs.empty}</Text>}
+      <Text dimColor>w or e to edit</Text>
+    </Box>
+  )
+}
+
+function DocumentsPanel({ docs }: { docs: DocsView }) {
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      <PanelHeader tab="documents" />
+      {docs.docs.length === 0 ? (
+        <Text dimColor>{TUI_TAB_META.documents.empty}</Text>
+      ) : (
+        docs.docs.map((d) => (
+          <Box key={d.name} flexDirection="column">
+            <Text>
+              {d.name}
+              <Text dimColor>
+                {"  "}
+                {d.label}  {d.type}  {d.sizeKb}kb
+              </Text>
+            </Text>
+            {d.preview ? (
+              <Text dimColor>
+                {"  "}
+                {d.preview.slice(0, 80)}
+              </Text>
+            ) : null}
+          </Box>
+        ))
+      )}
+    </Box>
+  )
+}
+
+function TestingPanel({
+  testing,
+  selectedTestName,
+  pane,
+}: {
+  testing: TestingView
+  selectedTestName?: string
+  pane: TuiPane
+}) {
+  const name = resolveSelectedTestName(testing, selectedTestName ?? "")
+  const selected = testing.tests.find((t) => t.name === name)
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      <PanelHeader tab="testing" />
+      {testing.tests.length === 0 ? (
+        <Text dimColor>{TUI_TAB_META.testing.empty}</Text>
+      ) : (
+        testing.tests.map((t) => {
+          const active = t.name === name
+          const color = t.verdict === "pass" ? "green" : t.verdict === "fail" ? "red" : undefined
+          return (
+            <Text key={t.name} color={color} inverse={active && pane === "tests"}>
+              {active ? "> " : "  "}
+              {t.verdict === "pass" ? "ok " : t.verdict === "fail" ? "x " : "· "}
+              {t.name}
+              <Text dimColor>  {t.verdict}</Text>
+            </Text>
+          )
+        })
+      )}
+      {selected ? (
+        <Text dimColor>
+          Looking at: {selected.name} — t runs this file, results appear in Logging
+        </Text>
+      ) : null}
+    </Box>
+  )
+}
+
+function VibePanel({ agent, agentBusy }: { agent: AgentView; agentBusy?: boolean }) {
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      <PanelHeader tab="vibe" />
+      {agentBusy ? <Text color="yellow">thinking...</Text> : null}
+      {agent.turns.length === 0 ? <Text dimColor>{TUI_TAB_META.vibe.empty}</Text> : null}
+      {agent.turns.slice(-8).map((t, i) => (
+        <Text key={`${t.role}-${i}`} color={t.role === "assistant" ? "cyan" : undefined}>
+          {t.role === "user" ? "> " : "< "}
+          {t.content.slice(0, 220)}
+        </Text>
+      ))}
+      {agent.pendingChanged.length ? (
+        <Text color="yellow">pending: {agent.pendingChanged.join(", ")} — y apply / d reject</Text>
+      ) : (
+        <Text dimColor>no pending proposal</Text>
+      )}
+      {agent.proposedActions.length ? <Text dimColor>actions: {agent.proposedActions.join(", ")}</Text> : null}
+    </Box>
+  )
+}
+
+function InferencePanel({ snap, runBusy }: { snap: SessionSnapshot; runBusy?: boolean }) {
+  const view = toInferenceView(snap)
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      <PanelHeader tab="inference" />
+      {runBusy ? <Text color="yellow">running…</Text> : null}
+      {view.assignments.length === 0 ? (
+        <Text dimColor>{TUI_TAB_META.inference.empty}</Text>
+      ) : (
+        view.assignments.map((a) => (
+          <Text key={a.moduleId} color={a.ready ? "green" : "yellow"}>
+            {a.ready ? "ok " : "· "}
+            {a.moduleLabel}
+            <Text dimColor>  {a.docNames.join(", ") || "(none)"}</Text>
+          </Text>
+        ))
+      )}
+      <Text dimColor>{view.ready ? "i run pipeline — trace opens in Logging" : "assign docs via spine session assign-input, then i"}</Text>
+    </Box>
+  )
+}
+
+function MoneyPanel({ kind, snap }: { kind: "billing" | "earnings"; snap: SessionSnapshot }) {
+  const view = kind === "billing" ? toBillingView(snap) : toEarningsView(snap)
+  const meta = TUI_TAB_META[kind]
+  const rows = view
+    ? kind === "billing"
+      ? [
+          `balance ${view.balanceCents}¢`,
+          view.totalBilledCents != null ? `billed ${view.totalBilledCents}¢` : "",
+          view.totalUsageCents != null ? `usage ${view.totalUsageCents}¢` : "",
+        ].filter(Boolean)
+      : [
+          `balance ${view.balanceCents}¢`,
+          view.totalEarnedCents != null ? `earned ${view.totalEarnedCents}¢` : "",
+          view.totalWithdrawnCents != null ? `withdrawn ${view.totalWithdrawnCents}¢` : "",
+        ].filter(Boolean)
+    : []
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      <PanelHeader tab={kind} />
+      <Lines title={meta.title} rows={rows} empty={meta.empty} />
+    </Box>
+  )
+}
+
+function SettingsPanel({ snap }: { snap: SessionSnapshot }) {
+  const view = toSettingsView(snap)
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      <PanelHeader tab="settings" />
+      <Text>model {view.model}</Text>
+      <Text dimColor>{view.saveError ?? "save ok"}</Text>
+      <Text dimColor>{view.modelOptionCount} model options</Text>
     </Box>
   )
 }
@@ -328,17 +495,29 @@ function PromptFooter({
   prompt,
   pipeline,
   selectedStepId,
+  tab,
+  logs,
+  testing,
+  errorsOnly,
 }: {
   snap: SessionSnapshot
   validation: ValidationView
   prompt: TuiPrompt
   pipeline: PipelineView | null
   selectedStepId: string
+  tab: TuiTab
+  logs: LogsView
+  testing: TestingView
+  errorsOnly: boolean
 }) {
   const ctx = {
     hasProject: snap.projects.length > 0,
     hasProposal: snap.pendingProposal != null,
     hasSteps: (pipeline?.steps.length ?? 0) > 0,
+    tab,
+    hasRuns: logs.runs.length > 0,
+    hasTests: testing.tests.length > 0,
+    validationOk: validation.ok,
   }
   const hintCtx = { ...ctx, projectCount: snap.projects.length, validation }
   const suggested = suggestedCommandId(hintCtx)
@@ -461,6 +640,53 @@ function PromptFooter({
       </>
     )
   }
+  if (prompt?.kind === "pick-run") {
+    const hits = suggestLogRuns(prompt.buffer, logs, errorsOnly)
+    const sel = selectedIndex(prompt, hits.length)
+    return (
+      <>
+        <Text color="yellow">look at run: {prompt.buffer}_</Text>
+        {hits.length === 0 ? (
+          <Text dimColor>no matching run</Text>
+        ) : (
+          hits.map((row, i) => (
+            <SuggestRow
+              key={row.id}
+              active={i === sel}
+              title={`${row.status} ${row.inputLabel}`}
+              detail={`${row.duration} ${row.cost}${row.errorSummary ? ` — ${row.errorSummary}` : ""}`}
+            />
+          ))
+        )}
+        <Text dimColor>↑↓ switch   enter   esc cancel</Text>
+      </>
+    )
+  }
+  if (prompt?.kind === "pick-test") {
+    const hits = suggestTests(prompt.buffer, testing)
+    const sel = selectedIndex(prompt, hits.length)
+    return (
+      <>
+        <Text color="yellow">run test: {prompt.buffer}_</Text>
+        {hits.length === 0 ? (
+          <Text dimColor>no matching test</Text>
+        ) : (
+          hits.map((row, i) => (
+            <SuggestRow key={row.name} active={i === sel} title={row.name} detail={row.verdict} />
+          ))
+        )}
+        <Text dimColor>↑↓ switch   enter runs   esc cancel</Text>
+      </>
+    )
+  }
+  if (prompt?.kind === "docs") {
+    return (
+      <>
+        <Text color="yellow">docs: {prompt.buffer}_</Text>
+        <Text dimColor>enter to save   esc cancel</Text>
+      </>
+    )
+  }
   if (prompt?.kind === "command") {
     const hits = suggestCommands(prompt.buffer, ctx, suggested)
     const sel = selectedIndex(prompt, hits.length)
@@ -486,7 +712,7 @@ function PromptFooter({
       <Text>
         <Text color="cyan">/</Text>
         <Text> search commands</Text>
-        <Text dimColor>   e configure step   q quit</Text>
+        <Text dimColor>   e inspect   i run   t test   q quit</Text>
       </Text>
       {idleCmds.map((cmd) => (
         <CommandSuggestRow key={cmd.id} cmd={cmd} active={cmd.id === suggested} available={commandAvailable(cmd, ctx)} />

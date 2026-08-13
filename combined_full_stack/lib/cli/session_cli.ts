@@ -28,6 +28,7 @@ import {
   addNamedModel,
   addPipelineStep,
   addTypeAlias,
+  assignStepStructure,
   exportSessionPydantic,
   importSeed,
   listSeedIds,
@@ -54,6 +55,7 @@ Usage:
   spine session add-alias --name <Name> --expr <TypeExpr>
   spine session add-step --kind <llm|input|...> [--label <Label>]
   spine session patch-step --id <id|label> [--label] [--prompt] [--note]
+  spine session assign-structure --id <id|label> --model <Name>
   spine session remove-step --id <id|label>
   spine session move-step --id <id|label> --at <index>
   spine session add-doc --name <file> --text <content> | --file <path>
@@ -68,6 +70,13 @@ Usage:
 --offline  fail if a command would egress (local actions never do)
 SPINE_API_URL / SPINE_API_TOKEN  HTTP egress for pull/push/start-run/billing
 `
+
+// AI : TODO (gui-parity) — CLI still lacks vs GUI:
+// AI :   kind-specific patch-step fields (model, cache, webhook, parallel, chatbot, code)
+// AI :   remove-doc / setDocProjects / binary upload; cloneFromTemplate HTTP; hydrateRunDetail
+// AI :   share mint / hosted API / marketplace; billing checkout / withdraw; teams
+// AI :   run cancel, human-review elicitation, Node custom-code host
+// AI :   inference *_setup.json editor; testing visual editor + alignment
 
 function ok(command: string, data: Record<string, unknown>): CliCommandResult {
   return { ok: true, command, issues: [], data }
@@ -248,6 +257,17 @@ async function runSessionCommandInner(
     if (note) patch.note = note
     const step = patchStep(session, id, patch)
     return ok("session patch-step", { step: { id: step.id, label: step.label, kind: step.kind } })
+  }
+
+  if (sub === "assign-structure") {
+    const id = flagString(flags, "id") ?? positional[2]
+    const model = flagString(flags, "model") ?? positional[3]
+    if (!id || !model) return usage("session assign-structure requires --id and --model")
+    const assigned = assignStepStructure(session, id, model)
+    return ok("session assign-structure", {
+      model: { id: assigned.id, name: assigned.name },
+      pipeline: toPipelineView(session.getSnapshot()),
+    })
   }
 
   if (sub === "remove-step") {

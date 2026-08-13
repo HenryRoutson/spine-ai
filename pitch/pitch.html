@@ -385,6 +385,7 @@
       <a href="#product">Product</a>
       <a href="#market">Market</a>
       <a href="#traction">Traction</a>
+      <a href="#gtm">GTM</a>
       <a href="#ask">Ask</a>
     </nav>
     <a class="btn" href="https://www.spine-ai-app.dev/" target="_blank" rel="noopener">Try now</a>
@@ -497,8 +498,8 @@
     <p class="eyebrow">03 &mdash; Why now</p>
     <h2>The budget shifted to low cost at high scale,<br />and the models finally allow it.</h2>
     <p class="lead">
-      Two things changed at once. Buyers stopped paying for expensive AI, and the cheap models got good enough
-      to serve them.
+      Enterprises are cutting AI spend, flash-class models made cheap inference real, and synergistic products
+      like Lovable have exploded &mdash; without a backend to finish the job.
     </p>
 
     <div class="grid g2 rv" style="margin-top:32px; gap:16px;">
@@ -508,16 +509,34 @@
         <p class="kill">
           Large enterprises are cutting AI spend, and so are the custom AI solutions sold to them as subscription
           products. What they want now is <span class="good">low cost at high scale</span> &mdash; which is exactly
-          the axis a frontier-model agent loop loses on.
+          the axis a frontier-model agent loop loses on. Our product is designed to cut the single biggest expense:
+          developer time.
         </p>
       </div>
       <div class="card num-card">
         <span class="num">SHIFT 02</span>
         <h3>Flash-class models are mature</h3>
         <p class="kill">
-          Small models are now good enough for segmented, typed tasks. Running inference is
+          Small models are now good enough for segmented, typed tasks. Running inference and vibe coding is
           <span class="good">dramatically cheaper than two years ago</span> &mdash; but only if the system is built
           to use them, which is the engineering problem we automate.
+        </p>
+      </div>
+      <div class="card num-card">
+        <span class="num">SHIFT 03</span>
+        <h3>Vibe coding is eating the backend</h3>
+        <p class="kill">
+          Vibe coding is about to automate large parts of backend work. The window is open now, before that work
+          is fully absorbed into frontier coding agents.
+        </p>
+      </div>
+      <div class="card num-card">
+        <span class="num">SHIFT 04</span>
+        <h3>Lovable still needs a backend</h3>
+        <p class="kill">
+          Lovable and similar vibe-coding tools are missing the backend code required to make a working product.
+          We could be the <span class="good">final piece of the puzzle</span> for non-technical builders looking
+          to complete a product without learning Claude Code.
         </p>
       </div>
     </div>
@@ -528,8 +547,8 @@
     <p class="eyebrow">04 &mdash; The solution</p>
     <h2>Build production systems<br />while being non-technical.</h2>
     <p class="lead">
-      We offer vibe coding for AI engineering. You describe what you want; we handle the hosting and
-      automate the backend development with AI, using deep production experience baked into the platform.
+      We offer vibe coding for AI engineering and backend code. You describe what you want; we handle the hosting
+      and automate the backend development with AI, using our deep production experience baked into the platform.
     </p>
 
     <!-- AI : flow diagram — prompt to deployed backend, mirrors the actual product tabs -->
@@ -615,9 +634,9 @@
         <span class="num">01</span>
         <h3>Chain of thought, everywhere</h3>
         <p class="kill">
-          <span class="bad">Embedding RAG is uninterpretable</span> &mdash; impossible to debug and fix.
+          <span class="bad">Embedding RAG is uninterpretable</span> &mdash; often impossible to find the real issue.
           We emit a chain-of-thought trace at every step. When a test case diverges, we feed that trace back in:
-          <span class="good">quick fixes, often automatic</span>.
+          <span class="good">quick fixes, often automatic, without human intervention</span>.
         </p>
       </div>
       <div class="card num-card">
@@ -626,7 +645,7 @@
         <p class="kill">
           Agents are useful, but in production they&rsquo;re <span class="bad">more variable and expensive</span>,
           especially on small tasks. Inference while testing our product has often been
-          <span class="good">under a single cent</span> &mdash; no 30k-token overhead like Claude Code.
+          <span class="good">under a single cent</span> &mdash; no 30 thousand tokens of overhead like Claude Code.
         </p>
       </div>
       <div class="card num-card">
@@ -640,13 +659,22 @@
       </div>
       <div class="card num-card">
         <span class="num">04</span>
-        <h3>Structured responses do three jobs</h3>
+        <h3>Structured AI backends do three jobs</h3>
         <p class="kill">
-          Typed, structured output <span class="good">catches bugs early</span>, lets
+          Structured AI backends <span class="good">catch bugs early</span>, let
           <span class="good">smaller models</span> do work the frontier would otherwise be needed for, and
-          saves the user from manually prompting at all &mdash; the schema generates the prompt.
+          save the user from manually prompting at all &mdash; the schema generates the prompt.
         </p>
       </div>
+    </div>
+
+    <div class="card num-card rv" style="margin-top:16px; border-color:var(--line-bright);">
+      <span class="num">05</span>
+      <h3>A vibe-coding UI with no learning curve</h3>
+      <p class="kill">
+        The key to unlocking fast adoption is a full vibe-coding UI with no learning curve
+        &mdash; <span class="good">like Lovable</span>.
+      </p>
     </div>
 
     <!-- AI : the 37x number is the sharpest single stat in the deck — give it its own visual -->
@@ -894,7 +922,7 @@
       <div class="card stat"><div class="k">Build time</div><div class="v">2 wks</div><div class="n">full-time, solo</div></div>
       <div class="card stat"><div class="k">Codebase</div><div class="v">120k</div><div class="n">lines of code</div></div>
       <div class="card stat"><div class="k">Measured run</div><div class="v">$0.0024</div><div class="n">legal eval pipeline, 8 steps cached</div></div>
-      <div class="card stat"><div class="k">Status</div><div class="v">Live</div><div class="n">Stripe-integrated, bugs pending</div></div>
+      <div class="card stat"><div class="k">Status</div><div class="v">Live</div><div class="n">Stripe-integrated</div></div>
     </div>
   </section>
 
@@ -911,9 +939,10 @@
       <div class="card">
         <h3>Relevance AI &mdash; $13M ARR</h3>
         <p style="font-size:14.5px; margin-bottom:0;">
-          From my experience at KPMG, I know Relevance AI isn&rsquo;t used in production and wouldn&rsquo;t be taken
-          seriously to do that. It&rsquo;s used exclusively for non-technical client demos &mdash; and it still requires
-          the development team to build those demos.
+          From my experience at KPMG, I know Relevance AI isn&rsquo;t used in production, despite a push from
+          leadership. It is used exclusively for non-technical client demos &mdash; and it still requires
+          the development team to develop those demos. This is despite repeated pushes to use the tool internally.
+          We can do better.
         </p>
       </div>
       <div class="card">
@@ -1112,6 +1141,11 @@
   <section class="block" id="market">
     <p class="eyebrow">09 &mdash; TAM / SAM / SOM</p>
     <h2>TAM SAM SOM</h2>
+    <p style="font-size:13px; color:var(--muted-dim); margin-bottom:14px;">
+      TAM &mdash; Total Addressable Market &nbsp;&middot;&nbsp;
+      SAM &mdash; Serviceable Addressable Market &nbsp;&middot;&nbsp;
+      SOM &mdash; Serviceable Obtainable Market
+    </p>
     <p class="lead">
       TAM $25B &middot; SAM $3.5B &middot; SOM $40&ndash;80M ARR / ~$1B by month 36, parked at Make.com on the landscape. Split, because the two legs
       carry opposite risk profiles and a single blended number hides both.
@@ -1211,9 +1245,8 @@
       <div>
         <h2>Traction</h2>
         <p class="lead">
-          For context: I was planning on pivoting and have come back to this idea, so I haven&rsquo;t put time
-          into traction until the last day and a half. I&rsquo;d rather show you the raw findings than dress up
-          the little there is.
+          For context: I was going to pivot from this idea, so we&rsquo;re light on traction at the moment
+          &mdash; and that&rsquo;s our current main focus.
         </p>
       </div>
       <div class="grid rv" style="gap:16px;">
@@ -1227,8 +1260,17 @@
           <h3>Founder interviews &mdash; validated pain</h3>
           <p style="font-size:14.5px; margin-bottom:0;">
             Startup founders with severe and urgent pain around AI engineering. The finding that matters:
-            <span class="fg">they had not heard of chain of thought or prompt caching</span> &mdash; two of the
-            most critical tools in the discipline. That gap is the product.
+            a small AI startup <span class="fg">wasn&rsquo;t familiar with the AI-engineering terminology</span>
+            required to develop a suitable solution. That gap is the product.
+          </p>
+        </div>
+        <div class="card">
+          <h3>Enterprises can&rsquo;t ship</h3>
+          <p style="font-size:14.5px; margin-bottom:0;">
+            In CBUS and KPMG, despite PhD qualifications, teams are struggling to ship to production.
+            Latency is often up to <span class="fg">6 months to ship a single product</span>.
+            NAB and KPMG have only started seeing shipping pace rise after years-long investments into
+            internal tooling. We&rsquo;re hoping to accelerate everyone.
           </p>
         </div>
       </div>
@@ -1256,46 +1298,85 @@
     <h2>Free with inference markup first.<br />Three revenue legs after.</h2>
     <p class="lead">
       Initially free with an inference markup, to get maximum user feedback. Then a synergistic, multi-pronged
-      approach where each leg feeds the next.
+      approach. We hope to attract:
     </p>
 
     <div class="grid g3 rv" style="margin-top:32px;">
       <div class="card num-card">
         <span class="num">LEG 01</span>
-        <h3>Vibe coding product</h3>
-        <p>Consumer-facing. The name-brand driver &mdash; this is what produces distribution.</p>
+        <h3>Vibe-coding consumers</h3>
+        <p>Attract vibe-coding consumers to drive our name brand. This is the distribution engine.</p>
       </div>
       <div class="card num-card">
         <span class="num">LEG 02</span>
         <h3>Enterprise dev tooling</h3>
-        <p>Development tooling and vibe coding for teams already building, monetising the traffic the consumer product brings.</p>
+        <p>Enterprise development tooling and vibe coding for teams already building.</p>
       </div>
       <div class="card num-card">
         <span class="num">LEG 03</span>
         <h3>Enterprise consulting</h3>
-        <p>For companies needing enterprise development without a dedicated engineering team. De-risks the early years.</p>
+        <p>And enterprise consulting services &mdash; for companies that need the work done without a dedicated engineering team.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GTM ============ -->
+  <section class="block" id="gtm">
+    <p class="eyebrow">12 &mdash; Go to market</p>
+    <h2>Hyper-augmented vibe coding<br />at developer rates.</h2>
+    <p class="lead">
+      We are reaching out to AI startup founders to sell hyper-augmented vibe coding at developer rates,
+      and to get real product feedback and testing.
+    </p>
+
+    <div class="grid g2 rv" style="margin-top:32px; gap:16px;">
+      <div class="card num-card">
+        <span class="num">NOW</span>
+        <h3>AI startup founders</h3>
+        <p>Sell hyper-augmented vibe coding at developer rates. Get real product feedback and testing.</p>
+      </div>
+      <div class="card num-card">
+        <span class="num">IN PARALLEL</span>
+        <h3>Larger companies</h3>
+        <p>At the same time, we&rsquo;re pitching to larger companies for trials.</p>
+      </div>
+      <div class="card num-card">
+        <span class="num">EXECS</span>
+        <h3>Vibe coding</h3>
+        <p>We&rsquo;re pitching our vibe-coding solution to execs.</p>
+      </div>
+      <div class="card num-card">
+        <span class="num">DEVS</span>
+        <h3>Engineering tool</h3>
+        <p>And our engineering-tool solution to developers.</p>
       </div>
     </div>
   </section>
 
   <!-- ============ MOAT ============ -->
   <section class="block" id="moat">
-    <p class="eyebrow">12 &mdash; The moat</p>
+    <p class="eyebrow">13 &mdash; The moat</p>
     <div class="grid g2" style="gap:40px; align-items:start;">
       <div>
         <h2>Make money first,<br />build a moat later.</h2>
         <p class="lead">
-          Claude eats our product with time &mdash; that was my original reason for pivoting. I want to be
-          straightforward about it rather than pretend otherwise.
+          Realistically, Claude eats our product with time &mdash; that was my original reason for pivoting.
+          I want to be straightforward about it rather than pretend otherwise.
         </p>
       </div>
       <div class="card rv" style="border-color:var(--line-bright);">
         <p style="font-size:15px;">
-          Today a Claude Code user still has to handle deployment themselves, until Anthropic clones our product.
-          Until then we are the <span class="fg">lowest-friction way to engineer a backend</span>.
+          However: today a Claude Code user still has to handle deployment themselves, until Anthropic clones
+          our product. Until then we are the
+          <span class="fg">lowest-friction way to engineer and deploy a backend</span>.
+        </p>
+        <p style="font-size:15px;">
+          No product is truly safe from a superintelligent Claude 10. Adapting to market demand is the best plan.
         </p>
         <p style="font-size:15px; margin-bottom:0;">
-          No product is truly safe from a superintelligent Claude 10. Adapting to market demand is the best plan.
+          By the time we need to pivot, we should have a data pool from user usage. xAI just acquired Cursor
+          for $60B &mdash; our hope is that a more accessible version of Cursor
+          <span class="fg">for non-developers</span> could see similar data volume.
         </p>
       </div>
     </div>
@@ -1303,13 +1384,13 @@
 
   <!-- ============ THE ASK ============ -->
   <section class="block" id="ask">
-    <p class="eyebrow">13 &mdash; The ask</p>
+    <p class="eyebrow">14 &mdash; The ask</p>
     <div class="grid g2" style="gap:40px; align-items:start;">
       <div>
         <h2>$200k for 5%,<br />at a $4M valuation.</h2>
         <p class="lead">
-          We require minimal funding or runway. The product is built, hosted and already chargeable &mdash;
-          this is not a raise to reach a first version.
+          We require minimal funding with our development pace. The product is built, hosted and already
+          chargeable &mdash; this is not a raise to reach a first version.
         </p>
       </div>
       <div class="grid rv" style="gap:16px;">

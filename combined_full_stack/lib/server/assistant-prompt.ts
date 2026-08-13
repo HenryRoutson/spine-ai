@@ -1,6 +1,6 @@
 // AI : dynamic assistant prompt blocks — derived from types so prompts stay current.
 
-import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds";
+import { USER_ADDABLE_MODULE_KINDS, kindAlwaysEmitsList } from "@/lib/module-kinds";
 import {
   DEFAULT_MODEL,
   FIELD_TYPES,
@@ -39,6 +39,14 @@ export function spineExpectsLabel(m: PipelineModule, models: StructureModel[]): 
   if (!name) return undefined;
   if (m.kind === "llm-batch") return `list[${name}]`;
   return name;
+}
+
+/** AI : structureOut as the agent should write it — list[] only when the kind does not already emit a list. */
+export function structureOutForAssistant(m: PipelineModule, models: StructureModel[]): string | undefined {
+  const name = structureName(models, m.outStructureId);
+  if (!name) return undefined;
+  if (kindAlwaysEmitsList(m.kind)) return name;
+  return stepEmitsList(m) ? `list[${name}]` : name;
 }
 
 export function buildModuleKindsPromptBlock(): string {
@@ -110,7 +118,6 @@ Validation error messages and how to fix them:
 - "list[Foo] → Bar needs a list field…" — bare transform cannot fold a list into a single object; add list[model] field on Bar or use custom-code.
 - "references missing structure …" — structureIn/structureOut names a model not in your models array.
 - "annotation / purpose is required" — set note on input, combine, llm, and llm-batch steps.
-- "input description is required" — set inputDescription on every step.
 - "code does not compile" — custom-code must be a TypeScript arrow expression, not Python.
 - "pipeline state has no …" on combine — no upstream step has emitted that structure name yet; add an earlier step with that structureOut label chain.
 
@@ -122,23 +129,27 @@ export function buildLinearIoPromptBlock(): string {
   return `Linear spine I/O (CRITICAL — validate mentally before returning modules):
 The pipeline is strictly left-to-right. Step N+1 consumes ONLY what step N puts on the spine — both the structure NAME and whether it is a single object or a list.
 
-Spine notation (for reasoning only — never put this in structureIn/structureOut JSON fields):
+How to write structureIn / structureOut in JSON:
+- structureIn is ALWAYS the item name (Document, ReceiptRow) — never list[...]. llm-batch/example-select/chunk still write the item type; list-ness is implied by kind.
+- structureOut for llm-batch / example-select / chunk: item name only (ReceiptRow). Those kinds ALWAYS emit list[item].
+- structureOut for input / llm / custom-code / transform: write list[Name] when the step emits a list, plain Name when it emits one object.
+- Current pipeline JSON uses this same write format in structureOut. spineExpects / spineEmits are the actual spine types after kind defaults — use those to check adjacent hops.
+
+Spine types (spineEmits / spineExpects — copy into structureOut only using the rules above):
 - Single object: Document
 - List of objects: list[ChunkItem]
 
 What each step puts on the spine (emits):
 - input with single structureOut → one structure on the spine (e.g. Document)
-- input with list output → set structureOut to list[structureOut] — required when one slot accepts many uploaded files ("Emit list output" in the UI)
+- input with list output → set structureOut to list[Document] — required when one slot accepts many uploaded files ("Emit list output" in the UI)
 - llm / transform (no code) with single structureOut → one item on the spine
-- llm / transform / custom-code with list output → list[structureOut] on the spine
-- llm-batch → ALWAYS list[structureOut]
+- llm / transform / custom-code with list output → list[Name] on structureOut
+- llm-batch / example-select / chunk → ALWAYS list[item] on the spine even when structureOut is the item name
 - quote (auto-inserted "Link Quotes") → INHERITS list-ness from its upstream LLM step. Do NOT create transform or quote steps named "Link Quotes ·…" yourself — they are inserted automatically.
 
 What each step requires from the previous step (expects):
-- Most steps → single structureIn matching the previous step's emit
+- Most steps → single structureIn matching the previous step's emit item type
 - llm-batch → list[structureIn] — the previous step MUST emit that list, not a single object
-
-structureIn and structureOut use structure NAMES. Write list[ChunkItem] when the step emits a list; plain ChunkItem when it emits one item.
 
 Common mistakes that fail validation:
 1. llm-batch after llm without list output — e.g. chunking llm emits single Document but batch expects list[ChunkItem]. Fix: set structureOut to list[ChunkItem] on the chunking step (or use custom-code to emit the list).
@@ -183,11 +194,12 @@ Use combine when the task needs TWO OR MORE DIFFERENT inputs that play different
 How combine works at runtime:
 1. Earlier steps run on the linear spine and accumulate pipeline state keyed by step label (e.g. "Parse Policy Table" → list[TableRow]).
 2. A side input step uploads the second document (Document on the spine).
-3. combine reads structureIn from pipeline state (must already exist — an upstream step must have emitted that structure) plus the side Document, and outputs a merged auto-generated structure.
+3. combine reads structureIn from pipeline state (must already exist — an upstream step must have emitted that structure) plus the side Document, and emits structureOut (a model you define with a document field + a state field).
 
 How to emit combine in your modules array:
 - structureIn (REQUIRED): structure NAME already produced upstream (e.g. TableRow, RubricQuestion) — what combine pulls from pipeline state, NOT list[TableRow].
-- structureOut: optional — server auto-generates the combine output model; do NOT add auto:true combine structs to models unless they already exist in the project.
+- structureOut (REQUIRED): name a model you include in models — typically a document field for the side upload plus a list[model] field for the state structure. The proposal path does not invent this model. Do not mark it auto:true.
+- The step AFTER combine must structureIn that same structureOut name — not the state item type (TableRow).
 - note + inputDescription on combine: describe the MERGED payload (pipeline state fields + side document), not just the side file.
 
 Side document input — pick ONE pattern:
@@ -540,7 +552,7 @@ Spine: Document → list[TextChunk] → list[ChunkSummary] → CombinedReport �
 
 Example 3 — two document kinds → combine → single audit llm (NOT one llm over both raw files)
 Task: "Check expense line items against a policy table"
-Spine: Document → list[TableRow] (state) + side Document → combine → MergedTables → llm → output
+Spine: Document → list[TableRow] (state) + side Document → combine → AuditInput → MergedTables → llm → output
 {
   "projectNameUpdate": "Expense Auditor",
   "models": [
@@ -550,6 +562,14 @@ Spine: Document → list[TableRow] (state) + side Document → combine → Merge
       "fields": [
         { "name": "row_id", "type": "text", "optional": false, "description": "Row id" },
         { "name": "cells_json", "type": "text", "optional": false, "description": "Row JSON" }
+      ]
+    },
+    {
+      "name": "AuditInput",
+      "description": "Combine output — side expense document plus parsed policy rows from state.",
+      "fields": [
+        { "name": "expense_report", "type": "document", "optional": false, "description": "Submitted expense report" },
+        { "name": "policy_rows", "type": "list[model]", "optional": false, "description": "Parsed policy limits", "ref": "TableRow" }
       ]
     },
     {
@@ -603,13 +623,14 @@ Spine: Document → list[TableRow] (state) + side Document → combine → Merge
       "label": "Combine Inputs",
       "note": "Merge parsed policy rows (pipeline state) with expense report document.",
       "structureIn": "TableRow",
+      "structureOut": "AuditInput",
       "inputDescription": "TableRow list from Parse Policy Table plus expense report Document"
     },
     {
       "kind": "custom-code",
       "label": "Merge Tables",
       "note": "Combine output → compact JSON for one audit llm.",
-      "structureIn": "TableRow",
+      "structureIn": "AuditInput",
       "structureOut": "MergedTables",
       "code": "(combined) => ({ table_a_json: JSON.stringify(combined.policy_rows ?? []), table_b_json: JSON.stringify(combined.expense_report?.content ?? '') })",
       "inputDescription": "Combined audit input — policy rows and expense report"
@@ -744,7 +765,7 @@ export function buildProjectContextBlock(
       label: m.label,
       note: m.note,
       structureIn: structureName(project.models, m.inStructureId),
-      structureOut: structureName(project.models, m.outStructureId),
+      structureOut: structureOutForAssistant(m, project.models),
       spineExpects: spineExpectsLabel(m, project.models),
       spineEmits: spineEmitsLabel(m, project.models),
       inputType: m.inputType,

@@ -20,7 +20,7 @@ import {
   syncListOpsStepModule,
 } from "@/lib/list-ops-steps"
 import { uid } from "@/lib/id"
-import { isLlmKind, stepRequiresNote, usesPassthroughStructure } from "@/lib/module-kinds"
+import { isLlmKind, kindAlwaysEmitsList, stepRequiresNote, usesPassthroughStructure } from "@/lib/module-kinds"
 import { migrateModuleSpineTypes, patchSpineOutList } from "@/lib/server/spine_types"
 import type { TypeExpr } from "@/lib/server/type_expr"
 
@@ -90,11 +90,11 @@ export function createPipelineModule(
     : kind !== ModuleKind.Input
       ? opts.inStructureId ?? defaultModel
       : undefined
-  const spineList =
-    opts.outType != null
+  const spineList = kindAlwaysEmitsList(kind)
+    ? true
+    : opts.outType != null
       ? opts.outType.kind === "list"
-      : opts.emitsList ??
-        (kind === ModuleKind.Chunk || kind === ModuleKind.ExampleSelect ? true : false)
+      : opts.emitsList ?? false
   const outType =
     opts.outType ??
     (outStructureId

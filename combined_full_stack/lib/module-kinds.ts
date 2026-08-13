@@ -35,6 +35,11 @@ export function isLlmKind(kind: RunStepKind): boolean {
   return LLM_KINDS.includes(kind as ModuleKind)
 }
 
+// AI : these kinds always put list[item] on the spine — structureOut is the ITEM name, not list[Name].
+export function kindAlwaysEmitsList(kind: ModuleKind | string): boolean {
+  return kind === ModuleKind.LlmBatch || kind === ModuleKind.ExampleSelect || kind === ModuleKind.Chunk
+}
+
 // AI : merge step + legacy list-merge kind string on run logs / migrated modules.
 export function isMergeModuleKind(kind: string): boolean {
   return kind === ModuleKind.Merge || kind === LegacyModuleKind.ListMerge

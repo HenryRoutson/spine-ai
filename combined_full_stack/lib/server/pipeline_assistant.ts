@@ -42,6 +42,7 @@ import {
 } from "./assistant_observe_tools";
 import type { Store } from "./store";
 import { stripBuiltinTypeAliases } from "./builtin_types";
+import { withSharedModels } from "./builtin_models";
 import {
   computeInvalid,
   formatPipelineValidationErrors,
@@ -53,7 +54,7 @@ import { migrateModuleSpineTypes, patchSpineOutList } from "./spine_types";
 import { stepEmitsList } from "./type_expr";
 import { uid } from "@/lib/id";
 import { inputTypesAreAllJsonNative } from "@/lib/inference-input-core";
-import { USER_ADDABLE_MODULE_KINDS, stepRequiresNote } from "@/lib/module-kinds";
+import { USER_ADDABLE_MODULE_KINDS, kindAlwaysEmitsList, stepRequiresNote } from "@/lib/module-kinds";
 import { attachAssistantUsage } from "./assistant_billing";
 import { isUnnamedProjectName } from "@/lib/project-assistant-types";
 import { catalogHasModel, resolveModelId } from "./model_catalog";
@@ -91,7 +92,7 @@ const moduleSpecSchema = z
     structureOut: z
       .string()
       .optional()
-      .describe("Structure name emitted onto spine — prefix list[...] when step emits multiple items (input multi-upload, llm-batch upstream, custom-code map)"),
+      .describe("Emitted structure — list[Name] for input/llm/custom-code list emit; item name only for llm-batch/example-select/chunk (those always emit list[item])"),
     inputType: z
       .enum(INPUT_TYPE_VALUES as [string, ...string[]])
       .optional()
@@ -342,10 +343,6 @@ const MAX_VALIDATION_RETRIES = 2;
 
 export type { ChatTurn };
 
-function defaultOutForKind(_kind: ModuleKind, models: StructureModel[]): StructureModelId | undefined {
-  return models[0]?.id;
-}
-
 function makeModuleFromSpec(
   spec: PipelineAssistantModuleSpec,
   models: StructureModel[],
@@ -353,11 +350,13 @@ function makeModuleFromSpec(
 ): PipelineModule {
   const inHint = parseStructureHint(spec.structureIn);
   const outHint = parseStructureHint(spec.structureOut);
-  const inId = resolveStructureIdFromModels(inHint?.name ?? spec.structureIn, models);
-  const outId =
-    resolveStructureIdFromModels(outHint?.name ?? spec.structureOut, models) ??
-    defaultOutForKind(spec.kind, models);
-  const emitsList = outHint?.isList ?? false;
+  const inName = inHint?.name ?? spec.structureIn;
+  const outName = outHint?.name ?? spec.structureOut;
+  const lookup = withSharedModels(models);
+  const inId = resolveStructureIdFromModels(inName, lookup);
+  const outId = resolveStructureIdFromModels(outName, lookup);
+  // AI : llm-batch/example-select/chunk always emit a list even when the agent wrote the item name.
+  const emitsList = kindAlwaysEmitsList(spec.kind) || (outHint?.isList ?? false);
   const modelId = spec.model && catalogHasModel(spec.model) ? resolveModelId(spec.model) : undefined;
   // AI : parallel branches resolve structureOut names → model ids; ids assigned at materialize time
   const parallelBranches =
@@ -365,7 +364,7 @@ function makeModuleFromSpec(
       ? (spec.parallelBranches ?? []).map((b) => {
           const hint = parseStructureHint(b.structureOut);
           const branchOut =
-            resolveStructureIdFromModels(hint?.name ?? b.structureOut, models) ??
+            resolveStructureIdFromModels(hint?.name ?? b.structureOut, lookup) ??
             ("" as StructureModelId);
           return {
             id: uid("pbr_"),
@@ -379,7 +378,7 @@ function makeModuleFromSpec(
         })
       : undefined;
 
-  return createPipelineModule(
+  let mod = createPipelineModule(
     {
       id: uid<ModuleId>(),
       kind: spec.kind,
@@ -389,7 +388,7 @@ function makeModuleFromSpec(
       inputNameContains: spec.inputNameContains,
       inputDescription: spec.inputDescription,
       inputMinCount: spec.inputMinCount,
-      inStructureId: spec.kind !== "input" ? inId ?? defaultOutForKind(spec.kind, models) : undefined,
+      inStructureId: spec.kind !== "input" ? inId : undefined,
       // AI : assemble/parallel without structureOut → auto-derive product on sync
       outStructureId:
         (spec.kind === ModuleKind.Assemble || spec.kind === ModuleKind.Parallel) && !outHint
@@ -410,6 +409,16 @@ function makeModuleFromSpec(
     models,
     globalModel,
   );
+  // AI : do not silently wire models[0] when the agent named a structure that does not exist.
+  if (spec.kind !== ModuleKind.Chatbot && outName?.trim() && !outId) {
+    const { outType: _drop, ...rest } = mod;
+    mod = migrateModuleSpineTypes({ ...rest, outStructureId: undefined });
+  }
+  if (spec.kind !== ModuleKind.Input && spec.kind !== ModuleKind.Chatbot && inName?.trim() && !inId) {
+    const { inType: _drop, ...rest } = mod;
+    mod = migrateModuleSpineTypes({ ...rest, inStructureId: undefined });
+  }
+  return mod;
 }
 
 function expandModuleSpecs(
@@ -467,8 +476,9 @@ function applyModulePatch(
 ): PipelineModule {
   const inHint = patch.structureIn ? parseStructureHint(patch.structureIn) : undefined;
   const outHint = patch.structureOut ? parseStructureHint(patch.structureOut) : undefined;
-  const inId = inHint ? resolveStructureIdFromModels(inHint.name ?? patch.structureIn!, models) : undefined;
-  const outId = outHint ? resolveStructureIdFromModels(outHint.name ?? patch.structureOut!, models) : undefined;
+  const lookup = withSharedModels(models);
+  const inId = inHint ? resolveStructureIdFromModels(inHint.name ?? patch.structureIn!, lookup) : undefined;
+  const outId = outHint ? resolveStructureIdFromModels(outHint.name ?? patch.structureOut!, lookup) : undefined;
   const modelId = patch.model && catalogHasModel(patch.model) ? resolveModelId(patch.model) : undefined;
   let next: PipelineModule = {
     ...existing,
@@ -485,8 +495,8 @@ function applyModulePatch(
     ...(modelId !== undefined ? { model: modelId } : {}),
     ...(patch.inputMinCount !== undefined ? { inputMinCount: patch.inputMinCount } : {}),
   };
-  if (outHint?.isList !== undefined) {
-    next = { ...next, ...patchSpineOutList(next, outHint.isList) };
+  if (outHint) {
+    next = { ...next, ...patchSpineOutList(next, kindAlwaysEmitsList(existing.kind) || outHint.isList) };
   }
   return migrateModuleSpineTypes(next);
 }
@@ -620,7 +630,7 @@ function buildUserPrompt(
 User request: ${userMessage}`;
 }
 
-function materializeProposal(
+export function materializeProposal(
   raw: z.infer<typeof assistantResponseSchema>,
   project: Project,
   globalModel: ModelId,

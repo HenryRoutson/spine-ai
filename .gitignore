@@ -242,3 +242,6 @@ csv_demo_files/
 
 # Clones 
 AutomationBench
+
+# Claude Code personal approvals (project policy lives in .claude/settings.json)
+.claude/settings.local.json
