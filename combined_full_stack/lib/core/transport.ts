@@ -10,19 +10,37 @@ export class EgressBlockedError extends Error {
 
 export type EgressPort = {
   bytesSent: number
+  blocked?: boolean
   request: (url: string, init?: RequestInit) => Promise<Response>
 }
 
 export function createThrowingEgress(): EgressPort {
   return {
     bytesSent: 0,
+    blocked: true,
     request: () => {
       throw new EgressBlockedError()
     },
   }
 }
 
-export function createRecordingEgress(inner: typeof fetch = fetch): EgressPort {
+export const SPINE_API_URL_ENV = "SPINE_API_URL"
+export const SPINE_API_TOKEN_ENV = "SPINE_API_TOKEN"
+
+type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
+
+export function createApiEgress(baseUrl: string, token?: string, inner: FetchLike = fetch): EgressPort {
+  const origin = baseUrl.replace(/\/$/, "")
+  return createRecordingEgress((url, init) => {
+    const headers = new Headers(init?.headers)
+    if (token) headers.set("Authorization", `Bearer ${token}`)
+    const path = url
+    const abs = path.startsWith("http") ? path : `${origin}${path.startsWith("/") ? path : `/${path}`}`
+    return inner(abs, { ...init, headers })
+  })
+}
+
+export function createRecordingEgress(inner: FetchLike = fetch): EgressPort {
   const port: EgressPort = {
     bytesSent: 0,
     request: async (url, init) => {

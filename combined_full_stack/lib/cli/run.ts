@@ -15,13 +15,6 @@ import { runAgentCommand } from "@/lib/cli/agent_cli"
 import { runDemoCommand } from "@/lib/cli/demo"
 import type { CliCommandResult } from "@/lib/cli/types"
 
-// AI : TODO (cli-parity vs React UI) — missing subcommands matching app tabs / store:
-// AI :   inference startRun + input assignment, testing run (not just validate), cache inspect,
-// AI :   logging hydrateRunDetail / notes, documents File upload + OCR/PDF, structure field CRUD +
-// AI :   type-alias editor + pydantic/zod preview, pipeline step-field edit + export bundle,
-// AI :   share/marketplace/hosted APIs, earnings, billing, settings, sign-in, consumer Run mode,
-// AI :   Node custom-code host, human-review elicitation, diagnosis + structure + testing assistants,
-// AI :   Supabase persist/realtime (file persist only), team read-only, strategies / A-B.
 export const SPINE_CLI_HELP = `spine — validate Spine projects and run the headless workspace / agent
 
 Usage:
@@ -31,9 +24,9 @@ Usage:
   npx tsx scripts/spine-cli.ts validate setup --project <seed.json> --file <setup.json> [--json]
   npx tsx scripts/spine-cli.ts parse test --file <test.json> [--json]
   npx tsx scripts/spine-cli.ts profile landing [--days 30] [--limit 50] [--backfill-local] [--json]
-  npx tsx scripts/spine-cli.ts session <list|add-project|open|rename|clone|delete|import-seed|seeds|set-docs|add-model|add-step|add-doc|docs|pipeline|mermaid|tests|logs|link-quotes|validate|snapshot|actions> [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts agent <ask|apply|reject|history|apply-file> [--message "..."] [--apply] [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts tui [--session <path>] [--once] [--tab build|docs|tests|agent|logs] [--offline] [--json]
+  npx tsx scripts/spine-cli.ts session <list|add-project|open|rename|clone|delete|import-seed|seeds|set-docs|add-model|add-field|add-step|add-doc|docs|pipeline|structure|pydantic|mermaid|tests|logs|assign-input|start-run|run-test|pull|push|billing|cache|share|link-quotes|validate|snapshot|actions> [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts agent <ask|structure|testing|diagnose|apply|reject|history|apply-file> [--message "..."] [--apply] [--run] [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts tui [--session <path>] [--once] [--tab structure|pipeline|testing|vibe|...] [--offline] [--json]
   npx tsx scripts/spine-cli.ts demo [--json]
 
 Flags:
@@ -45,10 +38,12 @@ Flags:
   --session path to .spine-session.json (or SPINE_SESSION_PATH)
   --offline  local-only; egress throws (session/demo/tui). agent ask is blocked.
   --once    Ink TUI: print one frame and exit (CI / non-TTY default)
-  --tab     Ink TUI starting tab
+  --tab     Ink TUI starting tab (aliases: build=pipeline, agent=vibe, tests=testing, logs=logging)
   --message agent ask prompt
   --apply   agent ask: apply the proposal immediately
+  --run     after apply, execute proposedActions via HTTP
   --file    seed JSON, proposal JSON, or test file
+  --assistant vibe|structure|testing|diagnosis
 
 Exit codes:
   0  success / no validation errors

@@ -1,58 +1,72 @@
 // AI : CLI adapter over SpineSession — method names match useStore().
-// AI : TODO (cli-parity) — no session start-run / run-test / export / cache / share / billing /
-// AI :   structure field edit / type-alias / pydantic preview / upload / sign-in / settings.
 
+import { readFileSync } from "node:fs"
+import { basename } from "node:path"
 import { DocLabel, InputType } from "@/lib/types"
-import { createSpineSession } from "@/lib/core/session"
-import { createThrowingEgress } from "@/lib/core/transport"
 import {
   toAgentView,
+  toBillingView,
+  toCacheView,
   toDocsView,
+  toEarningsView,
+  toInferenceView,
   toLogsView,
   toMermaidView,
   toPipelineView,
   toSessionSummary,
+  toSettingsView,
+  toShareView,
+  toStructureView,
   toTestingView,
   toValidationView,
 } from "@/lib/core/view"
 import { SESSION_ACTION_IDS } from "@/lib/core/actions"
 import type { CliCommandResult } from "@/lib/cli/types"
-import { createFilePersist, resolveSessionPath } from "@/lib/cli/session_persist"
+import { openCliSession } from "@/lib/cli/session_open"
 import {
+  addModelField,
   addNamedModel,
   addPipelineStep,
+  addTypeAlias,
+  exportSessionPydantic,
   importSeed,
   listSeedIds,
+  moveStep,
   parseAddableKind,
+  parseFieldType,
+  patchStep,
+  removeModelField,
+  removeStep,
   validateSessionTests,
 } from "@/lib/cli/workspace_edits"
 
 export const SPINE_SESSION_HELP = `session — headless workspace (same method names as useStore)
 
 Usage:
-  npx tsx scripts/spine-cli.ts session list [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session add-project [--open] [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session open <id> [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session rename --name <name> [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session clone [id] [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session delete <id> [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session import-seed --file <seed.json|id> [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session seeds [--json]
-  npx tsx scripts/spine-cli.ts session set-docs --text <markdown> [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session add-model --name <Name> [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session add-step --kind <llm|input|...> [--label <Label>] [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session add-doc --name <file> --text <content> [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session docs [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session pipeline [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session mermaid [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session tests [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session logs [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session link-quotes --quote <text> --doc <name|id> [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session validate [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session snapshot [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts session actions [--json]
+  spine session list|snapshot|actions|seeds
+  spine session add-project [--open]
+  spine session open <id> | rename --name <name> | clone [id] | delete <id>
+  spine session import-seed --file <seed.json|id>
+  spine session set-docs --text <markdown>
+  spine session add-model --name <Name>
+  spine session add-field --model <Name> --name <field> --type <text|int|...> [--optional]
+  spine session remove-field --model <Name> --name <field>
+  spine session add-alias --name <Name> --expr <TypeExpr>
+  spine session add-step --kind <llm|input|...> [--label <Label>]
+  spine session patch-step --id <id|label> [--label] [--prompt] [--note]
+  spine session remove-step --id <id|label>
+  spine session move-step --id <id|label> --at <index>
+  spine session add-doc --name <file> --text <content> | --file <path>
+  spine session docs | pipeline | mermaid | structure | pydantic | tests | logs
+  spine session assign-input --module <id|label> --doc <name|id>
+  spine session start-run | run-test [--file <*_testing.json>]
+  spine session pull | push
+  spine session billing | earnings | cache | share | settings
+  spine session link-quotes --quote <text> --doc <name|id>
+  spine session validate | set-model --model <id>
 
 --offline  fail if a command would egress (local actions never do)
+SPINE_API_URL / SPINE_API_TOKEN  HTTP egress for pull/push/start-run/billing
 `
 
 function ok(command: string, data: Record<string, unknown>): CliCommandResult {
@@ -68,10 +82,25 @@ function usage(message: string): CliCommandResult {
   }
 }
 
-export function runSessionCommand(
+export async function runSessionCommand(
   positional: string[],
   flags: Record<string, string | boolean>,
-): CliCommandResult {
+): Promise<CliCommandResult> {
+  try {
+    return await runSessionCommandInner(positional, flags)
+  } catch (err) {
+    return {
+      ok: false,
+      command: `session ${positional[1] ?? ""}`.trim(),
+      issues: [{ level: "error", where: "session", message: err instanceof Error ? err.message : String(err) }],
+    }
+  }
+}
+
+async function runSessionCommandInner(
+  positional: string[],
+  flags: Record<string, string | boolean>,
+): Promise<CliCommandResult> {
   const sub = positional[1]
   if (!sub || sub === "help") {
     return { ok: true, command: "help", issues: [], data: { help: SPINE_SESSION_HELP } }
@@ -81,11 +110,7 @@ export function runSessionCommand(
     return ok("session actions", { actions: SESSION_ACTION_IDS })
   }
 
-  const persist = createFilePersist(resolveSessionPath(flagString(flags, "session")))
-  const session = createSpineSession({
-    persist,
-    egress: flags.offline === true ? createThrowingEgress() : undefined,
-  })
+  const session = openCliSession(flags)
 
   if (sub === "list" || sub === "snapshot") {
     const snap = session.getSnapshot()
@@ -171,6 +196,33 @@ export function runSessionCommand(
     })
   }
 
+  if (sub === "add-field") {
+    const model = flagString(flags, "model")
+    const name = flagString(flags, "name")
+    const typeRaw = flagString(flags, "type")
+    if (!model || !name || !typeRaw) return usage("session add-field requires --model --name --type")
+    const type = parseFieldType(typeRaw)
+    if (!type) return usage(`unknown field type: ${typeRaw}`)
+    addModelField(session, model, name, type, { optional: flags.optional === true })
+    return ok("session add-field", { action: "applyProjectChanges", structure: toStructureView(session.getSnapshot()) })
+  }
+
+  if (sub === "remove-field") {
+    const model = flagString(flags, "model")
+    const name = flagString(flags, "name")
+    if (!model || !name) return usage("session remove-field requires --model --name")
+    removeModelField(session, model, name)
+    return ok("session remove-field", { structure: toStructureView(session.getSnapshot()) })
+  }
+
+  if (sub === "add-alias") {
+    const name = flagString(flags, "name")
+    const expr = flagString(flags, "expr")
+    if (!name || !expr) return usage("session add-alias requires --name --expr")
+    addTypeAlias(session, name, expr)
+    return ok("session add-alias", { structure: toStructureView(session.getSnapshot()) })
+  }
+
   if (sub === "add-step") {
     const kindRaw = flagString(flags, "kind")
     if (!kindRaw) return usage("session add-step requires --kind")
@@ -184,17 +236,47 @@ export function runSessionCommand(
     })
   }
 
+  if (sub === "patch-step") {
+    const id = flagString(flags, "id") ?? positional[2]
+    if (!id) return usage("session patch-step requires --id")
+    const patch: { label?: string; prompt?: string; note?: string } = {}
+    const label = flagString(flags, "label")
+    const prompt = flagString(flags, "prompt")
+    const note = flagString(flags, "note")
+    if (label) patch.label = label
+    if (prompt) patch.prompt = prompt
+    if (note) patch.note = note
+    const step = patchStep(session, id, patch)
+    return ok("session patch-step", { step: { id: step.id, label: step.label, kind: step.kind } })
+  }
+
+  if (sub === "remove-step") {
+    const id = flagString(flags, "id") ?? positional[2]
+    if (!id) return usage("session remove-step requires --id")
+    removeStep(session, id)
+    return ok("session remove-step", { pipeline: toPipelineView(session.getSnapshot()) })
+  }
+
+  if (sub === "move-step") {
+    const id = flagString(flags, "id") ?? positional[2]
+    const atRaw = flagString(flags, "at")
+    if (!id || atRaw == null) return usage("session move-step requires --id --at")
+    moveStep(session, id, Number(atRaw))
+    return ok("session move-step", { pipeline: toPipelineView(session.getSnapshot()) })
+  }
+
   if (sub === "add-doc") {
-    const name = flagString(flags, "name") ?? "note.txt"
-    const text = flagString(flags, "text")
-    if (text == null) return usage("session add-doc requires --text")
-    const doc = session.addDocContent({
+    const file = flagString(flags, "file")
+    const text = flagString(flags, "text") ?? (file ? readFileSync(file, "utf8") : undefined)
+    const name = flagString(flags, "name") ?? (file ? basename(file) : "note.txt")
+    if (text == null) return usage("session add-doc requires --text or --file")
+    const doc = session.addDoc({
       name,
       type: InputType.Text,
       content: text,
       label: DocLabel.Inference,
     })
-    return ok("session add-doc", { action: "addDocContent", doc })
+    return ok("session add-doc", { action: "addDoc", doc })
   }
 
   if (sub === "validate") {
@@ -209,6 +291,15 @@ export function runSessionCommand(
 
   if (sub === "docs") {
     return ok("session docs", { docs: toDocsView(session.getSnapshot()) })
+  }
+
+  if (sub === "structure") {
+    return ok("session structure", { structure: toStructureView(session.getSnapshot()) })
+  }
+
+  if (sub === "pydantic" || sub === "export") {
+    const pydantic = exportSessionPydantic(session)
+    return ok("session pydantic", { pydantic, human: pydantic, action: "exportPipeline" })
   }
 
   if (sub === "pipeline") {
@@ -226,11 +317,78 @@ export function runSessionCommand(
   }
 
   if (sub === "tests") {
+    if (flags.run === true) {
+      const run = await session.runTest(flagString(flags, "file"))
+      return ok("session tests", { action: "runTest", run: { id: run.id, status: run.status } })
+    }
     return validateSessionTests(session)
   }
 
   if (sub === "logs") {
     return ok("session logs", { logs: toLogsView(session.getSnapshot()), agent: toAgentView(session.getSnapshot()) })
+  }
+
+  if (sub === "assign-input") {
+    const moduleKey = flagString(flags, "module")
+    const docKey = flagString(flags, "doc")
+    if (!moduleKey || !docKey) return usage("session assign-input requires --module and --doc")
+    const mod = session.modules.find((m) => m.id === moduleKey || m.label === moduleKey)
+    const doc = session.docs.find((d) => d.id === docKey || d.name === docKey)
+    if (!mod) return usage(`unknown module: ${moduleKey}`)
+    if (!doc) return usage(`unknown doc: ${docKey}`)
+    session.setInferenceInputDocIds({ ...session.getSnapshot().inferenceInputDocIds, [mod.id]: doc.id })
+    return ok("session assign-input", { inference: toInferenceView(session.getSnapshot()) })
+  }
+
+  if (sub === "start-run") {
+    const run = await session.startRun()
+    return ok("session start-run", { action: "startRun", run: { id: run.id, status: run.status } })
+  }
+
+  if (sub === "run-test") {
+    const run = await session.runTest(flagString(flags, "file"))
+    return ok("session run-test", { action: "runTest", run: { id: run.id, status: run.status } })
+  }
+
+  if (sub === "pull") {
+    await session.pullRemoteState()
+    return ok("session pull", { summary: toSessionSummary(session.getSnapshot()) })
+  }
+
+  if (sub === "push") {
+    await session.flushPendingSave()
+    return ok("session push", { action: "flushPendingSave", summary: toSessionSummary(session.getSnapshot()) })
+  }
+
+  if (sub === "billing") {
+    if (session.egress && !session.egress.blocked) await session.refreshBilling()
+    return ok("session billing", { billing: toBillingView(session.getSnapshot()), action: "billing" })
+  }
+
+  if (sub === "earnings") {
+    if (session.egress && !session.egress.blocked) await session.refreshEarnings()
+    return ok("session earnings", { earnings: toEarningsView(session.getSnapshot()) })
+  }
+
+  if (sub === "cache") {
+    return ok("session cache", { cache: toCacheView(session.getSnapshot()), action: "cacheGet" })
+  }
+
+  if (sub === "share") {
+    return ok("session share", { share: toShareView(session.getSnapshot()), action: "shareLink" })
+  }
+
+  if (sub === "settings") {
+    const model = flagString(flags, "model")
+    if (model) session.setModel(model)
+    return ok("session settings", { settings: toSettingsView(session.getSnapshot()) })
+  }
+
+  if (sub === "set-model") {
+    const model = flagString(flags, "model") ?? positional[2]
+    if (!model) return usage("session set-model requires --model")
+    session.setModel(model)
+    return ok("session set-model", { settings: toSettingsView(session.getSnapshot()) })
   }
 
   if (sub === "link-quotes") {

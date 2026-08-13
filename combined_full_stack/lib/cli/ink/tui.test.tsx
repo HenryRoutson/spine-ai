@@ -17,7 +17,7 @@ describe("Ink TUI", () => {
     expect(frame).toContain("Spine")
     expect(frame).toContain("empty")
     expect(frame).toContain("Projects")
-    expect(frame).toContain("1:build")
+    expect(frame).toContain("1:structure")
   })
 
   it("renders the same session mutations as the React store / session CLI", () => {
@@ -48,7 +48,7 @@ describe("Ink TUI", () => {
         testing={toTestingView(snap)}
         agent={toAgentView(snap)}
         logs={toLogsView(snap)}
-        tab="build"
+        tab="pipeline"
         selectedProjectId={snap.activeProjectId}
         prompt={{ kind: "rename", buffer: "New Name" }}
       />,
@@ -90,8 +90,8 @@ describe("Ink TUI", () => {
     session.appendChat({ role: "user", content: "Add a Finding structure" })
     session.appendChat({ role: "assistant", content: "I'll propose a Finding model." })
     const frame = renderSpineTuiString(session, "memory", { tab: "agent" })
-    expect(frame).toContain("Agent")
+    expect(frame).toContain("Vibe")
     expect(frame).toContain("Finding")
-    expect(frame).toContain("4:agent")
+    expect(frame).toContain("vibe")
   })
 })

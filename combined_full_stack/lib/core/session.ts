@@ -6,7 +6,7 @@ import { UNNAMED_PROJECT_NAME } from "@/lib/project-assistant-types"
 import { findQuote } from "@/lib/quotes"
 import { stripBuiltinTypeAliases, stripSharedModels, withBuiltinTypeAliases, withSharedModels } from "@/lib/structure"
 import { syncManagedPipelineSteps } from "@/lib/structure-parse-steps"
-import { DEFAULT_MODEL, DocLabel, InputType, ModuleKind } from "@/lib/types"
+import { DEFAULT_MODEL, DocLabel, InputType, ModuleKind, RunSource } from "@/lib/types"
 import type {
   DocId,
   DocRef,
@@ -15,6 +15,8 @@ import type {
   PipelineRun,
   Project,
   ProjectId,
+  RunTestReport,
+  Strategy,
   StructureModel,
   TypeAlias,
 } from "@/lib/types"
@@ -29,8 +31,12 @@ import { toQuoteView, toValidationView, type QuoteView, type ValidationView } fr
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 import type {
   AddDocContentInput,
+  BillingAccountView,
+  CacheEntryView,
+  EarningsAccountView,
   EgressPort,
   LinkQuotesInput,
+  ModelOptionView,
   PersistPort,
   ProjectCreateOpts,
   ProjectPatch,
@@ -57,6 +63,15 @@ export function emptySessionSnapshot(): SessionSnapshot {
     deletedProjectIds: [],
     chat: [],
     pendingProposal: null,
+    modelOptions: [],
+    billingRuns: [],
+    billingAccount: null,
+    earningsAccount: null,
+    cacheEntries: [],
+    saveError: null,
+    shareLinkIds: [],
+    hostedApiIds: [],
+    docProjectIds: {},
   }
 }
 
@@ -106,10 +121,6 @@ function nextNumberedCloneName(baseName: string, existingNames: Iterable<string>
 }
 
 export class SpineSession {
-  // AI : TODO (cli-parity vs useStore) — missing methods: cloneFromTemplate, resyncExamples,
-  // AI :   addDoc(File), setDocProjects, addRun, updateRunNotes, updateRunTest, hydrateRunDetail,
-  // AI :   startRun / runTest, flushPendingSave (Supabase PUT), refreshBilling / refreshEarnings,
-  // AI :   setStrategies, persist original bytes, prefetchProject.
   private snap: SessionSnapshot
   private readonly listeners = new Set<() => void>()
   private readonly persist: PersistPort | undefined
@@ -276,6 +287,10 @@ export class SpineSession {
     return fresh
   }
 
+  cloneFromTemplate(source: Project, opts?: ProjectCreateOpts): Project {
+    return this.ingestProject(source, opts)
+  }
+
   renameProject(id: string, name: string): void {
     const trimmed = name.trim()
     if (!trimmed) return
@@ -354,11 +369,13 @@ export class SpineSession {
   }
 
   setInferenceInputDocIds(docs: Partial<Record<ModuleId, DocId | DocId[]>>): void {
-    // AI : TODO (cli-parity) — Inference tab assigns docs per Input step then startRun; ids are stored unused.
     this.commit({ ...this.snap, inferenceInputDocIds: docs })
   }
 
-  // AI : TODO (cli-parity) — React addDoc POSTs /api/docs (content-hash + Storage); this is local-only text.
+  addDoc(input: AddDocContentInput): DocRef {
+    return this.addDocContent(input)
+  }
+
   addDocContent(input: AddDocContentInput): DocRef {
     const id = hashContent(input.content)
     const existing = this.snap.docs.find((d) => d.id === id)
@@ -417,7 +434,6 @@ export class SpineSession {
   }
 
   ingestRemoteRuns(remote: PipelineRun[]): void {
-    // AI : TODO (cli-parity) — no addRun / updateRunNotes / updateRunTest; Logging hydrates step traces.
     this.commit({ ...this.snap, runs: overlayOptimisticRuns(remote) })
   }
   appendChat(turn: SessionChatTurn): void {
@@ -428,8 +444,7 @@ export class SpineSession {
     this.commit({ ...this.snap, pendingProposal: proposal })
   }
 
-  // AI : same delta apply as project-assistant.tsx — local; hosted run actions stay with the caller.
-  // AI : TODO (cli-parity) — do not execute proposedActions (run_inference / run_test); React does after confirm.
+  // AI : same delta apply as project-assistant.tsx — local; proposedActions via executeProposedActions.
   applyProposal(proposal: ProjectProposal): void {
     const project = this.requireProject()
     if (proposal.changed.name && proposal.projectName) {
@@ -469,8 +484,146 @@ export class SpineSession {
     this.commit({ ...this.snap, pendingProposal: null })
   }
 
+  setStrategies(s: Strategy[]): void {
+    this.patchProject({ strategies: s })
+  }
+
+  setDocProjects(docId: DocId, projectIds: ProjectId[]): void {
+    this.commit({
+      ...this.snap,
+      docProjectIds: { ...this.snap.docProjectIds, [docId]: projectIds },
+    })
+  }
+
+  addRun(run: PipelineRun): void {
+    const runs = [...this.snap.runs.filter((r) => r.id !== run.id), run]
+    this.commit({ ...this.snap, runs })
+  }
+
+  updateRunNotes(runId: PipelineRun["id"], notes: string | undefined): void {
+    this.commit({
+      ...this.snap,
+      runs: this.snap.runs.map((r) => (r.id === runId ? { ...r, notes } : r)),
+    })
+  }
+
+  updateRunTest(runId: PipelineRun["id"], test: RunTestReport): void {
+    this.commit({
+      ...this.snap,
+      runs: this.snap.runs.map((r) => (r.id === runId ? { ...r, test, source: r.source ?? RunSource.Testing } : r)),
+    })
+  }
+
+  setModelOptions(options: ModelOptionView[]): void {
+    this.commit({ ...this.snap, modelOptions: options })
+  }
+
+  setCacheEntries(entries: CacheEntryView[]): void {
+    this.commit({ ...this.snap, cacheEntries: entries })
+  }
+
+  setShareLinkIds(ids: string[]): void {
+    this.commit({ ...this.snap, shareLinkIds: ids })
+  }
+
+  setHostedApiIds(ids: string[]): void {
+    this.commit({ ...this.snap, hostedApiIds: ids })
+  }
+
+  clearSaveError(): void {
+    this.commit({ ...this.snap, saveError: null })
+  }
+
+  private async requestRemote(path: string, init?: RequestInit): Promise<Response> {
+    if (!this.egress) throw new Error("remote action needs SPINE_API_URL (or --offline to fail closed)")
+    return this.egress.request(path, init)
+  }
+
+  async resyncExamples(): Promise<number> {
+    const res = await this.requestRemote("/api/projects/resync-examples", { method: "POST" })
+    const body = (await res.json()) as { count?: number }
+    return body.count ?? 0
+  }
+
+  async hydrateRunDetail(runId: PipelineRun["id"]): Promise<void> {
+    const res = await this.requestRemote(`/api/runs/${runId}`)
+    const body = (await res.json()) as { run?: PipelineRun }
+    if (body.run) this.addRun(body.run)
+  }
+
+  async startRun(opts?: { source?: RunSource; testDocName?: string }): Promise<PipelineRun> {
+    const project = this.requireProject()
+    const source = opts?.source ?? RunSource.App
+    const res = await this.requestRemote("/api/runs", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        projectId: project.id,
+        model: this.snap.model,
+        source,
+        inputDocsByModule: this.snap.inferenceInputDocIds,
+        testDocName: opts?.testDocName,
+      }),
+    })
+    if (!res.ok) throw new Error(`startRun failed: HTTP ${res.status}`)
+    const body = (await res.json()) as { run?: PipelineRun; error?: string }
+    if (!body.run) throw new Error(body.error ?? "startRun: API returned no run")
+    this.addRun(body.run)
+    return body.run
+  }
+
+  async runTest(testDocName?: string): Promise<PipelineRun> {
+    return this.startRun({ source: RunSource.Testing, testDocName })
+  }
+
+  async flushPendingSave(): Promise<void> {
+    const project = this.project
+    if (!project) return
+    await this.requestRemote(`/api/projects/${project.id}`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(project),
+    })
+  }
+
+  async refreshBilling(): Promise<void> {
+    const res = await this.requestRemote("/api/billing")
+    const data = (await res.json()) as BillingAccountView
+    this.commit({ ...this.snap, billingAccount: data })
+  }
+
+  async refreshEarnings(): Promise<void> {
+    const res = await this.requestRemote("/api/earnings")
+    const data = (await res.json()) as EarningsAccountView
+    this.commit({ ...this.snap, earningsAccount: data })
+  }
+
+  async pullRemoteState(): Promise<void> {
+    const res = await this.requestRemote("/api/state")
+    const data = (await res.json()) as {
+      projects?: Project[]
+      docs?: DocRef[]
+      runs?: PipelineRun[]
+      modelOptions?: ModelOptionView[]
+    }
+    if (data.projects) this.ingestRemoteProjects(data.projects)
+    if (data.docs) this.commit({ ...this.snap, docs: data.docs })
+    if (data.runs) this.ingestRemoteRuns(data.runs)
+    if (data.modelOptions) this.setModelOptions(data.modelOptions)
+  }
+
+  async executeProposedActions(
+    actions = this.snap.pendingProposal?.proposedActions ?? [],
+  ): Promise<PipelineRun[]> {
+    const out: PipelineRun[] = []
+    for (const action of actions) {
+      if (action.type === "run_inference") out.push(await this.startRun({ source: RunSource.Assistant }))
+      if (action.type === "run_test") out.push(await this.runTest(action.testDocName))
+    }
+    return out
+  }
+
   attachRealtime(port: RealtimePort, handlers?: Partial<TeamRealtimeHandlers>, debounceMs = 0): () => void {
-    // AI : TODO (cli-parity) — React useTeamRealtime watches projects/docs/runs/team_members; CLI never connects.
     this.realtimeStop?.()
     const stop = attachRealtimePort(port, {
       onProjectsChanged: handlers?.onProjectsChanged ?? (() => undefined),

@@ -7,6 +7,7 @@ import { withSharedModels } from "@/lib/structure"
 import { quoteHref, type QuoteMatch } from "@/lib/quotes"
 import { isTestingFileName } from "@/lib/testing-files"
 import { derivePipelineMermaid } from "@/lib/pipeline-mermaid"
+import { formatTypeExprPy } from "@/lib/type-expr-parse"
 import type { SessionChatTurn, SessionSnapshot } from "@/lib/core/types"
 
 export type PipelineStepView = {
@@ -93,8 +94,38 @@ export function toValidationView(snap: SessionSnapshot): ValidationView {
   return { ok: issues.length === 0, issues }
 }
 
+export type StructureView = {
+  models: { name: string; fields: string[] }[]
+  aliases: string[]
+}
+
+export type InferenceView = {
+  assignments: { moduleId: string; docIds: string[] }[]
+}
+
+export type ShareView = {
+  shareLinkIds: string[]
+  hostedApiIds: string[]
+}
+
+export type AccountMoneyView = {
+  balanceCents: number
+  label: string
+}
+
+export type CacheView = {
+  entries: { key: string; stepLabel?: string }[]
+}
+
+export type SettingsView = {
+  model: string
+  saveError: string | null
+  modelOptionCount: number
+}
+
 export type DocsView = {
   markdown: string
+  preview: string
   docs: { name: string; type: string; label: string; sizeKb: number }[]
 }
 
@@ -111,21 +142,59 @@ export type AgentView = {
 }
 
 export type LogsView = {
-  runs: { id: string; status: string; source: string }[]
+  runs: { id: string; status: string; source: string; notes?: string; testDoc?: string; langfuse?: string; steps: number }[]
 }
 
-export type TuiTab = "build" | "docs" | "tests" | "agent" | "logs"
+export type TuiTab =
+  | "structure"
+  | "pipeline"
+  | "testing"
+  | "inference"
+  | "share"
+  | "earnings"
+  | "logging"
+  | "cache"
+  | "documents"
+  | "docs"
+  | "billing"
+  | "settings"
+  | "vibe"
 
-// AI : TODO (cli-parity vs React tabs) — add structure, inference, share, earnings, cache,
-// AI :   documents, billing, settings (and consumer Run). build ≈ projects+pipeline; agent ≈ Vibe;
-// AI :   tests validate only; logs has no step traces / cache / billing charts.
-export const TUI_TABS: TuiTab[] = ["build", "docs", "tests", "agent", "logs"]
+export const TUI_TABS: TuiTab[] = [
+  "structure",
+  "pipeline",
+  "testing",
+  "inference",
+  "share",
+  "earnings",
+  "logging",
+  "cache",
+  "documents",
+  "docs",
+  "billing",
+  "settings",
+  "vibe",
+]
+
+export const TUI_TAB_ALIASES: Record<string, TuiTab> = {
+  build: "pipeline",
+  agent: "vibe",
+  tests: "testing",
+  logs: "logging",
+}
+
+export function resolveTuiTab(raw?: string): TuiTab {
+  if (!raw) return "pipeline"
+  const mapped = TUI_TAB_ALIASES[raw] ?? raw
+  return (TUI_TABS as readonly string[]).includes(mapped) ? (mapped as TuiTab) : "pipeline"
+}
 
 export function toDocsView(snap: SessionSnapshot): DocsView {
-  // AI : TODO (cli-parity vs Docs tab) — no markdown preview/split editor.
   const project = snap.projects.find((p) => p.id === snap.activeProjectId) ?? snap.projects[0]
+  const markdown = project?.documentation ?? ""
   return {
-    markdown: project?.documentation ?? "",
+    markdown,
+    preview: markdown.slice(0, 400),
     docs: snap.docs.map((d) => ({
       name: d.name,
       type: d.type,
@@ -135,7 +204,6 @@ export function toDocsView(snap: SessionSnapshot): DocsView {
   }
 }
 
-// AI : TODO (cli-parity) — Testing tab also runs suites, diffs expected vs actual, LLM-judges probabilistic fields.
 export function toTestingView(snap: SessionSnapshot): TestingView {
   return {
     tests: snap.docs
@@ -161,14 +229,63 @@ export function toAgentView(snap: SessionSnapshot): AgentView {
   }
 }
 
-// AI : TODO (cli-parity) — Logging tab: per-step traces, cache hits, Langfuse links, test verdicts, run notes.
 export function toLogsView(snap: SessionSnapshot): LogsView {
   return {
     runs: snap.runs.map((r) => ({
       id: r.id,
       status: r.status,
       source: String(r.source ?? ""),
+      notes: r.notes,
+      testDoc: r.test?.testDocName,
+      langfuse: r.langfuseTraceUrl,
+      steps: r.steps?.length ?? 0,
     })),
+  }
+}
+
+export function toStructureView(snap: SessionSnapshot): StructureView {
+  const project = snap.projects.find((p) => p.id === snap.activeProjectId) ?? snap.projects[0]
+  return {
+    models: (project?.models ?? []).map((m) => ({
+      name: m.name,
+      fields: m.fields.map((f) => `${f.name}:${f.type}${f.optional ? "?" : ""}`),
+    })),
+    aliases: (project?.typeAliases ?? []).map((a) => `${a.name}=${formatTypeExprPy(a.expr, project?.models ?? [])}`),
+  }
+}
+
+export function toInferenceView(snap: SessionSnapshot): InferenceView {
+  return {
+    assignments: Object.entries(snap.inferenceInputDocIds).map(([moduleId, ids]) => ({
+      moduleId,
+      docIds: Array.isArray(ids) ? ids : ids ? [ids] : [],
+    })),
+  }
+}
+
+export function toShareView(snap: SessionSnapshot): ShareView {
+  return { shareLinkIds: snap.shareLinkIds, hostedApiIds: snap.hostedApiIds }
+}
+
+export function toBillingView(snap: SessionSnapshot): AccountMoneyView | null {
+  if (!snap.billingAccount) return null
+  return { balanceCents: snap.billingAccount.balanceCents, label: "billing" }
+}
+
+export function toEarningsView(snap: SessionSnapshot): AccountMoneyView | null {
+  if (!snap.earningsAccount) return null
+  return { balanceCents: snap.earningsAccount.balanceCents, label: "earnings" }
+}
+
+export function toCacheView(snap: SessionSnapshot): CacheView {
+  return { entries: snap.cacheEntries }
+}
+
+export function toSettingsView(snap: SessionSnapshot): SettingsView {
+  return {
+    model: snap.model,
+    saveError: snap.saveError,
+    modelOptionCount: snap.modelOptions.length,
   }
 }
 

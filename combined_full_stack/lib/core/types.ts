@@ -10,6 +10,8 @@ import type {
   PipelineRun,
   Project,
   ProjectId,
+  RunTestReport,
+  Strategy,
   StructureModel,
   TypeAlias,
 } from "@/lib/types"
@@ -20,6 +22,22 @@ export type locality_t = "local" | "remote" | "local-first"
 export type ProjectCreateOpts = { open?: boolean }
 
 export type SessionChatTurn = { role: "user" | "assistant"; content: string }
+
+export type BillingAccountView = {
+  balanceCents: number
+  totalBilledCents: number
+  totalUsageCents: number
+}
+
+export type EarningsAccountView = {
+  balanceCents: number
+  totalEarnedCents: number
+  totalWithdrawnCents: number
+}
+
+export type ModelOptionView = { id: string; label: string }
+
+export type CacheEntryView = { key: string; stepLabel?: string }
 
 export type SessionSnapshot = {
   projects: Project[]
@@ -33,9 +51,15 @@ export type SessionSnapshot = {
   deletedProjectIds: string[]
   chat: SessionChatTurn[]
   pendingProposal: ProjectProposal | null
-  // AI : TODO (cli-parity vs React store) — snapshot still omits: strategies, modelOptions,
-  // AI :   billingRuns / billingAccount / earningsAccount, chats[] (Vibe threads), team membership,
-  // AI :   saveError, inference presets, cache entries, share/hosted-api ids.
+  modelOptions: ModelOptionView[]
+  billingRuns: PipelineRun[]
+  billingAccount: BillingAccountView | null
+  earningsAccount: EarningsAccountView | null
+  cacheEntries: CacheEntryView[]
+  saveError: string | null
+  shareLinkIds: string[]
+  hostedApiIds: string[]
+  docProjectIds: Partial<Record<DocId, ProjectId[]>>
 }
 
 export type ProjectPatch = {
@@ -67,5 +91,6 @@ export type PersistPort = {
 
 export type EgressPort = {
   bytesSent: number
+  blocked?: boolean
   request: (url: string, init?: RequestInit) => Promise<Response>
 }

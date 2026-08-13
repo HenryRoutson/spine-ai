@@ -5,6 +5,7 @@ import { useApp, useInput } from "ink"
 import type { SpineSession } from "@/lib/core/session"
 import {
   TUI_TABS,
+  resolveTuiTab,
   toAgentView,
   toDocsView,
   toLogsView,
@@ -29,19 +30,18 @@ export function spineTuiTree(props: SpineTuiProps) {
 }
 
 function parseTabKey(input: string): TuiTab | undefined {
+  if (input === "0") return TUI_TABS[9]
   const n = Number(input)
-  if (n >= 1 && n <= TUI_TABS.length) return TUI_TABS[n - 1]
+  if (n >= 1 && n <= 9) return TUI_TABS[n - 1]
   return undefined
 }
 
-export function SpineTui({ session, sessionPath, interactive = true, initialTab = "build" }: SpineTuiProps) {
-  // AI : TODO (cli-parity vs React shell) — no Structure/Inference/Share/Earnings/Cache/Documents/
-  // AI :   Billing/Settings tabs; no markdown split preview; no file picker; no mermaid; no sign-in.
+export function SpineTui({ session, sessionPath, interactive = true, initialTab = "pipeline" }: SpineTuiProps) {
   const snap = useSpineSnapshot(session)
   const { exit } = useApp()
   const [selectedId, setSelectedId] = useState(snap.activeProjectId)
   const [prompt, setPrompt] = useState<TuiPrompt>(null)
-  const [tab, setTab] = useState<TuiTab>(initialTab)
+  const [tab, setTab] = useState<TuiTab>(resolveTuiTab(initialTab))
   const [agentBusy, setAgentBusy] = useState(false)
 
   const selectedProjectId = snap.projects.some((p) => p.id === selectedId)
@@ -101,6 +101,14 @@ export function SpineTui({ session, sessionPath, interactive = true, initialTab 
         setTab(nextTab)
         return
       }
+      if (input === "]") {
+        setTab(TUI_TABS[(TUI_TABS.indexOf(tab) + 1) % TUI_TABS.length]!)
+        return
+      }
+      if (input === "[") {
+        setTab(TUI_TABS[(TUI_TABS.indexOf(tab) + TUI_TABS.length - 1) % TUI_TABS.length]!)
+        return
+      }
       if (input === "n") {
         const created = session.addProject({ open: true })
         setSelectedId(created.id)
@@ -133,7 +141,7 @@ export function SpineTui({ session, sessionPath, interactive = true, initialTab 
         return
       }
       if (input === "a") {
-        setTab("agent")
+        setTab("vibe")
         setPrompt({ kind: "agent", buffer: "" })
         return
       }

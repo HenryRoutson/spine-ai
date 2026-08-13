@@ -1,5 +1,5 @@
 // AI : file-backed session so sequential `spine session` commands share the React-like store.
-// AI : TODO (cli-parity) — React persists via /api/projects + Supabase realtime; this is a local JSON file.
+// AI : set SPINE_API_URL for pull/push/start-run against the same HTTP API as the GUI.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
@@ -29,6 +29,15 @@ export function createFilePersist(path: string): PersistPort {
         deletedProjectIds: raw.deletedProjectIds ?? [],
         chat: raw.chat ?? [],
         pendingProposal: raw.pendingProposal ?? null,
+        modelOptions: raw.modelOptions ?? [],
+        billingRuns: raw.billingRuns ?? [],
+        billingAccount: raw.billingAccount ?? null,
+        earningsAccount: raw.earningsAccount ?? null,
+        cacheEntries: raw.cacheEntries ?? [],
+        saveError: raw.saveError ?? null,
+        shareLinkIds: raw.shareLinkIds ?? [],
+        hostedApiIds: raw.hostedApiIds ?? [],
+        docProjectIds: raw.docProjectIds ?? {},
       }
     },
     save(snap) {

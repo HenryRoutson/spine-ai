@@ -1,5 +1,4 @@
 // AI : launches the CLI session the way the React store is used — plus a realtime overlay check.
-// AI : TODO (cli-parity) — demo does not walk inference, testing run, share, billing, or agent ask.
 
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -34,16 +33,28 @@ export async function runDemoCommand(opts: {
     },
     { positional: ["session", "add-model"], flags: { name: "Finding", session: sessionPath } },
     {
+      positional: ["session", "add-field"],
+      flags: { model: "Finding", name: "title", type: "text", session: sessionPath },
+    },
+    {
       positional: ["session", "add-doc"],
       flags: { name: "lease.txt", text: DEMO_SOURCE, session: sessionPath },
     },
+    {
+      positional: ["session", "assign-input"],
+      flags: { module: "Input", doc: "lease.txt", session: sessionPath },
+    },
+    { positional: ["session", "structure"], flags: { session: sessionPath } },
+    { positional: ["session", "cache"], flags: { session: sessionPath } },
+    { positional: ["session", "share"], flags: { session: sessionPath } },
+    { positional: ["session", "billing"], flags: { session: sessionPath, offline: true } },
     { positional: ["session", "validate"], flags: { session: sessionPath } },
     { positional: ["session", "snapshot"], flags: { session: sessionPath } },
   ]
 
   const launched: Record<string, unknown>[] = []
   for (const step of steps) {
-    const result = runSessionCommand(step.positional, step.flags)
+    const result = await runSessionCommand(step.positional, step.flags)
     launched.push({
       argv: [...step.positional, `--session ${sessionPath}`],
       command: result.command,

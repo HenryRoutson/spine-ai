@@ -67,5 +67,6 @@ describe("spine demo + session CLI", () => {
     const result = await runSpineCli(["session", "actions"])
     expect(result.ok).toBe(true)
     expect(result.data?.actions).toContain("addProject")
+    expect(result.data?.actions).toContain("startRun")
   })
 })

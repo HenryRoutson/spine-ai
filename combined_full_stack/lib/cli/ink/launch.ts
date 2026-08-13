@@ -2,25 +2,23 @@
 
 import { render, renderToString } from "ink"
 import type { SpineSession } from "@/lib/core/session"
-import { createSpineSession } from "@/lib/core/session"
-import { createThrowingEgress } from "@/lib/core/transport"
-import { createFilePersist, resolveSessionPath } from "@/lib/cli/session_persist"
+import { resolveTuiTab, type TuiTab } from "@/lib/core/view"
+import { openCliSession, attachCliRealtime } from "@/lib/cli/session_open"
+import { resolveSessionPath } from "@/lib/cli/session_persist"
 import type { CliCommandResult } from "@/lib/cli/types"
 import { spineTuiTree } from "@/lib/cli/ink/app"
-import { TUI_TABS, type TuiTab } from "@/lib/core/view"
 
 export function parseTuiTab(raw?: string): TuiTab {
-  if (raw && (TUI_TABS as readonly string[]).includes(raw)) return raw as TuiTab
-  return "build"
+  return resolveTuiTab(raw)
 }
 
 export function renderSpineTuiString(
   session: SpineSession,
   sessionPath?: string,
-  opts: { columns?: number; tab?: TuiTab } = {},
+  opts: { columns?: number; tab?: TuiTab | string } = {},
 ): string {
   return renderToString(
-    spineTuiTree({ session, sessionPath, interactive: false, initialTab: opts.tab ?? "build" }),
+    spineTuiTree({ session, sessionPath, interactive: false, initialTab: resolveTuiTab(opts.tab) }),
     { columns: opts.columns ?? 80 },
   )
 }
@@ -35,13 +33,10 @@ export function shouldLaunchInteractiveTui(
 
 export async function runTuiCommand(flags: Record<string, string | boolean>): Promise<CliCommandResult> {
   const sessionPath = resolveSessionPath(typeof flags.session === "string" ? flags.session : undefined)
-  const session = createSpineSession({
-    persist: createFilePersist(sessionPath),
-    egress: flags.offline === true ? createThrowingEgress() : undefined,
-  })
+  const session = openCliSession(flags)
+  const tab = parseTuiTab(typeof flags.tab === "string" ? flags.tab : undefined)
 
   if (!shouldLaunchInteractiveTui(flags)) {
-    const tab = parseTuiTab(typeof flags.tab === "string" ? flags.tab : undefined)
     const frame = renderSpineTuiString(session, sessionPath, { tab })
     return {
       ok: true,
@@ -51,15 +46,17 @@ export async function runTuiCommand(flags: Record<string, string | boolean>): Pr
     }
   }
 
+  const stopRealtime = await attachCliRealtime(session)
   const instance = render(
     spineTuiTree({
       session,
       sessionPath,
       interactive: true,
-      initialTab: parseTuiTab(typeof flags.tab === "string" ? flags.tab : undefined),
+      initialTab: tab,
     }),
   )
   await instance.waitUntilExit()
+  stopRealtime()
   return {
     ok: true,
     command: "tui",

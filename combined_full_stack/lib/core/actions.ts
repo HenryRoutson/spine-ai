@@ -100,18 +100,127 @@ export const applyProposalAction = defineAction({
   run: (session) => session.applyPendingProposal(),
 })
 
+type AgentAskFn = (session: SpineSession, message: string) => Promise<unknown>
+let agentAskImpl: AgentAskFn | null = null
+
+export function registerAskAgent(fn: AgentAskFn): void {
+  agentAskImpl = fn
+}
+
 export const askAgentAction = defineAction({
   id: "askAgent",
   label: "Ask the project agent (LLM)",
   locality: "remote",
   input: z.object({ message: z.string() }),
-  run: () => {
-    throw new Error("askAgent is remote — use spine agent ask")
+  run: async (session, input) => {
+    if (!agentAskImpl) throw new Error("askAgent is remote — use spine agent ask")
+    return agentAskImpl(session, input.message)
   },
 })
 
-// AI : TODO (cli-parity vs React / MCP Bar B) — register startRun, runTest, addDoc File, exportPipeline,
-// AI :   shareLink, hostedApi, billing, cacheGet, humanReview, customCode. askAgent.run is a stub.
+export const addDocAction = defineAction({
+  id: "addDoc",
+  label: "Add a text document",
+  locality: "local",
+  input: z.object({
+    name: z.string(),
+    type: z.string(),
+    content: z.string(),
+    label: z.string(),
+  }),
+  run: (session, input) =>
+    session.addDoc({
+      name: input.name,
+      type: input.type as never,
+      content: input.content,
+      label: input.label as never,
+    }),
+})
+
+export const cloneFromTemplateAction = defineAction({
+  id: "cloneFromTemplate",
+  label: "Ingest a template/seed project",
+  locality: "local",
+  input: z.object({}),
+  run: (session) => session.project,
+})
+
+export const startRunAction = defineAction({
+  id: "startRun",
+  label: "Start an inference run",
+  locality: "remote",
+  input: z.object({}),
+  run: (session) => session.startRun(),
+})
+
+export const runTestAction = defineAction({
+  id: "runTest",
+  label: "Run a testing-tab suite",
+  locality: "remote",
+  input: z.object({ testDocName: z.string().optional() }),
+  run: (session, input) => session.runTest(input.testDocName),
+})
+
+export const exportPipelineAction = defineAction({
+  id: "exportPipeline",
+  label: "Export pydantic for the active project",
+  locality: "local",
+  input: z.object({}),
+  run: (session) => session.project,
+})
+
+export const shareLinkAction = defineAction({
+  id: "shareLink",
+  label: "List share link ids (HTTP to mint)",
+  locality: "remote",
+  input: z.object({}),
+  run: (session) => session.getSnapshot().shareLinkIds,
+})
+
+export const hostedApiAction = defineAction({
+  id: "hostedApi",
+  label: "List hosted API ids (HTTP to mint)",
+  locality: "remote",
+  input: z.object({}),
+  run: (session) => session.getSnapshot().hostedApiIds,
+})
+
+export const billingAction = defineAction({
+  id: "billing",
+  label: "Refresh billing account",
+  locality: "remote",
+  input: z.object({}),
+  run: (session) => session.refreshBilling(),
+})
+
+export const cacheGetAction = defineAction({
+  id: "cacheGet",
+  label: "Read local cache entries",
+  locality: "local",
+  input: z.object({}),
+  run: (session) => session.getSnapshot().cacheEntries,
+})
+
+export const humanReviewAction = defineAction({
+  id: "humanReview",
+  label: "Human-review pause (browser)",
+  locality: "remote",
+  input: z.object({}),
+  run: () => {
+    throw new Error("human-review elicitation is GUI-only (run pause in the browser)")
+  },
+})
+
+export const customCodeAction = defineAction({
+  id: "customCode",
+  label: "Custom-code step (browser CodeHost)",
+  locality: "remote",
+  input: z.object({}),
+  run: () => {
+    throw new Error("custom code executes in the browser CodeHost — no Node host yet")
+  },
+})
+
 export const SESSION_ACTIONS = [
   addProjectAction,
   renameProjectAction,
@@ -123,6 +232,17 @@ export const SESSION_ACTIONS = [
   ingestProjectAction,
   applyProposalAction,
   askAgentAction,
+  addDocAction,
+  cloneFromTemplateAction,
+  startRunAction,
+  runTestAction,
+  exportPipelineAction,
+  shareLinkAction,
+  hostedApiAction,
+  billingAction,
+  cacheGetAction,
+  humanReviewAction,
+  customCodeAction,
 ] as const
 
 export const SESSION_ACTION_IDS = SESSION_ACTIONS.map((a) => a.id)

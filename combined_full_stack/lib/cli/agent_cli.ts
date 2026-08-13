@@ -1,26 +1,26 @@
-// AI : CLI adapter for the in-app project agent (proposePipelineChange + local apply).
-// AI : TODO (cli-parity) — React has four assistants (project/Vibe, structure, testing, diagnosis).
-// AI :   CLI only exposes the project agent. No streaming TUI deltas, no chat threads per project.
+// AI : CLI adapter for the four in-app assistants (vibe, structure, testing, diagnosis).
 
 import { readFileSync } from "node:fs"
-import { createSpineSession } from "@/lib/core/session"
-import { createThrowingEgress } from "@/lib/core/transport"
 import { toAgentView, toSessionSummary } from "@/lib/core/view"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 import type { CliCommandResult } from "@/lib/cli/types"
-import { createFilePersist, resolveSessionPath } from "@/lib/cli/session_persist"
-import { applyPendingAgent, askAgent } from "@/lib/cli/agent"
+import { openCliSession } from "@/lib/cli/session_open"
+import { applyPendingAgent, askAgent, type AgentKind } from "@/lib/cli/agent"
 
 export const SPINE_AGENT_HELP = `agent — same propose/apply path as Vibe (LLM remote; apply local)
 
 Usage:
-  npx tsx scripts/spine-cli.ts agent ask --message "<prompt>" [--apply] [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts agent apply [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts agent reject [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts agent history [--session <path>] [--json]
-  npx tsx scripts/spine-cli.ts agent apply-file --file <proposal.json> [--session <path>] [--json]
+  spine agent ask --message "<prompt>" [--assistant vibe|structure|testing|diagnosis] [--apply] [--run]
+  spine agent structure --message "<prompt>" [--apply]
+  spine agent testing --message "<prompt>" [--apply]
+  spine agent diagnose --message "<prompt>"
+  spine agent apply [--run]
+  spine agent reject
+  spine agent history
+  spine agent apply-file --file <proposal.json> [--run]
 
 --offline  blocks ask (LLM). apply / history / reject stay local.
+--run      after apply, execute proposedActions (startRun / runTest via SPINE_API_URL)
 `
 
 function ok(command: string, data: Record<string, unknown>): CliCommandResult {
@@ -41,11 +41,13 @@ function flagString(flags: Record<string, string | boolean>, key: string): strin
   return typeof v === "string" ? v : undefined
 }
 
+function parseKind(raw?: string): AgentKind {
+  if (raw === "structure" || raw === "testing" || raw === "diagnosis" || raw === "vibe") return raw
+  return "vibe"
+}
+
 function openSession(flags: Record<string, string | boolean>) {
-  return createSpineSession({
-    persist: createFilePersist(resolveSessionPath(flagString(flags, "session"))),
-    egress: flags.offline === true ? createThrowingEgress() : undefined,
-  })
+  return openCliSession(flags)
 }
 
 export async function runAgentCommand(
@@ -58,14 +60,29 @@ export async function runAgentCommand(
   }
 
   const session = openSession(flags)
+  const run = flags.run === true
 
   if (sub === "ask") {
     const message = flagString(flags, "message") ?? positional.slice(2).join(" ")
-    return askAgent(session, message ?? "", { apply: flags.apply === true || flags.yes === true })
+    return askAgent(session, message ?? "", {
+      apply: flags.apply === true || flags.yes === true,
+      run,
+      kind: parseKind(flagString(flags, "assistant") ?? flagString(flags, "kind")),
+    })
+  }
+
+  if (sub === "structure" || sub === "testing" || sub === "diagnose" || sub === "diagnosis") {
+    const message = flagString(flags, "message") ?? positional.slice(2).join(" ")
+    const kind: AgentKind = sub === "diagnose" || sub === "diagnosis" ? "diagnosis" : sub
+    return askAgent(session, message ?? "", {
+      apply: flags.apply === true || flags.yes === true,
+      run,
+      kind,
+    })
   }
 
   if (sub === "apply") {
-    return applyPendingAgent(session)
+    return applyPendingAgent(session, { run })
   }
 
   if (sub === "reject") {
@@ -94,7 +111,7 @@ export async function runAgentCommand(
     if (!file) return usage("agent apply-file requires --file <proposal.json>")
     const proposal = JSON.parse(readFileSync(file, "utf8")) as ProjectProposal
     session.setPendingProposal(proposal)
-    return applyPendingAgent(session)
+    return applyPendingAgent(session, { run })
   }
 
   return usage(`unknown agent command: ${sub}`)

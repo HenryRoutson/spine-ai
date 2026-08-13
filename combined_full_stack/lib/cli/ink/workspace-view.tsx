@@ -10,7 +10,16 @@ import type {
   TuiTab,
   ValidationView,
 } from "@/lib/core/view"
-import { TUI_TABS } from "@/lib/core/view"
+import {
+  TUI_TABS,
+  toBillingView,
+  toCacheView,
+  toEarningsView,
+  toInferenceView,
+  toSettingsView,
+  toShareView,
+  toStructureView,
+} from "@/lib/core/view"
 import type { SessionSnapshot } from "@/lib/core/types"
 
 export type TuiPrompt =
@@ -38,12 +47,21 @@ export type WorkspaceViewProps = {
 
 function TabBar({ tab }: { tab: TuiTab }) {
   return (
-    <Box>
+    <Box flexWrap="wrap">
       {TUI_TABS.map((t, i) => (
         <Text key={t} color={t === tab ? "cyan" : undefined} inverse={t === tab}>
           {` ${i + 1}:${t} `}
         </Text>
       ))}
+    </Box>
+  )
+}
+
+function Lines({ title, rows }: { title: string; rows: string[] }) {
+  return (
+    <Box flexDirection="column" flexGrow={1}>
+      <Text bold>{title}</Text>
+      {rows.length === 0 ? <Text dimColor>empty</Text> : rows.map((row) => <Text key={row}>{row}</Text>)}
     </Box>
   )
 }
@@ -135,42 +153,36 @@ export function WorkspaceView({
             })
           )}
         </Box>
-        {tab === "build" ? (
+        {tab === "pipeline" ? (
           <BuildPanel
             pipeline={pipeline}
             validation={validation}
             selectedName={selected?.models.map((m) => m.name).join(", ")}
             documentation={selected?.documentation}
           />
+        ) : tab === "structure" ? (
+          <Lines
+            title="Structure"
+            rows={[
+              ...toStructureView(snap).models.map((m) => `${m.name}  ${m.fields.join(", ") || "(no fields)"}`),
+              ...toStructureView(snap).aliases.map((a) => `alias ${a}`),
+            ]}
+          />
         ) : tab === "docs" ? (
-          // AI : TODO (cli-parity vs Docs + Documents tabs) — no markdown preview/split, no File upload, OCR, labels, project binding.
           <Box flexDirection="column" flexGrow={1}>
             <Text bold>Docs</Text>
-            {docs.markdown ? <Text dimColor>{docs.markdown.slice(0, 160)}</Text> : <Text dimColor>no markdown</Text>}
-            {docs.docs.length === 0 ? (
-              <Text dimColor>no documents</Text>
-            ) : (
-              docs.docs.map((d) => (
-                <Text key={d.name}>
-                  {d.name}
-                  <Text dimColor>  {d.label} {d.sizeKb}kb</Text>
-                </Text>
-              ))
-            )}
+            {docs.preview ? <Text dimColor>{docs.preview}</Text> : <Text dimColor>no markdown</Text>}
           </Box>
-        ) : tab === "tests" ? (
-          // AI : TODO (cli-parity vs Testing tab) — list only; no run, git-diff expected vs actual, expectFailure.
+        ) : tab === "documents" ? (
+          <Lines
+            title="Documents"
+            rows={docs.docs.map((d) => `${d.name}  ${d.label} ${d.sizeKb}kb`)}
+          />
+        ) : tab === "testing" ? (
+          <Lines title="Testing" rows={testing.tests.map((t) => t.name)} />
+        ) : tab === "vibe" ? (
           <Box flexDirection="column" flexGrow={1}>
-            <Text bold>Tests</Text>
-            {testing.tests.length === 0 ? (
-              <Text dimColor>no *_testing.json docs</Text>
-            ) : (
-              testing.tests.map((t) => <Text key={t.name}>{t.name}</Text>)
-            )}
-          </Box>
-        ) : tab === "agent" ? (
-          <Box flexDirection="column" flexGrow={1}>
-            <Text bold>Agent</Text>
+            <Text bold>Vibe</Text>
             {agentBusy ? <Text color="yellow">thinking...</Text> : null}
             {agent.turns.slice(-6).map((t, i) => (
               <Text key={`${t.role}-${i}`} color={t.role === "assistant" ? "cyan" : undefined}>
@@ -184,24 +196,50 @@ export function WorkspaceView({
               <Text dimColor>no pending proposal</Text>
             )}
             {agent.proposedActions.length ? (
-              <Text dimColor>actions (not run locally): {agent.proposedActions.join(", ")}</Text>
+              <Text dimColor>actions: {agent.proposedActions.join(", ")}</Text>
             ) : null}
           </Box>
-        ) : (
-          // AI : TODO (cli-parity vs Logging + Cache) — no step traces, cache hits, Langfuse, billing charts.
-          <Box flexDirection="column" flexGrow={1}>
-            <Text bold>Logs</Text>
-            {logs.runs.length === 0 ? (
-              <Text dimColor>no local runs — hosted inference is remote</Text>
-            ) : (
-              logs.runs.map((r) => (
-                <Text key={r.id}>
-                  {r.status}
-                  <Text dimColor>  {r.id}</Text>
-                </Text>
-              ))
+        ) : tab === "logging" ? (
+          <Lines
+            title="Logging"
+            rows={logs.runs.map((r) =>
+              [r.status, r.id, r.notes, r.testDoc, r.langfuse, `${r.steps} steps`].filter(Boolean).join("  "),
             )}
-          </Box>
+          />
+        ) : tab === "inference" ? (
+          <Lines
+            title="Inference"
+            rows={toInferenceView(snap).assignments.map((a) => `${a.moduleId}: ${a.docIds.join(",") || "(none)"}`)}
+          />
+        ) : tab === "share" ? (
+          <Lines
+            title="Share"
+            rows={[
+              ...toShareView(snap).shareLinkIds.map((id) => `link ${id}`),
+              ...toShareView(snap).hostedApiIds.map((id) => `api ${id}`),
+            ]}
+          />
+        ) : tab === "cache" ? (
+          <Lines title="Cache" rows={toCacheView(snap).entries.map((e) => e.key)} />
+        ) : tab === "billing" ? (
+          <Lines
+            title="Billing"
+            rows={[toBillingView(snap) ? `${toBillingView(snap)!.balanceCents}¢` : "no account — session pull / SPINE_API_URL"]}
+          />
+        ) : tab === "earnings" ? (
+          <Lines
+            title="Earnings"
+            rows={[toEarningsView(snap) ? `${toEarningsView(snap)!.balanceCents}¢` : "no account — session pull / SPINE_API_URL"]}
+          />
+        ) : (
+          <Lines
+            title="Settings"
+            rows={[
+              `model ${toSettingsView(snap).model}`,
+              toSettingsView(snap).saveError ?? "save ok",
+              `${toSettingsView(snap).modelOptionCount} model options`,
+            ]}
+          />
         )}
       </Box>
       <Box marginTop={1}>
@@ -217,7 +255,7 @@ export function WorkspaceView({
           <Text color="yellow">add-step kind: {prompt.buffer}_</Text>
         ) : (
           <Text dimColor>
-            1-5 tabs  n new  r rename  m model  s step  a agent  y apply  x delete  q quit
+            [ ] cycle  1-9 tabs  n new  r rename  m model  s step  a vibe  y apply  x delete  q quit
           </Text>
         )}
       </Box>

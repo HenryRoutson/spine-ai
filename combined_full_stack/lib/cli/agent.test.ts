@@ -150,6 +150,32 @@ describe("spine agent CLI", () => {
       const tests = await runSpineCli(["session", "tests", "--session", sessionPath, "--offline"])
       expect(tests.command).toBe("session tests")
       expect(typeof tests.data?.testCount).toBe("number")
+      const named = await runSpineCli([
+        "session",
+        "add-model",
+        "--name",
+        "Finding",
+        "--session",
+        sessionPath,
+        "--offline",
+      ])
+      expect(named.ok, JSON.stringify(named.issues)).toBe(true)
+      const field = await runSpineCli([
+        "session",
+        "add-field",
+        "--model",
+        "Finding",
+        "--name",
+        "title",
+        "--type",
+        "text",
+        "--session",
+        sessionPath,
+        "--offline",
+      ])
+      expect(field.ok, JSON.stringify(field.issues)).toBe(true)
+      const blocked = await runSpineCli(["session", "start-run", "--session", sessionPath, "--offline"])
+      expect(blocked.ok).toBe(false)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

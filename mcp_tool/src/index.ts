@@ -21,6 +21,13 @@ import {
   validatePipelineWiring,
   validateStepOutputValue,
 } from "./spine-step-models.js"
+import {
+  applyProjectChangesFromSession,
+  getProjectFromSession,
+  sessionLogs,
+  startRunFromSession,
+  validateProjectFromSession,
+} from "./spine-session-bar-a.js"
 
 const REPO_ROOT = process.env.SPINE_REPO_ROOT ?? resolve(process.cwd(), "..")
 
@@ -145,6 +152,64 @@ server.tool(
     includePipelineSignatures: z.boolean().optional().describe("Include generated step function stubs (default true)"),
   },
   async (args) => textContent(exportPydanticProject(args, REPO_ROOT)),
+)
+
+server.tool(
+  "get_project",
+  "Read the active project from a Spine session file (same SpineSession as CLI / Vibe).",
+  {
+    sessionPath: z.string().optional().describe("Path to .spine-session.json (or SPINE_SESSION_PATH)"),
+  },
+  async (args) => textContent(getProjectFromSession(args.sessionPath)),
+)
+
+server.tool(
+  "validate_project",
+  "Validate the active session project — same computeInvalid / structure rules as the GUI.",
+  {
+    sessionPath: z.string().optional(),
+  },
+  async (args) => textContent(validateProjectFromSession(args.sessionPath)),
+)
+
+server.tool(
+  "apply_project_changes",
+  "Apply a ProjectProposal (assistantResponseSchema / Vibe approve) onto the session file.",
+  {
+    sessionPath: z.string().optional(),
+    proposalJson: z.string().describe("JSON ProjectProposal with changed.* deltas"),
+  },
+  async (args) => textContent(applyProjectChangesFromSession(JSON.parse(args.proposalJson), args.sessionPath)),
+)
+
+server.tool(
+  "start_run",
+  "POST /api/runs for the active session project. Needs SPINE_API_URL.",
+  {
+    sessionPath: z.string().optional(),
+    testDocName: z.string().optional(),
+    testing: z.boolean().optional(),
+  },
+  async (args) => textContent(await startRunFromSession(args)),
+)
+
+server.tool(
+  "run_test",
+  "Start a Testing-tab run for the active session project. Needs SPINE_API_URL.",
+  {
+    sessionPath: z.string().optional(),
+    testDocName: z.string().optional(),
+  },
+  async (args) => textContent(await startRunFromSession({ ...args, testing: true })),
+)
+
+server.tool(
+  "session_logs",
+  "List local session runs, cache entries, and *_testing.json docs.",
+  {
+    sessionPath: z.string().optional(),
+  },
+  async (args) => textContent(sessionLogs(args.sessionPath)),
 )
 
 async function main() {

@@ -104,6 +104,8 @@ describe("SpineSession React-like API", () => {
     expect(project.id).toBe(store.activeProjectId)
     expect(SESSION_ACTION_IDS).toContain("addProject")
     expect(SESSION_ACTION_IDS).toContain("linkQuotes")
+    expect(SESSION_ACTION_IDS).toContain("startRun")
+    expect(SESSION_ACTION_IDS).toContain("askAgent")
   })
 
   it("throwing egress is unused by local actions", () => {
@@ -153,5 +155,21 @@ describe("SpineSession React-like API", () => {
     expect(store.documentation).toBe("Agent wrote this")
     expect(store.docs.some((d) => d.name === "lease.txt")).toBe(true)
     expect(store.pendingProposal).toBeNull()
+  })
+
+  it("startRun fails closed without HTTP egress", async () => {
+    const store = createSpineSession({ egress: createThrowingEgress() })
+    store.addProject({ open: true })
+    await expect(store.startRun()).rejects.toThrow(EgressBlockedError)
+  })
+
+  it("cloneFromTemplate aliases ingestProject", () => {
+    const store = createSpineSession()
+    const a = store.addProject({ open: true })
+    store.renameProject(a.id, "Template")
+    const source = store.project!
+    const b = store.cloneFromTemplate(source, { open: false })
+    expect(b.id).not.toBe(source.id)
+    expect(b.name).toBe("Template")
   })
 })

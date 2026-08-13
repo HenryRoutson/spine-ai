@@ -25,8 +25,36 @@ export {
   toAgentView,
   toLogsView,
   toMermaidView,
+  toStructureView,
+  toInferenceView,
+  toShareView,
+  toBillingView,
+  toEarningsView,
+  toCacheView,
+  toSettingsView,
   TUI_TABS,
+  TUI_TAB_ALIASES,
+  resolveTuiTab,
 } from "@/lib/core/view"
-export type { TuiTab, DocsView, TestingView, AgentView, LogsView } from "@/lib/core/view"
-export { createThrowingEgress, createRecordingEgress, EgressBlockedError } from "@/lib/core/transport"
-export { SESSION_ACTIONS, SESSION_ACTION_IDS, defineAction } from "@/lib/core/actions"
+export type {
+  TuiTab,
+  DocsView,
+  TestingView,
+  AgentView,
+  LogsView,
+  StructureView,
+  InferenceView,
+  ShareView,
+  AccountMoneyView,
+  CacheView,
+  SettingsView,
+} from "@/lib/core/view"
+export {
+  createThrowingEgress,
+  createRecordingEgress,
+  createApiEgress,
+  EgressBlockedError,
+  SPINE_API_URL_ENV,
+  SPINE_API_TOKEN_ENV,
+} from "@/lib/core/transport"
+export { SESSION_ACTIONS, SESSION_ACTION_IDS, defineAction, registerAskAgent } from "@/lib/core/actions"
