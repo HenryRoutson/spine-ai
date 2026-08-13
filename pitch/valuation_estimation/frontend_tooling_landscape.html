@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Front-End Tooling Landscape — ARR vs Valuation with Uncertainty Bands</title>
+<style>
+  /* dark theme only — fixed, no light-mode branch */
+  .viz-root{
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #a5a49c;
+    --grid:           #2c2c2a;
+    --axis:           #4a4a47;
+    --border:         rgba(255,255,255,0.14);
+    --accent:         #3987e5;
+    --accent-ring:    #86b6ef;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background: #0d0d0d; }
+  body{
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #ffffff;
+  }
+  .viz-root{ max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; background: var(--page); }
+
+  header.top{ margin-bottom: 18px; }
+  h1{ font-size: 21px; font-weight: 650; margin: 0 0 4px; letter-spacing: -0.01em; color: var(--text-primary); }
+  .subtitle{ font-size: 13.5px; color: var(--text-secondary); max-width: 800px; line-height:1.5; }
+
+  .stats{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0 22px; }
+  .tile{ background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .tile .label{ font-size: 11.5px; color: var(--text-secondary); margin-bottom: 6px; }
+  .tile .value{ font-size: 22px; font-weight: 650; letter-spacing:-0.01em; color: var(--text-primary); }
+  .tile .note{ font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height:1.4; }
+
+  .card{ background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 18px 18px 10px; margin-bottom: 22px; }
+  .card h2{ font-size: 14.5px; font-weight: 650; margin: 0 0 2px; color: var(--text-primary); }
+  .card .card-sub{ font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; line-height:1.5; }
+
+  svg{ display:block; width:100%; height:auto; overflow: visible; }
+  .grid-line{ stroke: var(--grid); stroke-width:1; shape-rendering: crispEdges; }
+  .axis-line{ stroke: var(--axis); stroke-width:1; shape-rendering: crispEdges; }
+  .tick-label{ fill: var(--text-muted); font-size: 10.5px; }
+  .axis-title{ fill: var(--text-secondary); font-size: 11.5px; font-weight: 600; }
+
+  .pt{ fill: var(--accent); }
+  .pt-ring-surface{ fill: none; stroke: var(--surface-1); stroke-width: 2px; }
+  .band-fill{ fill: var(--accent); }
+  .band-edge{ fill:none; stroke: var(--accent-ring); stroke-width:1.2px; stroke-dasharray: 3 2.5; }
+  .band-mid{ stroke: var(--accent); stroke-width:2px; stroke-linecap:round; }
+  .band-cap{ stroke: var(--accent-ring); stroke-width:1.6px; stroke-linecap:round; }
+  .pt-label{ fill: var(--text-primary); font-size: 11px; }
+
+  .legends{ display:flex; flex-wrap:wrap; gap: 26px; align-items:flex-start; margin: 4px 0 14px; padding-top: 4px; }
+  .legend-block .legend-title{ font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; font-weight:600; }
+  .alpha-grad{ width: 170px; height: 12px; border-radius: 3px; border: 1px solid var(--border); }
+  .alpha-ticks{ display:flex; justify-content:space-between; width:170px; font-size: 10px; color: var(--text-muted); margin-top:3px; }
+  .shape-legend{ display:flex; flex-direction:column; gap:6px; font-size: 11.5px; color: var(--text-secondary); }
+  .shape-row{ display:flex; align-items:center; gap:8px; }
+  .sw{ flex:none; width:16px; height:16px; }
+  .swatch-line{ width:16px; height:0; border-top: 1.6px dashed var(--text-muted); align-self:center; }
+
+  #tooltip{
+    position: fixed; pointer-events:none; z-index: 50; opacity:0; transition: opacity 0.08s ease;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; font-size: 11.5px; color: var(--text-primary); max-width: 340px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  }
+  #tooltip .tt-name{ font-weight: 650; font-size: 12.5px; margin-bottom: 2px; color: var(--text-primary); }
+  #tooltip .tt-cat{ color: var(--text-muted); font-size: 10.5px; margin-bottom: 6px; }
+  #tooltip .tt-row{ display:flex; justify-content:space-between; gap:14px; margin-bottom:2px; }
+  #tooltip .tt-k{ color: var(--text-secondary); }
+  #tooltip .tt-v{ font-weight:600; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+  #tooltip .tt-desc{ margin-top:6px; color: var(--text-secondary); line-height:1.4; }
+  #tooltip .tt-flag{ margin-top:6px; color: var(--text-muted); font-size:10px; line-height:1.45; }
+
+  .table-wrap{ overflow-x:auto; }
+  table{ width:100%; border-collapse: collapse; font-size: 12px; }
+  thead th{
+    text-align:left; font-size: 10.5px; text-transform: uppercase; letter-spacing:0.03em;
+    color: var(--text-muted); border-bottom: 1px solid var(--grid); padding: 8px 10px; cursor:pointer; user-select:none;
+    white-space: nowrap;
+  }
+  thead th:hover{ color: var(--text-secondary); }
+  tbody td{ padding: 7px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; color: var(--text-primary); }
+  tbody tr:hover{ background: rgba(255,255,255,0.05); }
+  td.num{ text-align:right; font-variant-numeric: tabular-nums; white-space:nowrap; }
+  td.name{ font-weight:600; max-width: 200px; color: var(--text-primary); }
+  td.desc{ color: var(--text-secondary); font-size: 11.5px; max-width: 330px; }
+  .flag{ display:inline-block; font-size:9.5px; padding:1px 5px; border-radius:4px; margin-left:5px; border:1px solid var(--border); color: var(--text-muted); white-space:nowrap; }
+
+  footer.methodology{ font-size: 11.5px; color: var(--text-secondary); line-height:1.6; margin-top: 8px; }
+  footer.methodology h3{ font-size:12.5px; color: var(--text-primary); margin: 16px 0 6px; }
+  footer.methodology ul{ margin: 4px 0; padding-left: 18px; }
+  footer.methodology li{ margin-bottom: 5px; }
+  footer.methodology strong{ color: var(--text-primary); }
+  footer.methodology code{ font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; color: var(--text-primary); }
+
+  @media (max-width: 760px){
+    .stats{ grid-template-columns: repeat(2,1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="viz-root" id="vizRoot">
+
+  <header class="top">
+    <h1>Front-End Tooling Landscape — ARR vs valuation with uncertainty bands</h1>
+    <div class="subtitle">Prompt-to-UI and prompt-to-app builders that produce shippable front ends, plus the visual builders they compete with. Every figure resolves to either a <strong>point</strong> or a <strong>band</strong> — nothing is imputed to a single fake coordinate. Mark opacity encodes similarity to the brief (0–10); the dashed line is a power-law fit of valuation on ARR. Log–log scale. Figures current as of 13 August 2026.</div>
+  </header>
+
+  <div class="stats" id="statTiles"></div>
+
+  <div class="card">
+    <h2>ARR vs. valuation, opacity = similarity, bands = uncertainty</h2>
+    <div class="card-sub">X = ARR ($M, log). Y = valuation ($M, log). <strong>Solid dot</strong> = both axes are recent, corroborated point figures. <strong>Vertical bar</strong> = ARR known, valuation is a range. <strong>Horizontal bar</strong> = valuation known, ARR is a range. <strong>Box</strong> = both axes are ranges. The tick inside each band marks its geometric centre, which is what the fit uses — bands are down-weighted in the regression in proportion to their width. Overlapping marks are real: where one company's band covers another's point, the data genuinely cannot separate them. 1 tool with no figure on either axis is omitted from the plot.</div>
+    <div id="chartHost"></div>
+    <div class="legends">
+      <div class="legend-block">
+        <div class="legend-title">Similarity to brief (opacity)</div>
+        <div class="alpha-grad" id="alphaGrad"></div>
+        <div class="alpha-ticks"><span>0</span><span>5</span><span>10</span></div>
+      </div>
+      <div class="legend-block">
+        <div class="legend-title">How the figure was resolved</div>
+        <div class="shape-legend">
+          <div class="shape-row">
+            <svg class="sw" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="#3987e5" opacity="0.85"/></svg>
+            Both axes are point figures
+          </div>
+          <div class="shape-row">
+            <svg class="sw" viewBox="0 0 16 16"><rect x="5" y="1.5" width="6" height="13" rx="3" fill="#3987e5" opacity="0.4"/><rect x="5" y="1.5" width="6" height="13" rx="3" fill="none" stroke="#86b6ef" stroke-width="1" stroke-dasharray="2.5 2"/><line x1="5.5" y1="8" x2="10.5" y2="8" stroke="#3987e5" stroke-width="1.8"/></svg>
+            Valuation is a range (vertical)
+          </div>
+          <div class="shape-row">
+            <svg class="sw" viewBox="0 0 16 16"><rect x="1.5" y="5" width="13" height="6" rx="3" fill="#3987e5" opacity="0.4"/><rect x="1.5" y="5" width="13" height="6" rx="3" fill="none" stroke="#86b6ef" stroke-width="1" stroke-dasharray="2.5 2"/><line x1="8" y1="5.5" x2="8" y2="10.5" stroke="#3987e5" stroke-width="1.8"/></svg>
+            ARR is a range (horizontal)
+          </div>
+          <div class="shape-row">
+            <svg class="sw" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2" fill="#3987e5" opacity="0.28"/><rect x="2" y="3" width="12" height="10" rx="2" fill="none" stroke="#86b6ef" stroke-width="1" stroke-dasharray="2.5 2"/><path d="M5 8h6M8 5v6" stroke="#3987e5" stroke-width="1.4"/></svg>
+            Both axes are ranges (box)
+          </div>
+          <div class="shape-row"><span class="swatch-line sw" style="height:0"></span> <span id="fitLegend">Fitted trend</span></div>
+        </div>
+      </div>
+      <div class="legend-block">
+        <div class="legend-title">Why a figure becomes a band</div>
+        <div class="shape-legend" style="max-width:235px">
+          <div><strong style="color:var(--text-primary)">reported</strong> — good sources disagree, or the company gave a floor and a target</div>
+          <div><strong style="color:var(--text-primary)">stale</strong> — one solid figure, too old to still be true</div>
+          <div><strong style="color:var(--text-primary)">modeled</strong> — nothing on this axis; band spans the peer-multiple IQR</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Tool list</h2>
+    <div class="card-sub">Click a column header to sort. Valuation / ARR in $M; ranges shown as low–high. The basis tag says how each figure was resolved — hover a mark on the chart for the full provenance note.</div>
+    <div class="table-wrap">
+      <table id="dataTable">
+        <thead>
+          <tr>
+            <th data-key="name">Company</th>
+            <th data-key="category">Category</th>
+            <th data-key="val_mid" class="num">Valuation $M</th>
+            <th data-key="arr_mid" class="num">ARR $M</th>
+            <th data-key="mult" class="num">Multiple</th>
+            <th data-key="similarity" class="num">Sim /10</th>
+            <th data-key="desc">What it does</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer class="methodology">
+    <h3>Methodology &amp; caveats</h3>
+    <ul>
+      <li><strong>What replaced the imputed point.</strong> The previous version placed a single dot at <code>ARR × median peer multiple</code> whenever one axis was missing, which invents precision that does not exist. Here a missing or unreliable figure becomes a band along the axis it is uncertain on, and a company uncertain on both axes becomes a box. The regression uses each band's geometric centre and weights it by <code>1 / (1 + log₁₀(width_x) + log₁₀(width_y))</code>, so a wide box pulls the fit far less than a clean point.</li>
+      <li><strong>Three reasons a figure becomes a band.</strong> <em>reported</em> — two or more good sources disagree by more than 15%, or the company disclosed a floor and guided to a higher target: Replit's $150M disclosed against its $1B year-end goal, Framer's $50M against its $100M target, Vercel's $9.3B primary mark against roughly $8.1B implied by secondary blocks on offer. <em>stale</em> — a single solid figure old enough that the present value is a range, with the upper bound set by the cohort's median growth over the elapsed time; Bolt's $40M is from March 2025, seventeen months ago. <em>modeled</em> — nothing disclosed on that axis at all, so the band spans the peer-multiple interquartile range instead of sitting at its median.</li>
+      <li><strong>Peer multiple.</strong> Computed across the 8 plotted tools that have a value on both axes (point figures, or band centres), giving p25 = 17.0×, median = 21.0×, p75 = 25.8×. Base44 and v0 have no standalone valuation and get a modeled band from that IQR.</li>
+      <li><strong>Products inside bigger companies.</strong> v0 and Base44 are product lines, not companies. Base44's roughly $100M ARR comes from Wix management on an earnings call, which is a primary source, but Wix assigns it no separate valuation — hence a vertical band. v0 is worse: Vercel discloses neither v0 revenue nor a v0 valuation, so its ARR band is derived from Vercel's $340M total against v0's reported 4M users on a $20/month tier with a majority of v0 revenue coming from Teams and Enterprise. That is the least reliable mark on the chart and it is drawn as a box for exactly that reason. Figma Make is the same problem with no usable anchor at all, so it is omitted from the plot.</li>
+      <li><strong>ARR here is self-reported and unaudited.</strong> Several of these are run-rate figures computed by annualising one strong month, which flatters fast-growing companies and is not comparable to a public company's revenue. Cursor and Lovable in particular publish run-rate, not revenue.</li>
+      <li><strong>Cursor is a category outlier, deliberately included.</strong> It is an AI code editor rather than front-end tooling (similarity 5/10) and sits two orders of magnitude up the x-axis; it is on the chart as the ceiling reference for how this cohort gets priced. Its $60B mark is an all-stock acquisition price announced 16 June 2026 and not yet closed, so it is a deal price rather than a financing mark — a different instrument from every other figure here.</li>
+      <li><strong>The fit is close to a straight multiple.</strong> The regression returns an exponent of 1.00, meaning valuation scales roughly linearly with ARR across the range and the fitted line is effectively a constant ~20× multiple. R² = 0.96 sounds strong but is inflated by the log–log scale and by Cursor anchoring the top right; with 10 points, 7 of them involving a band, treat this as a visual trend and not a pricing model.</li>
+      <li><strong>Scraping.</strong> Figures come from the fixed URL list in <code>sources.json</code>. Money tokens are attributed to the nearest metric keyword rather than by pattern match, which is what stops a Series C size being read as a valuation and a prior valuation being read as ARR. Run <code>python landscape_scraper.py --selftest</code> to check the extractors against fixtures covering both failure modes.</li>
+    </ul>
+  </footer>
+
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+const PAYLOAD = {
+ "generated": "2026-08-13",
+ "brief": "front-end tooling: prompt-to-UI and prompt-to-app builders that produce shippable front ends, plus the visual builders they compete with",
+ "companies": [
+  {
+   "name": "Lovable",
+   "category": "Prompt-to-app builder",
+   "similarity": 10,
+   "desc": "Prompt-to-app builder producing React/TypeScript front ends with Supabase-backed auth, data and hosting. The category reference point.",
+   "arr": {
+    "point": 500,
+    "lo": null,
+    "hi": null,
+    "kind": "point",
+    "note": "self-reported ARR run-rate, corroborated by TechCrunch/Sifted and the Series B coverage",
+    "as_of": "2026-06-01",
+    "mid": 500
+   },
+   "valuation": {
+    "point": 13300,
+    "lo": null,
+    "hi": null,
+    "kind": "point",
+    "note": "closed round announced 12 Aug 2026, up from $6.6B in Dec 2025",
+    "as_of": "2026-08-12",
+    "mid": 13300
+   },
+   "n_obs": 8,
+   "sources": [
+    "https://techcrunch.com/2026/07/08/lovable-reportedly-in-talks-to-double-its-valuation-to-13-2b/",
+    "https://www.gurufocus.com/news/9027780/lovable-secures-400-million-funding-round-valuation-surges-to-133-billion",
+    "https://growthindex.startupriders.com/lovable",
+    "https://getlatka.com/companies/lovable.dev"
+   ],
+   "arr_mid": 500,
+   "val_mid": 13300,
+   "shape": "point"
+  },
+  {
+   "name": "v0 (Vercel)",
+   "category": "Prompt-to-UI generator",
+   "similarity": 10,
+   "desc": "Text-to-UI generation producing React components, wired to Vercel deploy, branches and PRs. Revenue is not broken out from its parent.",
+   "arr": {
+    "point": null,
+    "lo": 30,
+    "hi": 90,
+    "kind": "range_modeled",
+    "note": "not broken out; band derived from Vercel's disclosed $340M total ARR and v0's reported 4M users on a $20/mo tier with >50% of v0 revenue from Teams/Enterprise",
+    "as_of": "2026-02-01",
+    "mid": 51.96152422706632
+   },
+   "valuation": {
+    "point": null,
+    "lo": 510,
+    "hi": 2322,
+    "kind": "range_modeled",
+    "note": "no standalone valuation; band = ARR x the peer-multiple IQR (17x-26x) observed across this cohort",
+    "as_of": null,
+    "mid": 1088.2187280138126
+   },
+   "n_obs": 4,
+   "sources": [
+    "https://sacra.com/c/vercel/",
+    "https://www.selecthub.com/vibe-coding-tools/base44-vs-vercel-v0/"
+   ],
+   "arr_mid": 51.96152422706632,
+   "val_mid": 1088.2187280138126,
+   "shape": "box"
+  },
+  {
+   "name": "Vercel",
+   "category": "Front-end cloud + AI tooling",
+   "similarity": 6,
+   "desc": "Front-end hosting and deploy platform behind Next.js; v0 sits inside it and drives downstream infrastructure consumption.",
+   "arr": {
+    "point": 340,
+    "lo": null,
+    "hi": null,
+    "kind": "point",
+    "note": "Sacra estimate, up from $305M at end-2025",
+    "as_of": "2026-02-01",
+    "mid": 340
+   },
+   "valuation": {
+    "point": null,
+    "lo": 8100,
+    "hi": 9300,
+    "kind": "range_reported",
+    "note": "$9.3B primary mark from the Sep 2025 Series F vs ~$8.1B implied by secondary blocks on offer",
+    "as_of": "2025-09-30",
+    "mid": 8679.285684893659
+   },
+   "n_obs": 8,
+   "sources": [
+    "https://sacra.com/c/vercel/",
+    "https://tracxn.com/d/companies/vercel/__uPuJfXzfvAQs0wmUuqRiXFxW4uGbcaKUHjHks8VPbrI/funding-and-investors",
+    "https://www.hustlefund.vc/post/angel-squad-vercel-pre-ipo-shares-what-accredited-investors-should-know-in-2026",
+    "https://www.premieralts.com/companies/vercel/valuation"
+   ],
+   "arr_mid": 340,
+   "val_mid": 8679.285684893659,
+   "shape": "vband"
+  },
+  {
+   "name": "Replit",
+   "category": "Browser IDE + agent",
+   "similarity": 7,
+   "desc": "Browser-based IDE with an autonomous build agent; broader than front-end but a direct competitor for prompt-to-app work.",
+   "arr": {
+    "point": null,
+    "lo": 150,
+    "hi": 1000,
+    "kind": "range_reported",
+    "note": "last disclosed $150M (Sep 2025); company guided to $1B by end-2026 and did not update at the Series D",
+    "as_of": "2025-09-10",
+    "mid": 387.2983346207417
+   },
+   "valuation": {
+    "point": 9000,
+    "lo": null,
+    "hi": null,
+    "kind": "point",
+    "note": "$400M Series D led by Georgian, 11 Mar 2026",
+    "as_of": "2026-03-11",
+    "mid": 9000
+   },
+   "n_obs": 8,
+   "sources": [
+    "https://tracxn.com/d/companies/replit/__PUWtoWCDA1Qjxd1rE0XG7GgDNdav8DNlaP_1EkZUh3A/funding-and-investors",
+    "https://www.arr.club/replit/replit-rockets-to-9b-valuation-after-series-d-funding",
+    "https://fnex.com/replit-raises-400m-at-9b-valuation/",
+    "https://tech-insider.org/ie/replit-9-billion-valuation-2026/"
+   ],
+   "arr_mid": 387.2983346207417,
+   "val_mid": 9000,
+   "shape": "hband"
+  },
+  {
+   "name": "Base44 (Wix)",
+   "category": "Prompt-to-app builder",
+   "similarity": 8,
+   "desc": "Backend-first prompt-to-app builder bundling database, auth and hosting. Acquired by Wix mid-2025; now reported inside Wix results.",
+   "arr": {
+    "point": 100,
+    "lo": null,
+    "hi": null,
+    "kind": "point",
+    "note": "~$100M ARR stated by Wix management on the Q4 2025 earnings call",
+    "as_of": "2026-02-01",
+    "mid": 100
+   },
+   "valuation": {
+    "point": null,
+    "lo": 1701,
+    "hi": 2580,
+    "kind": "range_modeled",
+    "note": "no standalone valuation; band = ARR x the peer-multiple IQR (17x-26x) observed across this cohort",
+    "as_of": null,
+    "mid": 2094.893792057249
+   },
+   "n_obs": 6,
+   "sources": [
+    "https://www.calcalistech.com/ctechnews/article/n4je37x0k",
+    "https://finance.yahoo.com/news/wix-com-q4-earnings-call-165003576.html",
+    "https://weavai.app/blog/en/2026/05/08/base44-review-2026-wix-80m-ai-app-builder-pricing/"
+   ],
+   "arr_mid": 100,
+   "val_mid": 2094.893792057249,
+   "shape": "vband"
+  },
+  {
+   "name": "Emergent",
+   "category": "Prompt-to-app builder",
+   "similarity": 8,
+   "desc": "Autonomous-agent app builder for web and mobile aimed at non-technical founders; fastest of the cohort from launch to unicorn.",
+   "arr": {
+    "point": 120,
+    "lo": null,
+    "hi": null,
+    "kind": "point",
+    "note": "$120M annualised run-rate disclosed at the Series C",
+    "as_of": "2026-07-15",
+    "mid": 120
+   },
+   "valuation": {
+    "point": 1500,
+    "lo": null,
+    "hi": null,
+    "kind": "point",
+    "note": "$130M Series C led by Creaegis, post-money",
+    "as_of": "2026-07-15",
+    "mid": 1500
+   },
+   "n_obs": 8,
+   "sources": [
+    "https://techcrunch.com/2026/07/15/indian-ai-coding-startup-emergent-becomes-a-unicorn-just-over-a-year-after-launch/",
+    "https://emergent.sh/news/emergent-now-a-unicorn-at-1-5-billion-valuation",
+    "https://entrackr.com/news/emergent-becomes-third-ai-unicorn-of-2026-with-130-mn-series-c-led-by-creaegis-12166031",
+    "https://www.techbuzz.ai/articles/indian-ai-coding-startup-emergent-hits-unicorn-status"
+   ],
+   "arr_mid": 120,
+   "val_mid": 1500,
+   "shape": "point"
+  },
+  {
+   "name": "Bolt.new (StackBlitz)",
+   "category": "Prompt-to-app builder",
+   "similarity": 9,
+   "desc": "Browser-native full-stack builder on WebContainers; multi-framework output and in-browser Node runtime with zero setup.",
+   "arr": {
+    "point": null,
+    "lo": 40,
+    "hi": 190,
+    "kind": "range_stale",
+    "note": "last disclosed $40M in Mar 2025; upper bound is that figure grown at the cohort's 3x/yr median over the 17 months since",
+    "as_of": "2025-03-15",
+    "mid": 87.17797887081348
+   },
+   "valuation": {
+    "point": null,
+    "lo": 700,
+    "hi": 2800,
+    "kind": "range_stale",
+    "note": "$700M from the Jan 2025 Series B; later rounds are widely referenced but undisclosed, so the upper bound is peer-growth implied",
+    "as_of": "2025-01-15",
+    "mid": 1400.0
+   },
+   "n_obs": 8,
+   "sources": [
+    "https://sacra.com/c/bolt-new/",
+    "https://getlatka.com/companies/bolt.new",
+    "https://vibeappscanner.com/bolt-statistics",
+    "https://productgrowth.in/tools/ai-automation/bolt-new/"
+   ],
+   "arr_mid": 87.17797887081348,
+   "val_mid": 1400.0,
+   "shape": "box"
+  },
+  {
+   "name": "Framer",
+   "category": "Visual site builder",
+   "similarity": 7,
+   "desc": "Figma-like canvas that publishes production sites, with AI layout generation (Wireframer) and a coding assistant (Workshop).",
+   "arr": {
+    "point": null,
+    "lo": 50,
+    "hi": 100,
+    "kind": "range_reported",
+    "note": "$50M disclosed at the Aug 2025 Series D; company target is $100M for 2026",
+    "as_of": "2025-08-28",
+    "mid": 70.71067811865476
+   },
+   "valuation": {
+    "point": 2000,
+    "lo": null,
+    "hi": null,
+    "kind": "point",
+    "note": "$100M Series D led by Meritech, 28 Aug 2025",
+    "as_of": "2025-08-28",
+    "mid": 2000
+   },
+   "n_obs": 6,
+   "sources": [
+    "https://sacra.com/c/framer/",
+    "https://tracxn.com/d/companies/framer/__WwABy6r40KPszbW9ZaEHR6v4BX_MP8437KgHYLns7fo",
+    "https://technologychecker.io/technology/framer"
+   ],
+   "arr_mid": 70.71067811865476,
+   "val_mid": 2000,
+   "shape": "hband"
+  },
+  {
+   "name": "Webflow",
+   "category": "Visual site builder",
+   "similarity": 6,
+   "desc": "Visual development environment with deep CMS, localisation and clean code export; the incumbent the AI builders are attacking.",
+   "arr": {
+    "point": 212.5,
+    "lo": null,
+    "hi": null,
+    "kind": "point",
+    "note": "widely reported ARR, stable series",
+    "as_of": "2026-05-01",
+    "mid": 212.5
+   },
+   "valuation": {
+    "point": 4000,
+    "lo": null,
+    "hi": null,
+    "kind": "point",
+    "note": "last primary mark",
+    "as_of": "2025-01-01",
+    "mid": 4000
+   },
+   "n_obs": 4,
+   "sources": [
+    "https://productgrowth.in/tools/no-code/webflow/",
+    "https://www.flowninja.com/blog/framer-vs-webflow"
+   ],
+   "arr_mid": 212.5,
+   "val_mid": 4000,
+   "shape": "point"
+  },
+  {
+   "name": "Cursor (Anysphere)",
+   "category": "AI code editor",
+   "similarity": 5,
+   "desc": "AI-first VS Code fork. Not front-end specific, included as the ceiling reference for the category's pricing.",
+   "arr": {
+    "point": null,
+    "lo": 3000,
+    "hi": 4000,
+    "kind": "range_reported",
+    "note": "reported at $3B annualised in late Apr 2026 and $4B+ by Jun 2026; self-reported run-rate, not audited",
+    "as_of": "2026-06-16",
+    "mid": 3464.1016151377544
+   },
+   "valuation": {
+    "point": 60000,
+    "lo": null,
+    "hi": null,
+    "kind": "point",
+    "note": "SpaceX all-stock acquisition, announced 16 Jun 2026 via securities filing, pending Q3 close",
+    "as_of": "2026-06-16",
+    "mid": 60000
+   },
+   "n_obs": 6,
+   "sources": [
+    "https://www.cbsnews.com/news/spacex-cursor-60-billion-ai-acquisition/",
+    "https://www.forbes.com/sites/sandycarter/2026/06/16/spacex-buys-cursor-in-largest-startup-acquisition-ever-at-60-billion/",
+    "https://www.digitalapplied.com/blog/spacex-acquires-cursor-anysphere-60b-ai-coding-2026"
+   ],
+   "arr_mid": 3464.1016151377544,
+   "val_mid": 60000,
+   "shape": "hband"
+  },
+  {
+   "name": "Figma Make",
+   "category": "Prompt-to-UI generator",
+   "similarity": 8,
+   "desc": "Prompt-to-app inside Figma, converting design frames to working front ends. No product-level figures: Figma is public and does not break it out.",
+   "arr": {
+    "point": null,
+    "lo": null,
+    "hi": null,
+    "kind": "none",
+    "note": "no figure on either axis",
+    "as_of": null,
+    "mid": null
+   },
+   "valuation": {
+    "point": null,
+    "lo": null,
+    "hi": null,
+    "kind": "none",
+    "note": "no figure on either axis",
+    "as_of": null,
+    "mid": null
+   },
+   "n_obs": 2,
+   "sources": [
+    "https://www.figma.com/make/"
+   ],
+   "arr_mid": null,
+   "val_mid": null,
+   "shape": "omitted"
+  }
+ ],
+ "fit": {
+  "a": 20.187003463340194,
+  "b": 1.002226293275317,
+  "r2": 0.9560802411460184,
+  "n": 10
+ },
+ "peer_multiple": {
+  "p25": 17.0,
+  "median": 21.0,
+  "p75": 25.8
+ },
+ "errors": []
+};
+
+const DATA = PAYLOAD.companies;
+const FIT  = PAYLOAD.fit;
+const PM   = PAYLOAD.peer_multiple;
+
+function fmtM(m){
+  if(m == null) return "\u2014";
+  if(m >= 1000) return "$" + (m/1000).toFixed(m >= 10000 ? 0 : 1) + "B";
+  if(m >= 10)   return "$" + Math.round(m) + "M";
+  return "$" + m.toFixed(1) + "M";
+}
+function fmtAxis(v){ return v >= 1000 ? "$" + (v/1000) + "B" : "$" + v + "M"; }
+function metricText(m){
+  if(m.kind === "point") return fmtM(m.point);
+  if(m.lo != null)       return fmtM(m.lo) + "\u2013" + fmtM(m.hi);
+  return "\u2014";
+}
+const BASIS = { point:"point", range_reported:"reported", range_stale:"stale",
+                range_modeled:"modeled", none:"none" };
+
+/* ---------- stat tiles ---------- */
+const plotted = DATA.filter(d => d.shape !== "omitted");
+let nPoint = 0, nBand = 0;
+plotted.forEach(d => ["arr","valuation"].forEach(k => {
+  if(d[k].kind === "point") nPoint++; else nBand++;
+}));
+const totalVal   = DATA.filter(d => d.valuation.kind === "point")
+                       .reduce((s,d) => s + d.valuation.point, 0);
+const nValPoints = DATA.filter(d => d.valuation.kind === "point").length;
+const nBothAxes  = plotted.filter(d => d.arr_mid && d.val_mid).length;
+
+const tiles = [
+  { label:"Total valuation (point marks only)", value: fmtM(totalVal),
+    note: nValPoints + " of " + DATA.length + " tools have a valuation solid enough to be a point; banded and modeled marks are excluded from this sum" },
+  { label:"Peer multiple (p25 / med / p75)", value: PM.p25 + "\u00d7 / " + PM.median + "\u00d7 / " + PM.p75 + "\u00d7",
+    note:"valuation \u00f7 ARR across the " + nBothAxes + " plotted tools with a value on both axes \u2014 the IQR is what modeled bands span" },
+  { label:"Figures needing a band", value: nBand + " / " + (nPoint + nBand),
+    note: nBand + " of the " + (nPoint + nBand) + " axis-figures across plotted tools could not be resolved to a single trustworthy number" },
+  { label:"Tools shown / plotted", value: DATA.length + " / " + plotted.length,
+    note:"1 omitted from the scatter \u2014 Figma Make has no figure on either axis" },
+];
+document.getElementById('statTiles').innerHTML = tiles.map(t => `
+  <div class="tile">
+    <div class="label">${t.label}</div>
+    <div class="value">${t.value}</div>
+    <div class="note">${t.note}</div>
+  </div>`).join('');
+
+/* ---------- chart ---------- */
+const W = 1140, H = 560, M = {top: 20, right: 40, bottom: 52, left: 74};
+const plotW = W - M.left - M.right, plotH = H - M.top - M.bottom;
+
+const arrDomain = [20, 6000];      // $M, log10
+const valDomain = [400, 90000];    // $M, log10
+
+const lg = Math.log10;
+function xScale(v){
+  const t = (lg(v) - lg(arrDomain[0])) / (lg(arrDomain[1]) - lg(arrDomain[0]));
+  return M.left + t * plotW;
+}
+function yScale(v){
+  const t = (lg(v) - lg(valDomain[0])) / (lg(valDomain[1]) - lg(valDomain[0]));
+  return M.top + (1 - t) * plotH;
+}
+function alphaFor(sim){ return 0.20 + 0.72 * (sim / 10); }
+const clampX = v => Math.min(Math.max(v, arrDomain[0]), arrDomain[1]);
+const clampY = v => Math.min(Math.max(v, valDomain[0]), valDomain[1]);
+
+const xTicks = [50, 100, 500, 1000, 5000];
+const yTicks = [500, 1000, 5000, 10000, 50000];
+
+/* label placement: ref picks the anchor point on the mark, dx/dy nudge from there */
+const LABELS = {
+  "Cursor (Anysphere)":    {ref:"left",        dx:-10, dy:-10, anchor:"end"},
+  "Lovable":               {ref:"center",      dx: 13, dy: -9, anchor:"start"},
+  "Replit":                {ref:"right",       dx: 10, dy:  4, anchor:"start"},
+  "Vercel":                {ref:"bottom",      dx:  0, dy: 18, anchor:"middle"},
+  "Webflow":               {ref:"center",      dx: 13, dy:  4, anchor:"start"},
+  "Base44 (Wix)":          {ref:"top",         dx:  7, dy: -7, anchor:"start"},
+  "Emergent":              {ref:"center",      dx: 12, dy: 12, anchor:"start"},
+  "Framer":                {ref:"left",        dx: -9, dy:  3, anchor:"end"},
+  "Bolt.new (StackBlitz)": {ref:"bottomright", dx: -2, dy: 15, anchor:"end"},
+  "v0 (Vercel)":           {ref:"bottomleft",  dx:  1, dy: 15, anchor:"start"},
+};
+
+function geom(d){
+  const a = d.arr, v = d.valuation;
+  const ax = a.kind === "point" ? [a.point, a.point] : [clampX(a.lo), clampX(a.hi)];
+  const vy = v.kind === "point" ? [v.point, v.point] : [clampY(v.lo), clampY(v.hi)];
+  return {
+    x1: xScale(ax[0]), x2: xScale(ax[1]),
+    y1: yScale(vy[1]),          // hi valuation maps to the smaller y
+    y2: yScale(vy[0]),
+    cx: xScale(d.arr_mid), cy: yScale(d.val_mid),
+  };
+}
+
+let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Log-log scatter of ARR against valuation for front-end tooling companies, with uncertainty bands">`;
+
+xTicks.forEach(v => {
+  const x = xScale(v);
+  svg += `<line class="grid-line" x1="${x}" x2="${x}" y1="${M.top}" y2="${M.top+plotH}"></line>`;
+  svg += `<text class="tick-label" x="${x}" y="${M.top+plotH+16}" text-anchor="middle">${fmtAxis(v)}</text>`;
+});
+yTicks.forEach(v => {
+  const y = yScale(v);
+  svg += `<line class="grid-line" x1="${M.left}" x2="${M.left+plotW}" y1="${y}" y2="${y}"></line>`;
+  svg += `<text class="tick-label" x="${M.left-8}" y="${y+3}" text-anchor="end">${fmtAxis(v)}</text>`;
+});
+svg += `<line class="axis-line" x1="${M.left}" x2="${M.left+plotW}" y1="${M.top+plotH}" y2="${M.top+plotH}"></line>`;
+svg += `<line class="axis-line" x1="${M.left}" x2="${M.left}" y1="${M.top}" y2="${M.top+plotH}"></line>`;
+svg += `<text class="axis-title" x="${M.left+plotW/2}" y="${H-8}" text-anchor="middle">ARR, $M (log scale)</text>`;
+svg += `<text class="axis-title" transform="translate(18,${M.top+plotH/2}) rotate(-90)" text-anchor="middle">Valuation, $M (log scale)</text>`;
+
+if(FIT.a){
+  const steps = 60; let path = '';
+  for(let i = 0; i <= steps; i++){
+    const lx = lg(arrDomain[0]) + (i/steps)*(lg(arrDomain[1]) - lg(arrDomain[0]));
+    const av = Math.pow(10, lx);
+    const vv = FIT.a * Math.pow(av, FIT.b);
+    path += (i === 0 ? 'M' : 'L') + xScale(av).toFixed(1) + ',' + yScale(clampY(vv)).toFixed(1) + ' ';
+  }
+  svg += `<path d="${path}" fill="none" stroke="var(--text-muted)" stroke-width="1.6" stroke-dasharray="5 4" opacity="0.7"></path>`;
+}
+
+/* marks. Draw largest first so a thin band sitting inside a wide one stays
+   visible; hit-testing is delegated below and picks the smallest mark under
+   the cursor, so overlapping boxes never trap each other's pointer events. */
+const BAND_W = 11;
+const HITBOX = [];
+const drawOrder = DATA.map((d, i) => ({d, i}))
+  .filter(o => o.d.shape !== "omitted")
+  .sort((p, q) => {
+    const area = o => { const g = geom(o); return Math.max(g.x2-g.x1, 6) * Math.max(g.y2-g.y1, 6); };
+    return area(q.d) - area(p.d);
+  });
+
+drawOrder.forEach(({d, i}) => {
+  const g = geom(d), a = alphaFor(d.similarity);
+  svg += `<g class="mark" data-i="${i}">`;
+
+  if(d.shape === "point"){
+    svg += `<circle class="pt" cx="${g.cx}" cy="${g.cy}" r="8" style="opacity:${a.toFixed(2)}"></circle>`;
+    svg += `<circle class="pt-ring-surface" cx="${g.cx}" cy="${g.cy}" r="8"></circle>`;
+
+  } else if(d.shape === "vband"){
+    const x = g.cx - BAND_W/2;
+    const h = Math.max(g.y2 - g.y1, BAND_W);
+    const yTop = (g.y2 - g.y1) < BAND_W ? g.cy - BAND_W/2 : g.y1;
+    svg += `<rect class="band-fill" x="${x}" y="${yTop}" width="${BAND_W}" height="${h}" rx="${BAND_W/2}" style="opacity:${(a*0.42).toFixed(2)}"></rect>`;
+    svg += `<rect class="band-edge" x="${x}" y="${yTop}" width="${BAND_W}" height="${h}" rx="${BAND_W/2}" style="opacity:${(a*0.9).toFixed(2)}"></rect>`;
+    svg += `<line class="band-mid" x1="${x+1}" x2="${x+BAND_W-1}" y1="${g.cy}" y2="${g.cy}" style="opacity:${a.toFixed(2)}"></line>`;
+
+  } else if(d.shape === "hband"){
+    const y = g.cy - BAND_W/2;
+    const w = Math.max(g.x2 - g.x1, BAND_W);
+    const xL = (g.x2 - g.x1) < BAND_W ? g.cx - BAND_W/2 : g.x1;
+    svg += `<rect class="band-fill" x="${xL}" y="${y}" width="${w}" height="${BAND_W}" rx="${BAND_W/2}" style="opacity:${(a*0.42).toFixed(2)}"></rect>`;
+    svg += `<rect class="band-edge" x="${xL}" y="${y}" width="${w}" height="${BAND_W}" rx="${BAND_W/2}" style="opacity:${(a*0.9).toFixed(2)}"></rect>`;
+    svg += `<line class="band-mid" x1="${g.cx}" x2="${g.cx}" y1="${y+1}" y2="${y+BAND_W-1}" style="opacity:${a.toFixed(2)}"></line>`;
+
+  } else { // box
+    const w = Math.max(g.x2 - g.x1, BAND_W), h = Math.max(g.y2 - g.y1, BAND_W);
+    svg += `<rect class="band-fill" x="${g.x1}" y="${g.y1}" width="${w}" height="${h}" rx="4" style="opacity:${(a*0.15).toFixed(2)}"></rect>`;
+    svg += `<rect class="band-edge" x="${g.x1}" y="${g.y1}" width="${w}" height="${h}" rx="4" style="opacity:${(a*0.95).toFixed(2)}"></rect>`;
+    svg += `<line class="band-cap" x1="${g.cx-4}" x2="${g.cx+4}" y1="${g.cy}" y2="${g.cy}" style="opacity:${a.toFixed(2)}"></line>`;
+    svg += `<line class="band-cap" x1="${g.cx}" x2="${g.cx}" y1="${g.cy-4}" y2="${g.cy+4}" style="opacity:${a.toFixed(2)}"></line>`;
+  }
+
+  const pad = 7;
+  const bx1 = Math.min(g.x1, g.cx) - pad, bx2 = Math.max(g.x2, g.cx) + pad;
+  const by1 = Math.min(g.y1, g.cy) - pad, by2 = Math.max(g.y2, g.cy) + pad;
+  HITBOX.push({ i, x1:bx1, y1:by1, x2:bx2, y2:by2, area:(bx2-bx1)*(by2-by1) });
+
+  const L = LABELS[d.name];
+  if(L){
+    let lx, ly;
+    switch(L.ref){
+      case "left":        lx = g.x1; ly = g.cy; break;
+      case "right":       lx = g.x2; ly = g.cy; break;
+      case "top":         lx = g.cx; ly = g.y1; break;
+      case "bottom":      lx = g.cx; ly = g.y2; break;
+      case "topright":    lx = g.x2; ly = g.y1; break;
+      case "bottomright": lx = g.x2; ly = g.y2; break;
+      case "bottomleft":  lx = g.x1; ly = g.y2; break;
+      default:            lx = g.cx; ly = g.cy;
+    }
+    const short = d.name.replace(/\s*\(.*?\)\s*/g, '');
+    svg += `<text class="pt-label" x="${lx + L.dx}" y="${ly + L.dy}" text-anchor="${L.anchor}" style="opacity:${Math.max(0.55, a).toFixed(2)}">${short}</text>`;
+  }
+  svg += `</g>`;
+});
+
+svg += `</svg>`;
+document.getElementById('chartHost').innerHTML = svg;
+
+document.getElementById('fitLegend').innerHTML = FIT.a
+  ? `Fitted trend: val \u2248 ${FIT.a.toFixed(1)} \u00d7 ARR<sup>${FIT.b.toFixed(2)}</sup> (R\u00b2=${FIT.r2.toFixed(2)}, n=${FIT.n})`
+  : 'Fitted trend unavailable';
+
+(function paintAlphaGrad(){
+  const accent = getComputedStyle(document.getElementById('vizRoot')).getPropertyValue('--accent').trim();
+  const hex = accent.replace('#','');
+  const rgba = a => `rgba(${parseInt(hex.substring(0,2),16)},${parseInt(hex.substring(2,4),16)},${parseInt(hex.substring(4,6),16)},${a})`;
+  document.getElementById('alphaGrad').style.background =
+    `linear-gradient(90deg, ${rgba(alphaFor(0))}, ${rgba(alphaFor(10))})`;
+})();
+
+/* ---------- hover ---------- */
+/* One delegated handler on the SVG. Overlapping boxes would otherwise trap each
+   other's pointer events, so hit-test in viewBox space and pick the smallest
+   (most specific) mark containing the cursor. */
+const tooltip = document.getElementById('tooltip');
+const svgEl = document.querySelector('#chartHost svg');
+HITBOX.sort((a, b) => a.area - b.area);
+
+function multText(d){
+  const a = d.arr, v = d.valuation;
+  const lo = (v.lo != null ? v.lo : v.point) / (a.hi != null ? a.hi : a.point);
+  const hi = (v.hi != null ? v.hi : v.point) / (a.lo != null ? a.lo : a.point);
+  return Math.abs(hi - lo) < 0.05
+    ? lo.toFixed(1) + "\u00d7"
+    : lo.toFixed(1) + "\u2013" + hi.toFixed(1) + "\u00d7";
+}
+
+svgEl.addEventListener('mousemove', e => {
+  const r = svgEl.getBoundingClientRect();
+  const px = (e.clientX - r.left) / r.width  * W;
+  const py = (e.clientY - r.top)  / r.height * H;
+  const inside = HITBOX.filter(h => px >= h.x1 && px <= h.x2 && py >= h.y1 && py <= h.y2);
+  if(!inside.length){ tooltip.style.opacity = 0; svgEl.style.cursor = 'default'; return; }
+  // among overlapping marks, the one whose centre is nearest the cursor wins,
+  // tie-broken by the smaller (more specific) mark
+  const hit = inside.reduce((best, h) => {
+    const dist = k => Math.hypot(px - (k.x1+k.x2)/2, py - (k.y1+k.y2)/2);
+    const db = dist(best), dh = dist(h);
+    return dh < db - 0.5 ? h : (Math.abs(dh - db) <= 0.5 && h.area < best.area ? h : best);
+  });
+  const d = DATA[hit.i];
+  svgEl.style.cursor = 'pointer';
+  const notes = ["arr","valuation"]
+    .filter(k => d[k].kind !== "point")
+    .map(k => `<div class="tt-flag"><strong style="color:var(--text-secondary)">${k === "arr" ? "ARR" : "Valuation"} (${BASIS[d[k].kind]}):</strong> ${d[k].note}</div>`)
+    .join('');
+  tooltip.innerHTML = `
+    <div class="tt-name">${d.name}</div>
+    <div class="tt-cat">${d.category} \u00b7 similarity ${d.similarity}/10</div>
+    <div class="tt-row"><span class="tt-k">Valuation</span><span class="tt-v">${metricText(d.valuation)}</span></div>
+    <div class="tt-row"><span class="tt-k">ARR</span><span class="tt-v">${metricText(d.arr)}</span></div>
+    <div class="tt-row"><span class="tt-k">Implied multiple</span><span class="tt-v">${multText(d)}</span></div>
+    <div class="tt-desc">${d.desc}</div>
+    ${notes}`;
+  tooltip.style.left = Math.min(e.clientX + 16, window.innerWidth - 356) + 'px';
+  tooltip.style.top  = Math.min(e.clientY + 16, window.innerHeight - tooltip.offsetHeight - 12) + 'px';
+  tooltip.style.opacity = 1;
+});
+svgEl.addEventListener('mouseleave', () => { tooltip.style.opacity = 0; });
+
+/* ---------- table ---------- */
+DATA.forEach(d => { d.mult = (d.val_mid && d.arr_mid) ? d.val_mid / d.arr_mid : null; });
+let sortKey = 'val_mid', sortDir = -1;
+function renderTable(){
+  const rows = [...DATA].sort((a, b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if(av == null) av = sortDir === 1 ?  Infinity : -Infinity;
+    if(bv == null) bv = sortDir === 1 ?  Infinity : -Infinity;
+    if(typeof av === 'string') return sortDir * av.localeCompare(bv);
+    return sortDir * (av - bv);
+  });
+  const tag = m => (m.kind === "point" || m.kind === "none")
+    ? '' : ` <span class="flag">${BASIS[m.kind]}</span>`;
+  document.getElementById('tableBody').innerHTML = rows.map(d => `
+    <tr>
+      <td class="name">${d.name}</td>
+      <td>${d.category}</td>
+      <td class="num">${metricText(d.valuation)}${tag(d.valuation)}</td>
+      <td class="num">${metricText(d.arr)}${tag(d.arr)}</td>
+      <td class="num">${d.mult ? d.mult.toFixed(1) + '\u00d7' : '\u2014'}</td>
+      <td class="num">${d.similarity}</td>
+      <td class="desc">${d.desc}</td>
+    </tr>`).join('');
+}
+document.querySelectorAll('#dataTable thead th').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if(sortKey === key) sortDir *= -1;
+    else { sortKey = key; sortDir = (key === 'name' || key === 'category' || key === 'desc') ? 1 : -1; }
+    renderTable();
+  });
+});
+renderTable();
+</script>
+</body>
+</html>

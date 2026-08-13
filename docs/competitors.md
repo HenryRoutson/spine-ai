@@ -59,5 +59,6 @@ https://buildship.com/
 https://help.asana.com/s/article/ai-studio?language=en_US
 https://developers.openai.com/api/docs/guides/agent-builder
 https://docs.cloud.google.com/gemini-enterprise-agent-platform/agents
-
+https://www.xano.com/
+https://www.zite.com/
 

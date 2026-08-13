@@ -1,0 +1,115 @@
+import { describe, expect, it, vi } from "vitest"
+import { FieldType, InputType, DocLabel } from "@/lib/types"
+import { createSpineSession, createMemoryPersist } from "@/lib/core/session"
+import { createThrowingEgress, EgressBlockedError } from "@/lib/core/transport"
+import { toPipelineView, toSessionSummary } from "@/lib/core/view"
+import { SESSION_ACTION_IDS, addProjectAction } from "@/lib/core/actions"
+import { uid } from "@/lib/id"
+import type { StructureModel, StructureModelId } from "@/lib/types"
+
+describe("SpineSession React-like API", () => {
+  it("addProject / open / rename / delete match useStore names", () => {
+    const store = createSpineSession()
+    const created = store.addProject({ open: true })
+    expect(store.activeProjectId).toBe(created.id)
+    expect(store.project?.name).toBe("Untitled Pipeline")
+
+    store.renameProject(created.id, "Lease Review")
+    expect(store.project?.name).toBe("Lease Review")
+
+    store.setDocumentation("# Notes")
+    expect(store.documentation).toBe("# Notes")
+
+    const clone = store.cloneProject(created.id, { open: false })
+    expect(clone.name).toBe("Lease Review 1")
+    expect(store.activeProjectId).toBe(created.id)
+
+    store.deleteProject(clone.id)
+    expect(store.projects.some((p) => p.id === clone.id)).toBe(false)
+    expect(store.projects.some((p) => p.id === created.id)).toBe(true)
+  })
+
+  it("subscribe notifies on mutations", () => {
+    const store = createSpineSession()
+    const ticks: string[] = []
+    const stop = store.subscribe(() => {
+      ticks.push(store.activeProjectId)
+    })
+    store.addProject({ open: true })
+    store.renameProject(store.activeProjectId, "A")
+    stop()
+    store.renameProject(store.activeProjectId, "B")
+    expect(ticks.length).toBe(2)
+    expect(store.project?.name).toBe("B")
+  })
+
+  it("applyProjectChanges is atomic like the React store", () => {
+    const store = createSpineSession()
+    store.addProject({ open: true })
+    const model: StructureModel = {
+      id: uid<StructureModelId>("m_"),
+      name: "Finding",
+      description: "",
+      fields: [
+        { id: uid("f_"), name: "summary", type: FieldType.Text, optional: false, description: "" },
+      ],
+    }
+    store.applyProjectChanges({ models: [model], documentation: "updated" })
+    expect(store.project?.models.map((m) => m.name)).toEqual(["Finding"])
+    expect(store.documentation).toBe("updated")
+  })
+
+  it("addDocContent hashes locally and linkQuotes never needs the network", () => {
+    const store = createSpineSession({ egress: createThrowingEgress() })
+    store.addProject({ open: true })
+    const source = "The tenant must keep the premises insured at all times."
+    const doc = store.addDocContent({
+      name: "lease.txt",
+      type: InputType.Text,
+      content: source,
+      label: DocLabel.Inference,
+    })
+    const linked = store.linkQuotes({
+      quote: "keep the premises insured",
+      sourceText: source,
+      docId: doc.id,
+    })
+    expect(linked.exact).toBe(true)
+    expect(linked.href).toContain(doc.id)
+    expect(linked.start).toBeLessThan(linked.end)
+    expect(store.egress?.bytesSent).toBe(0)
+  })
+
+  it("toPipelineView reads the same snapshot CLI would render", () => {
+    const store = createSpineSession()
+    store.addProject({ open: true })
+    const view = toPipelineView(store.getSnapshot())
+    expect(view?.title).toBe("Untitled Pipeline")
+    expect(view?.steps.map((s) => s.kind)).toEqual(["input", "output"])
+  })
+
+  it("memory persist round-trips across session instances", () => {
+    const persist = createMemoryPersist()
+    const a = createSpineSession({ persist })
+    const p = a.addProject({ open: true })
+    a.renameProject(p.id, "Saved")
+    const b = createSpineSession({ persist })
+    expect(b.project?.name).toBe("Saved")
+    expect(toSessionSummary(b.getSnapshot()).projectCount).toBe(1)
+  })
+
+  it("addProject action registry id matches the React method name", () => {
+    const store = createSpineSession()
+    const project = addProjectAction.run(store, { open: true })
+    expect(project.id).toBe(store.activeProjectId)
+    expect(SESSION_ACTION_IDS).toContain("addProject")
+    expect(SESSION_ACTION_IDS).toContain("linkQuotes")
+  })
+
+  it("throwing egress is unused by local actions", () => {
+    const egress = createThrowingEgress()
+    const store = createSpineSession({ egress })
+    expect(() => store.addProject({ open: true })).not.toThrow(EgressBlockedError)
+    expect(() => store.validation()).not.toThrow()
+  })
+})

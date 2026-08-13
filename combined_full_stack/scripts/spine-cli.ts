@@ -7,7 +7,9 @@ import { CLI_EXIT_USAGE } from "@/lib/cli/types"
 
 async function main(): Promise<void> {
   const result = await runSpineCli(process.argv.slice(2))
-  printResult(result, process.argv.includes("--json"))
+  if (!result.data?.skipPrint) {
+    printResult(result, process.argv.includes("--json"))
+  }
   const code = result.command === "usage" ? CLI_EXIT_USAGE : exitCodeForResult(result)
   process.exit(code)
 }

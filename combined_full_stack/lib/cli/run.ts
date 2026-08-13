@@ -10,6 +10,8 @@ import {
 } from "@/lib/cli/validate_test"
 import { loadContextAndValidateSetup } from "@/lib/cli/validate_setup"
 import { profileLandingCommand } from "@/lib/cli/profile_landing"
+import { runSessionCommand } from "@/lib/cli/session_cli"
+import { runDemoCommand } from "@/lib/cli/demo"
 import type { CliCommandResult } from "@/lib/cli/types"
 
 export const SPINE_CLI_HELP = `spine — validate Spine projects and test files without React
@@ -21,6 +23,9 @@ Usage:
   npx tsx scripts/spine-cli.ts validate setup --project <seed.json> --file <setup.json> [--json]
   npx tsx scripts/spine-cli.ts parse test --file <test.json> [--json]
   npx tsx scripts/spine-cli.ts profile landing [--days 30] [--limit 50] [--backfill-local] [--json]
+  npx tsx scripts/spine-cli.ts session <list|add-project|open|rename|delete|set-docs|add-model|add-doc|validate|snapshot|actions> [--session <path>] [--json]
+  npx tsx scripts/spine-cli.ts tui [--session <path>] [--once] [--offline] [--json]
+  npx tsx scripts/spine-cli.ts demo [--json]
 
 Flags:
   --json    machine-readable output (for agents)
@@ -28,6 +33,9 @@ Flags:
   --days    landing profile window (default 30)
   --limit   max recent calls in landing profile (default 50)
   --backfill-local  sync data/landing_page_demo.json into Supabase before profiling
+  --session path to .spine-session.json (or SPINE_SESSION_PATH)
+  --offline  local-only; egress throws (session/demo/tui)
+  --once    Ink TUI: print one frame and exit (CI / non-TTY default)
 
 Exit codes:
   0  success / no validation errors
@@ -143,6 +151,27 @@ export async function runSpineCli(argv: string[]): Promise<CliCommandResult> {
       limit: flagNumber(flags, "limit", 50),
       backfillLocal: flags["backfill-local"] === true,
     })
+  }
+
+  if (cmd === "session") {
+    return runSessionCommand(positional, flags)
+  }
+
+  if (cmd === "demo") {
+    return runDemoCommand({
+      keepSession: flags["keep-session"] === true,
+      sessionPath: flagString(flags, "session"),
+    })
+  }
+
+  if (cmd === "tui" || cmd === "ui") {
+    const tuiFlags = { ...flags, ...(_json ? { json: true } : {}) }
+    if (process.env.VITEST) {
+      const { runTuiCommand } = await import("@/lib/cli/ink/launch")
+      return runTuiCommand(tuiFlags)
+    }
+    const { spawnSpineTui } = await import("@/lib/cli/ink/spawn")
+    return spawnSpineTui(process.argv.slice(2))
   }
 
   return usageError(`unknown command: ${positional.join(" ")}`)

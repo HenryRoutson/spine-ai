@@ -611,12 +611,21 @@ You should just have a page with a list of providers and openrouter should be a 
 
 
 
+
+
 Thinking of errors when running the homework assessment pipeline,
 although i can filter down file names to contains certain things like 
 marking criteria might always contain "marking guide" in their name,
 there is nothing stopping me from passing in a  "marking guide"  and a "homework sheet" which do not match. You need to have the option to only upload files after another input step when you can further filter down what files fit a format. You could do this both with pydantic format, where you check if the marking schema matches with the homework schema, but with extra marking fields. You could also do it with names where you parse the name into different values and check if those values equal. like marking_guide_SPLIT_grade10.txt and homework_SPLIT_james_miller_SPLIT_grade10.txt. However, this is janky and could lead to very long names, although names still do need to be unique. There is probably some approach with metadata or some derived data. How do i approach this? How do i error early rather than waiting for an error later? You shouldn't be blocking one file upload before another, but checking that they're compatible after both are uploaded. You should be clearly displaying the variables that are conflicting in the UI. rather than a generic 'these are not compatible', you should see something like 'MATCH assignment names, MISMATCH assignment questions, MISMATCH assignment year'. please ensure you're using dynamic pydantic schemas to be able to parse not just variables, but also how structures might change. i'm not sure how this is going to be put in the pipeline. this is a different type of error than assert, and it should come back to the user differently.
 
 There should be a derived graph of the structure of the pipeline which is a mermaid file which should be rendered in the documentation, it should be derived from the pipeline. 
+
+
+
+# integration with front end tools
+
+there should be the ability to easily connect the APIs you've built into loveable. this should be done with a button the copies the prompt for how to setup everything.
+
 
 # history and merging changes 
 
@@ -625,6 +634,12 @@ An integrated revision and branching system for colaboration, changes merging, a
 """
 For true 3D software with built-in version control featuring Git-like branching and commit changes, your primary options are cloud-native platforms like Onshape or multi-user ecosystems like Autodesk Fusion.
 """
+
+
+# CLI
+
+there should be a CLI with the same UI as the react setup.
+please use Ink ; https://github.com/vadimdemedes/ink to create this.
 
 
 

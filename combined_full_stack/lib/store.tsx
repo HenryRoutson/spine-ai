@@ -84,6 +84,7 @@ import { warmSettingsAccount, warmSettingsTeams } from "@/lib/warm-settings-data
 import { useTeamRealtime } from "@/lib/use-team-realtime"
 import { DEMO_DEFAULT_PROJECT_ID } from "@/lib/demo-constants"
 import { setDemoMode } from "@/lib/demo-mode"
+import { overlayOptimisticProjects as mergeOptimisticProjects, confirmCreatedInMap } from "@/lib/core/realtime"
 import { ProjectPickerSkeleton, StoreShellSkeleton } from "@/components/store-shell-skeletons"
 
 export type ProjectCreateOpts = { open?: boolean }
@@ -445,22 +446,11 @@ export function StoreProvider({
 
   // AI : prod GET /api/state lags POST/DELETE (warm-instance + realtime). Never let that snapshot drop local creates or resurrect tombstones.
   const overlayOptimisticProjects = useCallback((projects: Project[]): Project[] => {
-    const tombstones = deletedProjectIdsRef.current
-    const created = createdProjectsRef.current
-    const visible = projects.filter((p) => !tombstones.has(p.id))
-    const ids = new Set(visible.map((p) => p.id))
-    const pending: Project[] = []
-    for (const p of created.values()) {
-      if (!ids.has(p.id) && !tombstones.has(p.id)) pending.push(p)
-    }
-    return [...pending, ...visible]
+    return mergeOptimisticProjects(projects, createdProjectsRef.current, deletedProjectIdsRef.current)
   }, [])
 
   const confirmCreatedProjects = useCallback((serverProjects: Project[]): void => {
-    const created = createdProjectsRef.current
-    for (const id of [...created.keys()]) {
-      if (serverProjects.some((p) => p.id === id)) created.delete(id)
-    }
+    confirmCreatedInMap(createdProjectsRef.current, serverProjects)
   }, [])
 
   const clearSaveError = useCallback(() => setSaveError(null), [])

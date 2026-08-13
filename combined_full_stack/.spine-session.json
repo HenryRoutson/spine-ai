@@ -1,0 +1,73 @@
+{
+  "projects": [
+    {
+      "id": "p_5932d2d53bcc4fd287ad77f0",
+      "name": "cli pipeline",
+      "kind": "blank",
+      "createdAt": 1786602626595,
+      "lastOpenedAt": 1786602641118,
+      "models": [],
+      "modules": [
+        {
+          "id": "mod_blank_in_p_5932d2d53bcc4fd287ad77f0",
+          "kind": "input",
+          "label": "Input",
+          "note": "Pipeline input document",
+          "inputType": "text",
+          "cached": true,
+          "avgMs": 80,
+          "avgCostCents": 0
+        },
+        {
+          "id": "mod_blank_out_p_5932d2d53bcc4fd287ad77f0",
+          "kind": "output",
+          "label": "Output",
+          "note": "",
+          "cached": true,
+          "avgMs": 40,
+          "avgCostCents": 0
+        }
+      ],
+      "strategies": []
+    }
+  ],
+  "docs": [],
+  "docContents": {},
+  "runs": [],
+  "activeProjectId": "p_5932d2d53bcc4fd287ad77f0",
+  "model": "openrouter:deepseek-v4",
+  "inferenceInputDocIds": {},
+  "pendingCreates": [
+    {
+      "id": "p_5932d2d53bcc4fd287ad77f0",
+      "name": "cli pipeline",
+      "kind": "blank",
+      "createdAt": 1786602626595,
+      "lastOpenedAt": 1786602626595,
+      "models": [],
+      "modules": [
+        {
+          "id": "mod_blank_in_p_5932d2d53bcc4fd287ad77f0",
+          "kind": "input",
+          "label": "Input",
+          "note": "Pipeline input document",
+          "inputType": "text",
+          "cached": true,
+          "avgMs": 80,
+          "avgCostCents": 0
+        },
+        {
+          "id": "mod_blank_out_p_5932d2d53bcc4fd287ad77f0",
+          "kind": "output",
+          "label": "Output",
+          "note": "",
+          "cached": true,
+          "avgMs": 40,
+          "avgCostCents": 0
+        }
+      ],
+      "strategies": []
+    }
+  ],
+  "deletedProjectIds": []
+}

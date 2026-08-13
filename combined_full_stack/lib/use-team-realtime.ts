@@ -5,8 +5,13 @@ import { useEffect, useRef } from "react"
 import type { RealtimeChannel } from "@supabase/supabase-js"
 import { createClient } from "@/utils/supabase/client"
 import { isDemoMode, isPreviewOnly } from "@/lib/demo-mode"
-
-const DEBOUNCE_MS = 400
+import {
+  TEAM_REALTIME_CHANNEL,
+  TEAM_REALTIME_DEBOUNCE_MS,
+  attachRealtimePort,
+  createMemoryRealtimePort,
+  subscribeTeamRealtimeChannel,
+} from "@/lib/core/realtime"
 
 type TeamRealtimeOpts = {
   enabled: boolean
@@ -33,35 +38,27 @@ export function useTeamRealtime({
 
     let cancelled = false
     let channel: RealtimeChannel | null = null
-    let projectsTimer: ReturnType<typeof setTimeout> | null = null
-    let runsTimer: ReturnType<typeof setTimeout> | null = null
-    let membersTimer: ReturnType<typeof setTimeout> | null = null
+    let stop: (() => void) | null = null
 
     void (async () => {
       try {
         const supabase = await createClient()
         if (cancelled) return
 
-        const bumpProjects = () => {
-          if (projectsTimer) clearTimeout(projectsTimer)
-          projectsTimer = setTimeout(() => projectsRef.current(), DEBOUNCE_MS)
-        }
-        const bumpRuns = () => {
-          if (runsTimer) clearTimeout(runsTimer)
-          runsTimer = setTimeout(() => runsRef.current(), DEBOUNCE_MS)
-        }
-        const bumpMembers = () => {
-          if (membersTimer) clearTimeout(membersTimer)
-          membersTimer = setTimeout(() => membersRef.current(), DEBOUNCE_MS)
-        }
-
-        channel = supabase
-          .channel("team-shared-pointers")
-          .on("postgres_changes", { event: "*", schema: "public", table: "projects" }, bumpProjects)
-          .on("postgres_changes", { event: "*", schema: "public", table: "docs" }, bumpProjects)
-          .on("postgres_changes", { event: "*", schema: "public", table: "runs" }, bumpRuns)
-          .on("postgres_changes", { event: "*", schema: "public", table: "team_members" }, bumpMembers)
-          .subscribe()
+        const bus = createMemoryRealtimePort()
+        stop = attachRealtimePort(
+          bus,
+          {
+            onProjectsChanged: () => projectsRef.current(),
+            onRunsChanged: () => runsRef.current(),
+            onMembershipChanged: () => membersRef.current(),
+          },
+          TEAM_REALTIME_DEBOUNCE_MS,
+        )
+        channel = subscribeTeamRealtimeChannel(
+          supabase.channel(TEAM_REALTIME_CHANNEL) as never,
+          (event) => bus.emit(event),
+        ) as unknown as RealtimeChannel
       } catch (err) {
         console.warn("team realtime unavailable", err)
       }
@@ -69,9 +66,7 @@ export function useTeamRealtime({
 
     return () => {
       cancelled = true
-      if (projectsTimer) clearTimeout(projectsTimer)
-      if (runsTimer) clearTimeout(runsTimer)
-      if (membersTimer) clearTimeout(membersTimer)
+      stop?.()
       const ch = channel
       if (ch) {
         void createClient().then((supabase) => {

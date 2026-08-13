@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spine across four markets — ARR vs valuation with uncertainty bands</title>
+<style>
+  /* dark theme only — fixed, no light-mode branch */
+  .viz-root{
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #a5a49c;
+    --grid:           #2c2c2a;
+    --axis:           #4a4a47;
+    --border:         rgba(255,255,255,0.14);
+    --accent:         #3987e5;
+    --accent-ring:    #86b6ef;
+    --fe-con:         #3987e5;
+    --fe-dev:         #8b7cf7;
+    --be-con:         #e5a039;
+    --be-dev:         #3ecf8e;
+    --spine:          #f0c14b;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; background: #0d0d0d; }
+  body{
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #ffffff;
+  }
+  .viz-root{ max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; background: var(--page); }
+
+  header.top{ margin-bottom: 18px; }
+  h1{ font-size: 21px; font-weight: 650; margin: 0 0 4px; letter-spacing: -0.01em; color: var(--text-primary); }
+  .subtitle{ font-size: 13.5px; color: var(--text-secondary); max-width: 800px; line-height:1.5; }
+
+  .stats{ display:grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0 22px; }
+  .tile{ background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .tile .label{ font-size: 11.5px; color: var(--text-secondary); margin-bottom: 6px; }
+  .tile .value{ font-size: 22px; font-weight: 650; letter-spacing:-0.01em; color: var(--text-primary); }
+  .tile .note{ font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height:1.4; }
+
+  .card{ background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 18px 18px 10px; margin-bottom: 22px; }
+  .card h2{ font-size: 14.5px; font-weight: 650; margin: 0 0 2px; color: var(--text-primary); }
+  .card .card-sub{ font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; line-height:1.5; }
+
+  svg{ display:block; width:100%; height:auto; overflow: visible; }
+  .grid-line{ stroke: var(--grid); stroke-width:1; shape-rendering: crispEdges; }
+  .axis-line{ stroke: var(--axis); stroke-width:1; shape-rendering: crispEdges; }
+  .tick-label{ fill: var(--text-muted); font-size: 10.5px; }
+  .axis-title{ fill: var(--text-secondary); font-size: 11.5px; font-weight: 600; }
+
+  .pt{ fill: var(--accent); }
+  .pt-ring-surface{ fill: none; stroke: var(--surface-1); stroke-width: 2px; }
+  .band-fill{ fill: var(--accent); }
+  .band-edge{ fill:none; stroke: var(--accent-ring); stroke-width:1.2px; stroke-dasharray: 3 2.5; }
+  .band-mid{ stroke: var(--accent); stroke-width:2px; stroke-linecap:round; }
+  .band-cap{ stroke: var(--accent-ring); stroke-width:1.6px; stroke-linecap:round; }
+  .pt-label{ fill: var(--text-primary); font-size: 11px; }
+
+  .legends{ display:flex; flex-wrap:wrap; gap: 26px; align-items:flex-start; margin: 4px 0 14px; padding-top: 4px; }
+  .legend-block .legend-title{ font-size: 11px; color: var(--text-secondary); margin-bottom: 6px; font-weight:600; }
+  .alpha-grad{ width: 170px; height: 12px; border-radius: 3px; border: 1px solid var(--border); }
+  .alpha-ticks{ display:flex; justify-content:space-between; width:170px; font-size: 10px; color: var(--text-muted); margin-top:3px; }
+  .shape-legend{ display:flex; flex-direction:column; gap:6px; font-size: 11.5px; color: var(--text-secondary); }
+  .shape-row{ display:flex; align-items:center; gap:8px; }
+  .sw{ flex:none; width:16px; height:16px; }
+  .swatch-line{ width:16px; height:0; border-top: 1.6px dashed var(--text-muted); align-self:center; }
+
+  #tooltip{
+    position: fixed; pointer-events:none; z-index: 50; opacity:0; transition: opacity 0.08s ease;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; font-size: 11.5px; color: var(--text-primary); max-width: 340px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  }
+  #tooltip .tt-name{ font-weight: 650; font-size: 12.5px; margin-bottom: 2px; color: var(--text-primary); }
+  #tooltip .tt-cat{ color: var(--text-muted); font-size: 10.5px; margin-bottom: 6px; }
+  #tooltip .tt-row{ display:flex; justify-content:space-between; gap:14px; margin-bottom:2px; }
+  #tooltip .tt-k{ color: var(--text-secondary); }
+  #tooltip .tt-v{ font-weight:600; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+  #tooltip .tt-desc{ margin-top:6px; color: var(--text-secondary); line-height:1.4; }
+  #tooltip .tt-flag{ margin-top:6px; color: var(--text-muted); font-size:10px; line-height:1.45; }
+
+  .table-wrap{ overflow-x:auto; }
+  table{ width:100%; border-collapse: collapse; font-size: 12px; }
+  thead th{
+    text-align:left; font-size: 10.5px; text-transform: uppercase; letter-spacing:0.03em;
+    color: var(--text-muted); border-bottom: 1px solid var(--grid); padding: 8px 10px; cursor:pointer; user-select:none;
+    white-space: nowrap;
+  }
+  thead th:hover{ color: var(--text-secondary); }
+  tbody td{ padding: 7px 10px; border-bottom: 1px solid var(--grid); vertical-align: top; color: var(--text-primary); }
+  tbody tr:hover{ background: rgba(255,255,255,0.05); }
+  td.num{ text-align:right; font-variant-numeric: tabular-nums; white-space:nowrap; }
+  td.name{ font-weight:600; max-width: 200px; color: var(--text-primary); }
+  td.desc{ color: var(--text-secondary); font-size: 11.5px; max-width: 330px; }
+  .flag{ display:inline-block; font-size:9.5px; padding:1px 5px; border-radius:4px; margin-left:5px; border:1px solid var(--border); color: var(--text-muted); white-space:nowrap; }
+
+  footer.methodology{ font-size: 11.5px; color: var(--text-secondary); line-height:1.6; margin-top: 8px; }
+  footer.methodology h3{ font-size:12.5px; color: var(--text-primary); margin: 16px 0 6px; }
+  footer.methodology ul{ margin: 4px 0; padding-left: 18px; }
+  footer.methodology li{ margin-bottom: 5px; }
+  footer.methodology strong{ color: var(--text-primary); }
+  footer.methodology code{ font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; color: var(--text-primary); }
+
+  .insight{
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; margin: 0 0 22px; font-size: 13.5px; line-height: 1.55; color: var(--text-secondary);
+  }
+  .insight strong{ color: var(--text-primary); }
+  .insight .kicker{ font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--spine); font-weight: 650; margin-bottom: 6px; }
+
+  .quad-grid{
+    display: grid; grid-template-columns: 92px 1fr 1fr; grid-template-rows: 28px 1fr 1fr;
+    gap: 8px; margin: 18px 0 22px;
+  }
+  .quad-colh, .quad-rowh{ font-size: 11px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.02em; }
+  .quad-colh{ display:flex; align-items:flex-end; justify-content:center; text-align:center; }
+  .quad-rowh{ display:flex; align-items:center; justify-content:flex-end; text-align:right; padding-right: 6px; }
+  .quad-cell{
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; cursor: pointer;
+  }
+  .quad-cell:hover, .quad-cell.active{ border-color: rgba(255,255,255,0.28); }
+  .quad-cell .q-name{ font-size: 12.5px; font-weight: 650; margin-bottom: 4px; }
+  .quad-cell .q-lead{ font-size: 11.5px; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.4; }
+  .quad-cell .q-nums{ font-size: 18px; font-weight: 650; letter-spacing: -0.01em; }
+  .quad-cell .q-note{ font-size: 10.5px; color: var(--text-muted); margin-top: 4px; line-height: 1.4; }
+  .quad-cell .spine-fit{ font-size: 11px; color: var(--text-secondary); margin-top: 8px; line-height: 1.4; border-top: 1px solid var(--grid); padding-top: 7px; }
+  .dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+
+  .filters{ display:flex; flex-wrap:wrap; gap: 8px; margin: 0 0 12px; }
+  .chip{
+    font-size: 11.5px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-secondary); cursor: pointer;
+  }
+  .chip.active{ color: var(--text-primary); border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.06); }
+
+  .scen{ width:100%; }
+  .scen td.hl{ color: var(--spine); font-weight: 650; }
+
+  .qtag{ display:inline-block; font-size:9.5px; padding:1px 6px; border-radius:4px; margin-right:4px; white-space:nowrap; }
+  tr.spine-row{ background: rgba(240,193,75,0.06); }
+
+  @media (max-width: 760px){
+    .stats{ grid-template-columns: repeat(2,1fr); }
+    .quad-grid{ grid-template-columns: 1fr; grid-template-rows: auto; }
+    .quad-colh, .quad-rowh{ display:none; }
+  }
+</style>
+</head>
+<body>
+<div class="viz-root" id="vizRoot">
+
+  <header class="top">
+    <h1>Spine sits in four markets. The $13M ARR figure is one cell.</h1>
+    <div class="subtitle">Categories from the product: <strong>front-end vs back-end</strong> × <strong>consumer vs developer</strong> (also technical / non-technical, enterprise / consumer). Every figure is a <strong>point</strong> or a <strong>band</strong> — nothing is imputed to a single fake coordinate. Mark colour is the quadrant; opacity is similarity to Spine (0–10). The gold box is Spine’s month-36 SOM, not a current mark. Log–log. Figures as of 13 August 2026.</div>
+  </header>
+
+  <div class="insight">
+    <div class="kicker">What this changes in the pitch</div>
+    The current deck prices Spine against <strong>back-end × consumer</strong> no-code agent builders, where Relevance AI leads at ~$13M ARR and Dify is the closest product at $180M. That cell is real — and it is the smallest of the four. Front-end × consumer is led by Lovable at <strong>$500M ARR / $13.3B</strong>. Back-end × developer is led by n8n at <strong>$5.2B</strong> (SAP, May 2026) and LangChain at <strong>$1.25B</strong>. Spine’s graduated complexity (consumer Run → non-technical builder → developer typed pipelines + code export) is built to occupy all four cells, which is why a Relevance-only comp set understates the ceiling. Asking today remains $4M; the gold band is the m36 outcome range, not the round.
+  </div>
+
+  <div class="quad-grid" id="quadGrid">
+    <div></div>
+    <div class="quad-colh">Consumer / non-technical</div>
+    <div class="quad-colh">Developer / technical</div>
+    <div class="quad-rowh">Front-end<br>tools</div>
+    <div class="quad-cell" data-filter="frontend-consumer" id="q-fe-con"></div>
+    <div class="quad-cell" data-filter="frontend-developer" id="q-fe-dev"></div>
+    <div class="quad-rowh">Back-end<br>tools</div>
+    <div class="quad-cell" data-filter="backend-consumer" id="q-be-con"></div>
+    <div class="quad-cell" data-filter="backend-developer" id="q-be-dev"></div>
+  </div>
+
+  <div class="stats" id="statTiles"></div>
+
+  <div class="card">
+    <h2>ARR vs. valuation — colour = quadrant, opacity = similarity to Spine</h2>
+    <div class="card-sub">X = ARR ($M, log). Y = valuation ($M, log). <strong>Solid dot</strong> = both axes are recent point figures. <strong>Vertical bar</strong> = ARR known, valuation is a range. <strong>Horizontal bar</strong> = valuation known, ARR is a range. <strong>Box</strong> = both axes are ranges. Gold box = Spine m36 SOM ($8–40M ARR × 10–26×). Filter a quadrant from the 2×2 above or the chips; Spine stays on. The tick inside each band is its geometric centre — that is what the fit uses, down-weighted by band width.</div>
+    <div class="filters" id="filters"></div>
+    <div id="chartHost"></div>
+    <div class="legends">
+      <div class="legend-block">
+        <div class="legend-title">Quadrant (colour)</div>
+        <div class="shape-legend">
+          <div class="shape-row"><span class="dot" style="background:var(--fe-con)"></span> Front-end × consumer</div>
+          <div class="shape-row"><span class="dot" style="background:var(--fe-dev)"></span> Front-end × developer</div>
+          <div class="shape-row"><span class="dot" style="background:var(--be-con)"></span> Back-end × consumer</div>
+          <div class="shape-row"><span class="dot" style="background:var(--be-dev)"></span> Back-end × developer</div>
+          <div class="shape-row"><span class="dot" style="background:var(--spine)"></span> Spine m36 potential</div>
+        </div>
+      </div>
+      <div class="legend-block">
+        <div class="legend-title">Similarity to Spine (opacity)</div>
+        <div class="alpha-grad" id="alphaGrad"></div>
+        <div class="alpha-ticks"><span>0</span><span>5</span><span>10</span></div>
+      </div>
+      <div class="legend-block">
+        <div class="legend-title">How the figure was resolved</div>
+        <div class="shape-legend">
+          <div class="shape-row">
+            <svg class="sw" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" fill="#3987e5" opacity="0.85"/></svg>
+            Both axes are point figures
+          </div>
+          <div class="shape-row">
+            <svg class="sw" viewBox="0 0 16 16"><rect x="5" y="1.5" width="6" height="13" rx="3" fill="#3987e5" opacity="0.4"/><rect x="5" y="1.5" width="6" height="13" rx="3" fill="none" stroke="#86b6ef" stroke-width="1" stroke-dasharray="2.5 2"/><line x1="5.5" y1="8" x2="10.5" y2="8" stroke="#3987e5" stroke-width="1.8"/></svg>
+            Valuation is a range (vertical)
+          </div>
+          <div class="shape-row">
+            <svg class="sw" viewBox="0 0 16 16"><rect x="1.5" y="5" width="13" height="6" rx="3" fill="#3987e5" opacity="0.4"/><rect x="1.5" y="5" width="13" height="6" rx="3" fill="none" stroke="#86b6ef" stroke-width="1" stroke-dasharray="2.5 2"/><line x1="8" y1="5.5" x2="8" y2="10.5" stroke="#3987e5" stroke-width="1.8"/></svg>
+            ARR is a range (horizontal)
+          </div>
+          <div class="shape-row">
+            <svg class="sw" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2" fill="#3987e5" opacity="0.28"/><rect x="2" y="3" width="12" height="10" rx="2" fill="none" stroke="#86b6ef" stroke-width="1" stroke-dasharray="2.5 2"/><path d="M5 8h6M8 5v6" stroke="#3987e5" stroke-width="1.4"/></svg>
+            Both axes are ranges (box)
+          </div>
+          <div class="shape-row"><span class="swatch-line sw" style="height:0"></span> <span id="fitLegend">Fitted trend</span></div>
+        </div>
+      </div>
+      <div class="legend-block">
+        <div class="legend-title">Why a figure becomes a band</div>
+        <div class="shape-legend" style="max-width:235px">
+          <div><strong style="color:var(--text-primary)">reported</strong> — good sources disagree, or the company gave a floor and a target</div>
+          <div><strong style="color:var(--text-primary)">stale</strong> — one solid figure, too old to still be true</div>
+          <div><strong style="color:var(--text-primary)">modeled</strong> — nothing on this axis; band spans the peer-multiple IQR</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Spine potential — scenarios for the pitch, not a round</h2>
+    <div class="card-sub">Asking today is $4M (5% for $200k). The gold box on the chart is the month-36 SOM band. These rows are what that band is made of. Do not put a single implied valuation on a slide; put a band.</div>
+    <div class="table-wrap">
+      <table class="scen">
+        <thead>
+          <tr>
+            <th>Scenario</th>
+            <th class="num">ARR</th>
+            <th class="num">Multiple</th>
+            <th class="num">Implied val</th>
+            <th>What it assumes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="name">Asking now</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num hl">$4M</td>
+            <td class="desc">5% for $200k. Pre-revenue. Not on the scatter (zero ARR cannot sit on a log axis).</td>
+          </tr>
+          <tr>
+            <td class="name">AI-eng box only</td>
+            <td class="num">$8M</td>
+            <td class="num">15–25×</td>
+            <td class="num">$120–200M</td>
+            <td class="desc">Current pitch framing: beat Relevance ($13M ARR) and approach Dify ($180M). Back-end consumer + developer overlap only.</td>
+          </tr>
+          <tr>
+            <td class="name">SOM base (m36)</td>
+            <td class="num">$8M</td>
+            <td class="num">10–25×</td>
+            <td class="num">$80–200M</td>
+            <td class="desc">Pitch base SOM. 10× is Zapier-like (mature consumer automation); 25× is the cohort median.</td>
+          </tr>
+          <tr>
+            <td class="name">SOM bull (m36)</td>
+            <td class="num">$40M</td>
+            <td class="num">17–26×</td>
+            <td class="num">$680M–$1.04B</td>
+            <td class="desc">Pitch bull SOM = n8n’s last disclosed ARR. 17× is p25; 26× is Lovable’s point multiple.</td>
+          </tr>
+          <tr>
+            <td class="name">Back-end developer path</td>
+            <td class="num">$8–40M</td>
+            <td class="num">~39× Dify / n8n stale</td>
+            <td class="num">$180M–$1.5B+</td>
+            <td class="desc">Typed hosted pipelines with code export. Dify is $180M on ~$3–7M ARR; n8n is $5.2B on a stale $40M ARR (do not copy that multiple).</td>
+          </tr>
+          <tr>
+            <td class="name">Front-end consumer path</td>
+            <td class="num">$40–100M</td>
+            <td class="num">~26×</td>
+            <td class="num">$1.0–2.7B</td>
+            <td class="desc">Vibe-coding for AI engineering actually works for non-technical users (Lovable’s motion). $100M ARR is 7% of the pitch’s consumer SAM.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Tool list</h2>
+    <div class="card-sub">Click a column header to sort. Valuation / ARR in $M; ranges shown as low–high. Quadrant is the primary cell; several products (Replit, n8n, Zapier) bleed into a second cell — that is noted in the description, not double-counted.</div>
+    <div class="table-wrap">
+      <table id="dataTable">
+        <thead>
+          <tr>
+            <th data-key="name">Company</th>
+            <th data-key="quadLabel">Quadrant</th>
+            <th data-key="val_mid" class="num">Valuation $M</th>
+            <th data-key="arr_mid" class="num">ARR $M</th>
+            <th data-key="mult" class="num">Multiple</th>
+            <th data-key="similarity" class="num">Sim /10</th>
+            <th data-key="desc">What it does / why it maps to Spine</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer class="methodology">
+    <h3>Methodology &amp; caveats</h3>
+    <ul>
+      <li><strong>Why four cells.</strong> Spine is not one product. Consumer mode is a Run/marketplace surface (back-end × consumer). The landing-page agent and non-technical builder are vibe-coding (front-end × consumer). Typed structures, pipeline, testing, logging, and multi-language export are back-end × developer. Hosted inference UIs, custom LLM providers, and teams are the enterprise/developer front-end. Pricing against only Relevance/Dify is pricing one cell.</li>
+      <li><strong>What replaced the imputed point.</strong> A missing or unreliable figure becomes a band along the uncertain axis; both uncertain → a box. The regression uses each band's geometric centre and weights it by <code>1 / (1 + log₁₀(width_x) + log₁₀(width_y))</code>.</li>
+      <li><strong>Three reasons a figure becomes a band.</strong> <em>reported</em> — good sources disagree, or the company gave a floor and a target (Replit $150M vs $1B goal; Relevance $38M Latka vs $120M Finro). <em>stale</em> — one solid figure old enough that "now" is a range, upper bound = cohort growth (Bolt $40M from Mar 2025; n8n $40M from Jul 2025). <em>modeled</em> — nothing on that axis; band spans the peer-multiple IQR (17×–29× used to fill, observed IQR 16.7× / 23.2× / 27.4× on 15 dual-axis comps).</li>
+      <li><strong>The $13M ARR line.</strong> Relevance AI is the highest-ARR name in the <em>no-code AI-agent</em> box, not in AI engineering. Finro Q1 2026 still has it at ~$13M / ~$120M (9.5×). n8n ($5.2B), LangChain ($1.25B), and Lovable ($13.3B) are not in that box.</li>
+      <li><strong>n8n.</strong> Accel Series C Oct 2025 at $2.5B on $40M ARR (Sacra, Jul 2025). SAP strategic investment 12 May 2026 values it at $5.2B and did not publish a new ARR — so ARR is a stale band $40–130M, not a point. Do not quote 130× as a comparable multiple.</li>
+      <li><strong>Lovable.</strong> $400M Series C at $13.3B on 12 Aug 2026 (TechCrunch / company blog). $500M annualised run-rate in June, tracking ~$600M by end of August. Run-rate, not audited revenue. Enterprise is still a small slice (~$20M of the earlier $400M ARR print).</li>
+      <li><strong>Cursor is a ceiling, not a comp.</strong> $60B is an all-stock SpaceX deal price announced 16 Jun 2026, not a financing mark, and Cursor is an editor rather than a pipeline host. Similarity 5/10. The fit without Cursor is almost the same (val ≈ 19.1 × ARR<sup>1.03</sup>).</li>
+      <li><strong>Products inside bigger companies.</strong> v0, Base44, and Make have no standalone valuation — vertical modeled bands/boxes. StackAI is an acquisition price ($75M, Asana, May 2026), a different instrument from a primary round.</li>
+      <li><strong>The fit.</strong> val ≈ 20.0 × ARR<sup>1.01</sup> (R² = 0.94, n = 23). Exponent ≈ 1 means a roughly constant ~20× multiple across four orders of magnitude. R² is inflated by the log–log scale and by Cursor/Lovable anchoring the top right. Treat as a visual trend, not a pricing model.</li>
+      <li><strong>Similarity (0–10).</strong> Hand-scored against Spine: typed schemas, hosted runs, code export, eval/testing, share/marketplace, vibe-coding for non-technical users. Dify and n8n are 9; Gumloop/Windmill/Vellum/BAML/Lovable are 8; Relevance is 6 (demo-ware, but the pitch's cited leader).</li>
+      <li><strong>Sources.</strong> Primary: company blogs and BusinessWire/TechCrunch/Bloomberg. Secondary: Sacra, ARR Club, Finro, Latka (flagged when they are the only number). Research pass 13 Aug 2026.</li>
+    </ul>
+  </footer>
+
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+const PAYLOAD = {"generated":"2026-08-13","peer_multiple":{"p25":16.7,"median":23.2,"p75":27.4,"n":15},"fit":{"a":19.974156090753844,"b":1.012281554033738,"r2":0.9421273521648966,"n":23},"fit_no_cursor":{"a":19.10543924140827,"b":1.0275610045620416,"r2":0.9310820867283589,"n":22},"companies":[{"name":"Lovable","layer":"frontend","audience":"consumer","gtm":"consumer","technical":"non-technical","category":"Prompt-to-app builder","similarity":8,"desc":"Vibe-coding: prompt to a hosted React/Supabase app. Spine's consumer-builder analog \u2014 the pitch line is 'Lovable for AI engineering'.","arr":{"kind":"point","point":500,"lo":null,"hi":null,"as_of":"2026-06-01","note":"self-reported annualised run-rate; TechCrunch at Series C. Tracking toward ~$600M by end-Aug 2026.","mid":500},"valuation":{"kind":"point","point":13300,"lo":null,"hi":null,"as_of":"2026-08-12","note":"$400M Series C led by Menlo + EQT Scaleup Europe Fund, announced 12 Aug 2026.","mid":13300},"sources":["https://techcrunch.com/2026/08/12/lovable-confirms-new-13-3b-valuation-raises-another-400m/","https://lovable.dev/blog/series-c"],"arr_mid":500,"val_mid":13300,"shape":"point"},{"name":"Bolt.new (StackBlitz)","layer":"frontend","audience":"consumer","gtm":"consumer","technical":"non-technical","category":"Prompt-to-app builder","similarity":7,"desc":"Browser-native full-stack builder on WebContainers. Same consumer prompt-to-app motion Spine wants for AI pipelines.","arr":{"kind":"range_stale","point":null,"lo":40,"hi":190,"as_of":"2025-03-15","note":"last disclosed $40M Mar 2025; upper bound = that figure grown at the front-end cohort's ~3\u00d7/yr over 17 months.","mid":87.17797887081348},"valuation":{"kind":"range_stale","point":null,"lo":700,"hi":2800,"as_of":"2025-01-15","note":"$700M Jan 2025 Series B; later rounds widely referenced but undisclosed.","mid":1400.0},"sources":["https://sacra.com/c/bolt-new/"],"arr_mid":87.17797887081348,"val_mid":1400.0,"shape":"box"},{"name":"Base44 (Wix)","layer":"frontend","audience":"consumer","gtm":"consumer","technical":"non-technical","category":"Prompt-to-app builder","similarity":7,"desc":"Backend-first prompt-to-app (db, auth, hosting) acquired by Wix. Product-line, not a standalone company.","arr":{"kind":"point","point":100,"lo":null,"hi":null,"as_of":"2026-02-01","note":"~$100M ARR stated by Wix management on the Q4 2025 earnings call.","mid":100},"valuation":{"kind":"range_modeled","point":null,"lo":1700.0,"hi":2910.0,"as_of":null,"note":"no standalone valuation; band = ARR \u00d7 peer-multiple IQR (17\u00d7\u201329.1\u00d7)","mid":2224.1852440837747},"sources":["https://finance.yahoo.com/news/wix-com-q4-earnings-call-165003576.html"],"arr_mid":100,"val_mid":2224.1852440837747,"shape":"vband"},{"name":"Emergent","layer":"frontend","audience":"consumer","gtm":"consumer","technical":"non-technical","category":"Prompt-to-app builder","similarity":7,"desc":"Autonomous-agent app builder for non-technical founders. Fastest launch-to-unicorn in the consumer builder set.","arr":{"kind":"point","point":120,"lo":null,"hi":null,"as_of":"2026-07-15","note":"$120M annualised run-rate disclosed at Series C.","mid":120},"valuation":{"kind":"point","point":1500,"lo":null,"hi":null,"as_of":"2026-07-15","note":"$130M Series C led by Creaegis, post-money.","mid":1500},"sources":["https://techcrunch.com/2026/07/15/indian-ai-coding-startup-emergent-becomes-a-unicorn-just-over-a-year-after-launch/"],"arr_mid":120,"val_mid":1500,"shape":"point"},{"name":"Framer","layer":"frontend","audience":"consumer","gtm":"consumer","technical":"non-technical","category":"Visual site builder","similarity":4,"desc":"Canvas that publishes production sites, with AI layout. Adjacent visual-builder incumbent, not an AI-eng tool.","arr":{"kind":"range_reported","point":null,"lo":50,"hi":100,"as_of":"2025-08-28","note":"$50M disclosed at Aug 2025 Series D; company target $100M for 2026.","mid":70.71067811865476},"valuation":{"kind":"point","point":2000,"lo":null,"hi":null,"as_of":"2025-08-28","note":"$100M Series D led by Meritech.","mid":2000},"sources":["https://sacra.com/c/framer/"],"arr_mid":70.71067811865476,"val_mid":2000,"shape":"hband"},{"name":"Cursor (Anysphere)","layer":"frontend","audience":"developer","gtm":"both","technical":"technical","category":"AI code editor","similarity":5,"desc":"AI-first VS Code fork. Ceiling reference for how developer tooling is priced \u2014 not a pipeline product. Interviews in the pitch found enterprise AI eng happening here, not in Relevance.","arr":{"kind":"range_reported","point":null,"lo":3000,"hi":4000,"as_of":"2026-06-16","note":"$3B annualised late Apr 2026 and $4B+ by Jun 2026; self-reported run-rate, not audited.","mid":3464.1016151377544},"valuation":{"kind":"point","point":60000,"lo":null,"hi":null,"as_of":"2026-06-16","note":"SpaceX all-stock acquisition announced 16 Jun 2026, pending close \u2014 a deal price, not a financing mark.","mid":60000},"sources":["https://www.forbes.com/sites/sandycarter/2026/06/16/spacex-buys-cursor-in-largest-startup-acquisition-ever-at-60-billion/"],"arr_mid":3464.1016151377544,"val_mid":60000,"shape":"hband"},{"name":"Replit","layer":"frontend","audience":"developer","gtm":"both","technical":"both","category":"Browser IDE + agent","similarity":6,"desc":"Browser IDE with an autonomous build agent. Spans consumer and developer \u2014 the closest full-stack analog to Spine's graduated complexity.","arr":{"kind":"range_reported","point":null,"lo":150,"hi":1000,"as_of":"2025-09-10","note":"last disclosed $150M Sep 2025; company guided to $1B by end-2026 and did not update at the Series D.","mid":387.2983346207417},"valuation":{"kind":"point","point":9000,"lo":null,"hi":null,"as_of":"2026-03-11","note":"$400M Series D led by Georgian, 11 Mar 2026.","mid":9000},"sources":["https://fnex.com/replit-raises-400m-at-9b-valuation/"],"arr_mid":387.2983346207417,"val_mid":9000,"shape":"hband"},{"name":"Vercel","layer":"frontend","audience":"developer","gtm":"enterprise","technical":"technical","category":"Front-end cloud + AI tooling","similarity":4,"desc":"Next.js hosting/deploy. Spine's hosting/share/API surface is the AI-eng equivalent of what Vercel is for front ends.","arr":{"kind":"point","point":340,"lo":null,"hi":null,"as_of":"2026-02-01","note":"Sacra estimate, up from $305M at end-2025.","mid":340},"valuation":{"kind":"range_reported","point":null,"lo":8100,"hi":9300,"as_of":"2025-09-30","note":"$9.3B primary mark from Sep 2025 Series F vs ~$8.1B implied by secondary blocks.","mid":8679.285684893659},"sources":["https://sacra.com/c/vercel/"],"arr_mid":340,"val_mid":8679.285684893659,"shape":"vband"},{"name":"v0 (Vercel)","layer":"frontend","audience":"developer","gtm":"consumer","technical":"technical","category":"Prompt-to-UI generator","similarity":6,"desc":"Text-to-UI inside Vercel. Product line \u2014 neither v0 ARR nor a v0 valuation is broken out.","arr":{"kind":"range_modeled","point":null,"lo":30,"hi":90,"as_of":"2026-02-01","note":"not broken out; band from Vercel's $340M total ARR vs v0's reported 4M users on a $20/mo tier, majority Teams/Enterprise.","mid":51.96152422706632},"valuation":{"kind":"range_modeled","point":null,"lo":510.0,"hi":2619.0,"as_of":null,"note":"no standalone valuation; band = ARR \u00d7 peer-multiple IQR (17\u00d7\u201329.1\u00d7)","mid":1155.7205544594246},"sources":["https://sacra.com/c/vercel/"],"arr_mid":51.96152422706632,"val_mid":1155.7205544594246,"shape":"box"},{"name":"Webflow","layer":"frontend","audience":"developer","gtm":"consumer","technical":"both","category":"Visual site builder","similarity":3,"desc":"Visual development with CMS and code export. Incumbent the AI builders are attacking; included as a mature visual-builder multiple.","arr":{"kind":"point","point":212.5,"lo":null,"hi":null,"as_of":"2026-05-01","note":"widely reported ARR, stable series.","mid":212.5},"valuation":{"kind":"point","point":4000,"lo":null,"hi":null,"as_of":"2025-01-01","note":"last primary mark.","mid":4000},"sources":["https://productgrowth.in/tools/no-code/webflow/"],"arr_mid":212.5,"val_mid":4000,"shape":"point"},{"name":"Retool","layer":"frontend","audience":"developer","gtm":"enterprise","technical":"technical","category":"Internal-app builder","similarity":5,"desc":"Low-code internal tools now shipping AppGen + Agents. Developer-built UIs on live data \u2014 closest front-end analog to Spine's inference/run UI for enterprises.","arr":{"kind":"point","point":120,"lo":null,"hi":null,"as_of":"2025-10-01","note":"Sacra: $120M ARR Oct 2025, up from $90M end-2024.","mid":120},"valuation":{"kind":"range_reported","point":null,"lo":2700,"hi":3200,"as_of":"2022-07-01","note":"Series C Jul 2022 at $3.2B; UpMarket also cites $2.7B. Still the 2026 cited mark \u2014 four years stale as a primary.","mid":2939.3876913398135},"sources":["https://sacra.com/c/retool/"],"arr_mid":120,"val_mid":2939.3876913398135,"shape":"vband"},{"name":"Zapier","layer":"backend","audience":"consumer","gtm":"both","technical":"non-technical","category":"No-code iPaaS","similarity":6,"desc":"The consumer automation incumbent. Spine's share/marketplace/earnings motion is the AI-eng version of Zapier's 'anyone can publish a zap'.","arr":{"kind":"point","point":420,"lo":null,"hi":null,"as_of":"2026-03-01","note":"$420M ARR in Q1 2026 (ARR Club); 3.8M users, 69% of Fortune 1000. Profitable on $2.7M raised.","mid":420},"valuation":{"kind":"point","point":5000,"lo":null,"hi":null,"as_of":"2026-02-01","note":"widely cited $5B mark (2021 secondary, still the 2026 figure in Sacra/AskCyborg).","mid":5000},"sources":["https://www.arr.club/signal/zapier-arr-hit-420m-in-q1-2026"],"arr_mid":420,"val_mid":5000,"shape":"point"},{"name":"Make (Celonis)","layer":"backend","audience":"consumer","gtm":"enterprise","technical":"non-technical","category":"Visual automation","similarity":5,"desc":"Visual orchestration inside Celonis (acquired Integromat 2020). Product line, not a standalone company.","arr":{"kind":"range_stale","point":null,"lo":52.6,"hi":80,"as_of":"2025-09-02","note":"Latka $52.6M Sep 2025; upper bound = ~1.5\u00d7/yr cohort growth over 11 months.","mid":64.86909896090742},"valuation":{"kind":"range_modeled","point":null,"lo":894.2,"hi":2328.0,"as_of":null,"note":"no standalone valuation; band = ARR \u00d7 peer-multiple IQR (17\u00d7\u201329.1\u00d7)","mid":1442.808927058604},"sources":["https://getlatka.com/companies/make.com"],"arr_mid":64.86909896090742,"val_mid":1442.808927058604,"shape":"box"},{"name":"Gumloop","layer":"backend","audience":"consumer","gtm":"enterprise","technical":"non-technical","category":"No-code AI workflow","similarity":8,"desc":"Visual canvas of editable Python nodes; shareable agents. Closest consumer back-end analog to Spine's non-technical builder + share.","arr":{"kind":"range_reported","point":null,"lo":10,"hi":25,"as_of":"2026-03-12","note":"Series B coverage cited ARR north of $10M with 300% QoQ growth. Latka $1.1M is pre-round and stale. Upper bound spans StartupHub's $13.5M band plus implied growth.","mid":15.811388300841896},"valuation":{"kind":"range_modeled","point":null,"lo":170.0,"hi":727.5,"as_of":null,"note":"no standalone valuation; band = ARR \u00d7 peer-multiple IQR (17\u00d7\u201329.1\u00d7)","mid":351.6745654721137},"sources":["https://gmacouncil.org/news/gumloop-raises-50m-series-b-led-by-benchmark-to-empower-no-code-ai-agent-building-for-enterprise-workflows-automating-multi-step-tasks-across-marketing-to-finance","https://betakit.com/vancouver-founded-gumloop-sticks-50-million-usd-series-b-round-to-let-employees-build-their-own-ai-agents/"],"arr_mid":15.811388300841896,"val_mid":351.6745654721137,"shape":"box"},{"name":"Relevance AI","layer":"backend","audience":"consumer","gtm":"enterprise","technical":"non-technical","category":"No-code AI agent builder","similarity":6,"desc":"No-code 'AI workforce' builder. The current pitch's category leader \u2014 and, from KPMG use, a demo tool rather than production infrastructure.","arr":{"kind":"range_reported","point":null,"lo":12.6,"hi":13.5,"as_of":"2026-03-01","note":"Latka ~$12.6M (2025); Finro Q1 2026 cites ~$13M. No company-disclosed ARR at the May 2025 Series B.","mid":13.042239071570494},"valuation":{"kind":"range_reported","point":null,"lo":37.8,"hi":120,"as_of":"2026-03-01","note":"Latka model $37.8M vs Finro Q1 2026 ~$120M on ~$13M revenue (9.5\u00d7). Series B $24M (Bessemer, May 2025) did not disclose post-money.","mid":67.34983296193094},"sources":["https://techcrunch.com/2025/05/06/relevance-ai-raises-24m-series-b-to-help-anyone-build-teams-of-ai-agents/","https://www.finrofca.com/news/ai-agents-valuation-multiples-q1-2026"],"arr_mid":13.042239071570494,"val_mid":67.34983296193094,"shape":"box"},{"name":"n8n","layer":"backend","audience":"developer","gtm":"enterprise","technical":"technical","category":"Visual workflow + code","similarity":9,"desc":"Fair-code visual workflows with JS/Python nodes, self-host, evals, agents. The original Spine brief ('n8n-style AI engineering'). SAP strategic investment May 2026.","arr":{"kind":"range_stale","point":null,"lo":40,"hi":130,"as_of":"2025-07-01","note":"Sacra: $40M ARR Jul 2025. SAP's May 2026 $5.2B mark did not refresh ARR. Upper bound = 3\u00d7/yr cohort growth over 13 months. 10\u00d7 YoY was claimed at Series C; that is not used as the cap.","mid":72.11102550927978},"valuation":{"kind":"point","point":5200,"lo":null,"hi":null,"as_of":"2026-05-12","note":"SAP strategic investment values n8n at $5.2B (company blog + Bloomberg), up from $2.5B Accel Series C Oct 2025.","mid":5200},"sources":["https://blog.n8n.io/n8n-sap/","https://sacra.com/c/n8n/"],"arr_mid":72.11102550927978,"val_mid":5200,"shape":"hband"},{"name":"LangChain","layer":"backend","audience":"developer","gtm":"enterprise","technical":"technical","category":"Agent engineering platform","similarity":7,"desc":"Open-source agents + LangSmith evals/observability + a no-code builder. Developer platform Spine overlaps on evals, tracing, and typed chains.","arr":{"kind":"range_reported","point":null,"lo":16,"hi":35,"as_of":"2025-10-21","note":"TechCrunch Jul 2025 pegged $12\u201316M; at Series B a spokesperson said that was 'low for where we are today'. Band from that floor to ~2\u00d7 over the following year.","mid":23.664319132398465},"valuation":{"kind":"point","point":1250,"lo":null,"hi":null,"as_of":"2025-10-21","note":"$125M Series B led by IVP at $1.25B, Oct 2025.","mid":1250},"sources":["https://www.langchain.com/blog/series-b","https://techcrunch.com/2025/10/21/open-source-agentic-startup-langchain-hits-1-25b-valuation/"],"arr_mid":23.664319132398465,"val_mid":1250,"shape":"hband"},{"name":"Dify AI","layer":"backend","audience":"developer","gtm":"enterprise","technical":"technical","category":"LLM app dev platform","similarity":9,"desc":"Open-source visual agentic workflows + production infra. Closest shipped product to Spine (typed-ish, hosted, OSS). 1.4M self-hosted instances.","arr":{"kind":"range_reported","point":null,"lo":3,"hi":7,"as_of":"2026-03-09","note":"~$3M ARR in 2025 third-party estimates (ToolJunction/EveryDev). Not disclosed at the $30M Pre-A. Upper bound is the old pitch's modeled $7M from the $180M \u00f7 ~25\u00d7 peer multiple.","mid":4.58257569495584},"valuation":{"kind":"point","point":180,"lo":null,"hi":null,"as_of":"2026-03-09","note":"$30M Series Pre-A at $180M, led by HSG, 9 Mar 2026 (BusinessWire).","mid":180},"sources":["https://www.businesswire.com/news/home/20260309511426/en/Dify-Raises-%2430-million-Series-Pre-A-to-Power-Enterprise-Grade-Agentic-Workflows"],"arr_mid":4.58257569495584,"val_mid":180,"shape":"hband"},{"name":"Windmill","layer":"backend","audience":"developer","gtm":"enterprise","technical":"technical","category":"Script-to-workflow platform","similarity":8,"desc":"Open-source scripts \u2192 workflows, internal apps, UIs. Code-first + hosting \u2014 Spine's TypeScript/Python steps and export story.","arr":{"kind":"range_reported","point":null,"lo":2.7,"hi":4.0,"as_of":"2026-06-01","note":"$2.7M ARR in 2024 disclosures; founder-adjacent June 2026 post claimed $4M ARR and profitability on a 7-person team.","mid":3.286335345030997},"valuation":{"kind":"range_modeled","point":null,"lo":45.9,"hi":116.4,"as_of":null,"note":"no standalone valuation; band = ARR \u00d7 peer-multiple IQR (17\u00d7\u201329.1\u00d7)","mid":73.09418581528904},"sources":["https://productgrowth.in/tools/automation/windmill/"],"arr_mid":3.286335345030997,"val_mid":73.09418581528904,"shape":"box"},{"name":"Vellum AI","layer":"backend","audience":"developer","gtm":"enterprise","technical":"technical","category":"LLM app dev platform","similarity":8,"desc":"Build / test / evaluate / deploy production LLM apps. Strongest overlap on Spine's testing tab and eval harness.","arr":{"kind":"range_stale","point":null,"lo":3.5,"hi":7.7,"as_of":"2024-12-01","note":"Latka ~$3.5M (2024). $20M Series A Jul 2025 did not disclose ARR; upper bound = ~2\u00d7/yr over ~13 months.","mid":5.191338940966964},"valuation":{"kind":"range_modeled","point":null,"lo":59.5,"hi":224.1,"as_of":null,"note":"no standalone valuation; band = ARR \u00d7 peer-multiple IQR (17\u00d7\u201329.1\u00d7)","mid":115.47272405204616},"sources":["https://vellum.ai/blog/announcing-our-20m-series-a"],"arr_mid":5.191338940966964,"val_mid":115.47272405204616,"shape":"box"},{"name":"StackAI","layer":"backend","audience":"developer","gtm":"enterprise","technical":"both","category":"No-code AI agent platform","similarity":7,"desc":"Enterprise no-code agents across Salesforce/ERP. Realised exit: Asana acquired it for ~$75M cash, 28 May 2026.","arr":{"kind":"range_stale","point":null,"lo":2.9,"hi":4.4,"as_of":"2025-06-01","note":"2025 third-party ~$2.9M. Asana said the deal adds ~50 bps to FY27 growth \u2014 not a current ARR. Upper bound = 1.5\u00d7 over a year.","mid":3.57211421989835},"valuation":{"kind":"point","point":75,"lo":null,"hi":null,"as_of":"2026-05-28","note":"Asana acquisition price ~$75M cash (company 8-K / TechCrunch).","mid":75},"sources":["https://techcrunch.com/2026/05/28/asana-acquires-no-code-agent-builder-stack-ai/"],"arr_mid":3.57211421989835,"val_mid":75,"shape":"hband"},{"name":"Flowise","layer":"backend","audience":"developer","gtm":"consumer","technical":"technical","category":"Visual LLM workflow builder","similarity":7,"desc":"Open-source drag-and-drop LLM/agent builder, self-hostable. The OSS floor of the back-end developer box.","arr":{"kind":"range_reported","point":null,"lo":0.6,"hi":1.0,"as_of":"2026-01-01","note":"TrueRecurring $50k MRR Jan 2026 ($0.6M ARR); Latka $1M (late 2024).","mid":0.7745966692414834},"valuation":{"kind":"range_modeled","point":null,"lo":2.3,"hi":10.0,"as_of":"2025-04-10","note":"Latka M&A-offer model $2.3M; upper bound is a thin slice of the peer-multiple IQR on $0.6\u20131.0M ARR.","mid":4.795831523312719},"sources":["https://getlatka.com/companies/flowiseai.com"],"arr_mid":0.7745966692414834,"val_mid":4.795831523312719,"shape":"box"},{"name":"BoundaryML (BAML)","layer":"backend","audience":"developer","gtm":"enterprise","technical":"technical","category":"Typed LLM output / codegen","similarity":8,"desc":"DSL for typed structured LLM output and multi-language codegen. Spine ships BAML as an export target.","arr":{"kind":"range_stale","point":null,"lo":0.33,"hi":0.6,"as_of":"2025-06-01","note":"2025 third-party ~$0.33M; bootstrapped, no VC round found. Too small to plot reliably.","mid":0.4449719092257398},"valuation":{"kind":"range_modeled","point":null,"lo":5.6,"hi":17.5,"as_of":null,"note":"no standalone valuation; band = ARR \u00d7 peer-multiple IQR (17\u00d7\u201329.1\u00d7)","mid":9.899494936611665},"sources":[],"arr_mid":0.4449719092257398,"val_mid":9.899494936611665,"shape":"box"},{"name":"Spine (m36 potential)","layer":"spine","audience":"both","gtm":"both","technical":"both","category":"Typed AI-eng platform","similarity":10,"is_spine":true,"desc":"Pitch SOM: $8M base / $40M bull ARR by month 36. Valuation band = those ARRs \u00d7 the 10\u00d7 (Zapier-like) to 26\u00d7 (Lovable-like) observed multiple range \u2014 not a current mark. Asking today is $4M (5% for $200k).","arr":{"kind":"range_reported","point":null,"lo":8,"hi":40,"as_of":"2026-08-13","note":"Pitch SOM base $8M / bull $40M ARR by month 36. Not current revenue.","mid":17.88854381999832},"valuation":{"kind":"range_modeled","point":null,"lo":80,"hi":1040,"as_of":"2026-08-13","note":"Implied: $8M \u00d7 10\u00d7 (consumer-automation floor) to $40M \u00d7 26\u00d7 (Lovable multiple). Geometric centre is a scenario, not a round.","mid":288.44410203711914},"sources":[],"arr_mid":17.88854381999832,"val_mid":288.44410203711914,"shape":"box"}]};
+
+const DATA = PAYLOAD.companies;
+const FIT  = PAYLOAD.fit;
+const PM   = PAYLOAD.peer_multiple;
+
+function fmtM(m){
+  if(m == null) return "\u2014";
+  if(m >= 1000) return "$" + (m/1000).toFixed(m >= 10000 ? 0 : 1) + "B";
+  if(m >= 10)   return "$" + Math.round(m) + "M";
+  return "$" + m.toFixed(1) + "M";
+}
+function fmtAxis(v){ return v >= 1000 ? "$" + (v/1000) + "B" : "$" + v + "M"; }
+function metricText(m){
+  if(m.kind === "point") return fmtM(m.point);
+  if(m.lo != null)       return fmtM(m.lo) + "\u2013" + fmtM(m.hi);
+  return "\u2014";
+}
+const BASIS = { point:"point", range_reported:"reported", range_stale:"stale",
+                range_modeled:"modeled", none:"none" };
+
+const QUAD = {
+  "frontend-consumer":  { fill:"#3987e5", ring:"#86b6ef", label:"Front-end \u00d7 consumer" },
+  "frontend-developer": { fill:"#8b7cf7", ring:"#c4b8ff", label:"Front-end \u00d7 developer" },
+  "backend-consumer":   { fill:"#e5a039", ring:"#f0c98a", label:"Back-end \u00d7 consumer" },
+  "backend-developer":  { fill:"#3ecf8e", ring:"#8eebc0", label:"Back-end \u00d7 developer" },
+  "spine-both":         { fill:"#f0c14b", ring:"#ffe08a", label:"Spine (all four)" },
+};
+function quadKey(d){ return d.layer + "-" + d.audience; }
+function quadOf(d){ return QUAD[quadKey(d)] || QUAD["spine-both"]; }
+function isSpine(d){ return !!d.is_spine; }
+const COMPS = DATA.filter(d => !isSpine(d));
+
+DATA.forEach(d => {
+  d.quadLabel = quadOf(d).label;
+  d.mult = (d.val_mid && d.arr_mid) ? d.val_mid / d.arr_mid : null;
+});
+
+/* ---------- 2x2 cells ---------- */
+function quadStats(layer, aud){
+  const sub = COMPS.filter(d => d.layer === layer && d.audience === aud);
+  const pts = sub.filter(d => d.valuation.kind === "point");
+  const pointSum = pts.reduce((s,d) => s + d.valuation.point, 0);
+  const midSum = sub.reduce((s,d) => s + (d.val_mid || 0), 0);
+  const top = [...sub].sort((a,b) => (b.val_mid||0) - (a.val_mid||0))[0];
+  return { n: sub.length, pointSum, midSum, top, sub };
+}
+const QMETA = [
+  { id:"q-fe-con", filter:"frontend-consumer", layer:"frontend", aud:"consumer",
+    spine:"Spine: landing-page agent + non-technical builder (the Lovable motion)." },
+  { id:"q-fe-dev", filter:"frontend-developer", layer:"frontend", aud:"developer",
+    spine:"Spine: hosted inference UI, code export, custom LLM providers." },
+  { id:"q-be-con", filter:"backend-consumer", layer:"backend", aud:"consumer",
+    spine:"Spine: consumer Run, share links, marketplace, earnings. This is the $13M ARR cell." },
+  { id:"q-be-dev", filter:"backend-developer", layer:"backend", aud:"developer",
+    spine:"Spine: typed structures, pipeline, testing, logging, evals. Closest products: Dify, n8n." },
+];
+QMETA.forEach(q => {
+  const s = quadStats(q.layer, q.aud);
+  const col = QUAD[q.filter];
+  document.getElementById(q.id).innerHTML = `
+    <div class="q-name"><span class="dot" style="background:${col.fill}"></span>${col.label}</div>
+    <div class="q-lead">${s.top.name} \u00b7 ${metricText(s.top.valuation)} / ${metricText(s.top.arr)} ARR</div>
+    <div class="q-nums">${fmtM(s.pointSum) === "\u2014" ? fmtM(s.midSum) : fmtM(s.pointSum)}</div>
+    <div class="q-note">${s.n} tools \u00b7 point-valuation sum ${fmtM(s.pointSum)}; mid-sum ${fmtM(s.midSum)}</div>
+    <div class="spine-fit">${q.spine}</div>`;
+});
+
+/* ---------- stat tiles ---------- */
+const plottedAll = DATA.filter(d => d.shape !== "omitted");
+let nPoint = 0, nBand = 0;
+COMPS.forEach(d => ["arr","valuation"].forEach(k => {
+  if(d[k].kind === "point") nPoint++; else nBand++;
+}));
+const totalVal = COMPS.filter(d => d.valuation.kind === "point")
+                      .reduce((s,d) => s + d.valuation.point, 0);
+const nValPoints = COMPS.filter(d => d.valuation.kind === "point").length;
+const nBothAxes = COMPS.filter(d => d.arr_mid && d.val_mid
+  && d.arr.kind !== "range_modeled" && d.valuation.kind !== "range_modeled").length;
+const beCon = quadStats("backend","consumer");
+
+const tiles = [
+  { label:"Point valuations (ex-Spine)", value: fmtM(totalVal),
+    note: nValPoints + " of " + COMPS.length + " comps have a valuation solid enough to be a point. Cursor $60B is a deal price inside this sum." },
+  { label:"Peer multiple (p25 / med / p75)", value: PM.p25 + "\u00d7 / " + PM.median + "\u00d7 / " + PM.p75 + "\u00d7",
+    note:"valuation \u00f7 ARR across " + PM.n + " comps with a non-modeled value on both axes \u2014 IQR used to fill modeled bands" },
+  { label:"The $13M ARR cell", value: fmtM(beCon.midSum),
+    note:"Back-end \u00d7 consumer mid-valuation. Relevance is ~$13M ARR; Zapier ($5B / $420M) is the cell incumbent. Smallest of the four cells." },
+  { label:"Spine m36 band", value: "$80M\u2013$1.0B",
+    note:"SOM $8\u201340M ARR \u00d7 10\u201326\u00d7. Asking now is $4M and is not on the scatter." },
+];
+document.getElementById('statTiles').innerHTML = tiles.map(t => `
+  <div class="tile">
+    <div class="label">${t.label}</div>
+    <div class="value">${t.value}</div>
+    <div class="note">${t.note}</div>
+  </div>`).join('');
+
+/* ---------- chart ---------- */
+const W = 1140, H = 560, M = {top: 20, right: 40, bottom: 52, left: 74};
+const plotW = W - M.left - M.right, plotH = H - M.top - M.bottom;
+
+const arrDomain = [0.4, 6000];
+const valDomain = [4, 90000];
+
+const lg = Math.log10;
+function xScale(v){
+  const t = (lg(v) - lg(arrDomain[0])) / (lg(arrDomain[1]) - lg(arrDomain[0]));
+  return M.left + t * plotW;
+}
+function yScale(v){
+  const t = (lg(v) - lg(valDomain[0])) / (lg(valDomain[1]) - lg(valDomain[0]));
+  return M.top + (1 - t) * plotH;
+}
+function alphaFor(sim){ return 0.20 + 0.72 * (sim / 10); }
+const clampX = v => Math.min(Math.max(v, arrDomain[0]), arrDomain[1]);
+const clampY = v => Math.min(Math.max(v, valDomain[0]), valDomain[1]);
+
+const xTicks = [1, 10, 50, 100, 500, 1000, 5000];
+const yTicks = [10, 100, 500, 1000, 5000, 10000, 50000];
+
+const LABELS = {
+  "Cursor (Anysphere)":    {ref:"left",        dx:-10, dy:-12, anchor:"end"},
+  "Lovable":               {ref:"center",      dx: 13, dy: -9, anchor:"start"},
+  "Replit":                {ref:"right",       dx: 10, dy:  4, anchor:"start"},
+  "Vercel":                {ref:"bottom",      dx:  0, dy: 18, anchor:"middle"},
+  "Webflow":               {ref:"center",      dx: 13, dy:  4, anchor:"start"},
+  "Zapier":                {ref:"left",        dx:-10, dy:  4, anchor:"end"},
+  "n8n":                   {ref:"right",       dx: 10, dy: -8, anchor:"start"},
+  "LangChain":             {ref:"right",       dx: 10, dy:  4, anchor:"start"},
+  "Dify AI":               {ref:"left",        dx: -9, dy: -8, anchor:"end"},
+  "Relevance AI":          {ref:"bottom",      dx:  0, dy: 16, anchor:"middle"},
+  "Gumloop":               {ref:"top",         dx:  8, dy: -8, anchor:"start"},
+  "Emergent":              {ref:"bottom",      dx:  8, dy: 14, anchor:"start"},
+  "Retool":                {ref:"left",        dx: -9, dy:  3, anchor:"end"},
+  "Spine (m36 potential)": {ref:"right",       dx: 10, dy: -6, anchor:"start"},
+};
+
+function geom(d){
+  const a = d.arr, v = d.valuation;
+  const ax = a.kind === "point" ? [a.point, a.point] : [clampX(a.lo), clampX(a.hi)];
+  const vy = v.kind === "point" ? [v.point, v.point] : [clampY(v.lo), clampY(v.hi)];
+  return {
+    x1: xScale(ax[0]), x2: xScale(ax[1]),
+    y1: yScale(vy[1]),
+    y2: yScale(vy[0]),
+    cx: xScale(clampX(d.arr_mid)), cy: yScale(clampY(d.val_mid)),
+  };
+}
+
+let HITBOX = [];
+let activeFilter = "all";
+
+function visible(d){
+  if(isSpine(d)) return true;
+  if(activeFilter === "all") return true;
+  return quadKey(d) === activeFilter;
+}
+
+function drawChart(){
+  HITBOX = [];
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Log-log scatter of ARR against valuation across four Spine-relevant markets">`;
+
+  xTicks.forEach(v => {
+    const x = xScale(v);
+    svg += `<line class="grid-line" x1="${x}" x2="${x}" y1="${M.top}" y2="${M.top+plotH}"></line>`;
+    svg += `<text class="tick-label" x="${x}" y="${M.top+plotH+16}" text-anchor="middle">${fmtAxis(v)}</text>`;
+  });
+  yTicks.forEach(v => {
+    const y = yScale(v);
+    svg += `<line class="grid-line" x1="${M.left}" x2="${M.left+plotW}" y1="${y}" y2="${y}"></line>`;
+    svg += `<text class="tick-label" x="${M.left-8}" y="${y+3}" text-anchor="end">${fmtAxis(v)}</text>`;
+  });
+  svg += `<line class="axis-line" x1="${M.left}" x2="${M.left+plotW}" y1="${M.top+plotH}" y2="${M.top+plotH}"></line>`;
+  svg += `<line class="axis-line" x1="${M.left}" x2="${M.left}" y1="${M.top}" y2="${M.top+plotH}"></line>`;
+  svg += `<text class="axis-title" x="${M.left+plotW/2}" y="${H-8}" text-anchor="middle">ARR, $M (log scale)</text>`;
+  svg += `<text class="axis-title" transform="translate(18,${M.top+plotH/2}) rotate(-90)" text-anchor="middle">Valuation, $M (log scale)</text>`;
+
+  if(FIT.a){
+    const steps = 60; let path = '';
+    for(let i = 0; i <= steps; i++){
+      const lx = lg(arrDomain[0]) + (i/steps)*(lg(arrDomain[1]) - lg(arrDomain[0]));
+      const av = Math.pow(10, lx);
+      const vv = FIT.a * Math.pow(av, FIT.b);
+      path += (i === 0 ? 'M' : 'L') + xScale(av).toFixed(1) + ',' + yScale(clampY(vv)).toFixed(1) + ' ';
+    }
+    svg += `<path d="${path}" fill="none" stroke="var(--text-muted)" stroke-width="1.6" stroke-dasharray="5 4" opacity="0.7"></path>`;
+  }
+
+  const BAND_W = 11;
+  const drawOrder = DATA.map((d, i) => ({d, i}))
+    .filter(o => o.d.shape !== "omitted" && visible(o.d))
+    .sort((p, q) => {
+      const area = o => { const g = geom(o); return Math.max(g.x2-g.x1, 6) * Math.max(g.y2-g.y1, 6); };
+      return area(q.d) - area(p.d);
+    });
+
+  drawOrder.forEach(({d, i}) => {
+    const g = geom(d), a = alphaFor(d.similarity);
+    const col = quadOf(d);
+    const fill = `fill:${col.fill}`;
+    const stroke = `stroke:${col.ring}`;
+    svg += `<g class="mark" data-i="${i}">`;
+
+    if(d.shape === "point"){
+      svg += `<circle cx="${g.cx}" cy="${g.cy}" r="8" style="${fill};opacity:${a.toFixed(2)}"></circle>`;
+      svg += `<circle class="pt-ring-surface" cx="${g.cx}" cy="${g.cy}" r="8"></circle>`;
+    } else if(d.shape === "vband"){
+      const x = g.cx - BAND_W/2;
+      const h = Math.max(g.y2 - g.y1, BAND_W);
+      const yTop = (g.y2 - g.y1) < BAND_W ? g.cy - BAND_W/2 : g.y1;
+      svg += `<rect x="${x}" y="${yTop}" width="${BAND_W}" height="${h}" rx="${BAND_W/2}" style="${fill};opacity:${(a*0.42).toFixed(2)}"></rect>`;
+      svg += `<rect x="${x}" y="${yTop}" width="${BAND_W}" height="${h}" rx="${BAND_W/2}" fill="none" stroke-width="1.2" stroke-dasharray="3 2.5" style="${stroke};opacity:${(a*0.9).toFixed(2)}"></rect>`;
+      svg += `<line x1="${x+1}" x2="${x+BAND_W-1}" y1="${g.cy}" y2="${g.cy}" stroke-width="2" stroke-linecap="round" style="stroke:${col.fill};opacity:${a.toFixed(2)}"></line>`;
+    } else if(d.shape === "hband"){
+      const y = g.cy - BAND_W/2;
+      const w = Math.max(g.x2 - g.x1, BAND_W);
+      const xL = (g.x2 - g.x1) < BAND_W ? g.cx - BAND_W/2 : g.x1;
+      svg += `<rect x="${xL}" y="${y}" width="${w}" height="${BAND_W}" rx="${BAND_W/2}" style="${fill};opacity:${(a*0.42).toFixed(2)}"></rect>`;
+      svg += `<rect x="${xL}" y="${y}" width="${w}" height="${BAND_W}" rx="${BAND_W/2}" fill="none" stroke-width="1.2" stroke-dasharray="3 2.5" style="${stroke};opacity:${(a*0.9).toFixed(2)}"></rect>`;
+      svg += `<line x1="${g.cx}" x2="${g.cx}" y1="${y+1}" y2="${y+BAND_W-1}" stroke-width="2" stroke-linecap="round" style="stroke:${col.fill};opacity:${a.toFixed(2)}"></line>`;
+    } else {
+      const w = Math.max(g.x2 - g.x1, BAND_W), h = Math.max(g.y2 - g.y1, BAND_W);
+      const edgeW = isSpine(d) ? 2.0 : 1.2;
+      svg += `<rect x="${g.x1}" y="${g.y1}" width="${w}" height="${h}" rx="4" style="${fill};opacity:${(a*(isSpine(d)?0.22:0.15)).toFixed(2)}"></rect>`;
+      svg += `<rect x="${g.x1}" y="${g.y1}" width="${w}" height="${h}" rx="4" fill="none" stroke-width="${edgeW}" stroke-dasharray="3 2.5" style="${stroke};opacity:${(a*0.95).toFixed(2)}"></rect>`;
+      svg += `<line x1="${g.cx-4}" x2="${g.cx+4}" y1="${g.cy}" y2="${g.cy}" stroke-width="1.6" stroke-linecap="round" style="${stroke};opacity:${a.toFixed(2)}"></line>`;
+      svg += `<line x1="${g.cx}" x2="${g.cx}" y1="${g.cy-4}" y2="${g.cy+4}" stroke-width="1.6" stroke-linecap="round" style="${stroke};opacity:${a.toFixed(2)}"></line>`;
+    }
+
+    const pad = 7;
+    const bx1 = Math.min(g.x1, g.cx) - pad, bx2 = Math.max(g.x2, g.cx) + pad;
+    const by1 = Math.min(g.y1, g.cy) - pad, by2 = Math.max(g.y2, g.cy) + pad;
+    HITBOX.push({ i, x1:bx1, y1:by1, x2:bx2, y2:by2, area:(bx2-bx1)*(by2-by1) });
+
+    const L = LABELS[d.name];
+    if(L){
+      let lx, ly;
+      switch(L.ref){
+        case "left":        lx = g.x1; ly = g.cy; break;
+        case "right":       lx = g.x2; ly = g.cy; break;
+        case "top":         lx = g.cx; ly = g.y1; break;
+        case "bottom":      lx = g.cx; ly = g.y2; break;
+        case "topright":    lx = g.x2; ly = g.y1; break;
+        case "bottomright": lx = g.x2; ly = g.y2; break;
+        case "bottomleft":  lx = g.x1; ly = g.y2; break;
+        default:            lx = g.cx; ly = g.cy;
+      }
+      const short = isSpine(d) ? "Spine m36" : d.name.replace(/\s*\(.*?\)\s*/g, '');
+      svg += `<text class="pt-label" x="${lx + L.dx}" y="${ly + L.dy}" text-anchor="${L.anchor}" style="opacity:${Math.max(0.55, a).toFixed(2)}">${short}</text>`;
+    }
+    svg += `</g>`;
+  });
+
+  svg += `</svg>`;
+  document.getElementById('chartHost').innerHTML = svg;
+  HITBOX.sort((a, b) => a.area - b.area);
+}
+
+document.getElementById('fitLegend').innerHTML = FIT.a
+  ? `Fitted trend: val \u2248 ${FIT.a.toFixed(1)} \u00d7 ARR<sup>${FIT.b.toFixed(2)}</sup> (R\u00b2=${FIT.r2.toFixed(2)}, n=${FIT.n})`
+  : 'Fitted trend unavailable';
+
+(function paintAlphaGrad(){
+  const accent = getComputedStyle(document.getElementById('vizRoot')).getPropertyValue('--accent').trim();
+  const hex = accent.replace('#','');
+  const rgba = a => `rgba(${parseInt(hex.substring(0,2),16)},${parseInt(hex.substring(2,4),16)},${parseInt(hex.substring(4,6),16)},${a})`;
+  document.getElementById('alphaGrad').style.background =
+    `linear-gradient(90deg, ${rgba(alphaFor(0))}, ${rgba(alphaFor(10))})`;
+})();
+
+const FILTERS = [
+  { id:"all", label:"All four cells" },
+  { id:"frontend-consumer", label:"Front-end \u00d7 consumer" },
+  { id:"frontend-developer", label:"Front-end \u00d7 developer" },
+  { id:"backend-consumer", label:"Back-end \u00d7 consumer" },
+  { id:"backend-developer", label:"Back-end \u00d7 developer" },
+];
+function paintFilters(){
+  document.getElementById('filters').innerHTML = FILTERS.map(f =>
+    `<button class="chip${f.id===activeFilter?' active':''}" data-filter="${f.id}">${f.label}</button>`
+  ).join('');
+  document.querySelectorAll('#filters .chip').forEach(btn => {
+    btn.addEventListener('click', () => setFilter(btn.dataset.filter));
+  });
+  document.querySelectorAll('.quad-cell').forEach(cell => {
+    cell.classList.toggle('active', cell.dataset.filter === activeFilter);
+  });
+}
+function setFilter(id){
+  activeFilter = (activeFilter === id && id !== "all") ? "all" : id;
+  paintFilters();
+  drawChart();
+}
+document.querySelectorAll('.quad-cell').forEach(cell => {
+  cell.addEventListener('click', () => setFilter(cell.dataset.filter));
+});
+paintFilters();
+drawChart();
+
+/* ---------- hover ---------- */
+const tooltip = document.getElementById('tooltip');
+const chartHost = document.getElementById('chartHost');
+
+function multText(d){
+  const a = d.arr, v = d.valuation;
+  const lo = (v.lo != null ? v.lo : v.point) / (a.hi != null ? a.hi : a.point);
+  const hi = (v.hi != null ? v.hi : v.point) / (a.lo != null ? a.lo : a.point);
+  return Math.abs(hi - lo) < 0.05
+    ? lo.toFixed(1) + "\u00d7"
+    : lo.toFixed(1) + "\u2013" + hi.toFixed(1) + "\u00d7";
+}
+
+chartHost.addEventListener('mousemove', e => {
+  const svgEl = chartHost.querySelector('svg');
+  if(!svgEl) return;
+  const r = svgEl.getBoundingClientRect();
+  const px = (e.clientX - r.left) / r.width  * W;
+  const py = (e.clientY - r.top)  / r.height * H;
+  const inside = HITBOX.filter(h => px >= h.x1 && px <= h.x2 && py >= h.y1 && py <= h.y2);
+  if(!inside.length){ tooltip.style.opacity = 0; svgEl.style.cursor = 'default'; return; }
+  const hit = inside.reduce((best, h) => {
+    const dist = k => Math.hypot(px - (k.x1+k.x2)/2, py - (k.y1+k.y2)/2);
+    const db = dist(best), dh = dist(h);
+    return dh < db - 0.5 ? h : (Math.abs(dh - db) <= 0.5 && h.area < best.area ? h : best);
+  });
+  const d = DATA[hit.i];
+  svgEl.style.cursor = 'pointer';
+  const notes = ["arr","valuation"]
+    .filter(k => d[k].kind !== "point")
+    .map(k => `<div class="tt-flag"><strong style="color:var(--text-secondary)">${k === "arr" ? "ARR" : "Valuation"} (${BASIS[d[k].kind]}):</strong> ${d[k].note}</div>`)
+    .join('');
+  tooltip.innerHTML = `
+    <div class="tt-name">${d.name}</div>
+    <div class="tt-cat">${d.quadLabel} \u00b7 ${d.category} \u00b7 similarity ${d.similarity}/10</div>
+    <div class="tt-row"><span class="tt-k">Valuation</span><span class="tt-v">${metricText(d.valuation)}</span></div>
+    <div class="tt-row"><span class="tt-k">ARR</span><span class="tt-v">${metricText(d.arr)}</span></div>
+    <div class="tt-row"><span class="tt-k">Implied multiple</span><span class="tt-v">${multText(d)}</span></div>
+    <div class="tt-desc">${d.desc}</div>
+    ${notes}`;
+  tooltip.style.left = Math.min(e.clientX + 16, window.innerWidth - 356) + 'px';
+  tooltip.style.top  = Math.min(e.clientY + 16, window.innerHeight - tooltip.offsetHeight - 12) + 'px';
+  tooltip.style.opacity = 1;
+});
+chartHost.addEventListener('mouseleave', () => { tooltip.style.opacity = 0; });
+
+/* ---------- table ---------- */
+let sortKey = 'val_mid', sortDir = -1;
+function renderTable(){
+  const rows = [...DATA].sort((a, b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if(av == null) av = sortDir === 1 ?  Infinity : -Infinity;
+    if(bv == null) bv = sortDir === 1 ?  Infinity : -Infinity;
+    if(typeof av === 'string') return sortDir * av.localeCompare(bv);
+    return sortDir * (av - bv);
+  });
+  const tag = m => (m.kind === "point" || m.kind === "none")
+    ? '' : ` <span class="flag">${BASIS[m.kind]}</span>`;
+  document.getElementById('tableBody').innerHTML = rows.map(d => {
+    const col = quadOf(d);
+    return `<tr class="${isSpine(d)?'spine-row':''}">
+      <td class="name">${d.name}</td>
+      <td><span class="qtag" style="border:1px solid ${col.fill};color:${col.fill}">${d.quadLabel}</span></td>
+      <td class="num">${metricText(d.valuation)}${tag(d.valuation)}</td>
+      <td class="num">${metricText(d.arr)}${tag(d.arr)}</td>
+      <td class="num">${d.mult ? d.mult.toFixed(1) + '\u00d7' : '\u2014'}</td>
+      <td class="num">${d.similarity}</td>
+      <td class="desc">${d.desc}</td>
+    </tr>`;
+  }).join('');
+}
+document.querySelectorAll('#dataTable thead th').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.key;
+    if(sortKey === key) sortDir *= -1;
+    else { sortKey = key; sortDir = (key === 'name' || key === 'quadLabel' || key === 'desc') ? 1 : -1; }
+    renderTable();
+  });
+});
+renderTable();
+</script>
+</body>
+</html>

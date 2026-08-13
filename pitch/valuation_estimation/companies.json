@@ -1,0 +1,382 @@
+{
+  "generated": "2026-08-13",
+  "brief": "front-end tooling: prompt-to-UI and prompt-to-app builders that produce shippable front ends, plus the visual builders they compete with",
+  "companies": [
+    {
+      "name": "Lovable",
+      "category": "Prompt-to-app builder",
+      "similarity": 10,
+      "desc": "Prompt-to-app builder producing React/TypeScript front ends with Supabase-backed auth, data and hosting. The category reference point.",
+      "arr": {
+        "point": 500,
+        "lo": null,
+        "hi": null,
+        "kind": "point",
+        "note": "self-reported ARR run-rate, corroborated by TechCrunch/Sifted and the Series B coverage",
+        "as_of": "2026-06-01",
+        "mid": 500
+      },
+      "valuation": {
+        "point": 13300,
+        "lo": null,
+        "hi": null,
+        "kind": "point",
+        "note": "closed round announced 12 Aug 2026, up from $6.6B in Dec 2025",
+        "as_of": "2026-08-12",
+        "mid": 13300
+      },
+      "n_obs": 8,
+      "sources": [
+        "https://techcrunch.com/2026/07/08/lovable-reportedly-in-talks-to-double-its-valuation-to-13-2b/",
+        "https://www.gurufocus.com/news/9027780/lovable-secures-400-million-funding-round-valuation-surges-to-133-billion",
+        "https://growthindex.startupriders.com/lovable",
+        "https://getlatka.com/companies/lovable.dev"
+      ],
+      "arr_mid": 500,
+      "val_mid": 13300,
+      "shape": "point"
+    },
+    {
+      "name": "v0 (Vercel)",
+      "category": "Prompt-to-UI generator",
+      "similarity": 10,
+      "desc": "Text-to-UI generation producing React components, wired to Vercel deploy, branches and PRs. Revenue is not broken out from its parent.",
+      "arr": {
+        "point": null,
+        "lo": 30,
+        "hi": 90,
+        "kind": "range_modeled",
+        "note": "not broken out; band derived from Vercel's disclosed $340M total ARR and v0's reported 4M users on a $20/mo tier with >50% of v0 revenue from Teams/Enterprise",
+        "as_of": "2026-02-01",
+        "mid": 51.96152422706632
+      },
+      "valuation": {
+        "point": null,
+        "lo": 510,
+        "hi": 2322,
+        "kind": "range_modeled",
+        "note": "no standalone valuation; band = ARR x the peer-multiple IQR (17x-26x) observed across this cohort",
+        "as_of": null,
+        "mid": 1088.2187280138126
+      },
+      "n_obs": 4,
+      "sources": [
+        "https://sacra.com/c/vercel/",
+        "https://www.selecthub.com/vibe-coding-tools/base44-vs-vercel-v0/"
+      ],
+      "arr_mid": 51.96152422706632,
+      "val_mid": 1088.2187280138126,
+      "shape": "box"
+    },
+    {
+      "name": "Vercel",
+      "category": "Front-end cloud + AI tooling",
+      "similarity": 6,
+      "desc": "Front-end hosting and deploy platform behind Next.js; v0 sits inside it and drives downstream infrastructure consumption.",
+      "arr": {
+        "point": 340,
+        "lo": null,
+        "hi": null,
+        "kind": "point",
+        "note": "Sacra estimate, up from $305M at end-2025",
+        "as_of": "2026-02-01",
+        "mid": 340
+      },
+      "valuation": {
+        "point": null,
+        "lo": 8100,
+        "hi": 9300,
+        "kind": "range_reported",
+        "note": "$9.3B primary mark from the Sep 2025 Series F vs ~$8.1B implied by secondary blocks on offer",
+        "as_of": "2025-09-30",
+        "mid": 8679.285684893659
+      },
+      "n_obs": 8,
+      "sources": [
+        "https://sacra.com/c/vercel/",
+        "https://tracxn.com/d/companies/vercel/__uPuJfXzfvAQs0wmUuqRiXFxW4uGbcaKUHjHks8VPbrI/funding-and-investors",
+        "https://www.hustlefund.vc/post/angel-squad-vercel-pre-ipo-shares-what-accredited-investors-should-know-in-2026",
+        "https://www.premieralts.com/companies/vercel/valuation"
+      ],
+      "arr_mid": 340,
+      "val_mid": 8679.285684893659,
+      "shape": "vband"
+    },
+    {
+      "name": "Replit",
+      "category": "Browser IDE + agent",
+      "similarity": 7,
+      "desc": "Browser-based IDE with an autonomous build agent; broader than front-end but a direct competitor for prompt-to-app work.",
+      "arr": {
+        "point": null,
+        "lo": 150,
+        "hi": 1000,
+        "kind": "range_reported",
+        "note": "last disclosed $150M (Sep 2025); company guided to $1B by end-2026 and did not update at the Series D",
+        "as_of": "2025-09-10",
+        "mid": 387.2983346207417
+      },
+      "valuation": {
+        "point": 9000,
+        "lo": null,
+        "hi": null,
+        "kind": "point",
+        "note": "$400M Series D led by Georgian, 11 Mar 2026",
+        "as_of": "2026-03-11",
+        "mid": 9000
+      },
+      "n_obs": 8,
+      "sources": [
+        "https://tracxn.com/d/companies/replit/__PUWtoWCDA1Qjxd1rE0XG7GgDNdav8DNlaP_1EkZUh3A/funding-and-investors",
+        "https://www.arr.club/replit/replit-rockets-to-9b-valuation-after-series-d-funding",
+        "https://fnex.com/replit-raises-400m-at-9b-valuation/",
+        "https://tech-insider.org/ie/replit-9-billion-valuation-2026/"
+      ],
+      "arr_mid": 387.2983346207417,
+      "val_mid": 9000,
+      "shape": "hband"
+    },
+    {
+      "name": "Base44 (Wix)",
+      "category": "Prompt-to-app builder",
+      "similarity": 8,
+      "desc": "Backend-first prompt-to-app builder bundling database, auth and hosting. Acquired by Wix mid-2025; now reported inside Wix results.",
+      "arr": {
+        "point": 100,
+        "lo": null,
+        "hi": null,
+        "kind": "point",
+        "note": "~$100M ARR stated by Wix management on the Q4 2025 earnings call",
+        "as_of": "2026-02-01",
+        "mid": 100
+      },
+      "valuation": {
+        "point": null,
+        "lo": 1701,
+        "hi": 2580,
+        "kind": "range_modeled",
+        "note": "no standalone valuation; band = ARR x the peer-multiple IQR (17x-26x) observed across this cohort",
+        "as_of": null,
+        "mid": 2094.893792057249
+      },
+      "n_obs": 6,
+      "sources": [
+        "https://www.calcalistech.com/ctechnews/article/n4je37x0k",
+        "https://finance.yahoo.com/news/wix-com-q4-earnings-call-165003576.html",
+        "https://weavai.app/blog/en/2026/05/08/base44-review-2026-wix-80m-ai-app-builder-pricing/"
+      ],
+      "arr_mid": 100,
+      "val_mid": 2094.893792057249,
+      "shape": "vband"
+    },
+    {
+      "name": "Emergent",
+      "category": "Prompt-to-app builder",
+      "similarity": 8,
+      "desc": "Autonomous-agent app builder for web and mobile aimed at non-technical founders; fastest of the cohort from launch to unicorn.",
+      "arr": {
+        "point": 120,
+        "lo": null,
+        "hi": null,
+        "kind": "point",
+        "note": "$120M annualised run-rate disclosed at the Series C",
+        "as_of": "2026-07-15",
+        "mid": 120
+      },
+      "valuation": {
+        "point": 1500,
+        "lo": null,
+        "hi": null,
+        "kind": "point",
+        "note": "$130M Series C led by Creaegis, post-money",
+        "as_of": "2026-07-15",
+        "mid": 1500
+      },
+      "n_obs": 8,
+      "sources": [
+        "https://techcrunch.com/2026/07/15/indian-ai-coding-startup-emergent-becomes-a-unicorn-just-over-a-year-after-launch/",
+        "https://emergent.sh/news/emergent-now-a-unicorn-at-1-5-billion-valuation",
+        "https://entrackr.com/news/emergent-becomes-third-ai-unicorn-of-2026-with-130-mn-series-c-led-by-creaegis-12166031",
+        "https://www.techbuzz.ai/articles/indian-ai-coding-startup-emergent-hits-unicorn-status"
+      ],
+      "arr_mid": 120,
+      "val_mid": 1500,
+      "shape": "point"
+    },
+    {
+      "name": "Bolt.new (StackBlitz)",
+      "category": "Prompt-to-app builder",
+      "similarity": 9,
+      "desc": "Browser-native full-stack builder on WebContainers; multi-framework output and in-browser Node runtime with zero setup.",
+      "arr": {
+        "point": null,
+        "lo": 40,
+        "hi": 190,
+        "kind": "range_stale",
+        "note": "last disclosed $40M in Mar 2025; upper bound is that figure grown at the cohort's 3x/yr median over the 17 months since",
+        "as_of": "2025-03-15",
+        "mid": 87.17797887081348
+      },
+      "valuation": {
+        "point": null,
+        "lo": 700,
+        "hi": 2800,
+        "kind": "range_stale",
+        "note": "$700M from the Jan 2025 Series B; later rounds are widely referenced but undisclosed, so the upper bound is peer-growth implied",
+        "as_of": "2025-01-15",
+        "mid": 1400.0
+      },
+      "n_obs": 8,
+      "sources": [
+        "https://sacra.com/c/bolt-new/",
+        "https://getlatka.com/companies/bolt.new",
+        "https://vibeappscanner.com/bolt-statistics",
+        "https://productgrowth.in/tools/ai-automation/bolt-new/"
+      ],
+      "arr_mid": 87.17797887081348,
+      "val_mid": 1400.0,
+      "shape": "box"
+    },
+    {
+      "name": "Framer",
+      "category": "Visual site builder",
+      "similarity": 7,
+      "desc": "Figma-like canvas that publishes production sites, with AI layout generation (Wireframer) and a coding assistant (Workshop).",
+      "arr": {
+        "point": null,
+        "lo": 50,
+        "hi": 100,
+        "kind": "range_reported",
+        "note": "$50M disclosed at the Aug 2025 Series D; company target is $100M for 2026",
+        "as_of": "2025-08-28",
+        "mid": 70.71067811865476
+      },
+      "valuation": {
+        "point": 2000,
+        "lo": null,
+        "hi": null,
+        "kind": "point",
+        "note": "$100M Series D led by Meritech, 28 Aug 2025",
+        "as_of": "2025-08-28",
+        "mid": 2000
+      },
+      "n_obs": 6,
+      "sources": [
+        "https://sacra.com/c/framer/",
+        "https://tracxn.com/d/companies/framer/__WwABy6r40KPszbW9ZaEHR6v4BX_MP8437KgHYLns7fo",
+        "https://technologychecker.io/technology/framer"
+      ],
+      "arr_mid": 70.71067811865476,
+      "val_mid": 2000,
+      "shape": "hband"
+    },
+    {
+      "name": "Webflow",
+      "category": "Visual site builder",
+      "similarity": 6,
+      "desc": "Visual development environment with deep CMS, localisation and clean code export; the incumbent the AI builders are attacking.",
+      "arr": {
+        "point": 212.5,
+        "lo": null,
+        "hi": null,
+        "kind": "point",
+        "note": "widely reported ARR, stable series",
+        "as_of": "2026-05-01",
+        "mid": 212.5
+      },
+      "valuation": {
+        "point": 4000,
+        "lo": null,
+        "hi": null,
+        "kind": "point",
+        "note": "last primary mark",
+        "as_of": "2025-01-01",
+        "mid": 4000
+      },
+      "n_obs": 4,
+      "sources": [
+        "https://productgrowth.in/tools/no-code/webflow/",
+        "https://www.flowninja.com/blog/framer-vs-webflow"
+      ],
+      "arr_mid": 212.5,
+      "val_mid": 4000,
+      "shape": "point"
+    },
+    {
+      "name": "Cursor (Anysphere)",
+      "category": "AI code editor",
+      "similarity": 5,
+      "desc": "AI-first VS Code fork. Not front-end specific, included as the ceiling reference for the category's pricing.",
+      "arr": {
+        "point": null,
+        "lo": 3000,
+        "hi": 4000,
+        "kind": "range_reported",
+        "note": "reported at $3B annualised in late Apr 2026 and $4B+ by Jun 2026; self-reported run-rate, not audited",
+        "as_of": "2026-06-16",
+        "mid": 3464.1016151377544
+      },
+      "valuation": {
+        "point": 60000,
+        "lo": null,
+        "hi": null,
+        "kind": "point",
+        "note": "SpaceX all-stock acquisition, announced 16 Jun 2026 via securities filing, pending Q3 close",
+        "as_of": "2026-06-16",
+        "mid": 60000
+      },
+      "n_obs": 6,
+      "sources": [
+        "https://www.cbsnews.com/news/spacex-cursor-60-billion-ai-acquisition/",
+        "https://www.forbes.com/sites/sandycarter/2026/06/16/spacex-buys-cursor-in-largest-startup-acquisition-ever-at-60-billion/",
+        "https://www.digitalapplied.com/blog/spacex-acquires-cursor-anysphere-60b-ai-coding-2026"
+      ],
+      "arr_mid": 3464.1016151377544,
+      "val_mid": 60000,
+      "shape": "hband"
+    },
+    {
+      "name": "Figma Make",
+      "category": "Prompt-to-UI generator",
+      "similarity": 8,
+      "desc": "Prompt-to-app inside Figma, converting design frames to working front ends. No product-level figures: Figma is public and does not break it out.",
+      "arr": {
+        "point": null,
+        "lo": null,
+        "hi": null,
+        "kind": "none",
+        "note": "no figure on either axis",
+        "as_of": null,
+        "mid": null
+      },
+      "valuation": {
+        "point": null,
+        "lo": null,
+        "hi": null,
+        "kind": "none",
+        "note": "no figure on either axis",
+        "as_of": null,
+        "mid": null
+      },
+      "n_obs": 2,
+      "sources": [
+        "https://www.figma.com/make/"
+      ],
+      "arr_mid": null,
+      "val_mid": null,
+      "shape": "omitted"
+    }
+  ],
+  "fit": {
+    "a": 20.187003463340194,
+    "b": 1.002226293275317,
+    "r2": 0.9560802411460184,
+    "n": 10
+  },
+  "peer_multiple": {
+    "p25": 17.0,
+    "median": 21.0,
+    "p75": 25.8
+  },
+  "errors": []
+}
