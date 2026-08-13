@@ -111,10 +111,26 @@ The leading product with the hightest annual reccuring revenue is relevance AI a
 
 From my experience in KPMG, i know that relevance AI isn't used in production, and wouldn't be taken seriously to do that.
 It's exclusively used for non-technical client demos, and requires the development team to develop the demos. 
+This is despite repeated pushes to use the tool internally.
 
+So the most valuable product in this space 
+- isn't adopted by leadership 
+- isn't adopted by developers
+
+Is this adoption because the product isn't needed? 
+Absolutely not, I developed 50 k lines of code inside of KPMG to mimic what relevance AI does but at scale.
+
+
+
+
+
+
+
+Briefly.
 A closer product to spine ai is dify.ai .
 it's got more developer features than relevance AI and around 450k lines of code. 
 Launching around 3 years ago, it now has 3 million ARR at 180 million valuation.
+
 
 
 # feature comparison 
@@ -171,6 +187,17 @@ Later, a synergistic multi-pronged approach.
 - enterprise development tooling and vibe coding
 - enterprise consulting services 
 
+
+# GTM
+
+reach out to AI startup founders, sell vibe coding for consulting pricing.
+Build a portfolio of customers, and get real product feedback. 
+
+At the same time, pitch to larger companies with industry connections for trials. 
+
+Our vibe coding solution for pitching to execs,
+Our engineering tool solution for devs.
+
 # What is our moat?
 
 Claude eats our product with time, which was my original reason for pivoting.
@@ -200,3 +227,9 @@ We require minimal funding or runway.
 
 
 
+
+
+
+
+TODO compare this to https://streamlit.io/playground?example=geospatial
+it's really a backend deployment tool + AI node editor
