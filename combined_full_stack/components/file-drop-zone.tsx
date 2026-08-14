@@ -102,6 +102,7 @@ export function FileDropZone({
               e.stopPropagation()
               inputRef.current?.click()
             }}
+            spineId="documents.upload"
           >
             {browseLabel}
           </Button>

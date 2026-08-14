@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — logging.errors-only logging.hydrate
 
 // AI : TODO (spec) — prompt context-length profiling grid per subcomponent (documents, JSON blocks, system text).
 import { useMemo, useState, useEffect } from "react"
@@ -220,6 +221,7 @@ export function Logging() {
                   size="sm"
                   checked={errorsOnly}
                   onCheckedChange={(checked) => setErrorsOnly(!!checked)}
+                  data-spine-id="logging.errors-only"
                 />
               </label>
             </div>

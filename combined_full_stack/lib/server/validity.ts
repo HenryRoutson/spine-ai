@@ -2,6 +2,8 @@
 // AI : TODO (linter-first) — shrink computeInvalid: generate pipeline.py or pipeline.rs with typed step chain,
 // AI :   run pyright / cargo check; surface diagnostics in UI instead of custom stepAcceptsSpineType rules.
 // AI : Types + messages → validity-types.ts / validity-messages.ts / validity-inspect.ts.
+// AI : TODO (arch-validity-split) — this file still mixes graph I/O, n8n, canRunStep, billedCents notes.
+// AI :   Keep computeInvalid as the graph checker; move n8n/canRunStep to own modules (messages already split).
 // AI : TODO (spec) — derive dependency graph from step() refs in custom code; flag unused/isolated steps (linear spine only today).
 // AI : TODO security — runs.data is user-writable via RLS; billedCents in JSON can be forged for display.
 // AI : Split billing fields to server-only columns or restrict data updates with a trigger.

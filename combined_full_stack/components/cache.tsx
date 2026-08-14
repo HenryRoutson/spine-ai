@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — cache.refresh
 
 // AI : TODO — run list rows still use flat inputPreview; detail modal uses IoPager for multi-file inputs.
 // AI : TODO (spec) — keep cache list in store after first fetch; see store.tsx prefetch TODO.
@@ -155,7 +156,7 @@ export function Cache() {
 
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col" data-spine-id="cache.refresh">
       <WindowHeader
         actions={
           <div className="flex items-center gap-2">

@@ -75,4 +75,20 @@ describe("pipeline TS export lint", () => {
     expect(src).toMatch(/const description = \(typeof \(state\["Normalize Case"\] as Record<string, unknown>\)\["description"\]/);
     expect(src).not.toMatch(/JSON\.stringify\(state\["Normalize Case"\], null, 2\)/);
   });
+
+  it("emits example-select relevance schema once", () => {
+    const { project } = loadProjectSeed(resolve(SEEDS_DIR, "billed_work_catalog_select.json"));
+    const src = generatePipelineSourceTs(project);
+    expect(src).toMatch(/from "\.\/pipeline_runtime"/);
+    expect(src).toMatch(/selectRelevant/);
+    expect(src).not.toMatch(/const relevanceSchema = /);
+  });
+
+  it("emits merge runtime once", () => {
+    const { project } = loadProjectSeed(resolve(SEEDS_DIR, "billed_work_catalog_select.json"));
+    const src = generatePipelineSourceTs(project);
+    expect(src.match(/mergeFold\(/g)?.length).toBe(2);
+    expect(src).not.toMatch(/function __itemKeyFn/);
+    expect(src).toMatch(/from "\.\/pipeline_runtime"/);
+  });
 });

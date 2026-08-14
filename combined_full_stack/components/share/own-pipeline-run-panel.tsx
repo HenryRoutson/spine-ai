@@ -1,5 +1,7 @@
 "use client"
 
+// AI : TODO (arch-consumer-run) — shared-run-panel is the same chrome; one ConsumerRunPanel with funding/download slots.
+
 import { useCallback, useMemo, useState } from "react"
 import {
   AlertTriangle,

@@ -22,4 +22,23 @@ describe("MCP Bar A session tools", () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+
+  it("session_action project.add matches GUI addProject", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mcp-action-"))
+    const sessionPath = join(dir, "session.json")
+    try {
+      const { runSessionAction } = await import("./spine-session-bar-a.js")
+      const created = (await runSessionAction({ id: "project.add", sessionPath })) as { id: string; name: string }
+      expect(created.name).toBe("Untitled Pipeline")
+      const renamed = (await runSessionAction({
+        id: "project.rename",
+        sessionPath,
+        name: "From MCP",
+        projectId: created.id,
+      })) as { name: string }
+      expect(renamed.name).toBe("From MCP")
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })

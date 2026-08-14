@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — docs.set
 
 // AI : project-level documentation panel — content is prepended to every assistant/agent prompt
 // AI : so the model always sees the rules/constraints before proposing changes.
@@ -92,6 +93,7 @@ export function Documentation() {
             onClick={handleSave}
             disabled={!isDirty && !saved}
             className="gap-1.5 font-mono text-xs"
+            spineId="docs.set"
           >
             <Save className="h-3.5 w-3.5" />
             {saved && !isDirty ? "saved" : "save"}

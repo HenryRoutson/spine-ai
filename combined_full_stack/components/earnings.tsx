@@ -89,6 +89,7 @@ export function Earnings() {
                   variant="outline"
                   disabled={withdrawing || earningsAccount.balanceCents <= 0}
                   onClick={() => withdrawAllEarnings().catch(console.error)}
+                  spineId="earnings.withdraw"
                 >
                   {withdrawing ? (
                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -97,7 +98,7 @@ export function Earnings() {
                   )}
                   Move to LLM credit
                 </Button>
-                <Button type="button" variant="ghost" onClick={() => refreshEarnings().catch(console.error)}>
+                <Button type="button" variant="ghost" onClick={() => refreshEarnings().catch(console.error)} spineId="earnings.refresh">
                   Refresh
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => setActiveWindow("billing")}>

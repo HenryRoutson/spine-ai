@@ -450,6 +450,7 @@ export function userProjectsFrom(projects: Project[]): Project[] {
   return projects.filter((p) => !templateIds.has(p.id));
 }
 
+// AI : TODO (arch-blank-project) — SpineSession has a private twin; one factory (id/strategies differ).
 export function blankProject(id: ProjectId): Project {
   const now = Date.now();
   return {

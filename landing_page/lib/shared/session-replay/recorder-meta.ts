@@ -14,6 +14,7 @@ export function currentPagePath(): string {
 
 export function elementClickLabel(el: HTMLElement, appWindow?: string | null): string {
   const tagged =
+    el.getAttribute("data-spine-id") ??
     el.getAttribute("data-component") ??
     el.getAttribute("data-testid") ??
     el.getAttribute("data-spine-window")

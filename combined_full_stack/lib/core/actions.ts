@@ -246,3 +246,45 @@ export const SESSION_ACTIONS = [
 ] as const
 
 export const SESSION_ACTION_IDS = SESSION_ACTIONS.map((a) => a.id)
+
+// AI : camelCase session ids stay useStore/SpineSession names; dotted ids are data-spine-id / MCP session_action.
+export const SESSION_ACTION_PARITY_ID: Record<string, string> = {
+  addProject: "project.add",
+  renameProject: "project.rename",
+  deleteProject: "project.delete",
+  openProject: "project.open",
+  setDocumentation: "docs.set",
+  validate: "pipeline.validate",
+  linkQuotes: "quotes.link",
+  ingestProject: "project.clone-template",
+  applyProposal: "assistant.approve",
+  askAgent: "assistant.send",
+  addDoc: "documents.upload",
+  cloneFromTemplate: "project.clone",
+  startRun: "inference.start-run",
+  runTest: "testing.run",
+  exportPipeline: "pipeline.export",
+  shareLink: "share.create-link",
+  hostedApi: "share.deploy-api",
+  billing: "billing.refresh",
+  cacheGet: "cache.refresh",
+  humanReview: "inference.human-review.approve",
+  customCode: "inference.custom-code",
+}
+
+export const TUI_COMMAND_PARITY_ID: Record<string, string> = {
+  "new-project": "project.add",
+  "configure-step": "pipeline.configure-step",
+  rename: "project.rename",
+  "add-model": "structure.add-model",
+  "add-step": "pipeline.add-step",
+  vibe: "assistant.send",
+  apply: "assistant.approve",
+  reject: "assistant.reject",
+  delete: "project.delete",
+  "run-inference": "inference.start-run",
+  "run-test": "testing.run",
+  "errors-only": "logging.errors-only",
+  "set-docs": "docs.set",
+  quit: "tui.quit",
+}

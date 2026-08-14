@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — documents.remove documents.open
 
 import { useMemo, useRef, useState, useEffect } from "react"
 import { useStore } from "@/lib/store"
@@ -279,6 +280,7 @@ export function Documents() {
                   variant="ghost"
                   size="sm"
                   className="shrink-0"
+                  spineId="documents.open"
                   onClick={(e) => {
                     e.stopPropagation()
                     open({ docId: doc.id, start: 0, end: 0 })

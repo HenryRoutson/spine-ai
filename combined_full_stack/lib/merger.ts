@@ -541,7 +541,8 @@ ${mergeFoldBody(
 }`;
 }
 
-// AI : inlined runtime for browser new Function() — keep in sync with mergePair / resolver above.
+// AI : TODO — typed mergePair / MergePolicyResolver above is a second copy of this string source; keep in sync.
+// AI : inlined runtime for browser new Function() — export hoists via mergeFoldFactorySource instead.
 function mergePairSource(): string {
   return `function(left, right, resolver, path) {
   if (left == null) return right;
@@ -756,4 +757,21 @@ function __patternDepth(pattern, path) {
   const offset = path.length - parts.length;
   return __suffixMatch(parts, path.slice(offset)) ? parts.length : null;
 }`;
+}
+
+// AI : one IIFE for TS export — browser merge steps still inline helpers (new Function per step).
+export function mergeFoldFactorySource(): string {
+  return `(() => {
+${mergeRuntimeHelpers().trim()}
+const __mergePair = ${mergePairSource()};
+const __resolve = ${policyResolverSource()};
+return function mergeFold(values, policy) {
+  const resolver = new __resolve(policy);
+  if (!values.length) return null;
+  if (values.length === 1) return values[0];
+  let result = values[0];
+  for (let i = 1; i < values.length; i++) result = __mergePair(result, values[i], resolver, []);
+  return result;
+};
+})()`;
 }

@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — structure.add-field structure.remove-field structure.mark-optional
 
 import { useMemo, useState } from "react"
 import { Plus, Trash2, Lock, AlertTriangle } from "lucide-react"
@@ -235,7 +236,7 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
 
         {!selectedLocked && (
           <div className="border-t border-border px-3 py-2">
-            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={addField}>
+            <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={addField} spineId="structure.add-field">
               <Plus className="mr-1 h-3.5 w-3.5" /> Add row
             </Button>
           </div>
@@ -458,6 +459,7 @@ function FieldRow({
                 onCheckedChange={(checked) => onUpdate({ optional: !checked })}
                 title={field.optional ? "Optional" : "Required"}
                 aria-label={field.optional ? "Mark required" : "Mark optional"}
+                data-spine-id="structure.mark-optional"
               />
             </div>
           </div>
@@ -530,6 +532,7 @@ function FieldRow({
             <button
               type="button"
               onClick={onRemove}
+              data-spine-id="structure.remove-field"
               className="px-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
             >
               <Trash2 className="h-3.5 w-3.5" />

@@ -265,7 +265,9 @@ export enum LegacyModuleKind {
 }
 export type RunStepKind = ModuleKind | LegacyModuleKind;
 
-export interface PipelineModule { // TODO this is bad, it contains multiple possible kinds of modules!!! TODO refactor.
+// AI : TODO (arch-module-union) — god object; split to a discriminated union per ModuleKind
+// AI :   so exporters/validity/UI stop optional-field soup. Keep kind as discriminant; config payloads per kind.
+export interface PipelineModule {
   id: ModuleId;
   kind: ModuleKind;
   label: string;

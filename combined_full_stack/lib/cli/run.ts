@@ -1,8 +1,10 @@
 // AI : spine CLI dispatcher — subcommands return structured results; exit codes for agents.
+// AI : TODO (arch-cli-result) — flagString copied in session_cli.ts / agent_cli.ts; share helpers from cli/types.ts.
 
 import { resolve } from "node:path"
 import { loadProjectContext } from "@/lib/cli/project_context"
 import { validateProjectCommand } from "@/lib/cli/validate_project"
+import { lintPipelineCommand } from "@/lib/cli/lint_pipeline"
 import {
   loadContextAndValidateTest,
   loadContextAndValidateTests,
@@ -19,6 +21,7 @@ export const SPINE_CLI_HELP = `spine — validate Spine projects and run the hea
 
 Usage:
   npx tsx scripts/spine-cli.ts validate project <seed.json> [--json]
+  npx tsx scripts/spine-cli.ts lint pipeline <seed.json> [--json]
   npx tsx scripts/spine-cli.ts validate test --project <seed.json> --file <test.json> [--json]
   npx tsx scripts/spine-cli.ts validate tests --project <seed.json> [--json]
   npx tsx scripts/spine-cli.ts validate setup --project <seed.json> --file <setup.json> [--json]
@@ -122,11 +125,24 @@ export async function runSpineCli(argv: string[]): Promise<CliCommandResult> {
     return parseTestCommand(file)
   }
 
+  if (cmd === "lint") {
+    if (sub === "pipeline") {
+      const seedPath = rest[0] ?? flagString(flags, "project")
+      if (!seedPath) return usageError("lint pipeline requires <seed.json>")
+      return lintPipelineCommand(loadProjectContext(resolve(seedPath)))
+    }
+    return usageError("lint requires: pipeline")
+  }
+
   if (cmd === "validate") {
     if (sub === "project") {
       const seedPath = rest[0] ?? flagString(flags, "project")
       if (!seedPath) return usageError("validate project requires <seed.json>")
       return validateProjectCommand(loadProjectContext(resolve(seedPath)))
+    }
+
+    if (sub === "pipeline") {
+      return usageError("did you mean: lint pipeline <seed.json>")
     }
 
     if (sub === "test") {

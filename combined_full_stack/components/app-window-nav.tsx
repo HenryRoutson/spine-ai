@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils"
 import { prefetchWorkspacePanel } from "@/lib/prefetch-workspace-panel"
 import { uiContextTargetProps } from "@/lib/ui-context-dom"
+import { spineActionProps } from "@/lib/core/parity"
 
 type AppWindowNavProps = {
   activeWindow: AppWindowId
@@ -76,6 +77,7 @@ export function AppWindowNav({
                   issue && "text-destructive hover:bg-destructive/10",
                   disabled && "cursor-not-allowed opacity-50",
                 )}
+                {...spineActionProps(`nav.window.${item.id}`)}
                 {...uiContextTargetProps({
                   kind: "generic",
                   id: `window:${item.id}`,

@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — structure.add-model structure.add-alias
 
 // AI : TODO (spec) — per-structure "Quick summarise" button: cheap LLM flags inconsistencies (e.g. document_summary:int).
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -327,6 +328,7 @@ export function StructureBuilder() {
                         className="h-6 px-1.5 font-mono text-[9px]"
                         onClick={addStruct}
                         disabled={teamReadOnly}
+                        spineId="structure.add-model"
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
@@ -387,6 +389,7 @@ export function StructureBuilder() {
                       className="h-6 px-1.5 font-mono text-[9px]"
                       onClick={addType}
                       disabled={teamReadOnly}
+                      spineId="structure.add-alias"
                     >
                       <Plus className="h-3 w-3" />
                     </Button>

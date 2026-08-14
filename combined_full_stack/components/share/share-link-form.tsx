@@ -1,5 +1,9 @@
 "use client"
 
+// AI : TODO (arch-share-form) — spend-limit parse, busy/error, default-docs, copy-to-clipboard duplicated
+// AI :   with host-api-form and share-embed-form; SharePricingFields already extracted — add useShareCreateForm.
+// AI :   Don't merge Link vs API vs Embed products.
+
 import { useMemo, useState } from "react"
 import { Copy, Link2, Loader2, Share2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -196,7 +200,7 @@ export function ShareLinkForm({
           </Button>
         </div>
       ) : (
-        <Button className="w-full gap-2" onClick={() => void createLink()} disabled={busy}>
+        <Button className="w-full gap-2" onClick={() => void createLink()} disabled={busy} spineId="share.create-link">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
           Create link
         </Button>

@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — inference.custom-code
 
 // AI : TODO — debounced tryCompileCustomCodeEntry markers in Monaco (computeInvalid already blocks run).
 import { useCallback, useEffect, useState } from "react"
@@ -52,14 +53,15 @@ export function CustomCodeEditor({
     <>
       {!fullscreen && (
         <div className={cn("relative overflow-hidden rounded-md border border-border bg-[#1e1f23]", className)}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-1 top-1 z-10 h-7 w-7 bg-background/60 text-muted-foreground backdrop-blur-sm hover:text-foreground"
-            onClick={() => setFullscreen(true)}
-            title="Open full editor"
-          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1 z-10 h-7 w-7 bg-background/60 text-muted-foreground backdrop-blur-sm hover:text-foreground"
+              onClick={() => setFullscreen(true)}
+              title="Open full editor"
+              spineId="inference.custom-code"
+            >
             <Maximize2 className="h-3.5 w-3.5" />
           </Button>
           <MonacoCodeEditor

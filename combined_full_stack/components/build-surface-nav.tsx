@@ -9,6 +9,7 @@ import { prefetchBuildPanel } from "@/lib/prefetch-build-panel"
 import { prefetchWorkspacePanel } from "@/lib/prefetch-workspace-panel"
 import { AppWindowId } from "@/lib/app-window-id"
 import { cn } from "@/lib/utils"
+import { spineActionProps } from "@/lib/core/parity"
 import { useCallback } from "react"
 
 type BuildSurfaceNavProps = {
@@ -41,6 +42,7 @@ export function BuildSurfaceNav({ value, onChange, className }: BuildSurfaceNavP
         onClick={() => onChange(BuildSurface.Vibe)}
         onWarm={warmVibe}
         icon={Sparkles}
+        spineId="nav.build.vibe"
         {...BUILD_SURFACE_NAV[BuildSurface.Vibe]}
       />
       <SurfaceButton
@@ -48,6 +50,7 @@ export function BuildSurfaceNav({ value, onChange, className }: BuildSurfaceNavP
         onClick={() => onChange(BuildSurface.Editors)}
         onWarm={warmEditors}
         icon={Hammer}
+        spineId="nav.build.editors"
         {...BUILD_SURFACE_NAV[BuildSurface.Editors]}
       />
     </div>
@@ -61,6 +64,7 @@ function SurfaceButton({
   icon: Icon,
   label,
   title,
+  spineId,
 }: {
   active: boolean
   onClick: () => void
@@ -68,6 +72,7 @@ function SurfaceButton({
   icon: React.ComponentType<{ className?: string }>
   label: string
   title: string
+  spineId: string
 }) {
   return (
     <button
@@ -76,6 +81,7 @@ function SurfaceButton({
       onClick={onClick}
       onMouseEnter={onWarm}
       onFocus={onWarm}
+      {...spineActionProps(spineId)}
       className={cn(
         "flex items-center gap-1.5 rounded px-2 py-1 font-mono text-[11px] transition-colors",
         active

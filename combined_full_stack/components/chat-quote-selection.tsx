@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — quotes.link
 
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react"
 import { Quote } from "lucide-react"
@@ -121,6 +122,7 @@ export function ChatQuoteSelection({
             size="sm"
             variant="secondary"
             className="pointer-events-auto h-7 gap-1 border border-border px-2 font-mono text-[10px] shadow-md"
+            spineId="quotes.link"
             onMouseDown={(e) => {
               // AI : keep selection until click handler reads it.
               e.preventDefault()

@@ -1,4 +1,5 @@
 // AI : project + pipeline validation — mirrors Structure/Pipeline tab gates without React.
+// AI : TODO (arch-validate-wrap) — remaps computeInvalid / computeStructureIssues; wrap lintPipeline instead.
 
 import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-validity"
 import { computeInvalid, invalidIssuesForModule } from "@/lib/validity"

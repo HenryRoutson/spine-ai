@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — settings.set-model
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
@@ -196,7 +197,7 @@ function CustomProviderEditor({
         ) : (
           <span />
         )}
-        <Button type="button" size="sm" onClick={save}>
+        <Button type="button" size="sm" onClick={save} spineId="settings.set-model">
           Save provider
         </Button>
       </div>

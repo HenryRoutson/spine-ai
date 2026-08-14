@@ -18,6 +18,7 @@ import { SharedLinkRunner } from "@/components/share/shared-link-runner"
 import { SharedWithMePanel } from "@/components/share/shared-with-me-panel"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { spineActionProps } from "@/lib/core/parity"
 import { useOptionalStore } from "@/lib/store"
 import { useAppShell } from "@/lib/app-shell"
 import { consumePendingSharedRun } from "@/lib/pending-shared-run"
@@ -266,6 +267,7 @@ export function SharePage() {
                         : "text-muted-foreground hover:text-foreground",
                     )}
                     onClick={() => setTab(PublishTab.Link)}
+                    {...spineActionProps("share.tab.link")}
                   >
                     <Globe className="h-3.5 w-3.5" />
                     Link
@@ -279,6 +281,7 @@ export function SharePage() {
                         : "text-muted-foreground hover:text-foreground",
                     )}
                     onClick={() => setTab(PublishTab.Api)}
+                    {...spineActionProps("share.tab.api")}
                   >
                     <Zap className="h-3.5 w-3.5" />
                     API
@@ -292,6 +295,7 @@ export function SharePage() {
                         : "text-muted-foreground hover:text-foreground",
                     )}
                     onClick={() => setTab(PublishTab.Embed)}
+                    {...spineActionProps("share.tab.embed")}
                   >
                     <PanelTop className="h-3.5 w-3.5" />
                     Embed

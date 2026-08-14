@@ -204,6 +204,7 @@ export function AccountBilling() {
                     size="sm"
                     disabled={!!checkoutKey || billingAccount.subscribed || capReached}
                     onClick={() => startCheckout("subscription")}
+                    spineId="billing.subscribe"
                   >
                     {checkoutKey === "subscription" ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -226,6 +227,7 @@ export function AccountBilling() {
                         size="sm"
                         disabled={!!checkoutKey || capReached || topupCapReached}
                         onClick={() => startCheckout("payment", amountCents)}
+                        spineId="billing.topup"
                       >
                         {checkoutKey === topupKey ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
                         Top up {formatCents(amountCents)}
@@ -239,6 +241,7 @@ export function AccountBilling() {
                 variant="ghost"
                 size="sm"
                 onClick={() => refreshBilling({ force: true }).catch(console.error)}
+                spineId="billing.refresh"
               >
                 Refresh
               </Button>
@@ -296,6 +299,7 @@ export function AccountBilling() {
               size="sm"
               disabled={billingKeysBusy}
               onClick={() => void createBillingKey()}
+              spineId="billing.create-key"
             >
               {billingKeysBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
               Create key

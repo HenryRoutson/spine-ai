@@ -201,6 +201,7 @@ type ChatInputProps = {
   // AI : paperclip → project docs + @file pin (Vibe / Agent composer).
   onFilesSelected?: (files: File[]) => void
   filesUploading?: boolean
+  spineId?: string
 }
 
 const MENTION_GROUP_ICON: Record<
@@ -340,6 +341,7 @@ function ChatInput({
   onMentionPick,
   onFilesSelected,
   filesUploading = false,
+  spineId = "assistant.send",
 }: ChatInputProps) {
   const pasteList = pastes ?? []
   const pasteChipsEnabled = Boolean(onPastesChange)
@@ -604,6 +606,7 @@ function ChatInput({
           disabled={!sendEnabled || disabled}
           onClick={onSend}
           aria-label={sendLabel}
+          spineId={spineId}
         >
           <Send className="h-4 w-4" />
           <span className="sr-only">{sendLabel}</span>

@@ -15,14 +15,18 @@ import type {
   StructureModel,
   TypeAlias,
 } from "@/lib/types"
+// AI : TODO (arch-proposal-port) — core should depend on a neutral Proposal port, not GUI project-assistant-types.
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 
 export type locality_t = "local" | "remote" | "local-first"
 
 export type ProjectCreateOpts = { open?: boolean }
 
+// AI : TODO (arch-chat-turn) — identical to assistant-shared ChatTurn; one type.
 export type SessionChatTurn = { role: "user" | "assistant"; content: string }
 
+// AI : TODO (arch-billing-view) — thin CLI snapshot; GUI store.tsx redeclares a richer BillingAccountView.
+// AI :   Share one type (GUI fields optional) so they cannot drift.
 export type BillingAccountView = {
   balanceCents: number
   totalBilledCents: number

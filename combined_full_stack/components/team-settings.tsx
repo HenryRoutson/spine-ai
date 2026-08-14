@@ -257,6 +257,7 @@ export function TeamSettings() {
                             disabled={busy}
                             onClick={() => void removeMember(m.userId)}
                             aria-label="Remove member"
+                            spineId="settings.remove-member"
                           >
                             <UserMinus className="h-3.5 w-3.5" />
                           </Button>
@@ -275,7 +276,7 @@ export function TeamSettings() {
                       type="email"
                       className="h-8 text-xs"
                     />
-                    <Button size="sm" disabled={busy || !inviteEmail.trim()} onClick={() => void inviteMember()}>
+                    <Button size="sm" disabled={busy || !inviteEmail.trim()} onClick={() => void inviteMember()} spineId="settings.invite-member">
                       <UserPlus className="h-3.5 w-3.5" />
                     </Button>
                   </div>
@@ -338,7 +339,7 @@ export function TeamSettings() {
                   placeholder="Paste invite token"
                   className="h-8 font-mono text-xs"
                 />
-                <Button size="sm" disabled={busy || !inviteToken.trim()} onClick={() => void acceptInvite()}>
+                <Button size="sm" disabled={busy || !inviteToken.trim()} onClick={() => void acceptInvite()} spineId="settings.accept-invite">
                   Join
                 </Button>
               </div>

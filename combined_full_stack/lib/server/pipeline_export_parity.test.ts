@@ -20,7 +20,7 @@ import {
 
 const seedFiles = readdirSync(SEEDS_DIR).filter((f) => f.endsWith(".json"));
 
-// AI : hard-gate empty until export stubs emit real JSON schemas for llm-batch (today: `schema = {}`).
+// AI : hard-gate empty until live OpenRouter traces stay green with real export schemas.
 // AI : live flash+seed still exercises every seed; expand this set when codegen schemas land.
 const HARD_PARITY_SEEDS = new Set<string>([]);
 

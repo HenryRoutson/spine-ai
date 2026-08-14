@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — testing.pinpoint logging.copy-error
 
 import { useState } from "react"
 import { AlertTriangle, Check, Copy, Eye } from "lucide-react"
@@ -38,6 +39,7 @@ export function IsolatedErrorActions({
         className="h-6 gap-1 border-destructive/40 font-mono text-[10px] text-destructive hover:bg-destructive/10"
         onClick={() => void copyErrors()}
         title="Copy failed fields only (input, process, diverging output)"
+        spineId="logging.copy-error"
       >
         {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
         {copied ? "copied" : "copy_errors"}

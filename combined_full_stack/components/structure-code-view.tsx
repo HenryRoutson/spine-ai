@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — structure.export-pydantic
 
 import { useMemo } from "react"
 import {

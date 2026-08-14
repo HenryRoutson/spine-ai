@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+// AI : TODO (arch-assistant-billing-http) — billing/auth/model parse duplicates assistant-route.runBilledProjectAssistant.
 import { apiError, billingResponse, requireAuthStore } from "@/lib/server/api_context";
 import { parseRequestJson, diagnosisAssistantBodySchema } from "@/lib/server/api_schemas";
 import { HTTP } from "@/lib/server/api-errors";

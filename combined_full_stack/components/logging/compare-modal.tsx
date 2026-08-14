@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — logging.compare
 
 import { useState } from "react"
 import { createPortal } from "react-dom"
@@ -28,6 +29,7 @@ export function CompareModal({ runs, runInputLabel, runInputDocIds, initialRunId
         aria-label="Close compare"
         className="absolute inset-0 bg-background/70 backdrop-blur-sm"
         onClick={onClose}
+        data-spine-id="logging.compare"
       />
       <div className="relative flex max-h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
         <div className="flex items-center justify-between border-b border-border px-4 py-2.5">

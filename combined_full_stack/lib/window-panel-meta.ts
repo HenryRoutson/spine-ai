@@ -1,23 +1,23 @@
-import type { AppWindowId } from "@/lib/app-shell"
+import type { AppWindowId } from "@/lib/app-window-id"
 import { AppPrimarySectionTitle } from "@/lib/app-primary-section-labels"
 
-// AI : canonical WindowHeader step badges — single source for panels + skeletons.
+// AI : canonical WindowHeader step badges — same numbers as BUILDER_NAV_ITEMS hints / TUI keys 01–10.
 export enum AppWindowStepLabel {
   Structure = "01 / Structure",
   Pipeline = "02 / Pipeline",
   Testing = "03 / Testing",
   Inference = "04 / Inference",
   Share = "05 / Share",
-  Logging = "06 / Logging",
-  Documents = "08 / Documents",
+  Earnings = "06 / Earnings",
+  Logging = "07 / Logging",
+  Cache = "08 / Cache",
+  Documents = "09 / Documents",
   Docs = "10 / Docs",
   ProjectBilling = "11 / Billing",
   ProjectSettings = "12 / Settings",
   Vibe = "· / Vibe",
   Billing = "· / Billing",
   Settings = "· / Settings",
-  Earnings = "Earnings",
-  Cache = "cache",
   Run = "01 / Run",
   ProjectPicker = "Project",
   AbTest = "03 / A/B Test",
@@ -175,4 +175,20 @@ const BUILDER_WINDOW_HEADERS: Record<AppWindowId, WindowHeaderCopy> = {
 
 export function windowPanelHeader(windowId: AppWindowId): WindowHeaderCopy {
   return BUILDER_WINDOW_HEADERS[windowId]
+}
+
+// AI : "07 / Logging" → "07" (nav hint). Non-numbered steps (· / Vibe) return "".
+export function windowStepHint(step: AppWindowStepLabel): string {
+  const match = /^(\d{2})/.exec(step)
+  return match?.[1] ?? ""
+}
+
+// AI : "07 / Logging" → "7"; "10 / Docs" → "0". 11+ and unnumbered steps have no digit key.
+export function windowStepHotkey(step: AppWindowStepLabel): string | null {
+  const hint = windowStepHint(step)
+  if (hint === "10") return "0"
+  if (hint === "11") return "["
+  if (hint === "12") return "]"
+  if (/^0[1-9]$/.test(hint)) return hint.slice(1)
+  return null
 }

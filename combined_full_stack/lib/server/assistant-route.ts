@@ -1,4 +1,6 @@
 // AI : shared assistant route validation, project lookup, and billing.
+// AI : TODO (arch-assistant-billing-http) — extend runBilledProjectAssistant (or sibling) so testing/diagnosis
+// AI :   routes don't re-copy gate+record+model parse.
 
 import { NextResponse } from "next/server"
 import { ASSISTANT_HISTORY_LIMIT } from "@/lib/assistant-chat-types"

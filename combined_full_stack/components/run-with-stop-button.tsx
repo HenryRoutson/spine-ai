@@ -23,12 +23,14 @@ export function RunStopButton({
   label = "Stop",
   title,
   size = "sm",
+  spineId = "jobs.stop",
 }: {
   onClick: (e: MouseEvent<HTMLButtonElement>) => void
   className?: string
   label?: string
   title?: string
   size?: RunButtonSize
+  spineId?: string
 }) {
   const resolvedTitle = title ?? (label === "Stop" ? "Stop this run" : label)
   return (
@@ -44,6 +46,7 @@ export function RunStopButton({
       onClick={onClick}
       title={resolvedTitle}
       aria-label={label}
+      spineId={spineId}
     >
       <Square className={cn(iconClass[size], "fill-current")} />
       <span className="font-mono text-[10px]">{label}</span>
@@ -67,6 +70,8 @@ export function RunWithStopButton({
   idleIcon,
   runButtonClassName,
   allowStartWhileRunning = false,
+  spineId = "inference.start-run",
+  stopSpineId = "inference.stop",
 }: {
   running: boolean
   onRun: () => void
@@ -83,6 +88,8 @@ export function RunWithStopButton({
   idleIcon?: ReactNode
   runButtonClassName?: string
   allowStartWhileRunning?: boolean
+  spineId?: string
+  stopSpineId?: string
 }) {
   const icon = iconClass[size]
   if (running) {
@@ -94,6 +101,7 @@ export function RunWithStopButton({
           className={cn(sizeClass[size], runButtonClassName)}
           disabled={allowStartWhileRunning ? disabled : true}
           onClick={allowStartWhileRunning ? onRun : undefined}
+          spineId={spineId}
         >
           {allowStartWhileRunning ? (
             <>
@@ -113,6 +121,7 @@ export function RunWithStopButton({
           title={stopTitle}
           size={size}
           onClick={onStop}
+          spineId={stopSpineId}
         />
       </div>
     )
@@ -130,6 +139,7 @@ export function RunWithStopButton({
       disabled={disabled}
       title={title}
       onClick={onRun}
+      spineId={spineId}
     >
       {idleIcon ?? <Play className={cn(icon, "mr-1.5")} />}
       {label}

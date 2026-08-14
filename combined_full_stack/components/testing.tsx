@@ -3,6 +3,7 @@
 // AI : Testing tab — *_testing.json files pin exact per-step outputs; a run pinpoints the
 // AI : first step that diverges. Static checks stay in Structure/Pipeline; this is for full runs.
 // AI : TODO (spec) — whole-JSON LLM overview diff alongside per-field deterministic/probabilistic checks.
+// AI : TODO (arch-run-chrome) — inference.tsx shares start/stop/job-hub/trace chrome; extract RunWorkspaceChrome.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
@@ -862,11 +863,13 @@ function staleLoadFailedContent(content: string): string | null {
               stopLabel="Stop all"
               stopTitle="Stop all running tests"
               idleIcon={<ListChecks className="mr-1.5 h-3.5 w-3.5" />}
+              spineId="testing.run"
+              stopSpineId="testing.stop"
             />
             <Button size="sm" variant="outline" className="h-8 bg-transparent" onClick={() => setAiOpen((v) => !v)}>
               <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Generate with AI
             </Button>
-            <Button size="sm" className="h-8" onClick={() => void createBlankTest()} disabled={creatingTest}>
+            <Button size="sm" className="h-8" onClick={() => void createBlankTest()} disabled={creatingTest} spineId="testing.new-file">
               {creatingTest ? (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               ) : (
@@ -1025,6 +1028,7 @@ function staleLoadFailedContent(content: string): string | null {
                                 e.stopPropagation()
                                 stopTest(t.doc.name)
                               }}
+                              spineId="testing.stop"
                             />
                           )}
                         </div>
@@ -1412,6 +1416,8 @@ function TestDetail({
               title={runTitle}
               label={dirty ? "Save as & run" : "Run test"}
               stopTitle="Stop this test run"
+              spineId="testing.run"
+              stopSpineId="testing.stop"
             />
           )}
         </div>
@@ -1488,7 +1494,7 @@ function TestDetail({
             <section>
               <div className="flex items-center gap-2">
                 <SectionLabel>run progress</SectionLabel>
-                <RunStopButton onClick={onStop} />
+                <RunStopButton onClick={onStop} spineId="testing.stop" />
               </div>
               <ul className="mt-1.5 space-y-1">
                 {modules.map((m) => {

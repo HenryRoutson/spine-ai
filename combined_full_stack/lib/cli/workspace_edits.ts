@@ -1,4 +1,5 @@
 // AI : workspace mutations shared by direct `spine session` commands and the Ink TUI.
+// AI : TODO (arch-workspace-edits) — promote into SpineSession (or core/workspace) so GUI builders don't reimplement add-model/add-step.
 
 import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"

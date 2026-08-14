@@ -1,4 +1,5 @@
 // AI : shared CLI result shapes — human text and --json agents use the same payloads.
+// AI : TODO (arch-cli-result) — flagString / ok / usage copied in run.ts, session_cli.ts, agent_cli.ts; put helpers here.
 
 export type cli_issue_level = "error" | "warning"
 

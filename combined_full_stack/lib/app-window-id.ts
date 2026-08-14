@@ -1,4 +1,5 @@
 // AI : workspace tab ids — shared by shell, nav, and panel prefetch (avoid app-shell ↔ nav cycles).
+// AI : TUI_TABS is Object.values(AppWindowId); area grouping lives in lib/app-area-windows.ts.
 export const AppWindowId = {
   Structure: "structure",
   Pipeline: "pipeline",

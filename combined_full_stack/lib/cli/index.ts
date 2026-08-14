@@ -3,6 +3,7 @@
 export type { CliCommandResult, CliIssue } from "@/lib/cli/types"
 export { loadProjectContext, type ProjectContext } from "@/lib/cli/project_context"
 export { validateProjectCommand } from "@/lib/cli/validate_project"
+export { lintPipelineCommand } from "@/lib/cli/lint_pipeline"
 export {
   parseTestCommand,
   validateTestCommand,

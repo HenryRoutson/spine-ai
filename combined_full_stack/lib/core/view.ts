@@ -18,6 +18,16 @@ import { runInputDocsSummary } from "@/lib/inference-input-assignment"
 import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
 import { RunStepStatus, type ModuleId } from "@/lib/types"
 import type { SessionChatTurn, SessionSnapshot } from "@/lib/core/types"
+import { AppWindowId } from "@/lib/app-window-id"
+import {
+  AppArea,
+  BUILDER_AREA_LABEL,
+  BUILDER_AREA_WINDOWS,
+  TUI_AREA_IDS,
+  areaIdForWindow,
+  type BuilderAreaId,
+} from "@/lib/app-area-windows"
+import { windowPanelHeader, windowStepHotkey } from "@/lib/window-panel-meta"
 
 export type PipelineStepView = {
   id: string
@@ -203,71 +213,42 @@ export type LogsView = {
   errorCount: number
 }
 
-export type TuiTab =
-  | "structure"
-  | "pipeline"
-  | "testing"
-  | "inference"
-  | "share"
-  | "earnings"
-  | "logging"
-  | "cache"
-  | "documents"
-  | "docs"
-  | "billing"
-  | "settings"
-  | "vibe"
+export type TuiTab = AppWindowId
 
-export const TUI_TABS: TuiTab[] = [
-  "structure",
-  "pipeline",
-  "testing",
-  "inference",
-  "share",
-  "earnings",
-  "logging",
-  "cache",
-  "documents",
-  "docs",
-  "billing",
-  "settings",
-  "vibe",
-]
+export const TUI_TABS: TuiTab[] = Object.values(AppWindowId)
 
 export const TUI_TAB_ALIASES: Record<string, TuiTab> = {
-  build: "pipeline",
-  agent: "vibe",
-  tests: "testing",
-  logs: "logging",
+  build: AppWindowId.Pipeline,
+  agent: AppWindowId.Vibe,
+  tests: AppWindowId.Testing,
+  logs: AppWindowId.Logging,
 }
 
-export type TuiArea = "build" | "deploy" | "observe" | "library" | "account" | "vibe"
+export type TuiArea = BuilderAreaId
 
-export const TUI_AREAS: { id: TuiArea; label: string; tabs: TuiTab[] }[] = [
-  { id: "build", label: "Build", tabs: ["structure", "pipeline", "testing", "inference"] },
-  { id: "deploy", label: "Deploy", tabs: ["share", "earnings"] },
-  { id: "observe", label: "Observe", tabs: ["logging", "cache"] },
-  { id: "library", label: "Library", tabs: ["documents", "docs"] },
-  { id: "account", label: "Account", tabs: ["billing", "settings"] },
-  { id: "vibe", label: "Vibe", tabs: ["vibe"] },
-]
+export const TUI_AREAS: { id: TuiArea; label: string; tabs: TuiTab[] }[] = TUI_AREA_IDS.map((id) => ({
+  id,
+  label: BUILDER_AREA_LABEL[id],
+  tabs: [...BUILDER_AREA_WINDOWS[id]],
+}))
 
-// AI : number keys match the web UI 01–10 hints; b opens account billing.
-export const TUI_TAB_HOTKEY: Record<TuiTab, string> = {
-  structure: "1",
-  pipeline: "2",
-  testing: "3",
-  inference: "4",
-  share: "5",
-  earnings: "6",
-  logging: "7",
-  cache: "8",
-  documents: "9",
-  docs: "0",
+const TUI_TAB_HOTKEY_OVERRIDE: Partial<Record<TuiTab, string>> = {
   billing: "b",
   settings: ",",
   vibe: "a",
 }
+
+function tuiHotkey(tab: TuiTab): string {
+  const override = TUI_TAB_HOTKEY_OVERRIDE[tab]
+  if (override) return override
+  const key = windowStepHotkey(windowPanelHeader(tab).step)
+  if (!key) throw new Error(`TUI tab ${tab} has no digit hotkey — add TUI_TAB_HOTKEY_OVERRIDE`)
+  return key
+}
+
+export const TUI_TAB_HOTKEY: Record<TuiTab, string> = Object.fromEntries(
+  TUI_TABS.map((tab) => [tab, tuiHotkey(tab)]),
+) as Record<TuiTab, string>
 
 export type TuiTabMeta = {
   title: string
@@ -276,90 +257,46 @@ export type TuiTabMeta = {
   empty: string
 }
 
-// AI : usability annotations — same copy as the full UI window headers, plus empty-state next steps.
-export const TUI_TAB_META: Record<TuiTab, TuiTabMeta> = {
-  structure: {
-    title: "Structures",
-    step: "01 / Structure",
-    description: "Define the pydantic models your LLM must output to. Schema validation is implicit on every step's I/O.",
-    empty: "no models — press m to add one (fixes Input / Output)",
-  },
-  pipeline: {
-    title: "Linear Pipeline",
-    step: "02 / Pipeline",
-    description: "Each step declares its input and output model. Mismatched I/O is flagged — there is no explicit validation step.",
-    empty: "no project — press n to create one",
-  },
-  testing: {
-    title: "Pipeline Tests",
-    step: "03 / Testing",
-    description: "Pin exact per-step outputs in *_testing.json files, then run to pinpoint failures.",
-    empty: "no *_testing.json files — add one in Documents, then press t to run",
-  },
-  inference: {
-    title: "Run Pipeline",
-    step: "04 / Inference",
-    description: "Save named input setups, then run the pipeline. Final output appears when the run finishes.",
-    empty: "no documents assigned — add a file in Documents, then press i to run",
-  },
-  share: {
-    title: "Share & Monetize",
-    step: "05 / Share",
-    description: "Publish run links, APIs, or marketplace copies — viewer billing uses the Billing tab.",
-    empty: "no published links — create them in the web UI, then session pull",
-  },
-  earnings: {
-    title: "Earnings account",
-    step: "Earnings",
-    description: "Markup from viewer-funded shared links and hosted APIs — separate from your LLM credit balance.",
-    empty: "no account — session pull / SPINE_API_URL",
-  },
-  logging: {
-    title: "Run History",
-    step: "07 / Logging",
-    description: "Every inference run is recorded with a full per-step trace, token counts, and cost.",
-    empty: "no runs yet — press i to run inference, or t to run a test",
-  },
-  cache: {
-    title: "Step cache",
-    step: "cache",
-    description: "Disk-cached pipeline steps — search entries and see reuse counts.",
-    empty: "no cache entries — they appear after inference (session pull)",
-  },
-  documents: {
-    title: "Document Store",
-    step: "09 / Documents",
-    description: "Content-addressed storage — upload, view, and fork-edit JSON as a new named file.",
-    empty: "no documents — spine session add-doc, or import a seed",
-  },
-  docs: {
-    title: "Documentation",
-    step: "10 / Docs",
-    description: "Project rules and context — prepended to every agent prompt to prevent regressions.",
-    empty: "no markdown — press e to write project docs",
-  },
-  billing: {
-    title: "Account billing",
-    step: "· / Billing",
-    description: "Credit balance, top-ups, and spend across all projects.",
-    empty: "no account — session pull / SPINE_API_URL",
-  },
-  settings: {
-    title: "Settings",
-    step: "· / Settings",
-    description: "App preferences — stored in this session (model, save status).",
-    empty: "default model",
-  },
-  vibe: {
-    title: "Vibe",
-    step: "· / Vibe",
-    description: "Talk to the agent to build the full project — structures, pipeline, docs, and run.",
-    empty: "no chat yet — press a to ask vibe",
-  },
+// AI : TUI-only empty states — title/step/description come from windowPanelHeader (GUI).
+const TUI_TAB_EMPTY: Record<TuiTab, string> = {
+  structure: "no models — press m to add one (fixes Input / Output)",
+  pipeline: "no project — press n to create one",
+  testing: "no *_testing.json files — add one in Documents, then press t to run",
+  inference: "no documents assigned — add a file in Documents, then press i to run",
+  share: "no published links — create them in the web UI, then session pull",
+  earnings: "no account — session pull / SPINE_API_URL",
+  logging: "no runs yet — press i to run inference, or t to run a test",
+  cache: "no cache entries — they appear after inference (session pull)",
+  documents: "no documents — spine session add-doc, or import a seed",
+  docs: "no markdown — press e to write project docs",
+  "project-billing": "no account — session pull / SPINE_API_URL",
+  "project-settings": "no project — press n to create one",
+  billing: "no account — session pull / SPINE_API_URL",
+  settings: "default model",
+  vibe: "no chat yet — press a to ask vibe",
 }
 
+const TUI_TAB_DESCRIPTION_OVERRIDE: Partial<Record<TuiTab, string>> = {
+  settings: "App preferences — stored in this session (model, save status).",
+}
+
+export const TUI_TAB_META: Record<TuiTab, TuiTabMeta> = Object.fromEntries(
+  TUI_TABS.map((tab) => {
+    const header = windowPanelHeader(tab)
+    return [
+      tab,
+      {
+        title: header.title,
+        step: header.step,
+        description: TUI_TAB_DESCRIPTION_OVERRIDE[tab] ?? header.description,
+        empty: TUI_TAB_EMPTY[tab],
+      },
+    ]
+  }),
+) as Record<TuiTab, TuiTabMeta>
+
 export function areaForTuiTab(tab: TuiTab): TuiArea {
-  return TUI_AREAS.find((a) => a.tabs.includes(tab))?.id ?? "build"
+  return areaIdForWindow(tab) ?? AppArea.Build
 }
 
 export function tabsInTuiArea(area: TuiArea): TuiTab[] {

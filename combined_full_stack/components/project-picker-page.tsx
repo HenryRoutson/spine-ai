@@ -187,6 +187,7 @@ export function ProjectPickerPage() {
                 className="bg-transparent"
                 onClick={() => void handleResync()}
                 disabled={busy === "resync"}
+                spineId="project.resync-examples"
               >
                 {busy === "resync" ? (
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -287,13 +288,14 @@ export function ProjectPickerPage() {
                         className="h-8"
                         onClick={() => void handleOpen(p.id)}
                         disabled={openingId !== null || busy !== null}
+                        spineId="project.open"
                       >
                         {openingId === p.id ? (
                           <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                         ) : null}
                         Open
                       </Button>
-                      <Button variant="ghost" size="icon-sm" onClick={() => startEdit(p)} aria-label={`Rename ${p.name}`}>
+                      <Button variant="ghost" size="icon-sm" onClick={() => startEdit(p)} aria-label={`Rename ${p.name}`} spineId="project.rename">
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <Button
@@ -302,6 +304,7 @@ export function ProjectPickerPage() {
                         onClick={() => void handleCloneProject(p.id)}
                         disabled={busy === `clone-${p.id}`}
                         aria-label={`Clone ${p.name}`}
+                        spineId="project.clone"
                       >
                         {busy === `clone-${p.id}` ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -315,6 +318,7 @@ export function ProjectPickerPage() {
                           size="icon-sm"
                           deleting={deleting}
                           label={`Delete ${p.name}`}
+                          spineId="project.delete"
                           onClick={() => void runDelete(p, projects, () => deleteProject(p.id))}
                         />
                       ) : null}

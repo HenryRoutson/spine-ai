@@ -346,6 +346,7 @@ export function Settings() {
                 <Button
                   variant="outline"
                   size="sm"
+                  spineId="settings.sign-out"
                   onClick={() => {
                     void createClient()
                       .then((supabase) => supabase.auth.signOut())

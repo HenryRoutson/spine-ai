@@ -6,6 +6,7 @@ import { normalizeModelField } from "./type_expr";
 import { withBuiltinTypeAliases } from "./builtin_types";
 import { FIELD_TYPES, FieldType, type ModelField, type StructureModel, type StructureModelId, type TypeAlias, type TypeAliasId } from "./types";
 
+// AI : TODO (arch-chat-turn) — identical to core SessionChatTurn; one type, both import it.
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
 const fieldTypeValues = FIELD_TYPES as [FieldType, ...FieldType[]];

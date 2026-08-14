@@ -612,6 +612,7 @@ export function resolveHostedApiAssignment(
 }
 
 // AI : in-memory doc overlay for hosted API runs — no session cookies.
+// AI : TODO (arch-store-overlay) — same facade as overlayStoreForSharedRun; one overlayStore(base, extraDocs).
 export function overlayStoreForHostedRun(
   base: Store,
   assignment: InputDocsAssignment,

@@ -182,6 +182,7 @@ export function ProjectSelector({ embed = false }: { embed?: boolean }) {
                             startRename(p.id, p.name)
                           }}
                           aria-label={`Rename ${p.name}`}
+                          spineId="project.rename"
                         >
                           <Pencil className="h-3 w-3" />
                         </Button>
@@ -193,6 +194,7 @@ export function ProjectSelector({ embed = false }: { embed?: boolean }) {
                             className="h-6 w-6 opacity-0 group-hover:opacity-100"
                             deleting={isDeleting(p.id)}
                             label={`Delete ${p.name}`}
+                            spineId="project.delete"
                             onClick={(e: React.MouseEvent) => {
                               e.stopPropagation()
                               e.preventDefault()
@@ -220,6 +222,7 @@ export function ProjectSelector({ embed = false }: { embed?: boolean }) {
             className="h-[30px] gap-1.5 px-2.5 text-xs"
             onClick={handleAllProjects}
             title="Browse all projects"
+            spineId="project.browse-all"
           >
             <LayoutGrid className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">All projects…</span>
@@ -233,6 +236,7 @@ export function ProjectSelector({ embed = false }: { embed?: boolean }) {
             disabled={addingProject}
             aria-busy={addingProject}
             title="Create a new project"
+            spineId="project.add"
           >
             {addingProject ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />

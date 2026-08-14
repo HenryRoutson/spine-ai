@@ -2,6 +2,7 @@
 
 // AI : TODO — per-step cache toggles, run-from-step, and cache probe (see requirements/inference_tab_requirements.md).
 // AI : TODO (spec) — demo assert: when running seed example setups, compare final output to project.expectedOutputs.
+// AI : TODO (arch-run-chrome) — testing.tsx shares start/stop/job-hub/trace chrome; extract RunWorkspaceChrome.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   AlertTriangle,
@@ -594,13 +595,15 @@ export function Inference() {
                         />
                       </div>
                     )}
-                    <RunWithStopButton
+                      <RunWithStopButton
                       className="w-full"
                       runButtonClassName="flex-1"
                       running={run.phase === "running"}
                       allowStartWhileRunning
                       onRun={run.start}
                       onStop={() => run.stop()}
+                      spineId="inference.start-run"
+                      stopSpineId="inference.stop"
                       disabled={
                         !run.allInputsReady ||
                         run.inputsInvalid ||
@@ -920,6 +923,7 @@ function SetupDetail({
               variant="outline"
               className="h-8 bg-transparent"
               onClick={() => onApplyInputs(state.setup!)}
+              spineId="inference.apply-setup"
             >
               Apply to run
             </Button>

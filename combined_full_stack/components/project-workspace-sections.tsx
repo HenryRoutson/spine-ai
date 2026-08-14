@@ -16,7 +16,7 @@ export function BlankProjectButton({
   className?: string
 }) {
   return (
-    <Button className={className} onClick={onClick} disabled={busy}>
+    <Button className={className} onClick={onClick} disabled={busy} spineId="project.add">
       {busy ? (
         <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
       ) : (
@@ -66,6 +66,7 @@ export function ExampleTemplateGrid({
             className="shrink-0"
             onClick={() => onClone(t.id)}
             disabled={busyId === t.id}
+            spineId="project.clone-template"
           >
             {busyId === t.id ? (
               <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />

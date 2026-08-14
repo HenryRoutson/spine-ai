@@ -1,4 +1,6 @@
 // AI : vanilla store matching useStore() names — React/CLI/MCP subscribe; persist is a port.
+// AI : TODO (arch-thin-store) — GUI useStore should call these methods instead of reimplementing
+// AI :   rename/delete/apply; React still owns hydration/debounce/billing (docs/parity.md §8.5).
 
 import { createHash } from "node:crypto"
 import { uid } from "@/lib/id"
@@ -75,6 +77,7 @@ export function emptySessionSnapshot(): SessionSnapshot {
   }
 }
 
+// AI : TODO (arch-blank-project) — twins seed.blankProject; one factory (session/seed only differ on id/strategies).
 function blankProject(now: number): Project {
   const id = uid<ProjectId>("p_")
   return {
@@ -109,6 +112,7 @@ function blankProject(now: number): Project {
   }
 }
 
+// AI : TODO (arch-hash-content) — twins store.hashContent; import that (or a shared hash helper).
 function hashContent(content: string): DocId {
   return (`sha_${createHash("sha256").update(content).digest("hex").slice(0, 16)}`) as DocId
 }

@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — chrome.pager-prev chrome.pager-next
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
@@ -39,6 +40,7 @@ export function IoPager({ items, renderItem }: IoPagerProps) {
             type="button"
             disabled={index <= 0}
             onClick={() => setIndex((i) => Math.max(0, i - 1))}
+            data-spine-id="chrome.pager-prev"
             className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border text-muted-foreground hover:text-foreground disabled:opacity-30"
             aria-label="Previous item"
           >
@@ -48,6 +50,7 @@ export function IoPager({ items, renderItem }: IoPagerProps) {
             type="button"
             disabled={index >= items.length - 1}
             onClick={() => setIndex((i) => Math.min(items.length - 1, i + 1))}
+            data-spine-id="chrome.pager-next"
             className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border text-muted-foreground hover:text-foreground disabled:opacity-30"
             aria-label="Next item"
           >

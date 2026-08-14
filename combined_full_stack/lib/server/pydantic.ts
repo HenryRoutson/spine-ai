@@ -8,6 +8,7 @@ import {
   typeExprToTs,
   TypeExprKind,
 } from "./type_expr";
+// AI : TODO (arch-pydantic-walk) — allModelsTo{Pydantic,Dts,Rust,Go,Baml} share a field walk; language printers only.
 import { stripBuiltinTypeAliases } from "./builtin_types";
 import { stripSharedModels } from "./builtin_models";
 import type { TypeExpr } from "./types";

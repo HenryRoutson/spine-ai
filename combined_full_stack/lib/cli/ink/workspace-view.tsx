@@ -250,7 +250,7 @@ export function WorkspaceView({
             tab="cache"
             rows={toCacheView(snap).entries.map((e) => (e.stepLabel ? `${e.stepLabel}  ${e.key}` : e.key))}
           />
-        ) : tab === "billing" ? (
+        ) : tab === "billing" || tab === "project-billing" ? (
           <MoneyPanel kind="billing" snap={snap} />
         ) : tab === "earnings" ? (
           <MoneyPanel kind="earnings" snap={snap} />

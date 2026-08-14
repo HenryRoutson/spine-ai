@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — chrome.dialog-close
 
 import { createPortal } from "react-dom"
 import { Button } from "@/components/ui/button"
@@ -17,7 +18,7 @@ export function PreviewBlockedDialog({ onClose }: { onClose: () => void }) {
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           Document uploads are disabled in the live preview without sign in.
         </p>
-        <Button size="sm" className="mt-4" onClick={onClose}>
+        <Button size="sm" className="mt-4" onClick={onClose} spineId="chrome.dialog-close">
           OK
         </Button>
       </div>

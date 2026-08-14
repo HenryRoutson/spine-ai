@@ -1,4 +1,5 @@
 // AI : same propose/apply path as Vibe — LLM is remote; apply is local session mutation.
+// AI : TODO (arch-structure-assistant) — askStructureAgent uses proposeStructureChange; GUI structure tab uses full project assistant.
 
 import { DocLabel, InputType } from "@/lib/types"
 import type { ModelId, Project } from "@/lib/types"

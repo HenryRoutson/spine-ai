@@ -1,6 +1,7 @@
 import { orderedInputModules } from "@/lib/inference-input";
 import { buildCustomFnSource } from "@/lib/custom_code";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
+import { DEFAULT_MERGE_POLICY } from "@/lib/merger";
 import { usesPassthroughStructure } from "@/lib/module-kinds";
 import { modelExportIdentifierGo, modelExportIdentifierRust, rustFieldIdent } from "@/lib/structure-shape";
 import { webhookStepUsesPipelineState } from "@/lib/webhook-step";
@@ -21,6 +22,8 @@ import { FieldType, ModuleKind } from "./types";
 import type { StepLabel } from "../run-types";
 import type { PipelineModule, Project, StructureModelId, TypeExpr } from "./types";
 import { assemblePolymorphicTsSignature } from "@/lib/type-expr-polymorph";
+import { llmSchema } from "./structure";
+import { z } from "zod";
 
 export type PipelineSetupFile = {
   filename: string;
@@ -37,7 +40,40 @@ export function prepareExportProject(project: Project): Project {
   return { ...migrated, models: withSharedModels(migrated.models) };
 }
 
+export function exportLlmSchemaJson(
+  project: Project,
+  structureId: string | undefined,
+  isList: boolean,
+): string {
+  const model = project.models.find((x) => x.id === structureId);
+  if (!model) return "{}";
+  return JSON.stringify(z.toJSONSchema(llmSchema(model, project.models, isList, project.typeAliases ?? [])));
+}
+
+export function exportStepLlmSchemaJson(project: Project, m: PipelineModule): string {
+  const itemSchema = m.kind === ModuleKind.LlmBatch;
+  return exportLlmSchemaJson(project, m.outStructureId, itemSchema ? false : stepEmitsList(m));
+}
+
+export function exportSchemaExprTs(json: string): string {
+  return json;
+}
+
+export function exportSchemaExprPy(json: string): string {
+  return `json.loads(${JSON.stringify(json)})`;
+}
+
+export function exportSchemaExprRust(json: string): string {
+  return `serde_json::from_str(${JSON.stringify(json)}).unwrap_or_else(|_| serde_json::json!({}))`;
+}
+
+export function exportSchemaExprGo(json: string): string {
+  return `json.RawMessage([]byte(${JSON.stringify(json)}))`;
+}
+
 // AI : shared by py / ts / rust / go / baml pipeline exporters — keep step bodies DRY across languages.
+// AI : TODO (arch-export-orchestrator) — generateOrchestrator* still walk the same spine;
+// AI :   dispatch owns kind × lang bodies (pipeline_export_dispatch.ts). IR printers next, leave BAML.
 export function indentExportBlock(code: string, spaces: number): string {
   const pad = " ".repeat(spaces);
   return code
@@ -442,6 +478,169 @@ function generateCustomCodeStepBodyTs(code: string, inTs: string, outTs: string)
   ].join("\n");
 }
 
+export function generateMergeStepBodyTs(m: PipelineModule, outTs: string): string {
+  const policyJson = JSON.stringify(m.mergePolicy ?? DEFAULT_MERGE_POLICY);
+  const wrapField = m.mergeWrapListField?.trim();
+  const stateLabel = m.mergeStateLabel?.trim();
+  const lines = [exportComment("//", "Deep-merge via shared mergeFold")];
+  if (!stateLabel && !wrapField) {
+    lines.push(
+      "const values = Array.isArray(input) ? (input as unknown[]).filter((v) => v != null) : input != null ? [input] : [];",
+      `return mergeFold(values, ${policyJson}) as ${outTs};`,
+    );
+    return lines.join("\n");
+  }
+  lines.push("let spine: unknown = input;");
+  if (wrapField) {
+    const wrapKey = JSON.stringify(wrapField);
+    lines.push(`if (Array.isArray(spine)) spine = { [${wrapKey}]: spine };`);
+  }
+  lines.push("const values: unknown[] = [];");
+  if (stateLabel) {
+    const stateKey = JSON.stringify(stateLabel);
+    lines.push(`const fromState = state[${stateKey}];`, "if (fromState != null) values.push(fromState);");
+  }
+  lines.push("if (spine != null) values.push(spine);", `return mergeFold(values, ${policyJson}) as ${outTs};`);
+  return lines.join("\n");
+}
+
+export function generateMergeStepBodyPy(m: PipelineModule, outPy: string): string {
+  const policyJson = JSON.stringify(m.mergePolicy ?? DEFAULT_MERGE_POLICY);
+  const wrapField = m.mergeWrapListField?.trim();
+  const stateLabel = m.mergeStateLabel?.trim();
+  const lines = [exportComment("#", "Deep-merge via shared merge_fold")];
+  const cast = `return cast(${outPy}, cast(object, merge_fold(values, ${policyJson})))`;
+  if (!stateLabel && !wrapField) {
+    lines.push(
+      "values = input if isinstance(input, list) else ([input] if input is not None else [])",
+      cast,
+    );
+    return lines.join("\n");
+  }
+  lines.push("spine = input");
+  if (wrapField) {
+    const wrapKey = JSON.stringify(wrapField);
+    lines.push(`if isinstance(spine, list): spine = {${wrapKey}: spine}`);
+  }
+  lines.push("values: list[Any] = []");
+  if (stateLabel) {
+    const stateKey = JSON.stringify(stateLabel);
+    lines.push(`from_state = state[${stateKey}]`, "if from_state is not None: values.append(from_state)");
+  }
+  lines.push("if spine is not None: values.append(spine)", cast);
+  return lines.join("\n");
+}
+
+export function generateMergeStepBodyGo(m: PipelineModule, outGo: string): string {
+  const policyJson = JSON.stringify(m.mergePolicy ?? DEFAULT_MERGE_POLICY);
+  const wrapField = m.mergeWrapListField?.trim();
+  const stateLabel = m.mergeStateLabel?.trim();
+  const zero = goZeroValue(outGo);
+  const lines = [
+    exportComment("//", "Deep-merge via shared mergeFold"),
+    `var policy any`,
+    `if err := json.Unmarshal([]byte(${JSON.stringify(policyJson)}), &policy); err != nil {`,
+    `\treturn ${zero}, err`,
+    `}`,
+    `inJSON, err := json.Marshal(input)`,
+    `if err != nil {`,
+    `\treturn ${zero}, err`,
+    `}`,
+    `var spine any`,
+    `if err := json.Unmarshal(inJSON, &spine); err != nil {`,
+    `\treturn ${zero}, err`,
+    `}`,
+  ];
+  if (wrapField) {
+    lines.push(
+      `if _, isArr := spine.([]any); isArr {`,
+      `\tspine = map[string]any{${JSON.stringify(wrapField)}: spine}`,
+      `}`,
+    );
+  }
+  lines.push(`var values []any`);
+  if (stateLabel) {
+    lines.push(
+      `if fromState, ok := state[${JSON.stringify(stateLabel)}]; ok && len(fromState) > 0 {`,
+      `\tvar v any`,
+      `\tif err := json.Unmarshal(fromState, &v); err != nil {`,
+      `\t\treturn ${zero}, err`,
+      `\t}`,
+      `\tvalues = append(values, v)`,
+      `}`,
+    );
+  }
+  if (!stateLabel && !wrapField) {
+    lines.push(
+      `if arr, ok := spine.([]any); ok {`,
+      `\tfor _, v := range arr {`,
+      `\t\tif v != nil { values = append(values, v) }`,
+      `\t}`,
+      `} else if spine != nil {`,
+      `\tvalues = append(values, spine)`,
+      `}`,
+    );
+  } else {
+    lines.push(`if spine != nil { values = append(values, spine) }`);
+  }
+  lines.push(
+    `merged := mergeFold(values, policy)`,
+    `b, err := json.Marshal(merged)`,
+    `if err != nil {`,
+    `\treturn ${zero}, err`,
+    `}`,
+    `var out ${outGo}`,
+    `if err := json.Unmarshal(b, &out); err != nil {`,
+    `\treturn ${zero}, err`,
+    `}`,
+    `return out, nil`,
+  );
+  return lines.join("\n");
+}
+
+export function generateMergeStepBodyRust(m: PipelineModule, outRust: string): string {
+  const policyJson = JSON.stringify(m.mergePolicy ?? DEFAULT_MERGE_POLICY);
+  const wrapField = m.mergeWrapListField?.trim();
+  const stateLabel = m.mergeStateLabel?.trim();
+  const lines = [
+    exportComment("//", "Deep-merge via shared merge_fold"),
+    `let policy: Value = serde_json::from_str(${JSON.stringify(policyJson)})?;`,
+    `let mut spine = serde_json::to_value(&input)?;`,
+  ];
+  if (wrapField) {
+    lines.push(
+      `if spine.is_array() {`,
+      `    spine = serde_json::json!({ ${JSON.stringify(wrapField)}: spine });`,
+      `}`,
+    );
+  }
+  lines.push(`let mut values: Vec<Value> = Vec::new();`);
+  if (stateLabel) {
+    lines.push(
+      `if let Some(from_state) = state.get(${JSON.stringify(stateLabel)}) {`,
+      `    if !from_state.is_null() { values.push(from_state.clone()); }`,
+      `}`,
+    );
+  }
+  if (!stateLabel && !wrapField) {
+    lines.push(
+      `match spine {`,
+      `    Value::Array(arr) => values.extend(arr.into_iter().filter(|v| !v.is_null())),`,
+      `    Value::Null => {}`,
+      `    other => values.push(other),`,
+      `}`,
+    );
+  } else {
+    lines.push(`if !spine.is_null() { values.push(spine); }`);
+  }
+  lines.push(
+    `let merged = merge_fold(values, &policy);`,
+    `let out: ${outRust} = serde_json::from_value(merged)?;`,
+    `Ok(out)`,
+  );
+  return lines.join("\n");
+}
+
 function tsCustomCodeCall(code: string, outTs: string): string {
   return tsCustomCodeParamCount(code) <= 1
     ? `return __fn(input) as ${outTs};`
@@ -686,12 +885,12 @@ export function generateAssembleStepBodyPy(m: PipelineModule, _project: Project,
   ].join("\n");
 }
 
-export function generateParallelStepBodyTs(m: PipelineModule, outTs: string): string {
+export function generateParallelStepBodyTs(m: PipelineModule, project: Project, outTs: string): string {
   const branches = (m.parallelBranches ?? []).filter((b) => b.field.trim());
-  const calls = branches.map(
-    (b) =>
-      `${JSON.stringify(b.field.trim())}: await llmStructured(${JSON.stringify(b.prompt || "Process the input.")} + "\\n\\nINPUT DATA:\\n" + JSON.stringify(input), /* schema for ${b.outStructureId} */ {} as never)`,
-  );
+  const calls = branches.map((b) => {
+    const schema = exportSchemaExprTs(exportLlmSchemaJson(project, b.outStructureId, false));
+    return `${JSON.stringify(b.field.trim())}: await llmStructured(${JSON.stringify(b.prompt || "Process the input.")} + "\\n\\nINPUT DATA:\\n" + JSON.stringify(input), ${schema} as never)`;
+  });
   return [
     exportComment("//", parallelBranchesComment()),
     `const assembled = { ${calls.join(", ")} };`,
@@ -699,11 +898,12 @@ export function generateParallelStepBodyTs(m: PipelineModule, outTs: string): st
   ].join("\n");
 }
 
-export function generateParallelStepBodyPy(m: PipelineModule, outPy: string): string {
+export function generateParallelStepBodyPy(m: PipelineModule, project: Project, outPy: string): string {
   const branches = (m.parallelBranches ?? []).filter((b) => b.field.trim());
   const entries = branches.map((b) => {
     const prompt = JSON.stringify(b.prompt || "Process the input.");
-    return `    ${JSON.stringify(b.field.trim())}: await llm_structured(${prompt} + "\\n\\nINPUT DATA:\\n" + json.dumps(input, default=str), None),`;
+    const schema = exportSchemaExprPy(exportLlmSchemaJson(project, b.outStructureId, false));
+    return `    ${JSON.stringify(b.field.trim())}: await llm_structured(${prompt} + "\\n\\nINPUT DATA:\\n" + json.dumps(input, default=str), ${schema}),`;
   });
   return [
     exportComment("#", parallelBranchesComment()),
@@ -714,14 +914,15 @@ export function generateParallelStepBodyPy(m: PipelineModule, outPy: string): st
   ].join("\n");
 }
 
-export function generateParallelStepBodyRust(m: PipelineModule, outRust: string): string {
+export function generateParallelStepBodyRust(m: PipelineModule, project: Project, outRust: string): string {
   const branches = (m.parallelBranches ?? []).filter((b) => b.field.trim());
   const inserts = branches.map((b) => {
     const prompt = exportStringLiteral(b.prompt || "Process the input.");
+    const schema = exportSchemaExprRust(exportLlmSchemaJson(project, b.outStructureId, false));
     return [
       `{`,
       `    let prompt = format!("{}\\n\\nINPUT DATA:\\n{}", ${prompt}, serde_json::to_string_pretty(&input)?);`,
-      `    let schema = serde_json::json!({}); // schema for ${b.outStructureId}`,
+      `    let schema = ${schema};`,
       `    let value = llm_structured(&prompt, &schema).await?;`,
       `    map.insert(${JSON.stringify(b.field.trim())}.to_string(), value);`,
       `}`,
@@ -736,12 +937,13 @@ export function generateParallelStepBodyRust(m: PipelineModule, outRust: string)
   ].join("\n");
 }
 
-export function generateParallelStepBodyGo(m: PipelineModule, outGo: string): string {
+export function generateParallelStepBodyGo(m: PipelineModule, project: Project, outGo: string): string {
   const branches = (m.parallelBranches ?? []).filter((b) => b.field.trim());
   const zero = `*new(${outGo})`;
   const assigns = branches.flatMap((b) => {
     const prompt = exportStringLiteral(b.prompt || "Process the input.");
     const field = JSON.stringify(b.field.trim());
+    const schema = exportSchemaExprGo(exportLlmSchemaJson(project, b.outStructureId, false));
     return [
       `{`,
       `\tinJSON, err := json.MarshalIndent(input, "", "  ")`,
@@ -749,7 +951,7 @@ export function generateParallelStepBodyGo(m: PipelineModule, outGo: string): st
       `\t\treturn ${zero}, err`,
       `\t}`,
       `\tuserPrompt := ${prompt} + "\\n\\nINPUT DATA:\\n" + string(inJSON)`,
-      `\tschema := json.RawMessage([]byte("{}")) // schema for ${b.outStructureId}`,
+      `\tschema := ${schema}`,
       `\tvalue, err := llmStructured(userPrompt, schema)`,
       `\tif err != nil {`,
       `\t\treturn ${zero}, err`,
@@ -1024,6 +1226,7 @@ function orchestratorInvokeLine(
     : `    spine = await ${fn}(inputs[${key}], state)`;
 }
 
+// AI : TODO (arch-export-orchestrator) — Ts/Py/Rust/Go walk the same spine; one IR then printers.
 export function generateOrchestratorTs(project: Project, stepFnName: (m: PipelineModule, i: number) => string): string {
   const inputMods = orchestratorInputMods(project);
   const multi = inputMods.length > 1;

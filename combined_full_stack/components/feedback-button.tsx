@@ -123,6 +123,7 @@ export function FeedbackButton() {
           className="mt-2 w-full"
           onClick={() => void submit()}
           disabled={!canSubmit}
+          spineId="feedback.submit"
         >
           {busy ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
           Send

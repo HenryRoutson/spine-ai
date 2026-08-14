@@ -77,7 +77,7 @@ interface ParserCacheDbRow {
 // AI : Supabase twin of JsonStore. The Store contract is synchronous, so: load everything
 // AI : for the signed-in user once in init(), serve reads from memory, and queue
 // AI : write-behind upserts that flush() awaits (routes flush before responding).
-// AI : TODO bug (prod) — load-all + write-behind is serverless-hostile; make Store async and
+// AI : TODO bug (prod) / TODO (arch-store-async) — load-all + write-behind is serverless-hostile; make Store async and
 // AI : read/write Postgres per call so instances do not diverge.
 // AI : docs.content = built-in parser text; doc_vision_cache = OpenRouter vision OCR (separate table).
 export class SupabaseStore implements Store {

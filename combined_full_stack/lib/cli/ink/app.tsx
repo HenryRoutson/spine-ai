@@ -1,3 +1,4 @@
+// AI : parity ids — tui.quit
 // AI : Ink app — dispatches SpineSession methods (same names as useStore); no fetch in render.
 
 import { useState } from "react"

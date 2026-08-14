@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — chrome.copy
 
 import "@/lib/monaco-loader"
 import dynamic from "next/dynamic"

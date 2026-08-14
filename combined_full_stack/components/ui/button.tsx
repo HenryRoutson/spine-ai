@@ -44,11 +44,13 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  spineId,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants> & { spineId?: string }) {
   return (
     <ButtonPrimitive
       data-slot="button"
+      data-spine-id={spineId}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — pipeline.configure-step pipeline.remove-step pipeline.assign-structure
 
 import { MODULE_META, type PipelineModule, type StructureModel, type TypeAlias } from "@/lib/types"
 import { isAutoQuoteStep } from "@/lib/quote-steps"

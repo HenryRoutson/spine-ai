@@ -48,6 +48,7 @@ function parserCacheDir(): string {
 }
 
 // AI : content hash == doc id, so identical uploads dedupe to one ref (Documents tab).
+// AI : TODO (arch-hash-content) — SpineSession has a private twin; session should import this.
 export function hashContent(content: string): DocId {
   return ("sha_" + createHash("sha256").update(content).digest("hex").slice(0, 16)) as DocId;
 }
@@ -154,6 +155,8 @@ interface Persisted {
 // AI : the ONE storage interface — JsonStore (local JSON) and SupabaseStore (per-user, RLS)
 // AI : both implement it, so runPipeline & co never know which one they're on.
 // AI : reads/writes are sync; flush() awaits any write-behind persistence (no-op for JSON).
+// AI : TODO (arch-store-async) — Store is sync + write-behind RAM; make methods async so JsonStore vs
+// AI :   SupabaseStore aren't both in-memory mirrors (see supabase_store.ts load-all TODO).
 export interface Store {
   projects(): Project[];
   project(id: ProjectId): Project | undefined;
@@ -535,7 +538,7 @@ export class JsonStore implements Store {
     return existsSync(path) ? readFileSync(path, "utf8") : undefined;
   }
 
-  // AI : TODO refactor — parser/vision cache mirrors supabase_store index; JsonStore uses filesystem backend.
+  // AI : TODO refactor / TODO (arch-parser-cache) — parser/vision cache mirrors supabase_store index; JsonStore should use parser_vision_cache_index + fs adapter.
   parserCacheGetByFileHash(fileHash: FileContentHash, parser: ParserKind): ParserCacheRow | undefined {
     const path = join(parserCacheDir(), `${parserCacheKey(fileHash, parser)}.json`);
     if (!existsSync(path)) return undefined;

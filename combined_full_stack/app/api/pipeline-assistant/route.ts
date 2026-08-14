@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+// AI : TODO (arch-assistant-http) — copy of project-assistant/route.ts; keep one POST handler and alias this path.
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
 import { assistantRequestBodySchema, parseRequestJson } from "@/lib/server/api_schemas";

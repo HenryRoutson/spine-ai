@@ -148,7 +148,7 @@ export function MarketplacePublishForm({
           </p>
         </div>
       ) : (
-        <Button className="w-full gap-2" onClick={() => void publish()} disabled={busy || !title.trim()}>
+        <Button className="w-full gap-2" onClick={() => void publish()} disabled={busy || !title.trim()} spineId="share.marketplace-publish">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Store className="h-4 w-4" />}
           Share to marketplace
         </Button>

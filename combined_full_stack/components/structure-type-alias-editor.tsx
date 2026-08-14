@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — structure.add-alias
 
 import { Trash2 } from "lucide-react"
 import { TypeExprEditor } from "@/components/type-expr-editor"

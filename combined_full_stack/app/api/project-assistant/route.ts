@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+// AI : TODO (arch-assistant-http) — pipeline-assistant/route.ts is a copy; this should be the one POST handler.
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
 import { assistantRequestBodySchema, parseRequestJson } from "@/lib/server/api_schemas";

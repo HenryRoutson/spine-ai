@@ -1,5 +1,7 @@
 "use client"
 
+// AI : TODO (arch-consumer-run) — own-pipeline-run-panel is the same chrome; one ConsumerRunPanel with funding/download slots.
+
 import { useState } from "react"
 import {
   AlertTriangle,

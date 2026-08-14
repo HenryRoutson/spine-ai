@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — inference.assign-input
 
 import { useEffect, useRef, useState } from "react"
 import { FileText, FolderOpen, Link2, Loader2, Upload, X } from "lucide-react"
@@ -194,6 +195,7 @@ export function InferenceInputSlot(props: {
               className="h-8 w-full bg-transparent"
               disabled={jsonStructDisabled}
               onClick={openPicker}
+              spineId="inference.assign-input"
             >
               <FolderOpen className="mr-1.5 h-3.5 w-3.5" /> Choose file to branch from
             </Button>

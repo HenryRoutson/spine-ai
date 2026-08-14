@@ -1,4 +1,6 @@
 import { z } from "zod";
+// AI : TODO (arch-structure-assistant) — leftover thinner proposer; HTTP structure-assistant uses pipeline_assistant.
+// AI :   Delete or make CLI call proposePipelineChange with a structures-only prompt flag.
 import { llmStructured } from "./llm";
 import {
   ChatTurn,

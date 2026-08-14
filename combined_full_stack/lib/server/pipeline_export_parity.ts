@@ -1,9 +1,8 @@
 // AI : Headless UI↔export parity — calls run_engine + generated TS export only (never Next.js / browser).
-// AI : TODO (parity) — emit real JSON schemas in exports (ts/py/rs/go still stub `schema = {}`);
-// AI : then re-enable HARD_PARITY_SEEDS. Live path: OpenRouter flash + OPENROUTER_SEED via .env.
+// AI : Live path: OpenRouter flash + OPENROUTER_SEED via .env. Re-enable HARD_PARITY_SEEDS once live traces stay green.
 // AI : Run with `npm run test:parity` only — excluded from default `npm test` so it won't brick the terminal.
 import { createServer, type Server } from "node:http";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { testValuesEqual } from "@/lib/deep_equal";
@@ -24,6 +23,7 @@ import { SEED_LLM_PROVIDER_ID } from "@/lib/server/llm/providers/seed";
 import { seedOpenAiChatCompletion } from "@/lib/server/llm/seed_response";
 import { DEEPSEEK_FLASH_SLUG, DEEPSEEK_SLUG } from "@/lib/server/openrouter_slugs";
 import { generatePipelineSourceTs } from "@/lib/server/pipeline_ts_export";
+import { exportRuntimeTsPath } from "@/lib/server/pipeline_export_runtime_lib";
 import { loadProjectSeed, resolveSeedDocPath, type ProjectSeed } from "@/lib/server/seed";
 import { hashContent, type Store } from "@/lib/server/store";
 import { computeInvalid } from "@/lib/server/validity";
@@ -245,6 +245,7 @@ function docsForInputs(seed: ProjectSeed, inputs: Record<string, string | string
   return out;
 }
 
+// AI : TODO (arch-ephemeral-store) — copy of landingEphemeralStore; one ephemeralStore(project, docs).
 function ephemeralStore(project: Project, docs: ExampleDoc[]): Store {
   const docMap = new Map(docs.map((d) => [d.ref.id, d]));
   const runs: PipelineRun[] = [];
@@ -443,6 +444,7 @@ export async function runTsExportParityTrace(
     const source = generatePipelineSourceTs(project);
     const file = join(dir, `${projectSlug(project.name)}_pipeline.ts`);
     writeFileSync(file, source, "utf8");
+    copyFileSync(exportRuntimeTsPath(), join(dir, "pipeline_runtime.ts"));
     const mod = (await import(`${pathToFileURL(file).href}?t=${Date.now()}`)) as TsExportModule;
     const apiKey = process.env.OPENROUTER_API_KEY?.trim();
     if (!apiKey) throw new Error("OPENROUTER_API_KEY missing — set it in the repo root .env");

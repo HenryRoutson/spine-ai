@@ -10,6 +10,7 @@ import { prefetchWorkspacePanel } from "@/lib/prefetch-workspace-panel"
 import { AppWindowId } from "@/lib/app-window-id"
 import { useOptionalConsumerStore, useOptionalStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
+import { spineActionProps } from "@/lib/core/parity"
 import { useCallback, useEffect } from "react"
 
 export { AppPrimarySection } from "@/lib/app-primary-section-labels"
@@ -47,6 +48,7 @@ export function AppPrimaryNav({ value, onChange, openingSection = null, classNam
         onClick={() => onChange(AppPrimarySection.Run)}
         onWarm={warmRun}
         icon={Play}
+        spineId="nav.run"
         {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Run]}
       />
       <PrimaryButton
@@ -55,6 +57,7 @@ export function AppPrimaryNav({ value, onChange, openingSection = null, classNam
         onClick={() => onChange(AppPrimarySection.Build)}
         onWarm={warmBuild}
         icon={Hammer}
+        spineId="nav.build"
         {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Build]}
       />
       <PrimaryButton
@@ -63,6 +66,7 @@ export function AppPrimaryNav({ value, onChange, openingSection = null, classNam
         onClick={() => onChange(AppPrimarySection.Billing)}
         onWarm={warmBilling}
         icon={CreditCard}
+        spineId="nav.billing"
         {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Billing]}
       />
       <PrimaryButton
@@ -71,6 +75,7 @@ export function AppPrimaryNav({ value, onChange, openingSection = null, classNam
         onClick={() => onChange(AppPrimarySection.Settings)}
         onWarm={warmSettings}
         icon={Settings}
+        spineId="nav.settings"
         {...APP_PRIMARY_SECTION_NAV[AppPrimarySection.Settings]}
       />
     </div>
@@ -85,6 +90,7 @@ function PrimaryButton({
   icon: Icon,
   label,
   title,
+  spineId,
 }: {
   active: boolean
   loading?: boolean
@@ -93,6 +99,7 @@ function PrimaryButton({
   icon: React.ComponentType<{ className?: string }>
   label: string
   title: string
+  spineId: string
 }) {
   return (
     <button
@@ -102,6 +109,7 @@ function PrimaryButton({
       onMouseEnter={onWarm}
       onFocus={onWarm}
       aria-busy={loading}
+      {...spineActionProps(spineId)}
       className={cn(
         "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors sm:px-2.5",
         active

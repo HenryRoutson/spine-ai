@@ -1,4 +1,5 @@
 // AI : CLI adapter over SpineSession — method names match useStore().
+// AI : TODO (arch-cli-result) — ok / usage / flagString copied in agent_cli.ts / run.ts; share helpers from cli/types.ts.
 
 import { readFileSync } from "node:fs"
 import { basename } from "node:path"

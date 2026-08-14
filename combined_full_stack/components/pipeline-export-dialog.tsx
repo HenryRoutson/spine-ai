@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — pipeline.export
 
 // AI : TODO export UI — bundled Supabase SQL + Next.js inference shell alongside connector files.
 
@@ -273,6 +274,7 @@ export function PipelineExportDialog({
         className="h-7 gap-1.5 text-[10px]"
         onClick={() => setOpen((o) => !o)}
         title="View and download pipeline code + setup files"
+        spineId="pipeline.export"
       >
         <Code2 className="h-3.5 w-3.5" />
         Export code

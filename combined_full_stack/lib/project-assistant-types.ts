@@ -27,7 +27,7 @@ export type ProjectProposal = {
   proposedActions?: AssistantProposedAction[]
   // AI : which parts changed — used to apply only deltas on approve
   changed: {
-    // TODO should be reccusive? remove duplication
+    // AI : TODO (arch-proposal-changed) — mirrors proposal fields; derive from a key list so we don't maintain two.
     modules: boolean
     models: boolean
     typeAliases: boolean

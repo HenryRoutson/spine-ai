@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react"
 import { AppChromeHeader } from "@/components/app-chrome-header"
 import { AppWindowNav } from "@/components/app-window-nav"
 import { ProjectSelector } from "@/components/project-selector"
-import { BUILDER_NAV_ITEMS, isAccountWindow, isVibeWindow } from "@/lib/app-nav-config"
+import { BUILDER_NAV_ITEMS, BUILDER_PANEL_IDS, isAccountWindow, isVibeWindow } from "@/lib/app-nav-config"
 import { handlePrimarySectionChange, resolvePrimarySection } from "@/lib/app-primary-section"
 import { BuildSurfaceNav } from "@/components/build-surface-nav"
 import { resolveBuildSurface, windowForBuildSurface, type BuildSurface } from "@/lib/build-surface"
@@ -125,24 +125,6 @@ const CONSUMER_PANEL_IDS: AppWindowId[] = [AppWindowId.Share, AppWindowId.Billin
 
 // AI : primary-nav account tabs stay mounted so Billing/Settings open instantly after prefetch.
 const EAGER_ACCOUNT_PANEL_IDS: AppWindowId[] = [AppWindowId.Billing, AppWindowId.Settings]
-
-const BUILDER_PANEL_IDS: AppWindowId[] = [
-  AppWindowId.Structure,
-  AppWindowId.Pipeline,
-  AppWindowId.Testing,
-  AppWindowId.Inference,
-  AppWindowId.Share,
-  AppWindowId.Earnings,
-  AppWindowId.Logging,
-  AppWindowId.Cache,
-  AppWindowId.Documents,
-  AppWindowId.Docs,
-  AppWindowId.ProjectBilling,
-  AppWindowId.ProjectSettings,
-  AppWindowId.Vibe,
-  AppWindowId.Billing,
-  AppWindowId.Settings,
-]
 
 function renderWindowPanel(windowId: AppWindowId): ReactNode {
   switch (windowId) {

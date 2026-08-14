@@ -1,5 +1,8 @@
 "use client"
 
+// AI : TODO (arch-share-form) — spend-limit parse, busy/error, default-docs, copy-to-clipboard duplicated
+// AI :   with share-link-form and share-embed-form; SharePricingFields already extracted — add useShareCreateForm.
+
 import { useMemo, useState } from "react"
 import { Copy, KeyRound, Loader2, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -236,7 +239,7 @@ export function HostApiForm({
           )}
         </div>
       ) : (
-        <Button className="w-full gap-2" onClick={() => void createApi()} disabled={busy}>
+        <Button className="w-full gap-2" onClick={() => void createApi()} disabled={busy} spineId="share.deploy-api">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
           Deploy API
         </Button>

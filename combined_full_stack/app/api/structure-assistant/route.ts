@@ -1,4 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
+// AI : TODO (arch-structure-assistant) — HTTP calls runBilledProjectAssistant then strips to models;
+// AI :   CLI still uses proposeStructureChange. One path.
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
 import { assistantRequestBodySchema, parseRequestJson } from "@/lib/server/api_schemas";

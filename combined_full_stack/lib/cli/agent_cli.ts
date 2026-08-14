@@ -1,4 +1,5 @@
 // AI : CLI adapter for the four in-app assistants (vibe, structure, testing, diagnosis).
+// AI : TODO (arch-cli-result) — ok / usage / flagString copied in session_cli.ts / run.ts; share helpers from cli/types.ts.
 
 import { readFileSync } from "node:fs"
 import { toAgentView, toSessionSummary } from "@/lib/core/view"

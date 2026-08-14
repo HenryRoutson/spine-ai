@@ -147,7 +147,7 @@ export default function LoginPage() {
           {notice && <p className="text-xs text-primary">{notice}</p>}
           {error && <p className="text-xs text-destructive">{error}</p>}
 
-          <Button type="submit" disabled={pending} className="mt-1 w-full">
+          <Button type="submit" disabled={pending} className="mt-1 w-full" spineId={mode === "sign-in" ? "auth.sign-in" : "auth.sign-up"}>
             {pending ? "…" : mode === "sign-in" ? "Sign in" : "Sign up"}
           </Button>
         </form>

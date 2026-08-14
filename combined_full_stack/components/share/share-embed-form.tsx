@@ -1,4 +1,7 @@
 "use client"
+// AI : parity ids — share.create-embed
+
+// AI : TODO (arch-share-form) — spend-limit / busy / copy duplicated with share-link-form and host-api-form.
 
 import { useMemo, useState } from "react"
 import { Code2, Copy, Loader2, PanelTop } from "lucide-react"
@@ -341,7 +344,7 @@ export function ShareEmbedForm({
           )}
         </div>
       ) : (
-        <Button className="w-full gap-2" onClick={() => void createEmbed()} disabled={busy}>
+        <Button className="w-full gap-2" onClick={() => void createEmbed()} disabled={busy} spineId="share.create-embed">
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <PanelTop className="h-4 w-4" />}
           Create website embed
         </Button>

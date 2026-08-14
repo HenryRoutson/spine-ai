@@ -41,6 +41,7 @@ import { formatCostCents, formatSecondsShort } from "@/lib/format"
 import { runBilledCents, runTotalMs } from "@/lib/run-metrics"
 import { WARNING_TEXT_CLASS, INSPECTOR_SECTION_BORDER_CLASS, INSPECTOR_SECTION_TITLE_CLASS } from "@/lib/ui-classes"
 import { cn } from "@/lib/utils"
+import { spineActionProps } from "@/lib/core/parity"
 import { uiContextTargetProps } from "@/lib/ui-context-dom"
 import {
   DropdownMenu,
@@ -57,6 +58,8 @@ import { syncListOpsStepModule } from "@/lib/list-ops-steps"
 import { deriveAssembleStepTypes, deriveParallelStepTypes } from "@/lib/assemble-type-expr"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { copyTextToClipboard } from "@/lib/clipboard"
+import { API_ROUTES } from "@/lib/api-routes"
+import { FETCH_CREDENTIALS } from "@/lib/api-client"
 import { PipelineExportDialog } from "@/components/pipeline-export-dialog"
 import { ResizableSplit } from "@/components/resizable-split"
 import { InspectorCollapsibleSection } from "@/components/inspector-collapsible-section"
@@ -186,12 +189,29 @@ export function PipelineBuilder() {
   }
 
   async function copyPipelineJson() {
-    const json = JSON.stringify({ models, modules }, null, 2)
-    const validationErrors = formatInvalidMapErrors(invalid, modules, models)
-    const errorsBlock = validationErrors.trim()
-      ? `\n\nCurrent pipeline validation errors:\n${validationErrors}\n`
-      : "\n\nCurrent pipeline: valid (no I/O errors).\n"
-    await copyTextToClipboard(`${json}${errorsBlock}`)
+    const json = JSON.stringify({ models, modules, typeAliases }, null, 2)
+    let extra = ""
+    try {
+      const res = await fetch(API_ROUTES.pipelineLint, {
+        method: "POST",
+        credentials: FETCH_CREDENTIALS,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...project, modules, models, typeAliases }),
+      })
+      if (res.ok) {
+        const data = (await res.json()) as { copyText?: string }
+        if (data.copyText?.trim()) extra = `\n\n${data.copyText}\n`
+      }
+    } catch {
+      extra = ""
+    }
+    if (!extra) {
+      const validationErrors = formatInvalidMapErrors(invalid, modules, models)
+      extra = validationErrors.trim()
+        ? `\n\nCurrent pipeline validation errors:\n${validationErrors}\n`
+        : "\n\nCurrent pipeline: valid (no I/O errors).\n"
+    }
+    await copyTextToClipboard(`${json}${extra}`)
     setCopied(true)
     setTimeout(() => setCopied(false), COPY_FEEDBACK_MS)
   }
@@ -501,6 +521,7 @@ function AddStepMenu({
             : "inline-flex h-8 items-center gap-1.5 rounded-md border border-dashed border-border bg-transparent px-3 text-xs text-muted-foreground transition-colors hover:border-primary hover:bg-primary/5 hover:text-foreground",
         )}
         aria-label="Add pipeline step"
+        {...spineActionProps("pipeline.add-step")}
       >
         <Plus className={variant === "slot" ? "h-3 w-3" : "h-3.5 w-3.5"} />
         {variant === "button" && <span>Add step</span>}

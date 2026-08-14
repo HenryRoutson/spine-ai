@@ -1,352 +1,39 @@
-import { assertEntriesForModule } from "@/lib/assert_steps";
-import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { allModelsToGo } from "./pydantic";
+import { emitStepBody } from "./pipeline_export_dispatch";
 import {
-  assertPassthroughComment,
-  assertValidateComment,
-  chatbotComment,
-  commentForeignCode,
-  exampleSelectComment,
-  exportComment,
   exportFileMetaComments,
   exportSectionComment,
-  exportStringLiteral,
-  goZeroValue,
-  humanReviewComment,
   indentExportBlock,
-  llmBatchComment,
   makeUniqueStepFnName,
-  passthroughCustomComment,
-  primaryExportCustomCode,
-  quoteLinkComment,
-  reshapeStepComment,
-  snapshotComment,
   stepBodyUsesPipelineState,
-  structuredLlmComment,
   withExportLineCountMeta,
   exportSpineInGo,
   exportSpineOutGo,
-  generateCombineStepBodyGo,
-  generateAssembleStepBodyGo,
-  generateParallelStepBodyGo,
-  generateInputStepBodyGo,
   generateOrchestratorGo,
-  modelName,
   prepareExportProject,
 } from "./pipeline_export_shared";
-import { analyzeExportRuntimeNeeds, generateRuntimeStubsGo, type ExportRuntimeNeeds } from "./pipeline_export_setup";
+import { analyzeExportRuntimeNeeds, type ExportRuntimeNeeds } from "./pipeline_export_setup";
 import { pipelineStateGoType } from "./pipeline_state";
-import { exportWebhookStepBodyGo } from "@/lib/webhook-step";
-import { isMergeModuleKind } from "@/lib/module-kinds";
 import { MODULE_META, ModuleKind } from "./types";
-import { stepEmitsList } from "./type_expr";
 import type { PipelineModule, Project } from "./types";
 
-// AI : TODO export — inline real JSON schemas for llm / llm-batch steps (from structure models).
+// AI : TODO (arch-export-file) — generatePipelineSource* assemble the same sections; one assembler + lang adapters.
 
 const C = "//" as const;
 
 function goImports(needs: ExportRuntimeNeeds, project: Project): string {
-  const pkgs = new Set<string>(["encoding/json", "sync"]);
+  const pkgs = new Set<string>(["encoding/json"]);
   const needsFmt =
     needs.llm ||
     needs.llmBatch ||
     needs.visionOcr ||
     needs.quote ||
     needs.humanReview ||
+    needs.exampleSelect ||
     project.modules.some((m) => m.kind === ModuleKind.Combine);
   if (needsFmt) pkgs.add("fmt");
-  if (needs.llm || needs.llmBatch || needs.visionOcr) {
-    pkgs.add("bytes");
-    pkgs.add("io");
-    pkgs.add("net/http");
-    pkgs.add("strings");
-  }
   const sorted = [...pkgs].sort();
   return ["import (", ...sorted.map((p) => `\t"${p}"`), ")"].join("\n");
-}
-
-function generateStepBody(m: PipelineModule, project: Project, outGo: string, inGo: string): string {
-  const outName = modelName(project, m.outStructureId);
-  const inName = modelName(project, m.inStructureId);
-  const zero = goZeroValue(outGo);
-
-  if (isMergeModuleKind(m.kind) || m.kind === ModuleKind.Chunk || m.kind === ModuleKind.CustomCode) {
-    const custom = primaryExportCustomCode(m);
-    const fallbacks = customCodeEntriesForModule(m);
-    const passthrough = [
-      `b, err := json.Marshal(input)`,
-      `if err != nil {`,
-      `\treturn ${zero}, err`,
-      `}`,
-      `var out ${outGo}`,
-      `if err := json.Unmarshal(b, &out); err != nil {`,
-      `\treturn ${zero}, err`,
-      `}`,
-      `return out, nil`,
-    ];
-    if (custom) {
-      return [
-        commentForeignCode(
-          C,
-          `${custom.language === "python" ? "Python" : "TypeScript"} custom code (${fallbacks.length} attempt${fallbacks.length === 1 ? "" : "s"})`,
-          custom.code,
-          "port or call via cgo/FFI",
-        ),
-        ...passthrough,
-      ].join("\n");
-    }
-    return [exportComment(C, passthroughCustomComment()), ...passthrough].join("\n");
-  }
-
-  switch (m.kind) {
-    case ModuleKind.Input:
-      return generateInputStepBodyGo(m, outGo);
-    case ModuleKind.Llm: {
-      const prompt = m.prompt ?? "Process the input.";
-      const model = m.model ?? "deepseek-v4";
-      return [
-        exportComment(C, structuredLlmComment(outName ?? outGo, stepEmitsList(m))),
-        `_ = ${exportStringLiteral(model)}`,
-        `inJSON, err := json.MarshalIndent(input, "", "  ")`,
-        `if err != nil {`,
-        `\treturn ${zero}, err`,
-        `}`,
-        `userPrompt := ${exportStringLiteral(prompt)} + "\\n\\nINPUT DATA:\\n" + string(inJSON)`,
-        // AI : TODO (parity) — emit real JSON schema from outStructure; empty {} breaks live LLM asserts.
-        `schema := json.RawMessage([]byte("{}")) // JSON schema for ${outName ?? "output"}`,
-        `value, err := llmStructured(userPrompt, schema)`,
-        `if err != nil {`,
-        `\treturn ${zero}, err`,
-        `}`,
-        `var out ${outGo}`,
-        `if err := json.Unmarshal(value, &out); err != nil {`,
-        `\treturn ${zero}, err`,
-        `}`,
-        `return out, nil`,
-      ].join("\n");
-    }
-    case ModuleKind.LlmBatch: {
-      const prompt = m.prompt ?? "Process the item.";
-      const itemGo = outGo.startsWith("[]") ? outGo.slice(2) : outGo;
-      return [
-        exportComment(C, llmBatchComment(outName ?? outGo)),
-        `inJSON, err := json.Marshal(input)`,
-        `if err != nil {`,
-        `\treturn ${zero}, err`,
-        `}`,
-        `var items []json.RawMessage`,
-        `if len(inJSON) > 0 && inJSON[0] == '[' {`,
-        `\tif err := json.Unmarshal(inJSON, &items); err != nil {`,
-        `\t\treturn ${zero}, err`,
-        `\t}`,
-        `} else {`,
-        `\titems = []json.RawMessage{inJSON}`,
-        `}`,
-        // AI : TODO (parity) — emit real JSON schema from outStructure.
-        `schema := json.RawMessage([]byte("{}")) // JSON schema for ${outName ?? "output"}`,
-        `out := make([]${itemGo}, 0, len(items))`,
-        `for _, item := range items {`,
-        `\tprompt := ${exportStringLiteral(prompt)} + "\\n\\nITEM:\\n" + string(item)`,
-        `\tvalue, err := llmStructured(prompt, schema)`,
-        `\tif err != nil {`,
-        `\t\treturn ${zero}, err`,
-        `\t}`,
-        `\tvar one ${itemGo}`,
-        `\tif err := json.Unmarshal(value, &one); err != nil {`,
-        `\t\treturn ${zero}, err`,
-        `\t}`,
-        `\tout = append(out, one)`,
-        `}`,
-        `return out, nil`,
-      ].join("\n");
-    }
-    case ModuleKind.ExampleSelect: {
-      const prompt = m.prompt ?? "Find useful examples…";
-      const ctxLabel = m.exampleContextLabel ?? "Context";
-      const ctxKey = exportStringLiteral(ctxLabel);
-      const itemGo = outGo.startsWith("[]") ? outGo.slice(2) : outGo;
-      const fieldPath = m.exampleContextField?.trim();
-      const descriptionBlock = fieldPath
-        ? [
-            `ctxRaw, ok := state[${ctxKey}]`,
-            `if !ok {`,
-            `\treturn ${zero}, fmt.Errorf("example-select: missing context label %s", ${ctxKey})`,
-            `}`,
-            `ctxJSON, err := json.Marshal(ctxRaw)`,
-            `if err != nil {`,
-            `\treturn ${zero}, err`,
-            `}`,
-            `var ctxAny any`,
-            `if err := json.Unmarshal(ctxJSON, &ctxAny); err != nil {`,
-            `\treturn ${zero}, err`,
-            `}`,
-            `picked := ctxAny`,
-            ...fieldPath.split(".").filter(Boolean).map((part) => {
-              const p = exportStringLiteral(part);
-              return [
-                `if m, ok := picked.(map[string]any); ok {`,
-                `\tpicked = m[${p}]`,
-                `}`,
-              ].join("\n");
-            }),
-            `var description string`,
-            `switch v := picked.(type) {`,
-            `case string:`,
-            `\tdescription = v`,
-            `default:`,
-            `\tb, err := json.MarshalIndent(picked, "", "  ")`,
-            `\tif err != nil {`,
-            `\t\treturn ${zero}, err`,
-            `\t}`,
-            `\tdescription = string(b)`,
-            `}`,
-          ]
-        : [
-            `ctxRaw, ok := state[${ctxKey}]`,
-            `if !ok {`,
-            `\treturn ${zero}, fmt.Errorf("example-select: missing context label %s", ${ctxKey})`,
-            `}`,
-            `b, err := json.MarshalIndent(ctxRaw, "", "  ")`,
-            `if err != nil {`,
-            `\treturn ${zero}, err`,
-            `}`,
-            `description := string(b)`,
-          ];
-      return [
-        exportComment(C, exampleSelectComment(outName ?? outGo)),
-        ...descriptionBlock,
-        `inJSON, err := json.Marshal(input)`,
-        `if err != nil {`,
-        `\treturn ${zero}, err`,
-        `}`,
-        `var items []json.RawMessage`,
-        `if len(inJSON) > 0 && inJSON[0] == '[' {`,
-        `\tif err := json.Unmarshal(inJSON, &items); err != nil {`,
-        `\t\treturn ${zero}, err`,
-        `\t}`,
-        `} else {`,
-        `\titems = []json.RawMessage{inJSON}`,
-        `}`,
-        `schema := json.RawMessage([]byte("{\\"chain_of_thought\\":\\"string\\",\\"is_relevant\\":\\"boolean\\"}"))`,
-        `template := ${exportStringLiteral(prompt)}`,
-        `out := make([]${itemGo}, 0, len(items))`,
-        `for _, item := range items {`,
-        `\task := strings.ReplaceAll(strings.ReplaceAll(template, "{description}", description), "{example}", string(item))`,
-        `\tvalue, err := llmStructured(ask, schema)`,
-        `\tif err != nil {`,
-        `\t\treturn ${zero}, err`,
-        `\t}`,
-        `\tvar verdict map[string]any`,
-        `\tif err := json.Unmarshal(value, &verdict); err != nil {`,
-        `\t\treturn ${zero}, err`,
-        `\t}`,
-        `\tif relevant, _ := verdict["is_relevant"].(bool); !relevant {`,
-        `\t\tcontinue`,
-        `\t}`,
-        `\tvar row map[string]any`,
-        `\tif err := json.Unmarshal(item, &row); err != nil {`,
-        `\t\treturn ${zero}, err`,
-        `\t}`,
-        `\tif reason, ok := verdict["chain_of_thought"].(string); ok {`,
-        `\t\trow["selection_reason"] = reason`,
-        `\t}`,
-        `\tb, err := json.Marshal(row)`,
-        `\tif err != nil {`,
-        `\t\treturn ${zero}, err`,
-        `\t}`,
-        `\tvar one ${itemGo}`,
-        `\tif err := json.Unmarshal(b, &one); err != nil {`,
-        `\t\treturn ${zero}, err`,
-        `\t}`,
-        `\tout = append(out, one)`,
-        `}`,
-        `return out, nil`,
-      ].join("\n");
-    }
-    case ModuleKind.Quote:
-      return [
-        exportComment(C, quoteLinkComment()),
-        "linked, err := resolveQuotes(input, \"\", \"\")",
-        "if err != nil {",
-        `\treturn ${zero}, err`,
-        "}",
-        `var out ${outGo}`,
-        "if err := json.Unmarshal(linked, &out); err != nil {",
-        `\treturn ${zero}, err`,
-        "}",
-        "return out, nil",
-      ].join("\n");
-    case ModuleKind.Combine:
-      return generateCombineStepBodyGo(m, project, outGo, inGo);
-    case ModuleKind.Assemble:
-      return generateAssembleStepBodyGo(m, project, outGo);
-    case ModuleKind.Parallel:
-      return generateParallelStepBodyGo(m, outGo);
-    case ModuleKind.Transform: {
-      const custom = primaryExportCustomCode(m);
-      const passthrough = [
-        `b, err := json.Marshal(input)`,
-        `if err != nil {`,
-        `\treturn ${zero}, err`,
-        `}`,
-        `var out ${outGo}`,
-        `if err := json.Unmarshal(b, &out); err != nil {`,
-        `\treturn ${zero}, err`,
-        `}`,
-        `return out, nil`,
-      ];
-      if (custom) {
-        return [
-          commentForeignCode(
-            C,
-            custom.language === "python" ? "Python transform" : "TypeScript transform",
-            custom.code,
-            "port or call via cgo/FFI",
-          ),
-          ...passthrough,
-        ].join("\n");
-      }
-      return [
-        exportComment(C, reshapeStepComment(m, inName, outName, outGo)),
-        ...passthrough,
-      ].join("\n");
-    }
-    case ModuleKind.Assert: {
-      const entries = assertEntriesForModule(m);
-      if (entries[0]?.code.trim()) {
-        return [
-          commentForeignCode(C, `${entries[0].language} assert`, entries[0].code, "port or call via cgo/FFI"),
-          exportComment(C, assertValidateComment()),
-          "return input, nil",
-        ].join("\n");
-      }
-      return [exportComment(C, assertPassthroughComment()), "return input, nil"].join("\n");
-    }
-    case ModuleKind.HumanReview:
-      return [
-        exportComment(C, humanReviewComment()),
-        "if err := WaitForHumanReview(input); err != nil {",
-        `\treturn ${zero}, err`,
-        "}",
-        "return input, nil",
-      ].join("\n");
-    case ModuleKind.Chatbot:
-      return [
-        exportComment(C, chatbotComment()),
-        `result, err := WaitForChatbotSession(input, ${exportStringLiteral(m.chatbotMode ?? "until-exit")})`,
-        "if err != nil {",
-        `\treturn ${zero}, err`,
-        "}",
-        "return result, nil",
-      ].join("\n");
-    case ModuleKind.Webhook:
-      return exportWebhookStepBodyGo(m, zero);
-    case ModuleKind.Output:
-      return [exportComment(C, snapshotComment(outName, inName)), "return input, nil"].join("\n");
-    default:
-      return "return input, nil";
-  }
 }
 
 // AI : indentExportBlock uses spaces — convert leading spaces to tabs for idiomatic Go.
@@ -372,7 +59,7 @@ function generateStepFnGo(
   const inGo = exportSpineInGo(m, project, index);
   const outGo = exportSpineOutGo(m, project, index);
   const meta = MODULE_META[m.kind];
-  const body = generateStepBody(m, project, outGo, inGo);
+  const body = emitStepBody("go", { m, project, inType: inGo, outType: outGo });
   const stateParam = stepBodyUsesPipelineState(C, body, m) ? "state" : "_state";
   const docLines = [
     `// ${m.label.replace(/\*\//g, "*\\/")}`,
@@ -394,7 +81,6 @@ function generateStepFnGo(
 export function generatePipelineSourceGo(project: Project): string {
   const prepared = prepareExportProject(project);
   const needs = analyzeExportRuntimeNeeds(prepared);
-  const runtimeStubs = generateRuntimeStubsGo(needs);
   const sections: string[] = [];
   const stepFnName = makeUniqueStepFnName();
   const stepFns = prepared.modules.map((m, i) => generateStepFnGo(m, prepared, i, stepFnName)).join("\n");
@@ -413,8 +99,6 @@ export function generatePipelineSourceGo(project: Project): string {
     "",
     exportSectionComment(C, "pipeline state"),
     pipelineStateGoType(prepared),
-    "",
-    runtimeStubs,
     "",
     exportSectionComment(C, "steps"),
     stepFns,

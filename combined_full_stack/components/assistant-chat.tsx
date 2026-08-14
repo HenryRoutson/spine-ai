@@ -417,6 +417,7 @@ export function AssistantChat<TProposal>({
                               className="h-7 flex-1 gap-1.5 text-[11px]"
                               disabled={approvingId === m.id || rejectingId === m.id}
                               onClick={() => void approve(m)}
+                              spineId="assistant.approve"
                             >
                               {approvingId === m.id ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -431,6 +432,7 @@ export function AssistantChat<TProposal>({
                               className="h-7 flex-1 gap-1.5 text-[11px]"
                               disabled={approvingId === m.id || rejectingId === m.id}
                               onClick={() => void reject(m)}
+                              spineId="assistant.reject"
                             >
                               {rejectingId === m.id ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />

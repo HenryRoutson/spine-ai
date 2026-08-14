@@ -271,6 +271,7 @@ export function resolveSharedDocOriginalFile(
 }
 
 // AI : overlay session + default docs onto the sharer's store for runPipeline.
+// AI : TODO (arch-store-overlay) — same facade as overlayStoreForHostedRun; one overlayStore(base, extraDocs).
 export function overlayStoreForSharedRun(
   base: Store,
   linkId: SharedLinkId,

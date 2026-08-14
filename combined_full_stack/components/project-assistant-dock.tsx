@@ -182,6 +182,7 @@ export function ProjectAssistantDockPanel({ embedded = false }: ProjectAssistant
               onClick={toggleSelectMode}
               aria-label={selectMode ? "Exit select UI mode" : "Select UI for agent"}
               title={selectMode ? "Exit select UI mode (Esc)" : "Select UI for agent"}
+              spineId="assistant.select-ui"
             >
               <Crosshair className="h-3.5 w-3.5" />
               {selectMode ? "Selecting…" : "Select"}
@@ -221,6 +222,7 @@ export function ProjectAssistantDockPanel({ embedded = false }: ProjectAssistant
             }}
             aria-label="New agent"
             title="New agent"
+            spineId="assistant.new-chat"
           >
             <Plus className="h-4 w-4" />
           </Button>

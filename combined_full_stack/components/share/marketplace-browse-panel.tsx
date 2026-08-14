@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — share.marketplace-clone
 
 import { useCallback, useContext, useEffect, useState } from "react"
 import { Loader2, Search, Store, Trash2 } from "lucide-react"
@@ -244,6 +245,7 @@ export function MarketplaceBrowsePanel({
                     className="gap-1.5"
                     disabled={busyId === detail.id}
                     onClick={() => void cloneListing(detail.id)}
+                    spineId="share.marketplace-clone"
                   >
                     {busyId === detail.id ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />

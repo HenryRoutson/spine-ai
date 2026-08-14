@@ -321,6 +321,7 @@ export function HumanReviewPanel({
               size="sm"
               className="gap-1.5"
               disabled={pendingAction !== null}
+              spineId="inference.human-review.approve"
               onClick={() => {
                 if (pendingAction) return
                 setPendingAction("approve")
@@ -339,6 +340,7 @@ export function HumanReviewPanel({
               variant="outline"
               className="gap-1.5 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
               disabled={pendingAction !== null}
+              spineId="inference.human-review.reject"
               onClick={() => {
                 if (pendingAction) return
                 setPendingAction("reject")
@@ -506,6 +508,7 @@ export function ChatbotPanel({
               onSend={() => void sendUser()}
               disabled={busy || finishing || !promptText || (mode === "single" && transcript.some((t) => t.role === "user"))}
               placeholder="Reply…"
+              spineId="inference.chatbot.send"
             />
           </Chat>
           {error ? <p className="text-xs text-destructive">{error}</p> : null}

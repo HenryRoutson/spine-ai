@@ -1,4 +1,5 @@
 "use client"
+// AI : parity ids — share.run-shared
 
 import { useCallback, useEffect, useState } from "react"
 import { ArrowLeft, Loader2, Share2 } from "lucide-react"

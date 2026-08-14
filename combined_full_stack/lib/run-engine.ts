@@ -1,5 +1,7 @@
 // AI : client shim for the real server run engine — POST /api/runs starts the pipeline,
 // AI : then the Inference tab polls progress until the persisted PipelineRun arrives.
+// AI : TODO (arch-run-engine-name) — this is the browser client-step shim; server engine is lib/server/run_engine/.
+// AI :   Rename to client-run.ts (or similar) so "run engine" isn't two trees.
 // AI : user-authored transform/custom steps run here in the browser (never on the server).
 // AI : assistant / Vibe approve-to-run uses source: assistant via lib/assistant-run.ts.
 import { invariant } from "@/lib/assert"

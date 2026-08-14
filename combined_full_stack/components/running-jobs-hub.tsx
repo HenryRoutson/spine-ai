@@ -106,7 +106,7 @@ export function RunningJobsHub() {
                 {runningCount} active · {visibleJobs.length} recent
               </p>
             </div>
-            <Button type="button" size="icon-sm" variant="ghost" onClick={closeHub} aria-label="Close">
+            <Button type="button" size="icon-sm" variant="ghost" onClick={closeHub} aria-label="Close" spineId="jobs.close">
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -151,6 +151,7 @@ export function RunningJobsHub() {
                           className="shrink-0 text-destructive hover:text-destructive"
                           aria-label="Stop job"
                           onClick={() => stopJob(job.id)}
+                          spineId="jobs.stop"
                         >
                           <Square className="h-3.5 w-3.5 fill-current" />
                         </Button>

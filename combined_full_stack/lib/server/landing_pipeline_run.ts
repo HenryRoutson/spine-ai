@@ -285,6 +285,7 @@ export function materializeLandingExampleDocs(
   return out;
 }
 
+// AI : TODO (arch-ephemeral-store) — copy of pipeline_export_parity.ephemeralStore; one ephemeralStore(project, docs).
 function landingEphemeralStore(project: Project, docs: LandingExampleDoc[]): Store {
   const docMap = new Map(docs.map((d) => [d.ref.id, d]));
   const runs: PipelineRun[] = [];

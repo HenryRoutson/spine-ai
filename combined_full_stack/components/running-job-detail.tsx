@@ -70,7 +70,10 @@ export function RunningJobDetail({ job }: { job: TrackedRunJob }) {
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {job.status === TrackedRunJobStatus.Running && (
-            <RunStopButton onClick={() => stopJob(job.id)} />
+            <RunStopButton
+              onClick={() => stopJob(job.id)}
+              spineId={job.source === "inference" ? "inference.stop" : "testing.stop"}
+            />
           )}
           <Button type="button" size="icon-sm" variant="ghost" onClick={closeHub} aria-label="Close">
             <X className="h-4 w-4" />

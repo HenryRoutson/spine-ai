@@ -1,5 +1,36 @@
 {
-  "projects": [],
+  "projects": [
+    {
+      "id": "p_64e3ab8303ed483db5d78653",
+      "name": "Untitled Pipeline",
+      "kind": "blank",
+      "createdAt": 1786677060922,
+      "lastOpenedAt": 1786677060922,
+      "models": [],
+      "modules": [
+        {
+          "id": "mod_blank_in_p_64e3ab8303ed483db5d78653",
+          "kind": "input",
+          "label": "Input",
+          "note": "Pipeline input document",
+          "inputType": "text",
+          "cached": true,
+          "avgMs": 80,
+          "avgCostCents": 0
+        },
+        {
+          "id": "mod_blank_out_p_64e3ab8303ed483db5d78653",
+          "kind": "output",
+          "label": "Output",
+          "note": "",
+          "cached": true,
+          "avgMs": 40,
+          "avgCostCents": 0
+        }
+      ],
+      "strategies": []
+    }
+  ],
   "docs": [
     {
       "id": "sha_504621569078cd8e",
@@ -15,10 +46,41 @@
     "sha_504621569078cd8e": "The quick brown fox jumps over the lazy dog. This well-known sentence contains all the letters in the English alphabet. It is often used for typing practice and testing fonts. The earliest known use of this phrase dates back to the late 19th century."
   },
   "runs": [],
-  "activeProjectId": "",
+  "activeProjectId": "p_64e3ab8303ed483db5d78653",
   "model": "openrouter:deepseek-v4",
   "inferenceInputDocIds": {},
-  "pendingCreates": [],
+  "pendingCreates": [
+    {
+      "id": "p_64e3ab8303ed483db5d78653",
+      "name": "Untitled Pipeline",
+      "kind": "blank",
+      "createdAt": 1786677060922,
+      "lastOpenedAt": 1786677060922,
+      "models": [],
+      "modules": [
+        {
+          "id": "mod_blank_in_p_64e3ab8303ed483db5d78653",
+          "kind": "input",
+          "label": "Input",
+          "note": "Pipeline input document",
+          "inputType": "text",
+          "cached": true,
+          "avgMs": 80,
+          "avgCostCents": 0
+        },
+        {
+          "id": "mod_blank_out_p_64e3ab8303ed483db5d78653",
+          "kind": "output",
+          "label": "Output",
+          "note": "",
+          "cached": true,
+          "avgMs": 40,
+          "avgCostCents": 0
+        }
+      ],
+      "strategies": []
+    }
+  ],
   "deletedProjectIds": [
     "p_847505af14944a7f8ccad718",
     "p_71d5f3db3a754f54a9ebe5ea",

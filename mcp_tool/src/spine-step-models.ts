@@ -20,6 +20,7 @@ import {
   validateStepOutput,
 } from "@/lib/server/structure"
 import { computeInvalid, formatInvalidMapErrors } from "@/lib/server/validity"
+import { lintPipeline, lintPipelineJson } from "@/lib/server/pipeline_lint"
 import { stepOutputJsonSchema } from "@/lib/step-json-schema"
 import { formatTypeExpr, stepEmitsList, stepSpineInType, stepSpineOutType } from "@/lib/server/type_expr"
 import { tryParseJson } from "@/lib/json-utils"
@@ -227,6 +228,33 @@ export function validatePipelineWiring(input: { projectSeedPath: repo_path_strin
         return [mod?.label ?? moduleId, stepIssues]
       }),
     ),
+  }
+}
+
+export function lintPipelineFromInput(
+  input: { projectSeedPath?: repo_path_string; pipelineJson?: string; includeExport?: boolean },
+  cwd: string,
+) {
+  const includeExport = input.includeExport ?? true
+  if (input.pipelineJson) {
+    let raw: unknown
+    try {
+      raw = JSON.parse(input.pipelineJson)
+    } catch (err) {
+      throw new Error(`invalid pipeline JSON: ${err instanceof Error ? err.message : "parse failed"}`)
+    }
+    const result = lintPipelineJson(raw, { includeExport })
+    return { ok: result.ok, lintCount: result.lints.length, lints: result.lints }
+  }
+  if (!input.projectSeedPath) throw new Error("projectSeedPath or pipelineJson required")
+  const { seedPath, ctx } = loadProject(input.projectSeedPath, cwd)
+  const result = lintPipeline(ctx.project, { includeExport })
+  return {
+    projectName: ctx.project.name,
+    seedPath,
+    ok: result.ok,
+    lintCount: result.lints.length,
+    lints: result.lints,
   }
 }
 

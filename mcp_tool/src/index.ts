@@ -18,13 +18,28 @@ import {
   deriveStepPrompt,
   describePipelineSteps,
   exportPydanticProject,
+  lintPipelineFromInput,
   validatePipelineWiring,
   validateStepOutputValue,
 } from "./spine-step-models.js"
 import {
+  addDocFromSession,
+  addModelFromSession,
+  addProjectFromSession,
+  addStepFromSession,
+  applyPendingProposalFromSession,
   applyProjectChangesFromSession,
+  askAgentFromSession,
+  assignInputFromSession,
+  cloneProjectFromSession,
+  deleteProjectFromSession,
   getProjectFromSession,
+  importSeedFromSession,
+  openProjectFromSession,
+  renameProjectFromSession,
+  runSessionAction,
   sessionLogs,
+  setDocsFromSession,
   startRunFromSession,
   validateProjectFromSession,
 } from "./spine-session-bar-a.js"
@@ -145,6 +160,17 @@ server.tool(
 )
 
 server.tool(
+  "lint_pipeline",
+  "Lint a pipeline JSON or seed: spine I/O mismatches, structure fields, step custom code, and generated TypeScript export (tsc). Prefer this over validate_pipeline_wiring when you have pipeline JSON.",
+  {
+    projectSeedPath: z.string().optional().describe("Path to a seeds/*.json project file"),
+    pipelineJson: z.string().optional().describe("Inline pipeline JSON ({ models, modules, typeAliases? })"),
+    includeExport: z.boolean().optional().describe("Run tsc on generated pipeline.ts (default true)"),
+  },
+  async (args) => textContent(lintPipelineFromInput(args, REPO_ROOT)),
+)
+
+server.tool(
   "export_pydantic",
   "Export all structure models as pydantic Python plus generated per-step pipeline signatures.",
   {
@@ -174,12 +200,17 @@ server.tool(
 
 server.tool(
   "apply_project_changes",
-  "Apply a ProjectProposal (assistantResponseSchema / Vibe approve) onto the session file.",
+  "Apply a ProjectProposal (or the pending Vibe proposal) onto the session file — same as GUI Approve.",
   {
     sessionPath: z.string().optional(),
-    proposalJson: z.string().describe("JSON ProjectProposal with changed.* deltas"),
+    proposalJson: z.string().optional().describe("JSON ProjectProposal; omit to apply the pending Vibe proposal"),
   },
-  async (args) => textContent(applyProjectChangesFromSession(JSON.parse(args.proposalJson), args.sessionPath)),
+  async (args) =>
+    textContent(
+      args.proposalJson
+        ? applyProjectChangesFromSession(JSON.parse(args.proposalJson), args.sessionPath)
+        : applyPendingProposalFromSession(args.sessionPath),
+    ),
 )
 
 server.tool(
@@ -212,10 +243,141 @@ server.tool(
   async (args) => textContent(sessionLogs(args.sessionPath)),
 )
 
-// AI : TODO (gui-parity) — MCP still lacks vs GUI/CLI:
-// AI :   ask_agent (vibe/structure/testing/diagnose) — use `spine agent ask` then apply_project_changes
-// AI :   add-project / add-step / assign-structure / add-doc / assign-input
-// AI :   share mint, billing checkout, run cancel, hydrate run detail
+server.tool(
+  "session_action",
+  "Dispatch a GUI button id (data-spine-id / docs/parity.md) against the session file. Same SpineSession methods as CLI.",
+  {
+    id: z.string().describe("Parity catalog id, e.g. project.add, testing.run, assistant.send"),
+    sessionPath: z.string().optional(),
+    name: z.string().optional(),
+    projectId: z.string().optional(),
+    file: z.string().optional(),
+    kind: z.string().optional(),
+    label: z.string().optional(),
+    model: z.string().optional(),
+    type: z.string().optional(),
+    optional: z.boolean().optional(),
+    expr: z.string().optional(),
+    stepId: z.string().optional(),
+    prompt: z.string().optional(),
+    note: z.string().optional(),
+    content: z.string().optional(),
+    text: z.string().optional(),
+    module: z.string().optional(),
+    doc: z.string().optional(),
+    message: z.string().optional(),
+    proposalJson: z.string().optional(),
+    testDocName: z.string().optional(),
+    testing: z.boolean().optional(),
+  },
+  async (args) => textContent(await runSessionAction(args)),
+)
+
+server.tool(
+  "add_project",
+  "Create a blank project in the session file — same as GUI New project / session.addProject.",
+  { sessionPath: z.string().optional() },
+  async (args) => textContent(addProjectFromSession(args.sessionPath)),
+)
+
+server.tool(
+  "rename_project",
+  "Rename a project in the session file.",
+  {
+    sessionPath: z.string().optional(),
+    id: z.string().optional(),
+    name: z.string(),
+  },
+  async (args) => textContent(renameProjectFromSession(args.name, args.id, args.sessionPath)),
+)
+
+server.tool(
+  "delete_project",
+  "Delete a project from the session file.",
+  { sessionPath: z.string().optional(), id: z.string() },
+  async (args) => textContent(deleteProjectFromSession(args.id, args.sessionPath)),
+)
+
+server.tool(
+  "open_project",
+  "Set the active project in the session file.",
+  { sessionPath: z.string().optional(), id: z.string() },
+  async (args) => textContent(openProjectFromSession(args.id, args.sessionPath)),
+)
+
+server.tool(
+  "clone_project",
+  "Clone a project in the session file.",
+  { sessionPath: z.string().optional(), id: z.string().optional() },
+  async (args) => textContent(cloneProjectFromSession(args.id, args.sessionPath)),
+)
+
+server.tool(
+  "import_seed",
+  "Ingest a bundled seed JSON into the session — same as GUI Clone template.",
+  { sessionPath: z.string().optional(), file: z.string() },
+  async (args) => textContent(importSeedFromSession(args.file, args.sessionPath)),
+)
+
+server.tool(
+  "add_model",
+  "Add a named structure model (press m in the TUI).",
+  { sessionPath: z.string().optional(), name: z.string() },
+  async (args) => textContent(addModelFromSession(args.name, args.sessionPath)),
+)
+
+server.tool(
+  "add_step",
+  "Insert a pipeline step (press s in the TUI).",
+  {
+    sessionPath: z.string().optional(),
+    kind: z.string().describe("llm | input | combine | chunk | …"),
+    label: z.string().optional(),
+  },
+  async (args) => textContent(addStepFromSession(args.kind, args.label, args.sessionPath)),
+)
+
+server.tool(
+  "add_doc",
+  "Add a text document to the session (GUI Documents upload for text).",
+  {
+    sessionPath: z.string().optional(),
+    name: z.string(),
+    content: z.string(),
+  },
+  async (args) => textContent(addDocFromSession(args)),
+)
+
+server.tool(
+  "set_docs",
+  "Set project markdown docs (Docs tab / press w).",
+  { sessionPath: z.string().optional(), text: z.string() },
+  async (args) => textContent(setDocsFromSession(args.text, args.sessionPath)),
+)
+
+server.tool(
+  "assign_input",
+  "Assign a document to an Input step — same as Inference slot picker.",
+  {
+    sessionPath: z.string().optional(),
+    module: z.string(),
+    doc: z.string(),
+  },
+  async (args) => textContent(assignInputFromSession(args.module, args.doc, args.sessionPath)),
+)
+
+server.tool(
+  "ask_agent",
+  "Ask Vibe/structure/testing/diagnosis (same proposePipelineChange path as GUI Send).",
+  {
+    sessionPath: z.string().optional(),
+    message: z.string(),
+    kind: z.string().optional().describe("vibe | structure | testing | diagnosis"),
+  },
+  async (args) => textContent(await askAgentFromSession(args.message, args.sessionPath, args.kind)),
+)
+
+// AI : TODO (gui-parity) — MCP still lacks vs GUI: share mint, Stripe checkout, run cancel, Node custom-code, human-review pause.
 
 async function main() {
   const transport = new StdioServerTransport()
