@@ -104,20 +104,14 @@ export async function originalDocFile(id: DocId, docName?: string): Promise<Orig
 async function backfillSeedOriginalDoc(id: DocId, docName?: string): Promise<OriginalDocFile | undefined> {
   for (const seed of allProjectSeeds()) {
     for (const spec of seed.docSpecs) {
+      if (!spec.path.toLowerCase().endsWith(".pdf")) continue;
       const txtSidecar = spec.path.replace(/\.pdf$/i, ".txt");
       if (existsSync(txtSidecar) && hashContent(readFileSync(txtSidecar, "utf8")) === id) {
-        const pdfPath = spec.path.endsWith(".pdf") ? spec.path : spec.path.replace(/\.txt$/i, ".pdf");
-        if (existsSync(pdfPath)) return copySeedPdfToDocsDir(id, pdfPath);
+        if (existsSync(spec.path)) return copySeedPdfToDocsDir(id, spec.path);
       }
-      // AI : seed docs may be .md/.json — hash ingested text, not only a .txt sidecar path.
       try {
         const content = await readSeedDocContent(spec);
-        if (hashContent(content) === id) {
-          const pdfPath = spec.path.endsWith(".pdf")
-            ? spec.path
-            : spec.path.replace(/\.(txt|md|json)$/i, ".pdf");
-          if (existsSync(pdfPath)) return copySeedPdfToDocsDir(id, pdfPath);
-        }
+        if (hashContent(content) === id && existsSync(spec.path)) return copySeedPdfToDocsDir(id, spec.path);
       } catch {
         // skip missing seed files
       }
@@ -129,10 +123,7 @@ async function backfillSeedOriginalDoc(id: DocId, docName?: string): Promise<Ori
     for (const seed of allProjectSeeds()) {
       for (const spec of seed.docSpecs) {
         if (spec.name !== docName) continue;
-        const pdfPath = spec.path.endsWith(".pdf")
-          ? spec.path
-          : spec.path.replace(/\.(txt|md|json)$/i, ".pdf");
-        if (existsSync(pdfPath)) return copySeedPdfToDocsDir(id, pdfPath);
+        if (spec.path.toLowerCase().endsWith(".pdf") && existsSync(spec.path)) return copySeedPdfToDocsDir(id, spec.path);
       }
     }
   }

@@ -125,6 +125,9 @@ function nextNumberedCloneName(baseName: string, existingNames: Iterable<string>
 }
 
 export class SpineSession {
+  // AI : TODO (mcp-capability) — every method a human uses in the GUI should have an MCP session_action.
+  // AI :   Still unwrapped: removeDoc, linkQuotes, setDocProjects, hydrateRunDetail, flushPendingSave,
+  // AI :   pullRemoteState, executeProposedActions, resyncExamples. Not a full-snapshot "eyes" dump.
   private snap: SessionSnapshot
   private readonly listeners = new Set<() => void>()
   private readonly persist: PersistPort | undefined
@@ -401,6 +404,7 @@ export class SpineSession {
     return doc
   }
 
+  // AI : TODO (mcp-capability) — GUI Documents delete; wrap as session_action documents.remove.
   removeDoc(docId: DocId): void {
     const { [docId]: _removed, ...docContents } = this.snap.docContents
     this.commit({
@@ -411,6 +415,7 @@ export class SpineSession {
   }
 
   // AI : locality:local — offsets into source already on this machine; never egress.
+  // AI : TODO (mcp-capability) — GUI quote-as-context; wrap as session_action quotes.link (CLI already has link-quotes).
   linkQuotes(input: LinkQuotesInput): QuoteView {
     if (this.egress) {
       // AI : local capability — touching egress here would fail the no-network suite.
@@ -492,6 +497,7 @@ export class SpineSession {
     this.patchProject({ strategies: s })
   }
 
+  // AI : TODO (mcp-capability) — GUI document↔project binding; wrap as MCP session_action.
   setDocProjects(docId: DocId, projectIds: ProjectId[]): void {
     this.commit({
       ...this.snap,
@@ -543,12 +549,14 @@ export class SpineSession {
     return this.egress.request(path, init)
   }
 
+  // AI : TODO (mcp-capability) — GUI Refresh example documents; wrap as session_action project.resync-examples.
   async resyncExamples(): Promise<number> {
     const res = await this.requestRemote("/api/projects/resync-examples", { method: "POST" })
     const body = (await res.json()) as { count?: number }
     return body.count ?? 0
   }
 
+  // AI : TODO (mcp-capability) — GUI Logging load-run-detail; wrap as session_action logging.hydrate after start_run.
   async hydrateRunDetail(runId: PipelineRun["id"]): Promise<void> {
     const res = await this.requestRemote(`/api/runs/${runId}`)
     const body = (await res.json()) as { run?: PipelineRun }
@@ -580,6 +588,7 @@ export class SpineSession {
     return this.startRun({ source: RunSource.Testing, testDocName })
   }
 
+  // AI : TODO (mcp-capability) — GUI Save / PUT project; wrap as MCP session push (flushPendingSave).
   async flushPendingSave(): Promise<void> {
     const project = this.project
     if (!project) return
@@ -602,6 +611,7 @@ export class SpineSession {
     this.commit({ ...this.snap, earningsAccount: data })
   }
 
+  // AI : TODO (mcp-capability) — GUI GET /api/state; wrap as MCP session pull so the agent can use the same project as a signed-in human.
   async pullRemoteState(): Promise<void> {
     const res = await this.requestRemote("/api/state")
     const data = (await res.json()) as {
@@ -616,6 +626,7 @@ export class SpineSession {
     if (data.modelOptions) this.setModelOptions(data.modelOptions)
   }
 
+  // AI : TODO (mcp-capability) — GUI Approve-to-run; wrap as MCP after apply_project_changes.
   async executeProposedActions(
     actions = this.snap.pendingProposal?.proposedActions ?? [],
   ): Promise<PipelineRun[]> {

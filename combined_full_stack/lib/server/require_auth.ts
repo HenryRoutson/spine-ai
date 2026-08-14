@@ -70,6 +70,7 @@ export async function optionalAuthSession(): Promise<AuthSession | null> {
   }
 }
 
+// AI : TODO (mcp-auth) — accept Authorization: Bearer (Supabase access token or PAT) so CLI/MCP can sign in without cookies.
 // AI : production + Supabase-configured deploys require a signed-in session — no shared anon store.
 export async function requireAuth(): Promise<AuthSession | NextResponse> {
   if (isVercelWithoutSupabase()) {

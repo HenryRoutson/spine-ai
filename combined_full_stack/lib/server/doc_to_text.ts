@@ -14,9 +14,25 @@ const DEFAULT_OCR_PROMPT =
 
 type DocBytes = { bytes: Uint8Array; mime: string };
 
+export function mimeIsVisionAttachment(mime: string): boolean {
+  const m = mime.toLowerCase();
+  return m.startsWith("image/") || m === "application/pdf";
+}
+
+function looksLikePdf(bytes: Uint8Array): boolean {
+  return bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46;
+}
+
 export async function loadDocBytesForVision(store: Store, docId: DocId): Promise<DocBytes | undefined> {
   const file = await originalDocFile(docId);
-  if (file) return { bytes: new Uint8Array(readFileSync(file.path)), mime: file.mime };
+  if (file) {
+    const bytes = new Uint8Array(readFileSync(file.path));
+    // AI : seed backfill used to copy .json onto <hash>.pdf — don't send that as a vision image.
+    if (file.ext === "pdf" && !looksLikePdf(bytes)) {
+      return { bytes, mime: "text/plain" };
+    }
+    return { bytes, mime: file.mime };
+  }
   const meta = store.docs().find((d) => d.id === docId);
   if (meta?.type === "image") {
     throw new Error(
@@ -61,18 +77,19 @@ export async function docToTextViaLlm(
   let text: string;
 
   const media = await loadDocBytesForVision(store, docId);
-  if (media) {
+  if (media && mimeIsVisionAttachment(media.mime)) {
     const attachments: VisionAttachment[] = [
       { mime: media.mime, base64: bytesToBase64(media.bytes) },
     ];
     log.info(`vision OCR call`, { docId, mime: media.mime, bytes: media.bytes.length, model: ctx.model });
     text = (await llmVisionString(prompt, attachments, llmCtx, log)).trim();
-  } else if (parserText.trim()) {
-    log.info(`vision OCR text fallback`, { docId, parserChars: parserText.length });
-    const textPrompt = `${prompt}\n\n── BUILT-IN PARSER TEXT ──\n${parserText}`;
-    text = (await llmVisionString(textPrompt, [], llmCtx, log)).trim();
   } else {
-    throw new Error(`vision OCR: no file bytes or parser text for ${docId}`);
+    const extra = media ? new TextDecoder().decode(media.bytes) : "";
+    const body = parserText.trim() || extra.trim();
+    if (!body) throw new Error(`vision OCR: no file bytes or parser text for ${docId}`);
+    log.info(`vision OCR text fallback`, { docId, parserChars: body.length, mime: media?.mime });
+    const textPrompt = `${prompt}\n\n── BUILT-IN PARSER TEXT ──\n${body}`;
+    text = (await llmVisionString(textPrompt, [], llmCtx, log)).trim();
   }
 
   if (!text) throw new Error(`vision OCR returned empty text for ${docId}`);

@@ -3,12 +3,13 @@ import { type VisionAttachment } from "./openrouter_llm";
 import { llmStructured, llmVisionString, type CallContext } from "./llm";
 import { structuredLlmPrompt } from "./structure";
 import { type Store } from "./store";
-import { DEFAULT_INPUT_CHECK_MODEL, type DocId, type InputDescriptionCheckItem, type InputDescriptionCheckResult, type PipelineModule } from "./types";
+import { DEFAULT_INPUT_CHECK_MODEL, DEFAULT_VISION_DOC_PARSE_MODEL, InputType, type DocId, type InputDescriptionCheckItem, type InputDescriptionCheckResult, type PipelineModule } from "./types";
 import { type ServerLogger } from "./server_logger";
-import { loadDocBytesForVision } from "./doc_to_text";
+import { loadDocBytesForVision, mimeIsVisionAttachment } from "./doc_to_text";
 import {
   checkPayload,
   expandListItemsForCheck,
+  INPUT_PREVIEW_CHARS,
   inputCheckPayloadMode,
   MIN_INPUT_TEXT_CHARS,
   type InputDescriptionCheckListItem,
@@ -142,12 +143,17 @@ function bytesToBase64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64");
 }
 
-// AI : per-step toggle — default on when a description is set.
+// AI : per-step toggle — default on when a description is set. JSON/Excel parse structurally.
 export function shouldCheckInputDescription(
-  m: Pick<PipelineModule, "inputDescription" | "checkInputDescription">,
+  m: Pick<PipelineModule, "kind" | "inputType" | "inputDescription" | "checkInputDescription">,
 ): boolean {
   if (!m.inputDescription?.trim()) return false;
-  return m.checkInputDescription !== false;
+  if (m.checkInputDescription === false) return false;
+  if (m.kind === "input") {
+    const types = !m.inputType ? [] : Array.isArray(m.inputType) ? m.inputType : [m.inputType];
+    if (types.length > 0 && types.every((t) => t === InputType.Json || t === InputType.Excel)) return false;
+  }
+  return true;
 }
 
 // AI : optional per-step guard — cheap LLM judges incoming data before processing.
@@ -181,21 +187,30 @@ export async function runInputDescriptionCheck(
     result = (await llmStructured(userPrompt, matchSchema, llmCtx, log)) as InputDescriptionCheckResult;
   } else if (vision) {
     const media = await loadDocBytesForVision(vision.store, vision.docId);
-    if (!media) {
-      throw new Error(
-        `step "${stepLabel}" input has too little text to verify against the required description — enable OCR or re-upload the original file`,
-      );
+    if (media && mimeIsVisionAttachment(media.mime)) {
+      const attachments: VisionAttachment[] = [{ mime: media.mime, base64: bytesToBase64(media.bytes) }];
+      const visionCtx: CallContext = { ...llmCtx, model: DEFAULT_VISION_DOC_PARSE_MODEL };
+      const userPrompt = structuredLlmPrompt(buildCheckPrompt(stepLabel, desc, vision.docName, oneListItem), matchSchema);
+      log.info(`input description check (vision)`, {
+        stepLabel,
+        model: DEFAULT_VISION_DOC_PARSE_MODEL,
+        docName: vision.docName,
+        mime: media.mime,
+      });
+      const raw = await llmVisionString(userPrompt, attachments, visionCtx, log);
+      result = parseMatchReply(raw);
+    } else {
+      const decoded = media ? new TextDecoder().decode(media.bytes).trim() : "";
+      const payload = (decoded.length >= MIN_INPUT_TEXT_CHARS ? decoded.slice(0, INPUT_PREVIEW_CHARS) : textPayload || decoded || "(empty)");
+      const userPrompt = `${buildCheckPrompt(stepLabel, desc, vision.docName, oneListItem)}\n\n── STEP INPUT ──\n${payload}`;
+      log.info(`input description check (text fallback)`, {
+        stepLabel,
+        model: DEFAULT_INPUT_CHECK_MODEL,
+        docName: vision.docName,
+        payloadChars: payload.length,
+      });
+      result = (await llmStructured(userPrompt, matchSchema, llmCtx, log)) as InputDescriptionCheckResult;
     }
-    const attachments: VisionAttachment[] = [{ mime: media.mime, base64: bytesToBase64(media.bytes) }];
-    const userPrompt = structuredLlmPrompt(buildCheckPrompt(stepLabel, desc, vision.docName, oneListItem), matchSchema);
-    log.info(`input description check (vision)`, {
-      stepLabel,
-      model: DEFAULT_INPUT_CHECK_MODEL,
-      docName: vision.docName,
-      mime: media.mime,
-    });
-    const raw = await llmVisionString(userPrompt, attachments, llmCtx, log);
-    result = parseMatchReply(raw);
   } else {
     const userPrompt = `${buildCheckPrompt(stepLabel, desc, undefined, oneListItem)}\n\n── STEP INPUT ──\n${textPayload || "(empty)"}`;
     log.info(`input description check (short)`, { stepLabel, model: DEFAULT_INPUT_CHECK_MODEL, oneListItem: !!oneListItem });

@@ -1,8 +1,8 @@
-# Spine surface parity — API, CLI, GUI
+# Spine surface parity — API, CLI, GUI, MCP
 
-Spine is one product with three human/agent surfaces. They must not grow separate domain models. Conversion always goes through a **headless session** (`SpineSession`) plus **actions-as-data** and **ViewModels**. Pixels, argv, and HTTP are adapters.
+Spine is one product with four surfaces: **GUI**, **CLI/TUI**, **HTTP API**, and **MCP**. They must not grow separate domain models. Conversion always goes through a **headless session** (`SpineSession`) plus **actions-as-data** and **ViewModels**. Pixels, argv, HTTP, and MCP tools are adapters.
 
-This document is the map of what is already the same, how you convert between surfaces, and remaining host gaps (Node `CodeHost`, Stripe TUI, thin `useStore`).
+This document is the map of what is already the same, how you convert between surfaces, remaining host gaps (Node `CodeHost`, Stripe, OAuth), and what MCP still needs to match the full UI.
 
 **Button table:** §11 — every GUI control has a searchable `id` (`data-spine-id`) and a row for TUI, API, MCP, and the library (`SpineSession` / `useStore`). Catalog: `combined_full_stack/lib/core/parity-catalog.ts`. Test: `lib/core/parity-catalog.test.ts`.
 
@@ -16,7 +16,7 @@ Code roots:
 | GUI store | `combined_full_stack/lib/store.tsx` (`useStore`) |
 | CLI | `combined_full_stack/lib/cli/` + `scripts/spine-cli.ts` |
 | Ink TUI | `combined_full_stack/lib/cli/ink/` |
-| Pinpoint MCP | `mcp_tool/` (session_action + Testing-tab pinpoint) |
+| MCP | `mcp_tool/` (stdio: session_action + Testing-tab pinpoint + Vibe ask/apply) |
 
 ---
 
@@ -43,7 +43,7 @@ Conversion is always **surface → SpineSession (or the same named methods on `u
 
 ---
 
-## 2. The three surfaces
+## 2. The four surfaces
 
 ### 2.1 GUI (React)
 
@@ -129,7 +129,20 @@ Grouped by GUI tab (this **is** the conversion table GUI ↔ API):
 | Teams | `teams`, invite, members |
 | Misc | `account`, `activity`, `session-replay`, `abtest`, `feedback`, `pipeline-export/documents`, landing-demo |
 
-CLI today **does not** speak this HTTP surface except where it imports server libs in-process (`proposePipelineChange`, seed load). It does not `fetch /api/state`.
+CLI today **does not** speak this HTTP surface except where it imports server libs in-process (`proposePipelineChange`, seed load). It does not `fetch /api/state` unless `SPINE_API_URL` is set (`session pull` / `start-run`).
+
+### 2.4 MCP (Cursor / agents)
+
+Entry: `.cursor/mcp.json` + `~/.cursor/mcp.json` → `mcp_tool/src/index.ts` (stdio JSON-RPC). Spawn must use **absolute** `node` + `tsx/cli.mjs` + `tsconfig.json` — Cursor starts the process from `$HOME` and ignores `cwd`. Handshake test: `mcp_tool/src/mcp-boot.test.ts`.
+
+Two tool families on one server:
+
+| Family | Input | Same logic as |
+|---|---|---|
+| Pinpoint / lint | `seeds/*.json` + run JSON | Testing tab (`compareRunToTest`, `computeInvalid`, `lintPipeline`) |
+| Bar A session | `.spine-session.json` / `SPINE_SESSION_PATH` | CLI session + Vibe (`SpineSession`, `askAgent`, `workspace_edits`) |
+
+MCP **shares functions** with the GUI. It does **not** share the GUI’s live store. Capability (every GUI action as a tool) is the goal; a live “eyes” view of React state is not. See §4.1.
 
 ---
 
@@ -153,41 +166,41 @@ CLI today **does not** speak this HTTP surface except where it imports server li
   toAgentView              SESSION_ACTION_IDS          RealtimePort
         │                        │
         ├─ React pixels          ├─ CLI flags
-        ├─ Ink pixels            ├─ MCP tools (planned)
-        └─ --json data           └─ HTTP body (planned)
+        ├─ Ink pixels            ├─ MCP tools (`mcp_tool/src/index.ts`)
+        └─ --json data           └─ HTTP body (egress from session)
 ```
 
 ### 3.1 Snapshot → pixels (GUI and TUI)
 
 Renderers must not re-derive validity. They call ViewModels:
 
-| ViewModel | GUI | CLI / TUI |
-|---|---|---|
-| `toPipelineView` | Pipeline list | `session pipeline`, TUI `build` |
-| `toValidationView` | Red badges | `session validate` |
-| `toDocsView` | Docs tab (partial) | `session docs`, TUI `docs` |
-| `toTestingView` | Testing sidebar names | `session tests` list, TUI `tests` |
-| `toAgentView` | (GUI uses chat components) | `agent history`, TUI `agent` |
-| `toLogsView` | (GUI uses full Logging) | `session logs`, TUI `logs` |
-| `toQuoteView` | Quote chips | `session link-quotes` |
-| `toMermaidView` | Pipeline mermaid | `session mermaid` |
-| `toSessionSummary` | — | `session list/snapshot` |
+| ViewModel | GUI | CLI / TUI | MCP |
+|---|---|---|---|
+| `toPipelineView` | Pipeline list | `session pipeline`, TUI `build` | `describe_pipeline_steps` / `get_project` (summary only) |
+| `toValidationView` | Red badges | `session validate` | `validate_project` |
+| `toDocsView` | Docs tab (partial) | `session docs`, TUI `docs` | `set_docs` |
+| `toTestingView` | Testing sidebar names | `session tests` list, TUI `tests` | `list_project_tests` / `session_logs.tests` |
+| `toAgentView` | (GUI uses chat components) | `agent history`, TUI `agent` | `ask_agent` (no stream) |
+| `toLogsView` | (GUI uses full Logging) | `session logs`, TUI `logs` | `session_logs` (ids/notes, not step JSON) |
+| `toQuoteView` | Quote chips | `session link-quotes` | no MCP quote tool |
+| `toMermaidView` | Pipeline mermaid | `session mermaid` | not exposed |
+| `toSessionSummary` | — | `session list/snapshot` | `get_project` |
 
 Ink `WorkspaceView` is presentational: only ViewModels + prompt state. `SpineTui` dispatches `session.*` on keys — same names as `useStore`.
 
 ### 3.2 Actions as data
 
-`lib/core/actions.ts` — `id` is the React method name. Intended to feed CLI flags, MCP tools, and HTTP without new identifiers.
+`lib/core/actions.ts` — `id` is the React method name. Intended to feed CLI flags, MCP `session_action`, and HTTP without new identifiers.
 
 Registered today: `addProject`, `renameProject`, `deleteProject`, `openProject`, `setDocumentation`, `validate`, `linkQuotes`, `ingestProject`, `applyProposal`, `askAgent` (stub: remote, throws if `run()`).
 
 ### 3.3 Ports
 
-| Port | GUI | CLI |
+| Port | GUI | CLI / MCP |
 |---|---|---|
 | `PersistPort` | Debounced PUT project + GET state | `createFilePersist` → `.spine-session.json` |
-| `EgressPort` | `fetch` to `/api/*` | unset, or `createThrowingEgress()` when `--offline` |
-| `RealtimePort` | `useTeamRealtime` / `createSupabaseRealtimePort` | `attachRealtime` exists; CLI never connects Supabase |
+| `EgressPort` | `fetch` to `/api/*` (cookies) | `createApiEgress(SPINE_API_URL, SPINE_API_TOKEN)` or thrower |
+| `RealtimePort` | `useTeamRealtime` / `createSupabaseRealtimePort` | CLI can `attachRealtime`; MCP does not |
 
 `--offline` injects throwing egress. Local commands must not touch it. `agent ask` is remote and is blocked.
 
@@ -198,17 +211,21 @@ GUI Vibe/Build dock
   POST /api/pipeline-assistant  ──┐
                                   │  proposePipelineChange(project, message, history)
 CLI  spine agent ask              │  (lib/server/pipeline_assistant.ts)
+  in-process import  ─────────────┤
+MCP  ask_agent                    │
   in-process import  ─────────────┘
                                   │
                                   ▼
                          PipelineAssistantProposal
                                   │
-                    toProjectProposal()  (CLI)
+                    toProjectProposal()  (CLI/MCP)
                     applyProposal()      (GUI project-assistant.tsx
                                           and SpineSession.applyProposal)
                                   │
                          SessionSnapshot / StoreState
 ```
+
+GUI path is **billed + authed** (`requireAuthStore("llm")`). CLI/MCP `ask` still import the assistant **in-process** (needs `OPENROUTER_API_KEY`, skips HTTP billing). TODO: route MCP/CLI ask through `POST /api/pipeline-assistant`.
 
 Apply deltas (both surfaces):
 
@@ -296,7 +313,44 @@ Live runs, cache, billing, share link **ids** have CLI wrappers (`start-run`, `c
 
 ### API → MCP (Bar A)
 
-`mcp_tool` still wraps Testing-tab functions on **seed paths + run JSON**. Bar A also reads `.spine-session.json`: `get_project`, `validate_project`, `apply_project_changes`, `start_run` / `run_test` (HTTP), `session_logs`.
+`mcp_tool` wraps Testing-tab functions on **seed paths + run JSON**, and Bar A reads `.spine-session.json`: `get_project`, `validate_project`, `apply_project_changes`, `ask_agent`, `start_run` / `run_test` (HTTP), `session_logs`, plus CRUD (`add_project`, `add_step`, `add_model`, `add_doc`, `session_action`).
+
+### 4.1 Same actions, different store
+
+**MCP should be able to do what a human can click.** It does not need to see the live GUI.
+
+| | GUI | MCP |
+|---|---|---|
+| Project bytes | `useStore` ← `GET /api/state` (Supabase / JsonStore), cookies | `SpineSession` ← `.spine-session.json` |
+| Mutations | `useStore` methods (not yet a thin wrap of `SpineSession`) | same **names** via `createSpineSession` + `workspace_edits` |
+| Validators | `computeInvalid`, `validateTestFile`, `compareRunToTest` | **same imports** |
+| Vibe | `POST /api/pipeline-assistant` (auth, billing, stream, observe tools, UI pins) | `askAgent` → in-process `proposePipelineChange` |
+| Runs | `POST /api/runs` then poll until terminal; step JSON in Logging | `start_run` returns `{id, status}` immediately; `pinpoint_failure` needs a finished run JSON |
+| Auth | Supabase cookie JWT | `SPINE_API_TOKEN` Bearer — **API does not read it** (`requireAuth()` is cookies only) |
+| Agent playbook | on-screen tabs + buttons | MCP `instructions` + prompts `vibe_loop` / `fix_test` / `add_pipeline_step` |
+
+The GUI **does not read** `.spine-session.json`. An MCP `apply_project_changes` is invisible in the browser until `session pull` / `session push` against a working authenticated HTTP API (or until `useStore` loads the file — it does not). That is a **capability** gap (pull/push not MCP tools), not a missing screenshot.
+
+Three workspaces agents mix up:
+
+1. `seeds/*.json` — pinpoint/lint (golden templates)
+2. `.spine-session.json` — MCP/CLI session
+3. Signed-in Supabase project — what the GUI shows
+
+**Shared today:** types, `SpineSession` method names, `workspace_edits`, ViewModels (`toValidationView` etc.), Testing-tab compare/lint, `proposePipelineChange` source, overlay helper (`overlayOptimisticProjects`).
+
+**Not shared:** the live project document, cookie session, billed assistant HTTP, run polling, UI context pins, chat store, realtime.
+
+### GUI → MCP
+
+```
+Cursor agent
+  → MCP tool (get_project / ask_agent / apply / validate / run_test / pinpoint)
+  → createSpineSession({ persist: file, egress?: API })
+  → same SpineSession methods as CLI
+```
+
+To make MCP **the same project as the GUI**: `session pull` from `GET /api/state` (needs an auth path the API accepts) then mutate and `session push` (`PUT /api/projects/:id`). Those pull/push verbs exist on CLI/`SpineSession`; they are **not MCP tools yet**.
 
 ---
 
@@ -304,38 +358,38 @@ Live runs, cache, billing, share link **ids** have CLI wrappers (`start-run`, `c
 
 Legend: **Y** = same capability, **P** = partial (list/validate/stub), **N** = missing. GUI is the reference.
 
-| Capability | GUI | HTTP API | CLI session/TUI | MCP pinpoint |
+| Capability | GUI | HTTP API | CLI session/TUI | MCP |
 |---|---|---|---|---|
-| List/select/rename/delete/clone projects | Y | Y | Y | P (`get_project`) |
-| Blank project | Y | Y | Y | N |
-| Clone built-in seeds | Y (`cloneFromTemplate`) | Y templates | Y (`import-seed` / ingest) | seed path in |
-| Structure field CRUD, aliases, pydantic | Y | via project PUT | Y (`add-field` / `add-alias` / `pydantic`) | pydantic export + session validate |
-| Structure assistant | Y | Y | Y (`agent structure`) | N |
-| Pipeline add step | Y | via PUT | Y (`add-step`) | N |
-| Pipeline per-step fields / reorder / export | Y | Y export | Y (`patch-step` / `move-step` / `pydantic`) | `describe_pipeline_steps` |
-| Docs markdown | Y (edit/preview/split) | Y | P (set text / preview slice) | N |
-| Documents upload, OCR, PDF, labels | Y | Y | P (text `add-doc` / `--file`) | N |
+| List/select/rename/delete/clone projects | Y | Y | Y | Y (`get_project` handle + CRUD; full graph dump not required) |
+| Blank project | Y | Y | Y | Y `add_project` |
+| Clone built-in seeds | Y (`cloneFromTemplate`) | Y templates | Y (`import-seed` / ingest) | Y `import_seed` |
+| Structure field CRUD, aliases, pydantic | Y | via project PUT | Y (`add-field` / `add-alias` / `pydantic`) | P (`session_action` add-field; seed `export_pydantic`; no session describe tool yet) |
+| Structure assistant | Y | Y | Y (`agent structure`) | P `ask_agent kind=structure` (in-process, not HTTP) |
+| Pipeline add step | Y | via PUT | Y (`add-step`) | Y `add_step` |
+| Pipeline per-step fields / reorder / export | Y | Y export | Y (`patch-step` / `move-step` / `pydantic`) | P `session_action` configure/assign; no move-step |
+| Docs markdown | Y (edit/preview/split) | Y | P (set text / preview slice) | P `set_docs` (no preview) |
+| Documents upload, OCR, PDF, labels | Y | Y | P (text `add-doc` / `--file`) | P `add_doc` text only |
 | Link quotes (local offsets) | Y | server step + local `findQuote` | Y | N |
 | Validate pipeline / structures | Y | implicit on run | Y | Y |
 | Testing file validate | Y | — | Y | Y |
-| Testing **run** + diffs + LLM judge | Y | Y runs + `testing-evaluate` | P (`run-test` HTTP; diffs via pinpoint MCP) | P pinpoint vs run JSON |
-| Inference `startRun` + input assignment | Y | Y | Y (`assign-input` / `start-run`) | Y `start_run` |
+| Testing **run** + diffs + LLM judge | Y | Y runs + `testing-evaluate` | P (`run-test` HTTP; diffs via pinpoint MCP) | P `run_test` no wait; pinpoint vs seed+run JSON |
+| Inference `startRun` + input assignment | Y | Y | Y (`assign-input` / `start-run`) | P `assign_input` / `start_run` (no poll) |
 | Custom code (browser host) | Y | pause + client-step | N (no Node `CodeHost`; action registered) | N |
 | Human review / chatbot pauses | Y | Y | N (action registered; GUI pause) | N |
-| Logging traces / notes / Langfuse | Y | Y | Y (ViewModel: notes, test, langfuse, steps) | P `session_logs` |
+| Logging traces / notes / Langfuse | Y | Y | Y (ViewModel: notes, test, langfuse, steps) | P `session_logs` (no step outputs) |
 | Cache inspect | Y | Y | Y (local snapshot / pull) | P `session_logs` |
-| Share / marketplace / hosted APIs | Y | Y | P (list ids; mint is HTTP/GUI) | N |
-| Earnings / billing / Stripe / keys | Y | Y | P (HTTP refresh; no Stripe TUI) | N |
-| Settings / sign-in / teams | Y | Y | P (model / saveError; no OAuth) | N |
+| Share / marketplace / hosted APIs | Y | Y | P (list ids; mint is HTTP/GUI) | N mint; list ids after pull [P] |
+| Earnings / billing / Stripe / keys | Y | Y | P (HTTP refresh; no Stripe TUI) | P refresh via `session_action`; no Stripe |
+| Settings / sign-in / teams | Y | Y | P (model / saveError; no OAuth) | N (Bearer token unused by API) |
 | Consumer Run mode | Y | shared-link APIs | N | N |
-| Vibe / project agent propose+apply | Y | Y | Y (`agent ask/apply`) | Y `apply_project_changes` |
+| Vibe / project agent propose+apply | Y | Y | Y (`agent ask/apply`) | P `ask_agent` + `apply_project_changes` (in-process ask) |
 | Agent streaming + observe tools + billing | Y | Y | P (no stream/store/catalog) | N |
-| Structure / testing / diagnosis agents | Y | Y | Y | N |
-| Execute `proposedActions` runs | Y | Y | Y (`--run` + `SPINE_API_URL`) | via `start_run` |
-| Supabase persist | Y | Y | P (JSON file + `pull`/`push`) | session file |
+| Structure / testing / diagnosis agents | Y | Y | Y | P `ask_agent kind=` (in-process) |
+| Execute `proposedActions` runs | Y | Y | Y (`--run` + `SPINE_API_URL`) | via `start_run` (no wait) |
+| Supabase persist | Y | Y | P (JSON file + `pull`/`push`) | session file; pull/push not MCP tools |
 | Realtime overlay | Y | DB + channel | P (TUI attaches when Supabase env set) | N |
 | Strategies / A-B | Y | `/api/abtest` | P (`setStrategies` on session) | N |
-| `--offline` local-only | N/A | N/A | Y | N/A |
+| `--offline` local-only | N/A | N/A | Y | P (offline flag on `openMcpSession`; not a tool) |
 
 ---
 
@@ -355,17 +409,17 @@ Custom code: **local to the browser**, not to Node CLI. Source still goes to the
 
 ## 7. Identifier alignment (do not fork names)
 
-| Concept | GUI | CLI | API |
-|---|---|---|---|
-| Create project | `addProject` | `session add-project` | `POST /api/projects` |
-| Open | `setActiveProjectId` / `openProject` | `session open` | `GET /api/state?projectId=` |
-| Patch graph | `applyProjectChanges` | `add-model` / `add-step` / agent apply | `PUT /api/projects/:id` |
-| Docs markdown | `setDocumentation` | `session set-docs` | same PUT |
-| Validate | badges | `session validate` | (engine) |
-| Quotes | quote UI | `session link-quotes` | quote step in run |
-| Agent ask | Vibe send | `agent ask --message` | `POST /api/pipeline-assistant` |
-| Agent approve | Approve button | `agent apply` | local + optional run |
-| Tabs | `AppWindowId` | `TUI_TABS` | n/a |
+| Concept | GUI | CLI | API | MCP |
+|---|---|---|---|---|
+| Create project | `addProject` | `session add-project` | `POST /api/projects` | `add_project` |
+| Open | `setActiveProjectId` / `openProject` | `session open` | `GET /api/state?projectId=` | `open_project` |
+| Patch graph | `applyProjectChanges` | `add-model` / `add-step` / agent apply | `PUT /api/projects/:id` | `apply_project_changes` / `add_step` |
+| Docs markdown | `setDocumentation` | `session set-docs` | same PUT | `set_docs` |
+| Validate | badges | `session validate` | (engine) | `validate_project` |
+| Quotes | quote UI | `session link-quotes` | quote step in run | none |
+| Agent ask | Vibe send | `agent ask --message` | `POST /api/pipeline-assistant` | `ask_agent` (in-process) |
+| Agent approve | Approve button | `agent apply` | local + optional run | `apply_project_changes` |
+| Tabs | `AppWindowId` | `TUI_TABS` | n/a | no window; tools by concern |
 
 When adding a feature, add the `SpineSession` method **and** a `defineAction` id **before** a new CLI verb or MCP tool.
 
@@ -405,18 +459,38 @@ Remaining gaps are **browser-only hosts** and **marketplace/Stripe UX**, not mis
 - [x] CLI wrappers for `/api/state`, `/api/runs`, `/api/billing` (and earnings). Cache/share list from snapshot after pull.
 - [ ] Do not bypass billing when CLI calls `proposePipelineChange` in-process (still skips `requireAuthStore`).
 
-### 8.4 MCP (Bar A vs Bar B)
+### 8.4 MCP — Bar A vs full-UI (Bar B)
 
-**Bar A (replace Vibe)** — session tools exist:
+**Boot (done 14 Aug 2026):** stdio handshake works. Enums import from `@/lib/server/types` (tsx drops `export *` values). Cursor spawn uses absolute `node` + `tsx/cli.mjs` + `tsconfig` (process cwd is `$HOME`). Stdout is JSON-RPC only (`DOTENV_CONFIG_QUIET`, bootstrap filter). Test: `mcp_tool/src/mcp-boot.test.ts`.
 
-- [x] `get_project` / `validate_project` from session file.
-- [x] `apply_project_changes` matching `ProjectProposal`.
-- [x] `start_run` / `run_test` (HTTP).
-- [x] Test docs, runs, cache as `session_logs`.
+**Bar A (replace Vibe on one session file)** — tools exist; not GUI-equivalent yet:
 
-**Bar B (whole app)** — not started: marketplace mint, hosted API create, Node custom-code, human-review pause, Stripe.
+- [x] `get_project` / `validate_project` / CRUD / `ask_agent` / `apply_project_changes` / `start_run` / `run_test` / `session_logs` / pinpoint+lint.
+- [x] MCP `instructions` + prompts `vibe_loop` / `fix_test` / `add_pipeline_step` (agents: session vs seed, named tools vs `session_action`).
+- [ ] Wrap remaining `SpineSession` verbs as MCP (`mcp-capability`): `pullRemoteState`, `flushPendingSave`, `hydrateRunDetail`, `removeDoc`, `linkQuotes`, `setDocProjects`, `executeProposedActions`, `resyncExamples`. `get_project` stays a handle — do not dump the graph for “eyes”.
+- [ ] One project handle: MCP pull/push vs seeds vs GUI Supabase (`mcp-workspace`).
+- [ ] `ask_agent` via `POST /api/pipeline-assistant` (billed + auth), not in-process (`mcp-vibe-http`).
+- [ ] `wait_for_run` + `get_run` (step outputs) so pinpoint can run on session runs (`mcp-run-loop`).
+- [ ] Auth the API accepts: cookie/JWT/PAT in `requireAuth()` (`mcp-auth`). `auth_status` tool (`mcp-auth-tool`).
+- [ ] Shrink tool list; structured `{ ok, code, next }` errors (`mcp-tools`, `mcp-errors`).
 
-Pinpoint MCP remains the Testing-tab specialist; Bar A is the session/Vibe path.
+**Bar B (whole app)** — host-bound or mint HTTP; not started as MCP:
+
+- marketplace / hosted API / embed mint, Stripe checkout + keys, teams invite
+- Node `CodeHost` (custom-code / assert)
+- human-review + chatbot pause
+- OCR/PDF documents, consumer Run, UI select-mode pins, assistant chat store, realtime
+
+**What “MCP = full UI” actually requires (order):**
+
+1. Same **actions**: every GUI `data-spine-id` that is a `SpineSession` method is an MCP tool or `session_action` (see `mcp-capability` TODOs).
+2. Same project when the human is signed in: MCP `pull`/`push` **and** an auth header `requireAuth()` honors.
+3. Same remote path: billed HTTP assistant + polled runs + pinpoint on that run.
+4. Then host ports: CodeHost, human-review, Stripe — or keep those GUI-only forever.
+
+A live view of React state is explicitly **not** required.
+
+Pinpoint stays the Testing-tab specialist; Bar A is the session/Vibe path. They must not stay two sources of truth.
 
 ### 8.5 GUI using core (convergence)
 
@@ -432,7 +506,7 @@ Pinpoint MCP remains the Testing-tab specialist; Bar A is the session/Vibe path.
 cd combined_full_stack
 npm test -- lib/core lib/cli          # session, overlay, CLI, Ink renderToString, button catalog
 npm test -- lib/core/parity-catalog.test.ts
-cd ../mcp_tool && npm test            # Bar A session tools + session_action
+cd ../mcp_tool && npm test            # Bar A session tools + stdio handshake
 cd ../combined_full_stack
 npm run spine -- session actions      # action ids == useStore names
 npm run spine -- demo                 # CRUD + overlay + quotes, egress 0
@@ -463,7 +537,8 @@ A feature is at parity when:
 | GUI session | pixels | `lib/store.tsx` + `components/*` |
 | CLI argv | session | `lib/cli/session_cli.ts`, `agent_cli.ts`, `run.ts` |
 | Session | Ink | `lib/cli/ink/app.tsx` → `workspace-view.tsx` |
-| Agent propose | both | `lib/server/pipeline_assistant.ts` |
+| Agent propose | GUI HTTP; CLI/MCP in-process | `lib/server/pipeline_assistant.ts` |
+| MCP stdio | Cursor | `mcp_tool/src/index.ts` + `.cursor/mcp.json` |
 | Agent apply | both | `session.applyProposal` / `project-assistant.tsx` |
 | Button ids | GUI+TUI+API+MCP | `lib/core/parity-catalog.ts` (`data-spine-id`) |
 

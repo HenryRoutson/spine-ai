@@ -1,5 +1,11 @@
 #!/usr/bin/env node
-// AI : Spine pinpoint MCP — isolate which pipeline step diverged from pinned *_testing.json outputs.
+// AI : Spine MCP — GUI-equivalent *actions* on SpineSession + Testing-tab pinpoint. Not a live UI view.
+// AI : TODO (mcp-tools) — shrink to ~8 vibe tools; session_action duplicates named tools and agents pick the wrong one.
+// AI : TODO (mcp-errors) — return { ok:false, code, next } with isError instead of throwing (JSON.parse of proposalJson).
+// AI : TODO (mcp-workspace) — one project handle: session pull/push vs seeds vs GUI Supabase currently diverge.
+// AI : TODO (mcp-capability) — wrap remaining GUI verbs: pullRemoteState, flushPendingSave, hydrateRunDetail,
+// AI :   removeDoc, linkQuotes, setDocProjects, executeProposedActions, resyncExamples, wait_for_run,
+// AI :   billed ask HTTP, share/hosted mint, Stripe, run cancel. Host-bound stays GUI: CodeHost, human-review, chatbot.
 
 import { resolve } from "node:path"
 import "./bootstrap-env.js"
@@ -43,6 +49,7 @@ import {
   startRunFromSession,
   validateProjectFromSession,
 } from "./spine-session-bar-a.js"
+import { registerSpinePrompts, SPINE_MCP_INSTRUCTIONS } from "./agent-playbook.js"
 
 const REPO_ROOT = process.env.SPINE_REPO_ROOT ?? resolve(process.cwd(), "..")
 
@@ -63,14 +70,17 @@ const runSourceSchema = {
     .describe("Inline pipeline run JSON when runPath is not set"),
 }
 
-const server = new McpServer({
-  name: "spine-pinpoint",
-  version: "0.1.0",
-})
+const server = new McpServer(
+  {
+    name: "spine-pinpoint",
+    version: "0.1.0",
+  },
+  { instructions: SPINE_MCP_INSTRUCTIONS },
+)
 
 server.tool(
   "pinpoint_failure",
-  "Compare a finished pipeline run against a *_testing.json file and return the first diverging step with isolated field diffs (expected vs actual only — no cache, no full pipeline dump). Use this to quickly find which step is wrong.",
+  "Compare a finished pipeline run against a *_testing.json file and return the first diverging step with isolated field diffs (expected vs actual only). Seed-path tool — does not mutate .spine-session.json. Use after a completed run; start_run/run_test do not wait.",
   {
     projectSeedPath: z.string().describe("Path to the project seed JSON (e.g. seeds/homework_grader.json)"),
     testFilePath: z.string().describe("Path to the *_testing.json file with pinned per-step outputs"),
@@ -120,7 +130,7 @@ server.tool(
 
 server.tool(
   "describe_pipeline_steps",
-  "Break a pipeline into per-step pydantic models: spine I/O types, JSON schemas, structure defs, and derived LLM prompts. Filter with stepLabel to inspect one step.",
+  "Break a *seed* pipeline into per-step pydantic models (not the session file). Filter with stepLabel to inspect one step. For the session project, edit with add_step / session_action instead.",
   {
     projectSeedPath: z.string(),
     stepLabel: z.string().optional().describe("Optional step label — omit to list all steps"),
@@ -182,7 +192,7 @@ server.tool(
 
 server.tool(
   "get_project",
-  "Read the active project from a Spine session file (same SpineSession as CLI / Vibe).",
+  "Session handle: active project id, name, and step list (not a full graph). Same SpineSession as CLI. For validity use validate_project; for edits use named tools or session_action.",
   {
     sessionPath: z.string().optional().describe("Path to .spine-session.json (or SPINE_SESSION_PATH)"),
   },
@@ -215,7 +225,7 @@ server.tool(
 
 server.tool(
   "start_run",
-  "POST /api/runs for the active session project. Needs SPINE_API_URL.",
+  "POST /api/runs for the active session project (GUI Run). Needs SPINE_API_URL. Returns {id,status} immediately — no wait_for_run yet; pinpoint_failure needs finished run JSON.",
   {
     sessionPath: z.string().optional(),
     testDocName: z.string().optional(),
@@ -226,7 +236,7 @@ server.tool(
 
 server.tool(
   "run_test",
-  "Start a Testing-tab run for the active session project. Needs SPINE_API_URL.",
+  "Start a Testing-tab run for the active session project (GUI Testing → Run). Needs SPINE_API_URL. Returns immediately; poll/hydrate is not an MCP tool yet.",
   {
     sessionPath: z.string().optional(),
     testDocName: z.string().optional(),
@@ -245,7 +255,7 @@ server.tool(
 
 server.tool(
   "session_action",
-  "Dispatch a GUI button id (data-spine-id / docs/parity.md) against the session file. Same SpineSession methods as CLI.",
+  "Dispatch a GUI button id (data-spine-id) against the session file. Prefer named tools when they exist. Extra ids: structure.add-field/remove-field/add-alias, pipeline.configure-step/remove-step/assign-structure, assistant.reject, billing.refresh, earnings.refresh, cache.refresh, logging.errors-only.",
   {
     id: z.string().describe("Parity catalog id, e.g. project.add, testing.run, assistant.send"),
     sessionPath: z.string().optional(),
@@ -368,7 +378,7 @@ server.tool(
 
 server.tool(
   "ask_agent",
-  "Ask Vibe/structure/testing/diagnosis (same proposePipelineChange path as GUI Send).",
+  "GUI Send: Vibe/structure/testing/diagnosis. Same proposePipelineChange path. Then apply_project_changes to Approve (or session_action assistant.reject).",
   {
     sessionPath: z.string().optional(),
     message: z.string(),
@@ -377,9 +387,13 @@ server.tool(
   async (args) => textContent(await askAgentFromSession(args.message, args.sessionPath, args.kind)),
 )
 
-// AI : TODO (gui-parity) — MCP still lacks vs GUI: share mint, Stripe checkout, run cancel, Node custom-code, human-review pause.
+registerSpinePrompts(server)
+
+// AI : TODO (mcp-auth-tool) — add auth_status / mcp_auth; GUI sign-in is cookies, MCP has no login.
 
 async function main() {
+  // AI : JSON-RPC is stdout — npm banners and console.log break Cursor's handshake.
+  console.log = console.error
   const transport = new StdioServerTransport()
   await server.connect(transport)
 }

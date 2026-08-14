@@ -1,4 +1,5 @@
 // AI : MCP Bar A — session file + HTTP, same SpineSession methods as CLI/Vibe (not seed-only).
+// AI : Goal is GUI-equivalent *actions*. get_project is a handle, not a live UI dump.
 
 import { createSpineSession } from "@/lib/core/session"
 import { createApiEgress, createThrowingEgress, SPINE_API_TOKEN_ENV, SPINE_API_URL_ENV } from "@/lib/core/transport"
@@ -20,8 +21,8 @@ import {
 import { askAgent } from "@/lib/cli/agent"
 import type { ProjectProposal } from "@/lib/project-assistant-types"
 import { filterRunsByErrorStatus } from "@/lib/run-error-log"
-import { DocLabel, InputType } from "@/lib/types"
-import type { Project } from "@/lib/types"
+// AI : import enums from server/types — tsx ESM drops named values through lib/types `export *`.
+import { DocLabel, InputType, type Project } from "@/lib/server/types"
 
 export function openMcpSession(sessionPath?: string, offline = false) {
   const persist = createFilePersist(resolveSessionPath(sessionPath))
@@ -34,6 +35,8 @@ export function openMcpSession(sessionPath?: string, offline = false) {
   return createSpineSession({ persist, egress })
 }
 
+// AI : TODO (mcp-capability) — session describe/export if agents need prompts/fields without a seed path.
+// AI :   Do not thicken this payload for "eyes"; named tools + session_action are the edit surface.
 export function getProjectFromSession(sessionPath?: string) {
   const session = openMcpSession(sessionPath, true)
   const project = session.project
@@ -69,6 +72,8 @@ export async function startRunFromSession(opts: {
   testDocName?: string
   testing?: boolean
 }) {
+  // AI : TODO (mcp-run-loop) — wait until terminal + hydrateRunDetail; GUI polls until step outputs exist.
+  // AI :   pinpoint_failure needs that JSON. start_run/run_test matching GUI Run/Testing → Run is incomplete without this.
   const session = openMcpSession(opts.sessionPath, false)
   const run = opts.testing ? await session.runTest(opts.testDocName) : await session.startRun()
   return { id: run.id, status: run.status, source: run.source }
@@ -231,6 +236,7 @@ export function rejectProposalFromSession(sessionPath?: string) {
 }
 
 export async function askAgentFromSession(message: string, sessionPath?: string, kind?: string) {
+  // AI : TODO (mcp-vibe-http) — POST /api/pipeline-assistant (billed + auth) like GUI Send, not in-process proposePipelineChange.
   const session = openMcpSession(sessionPath, false)
   const assistant =
     kind === "structure" || kind === "testing" || kind === "diagnosis" || kind === "vibe" ? kind : "vibe"
@@ -255,6 +261,7 @@ export function cacheFromSession(sessionPath?: string) {
 }
 
 export function shareFromSession(sessionPath?: string) {
+  // AI : TODO (mcp-capability) — list-only; GUI Share mints POST /api/shared-links + hosted-apis + embed.
   const session = openMcpSession(sessionPath, true)
   return toShareView(session.getSnapshot())
 }
@@ -402,6 +409,12 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
       return sessionLogs(sessionPath)
     case "logging.errors-only":
       return sessionLogs(sessionPath, true)
+    // AI : TODO (mcp-capability) — GUI ids with SpineSession methods but no MCP case yet:
+    // AI :   documents.remove → removeDoc, quotes.link → linkQuotes, logging.hydrate → hydrateRunDetail,
+    // AI :   docs/project bind → setDocProjects, assistant approve-to-run → executeProposedActions,
+    // AI :   session pull/push → pullRemoteState/flushPendingSave, project.resync-examples → resyncExamples.
+    // AI :   Host-bound (no session method): inference.stop, jobs.stop, inference.human-review.*,
+    // AI :   inference.chatbot.send, inference.custom-code, share mint, Stripe, auth.sign-in.
     default:
       throw new Error(`unknown session_action id: ${id}`)
   }

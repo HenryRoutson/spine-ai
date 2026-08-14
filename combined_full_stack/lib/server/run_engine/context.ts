@@ -1,5 +1,5 @@
 import { invariant } from "@/lib/assert";
-import { orderedInputModules } from "../../inference-input";
+import { orderedInputModules, inputModuleNeedsOcr } from "../../inference-input";
 import { documentFilenameFrom, documentValueFrom } from "../document_value";
 import { stepEmits } from "../validity";
 import type { ModuleId, ModelId, StructureModelId } from "../types";
@@ -69,6 +69,7 @@ export function requireLinearInput(m: PipelineModule, ctx: RunCtx): unknown {
 export function resolveStepInputForCheck(m: PipelineModule, ctx: RunCtx, store: Store): StepInputForCheck {
   if (m.kind === "input") {
     const docIds = ctx.inputByModule.get(m.id) ?? [];
+    const allowVision = inputModuleNeedsOcr(m);
     const items = docIds.map((docId) => {
       const doc = store.docs().find((d) => d.id === docId);
       return documentValueFrom(
@@ -89,7 +90,7 @@ export function resolveStepInputForCheck(m: PipelineModule, ctx: RunCtx, store: 
               (typeof rec.filename === "string" && rec.filename) || docName || `doc ${i + 1}`;
             return {
               value: item,
-              vision: { store, docId, docName: label },
+              vision: allowVision ? { store, docId, docName: label } : undefined,
               label,
             };
           })
@@ -97,7 +98,7 @@ export function resolveStepInputForCheck(m: PipelineModule, ctx: RunCtx, store: 
     return {
       value: items.length === 1 ? first : items,
       vision:
-        items.length === 1 && firstDocId
+        allowVision && items.length === 1 && firstDocId
           ? { store, docId: firstDocId, docName: documentFilenameFrom(first, { docId: firstDocId }) }
           : undefined,
       items: listItems,

@@ -6,8 +6,8 @@ import { resolve } from "node:path";
 // AI : app root (process.cwd() === combined_full_stack/ under `next dev`/`next start`).
 // AI : .env lives at repo root, one level above; .env.local in-app wins if present.
 const here = process.cwd();
-loadEnv({ path: resolve(here, ".env.local") });
-loadEnv({ path: resolve(here, "../.env") });
+loadEnv({ path: resolve(here, ".env.local"), quiet: true });
+loadEnv({ path: resolve(here, "../.env"), quiet: true });
 
 type OpenRouterApiKey = string & { __brand: "OpenRouterApiKey" };
 type DataDir = string & { __brand: "DataDir" };

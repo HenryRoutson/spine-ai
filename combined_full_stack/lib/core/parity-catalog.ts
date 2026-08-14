@@ -1,4 +1,5 @@
 // AI : one row per GUI button — id is data-spine-id, grep target, MCP session_action, and docs table key.
+// AI : MCP column is *action* parity with the GUI, not a shared live store / "eyes".
 
 import type { ParityRow, ParitySurface } from "@/lib/core/parity"
 

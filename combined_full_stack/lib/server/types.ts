@@ -716,8 +716,15 @@ export const DOC_PARSE_MODES: { value: DocParseMode; label: string; hint: string
   { value: DocParseMode.Llm, label: "Vision OCR", hint: "OpenRouter vision — cached separately in doc_vision_cache" },
 ];
 
+function moduleAcceptsVisionOcr(m: PipelineModule): boolean {
+  if (m.kind !== ModuleKind.Input || !m.inputType) return false;
+  const types = Array.isArray(m.inputType) ? m.inputType : [m.inputType];
+  return types.includes(InputType.Pdf) || types.includes(InputType.Image);
+}
+
 export function docParseModeForModule(m: PipelineModule): DocParseMode {
-  if (m.kind === ModuleKind.Input) return m.useOcr ? DocParseMode.Llm : DocParseMode.Parser;
+  // AI : leftover useOcr on JSON/text slots must not route files through vision OCR.
+  if (m.kind === ModuleKind.Input && m.useOcr && moduleAcceptsVisionOcr(m)) return DocParseMode.Llm;
   return DocParseMode.Parser;
 }
 
