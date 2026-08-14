@@ -195,13 +195,22 @@ function parseUserProgram(code: string): Program {
   }
 }
 
+// AI : astring drops parens on a single identifier param (`async doc =>`).
+// AI : buildCustomFnSource must still see a trailing `(params) =>` after preamble+arrow split.
+function generateArrowExpression(expr: Expression): string {
+  const src = generate(expr)
+  return src
+    .replace(/^async\s+([A-Za-z_$][\w$]*)\s*=>/, "async ($1) =>")
+    .replace(/^([A-Za-z_$][\w$]*)\s*=>/, "($1) =>")
+}
+
 export function instrumentArrowSourceAst(code: string, opts: InstrumentCodeOpts = {}): string {
   const trimmed = code.trim()
   if (!trimmed) return code
   const visual = opts.visual === true
   const ast = instrumentProgram(parseUserProgram(trimmed), visual)
   if (isArrowExpressionProgram(ast)) {
-    return generate((ast.body[0] as ExpressionStatement).expression)
+    return generateArrowExpression((ast.body[0] as ExpressionStatement).expression)
   }
   return instrumentCodeLinesAst(code, opts)
 }
@@ -213,7 +222,7 @@ export function instrumentCodeLinesAst(code: string, opts: InstrumentCodeOpts = 
   const ast = instrumentProgram(parseUserProgram(trimmed), visual)
   if (isArrowExpressionProgram(ast)) {
     const expr = (ast.body[0] as ExpressionStatement).expression
-    return `(${generate(expr)})`
+    return `(${generateArrowExpression(expr)})`
   }
   return generate(ast)
 }

@@ -320,12 +320,13 @@ function staleLoadFailedContent(content: string): string | null {
         label: docName,
         projectId: project.id,
         testDocName: docName,
+        modules,
         cancel: () => cancellable.stop(docName),
       })
       trackIdByDocName.current.set(docName, trackId)
       return trackId
     },
-    [cancellable, project.id, runJobs],
+    [cancellable, modules, project.id, runJobs],
   )
 
   const updateTestJobProgress = useCallback(

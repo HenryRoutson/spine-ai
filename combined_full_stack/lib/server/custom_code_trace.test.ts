@@ -3,6 +3,7 @@ import { buildCustomFnSource, compileCustomFn, instrumentCustomCodeLines, runCus
 import { instrumentCodeLines, makeAsyncFunctionSource } from "@/lib/custom_code_trace"
 import { wrapAssertTypeScript } from "@/lib/assert_steps"
 import { buildMergeTypeScript } from "@/lib/merger"
+import { customCodeParseDocToTableRows } from "@/lib/markdown_table_parse"
 
 function compileInstrumented(
   code: string,
@@ -138,6 +139,31 @@ describe("instrumentCodeLines (AST)", () => {
     )
     expect(performance.now() - t0).toBeLessThan(2_000)
     expect((out as { description?: string }).description).toBe("leak")
+    vi.unstubAllGlobals()
+  })
+
+  it("splits preamble from unparenthesized async trailing arrow", () => {
+    const code = "const x = 1\nasync doc => {\n  return doc\n}"
+    const parts = splitCustomCodeParts(code)
+    expect(parts?.preamble).toBe("const x = 1")
+    expect(parts?.arrow.trimStart().startsWith("async")).toBe(true)
+  })
+
+  it("runs minified markdown table parser with visual trace", async () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0)
+      return 0
+    })
+    const code = customCodeParseDocToTableRows()
+    const inst = instrumentCustomCodeLines(code, { visual: true })
+    expect(splitCustomCodeParts(inst)?.arrow).toMatch(/^\s*async\s+\(doc\)\s*=>/)
+    const out = await runCustomFn(
+      inst,
+      { content: "| A | B |\n| --- | --- |\n| 1 | 2 |\n" },
+      {},
+      { onTrace: () => {}, maxRunMs: 5_000, profileCode: code },
+    )
+    expect(out).toEqual([{ row_id: "1", cells_json: JSON.stringify({ A: "1", B: "2" }) }])
     vi.unstubAllGlobals()
   })
 })

@@ -122,9 +122,14 @@ export function formatCustomCodeFailureLog(f: CustomCodeAttemptFailure, tag = "c
 // AI : pure string transform — does NOT evaluate. Both compile (browser) and syntax-check (server) share it.
 function trailingArrowParams(arrow: string): string[] {
   const head = arrow.trim().replace(/^async\s+/, "");
-  const params = head.match(/^\(([^)]*)\)/)?.[1]?.trim() ?? "input";
-  if (!params) return ["input"];
-  return params.split(",").map((p) => p.trim()).filter(Boolean);
+  const grouped = head.match(/^\(([^)]*)\)/)?.[1]?.trim();
+  if (grouped !== undefined) {
+    if (!grouped) return ["input"];
+    return grouped.split(",").map((p) => p.trim()).filter(Boolean);
+  }
+  // AI : astring emits `async doc =>` (no parens) after visual instrument.
+  const ident = head.match(/^([A-Za-z_$][\w$]*)\s*=>/);
+  return ident ? [ident[1]!] : ["input"];
 }
 
 export type CustomCodeParts = {
@@ -134,9 +139,10 @@ export type CustomCodeParts = {
 
 export function splitCustomCodeParts(code: string): CustomCodeParts | undefined {
   const trimmed = code.trim();
+  // AI : allow `(doc) =>` and astring's `async doc =>` (single ident, no parens).
   const mainArrow =
-    trimmed.match(/;\s*((?:async\s+)?\([^)]*\)\s*=>[\s\S]+)$/) ??
-    trimmed.match(/\n\s*((?:async\s+)?\([^)]*\)\s*=>[\s\S]+)$/);
+    trimmed.match(/;\s*((?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>[\s\S]+)$/) ??
+    trimmed.match(/\n\s*((?:async\s+)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>[\s\S]+)$/);
   if (!mainArrow) return undefined;
   const arrowStart = trimmed.lastIndexOf(mainArrow[1]!);
   const preamble = trimmed.slice(0, arrowStart).replace(/[;\s]*$/, "");

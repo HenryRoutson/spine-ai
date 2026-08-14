@@ -11,7 +11,7 @@ I've worked on production grade
 financial automation with AI,
 and lead the development of our team's shared library of internal code infrastructure.
 
-# What is the problem?
+# What is the problem? 1
 
 what's the problem we're trying to solve?
 
@@ -25,20 +25,16 @@ Additionally, small startups are struggling to implement
 - interpretable
 - accurate 
 - and cost efficient 
-AI engineering solutions 
-without spending 200k a year on a single engineer.
+AI engineering solutions.
 
-The demand for high quality AI engineering output is extremely high, 
-but companies are having to cut funding without seeing results. 
-
-# so Who is the ICP for this problem? Who feels this problem the most?
+# so Who is the ICP for this problem? Who feels this problem the most? 2
 
 we see it as technical founders of 'AI-native' startups without specific AI-engineering experience.
 
 Startup founders
 are at risk of losing their jobs within months without high quality AI engineering.
 
-# Why now?
+# Why now? 3
 
 
 
@@ -53,7 +49,7 @@ looking to complete their product without learning claude code.
 
 
 
-# What is the solution we're offering them.
+# What is the solution we're offering them. 4
 
 Our single line pitch is :
 
@@ -75,7 +71,7 @@ and our dev tool solution for devs.
 with easy hand off between each.
 
 
-# how are we differentiated from the competition?
+# how are we differentiated from the competition? 5
 
 
 We're very opinionated about AI engineering, and this is built into our platform.
@@ -83,7 +79,7 @@ We'll save you the grusome details, but we belive this translates into higher re
 
 One example is se can run inference often at a tenth or hundredth of a cent per call by avoiding agent harness overhead, which is around 30 thousand tokens.
 
-# Development progress
+# Development progress 6
 
 How much development progress have we made.
 
@@ -99,10 +95,9 @@ is guiding someone non-technical to creating a  highly reliable backend,
 using friendly formats like excel.
 
 
-# Who are the competitors? and How much money could this make?
+# Who are the competitors? and How much money could this make? 8
 
 We've conducted extensive competitor analysis, and tried out a subset of their products.
-We've identified around 90 companies which are either direct or adjacent competitors 
 The leading product we've observed is Relevance AI at 13M ARR and growing quickly.
 
 but, From my experience in KPMG, I know that Relevance AI
@@ -110,10 +105,8 @@ but, From my experience in KPMG, I know that Relevance AI
 
 Is this lack of adoption because the product isn't needed? 
 Absolutely not, I developed 50 k lines of code inside of KPMG to mimic what Relevance AI does but at scale.
-Our competitors are not only public companies in our space, 
-but the pre-exisitng codebases inside of companies we sell to.
 
-# Validation
+# Validation 9
 
 What work have i done for validation?
 
@@ -125,7 +118,7 @@ With regards to enterprises,
 despite PhD qualifications, 
 teams are often struggling to ship to production. 
 
-# TAM, SAM, SOM
+# TAM, SAM, SOM 10
 
 ...
 
@@ -134,7 +127,7 @@ SAM — Serviceable Addressable Market
 SOM — Serviceable Obtainable Market.
 
 
-# Traction
+# Traction 11
 
 for some context on traction, I was going to pivot from this idea, so we're light on traction at the moment, but that's our current main focus.
 
@@ -142,7 +135,7 @@ I've got strong industry connections with NAB, KPMG, and AI-Engineering agencies
 
 which i'm planning to leverage.
 
-# Pricing
+# Pricing 12
 
 What's our plan for pricing?
 
@@ -154,25 +147,13 @@ where we cater to
 - enterprise development tooling and vibe coding
 - and enterprise consulting services 
 
+# GTM AND MOAT 13 14
 
-# GTM
+hyper augmented vibe coding services
 
+our moat is that we will stay the easiest way to setup an AI backend.
 
-What's our go to market?
-
-we are reaching out to AI startup founders, 
-to sell hyper augmented vibe coded solutions at developer rates,
-to get real product feedback, testing, and inital cash flow.
-
-At the same time, we're pitching to larger companies for trials. 
-
-# What is our moat?
-
-what is our moat?
-We are the lowest friction solution to engineering and deploying a backend,
-with exceptional backend reliability and development speed with novel development insights.
-
-# Requesting
+# Requesting 15
 
 What funding are we requesting.
 

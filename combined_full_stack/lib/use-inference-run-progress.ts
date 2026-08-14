@@ -24,11 +24,12 @@ import { isPreviewOnly } from "@/lib/demo-mode"
 import { useRunNotesFlushOnLeave } from "@/lib/run-notes-flush"
 import { useRunJobs } from "@/lib/run-jobs-context"
 import { activeStepLabelFromStepStates, progressPctFromStepStates } from "@/lib/run-jobs-progress"
-import { isRunAbortedError, useCancellableRun } from "@/lib/use-cancellable-run"
-import type { DocId, JobLogEntry, ModuleId, PipelineModule, PipelineRun, ProjectId, RunJobId } from "@/lib/types"
+import { uid } from "@/lib/id"
+import { isRunAbortedError, useCancellableRunRegistry } from "@/lib/use-cancellable-run"
+import type { JobLogEntry, ModuleId, PipelineModule, PipelineRun, ProjectId, RunJobId } from "@/lib/types"
 import type { ClientStepSpec } from "@/lib/run-types"
 import type { CodeExecUiState } from "@/lib/code-exec-ui"
-import { buildChatbotResult, type ChatbotResultValue } from "@/lib/chatbot-step"
+import { type ChatbotResultValue } from "@/lib/chatbot-step"
 import { RunJobSource } from "@/lib/run-jobs-types"
 import { RunPhase } from "@/lib/run-phase"
 
@@ -81,13 +82,11 @@ export function useInferenceRunProgress({
   const [pendingHumanReview, setPendingHumanReview] = useState<ClientStepSpec | null>(null)
   const [pendingChatbot, setPendingChatbot] = useState<ClientStepSpec | null>(null)
   const [activeJobId, setActiveJobId] = useState<RunJobId | null>(null)
+  const [attachedTrackId, setAttachedTrackId] = useState<string | null>(null)
   const [deduped, setDeduped] = useState(false)
-  const humanReviewResolveRef = useRef<((decision: "approved" | "rejected") => void) | null>(null)
-  const chatbotResolveRef = useRef<((result: import("@/lib/chatbot-step").ChatbotResultValue) => void) | null>(null)
   const runNotesRef = useRef("")
   const savedNotesRef = useRef<string | undefined>(undefined)
   const logEndRef = useRef<HTMLDivElement>(null)
-  const activeJobGenRef = useRef(0)
   const activeJobIdRef = useRef<RunJobId | null>(null)
   const activeTrackIdRef = useRef<string | null>(null)
   const mountedRef = useRef(true)
@@ -95,7 +94,7 @@ export function useInferenceRunProgress({
   const runsRef = useRef(runs)
   runsRef.current = runs
   const runJobs = useRunJobs()
-  const cancellable = useCancellableRun()
+  const cancellable = useCancellableRunRegistry<string>()
 
   useEffect(() => {
     runNotesRef.current = runNotes
@@ -139,25 +138,18 @@ export function useInferenceRunProgress({
     setPendingHumanReview(null)
     setPendingChatbot(null)
     setActiveJobId(null)
+    setAttachedTrackId(null)
     setDeduped(false)
-    humanReviewResolveRef.current = null
-    chatbotResolveRef.current = null
   }
 
-  // AI : orphan local callbacks but keep the job in the Runs hub.
+  // AI : drop local step-trace UI but keep hub progress updating for the orphaned job.
   function detachFromActiveRun() {
-    activeJobGenRef.current++
     activeJobIdRef.current = null
     activeTrackIdRef.current = null
-    humanReviewResolveRef.current?.("rejected")
-    chatbotResolveRef.current?.(
-      buildChatbotResult("", [], "exit"),
-    )
     clearRunUiState()
   }
 
   function resetRunState() {
-    activeJobGenRef.current++
     activeJobIdRef.current = null
     activeTrackIdRef.current = null
     clearRunUiState()
@@ -183,10 +175,13 @@ export function useInferenceRunProgress({
     resetRunState()
   }, [configResetKey, phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  function isAttached(trackId: string): boolean {
+    return activeTrackIdRef.current === trackId && mountedRef.current
+  }
+
   async function start() {
     if (isPreviewOnly()) return
     if (!allInputsReady || inputsInvalid) return
-    const jobGen = ++activeJobGenRef.current
     const orderedIds = flattenInputDocIds(inputModules, inputDocs)
     const byModule = inputDocsByModuleFromAssignment(inputModules, inputDocs)
     const [primary, ...rest] = orderedIds
@@ -195,20 +190,31 @@ export function useInferenceRunProgress({
       setRunNotes("")
       runNotesRef.current = ""
     }
-    const signal = cancellable.begin()
+    const runKey = uid("inf_")
+    const signal = cancellable.begin(runKey)
     const trackId = runJobs.registerJob({
       source: RunJobSource.Inference,
       label: "Pipeline run",
       projectId,
-      cancel: () => cancellable.stop(),
+      modules,
+      inputDocs,
+      cancel: () => cancellable.stop(runKey),
     })
+    let localSteps = new Map<ModuleId, StepUiState>()
+    let localCodeExec = new Map<ModuleId, CodeExecUiState>()
     activeTrackIdRef.current = trackId
+    activeJobIdRef.current = null
+    setAttachedTrackId(trackId)
     setPhase(RunPhase.Running)
     setError(null)
     setRun(null)
     setStepStates(new Map())
+    stepStatesRef.current = new Map()
     setDebugLogs([])
     setCodeExecByModule(new Map())
+    setPendingHumanReview(null)
+    setPendingChatbot(null)
+    setActiveJobId(null)
     try {
       // AI : flush any debounced project save before starting — prevents stale server state causing 400.
       await flushPendingSave?.()
@@ -220,55 +226,46 @@ export function useInferenceRunProgress({
         byModule,
         readAllowDuplicateRuns(),
       )
-      if (jobGen !== activeJobGenRef.current) return
-      activeJobIdRef.current = jobId
-      setActiveJobId(jobId)
+      if (signal.aborted) return
       runJobs.bindJobId(trackId, jobId)
-      cancellable.trackJobId(jobId)
+      cancellable.trackJobId(runKey, jobId)
+      if (isAttached(trackId)) {
+        activeJobIdRef.current = jobId
+        setActiveJobId(jobId)
+      }
       refreshBilling().catch(console.error)
       const { run: finished, deduped } = await awaitRun(jobId, {
         signal,
         onStep: (steps) => {
-          if (jobGen !== activeJobGenRef.current || activeJobIdRef.current !== jobId) return
-          const merged = mergeStepStates(stepStatesRef.current, steps)
-          stepStatesRef.current = merged
+          localSteps = mergeStepStates(localSteps, steps)
           runJobs.updateJobProgress(trackId, {
-            stepStates: merged,
-            progressPct: progressPctFromStepStates(modules, merged),
-            activeStepLabel: activeStepLabelFromStepStates(modules, merged),
+            stepStates: localSteps,
+            progressPct: progressPctFromStepStates(modules, localSteps),
+            activeStepLabel: activeStepLabelFromStepStates(modules, localSteps),
           })
-          if (mountedRef.current) setStepStates(merged)
+          if (!isAttached(trackId)) return
+          stepStatesRef.current = localSteps
+          setStepStates(localSteps)
         },
         onLogs: (logs) => {
-          if (jobGen !== activeJobGenRef.current || activeJobIdRef.current !== jobId) return
-          if (!mountedRef.current) return
-          setDebugLogs(logs)
+          runJobs.updateJobProgress(trackId, { debugLogs: logs })
+          if (isAttached(trackId)) setDebugLogs(logs)
         },
         onCodeExec: (state) => {
-          if (jobGen !== activeJobGenRef.current || activeJobIdRef.current !== jobId) return
-          if (!mountedRef.current) return
+          localCodeExec = new Map(localCodeExec).set(state.moduleId, state)
+          runJobs.updateJobProgress(trackId, { codeExecByModule: localCodeExec })
+          if (!isAttached(trackId)) return
           flushSync(() => {
-            setCodeExecByModule((prev) => new Map(prev).set(state.moduleId, state))
+            setCodeExecByModule(new Map(localCodeExec))
           })
         },
         onHumanReview: (spec) => {
-          if (jobGen !== activeJobGenRef.current) {
-            return Promise.resolve("rejected" as const)
-          }
-          if (!mountedRef.current) return Promise.resolve("rejected" as const)
-          setPendingHumanReview(spec)
-          return new Promise<"approved" | "rejected">((resolve) => {
-            humanReviewResolveRef.current = resolve
-          })
+          if (isAttached(trackId)) setPendingHumanReview(spec)
+          return runJobs.awaitHumanReview(trackId, spec)
         },
         onChatbot: (spec) => {
-          if (jobGen !== activeJobGenRef.current || !mountedRef.current) {
-            return Promise.resolve(buildChatbotResult("", [], "exit"))
-          }
-          setPendingChatbot(spec)
-          return new Promise<ChatbotResultValue>((resolve) => {
-            chatbotResolveRef.current = resolve
-          })
+          if (isAttached(trackId)) setPendingChatbot(spec)
+          return runJobs.awaitChatbot(trackId, spec)
         },
         projectLlmProviders,
       })
@@ -276,57 +273,60 @@ export function useInferenceRunProgress({
       const withNotes = notes ? { ...finished, notes } : finished
       savedNotesRef.current = notes
       runJobs.completeJob(trackId, { runId: finished.id })
-      activeTrackIdRef.current = null
       if (!runsRef.current.some((r) => r.id === finished.id)) {
         addRun(withNotes)
       }
       if (notes) updateRunNotes(finished.id, notes).catch(console.error)
-      if (jobGen !== activeJobGenRef.current || !mountedRef.current) return
+      if (!isAttached(trackId)) return
+      activeTrackIdRef.current = null
+      setAttachedTrackId(null)
       setRun(withNotes)
       setDeduped(!!deduped)
       setPhase(RunPhase.Done)
     } catch (e) {
       if (isRunAbortedError(e)) {
-        if (activeTrackIdRef.current) runJobs.stopJob(activeTrackIdRef.current)
+        runJobs.stopJob(trackId)
+        if (!isAttached(trackId)) return
         activeTrackIdRef.current = null
-        if (jobGen !== activeJobGenRef.current || !mountedRef.current) return
+        activeJobIdRef.current = null
+        setAttachedTrackId(null)
         setPhase(RunPhase.Idle)
         return
       }
-      if (activeTrackIdRef.current) runJobs.failJob(activeTrackIdRef.current, (e as Error).message)
+      runJobs.failJob(trackId, (e as Error).message)
+      if (!isAttached(trackId)) return
       activeTrackIdRef.current = null
-      if (jobGen !== activeJobGenRef.current || !mountedRef.current) return
+      activeJobIdRef.current = null
+      setAttachedTrackId(null)
       if (isRunBillingError(e)) refreshBilling({ force: true }).catch(console.error)
       if (e instanceof RunStartError && e.status === 404) onProjectNotFound?.(projectId)
       setError((e as Error).message)
       setPhase(RunPhase.Idle)
     } finally {
-      cancellable.clear()
+      cancellable.clear(runKey)
     }
   }
 
   function stop() {
-    cancellable.stop()
-    if (activeTrackIdRef.current) runJobs.stopJob(activeTrackIdRef.current)
+    const trackId = activeTrackIdRef.current
+    if (trackId) runJobs.stopJob(trackId)
     activeTrackIdRef.current = null
-    activeJobGenRef.current++
     activeJobIdRef.current = null
+    setAttachedTrackId(null)
     setPhase(RunPhase.Idle)
     setPendingHumanReview(null)
-    humanReviewResolveRef.current = null
     setPendingChatbot(null)
-    chatbotResolveRef.current = null
   }
 
   function resolveHumanReview(decision: "approved" | "rejected") {
-    humanReviewResolveRef.current?.(decision)
-    humanReviewResolveRef.current = null
+    const trackId = activeTrackIdRef.current
+    if (trackId) runJobs.resolveHumanReview(trackId, decision)
     setPendingHumanReview(null)
   }
 
   function resolveChatbot(result: ChatbotResultValue) {
-    chatbotResolveRef.current?.(result)
-    chatbotResolveRef.current = null
+    const trackId = activeTrackIdRef.current
+    if (trackId) runJobs.resolveChatbot(trackId, result)
     setPendingChatbot(null)
   }
 
@@ -378,6 +378,7 @@ export function useInferenceRunProgress({
     pendingHumanReview,
     pendingChatbot,
     activeJobId,
+    attachedTrackId,
     deduped,
     resolveHumanReview,
     resolveChatbot,

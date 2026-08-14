@@ -18,6 +18,7 @@ import { useRunJobs } from "@/lib/run-jobs-context"
 import { useAppShell } from "@/lib/app-shell"
 import { cn } from "@/lib/utils"
 import type { TrackedRunJob } from "@/lib/run-jobs-types"
+import { RunningJobDetail } from "@/components/running-job-detail"
 
 function sourceLabel(source: TrackedRunJob["source"]) {
   return source === "inference" ? "Inference" : "Testing"
@@ -55,21 +56,15 @@ function statusBadge(job: TrackedRunJob) {
 }
 
 export function RunningJobsHub() {
-  const { open, toggle, jobs, runningCount, stopJob } = useRunJobs()
-  const { setActiveWindow, openTesting, openLogging } = useAppShell()
+  const { open, toggle, closeHub, jobs, runningCount, stopJob, selectedJobId, openJobDetail } = useRunJobs()
+  const { openLogging } = useAppShell()
 
   const visibleJobs = useMemo(
     () => [...jobs].sort((a, b) => b.startedAt - a.startedAt),
     [jobs],
   )
-
-  function openJob(job: TrackedRunJob) {
-    if (job.source === "inference") {
-      setActiveWindow("inference")
-      return
-    }
-    openTesting(job.testDocName ?? undefined)
-  }
+  const selectedJob = selectedJobId ? (jobs.find((j) => j.id === selectedJobId) ?? null) : null
+  const fullscreen = selectedJob != null
 
   return (
     <>
@@ -92,7 +87,16 @@ export function RunningJobsHub() {
       </Button>
 
       {open && (
-        <div className="fixed inset-y-0 right-0 z-[55] flex w-full sm:max-w-md flex-col border-l border-border bg-background shadow-xl">
+        <div
+          className={cn(
+            "fixed z-[55] flex flex-col border-border bg-background shadow-xl",
+            fullscreen ? "inset-0 border-0" : "inset-y-0 right-0 w-full border-l sm:max-w-md",
+          )}
+        >
+          {fullscreen ? (
+            <RunningJobDetail job={selectedJob} />
+          ) : (
+            <>
           <div className="flex items-center justify-between border-b border-border px-3 py-2">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
@@ -102,7 +106,7 @@ export function RunningJobsHub() {
                 {runningCount} active · {visibleJobs.length} recent
               </p>
             </div>
-            <Button type="button" size="icon-sm" variant="ghost" onClick={toggle} aria-label="Close">
+            <Button type="button" size="icon-sm" variant="ghost" onClick={closeHub} aria-label="Close">
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -110,8 +114,8 @@ export function RunningJobsHub() {
           <ScrollArea className="min-h-0 flex-1">
             {visibleJobs.length === 0 ? (
               <p className="p-4 font-mono text-[10px] text-muted-foreground">
-                Pipeline runs and tests appear here while they execute. Switch tabs freely — jobs keep running
-                in the background.
+                Pipeline runs and tests appear here while they execute. Click a job for the full-screen live
+                trace — you can still start more runs from Inference.
               </p>
             ) : (
               <ul className="divide-y divide-border">
@@ -120,7 +124,7 @@ export function RunningJobsHub() {
                     <div className="flex items-start justify-between gap-2">
                       <button
                         type="button"
-                        onClick={() => openJob(job)}
+                        onClick={() => openJobDetail(job.id)}
                         className="min-w-0 flex-1 text-left hover:opacity-80"
                       >
                         <div className="flex items-center gap-2">
@@ -154,10 +158,16 @@ export function RunningJobsHub() {
                     </div>
 
                     {job.status === "running" && (
-                      <div className="mt-2 space-y-1">
+                      <button
+                        type="button"
+                        className="mt-2 w-full space-y-1 text-left"
+                        onClick={() => openJobDetail(job.id)}
+                      >
                         <Progress value={job.progressPct} className="h-1.5" />
-                        <p className="font-mono text-[9px] text-muted-foreground">{job.progressPct}%</p>
-                      </div>
+                        <p className="font-mono text-[9px] text-muted-foreground">
+                          {job.progressPct}% · click for full screen
+                        </p>
+                      </button>
                     )}
 
                     {job.status === "error" && job.errorMessage && (
@@ -183,6 +193,8 @@ export function RunningJobsHub() {
               </ul>
             )}
           </ScrollArea>
+            </>
+          )}
         </div>
       )}
     </>

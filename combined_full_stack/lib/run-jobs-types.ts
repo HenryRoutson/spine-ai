@@ -1,6 +1,9 @@
 // AI : client types for pipeline runs tracked globally across tab switches.
+import type { CodeExecUiState } from "@/lib/code-exec-ui"
+import type { InputDocsAssignment } from "@/lib/inference-input"
 import type { StepUiState } from "@/lib/run-engine"
-import type { ModuleId, ProjectId, RunJobId } from "@/lib/types"
+import type { ClientStepSpec, JobLogEntry } from "@/lib/run-types"
+import type { ModuleId, PipelineModule, ProjectId, RunJobId } from "@/lib/types"
 
 export enum RunJobSource {
   Inference = "inference",
@@ -29,6 +32,12 @@ export type TrackedRunJob = {
   errorMessage?: string
   testDocName?: string
   runId?: string
+  modules: PipelineModule[]
+  inputDocs: InputDocsAssignment
+  debugLogs: JobLogEntry[]
+  codeExecByModule: Map<ModuleId, CodeExecUiState>
+  pendingHumanReview?: ClientStepSpec | null
+  pendingChatbot?: ClientStepSpec | null
 }
 
 export type RegisterRunJobOpts = {
@@ -36,5 +45,17 @@ export type RegisterRunJobOpts = {
   label: string
   projectId: ProjectId
   testDocName?: string
+  modules?: PipelineModule[]
+  inputDocs?: InputDocsAssignment
   cancel: () => void
+}
+
+export type RunJobProgressPatch = {
+  stepStates?: Map<ModuleId, StepUiState>
+  progressPct?: number
+  activeStepLabel?: string | null
+  debugLogs?: JobLogEntry[]
+  codeExecByModule?: Map<ModuleId, CodeExecUiState>
+  pendingHumanReview?: ClientStepSpec | null
+  pendingChatbot?: ClientStepSpec | null
 }

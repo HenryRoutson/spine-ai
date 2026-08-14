@@ -9,6 +9,7 @@ import {
   CreditCard,
   Layers,
   Loader2,
+  Maximize2,
   Plus,
   RotateCcw,
   TriangleAlert,
@@ -49,6 +50,7 @@ import {
 import { suggestEditDocName, validateNewDocName } from "@/lib/doc-edit"
 import { Input } from "@/components/ui/input"
 import { useInferenceRun } from "@/lib/use-inference-run"
+import { useRunJobs } from "@/lib/run-jobs-context"
 import { RunNotesPad } from "@/components/run-notes-pad"
 import { InferenceInputSlot } from "@/components/inference/inference-input-slot"
 import { InputCompatPanel } from "@/components/input-compat-panel"
@@ -138,6 +140,7 @@ export function Inference() {
     reportMissingProject,
   } = useStore()
   const { setActiveWindow, openLogging } = useAppShell()
+  const { openJobDetail } = useRunJobs()
   const { maybeAutoDiagnose } = useDiagnosisAgents()
   const { open } = useDocViewer()
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
@@ -340,7 +343,7 @@ export function Inference() {
 
   const nextRunSubtitle =
     run.phase === "running"
-      ? "Run in progress — inputs locked until it finishes"
+      ? "Run in progress — start another anytime, or open a job in Runs for the full-screen trace"
       : run.phase === "done"
         ? "Change files here to run again with different inputs"
         : selected
@@ -509,7 +512,7 @@ export function Inference() {
                   <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
                     pipeline inputs · {run.inputModules.length} slot{run.inputModules.length === 1 ? "" : "s"}
                   </p>
-                  <div className={run.phase === "running" ? "pointer-events-none opacity-60" : undefined}>
+                  <div>
                     {run.inputModules.map((m) => (
                       <InferenceInputSlot
                         key={m.id}
@@ -518,7 +521,7 @@ export function Inference() {
                         docs={docsForInputModule(run.inputDocs, m.id)}
                         issue={run.inputIssueByModule.get(m.id)}
                         jsonStruct={inputModuleJsonStructSchema(m, models, typeAliases)}
-                        jsonStructDisabled={run.phase === "running" || !!project?.teamReadOnly}
+                        jsonStructDisabled={!!project?.teamReadOnly}
                         onOpenPicker={() => run.setPickerModuleId(m.id)}
                         onOpenDoc={(docId) => open({ docId, start: 0, end: 0 })}
                         onRemoveDoc={(docId) => run.removeInputDocForModule(m.id, docId)}
@@ -595,6 +598,7 @@ export function Inference() {
                       className="w-full"
                       runButtonClassName="flex-1"
                       running={run.phase === "running"}
+                      allowStartWhileRunning
                       onRun={run.start}
                       onStop={() => run.stop()}
                       disabled={
@@ -603,16 +607,22 @@ export function Inference() {
                         insufficientCredit ||
                         previewOnly
                       }
-                      label={run.runButtonLabel}
+                      label={run.phase === "running" ? "Run another" : run.runButtonLabel}
                       runningLabel={run.runButtonLabel}
-                      idleIcon={
-                        run.runButtonBusy ? (
-                          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Zap className="mr-1.5 h-4 w-4" />
-                        )
-                      }
+                      idleIcon={<Zap className="mr-1.5 h-4 w-4" />}
                     />
+                    {run.phase === "running" && run.attachedTrackId && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full gap-1.5 bg-transparent font-mono text-[10px]"
+                        onClick={() => openJobDetail(run.attachedTrackId!)}
+                      >
+                        <Maximize2 className="h-3.5 w-3.5" />
+                        Watch live full screen
+                      </Button>
+                    )}
                   </>
                 )}
 
@@ -677,12 +687,26 @@ export function Inference() {
                       <p className="font-mono text-[10px] uppercase tracking-wider text-primary">
                         Live step logs
                       </p>
-                      {run.run?.id ? (
-                        <GoToLoggingButton
-                          variant="inline"
-                          onClick={() => openLogging(run.run!.id)}
-                        />
-                      ) : null}
+                      <div className="flex items-center gap-2">
+                        {run.attachedTrackId && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 gap-1 bg-transparent font-mono text-[10px]"
+                            onClick={() => openJobDetail(run.attachedTrackId!)}
+                          >
+                            <Maximize2 className="h-3.5 w-3.5" />
+                            Full screen
+                          </Button>
+                        )}
+                        {run.run?.id ? (
+                          <GoToLoggingButton
+                            variant="inline"
+                            onClick={() => openLogging(run.run!.id)}
+                          />
+                        ) : null}
+                      </div>
                     </div>
                     <InferenceStepTracePanel
                     modules={modules}

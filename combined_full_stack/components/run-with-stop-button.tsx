@@ -66,6 +66,7 @@ export function RunWithStopButton({
   className,
   idleIcon,
   runButtonClassName,
+  allowStartWhileRunning = false,
 }: {
   running: boolean
   onRun: () => void
@@ -81,6 +82,7 @@ export function RunWithStopButton({
   className?: string
   idleIcon?: ReactNode
   runButtonClassName?: string
+  allowStartWhileRunning?: boolean
 }) {
   const icon = iconClass[size]
   if (running) {
@@ -90,10 +92,20 @@ export function RunWithStopButton({
           size="sm"
           variant={variant}
           className={cn(sizeClass[size], runButtonClassName)}
-          disabled
+          disabled={allowStartWhileRunning ? disabled : true}
+          onClick={allowStartWhileRunning ? onRun : undefined}
         >
-          <Loader2 className={cn(icon, "mr-1.5 animate-spin")} />
-          {runningLabel}
+          {allowStartWhileRunning ? (
+            <>
+              {idleIcon ?? <Play className={cn(icon, "mr-1.5")} />}
+              {label}
+            </>
+          ) : (
+            <>
+              <Loader2 className={cn(icon, "mr-1.5 animate-spin")} />
+              {runningLabel}
+            </>
+          )}
         </Button>
         <RunStopButton
           className={sizeClass[size]}
