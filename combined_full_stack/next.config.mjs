@@ -38,8 +38,8 @@ const nextConfig = {
   },
   // AI : seeds/ + documents/ are read at runtime (not imported) — must ship in serverless traces.
   outputFileTracingIncludes: {
-    "/api/*": ["./seeds/**/*", "./documents/**/*"],
-    "/*": ["./seeds/**/*", "./documents/**/*"],
+    "/api/*": ["./seeds/**/*", "./documents/**/*", "./lib/export_runtime/**/*"],
+    "/*": ["./seeds/**/*", "./documents/**/*", "./lib/export_runtime/**/*"],
     "/api/docs": [
       "./node_modules/pdf-parse/**/*",
       "./node_modules/pdfjs-dist/**/*",

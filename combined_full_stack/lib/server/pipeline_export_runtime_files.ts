@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import type { PipelineSetupFile } from "./pipeline_export_shared";
 
-const RUNTIME_DIR = join(dirname(fileURLToPath(import.meta.url)), "../export_runtime");
+// AI : import.meta.url breaks once Next bundles this — cwd is combined_full_stack (dev, start, Vercel).
+const RUNTIME_DIR = join(process.cwd(), "lib/export_runtime");
 
 function readRuntime(rel: string): string {
   return readFileSync(join(RUNTIME_DIR, rel), "utf8");

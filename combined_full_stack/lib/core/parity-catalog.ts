@@ -359,7 +359,7 @@ export const PARITY_ROWS: ParityRow[] = [
     "pipeline",
     { label: "Export code", file: "components/pipeline-export-dialog.tsx" },
     y("spine session pydantic (models); full bundle is HTTP", "session pydantic"),
-    y("POST /api/pipeline-export/documents", "/api/pipeline-export/documents"),
+    y("POST /api/pipeline-export/documents (full bundle)", "/api/pipeline-export/documents"),
     y("export_pydantic (models only)", "export_pydantic"),
     y("exportSessionPydantic(session) / exportPipeline"),
   ),

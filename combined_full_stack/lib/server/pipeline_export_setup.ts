@@ -70,7 +70,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
   };
 }
 
-function projectSlug(name: string): string {
+export function projectSlug(name: string): string {
   return (
     name
       .trim()

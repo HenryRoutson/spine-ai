@@ -1,5 +1,6 @@
 "use client"
 // AI : parity ids — pipeline.export
+// AI : bundle is POST /api/pipeline-export/documents — never import lib/server generators here.
 
 // AI : TODO export UI — bundled Supabase SQL + Next.js inference shell alongside connector files.
 
@@ -8,11 +9,11 @@ import { zipSync } from "fflate"
 import { AlertTriangle, Check, Code2, Download, FileText, Loader2, X } from "lucide-react"
 import { ReadonlyCodeViewer, type CodeViewerLanguage } from "@/components/code-viewer"
 import { Button } from "@/components/ui/button"
+import { apiJson, JSON_HEADERS } from "@/lib/api-client"
 import { COPY_FEEDBACK_MS } from "@/lib/ui-timing"
 import { downloadBlob } from "@/lib/download-blob"
 import { API_ROUTES } from "@/lib/api-routes"
-import type { Project, StructureModel, TypeAlias } from "@/lib/types"
-import type { PipelineModule } from "@/lib/types"
+import type { Project, StructureModel, TypeAlias, PipelineModule } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 type ExportTabId =
@@ -70,6 +71,11 @@ const TAB_ORDER: ExportTabId[] = [
 ]
 
 function setupFileTabMeta(filename: string): { id: ExportTabId; label: string; language?: ExportFile["language"] } {
+  if (filename.endsWith("_pipeline.ts")) return { id: "typescript", label: "TypeScript", language: "typescript" }
+  if (filename.endsWith("_pipeline.py")) return { id: "python", label: "Python", language: "python" }
+  if (filename.endsWith("_pipeline.rs")) return { id: "rust", label: "Rust", language: "rust" }
+  if (filename.endsWith("_pipeline.go")) return { id: "go", label: "Go", language: "go" }
+  if (filename.endsWith("_pipeline.baml")) return { id: "baml", label: "BAML", language: "baml" }
   switch (filename) {
     case ".env.example":
       return { id: "env", label: ".env.example", language: "plaintext" }
@@ -126,99 +132,25 @@ export function PipelineExportDialog({
     setGenError(null)
     void (async () => {
       try {
-        const { generatePipelineSourceTs } = await import("@/lib/server/pipeline_ts_export")
-        const { generatePipelineSourcePy } = await import("@/lib/server/pipeline_py_export")
-        const { generatePipelineSourceRust } = await import("@/lib/server/pipeline_rs_export")
-        const { generatePipelineSourceGo } = await import("@/lib/server/pipeline_go_export")
-        const { generatePipelineSourceBaml } = await import("@/lib/server/pipeline_baml_export")
-        const { generatePipelineSetupFiles, assertNoSecretValuesInExport } = await import(
-          "@/lib/server/pipeline_export_setup"
+        const bundle = await apiJson<{ filename: string; content: string; mime: string }[]>(
+          API_ROUTES.pipelineExportDocuments,
+          {
+            method: "POST",
+            headers: JSON_HEADERS,
+            body: JSON.stringify(exportProject),
+          },
         )
-        const { generatePipelineConnectorFiles } = await import("@/lib/server/pipeline_export_connector")
-        const slug = projectSlug(project.name)
-        const setupFiles = generatePipelineSetupFiles(exportProject)
-        const connectorFiles = generatePipelineConnectorFiles(exportProject)
-        for (const f of connectorFiles) assertNoSecretValuesInExport(f.content)
-        const docRes = await fetch(API_ROUTES.pipelineExportDocuments, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(exportProject),
-        })
-        const documentFiles: { filename: string; content: string; mime: string }[] = docRes.ok
-          ? await docRes.json()
-          : []
-        const next: ExportFile[] = [
-          {
-            id: "typescript",
-            label: "TypeScript",
-            filename: `${slug}_pipeline.ts`,
-            content: generatePipelineSourceTs(exportProject),
-            mime: "text/typescript",
-            language: "typescript",
-          },
-          {
-            id: "python",
-            label: "Python",
-            filename: `${slug}_pipeline.py`,
-            content: generatePipelineSourcePy(exportProject),
-            mime: "text/x-python",
-            language: "python",
-          },
-          {
-            id: "rust",
-            label: "Rust",
-            filename: `${slug}_pipeline.rs`,
-            content: generatePipelineSourceRust(exportProject),
-            mime: "text/x-rust",
-            language: "rust",
-          },
-          {
-            id: "go",
-            label: "Go",
-            filename: `${slug}_pipeline.go`,
-            content: generatePipelineSourceGo(exportProject),
-            mime: "text/x-go",
-            language: "go",
-          },
-          {
-            id: "baml",
-            label: "BAML",
-            filename: `${slug}_pipeline.baml`,
-            content: generatePipelineSourceBaml(exportProject),
-            mime: "text/plain",
-            language: "baml",
-          },
-          ...setupFiles.map((f) => {
-            const meta = setupFileTabMeta(f.filename)
-            return {
-              id: meta.id,
-              label: meta.label,
-              filename: f.filename,
-              content: f.content,
-              mime: f.mime,
-              language: meta.language,
-            }
-          }),
-          ...connectorFiles.map((f) => {
-            const meta = setupFileTabMeta(f.filename)
-            return {
-              id: meta.id,
-              label: meta.label,
-              filename: f.filename,
-              content: f.content,
-              mime: f.mime,
-              language: meta.language,
-            }
-          }),
-          ...documentFiles.map((f) => ({
-            id: "setup" as const,
-            label: f.filename,
+        const next: ExportFile[] = bundle.map((f) => {
+          const meta = setupFileTabMeta(f.filename)
+          return {
+            id: meta.id,
+            label: meta.label,
             filename: f.filename,
             content: f.content,
             mime: f.mime,
-            language: "plaintext" as const,
-          })),
-        ]
+            language: meta.language,
+          }
+        })
         if (!cancelled) setFiles(next)
       } catch (e) {
         if (!cancelled) {
@@ -232,7 +164,7 @@ export function PipelineExportDialog({
     return () => {
       cancelled = true
     }
-  }, [open, exportProject, project.name])
+  }, [open, exportProject])
 
   const active = files.find((f) => f.id === tab) ?? files[0]
   const lineCount = active?.content.split("\n").length ?? 0
