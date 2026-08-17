@@ -8,7 +8,7 @@ import type { ExecResult, RunCtx, RunLogger } from "../engine_types";
 function asDocList(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [value];
 }
-// AI : TODO (sql-schema) — this step is UPDATE document SET content = ? WHERE id = ?; blob unchanged.
+// AI : this step is UPDATE document SET content = ? WHERE id = ?; blob unchanged.
 
 function precedingInputDocIds(m: PipelineModule, ctx: RunCtx): DocId[] {
   const modules = ctx.project.modules;

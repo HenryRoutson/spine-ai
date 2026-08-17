@@ -1,5 +1,5 @@
-import { FieldType, ModuleKind, type PipelineModule, type StructureModel } from "@/lib/types"
-import type { TypeExpr } from "@/lib/server/type_expr"
+import { ModuleKind, type PipelineModule, type StructureModel } from "@/lib/types"
+import { fieldToTypeExpr, type TypeExpr } from "@/lib/server/type_expr"
 import { examplePromptColumns, projectExampleForPrompt } from "@/lib/sql-schema"
 
 export { examplePromptColumns, projectExampleForPrompt }
@@ -9,12 +9,6 @@ export { examplePromptColumns, projectExampleForPrompt }
 // AI :   add the dual for {example} (examplePromptFields). {passthrough} is not a template var.
 // AI : TODO (example-select-view) — billed_work Select Relevant Jobs: prompt only title + work_description;
 // AI :   billed_items WI-xxxxx add uncached tokens and no pass-1 signal. Pass 2 {example} is a catalog row — leave it.
-// AI : TODO (sql-schema) — implement examplePromptColumns(m) + projectExampleForPrompt(item, cols) here
-// AI :   (or import from lib/sql-schema.ts). Columns from examplePromptView SELECT list, else examplePromptFields.
-// AI :   Call from run_engine/steps/example_select.ts before fillExampleSelectPrompt. Kept rows stay full objects
-// AI :   (buildExampleSelectVerdicts). Also replace {input_to_prompt} in fillExampleSelectPrompt.
-// AI :   Duplicate a tiny project helper inside export_runtime ts/py/go/rs (copied standalone — no lib import).
-// AI :   Spec: lib/sql-schema.ts header.
 
 export const DEFAULT_EXAMPLE_SELECT_PROMPT = `Find useful examples to help with this task.
 
@@ -55,8 +49,10 @@ export function exampleSelectAcceptsWrapper(
   if (actual.kind !== "ref") return false
   const model = models.find((x) => x.id === actual.modelId)
   if (!model) return false
-  const matches = model.fields.filter(
-    (f) => f.type === FieldType.ListModel && f.ref === expected.item.modelId,
-  )
+  const itemId = expected.item.modelId
+  const matches = model.fields.filter((f) => {
+    const expr = fieldToTypeExpr(f)
+    return expr.kind === "list" && expr.item.kind === "ref" && expr.item.modelId === itemId
+  })
   return matches.length === 1
 }

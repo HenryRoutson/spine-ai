@@ -13,6 +13,9 @@ const exampleSelectTest = resolve(SEEDS_DIR, "../documents/example_select_demo/k
 const exampleSelect2Seed = resolve(SEEDS_DIR, "billed_work_catalog_select.json")
 const exampleSelect2Setup = resolve(SEEDS_DIR, "../documents/billed_work_catalog_select/billed_work_catalog_select_inference.json")
 const exampleSelect2Test = resolve(SEEDS_DIR, "../documents/billed_work_catalog_select/billed_work_catalog_select_testing.json")
+const estimateIntelSeed = resolve(SEEDS_DIR, "estimate_intelligence.json")
+const estimateIntelSetup = resolve(SEEDS_DIR, "../documents/estimate_intelligence/estimate_intelligence_inference.json")
+const estimateIntelTest = resolve(SEEDS_DIR, "../documents/estimate_intelligence/estimate_intelligence_testing.json")
 const webResearchSeed = resolve(SEEDS_DIR, "web_research_scraper.json")
 const webResearchSetup = resolve(SEEDS_DIR, "../documents/web_research_scraper/web_research_scraper_inference.json")
 const webResearchTest = resolve(SEEDS_DIR, "../documents/web_research_scraper/web_research_scraper_testing.json")
@@ -154,6 +157,33 @@ describe("spine cli run", () => {
       exampleSelect2Seed,
       "--file",
       exampleSelect2Test,
+    ])
+    expect(result.command).toBe("validate test")
+    expect(result.ok).toBe(true)
+    expect(result.issues.filter((i) => i.level === "error")).toHaveLength(0)
+  })
+
+  it("validate setup passes estimate intelligence inference preset", async () => {
+    const result = await runSpineCli([
+      "validate",
+      "setup",
+      "--project",
+      estimateIntelSeed,
+      "--file",
+      estimateIntelSetup,
+    ])
+    expect(result.command).toBe("validate setup")
+    expect(result.ok).toBe(true)
+  })
+
+  it("validate test passes estimate intelligence fixture", async () => {
+    const result = await runSpineCli([
+      "validate",
+      "test",
+      "--project",
+      estimateIntelSeed,
+      "--file",
+      estimateIntelTest,
     ])
     expect(result.command).toBe("validate test")
     expect(result.ok).toBe(true)

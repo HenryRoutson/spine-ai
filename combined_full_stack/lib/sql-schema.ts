@@ -1,6 +1,5 @@
-// AI : TODO (sql-schema) — IMPLEMENT THIS FILE. Client-safe string building only (like lib/pydantic.ts).
+// AI : SQL DDL annotation — client-safe string building only (like lib/pydantic.ts).
 // AI :   No better-sqlite3 / sql.js / postgres in this slice. Runtime values stay JSON maps.
-// AI :   Delete `export {}` when real exports exist. Re-export nothing from lib/pydantic.ts.
 // AI :
 // AI : =============================================================================
 // AI : PROBLEM
@@ -11,7 +10,7 @@
 // AI : Do not custom-code a slimmer JobExample. Do not denormalize job_example_library.json.
 // AI :
 // AI : =============================================================================
-// AI : EXPORTS TO ADD
+// AI : EXPORTS
 // AI : =============================================================================
 // AI : export type ParsedSqlSelect = {
 // AI :   columns: string[]        // empty array means SELECT * (no projection)

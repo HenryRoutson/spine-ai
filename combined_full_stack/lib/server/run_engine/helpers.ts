@@ -1,5 +1,5 @@
 import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds";
-// AI : TODO (sql-schema) — materializeStepOutput / spine list-ness is INSERT into a named table (or JSON
+// AI : materializeStepOutput / spine list-ness is INSERT into a named table (or JSON
 // AI :   column). Helpers stay; annotation is CREATE TABLE step_<label> AS SELECT …
 import { inputModuleNeedsDocToText } from "@/lib/inference-input-core";
 import { failuresFromLlmCalls } from "@/lib/llm-distribution";

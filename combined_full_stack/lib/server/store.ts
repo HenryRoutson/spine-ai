@@ -8,6 +8,7 @@ import {
   blankProject,
   isSeedTemplateProject,
   isUnavailableSeedDoc,
+  projectSeedDocNames,
   readSeedDocContent,
   unavailableSeedDocMessage,
   seedTemplateIds,
@@ -480,7 +481,7 @@ async function ingestSeedDoc(store: Store, spec: SeedDocSpec, refreshStale = fal
   if (existingByName.length) {
     const content = store.docContent(existingByName[0]!.id);
     // AI : metadata-only rows (ref without bytes) must re-ingest — otherwise GET /api/docs/:id/text 404s.
-    const missingContent = content === undefined;
+    const missingContent = typeof content !== "string";
     const placeholderFixed =
       content && isUnavailableSeedDoc(content, spec.name) && !isUnavailableSeedDoc(fresh, spec.name);
     const stale = refreshStale && content !== undefined && content !== fresh && !isUnavailableSeedDoc(fresh, spec.name);
@@ -509,7 +510,7 @@ async function ingestSeedDoc(store: Store, spec: SeedDocSpec, refreshStale = fal
 export async function ensureBundledSeedDocsForProject(store: Store, project: Project): Promise<void> {
   await refreshBundledSeedDocsForRun(store, project);
   if (!store.usesPlatformSeedDocs?.()) return;
-  const missing = (project.seedDocNames ?? []).filter((name) => !store.docs().some((d) => d.name === name));
+  const missing = projectSeedDocNames(project).filter((name) => !store.docs().some((d) => d.name === name));
   if (!missing.length) return;
   const { createAdminClient } = await import("./supabase_admin");
   const admin = await createAdminClient();
@@ -520,8 +521,75 @@ export async function ensureBundledSeedDocsForProject(store: Store, project: Pro
   if (store instanceof SupabaseStore) await store.refreshPlatformSeedDocsFromDb();
 }
 
+export function snapshotDocNamesById(store: Store): Map<DocId, string> {
+  const map = new Map<DocId, string>();
+  for (const doc of store.docs()) map.set(doc.id, doc.name);
+  return map;
+}
+
+function runInputDoc(store: Store, id: DocId): { docId: DocId; doc: DocRef } | undefined {
+  if (typeof store.docContent(id) !== "string") return undefined;
+  const doc = store.docs().find((d) => d.id === id);
+  return doc ? { docId: id, doc } : undefined;
+}
+
+// AI : seed refresh may purge a user copy or rehash from git — keep the picker id working via name or content hash.
+export async function resolveRunInputDoc(
+  store: Store,
+  requestedId: DocId,
+  namesById: Map<DocId, string>,
+  opts?: { scanBundledHashes?: boolean },
+): Promise<{ docId: DocId; doc: DocRef } | undefined> {
+  const direct = runInputDoc(store, requestedId);
+  if (direct) return direct;
+
+  const name = namesById.get(requestedId);
+  if (name) {
+    const match = store.docs().find((d) => d.name === name);
+    if (match) {
+      const hit = runInputDoc(store, match.id);
+      if (hit) return hit;
+    }
+  }
+
+  await recoverBundledSeedDoc(store, requestedId, name, opts?.scanBundledHashes !== false);
+  const recovered = runInputDoc(store, requestedId);
+  if (recovered) return recovered;
+  if (!name) return undefined;
+  const renamed = store.docs().find((d) => d.name === name);
+  return renamed ? runInputDoc(store, renamed.id) : undefined;
+}
+
+async function recoverBundledSeedDoc(
+  store: Store,
+  requestedId: DocId,
+  name: string | undefined,
+  scanBundledHashes: boolean,
+): Promise<void> {
+  const { allUniqueSeedDocSpecs } = await import("./seed_docs_platform");
+  const specs = allUniqueSeedDocSpecs();
+  const named = name ? specs.filter((spec) => spec.name === name) : [];
+  for (const spec of named) await ingestSeedDoc(store, spec, true);
+  if (runInputDoc(store, requestedId)) return;
+  if (name && store.docs().some((d) => d.name === name && typeof store.docContent(d.id) === "string")) return;
+  if (!scanBundledHashes) return;
+
+  for (const spec of specs) {
+    if (named.some((s) => s.name === spec.name)) continue;
+    let fresh: string;
+    try {
+      fresh = await readSeedDocContent(spec);
+    } catch {
+      continue;
+    }
+    if (hashContent(fresh) !== requestedId) continue;
+    await ingestSeedDoc(store, spec, true);
+    return;
+  }
+}
+
 export async function refreshBundledSeedDocsForRun(store: Store, project: Project): Promise<void> {
-  const names = new Set(project.seedDocNames ?? []);
+  const names = new Set(projectSeedDocNames(project));
   if (!names.size) return;
   const platform = store as Store & {
     purgeStaleUserBundledDocsFromMemory?: () => number;

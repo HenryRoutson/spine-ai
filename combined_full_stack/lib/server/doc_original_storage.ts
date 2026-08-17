@@ -13,7 +13,7 @@ import type { user_id_string } from "./require_auth";
 
 export const DOC_ORIGINALS_BUCKET = "doc-originals";
 const origLog = logger("docs:original-bytes");
-// AI : TODO (sql-schema) — original bytes are document.blob (mime from InputType). Storage bucket is the
+// AI : original bytes are document.blob (mime from InputType). Storage bucket is the
 // AI :   blob store behind the column; the type is still one document row, not a parallel File universe.
 
 export function originalStoragePath(userId: user_id_string, docId: DocId, ext: OriginalDocExt): string {

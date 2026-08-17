@@ -2,8 +2,6 @@
 // AI : TODO (type-join) — Pick/Omit/extend assignability: a prompt view must be a projection/join of the
 // AI :   item type, never an arbitrary reshape. Lookup-embed: leftPath + leftKey ⋈ state[label] on rightKey
 // AI :   → intersect item with { embedAs: Right }. Assemble/combine stay product-zip, not FK resolve.
-// AI : TODO (sql-schema) — assignability of a prompt view is "SELECT list is a projection of the table".
-// AI :   FK resolve is JOIN. Keep assemble/combine as product-zip of documents until those values are tables.
 import {
   expandNamedTypeExpr,
   fieldToTypeExpr,

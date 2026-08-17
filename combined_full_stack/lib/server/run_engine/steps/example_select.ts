@@ -46,10 +46,6 @@ function formatExampleContext(value: unknown, fieldPath?: string): string {
 function exampleSelectPrompt(m: PipelineModule, template: string, description: string, example: unknown): string {
   // AI : TODO (example-select-view) — project `example` via m.examplePromptFields before fill; kept rows
   // AI :   stay the original object (buildExampleSelectVerdicts already passthroughs + reason).
-  // AI : TODO (sql-schema) — change to exampleSelectPrompt(m, template, description, example):
-  // AI :   const view = projectExampleForPrompt(example, examplePromptColumns(m))
-  // AI :   return fillExampleSelectPrompt(template, description, view)
-  // AI :   Update promptFor, llmBatchStructured mapper, and batchInputPreview to use that. items[] stay full.
   return fillExampleSelectPrompt(
     template,
     description,

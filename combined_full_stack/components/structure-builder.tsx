@@ -446,7 +446,6 @@ export function StructureBuilder() {
                 {view === "code" ? (
                   <>
                     <StructureCodeView models={models} typeAliases={typeAliases} modules={project?.modules} />
-                    {/* AI : TODO (sql-schema) — pass modules={project?.modules} so schema.sql can emit example-select views. */}
                   </>
                 ) : target.kind === "type" && selectedType ? (
                   <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">

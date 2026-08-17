@@ -10,12 +10,9 @@ You have ~100+ billable work items (scaling to 10k) and past jobs that billed a 
 
 ## Approach
 
-1. **Pass 1 — filter past jobs** — cached prefix with `{description}` from Work Description.content; each job is `{example}`.
-   - TODO (example-select-view): `{example}` must be `title` + `work_description` only. Opaque `billed_items` (`WI-xxxxx`) are uncached noise; keep them on the spine for pass 2 / draft.
-   - TODO (sql-schema): `CREATE VIEW job_example_prompt AS SELECT id, title, work_description FROM job_example;` — DDL annotation even without a SQLite instance.
+1. **Pass 1 — filter past jobs** — cached prefix with `{description}` from Work Description.content; each job is `{example}` (`title` + `work_description` via `examplePromptView`). Opaque `billed_items` (`WI-xxxxx`) stay on the spine for pass 2 / draft.
 2. **Assemble Item Filter** — `{ description, selected_examples }` becomes the per-run cached block for pass 2.
    - TODO (type-join): denormalize billed lines here (lookup-embed `work_item_id` → `WorkItem`), not inside pass 1 candidates.
-   - TODO (sql-schema): join view on `billed_line` ⋈ `work_item` for the cached prefix only.
 3. **Pass 2 — filter catalog** — same relevance schema; only each `WorkItem` row changes per call. Combine Catalog is required because pass 1 sits between the job library and catalog inputs; example-select unwraps `items` from the combine product.
 4. **Draft Billed Work** — final LLM picks quantities from filtered items using `selection_reason` on kept rows.
 

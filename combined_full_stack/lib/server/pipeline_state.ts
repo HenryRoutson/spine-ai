@@ -6,7 +6,7 @@ import { formatTypeExpr, labelToPyKey, stepSpineOutType, typeExprToGo, typeExprT
 export type { PipelineState, StepLabel };
 
 // AI : state stays flat StepLabel → value; Assemble zips labels into one product (see assemble-type-expr.ts).
-// AI : TODO (sql-schema) — PipelineState can be annotated as named tables (step label = table or view)
+// AI : PipelineState can be annotated as named tables (step label = table or view)
 // AI :   even while values stay JSON. Export = schema.sql + optional .sqlite dump.
 
 export function emptyPipelineState(): PipelineState {

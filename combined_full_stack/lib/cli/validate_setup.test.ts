@@ -10,6 +10,8 @@ const exampleSelectSeed = resolve(SEEDS_DIR, "example_select_demo.json")
 const exampleSelectDocs = resolve(SEEDS_DIR, "../documents/example_select_demo")
 const exampleSelect2Seed = resolve(SEEDS_DIR, "billed_work_catalog_select.json")
 const exampleSelect2Docs = resolve(SEEDS_DIR, "../documents/billed_work_catalog_select")
+const estimateIntelSeed = resolve(SEEDS_DIR, "estimate_intelligence.json")
+const estimateIntelDocs = resolve(SEEDS_DIR, "../documents/estimate_intelligence")
 
 describe("validate setup command", () => {
   it("passes homework university inference preset", () => {
@@ -37,6 +39,15 @@ describe("validate setup command", () => {
     )
     expect(result.ok, result.issues.map((i) => i.message).join("; ")).toBe(true)
   })
+
+  it.each(["estimate_intelligence_inference.json", "roof_storm_inference.json"])(
+    "passes estimate intelligence inference preset %s",
+    (file) => {
+      const ctx = loadProjectContext(estimateIntelSeed)
+      const result = validateSetupCommand(ctx, resolve(estimateIntelDocs, file))
+      expect(result.ok, result.issues.map((i) => i.message).join("; ")).toBe(true)
+    },
+  )
 
   it("errors when setup file is invalid json", () => {
     const ctx = loadProjectContext(resolve(SEEDS_DIR, "homework_grader.json"))

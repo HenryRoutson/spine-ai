@@ -1,0 +1,7 @@
+{
+  "description": "Two-pass example-select — retrieve this builder's analogue jobs, then compose a preliminary estimate from denormalized billed lines.",
+  "inputs": {
+    "Current Assessment": "bathroom_leak_assessment.json",
+    "Past Job Library": "past_job_library.json"
+  }
+}

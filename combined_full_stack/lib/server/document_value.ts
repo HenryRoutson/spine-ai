@@ -6,7 +6,7 @@ type DocumentHints = {
 };
 
 // AI : normalize runtime document values — supports legacy body/doc_id and the shared Document struct.
-// AI : TODO (sql-schema) — these helpers are column projections off document(id, filename, content, blob).
+// AI : these helpers are column projections off document(id, filename, content, blob).
 export function documentContentFrom(value: unknown, fallback = ""): string {
   if (typeof value === "string") return value;
   if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;

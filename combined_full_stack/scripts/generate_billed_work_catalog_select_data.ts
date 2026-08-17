@@ -23,7 +23,6 @@ type JobExample = {
   work_description: string;
   // AI : TODO (example-select-view) — keep billed_items on the library/spine; do not inline catalog rows here.
   // AI : TODO (type-join) — work_item_id is fk → WorkItem.id; expand only as a prompt/context view (pass 2 / draft).
-  // AI : TODO (sql-schema) — job_example + billed_line (job_id FK, work_item_id FK) + work_item. Nested JSON is a view.
   billed_items: { work_item_id: string; quantity: number }[];
 };
 

@@ -421,9 +421,6 @@ const emitExampleSelect: Record<ExportLang, StepBodyEmitter> = {
     const reason = exampleReasonField(ctx.m);
     const cols = examplePromptColumns(ctx.m);
     // AI : TODO (example-select-view) — export must project each item for the prompt and still return full rows.
-    // AI : TODO (sql-schema) — const cols = examplePromptColumns(ctx.m); if cols?.length pass as 5th arg
-    // AI :   selectRelevant(items, description, template, reason, cols) else keep 3/4-arg. Same for py/go/rs below.
-    // AI :   Import examplePromptColumns from @/lib/sql-schema in this dispatch file (host, not the copied runtime).
     let selectCall: string;
     if (cols?.length) {
       selectCall = `selectRelevant(items, description, template, ${JSON.stringify(reason)}, ${JSON.stringify(cols)})`;

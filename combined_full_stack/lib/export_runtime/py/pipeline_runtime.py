@@ -444,9 +444,6 @@ async def select_relevant(
 ) -> list[Any]:
     def prompt_for(item: Any) -> str:
         # AI : TODO (example-select-view) — dump the prompt view, not the full item; kept rows stay passthrough.
-        # AI : TODO (sql-schema) — add prompt_columns: list[str] | None = None. Inline project helper.
-        # AI :   prompt_for uses json.dumps(projected, default=str). Also replace {input_to_prompt}.
-        # AI :   kept rows still dict(item). Default reason_field stays selection_reason (positional after template).
         example_text = json.dumps(_project_example_for_prompt(item, prompt_columns), default=str)
         return (
             template.replace("{description}", description)

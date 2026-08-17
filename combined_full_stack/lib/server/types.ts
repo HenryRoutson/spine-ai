@@ -17,7 +17,7 @@ export type StructureModelId = string & { __brand: "StructureModelId" };
 export type TypeAliasId = string & { __brand: "TypeAliasId" };
 export type ModuleId = string & { __brand: "ModuleId" };
 export type DocId = string & { __brand: "ContentHash" }; // content hash == id
-// AI : TODO (sql-schema) — DocId is document.id PRIMARY KEY. Quotes and file blobs REFERENCES this row.
+// AI : DocId is document.id PRIMARY KEY. Quotes and file blobs REFERENCES this row.
 export type RunId = string & { __brand: "RunId" };
 export type ModelId = string; // demo model id or routed ref "provider:modelId" (see parseRoutedModel)
 export type OpenRouterSlug = string & { __brand: "OpenRouterSlug" };
@@ -39,7 +39,7 @@ export enum FieldType {
   ListTupleTextQuote = "list[tuple[text,quote]]",
   Model = "model",
   ListModel = "list[model]",
-  // AI : TODO (sql-schema) — these FieldTypes are the SQL column/table annotation LLMs already know.
+  // AI : FieldTypes are the SQL column/table annotation LLMs already know.
   // AI :   text/int/float/bool/datetime → TEXT/INTEGER/REAL/INTEGER/TEXT; optional → NULL; json/markdown/latex → TEXT.
   // AI :   document → row in `document` (pk id); list[document] → 1:N. quote → FK document(id) + start/end.
   // AI :   model / list[model] without fk → nested JSON column OR child table; with fk → REFERENCES.
@@ -75,10 +75,6 @@ export interface ModelField {
   testTolerance?: number;
   // AI : TODO (type-join) — relation?: { kind: "pk" } | { kind: "fk"; to: { modelId: StructureModelId; field: string } }
   // AI :   runtime type stays text; validity: fk field type equals target pk. Enables lookup-embed without Python joins.
-  // AI : TODO (sql-schema) — implement that FieldRelation. Persist on StructureFieldDef + seed + api_schemas.
-  // AI :   DDL emit: pk → PRIMARY KEY; fk → REFERENCES {sqlTable(to.modelId)}({to.field}).
-  // AI :   If no pk on the model and a field is named "id", treat as PRIMARY KEY.
-  // AI :   Spec + first-slice file list: lib/sql-schema.ts header.
   relation?: FieldRelation;
 }
 
@@ -100,7 +96,6 @@ export type ModelFieldLegacyTypePick = Pick<ModelField, ModelFieldTypeSource.Typ
 export type StructureFieldDef = Pick<
   ModelField,
   "id" | "name" | "type" | "optional" | "description" | "examples" | "negativeExamples" | "ref" | "minItems" | "maxItems" | "minLength" | "maxLength" | "typeExpr" | "deterministic" | "testTolerance" | "relation"
-  // AI : TODO (sql-schema) — add | "relation" once FieldRelation exists so seeds persist pk/fk.
 >;
 
 export interface TolerantFieldPath {
@@ -132,7 +127,7 @@ export interface StructureModel {
   // AI : type params — Ref { modelId, args } / Generic Name[T] instantiate field typeExprs.
   params?: string[];
   // AI : TODO (type-join) — pk lives on ModelField.relation, not here. Lookup-embed derives views; do not flatten models to 3NF.
-  // AI : TODO (sql-schema) — StructureModel = CREATE TABLE (or VIEW). Nested list[model] is either a child table
+  // AI : StructureModel = CREATE TABLE (or VIEW). Nested list[model] is either a child table
   // AI :   or a JSON column — declare which. Generics/trees can stay JSON until someone needs adjacency-list SQL.
 }
 
@@ -159,7 +154,7 @@ export enum InputType {
   Latex = "latex",
   Web = "web",
   Image = "image",
-  // AI : TODO (sql-schema) — InputType is document.mime / blob wrapper, not a separate type universe.
+  // AI : InputType is document.mime / blob wrapper, not a separate type universe.
   // AI :   pdf/image/word → BLOB + mime; json/text/markdown/latex → TEXT content (blob optional).
   // AI :   sqlite/.sql dump as an input loads tables into the run catalog instead of nested JSON files.
 }
@@ -174,12 +169,11 @@ export enum ModuleKind {
   LlmBatch = "llm-batch", // AI : backend addition — one structured call per list item, merged typed list out
   ExampleSelect = "example-select", // AI : LLM relevance filter per list item — chain_of_thought + is_relevant, not embedding RAG
   // AI : TODO (example-select-view) — filter on a prompt view of each item; spine passthrough stays the full row + reason.
-  // AI : TODO (sql-schema) — candidates FROM table; {example} FROM view; INSERT selected_* with selection_reason.
   Quote = "quote", // AI : deterministic — resolve LLM quote strings → source-linked spans
-  // AI : TODO (sql-schema) — Link Quotes fills quote_span(doc_id FK, start, end). quote_string_t is the LLM
+  // AI : Link Quotes fills quote_span(doc_id FK, start, end). quote_string_t is the LLM
   // AI :   wire type before the FK+offsets exist (INSERT pending resolve).
   DocToText = "doc-to-text", // AI : auto — parser/OCR fills Document.content; not user-addable
-  // AI : TODO (sql-schema) — UPDATE document SET content = extracted WHERE id = ?; blob stays the original bytes.
+  // AI : UPDATE document SET content = extracted WHERE id = ?; blob stays the original bytes.
   Transform = "transform",
   // AI : zip spine + state["Label"] → flat product (not Combine — that is upload ⊕ one state struct).
   Assemble = "assemble",
@@ -345,12 +339,6 @@ export interface PipelineModule {
   // AI : TODO (example-select-view) — optional examplePromptItemTemplate for prose (Title: {title}) instead of JSON.
   // AI : TODO (type-join) — optional examplePromptJoins: lookup-embed spec for the *view only* (pass 2 cached
   // AI :   prefix / draft). Same inType/outType; do not denormalize billed_items onto pass 1 {example}.
-  // AI : TODO (sql-schema) — examplePromptView?: string — SQL SELECT or CREATE VIEW … AS SELECT.
-  // AI :   First slice: parse column list, project those keys into {example} only. No JOIN (validity error).
-  // AI :   View wins over examplePromptFields. Wire seed/api_schemas/UI textarea in example-select-fields.tsx.
-  // AI :   Export selectRelevant(..., promptColumns). Host: project before fillExampleSelectPrompt.
-  // AI :   billed_work Select Relevant Jobs: SELECT id, title, work_description FROM job_example
-  // AI :   Spec: lib/sql-schema.ts header.
   examplePromptView?: string;
   useOcr?: boolean; // AI : doc-to-text (legacy: input) — vision OCR when PDF/image is accepted
   // AI : step result cache toggle — authoring may omit (defaults true via seed/factory).
@@ -817,9 +805,7 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
   [ModuleKind.ExampleSelect]: {
     label: "Example Select",
     description:
-      "Filter a list of examples with a cheap LLM per item — {description} from a prior step, structured is_relevant + chain_of_thought (not embedding RAG)",
-    // AI : TODO (example-select-view) — description should mention prompt-view vs spine passthrough once shipped.
-    // AI : TODO (sql-schema) — mention table vs view once DDL ships.
+      "Filter a list of examples with a cheap LLM per item — {description} from a prior step, structured is_relevant + chain_of_thought (not embedding RAG). Prompt view (SQL SELECT / field list) is uncached {example}; spine passthrough is the full row + reason.",
   },
   [ModuleKind.Quote]: {
     label: "Link Quotes",

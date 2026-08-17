@@ -786,6 +786,17 @@ export function compareRunToTest(
     }
     const parsed = tryParseJson(step.outputJson)
     const actual = parsed.ok ? parsed.value : step.outputJson
+    // AI : step-level null in expectedOutputs is a placeholder — do not score (field-level null still means skip LLM-check).
+    if (expected === null) {
+      results.push({
+        label: m.label,
+        status: RunTestStepStatus.Skipped,
+        skipReason: "placeholder — expected output not filled in",
+        expected,
+        actual: actual === undefined ? undefined : stripDocIds(actual),
+      })
+      continue
+    }
     if (!isComparableStep(m)) {
       results.push({
         label: m.label,

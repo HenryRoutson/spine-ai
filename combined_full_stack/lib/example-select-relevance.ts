@@ -25,12 +25,10 @@ export function fillExampleSelectPrompt(
 ): string {
   // AI : TODO (example-select-view) — stringify the prompt view (examplePromptFields / template), not the
   // AI :   full spine item. Opaque nested FKs (billed_items.work_item_id) must not land in the uncached suffix.
-  // AI : TODO (sql-schema) — example text is the view row (SELECT); stringify JSON or format columns.
   const exampleText =
     typeof example === "string" ? example : JSON.stringify(example, null, 2)
   return template
     .replace(/\{description\}/g, description)
     .replace(/\{example\}/g, exampleText)
     .replace(/\{input_to_prompt\}/g, exampleText)
-  // AI : TODO (sql-schema) — also .replace(/\{input_to_prompt\}/g, exampleText). Caller already projected.
 }

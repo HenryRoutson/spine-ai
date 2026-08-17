@@ -75,13 +75,20 @@ describe("pipeline TS export lint", () => {
     expect(src).toMatch(/const description = \(typeof \(state\["Work Description"\] as Record<string, unknown>\)\["content"\]/);
     expect(src).not.toMatch(/JSON\.stringify\(state\["Work Description"\], null, 2\)/);
   });
-  // AI : TODO (sql-schema) — after billed_work examplePromptView ships, assert src matches
-  // AI :   /title","work_description/ or promptColumns array and does not include billed_items in that call.
   it("billed_work example-select promptColumns omit billed_items", () => {
     const { project } = loadProjectSeed(resolve(SEEDS_DIR, "billed_work_catalog_select.json"));
     const src = generatePipelineSourceTs(project);
     expect(src).toMatch(/"title","work_description"/);
     expect(src).not.toMatch(/selectRelevant\([^;]*billed_items/);
+  });
+
+  it("estimate_intelligence promptColumns omit billed_lines and qty/rate", () => {
+    const { project } = loadProjectSeed(resolve(SEEDS_DIR, "estimate_intelligence.json"));
+    const src = generatePipelineSourceTs(project);
+    expect(src).toMatch(/"builder_id","title","peril"/);
+    expect(src).not.toMatch(/selectRelevant\([^;]*billed_lines/);
+    expect(src).toMatch(/"work_item_id","code","trade","description","unit","source_job_id"/);
+    expect(src).not.toMatch(/selectRelevant\([^;]*unit_rate/);
   });
 
   it("emits example-select relevance schema once", () => {

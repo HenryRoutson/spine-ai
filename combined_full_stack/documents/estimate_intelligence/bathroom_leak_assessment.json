@@ -1,0 +1,9 @@
+{
+  "builder_id": "bld-prime-north",
+  "peril": "escape of water",
+  "construction": "brick veneer",
+  "storeys": 2,
+  "rooms_affected": "ensuite, kitchen",
+  "narrative": "Water leaked from the upstairs bathroom suite. The kitchen ceiling below collapsed and the timber floor is cupping.",
+  "coverage_note": "Sudden escape of water is covered. Wear and tear and owner upgrades are excluded."
+}

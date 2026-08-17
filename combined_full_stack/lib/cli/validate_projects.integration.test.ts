@@ -107,6 +107,31 @@ describe("web research scraper — python scrape + n8n-shaped hits", () => {
   })
 })
 
+describe("estimate intelligence — analogue retrieval", () => {
+  const estimateIntelSeed = resolve(SEEDS_DIR, "estimate_intelligence.json")
+
+  it("includes two example-select prompt views and denormalized job lines", () => {
+    const ctx = loadProjectContext(estimateIntelSeed)
+    const selectSteps = ctx.project.modules.filter((m) => m.kind === "example-select")
+    expect(selectSteps).toHaveLength(2)
+    expect(selectSteps[0]?.examplePromptView).toMatch(/FROM past_job/i)
+    expect(selectSteps[0]?.examplePromptView).not.toMatch(/billed_lines/)
+    expect(selectSteps[1]?.examplePromptView).toMatch(/FROM candidate_line/i)
+    expect(selectSteps[1]?.examplePromptView).not.toMatch(/quantity|unit_rate/)
+    expect(ctx.project.modules.some((m) => m.label === "Explode Analogue Lines")).toBe(true)
+    expect(ctx.seed.docSpecs.some((d) => d.name === "past_job_library.json")).toBe(true)
+  })
+
+  it("validates every bundled inference preset", () => {
+    const ctx = loadProjectContext(estimateIntelSeed)
+    const inferenceSetups = ctx.seed.docSpecs.filter((d) => d.name.endsWith("_inference.json"))
+    for (const spec of inferenceSetups) {
+      const result = validateSetupCommand(ctx, spec.path)
+      expect(result.ok, `${spec.name}: ${result.issues.map((i) => i.message).join("; ")}`).toBe(true)
+    }
+  })
+})
+
 describe("billed work catalog select — structured catalog", () => {
   const billedWorkSeed = resolve(SEEDS_DIR, "billed_work_catalog_select.json")
 

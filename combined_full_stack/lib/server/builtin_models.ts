@@ -8,7 +8,7 @@ export const BUILTIN_CHATBOT_TURN_ID = "m_builtin_chatbot_turn" as StructureMode
 export const BUILTIN_CHATBOT_RESULT_ID = "m_builtin_chatbot_result" as StructureModelId;
 
 // AI : shared across every project — the canonical shape for field type `document`.
-// AI : TODO (sql-schema) — CREATE TABLE document (id TEXT PK, filename TEXT NOT NULL, mime TEXT,
+// AI : CREATE TABLE document (id TEXT PK, filename TEXT NOT NULL, mime TEXT,
 // AI :   content TEXT, blob BLOB). Extracted text vs original bytes are columns, not two types.
 export const BUILTIN_DOCUMENT_MODEL: StructureModel = {
   id: BUILTIN_DOCUMENT_ID,
@@ -37,7 +37,7 @@ export const BUILTIN_DOCUMENT_MODEL: StructureModel = {
 };
 
 // AI : linked quote span — doc hash + byte range after Link Quotes resolves a quote_string_t.
-// AI : TODO (sql-schema) — quote_span(doc_id TEXT NOT NULL REFERENCES document(id), start INT, end INT).
+// AI : quote_span(doc_id TEXT NOT NULL REFERENCES document(id), start INT, end INT).
 export const BUILTIN_QUOTE_SPAN_MODEL: StructureModel = {
   id: BUILTIN_QUOTE_SPAN_ID,
   name: "QuoteSpan",
@@ -51,7 +51,7 @@ export const BUILTIN_QUOTE_SPAN_MODEL: StructureModel = {
       type: FieldType.Text,
       optional: false,
       description: "Source document content hash",
-      // AI : TODO (sql-schema) — this field is FOREIGN KEY (doc_id) REFERENCES document(id).
+      // AI : FOREIGN KEY (doc_id) REFERENCES document(id).
     },
     {
       id: "f_start",

@@ -312,8 +312,6 @@ func projectExampleForPrompt(item any, columns []string) any {
 }
 
 func selectRelevant(items []json.RawMessage, description, template string, promptColumns ...string) ([]json.RawMessage, error) {
-	// AI : TODO (sql-schema) — add promptColumns ...string. Unmarshal item to map, pick keys, marshal for {example}.
-	// AI :   Kept row is still the original item map + chain_of_thought. Also replace {input_to_prompt}.
 	out := make([]json.RawMessage, 0, len(items))
 	for _, item := range items {
 		exampleJSON := string(item)

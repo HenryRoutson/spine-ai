@@ -1,6 +1,8 @@
 import { invariant } from "@/lib/assert";
+import { exampleSelectAcceptsWrapper } from "@/lib/example-select";
 import { orderedInputModules, inputModuleNeedsOcr } from "../../inference-input";
 import { documentFilenameFrom, documentValueFrom } from "../document_value";
+import { stepSpineInType, stepSpineOutType } from "../type_expr";
 import { stepEmits } from "../validity";
 import type { ModuleId, ModelId, StructureModelId } from "../types";
 import type { Store } from "../store";
@@ -56,9 +58,19 @@ export function requireLinearInput(m: PipelineModule, ctx: RunCtx): unknown {
   const prev = ctx.prevModuleId ? ctx.project.modules.find((x) => x.id === ctx.prevModuleId) : undefined;
   const upstream = stepEmits(prev);
   if (m.inStructureId !== upstream) {
-    throw new Error(
-      `step "${m.label}" expects ${m.inStructureId ?? "?"} but previous step emits ${upstream ?? "nothing"}`,
-    );
+    // AI : example-select unwraps the sole list[T] field on a combine wrapper (same rule as validity).
+    const expected = stepSpineInType(m);
+    const actual = prev ? stepSpineOutType(prev) : undefined;
+    const unwraps =
+      m.kind === "example-select" &&
+      !!expected &&
+      !!actual &&
+      exampleSelectAcceptsWrapper(expected, actual, ctx.project.models);
+    if (!unwraps) {
+      throw new Error(
+        `step "${m.label}" expects ${m.inStructureId ?? "?"} but previous step emits ${upstream ?? "nothing"}`,
+      );
+    }
   }
   if (!ctx.prevModuleId) throw new Error(`step "${m.label}" has no previous step`);
   const value = ctx.outputs.get(ctx.prevModuleId);

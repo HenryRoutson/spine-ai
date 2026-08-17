@@ -1,0 +1,623 @@
+[
+  {
+    "id": "job-bathroom-ceiling-collapse",
+    "builder_id": "bld-prime-north",
+    "title": "Upstairs bathroom leak — kitchen ceiling collapse",
+    "peril": "escape of water",
+    "construction": "brick veneer",
+    "storeys": 2,
+    "rooms_affected": "ensuite, kitchen",
+    "narrative": "Water escaped from an upstairs ensuite. Plasterboard ceiling in the kitchen below failed and fell. Timber joists were wet; insurer requested drying before rebuild.",
+    "billed_lines": [
+      {
+        "work_item_id": "WI-00001",
+        "code": "PLB-ISO-001",
+        "trade": "plumbing",
+        "description": "Isolate water supply to upstairs bathroom suite",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 95
+      },
+      {
+        "work_item_id": "WI-00002",
+        "code": "PLB-RPR-002",
+        "trade": "plumbing",
+        "description": "Repair burst flexi hose at vanity basin",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 145
+      },
+      {
+        "work_item_id": "WI-00061",
+        "code": "DEM-CLG-001",
+        "trade": "demolition",
+        "description": "Remove collapsed plasterboard ceiling — kitchen below bathroom",
+        "unit": "m2",
+        "quantity": 12,
+        "unit_rate": 48
+      },
+      {
+        "work_item_id": "WI-00071",
+        "code": "MIT-DHM-001",
+        "trade": "mitigation",
+        "description": "Place industrial dehumidifier — affected zone",
+        "unit": "each",
+        "quantity": 2,
+        "unit_rate": 95
+      },
+      {
+        "work_item_id": "WI-00072",
+        "code": "MIT-FAN-002",
+        "trade": "mitigation",
+        "description": "Air mover hire — drying period",
+        "unit": "day",
+        "quantity": 14,
+        "unit_rate": 45
+      },
+      {
+        "work_item_id": "WI-00073",
+        "code": "MIT-MON-003",
+        "trade": "mitigation",
+        "description": "Moisture mapping and daily readings",
+        "unit": "each",
+        "quantity": 12,
+        "unit_rate": 75
+      },
+      {
+        "work_item_id": "WI-00091",
+        "code": "STR-JST-001",
+        "trade": "structural",
+        "description": "Replace water-damaged ceiling joist — kitchen",
+        "unit": "each",
+        "quantity": 2,
+        "unit_rate": 310
+      },
+      {
+        "work_item_id": "WI-00041",
+        "code": "DRW-SH-001",
+        "trade": "drywall",
+        "description": "Install 13mm plasterboard to kitchen ceiling",
+        "unit": "m2",
+        "quantity": 12,
+        "unit_rate": 68
+      },
+      {
+        "work_item_id": "WI-00042",
+        "code": "DRW-JT-002",
+        "trade": "drywall",
+        "description": "Tape and joint ceiling sheets — Level 4 finish",
+        "unit": "m2",
+        "quantity": 12,
+        "unit_rate": 42
+      },
+      {
+        "work_item_id": "WI-00051",
+        "code": "PNT-CLG-001",
+        "trade": "painting",
+        "description": "Prime and paint kitchen ceiling — two coats",
+        "unit": "m2",
+        "quantity": 12,
+        "unit_rate": 28
+      }
+    ]
+  },
+  {
+    "id": "job-slow-leak-cupping",
+    "builder_id": "bld-prime-north",
+    "title": "Slow bathroom leak — cupped timber floor",
+    "peril": "escape of water",
+    "construction": "brick veneer",
+    "storeys": 2,
+    "rooms_affected": "bathroom, hallway",
+    "narrative": "Long-term leak at shower screen. Kitchen ceiling stained but intact; hallway timber flooring cupped. Scope focused on leak rectification, drying, and floor restoration.",
+    "billed_lines": [
+      {
+        "work_item_id": "WI-00003",
+        "code": "PLB-SWR-003",
+        "trade": "plumbing",
+        "description": "Re-seal shower waste and pressure test tray",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 220
+      },
+      {
+        "work_item_id": "WI-00011",
+        "code": "ELC-ISO-001",
+        "trade": "electrical",
+        "description": "Isolate and tag circuits in wet-area bathroom",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 165
+      },
+      {
+        "work_item_id": "WI-00031",
+        "code": "FLR-MST-001",
+        "trade": "flooring",
+        "description": "Moisture content testing — timber subfloor",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 120
+      },
+      {
+        "work_item_id": "WI-00032",
+        "code": "FLR-SND-002",
+        "trade": "flooring",
+        "description": "Sand and recoat cupped timber floorboards — affected zone",
+        "unit": "m2",
+        "quantity": 14,
+        "unit_rate": 72
+      },
+      {
+        "work_item_id": "WI-00033",
+        "code": "FLR-BRD-003",
+        "trade": "flooring",
+        "description": "Replace crowned timber boards after drying period",
+        "unit": "m2",
+        "quantity": 1,
+        "unit_rate": 145
+      },
+      {
+        "work_item_id": "WI-00071",
+        "code": "MIT-DHM-001",
+        "trade": "mitigation",
+        "description": "Place industrial dehumidifier — affected zone",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 95
+      },
+      {
+        "work_item_id": "WI-00072",
+        "code": "MIT-FAN-002",
+        "trade": "mitigation",
+        "description": "Air mover hire — drying period",
+        "unit": "day",
+        "quantity": 7,
+        "unit_rate": 45
+      },
+      {
+        "work_item_id": "WI-00053",
+        "code": "PNT-STN-008",
+        "trade": "painting",
+        "description": "Block stain and spot prime water marks",
+        "unit": "m2",
+        "quantity": 6,
+        "unit_rate": 32
+      }
+    ]
+  },
+  {
+    "id": "job-bathroom-stack-failure",
+    "builder_id": "bld-prime-north",
+    "title": "Bathroom stack leak — multi-room water damage",
+    "peril": "escape of water",
+    "construction": "weatherboard",
+    "storeys": 2,
+    "rooms_affected": "bathroom, kitchen, laundry",
+    "narrative": "Failed waste connection in upstairs bathroom affected kitchen ceiling and laundry wall. Full strip of wet linings, structural check, and phased reinstatement.",
+    "billed_lines": [
+      {
+        "work_item_id": "WI-00001",
+        "code": "PLB-ISO-001",
+        "trade": "plumbing",
+        "description": "Isolate water supply to upstairs bathroom suite",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 95
+      },
+      {
+        "work_item_id": "WI-00005",
+        "code": "PLB-PIPE-007",
+        "trade": "plumbing",
+        "description": "Reroute copper feed line in wall cavity",
+        "unit": "lm",
+        "quantity": 3,
+        "unit_rate": 85
+      },
+      {
+        "work_item_id": "WI-00061",
+        "code": "DEM-CLG-001",
+        "trade": "demolition",
+        "description": "Remove collapsed plasterboard ceiling — kitchen below bathroom",
+        "unit": "m2",
+        "quantity": 8,
+        "unit_rate": 48
+      },
+      {
+        "work_item_id": "WI-00062",
+        "code": "DEM-STR-002",
+        "trade": "demolition",
+        "description": "Strip water-damaged drywall to studs — wet line",
+        "unit": "m2",
+        "quantity": 16,
+        "unit_rate": 52
+      },
+      {
+        "work_item_id": "WI-00071",
+        "code": "MIT-DHM-001",
+        "trade": "mitigation",
+        "description": "Place industrial dehumidifier — affected zone",
+        "unit": "each",
+        "quantity": 2,
+        "unit_rate": 95
+      },
+      {
+        "work_item_id": "WI-00092",
+        "code": "STR-CHK-002",
+        "trade": "structural",
+        "description": "Structural inspection of wet framing",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 180
+      },
+      {
+        "work_item_id": "WI-00041",
+        "code": "DRW-SH-001",
+        "trade": "drywall",
+        "description": "Install 13mm plasterboard to kitchen ceiling",
+        "unit": "m2",
+        "quantity": 8,
+        "unit_rate": 68
+      },
+      {
+        "work_item_id": "WI-00043",
+        "code": "DRW-SH-003",
+        "trade": "drywall",
+        "description": "Line internal wall — standard 10mm board",
+        "unit": "m2",
+        "quantity": 16,
+        "unit_rate": 55
+      },
+      {
+        "work_item_id": "WI-00051",
+        "code": "PNT-CLG-001",
+        "trade": "painting",
+        "description": "Prime and paint kitchen ceiling — two coats",
+        "unit": "m2",
+        "quantity": 8,
+        "unit_rate": 28
+      },
+      {
+        "work_item_id": "WI-00052",
+        "code": "PNT-WAL-002",
+        "trade": "painting",
+        "description": "Wash, prep and paint internal walls — living",
+        "unit": "m2",
+        "quantity": 16,
+        "unit_rate": 24
+      }
+    ]
+  },
+  {
+    "id": "job-roof-tile-storm",
+    "builder_id": "bld-prime-north",
+    "title": "Roof storm damage — tile and flashing",
+    "peril": "storm",
+    "construction": "brick veneer",
+    "storeys": 1,
+    "rooms_affected": "roof, bedroom",
+    "narrative": "Hail and wind lifted tiles on north slope. Minor ceiling staining in bedroom; primary scope is roof make-safe and tile replacement.",
+    "billed_lines": [
+      {
+        "work_item_id": "WI-00024",
+        "code": "ROF-EP-009",
+        "trade": "roofing",
+        "description": "Erect edge protection — single storey",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 480
+      },
+      {
+        "work_item_id": "WI-00021",
+        "code": "ROF-TIL-001",
+        "trade": "roofing",
+        "description": "Replace broken concrete roof tile",
+        "unit": "each",
+        "quantity": 18,
+        "unit_rate": 38
+      },
+      {
+        "work_item_id": "WI-00022",
+        "code": "ROF-RID-002",
+        "trade": "roofing",
+        "description": "Reseal ridge capping with flexible pointing",
+        "unit": "lm",
+        "quantity": 12,
+        "unit_rate": 55
+      },
+      {
+        "work_item_id": "WI-00023",
+        "code": "ROF-VLY-003",
+        "trade": "roofing",
+        "description": "Replace corroded valley flashing",
+        "unit": "lm",
+        "quantity": 6,
+        "unit_rate": 95
+      },
+      {
+        "work_item_id": "WI-00053",
+        "code": "PNT-STN-008",
+        "trade": "painting",
+        "description": "Block stain and spot prime water marks",
+        "unit": "m2",
+        "quantity": 4,
+        "unit_rate": 32
+      }
+    ]
+  },
+  {
+    "id": "job-roof-valley-leak",
+    "builder_id": "bld-prime-north",
+    "title": "Valley flashing leak — patch ceiling stain only",
+    "peril": "storm",
+    "construction": "brick veneer",
+    "storeys": 1,
+    "rooms_affected": "roof, bedroom",
+    "narrative": "Active roof leak at valley during heavy rain. Roofer replaced flashing; internal works limited to stain block and ceiling touch-up where leak tracked.",
+    "billed_lines": [
+      {
+        "work_item_id": "WI-00023",
+        "code": "ROF-VLY-003",
+        "trade": "roofing",
+        "description": "Replace corroded valley flashing",
+        "unit": "lm",
+        "quantity": 8,
+        "unit_rate": 95
+      },
+      {
+        "work_item_id": "WI-00025",
+        "code": "ROF-FLS-005",
+        "trade": "roofing",
+        "description": "Install lead flashing at chimney abutment",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 210
+      },
+      {
+        "work_item_id": "WI-00053",
+        "code": "PNT-STN-008",
+        "trade": "painting",
+        "description": "Block stain and spot prime water marks",
+        "unit": "m2",
+        "quantity": 3,
+        "unit_rate": 32
+      },
+      {
+        "work_item_id": "WI-00044",
+        "code": "DRW-NCH-005",
+        "trade": "drywall",
+        "description": "Patch nib wall after doorway relocation",
+        "unit": "each",
+        "quantity": 2,
+        "unit_rate": 95
+      }
+    ]
+  },
+  {
+    "id": "job-hail-roof",
+    "builder_id": "bld-prime-north",
+    "title": "Hail strike — tile field and ridge",
+    "peril": "hail",
+    "construction": "weatherboard",
+    "storeys": 1,
+    "rooms_affected": "roof",
+    "narrative": "Severe hail cracked a tile field on the street elevation. No internal water ingress. Make-safe and replace broken tiles.",
+    "billed_lines": [
+      {
+        "work_item_id": "WI-00024",
+        "code": "ROF-EP-009",
+        "trade": "roofing",
+        "description": "Erect edge protection — single storey",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 480
+      },
+      {
+        "work_item_id": "WI-00021",
+        "code": "ROF-TIL-001",
+        "trade": "roofing",
+        "description": "Replace broken concrete roof tile",
+        "unit": "each",
+        "quantity": 42,
+        "unit_rate": 38
+      },
+      {
+        "work_item_id": "WI-00022",
+        "code": "ROF-RID-002",
+        "trade": "roofing",
+        "description": "Reseal ridge capping with flexible pointing",
+        "unit": "lm",
+        "quantity": 18,
+        "unit_rate": 55
+      }
+    ]
+  },
+  {
+    "id": "job-kitchen-cabinet-refresh",
+    "builder_id": "bld-prime-north",
+    "title": "Kitchen renovation — cabinetry and bench",
+    "peril": "owner upgrade",
+    "construction": "brick veneer",
+    "storeys": 1,
+    "rooms_affected": "kitchen",
+    "narrative": "Owner upgrade: new flat-pack kitchen, stone bench, and connections. No water damage; bathroom and ceilings out of scope.",
+    "billed_lines": [
+      {
+        "work_item_id": "WI-00081",
+        "code": "CAB-REM-001",
+        "trade": "cabinetry",
+        "description": "Remove existing kitchen cabinetry and benchtops",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 420
+      },
+      {
+        "work_item_id": "WI-00082",
+        "code": "CAB-SUP-002",
+        "trade": "cabinetry",
+        "description": "Supply and install flat-pack base cabinets",
+        "unit": "lm",
+        "quantity": 6,
+        "unit_rate": 380
+      },
+      {
+        "work_item_id": "WI-00004",
+        "code": "PLB-TAP-004",
+        "trade": "plumbing",
+        "description": "Replace leaking mixer tap — ensuite",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 280
+      },
+      {
+        "work_item_id": "WI-00013",
+        "code": "ELC-LED-003",
+        "trade": "electrical",
+        "description": "Supply and install LED downlight — living",
+        "unit": "each",
+        "quantity": 4,
+        "unit_rate": 85
+      }
+    ]
+  },
+  {
+    "id": "job-exterior-repaint",
+    "builder_id": "bld-prime-north",
+    "title": "Whole-house exterior repaint",
+    "peril": "owner upgrade",
+    "construction": "weatherboard",
+    "storeys": 1,
+    "rooms_affected": "exterior",
+    "narrative": "Wash down, scrape, and repaint weatherboard elevations including trims and fascia. No insurance claim.",
+    "billed_lines": [
+      {
+        "work_item_id": "WI-00054",
+        "code": "PNT-EXT-003",
+        "trade": "painting",
+        "description": "Repaint weatherboard exterior — front elevation",
+        "unit": "m2",
+        "quantity": 180,
+        "unit_rate": 36
+      }
+    ]
+  },
+  {
+    "id": "job-deck-extension",
+    "builder_id": "bld-prime-north",
+    "title": "Timber deck extension — rear yard",
+    "peril": "owner upgrade",
+    "construction": "weatherboard",
+    "storeys": 1,
+    "rooms_affected": "exterior",
+    "narrative": "New hardwood deck on screw piles with balustrade; unrelated to internal water claims.",
+    "billed_lines": [
+      {
+        "work_item_id": "WI-00093",
+        "code": "STR-DECK-004",
+        "trade": "structural",
+        "description": "Hardwood decking on screw piles",
+        "unit": "m2",
+        "quantity": 12,
+        "unit_rate": 290
+      },
+      {
+        "work_item_id": "WI-00054",
+        "code": "PNT-EXT-003",
+        "trade": "painting",
+        "description": "Repaint weatherboard exterior — front elevation",
+        "unit": "m2",
+        "quantity": 8,
+        "unit_rate": 36
+      }
+    ]
+  },
+  {
+    "id": "job-gpo-kitchen-accidental",
+    "builder_id": "bld-prime-north",
+    "title": "Kitchen GPO — accidental damage",
+    "peril": "accidental damage",
+    "construction": "brick veneer",
+    "storeys": 1,
+    "rooms_affected": "kitchen",
+    "narrative": "Impact damage to a kitchen bench GPO. Replace outlet only; no water or ceiling works.",
+    "billed_lines": [
+      {
+        "work_item_id": "WI-00012",
+        "code": "ELC-GPO-002",
+        "trade": "electrical",
+        "description": "Replace water-damaged GPO — kitchen bench",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 190
+      }
+    ]
+  },
+  {
+    "id": "job-other-builder-bathroom",
+    "builder_id": "bld-south-repairs",
+    "title": "Ensuite leak — other builder price book",
+    "peril": "escape of water",
+    "construction": "brick veneer",
+    "storeys": 2,
+    "rooms_affected": "ensuite, kitchen",
+    "narrative": "Same damage pattern as a bathroom leak with ceiling collapse, but billed on another builder's rates and methods. Must not leak into this tenant's estimate.",
+    "billed_lines": [
+      {
+        "work_item_id": "WI-00001",
+        "code": "PLB-ISO-001",
+        "trade": "plumbing",
+        "description": "Isolate water supply to upstairs bathroom suite",
+        "unit": "each",
+        "quantity": 1,
+        "unit_rate": 95
+      },
+      {
+        "work_item_id": "WI-00061",
+        "code": "DEM-CLG-001",
+        "trade": "demolition",
+        "description": "Remove collapsed plasterboard ceiling — kitchen below bathroom",
+        "unit": "m2",
+        "quantity": 10,
+        "unit_rate": 48
+      },
+      {
+        "work_item_id": "WI-00041",
+        "code": "DRW-SH-001",
+        "trade": "drywall",
+        "description": "Install 13mm plasterboard to kitchen ceiling",
+        "unit": "m2",
+        "quantity": 10,
+        "unit_rate": 68
+      },
+      {
+        "work_item_id": "WI-00051",
+        "code": "PNT-CLG-001",
+        "trade": "painting",
+        "description": "Prime and paint kitchen ceiling — two coats",
+        "unit": "m2",
+        "quantity": 10,
+        "unit_rate": 28
+      }
+    ]
+  },
+  {
+    "id": "job-other-builder-deck",
+    "builder_id": "bld-south-repairs",
+    "title": "Deck rebuild — other builder",
+    "peril": "owner upgrade",
+    "construction": "weatherboard",
+    "storeys": 1,
+    "rooms_affected": "exterior",
+    "narrative": "Unrelated deck job from another repairer network.",
+    "billed_lines": [
+      {
+        "work_item_id": "WI-00093",
+        "code": "STR-DECK-004",
+        "trade": "structural",
+        "description": "Hardwood decking on screw piles",
+        "unit": "m2",
+        "quantity": 8,
+        "unit_rate": 290
+      }
+    ]
+  }
+]

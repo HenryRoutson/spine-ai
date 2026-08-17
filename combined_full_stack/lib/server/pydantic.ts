@@ -12,7 +12,6 @@ import {
 import { stripBuiltinTypeAliases } from "./builtin_types";
 import { stripSharedModels } from "./builtin_models";
 import type { TypeExpr } from "./types";
-// AI : TODO (sql-schema) — allModelsToSql CREATE TABLE from StructureModel; quotes/documents as FKs+blob cols.
 import {
   goFieldIdent,
   modelExportIdentifier,

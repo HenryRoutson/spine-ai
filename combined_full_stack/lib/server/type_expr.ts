@@ -76,10 +76,8 @@ export type TypeExpr =
   // AI :   walk left at leftPath, intersect item with { embedAs: Right }. View attached to a consumer does
   // AI :   not change outType; a join *step* is only when downstream must consume expanded rows.
   // AI : TODO (type-join) — SelectedJobExample should be JobExample & { selection_reason: text }, not a cloned model.
-  // AI : TODO (sql-schema) — TypeExpr is the IR; SQL DDL is the human/LLM annotation. Unify:
-  // AI :   Document/File → document(id PK, filename, mime, content, blob); Quote → quote_span(doc_id FK, start, end);
-  // AI :   TextQuote → text + that FK. list/optional/json stay SQL LIST/NULL/JSON. Views are SELECT not Pick.
-  // AI :   No SQLite required to start — emit CREATE TABLE next to models.py in the Types tab.
+  // AI : TypeExpr is the IR; SQL DDL is the human/LLM annotation. Document/File → document(id PK, filename, mime, content, blob);
+  // AI :   Quote → quote_span(doc_id FK, start, end); TextQuote → text + that FK. Views are SELECT not Pick.
 
 export const UNSET_TYPE_EXPR: TypeExpr = { kind: TypeExprKind.Unset };
 
@@ -88,11 +86,11 @@ export const QuoteSchema = z.object({
   start: z.number().int(),
   end: z.number().int(),
 });
-// AI : TODO (sql-schema) — QuoteSpan is REFERENCES document(id) plus byte range, not a special TypeExpr forever.
+// AI : QuoteSpan is REFERENCES document(id) plus byte range, not a special TypeExpr forever.
 
 const TextQuoteSchema = z.object({ text: z.string(), quote: QuoteSchema });
 const DocumentSchema = z.object({ content: z.string(), filename: z.string() });
-// AI : TODO (sql-schema) — Document row: id PK, filename, mime, content TEXT NULL, blob BLOB NULL. content/filename
+// AI : Document row: id PK, filename, mime, content TEXT NULL, blob BLOB NULL. content/filename
 // AI :   are projections; original PDF is the blob, not a parallel File TypeExpr.
 const JsonStringSchema = z.string().refine(isValidJsonString, { message: "must be valid JSON" });
 const MarkdownStringSchema = z.string().refine(isValidMarkdown, { message: "must be valid markdown" });

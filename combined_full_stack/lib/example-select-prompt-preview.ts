@@ -58,7 +58,6 @@ export function parseExampleSelectPromptSegments(template: string): ExampleSelec
     if (part === "{example}" || part === "{input_to_prompt}") {
       // AI : TODO (example-select-view) — also split {input_to_prompt} as per_candidate; cache preview must
       // AI :   size {example} from the projected view (title+work_description), not the full JobExample JSON.
-      // AI : TODO (sql-schema) — sample prompts should render the VIEW row, not SELECT *.
       segments.push({ role: "per_candidate", text: part, label: part })
       continue
     }

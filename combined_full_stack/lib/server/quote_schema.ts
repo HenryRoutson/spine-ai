@@ -3,7 +3,7 @@ import type { TypeExpr } from "./type_expr";
 import type { DocId, ModelField, StructureModel, StructureModelId } from "./types";
 
 // AI : TODO (spec) — quote validation walks struct tree for quote fields only (no brute-force dict scan); partially via collectQuotesForModel.
-// AI : TODO (sql-schema) — a quote is a reference to a document row plus offsets. Integrity: doc_id exists,
+// AI : a quote is a reference to a document row plus offsets. Integrity: doc_id exists,
 // AI :   0 <= start < end <= length(content). Linking is resolving the FK, not a separate type system.
 export type LinkedQuoteValue = {
   text: string;

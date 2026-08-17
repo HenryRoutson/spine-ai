@@ -1,0 +1,13 @@
+{
+  "description": "Estimate Intelligence — golden fixtures for deterministic steps; LLM steps use null placeholders.",
+  "inputs": {
+    "Current Assessment": "bathroom_leak_assessment.json",
+    "Past Job Library": "past_job_library.json"
+  },
+  "expectedOutputs": {
+    "Select Comparable Jobs": null,
+    "Select Applicable Lines": null,
+    "Compose Preliminary Estimate": null,
+    "Estimate Output": null
+  }
+}

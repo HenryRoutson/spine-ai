@@ -1,0 +1,13 @@
+{
+  "description": "Roof storm scenario — LLM steps use null placeholders.",
+  "inputs": {
+    "Current Assessment": "roof_storm_assessment.json",
+    "Past Job Library": "past_job_library.json"
+  },
+  "expectedOutputs": {
+    "Select Comparable Jobs": null,
+    "Select Applicable Lines": null,
+    "Compose Preliminary Estimate": null,
+    "Estimate Output": null
+  }
+}

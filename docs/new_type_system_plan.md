@@ -315,7 +315,7 @@ CREATE TABLE quote_span (
 - [ ] **Optional later:** in-memory SQLite per run, `.sqlite` input/export, live Postgres connector. Not required for the annotation to be useful.
 - [ ] Do not delete TypeExpr; it remains the IR. DDL is the human/LLM-facing form.
 
-**First implementation slice (do this before SQLite / JOIN / Pick operators):** see `combined_full_stack/lib/sql-schema.ts` header. Grep `TODO (sql-schema)`. Keep `(example-select-view)` and `(type-join)` TODOs until those items ship. Do not custom-code a slimmer JobExample spine; do not denormalize `job_example_library.json`.
+**First implementation slice (shipped):** `combined_full_stack/lib/sql-schema.ts` + `docs/sql_types.md`. Grep leftovers: `TODO (example-select-view)`, `TODO (type-join)`. Do not custom-code a slimmer JobExample spine; do not denormalize `job_example_library.json`.
 
 ---
 

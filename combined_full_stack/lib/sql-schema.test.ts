@@ -90,6 +90,23 @@ describe("allModelsToSql billed_work", () => {
   })
 })
 
+describe("allModelsToSql estimate_intelligence", () => {
+  it("emits billed_lines child table, FKs, and both prompt views", () => {
+    const { project } = loadProjectSeed(resolve(SEEDS_DIR, "estimate_intelligence.json"))
+    const sql = allModelsToSql(project.models, project.modules)
+    expect(sql).toContain("CREATE TABLE work_item")
+    expect(sql).toContain("CREATE TABLE past_job")
+    expect(sql).toContain("CREATE TABLE past_job_billed_lines")
+    expect(sql).toContain("REFERENCES work_item(id)")
+    expect(sql).toMatch(/CREATE VIEW \w+_prompt AS\s+SELECT id, builder_id, title, peril, construction, storeys, rooms_affected, narrative FROM past_job/i)
+    expect(sql).toMatch(/CREATE VIEW \w+_prompt AS\s+SELECT work_item_id, code, trade, description, unit, source_job_id FROM candidate_line/i)
+    const jobView = sql.match(/SELECT id, builder_id[\s\S]*?FROM past_job/i)?.[0] ?? ""
+    expect(jobView).not.toMatch(/billed_lines/)
+    const lineView = sql.match(/SELECT work_item_id[\s\S]*?FROM candidate_line/i)?.[0] ?? ""
+    expect(lineView).not.toMatch(/quantity|unit_rate/)
+  })
+})
+
 describe("example-select projection vs passthrough", () => {
   it("prompt JSON has no billed_items; kept rows still have them", () => {
     const m = stubSelect({

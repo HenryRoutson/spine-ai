@@ -8,7 +8,7 @@ import { recordActivityEvent } from "@/lib/server/user_activity";
 import { PipelinePausedError } from "@/lib/server/run_checkpoint";
 import { runPipeline } from "@/lib/server/run_engine";
 import { computeRunFingerprintForRequest, findMatchingRun } from "@/lib/server/run_fingerprint";
-import { refreshBundledSeedDocsForRun, resolveStoreProject } from "@/lib/server/store";
+import { refreshBundledSeedDocsForRun, resolveRunInputDoc, resolveStoreProject, snapshotDocNamesById } from "@/lib/server/store";
 import {
   MAX_CONCURRENT_RUNS_PER_USER,
   countActiveJobs,
@@ -105,6 +105,8 @@ export async function POST(req: NextRequest) {
     return apiError(unknownProject(pid), HTTP.NOT_FOUND);
   }
   const project = store.project(pid)!;
+  await store.syncDocsFromDb?.();
+  const namesById = snapshotDocNamesById(store);
   await refreshBundledSeedDocsForRun(store, project);
   const inputModules = orderedInputModules(project.modules);
   const assignment: InputDocsAssignment = {};
@@ -117,16 +119,16 @@ export async function POST(req: NextRequest) {
       if (ids.length < inputMinCountForModule(m)) {
         return apiError(`input "${m.label}" needs at least ${inputMinCountForModule(m)} document(s)`, 400);
       }
-      const docs = ids.flatMap((docId) => {
-        if (store.docContent(docId as DocId) === undefined) return [];
-        const doc = store.docs().find((d: DocRef) => d.id === docId);
-        return doc ? [{ docId, doc }] : [];
-      });
-      if (docs.length !== ids.length) {
-        const missing = ids.find((id) => !docs.some((d) => d.docId === id));
-        return apiError(unknownDoc(missing ?? "unknown"), HTTP.NOT_FOUND);
+      const docs: { docId: DocId; doc: DocRef }[] = [];
+      for (const docId of ids) {
+        const resolved = await resolveRunInputDoc(store, docId as DocId, namesById);
+        if (!resolved) {
+          apiLog.warn(`unknown doc`, { docId });
+          return apiError(unknownDoc(docId), HTTP.NOT_FOUND);
+        }
+        docs.push(resolved);
       }
-      for (const { docId, doc } of docs) {
+      for (const { docId } of docs) {
         contentByDocId[docId] = store.docContent(docId)!;
       }
       assignment[m.id] = docs.map((d) => d.doc);
@@ -136,14 +138,13 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < inputModules.length; i++) {
       const docId = orderedDocIds[i];
       if (!docId) continue;
-      if (store.docContent(docId) === undefined) {
+      const resolved = await resolveRunInputDoc(store, docId, namesById);
+      if (!resolved) {
         apiLog.warn(`unknown doc`, { docId });
         return apiError(unknownDoc(docId), HTTP.NOT_FOUND);
       }
-      const doc = store.docs().find((d: DocRef) => d.id === docId);
-      if (!doc) return apiError(unknownDoc(docId), HTTP.NOT_FOUND);
-      assignment[inputModules[i].id] = doc;
-      contentByDocId[docId] = store.docContent(docId)!;
+      assignment[inputModules[i].id] = resolved.doc;
+      contentByDocId[resolved.docId] = store.docContent(resolved.docId)!;
     }
   }
   for (const m of inputModules) {
@@ -160,11 +161,12 @@ export async function POST(req: NextRequest) {
   }
 
   const resolvedByModule = inputDocsByModuleFromAssignment(inputModules, assignment);
+  const resolvedPrimaryId = (inputModules[0] && resolvedByModule[inputModules[0].id]?.[0]) || primaryDocId;
   const { fingerprint, inputDocIds: fingerprintInputDocIds, project: migratedProject } = computeRunFingerprintForRequest(
     store,
     project,
     resolvedModel,
-    primaryDocId,
+    resolvedPrimaryId,
     inputDocIds as DocId[] | undefined,
     resolvedByModule,
   );
@@ -214,7 +216,7 @@ export async function POST(req: NextRequest) {
             return;
           }
         }
-        const run = await runPipeline(store, pid, primaryDocId, {
+        const run = await runPipeline(store, pid, resolvedPrimaryId, {
           model: resolvedModel,
           inputDocIds: inputDocIds as DocId[] | undefined,
           inputDocsByModule: resolvedByModule,

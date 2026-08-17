@@ -1,3 +1,4 @@
+import { exampleSelectAcceptsWrapper } from "@/lib/example-select";
 import { orderedInputModules } from "@/lib/inference-input";
 import { buildCustomFnSource } from "@/lib/custom_code";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
@@ -9,6 +10,7 @@ import { BUILTIN_DOCUMENT_ID, withSharedModels } from "./builtin_models";
 import { labelAsStateKey } from "./pipeline_state";
 import { migrateProjectModules } from "./validity";
 import {
+  fieldToTypeExpr,
   labelToPyKey,
   stepEmitsList,
   stepSpineInType,
@@ -295,6 +297,12 @@ export function exportSpineInType(
   if (m.kind === ModuleKind.Input) return { kind: "document" };
   if (m.kind === ModuleKind.Combine || usesPassthroughStructure(m.kind)) {
     return prev ? stepSpineOutType(prev) : undefined;
+  }
+  // AI : example-select unwraps the sole list[T] field — generated input type is the wrapper, not list[item].
+  if (m.kind === ModuleKind.ExampleSelect) {
+    const expected = stepSpineInType(m);
+    const actual = prev ? stepSpineOutType(prev) : undefined;
+    if (expected && actual && exampleSelectAcceptsWrapper(expected, actual, project.models)) return actual;
   }
   return stepSpineInType(m);
 }
@@ -833,10 +841,12 @@ function combineSideStructId(m: PipelineModule, project: Project): StructureMode
 }
 
 function combineSideIsList(
-  f: { type: FieldType; ref?: StructureModelId },
+  f: { type: FieldType; ref?: StructureModelId; typeExpr?: import("./types").TypeExpr },
   sideId: StructureModelId | undefined,
 ): boolean {
-  return !!sideId && f.ref === sideId && f.type === FieldType.ListModel;
+  if (!sideId) return false;
+  const expr = fieldToTypeExpr(f);
+  return expr.kind === "list" && expr.item.kind === "ref" && expr.item.modelId === sideId;
 }
 
 export function generateCombineStepBodyTs(m: PipelineModule, project: Project, outTs: string): string {

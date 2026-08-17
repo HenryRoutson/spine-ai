@@ -564,9 +564,6 @@ function computeExampleSelectInvalid(modules: PipelineModule[], models: Structur
     }
     // AI : TODO (example-select-view) — when examplePromptFields ships, flag names not on inType item fields.
     // AI : TODO (type-join) — prompt view must be a Pick/join of the item type, not an arbitrary reshape.
-    // AI : TODO (sql-schema) — computeExampleSelectInvalid(modules, models): parse examplePromptView;
-    // AI :   columns must exist on inStructureId item fields; JOIN in this slice → StructureField invalid.
-    // AI :   Pass models from computeInvalid (already has them). Spec: lib/sql-schema.ts header.
     const inModel = models.find((x) => x.id === m.inStructureId);
     const fieldNames = new Set(inModel?.fields.map((f) => f.name) ?? []);
     const view = m.examplePromptView?.trim();

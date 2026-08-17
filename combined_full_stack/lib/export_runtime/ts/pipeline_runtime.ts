@@ -226,8 +226,6 @@ export async function selectRelevant(
   const verdicts = await llmBatchStructured<RelevanceVerdict>(
     items,
     // AI : TODO (example-select-view) — stringify the prompt view, not the full item; kept rows below stay passthrough.
-    // AI : TODO (sql-schema) — add 5th arg promptColumns?: string[]. Duplicate projectExampleForPrompt inline
-    // AI :   (this file is copied into export zips — do not import lib/sql-schema). Replace {example} and {input_to_prompt}.
     (item: unknown) => {
       const exampleText = JSON.stringify(projectExampleForPrompt(item, promptColumns));
       return template
