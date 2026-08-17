@@ -151,7 +151,10 @@ export async function POST(req: NextRequest) {
       return apiError(`input "${m.label}" needs at least ${inputMinCountForModule(m)} document(s)`, 400);
     }
   }
-  const inputIssues = collectInferenceInputIssues(inputModules, {}, contentByDocId, assignment);
+  const inputIssues = collectInferenceInputIssues(inputModules, {}, contentByDocId, assignment, {
+    models: project.models,
+    typeAliases: project.typeAliases,
+  });
   if (inputIssues.length) {
     return apiError(inferenceInputIssueMessage(inputIssues, inputModules), 400);
   }

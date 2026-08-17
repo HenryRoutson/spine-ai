@@ -302,6 +302,16 @@ export function materializeInputDocument(
   return documentValueFrom(undefined, { docId, docName: hints.docName }, content);
 }
 
+// AI : JSON list files already return T[] — multi-doc wrapping must concat, not nest T[] as one item.
+export function pushMaterializedInput(items: unknown[], materialized: unknown, emitsList: boolean): void {
+  if (emitsList && Array.isArray(materialized)) items.push(...materialized);
+  else items.push(materialized);
+}
+
+export function stepOutputTypeName(modelName: string, isList: boolean): string {
+  return isList ? `list[${modelName}]` : modelName;
+}
+
 // AI : map loose runtime values (file text, doc_id) into every field of a StructureModel.
 // AI : missing required fields throw — no silent 0/""/false defaults.
 export function materializeToModel(

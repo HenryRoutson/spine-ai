@@ -71,8 +71,10 @@ export interface ModelField {
   testTolerance?: number;
   // AI : TODO (type-join) — relation?: { kind: "pk" } | { kind: "fk"; to: { modelId: StructureModelId; field: string } }
   // AI :   runtime type stays text; validity: fk field type equals target pk. Enables lookup-embed without Python joins.
-  // AI : TODO (sql-schema) — same annotation as PRIMARY KEY / REFERENCES in CREATE TABLE. Prefer emitting DDL
-  // AI :   (universal, first-glance) even if the runtime is still JSON maps, not a SQLite instance.
+  // AI : TODO (sql-schema) — implement that FieldRelation. Persist on StructureFieldDef + seed + api_schemas.
+  // AI :   DDL emit: pk → PRIMARY KEY; fk → REFERENCES {sqlTable(to.modelId)}({to.field}).
+  // AI :   If no pk on the model and a field is named "id", treat as PRIMARY KEY.
+  // AI :   Spec + first-slice file list: lib/sql-schema.ts header.
 }
 
 // AI : ModelField keys that resolve a field's TypeExpr — typeExpr overrides legacy type/ref.
@@ -93,6 +95,7 @@ export type ModelFieldLegacyTypePick = Pick<ModelField, ModelFieldTypeSource.Typ
 export type StructureFieldDef = Pick<
   ModelField,
   "id" | "name" | "type" | "optional" | "description" | "examples" | "negativeExamples" | "ref" | "minItems" | "maxItems" | "minLength" | "maxLength" | "typeExpr" | "deterministic" | "testTolerance"
+  // AI : TODO (sql-schema) — add | "relation" once FieldRelation exists so seeds persist pk/fk.
 >;
 
 export interface TolerantFieldPath {
@@ -336,8 +339,12 @@ export interface PipelineModule {
   // AI : TODO (example-select-view) — optional examplePromptItemTemplate for prose (Title: {title}) instead of JSON.
   // AI : TODO (type-join) — optional examplePromptJoins: lookup-embed spec for the *view only* (pass 2 cached
   // AI :   prefix / draft). Same inType/outType; do not denormalize billed_items onto pass 1 {example}.
-  // AI : TODO (sql-schema) — examplePromptView?: SQL (CREATE VIEW / SELECT). Same contract: view for {example},
-  // AI :   table for passthrough. Prefer this over Pick/join-spec once DDL is the annotation language.
+  // AI : TODO (sql-schema) — examplePromptView?: string — SQL SELECT or CREATE VIEW … AS SELECT.
+  // AI :   First slice: parse column list, project those keys into {example} only. No JOIN (validity error).
+  // AI :   View wins over examplePromptFields. Wire seed/api_schemas/UI textarea in example-select-fields.tsx.
+  // AI :   Export selectRelevant(..., promptColumns). Host: project before fillExampleSelectPrompt.
+  // AI :   billed_work Select Relevant Jobs: SELECT id, title, work_description FROM job_example
+  // AI :   Spec: lib/sql-schema.ts header.
   useOcr?: boolean; // AI : doc-to-text (legacy: input) — vision OCR when PDF/image is accepted
   // AI : step result cache toggle — authoring may omit (defaults true via seed/factory).
   cached: boolean;

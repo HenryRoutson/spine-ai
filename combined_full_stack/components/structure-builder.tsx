@@ -445,6 +445,7 @@ export function StructureBuilder() {
               <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                 {view === "code" ? (
                   <StructureCodeView models={models} typeAliases={typeAliases} />
+                  {/* AI : TODO (sql-schema) — pass modules={project?.modules} so schema.sql can emit example-select views. */}
                 ) : target.kind === "type" && selectedType ? (
                   <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
                     <div className="mx-auto max-w-3xl px-5 py-5">

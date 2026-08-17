@@ -2,7 +2,7 @@
 // AI : validated against the live pipeline since labels and doc names drift.
 
 import { namedInputDocNames, resolveNamedRunInputs, type NamedRunInputs, type ResolvedNamedInputs } from "@/lib/inference-presets"
-import { validateInferenceDocAssignment } from "@/lib/inference-validity"
+import { validateInferenceDocAssignment, validateInferenceDocContent } from "@/lib/inference-validity"
 import { labelAsStateKey } from "@/lib/server/pipeline_state"
 import { tryParseJson } from "@/lib/json-utils"
 import { ModuleKind } from "@/lib/types"
@@ -68,6 +68,7 @@ export function validateNamedInputs(
   inputs: NamedRunInputs,
   project: Project,
   projectDocs: DocRef[],
+  jsonContentByName?: Record<string, string>,
 ): SetupFileIssue[] {
   const issues: SetupFileIssue[] = []
   const modules = project.modules
@@ -95,6 +96,17 @@ export function validateNamedInputs(
       const assignmentIssue = validateInferenceDocAssignment(mod, doc)
       if (assignmentIssue) {
         issues.push({ level: "error", where: label, message: `${name}: ${assignmentIssue.message}` })
+        continue
+      }
+      const content = jsonContentByName?.[name]
+      if (content !== undefined) {
+        const spineIssue = validateInferenceDocContent(mod, doc, content, {
+          models: project.models,
+          typeAliases: project.typeAliases,
+        })
+        if (spineIssue) {
+          issues.push({ level: "error", where: label, message: `${name}: ${spineIssue.message}` })
+        }
       }
     }
   }
@@ -117,8 +129,9 @@ export function validateInferenceSetupFile(
   setup: SpineInferenceSetupFile,
   project: Project,
   projectDocs: DocRef[],
+  jsonContentByName?: Record<string, string>,
 ): SetupFileIssue[] {
-  return validateNamedInputs(setup.inputs ?? {}, project, projectDocs)
+  return validateNamedInputs(setup.inputs ?? {}, project, projectDocs, jsonContentByName)
 }
 
 export type ResolvedSetupInputs = ResolvedNamedInputs

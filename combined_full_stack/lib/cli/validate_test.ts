@@ -11,6 +11,7 @@ import {
   loadTestInputContents,
   verifyExpectFailurePrecondition,
 } from "@/lib/test-expect-failure"
+import { namedInputDocNames } from "@/lib/inference-presets"
 import { loadProjectContext, readTextFile, type ProjectContext } from "@/lib/cli/project_context"
 import type { CliCommandResult, CliIssue } from "@/lib/cli/types"
 import type { DocRef, Project } from "@/lib/types"
@@ -58,7 +59,14 @@ export function validateTestAgainstProject(
       data: { projectName: project.name, testFile: testLabel },
     }
   }
-  const issues = toCliIssues(validateTestFile(parsed.test, project, docRefs))
+  const jsonContentByName: Record<string, string> = {}
+  for (const value of Object.values(parsed.test.inputs ?? {})) {
+    for (const name of namedInputDocNames(value)) {
+      const content = loadDocByName(name)
+      if (content !== undefined) jsonContentByName[name] = content
+    }
+  }
+  const issues = toCliIssues(validateTestFile(parsed.test, project, docRefs, jsonContentByName))
   const contentByDocId = loadTestInputContents(parsed.test, project.modules, docRefs, loadDocByName)
   const expectCheck = verifyExpectFailurePrecondition(parsed.test, project, docRefs, contentByDocId)
   if (expectCheck && !expectCheck.ok) {

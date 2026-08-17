@@ -37,7 +37,7 @@ import { UsageLedger } from "../usage";
 import type { RunCheckpoint } from "../run_checkpoint";
 import { computeRunFingerprint, buildRunInputDocIds, stepCacheKey } from "../run_fingerprint";
 import { writeStepCache } from "../step_cache";
-import { validateStepOutput } from "../structure";
+import { stepOutputTypeName, validateStepOutput } from "../structure";
 import { ensureModelOptionsFresh } from "../openrouter_models";
 import {
   beginLangfusePipelineRun,
@@ -331,10 +331,10 @@ export async function resumeRunPipeline(
             ctx.stepExtraFailures = [{ kind: FailureKind.StepOutput, detail: validationError, recovered: false }];
             log.error(`step output schema validation failed`, {
               failureKind: "step_output",
-              structure: out.name,
+              structure: stepOutputTypeName(out.name, isList),
               detail: validationError,
             });
-            throw new Error(`output failed ${out.name} validation: ${validationError}`);
+            throw new Error(`output failed ${stepOutputTypeName(out.name, isList)} validation: ${validationError}`);
           }
         }
       } catch (err) {

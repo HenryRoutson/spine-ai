@@ -136,6 +136,7 @@ export function validateTestFile(
   test: SpineTestFile,
   project: Project,
   projectDocs: DocRef[],
+  jsonContentByName?: Record<string, string>,
 ): TestFileIssue[] {
   const issues: TestFileIssue[] = []
   const modules = project.modules
@@ -172,7 +173,7 @@ export function validateTestFile(
     }
   }
 
-  issues.push(...validateNamedInputs(test.inputs ?? {}, project, projectDocs))
+  issues.push(...validateNamedInputs(test.inputs ?? {}, project, projectDocs, jsonContentByName))
   issues.push(...expectFailureScopeIssues(test, project))
   return issues
 }

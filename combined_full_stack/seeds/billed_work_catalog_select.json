@@ -375,7 +375,7 @@
       "id": "mod_select_jobs",
       "kind": "example-select",
       "label": "Select Relevant Jobs",
-      "note": "Pass 1 — filter past jobs by similarity to the claim description. TODO (example-select-view): {example} should be title+work_description only; billed_items stay on spine passthrough. TODO (sql-schema): CREATE VIEW job_example_prompt AS SELECT id, title, work_description FROM job_example;",
+      "note": "Pass 1 — filter past jobs by similarity to the claim description. TODO (example-select-view): {example} should be title+work_description only; billed_items stay on spine passthrough. TODO (sql-schema): add examplePromptView: SELECT id, title, work_description FROM job_example — confirm WorkItem id is m_work_item before wiring BilledLineRef fk.",
       "inputDescription": "list[JobExample] from the job library JSON",
       "inStructureId": "m_job_ex",
       "outStructureId": "m_selected_job",

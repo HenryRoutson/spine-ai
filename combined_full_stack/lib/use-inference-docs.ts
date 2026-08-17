@@ -99,7 +99,10 @@ export function useInferenceDocs({
       }
       await Promise.all(loads)
       if (cancelled) return
-      const next = collectInferenceInputIssues(inputModules, {}, contentByDocId, inputDocs)
+      const next = collectInferenceInputIssues(inputModules, {}, contentByDocId, inputDocs, {
+        models: project.models,
+        typeAliases: project.typeAliases,
+      })
       setInputIssues((prev) => (inferenceIssuesEqual(prev, next) ? prev : next))
       const compat = evaluateInputCompat(inputModules, inputDocs, contentByDocId)
       setInputCompatPairs((prev) =>
@@ -120,7 +123,7 @@ export function useInferenceDocs({
     return () => {
       cancelled = true
     }
-  }, [allInputsReady, inputModules, inputDocIdsKey, inputDocs])
+  }, [allInputsReady, inputModules, inputDocIdsKey, inputDocs, project.models, project.typeAliases])
 
   useEffect(() => {
     if (!allInputsReady) return

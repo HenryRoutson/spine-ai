@@ -432,7 +432,9 @@ def example_select_items(data: Any) -> list[Any]:
 async def select_relevant(items: list[Any], description: str, template: str) -> list[Any]:
     def prompt_for(item: Any) -> str:
         # AI : TODO (example-select-view) — dump the prompt view, not the full item; kept rows stay passthrough.
-        # AI : TODO (sql-schema) — dump the VIEW row; keep rows from the source TABLE.
+        # AI : TODO (sql-schema) — add prompt_columns: list[str] | None = None. Inline project helper.
+        # AI :   prompt_for uses json.dumps(projected, default=str). Also replace {input_to_prompt}.
+        # AI :   kept rows still dict(item). Default reason_field stays selection_reason (positional after template).
         return template.replace("{description}", description).replace("{example}", json.dumps(item, default=str))
     verdicts = await llm_batch_structured(items, prompt_for, relevance_schema)
     kept: list[Any] = []

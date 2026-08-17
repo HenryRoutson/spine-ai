@@ -31,4 +31,5 @@ export function fillExampleSelectPrompt(
   return template
     .replace(/\{description\}/g, description)
     .replace(/\{example\}/g, exampleText)
+  // AI : TODO (sql-schema) — also .replace(/\{input_to_prompt\}/g, exampleText). Caller already projected.
 }

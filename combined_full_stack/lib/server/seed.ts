@@ -75,6 +75,10 @@ const SeedFileSchema = z.object({
           typeExpr: TypeExprSchema.optional(),
           deterministic: z.boolean().optional(),
           testTolerance: z.number().min(0).optional(),
+          // AI : TODO (sql-schema) — relation: z.discriminatedUnion("kind", [
+          // AI :   z.object({ kind: z.literal("pk") }),
+          // AI :   z.object({ kind: z.literal("fk"), to: z.object({ modelId: z.string(), field: z.string().min(1) }) }),
+          // AI : ]).optional(),
         }),
       ),
     }),
@@ -146,7 +150,7 @@ const SeedFileSchema = z.object({
       exampleReasonField: z.string().optional(),
       examplePreFilterMax: z.number().int().min(1).optional(),
       // AI : TODO (example-select-view) — examplePromptFields: z.array(z.string()).optional()
-      // AI : TODO (sql-schema) — examplePromptView: z.string().optional() — SQL SELECT/VIEW text
+      // AI : TODO (sql-schema) — examplePromptView: z.string().optional()  (module, not field)
       mergeStateLabel: z.string().optional(),
       mergeWrapListField: z.string().optional(),
       mergeCustom: z.string().optional(),

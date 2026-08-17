@@ -9,7 +9,7 @@ import { ClientStepPendingError, HumanReviewPendingError, ChatbotPendingError, L
 import { expectedOutputsForRun } from "../seed";
 import { stepCacheKey } from "../run_fingerprint";
 import { readStepCache, writeStepCache } from "../step_cache";
-import { hasQuoteField, validateStepOutput } from "../structure";
+import { hasQuoteField, stepOutputTypeName, validateStepOutput } from "../structure";
 import { llmStepCostLimitCents, StepCostLimitExceededError } from "../step_cost_limit";
 import { customCodeMaxRunMs } from "@/lib/custom-code-max-run";
 import { DEFAULT_INPUT_CHECK_MODEL, FailureKind, ModuleKind, RunStepStatus, type LlmCallRecord } from "../types";
@@ -166,11 +166,11 @@ export async function runLinearStepsFrom(
                 ];
                 log.error(`step output schema validation failed`, {
                   failureKind: "step_output",
-                  structure: out.name,
+                  structure: stepOutputTypeName(out.name, isList),
                   detail: validationError,
                   failedJsonPreview: compactPreview(failedJson, 500),
                 });
-                throw new Error(`output failed ${out.name} validation: ${validationError}`);
+                throw new Error(`output failed ${stepOutputTypeName(out.name, isList)} validation: ${validationError}`);
               }
               const itemCount = isList && Array.isArray(result.value) ? result.value.length : 1;
               log.debug(`validation ok`, { moduleId: m.id, structure: out.name, itemCount });

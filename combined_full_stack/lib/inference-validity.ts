@@ -1,7 +1,10 @@
 import { captureThrownError, formatErrorForClipboard } from "./error-copy";
 import { InputType } from "./types";
-import type { DocRef, ModuleId, PipelineModule } from "./types";
+import type { DocRef, ModuleId, PipelineModule, StructureModel, TypeAlias } from "./types";
 import { isUnavailableSeedDoc, looksLikeUnavailableSeedDoc } from "./seed-doc";
+import { isBuiltinDocumentModel } from "@/lib/server/builtin_models";
+import { stepOutputTypeName, validateStepOutput } from "@/lib/server/structure";
+import { stepEmitsList } from "@/lib/server/type_expr";
 import {
   exclusionReasonForInputModule,
   inputNameRestrictionLabel,
@@ -44,11 +47,41 @@ export function validateInferenceDocAssignment(
   };
 }
 
+export type InferenceStructCtx = {
+  models: StructureModel[]
+  typeAliases?: TypeAlias[]
+}
+
+function validateJsonInputSpine(
+  inputModule: PipelineModule,
+  doc: DocRef,
+  parsed: unknown,
+  structs: InferenceStructCtx,
+): InferenceInputIssue | undefined {
+  const outId = inputModule.outStructureId
+  if (!outId) return undefined
+  const model = structs.models.find((m) => m.id === outId)
+  if (!model || isBuiltinDocumentModel(model)) return undefined
+  const isList = stepEmitsList(inputModule)
+  const check = validateStepOutput(parsed, model, structs.models, {
+    isList,
+    typeAliases: structs.typeAliases ?? [],
+  })
+  if (check.ok) return undefined
+  return {
+    moduleId: inputModule.id,
+    docName: doc.name,
+    inputLabel: inputModule.label,
+    message: `expected ${stepOutputTypeName(model.name, isList)}: ${check.error}`,
+  }
+}
+
 // AI : pre-run check — blocks inference when a seed placeholder or bad JSON would blow up custom-code JSON.parse.
 export function validateInferenceDocContent(
   inputModule: PipelineModule,
   doc: DocRef,
   content: string,
+  structs?: InferenceStructCtx,
 ): InferenceInputIssue | undefined {
   if (isUnavailableSeedDoc(content, doc.name) || looksLikeUnavailableSeedDoc(content)) {
     return {
@@ -59,8 +92,9 @@ export function validateInferenceDocContent(
     };
   }
   if (doc.type === InputType.Json && inputTypesForModule(inputModule).includes(InputType.Json)) {
+    let parsed: unknown;
     try {
-      JSON.parse(content);
+      parsed = JSON.parse(content);
     } catch (err) {
       const { message, stack } = captureThrownError(err);
       const emptyHint = content.trim() ? "" : " (document is empty)";
@@ -73,6 +107,7 @@ export function validateInferenceDocContent(
         stack,
       };
     }
+    if (structs) return validateJsonInputSpine(inputModule, doc, parsed, structs);
   }
   return undefined;
 }
@@ -101,6 +136,7 @@ export function collectInferenceInputIssues(
   inputDocs: Partial<Record<ModuleId, DocRef>>,
   contentByDocId: Partial<Record<string, string>>,
   assignment?: import("./inference-input").InputDocsAssignment,
+  structs?: InferenceStructCtx,
 ): InferenceInputIssue[] {
   const issues: InferenceInputIssue[] = [];
   const fullAssignment = assignment ?? inputDocs;
@@ -124,7 +160,7 @@ export function collectInferenceInputIssues(
       const content = contentByDocId[doc.id];
       const issue =
         content !== undefined
-          ? validateInferenceDocContent(m, doc, content)
+          ? validateInferenceDocContent(m, doc, content, structs)
           : validateInferenceDocPreview(m, doc);
       if (issue) issues.push(issue);
     }

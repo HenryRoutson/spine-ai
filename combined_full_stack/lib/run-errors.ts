@@ -81,7 +81,7 @@ function friendlyStepError(stepLabel: string, raw: string): RunErrorDisplay {
     }
   }
 
-  const validation = raw.match(/^output failed ([A-Za-z0-9_]+) validation:\s*([\s\S]+)$/)
+  const validation = raw.match(/^output failed (list\[[^\]]+\]|[A-Za-z0-9_]+) validation:\s*([\s\S]+)$/)
   if (validation) {
     const structure = validation[1]!
     const body = validation[2]!.trim()

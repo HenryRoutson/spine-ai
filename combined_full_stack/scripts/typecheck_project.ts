@@ -31,6 +31,8 @@ writeFileSync(join(outDir, "models.py"), generated.modelsPy);
 writeFileSync(join(outDir, "pipeline_types.py"), generated.pipelinePy);
 writeFileSync(join(outDir, "models.d.ts"), generated.modelsDts);
 writeFileSync(join(outDir, "pipeline_types.d.ts"), generated.pipelineDts);
+// AI : TODO (sql-schema) — writeFileSync(join(outDir, "schema.sql"), generated.schemaSql)
+// AI :   after generatePipelineTypes returns schemaSql. Console.log should mention schema.sql.
 
 const tsconfig = {
   compilerOptions: {

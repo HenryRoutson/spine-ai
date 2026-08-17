@@ -75,6 +75,8 @@ describe("pipeline TS export lint", () => {
     expect(src).toMatch(/const description = \(typeof \(state\["Work Description"\] as Record<string, unknown>\)\["content"\]/);
     expect(src).not.toMatch(/JSON\.stringify\(state\["Work Description"\], null, 2\)/);
   });
+  // AI : TODO (sql-schema) — after billed_work examplePromptView ships, assert src matches
+  // AI :   /title","work_description/ or promptColumns array and does not include billed_items in that call.
 
   it("emits example-select relevance schema once", () => {
     const { project } = loadProjectSeed(resolve(SEEDS_DIR, "billed_work_catalog_select.json"));

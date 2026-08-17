@@ -10,6 +10,11 @@ import {
 // AI : same model codegen as pipeline export (py / ts / rust / go / baml).
 import { allModelsToBaml, allModelsToDts, allModelsToGo, allModelsToPydantic, allModelsToRust } from "@/lib/pydantic"
 import type { StructureModel, TypeAlias } from "@/lib/types"
+// AI : TODO (sql-schema) — import allModelsToSql from @/lib/sql-schema; add a source
+// AI :   { language: "sql", label: "SQL", filename: "schema.sql", content: allModelsToSql(models, modules) }.
+// AI :   Accept optional modules from StructureBuilder (useStore project.modules) so example-select views emit.
+// AI :   Extend CodeViewerLanguage with "sql" but do NOT push sql onto CODE_VIEWER_LANGUAGES (export tabs).
+// AI :   monacoLanguageId("sql") already falls through to language. Spec: lib/sql-schema.ts header.
 
 export function StructureCodeView({
   models,

@@ -270,6 +270,7 @@ const pipelineModulePatchSchema = z
     examplePreFilterMax: z.number().int().min(1).max(10_000).optional(),
     // AI : TODO (example-select-view) — examplePromptFields: z.array(z.string().max(200)).max(64).optional()
     // AI : TODO (sql-schema) — examplePromptView: z.string().max(MAX_MODULE_STRING_CHARS).optional()
+    // AI :   empty string should be stripped to undefined on save if you normalize elsewhere; schema can allow "".
     webhookUrl: z.string().max(4_096).optional(),
     webhookMethod: z.enum(["POST", "PUT", "PATCH"]).optional(),
     webhookAuthEnv: z.string().max(256).optional(),
@@ -318,6 +319,7 @@ const structureFieldPatchSchema = z
     typeExpr: typeExprPatchSchema.optional(),
     deterministic: z.boolean().optional(),
     testTolerance: z.number().finite().optional(),
+    // AI : TODO (sql-schema) — relation: same discriminatedUnion as seed.ts field.relation
   })
   .strict();
 

@@ -146,7 +146,9 @@ export function ExampleSelectModuleFields({
 
       {/* AI : TODO (example-select-view) — Prompt fields picker (dual of Context field): which keys of each
           candidate go into {example}. Default all. Billed-work pass 1: title, work_description only. */}
-      {/* AI : TODO (sql-schema) — Prompt view SQL editor: CREATE VIEW / SELECT. Same UI contract as field pick. */}
+      {/* AI : TODO (sql-schema) — PipelineField label="Prompt view" hint="SQL SELECT for uncached {example}; empty = all fields; spine unchanged".
+          Textarea value={selected.examplePromptView ?? ""} placeholder="SELECT id, title, work_description FROM job_example"
+          onChange → examplePromptView: empty string becomes undefined. font-mono text-xs min-h-20. Place BEFORE Relevance prompt. */}
       <PipelineField
         label="Relevance prompt"
         hint="schema-first cached prefix · {description} per run · {example} last per candidate"

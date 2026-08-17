@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
 export type CodeViewerLanguage = "python" | "typescript" | "rust" | "go" | "baml"
+// AI : TODO (sql-schema) — add | "sql". CODE_LANG_LABEL.sql = "SQL"; CODE_LANG_LINT_HINT.sql = "annotation".
+// AI :   monacoLanguageId can return "sql". Do NOT push "sql" onto CODE_VIEWER_LANGUAGES (export dialog).
 
 export const CODE_VIEWER_LANGUAGES: CodeViewerLanguage[] = ["python", "typescript", "rust", "go", "baml"]
 

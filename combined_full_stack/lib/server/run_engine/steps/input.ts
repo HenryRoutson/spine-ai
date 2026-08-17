@@ -5,7 +5,7 @@ import {
   isMultiDocInputModule,
 } from "../../../inference-input";
 import { stepEmitsList } from "../../type_expr";
-import { materializeInputDocument, wrapListForOutputStructure } from "../../structure";
+import { materializeInputDocument, pushMaterializedInput, wrapListForOutputStructure } from "../../structure";
 import type { DocId, PipelineModule } from "../../types";
 import { materializeHints, modelById } from "../helpers";
 import { jsonStringifyStepValue } from "../results";
@@ -50,7 +50,7 @@ export async function execInputStep(m: PipelineModule, ctx: RunCtx, log: RunLogg
   const inputPreviewItems: { label: string; text: string }[] = [];
   for (let i = 0; i < docIds.length; i++) {
     const docId = docIds[i]!;
-    items.push(await materializeDoc(docId, i === 0));
+    pushMaterializedInput(items, await materializeDoc(docId, i === 0), stepEmitsList(m));
     const docName = store.docs().find((d) => d.id === docId)?.name ?? docId;
     inputPreviewItems.push({
       label: `${docName} (${i + 1}/${docIds.length})`,

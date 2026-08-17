@@ -158,6 +158,8 @@ pub async fn select_relevant(
     description: &str,
     template: &str,
 ) -> anyhow::Result<Vec<Value>> {
+    // AI : TODO (sql-schema) — add prompt_columns: &[String]. Project object keys before to_string_pretty.
+    // AI :   Kept Value::Object still the original map + selection_reason. Replace {input_to_prompt} too.
     let schema = relevance_schema();
     let mut out = Vec::new();
     for item in items {

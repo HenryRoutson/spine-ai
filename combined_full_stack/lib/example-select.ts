@@ -6,8 +6,12 @@ import type { TypeExpr } from "@/lib/server/type_expr"
 // AI :   add the dual for {example} (examplePromptFields). {passthrough} is not a template var.
 // AI : TODO (example-select-view) — billed_work Select Relevant Jobs: prompt only title + work_description;
 // AI :   billed_items WI-xxxxx add uncached tokens and no pass-1 signal. Pass 2 {example} is a catalog row — leave it.
-// AI : TODO (sql-schema) — that projection is CREATE VIEW job_example_prompt AS SELECT id, title, work_description FROM job_example;
-// AI :   billed_line stays a table; join only in pass-2/draft views. DDL readable without a SQLite process.
+// AI : TODO (sql-schema) — implement examplePromptColumns(m) + projectExampleForPrompt(item, cols) here
+// AI :   (or import from lib/sql-schema.ts). Columns from examplePromptView SELECT list, else examplePromptFields.
+// AI :   Call from run_engine/steps/example_select.ts before fillExampleSelectPrompt. Kept rows stay full objects
+// AI :   (buildExampleSelectVerdicts). Also replace {input_to_prompt} in fillExampleSelectPrompt.
+// AI :   Duplicate a tiny project helper inside export_runtime ts/py/go/rs (copied standalone — no lib import).
+// AI :   Spec: lib/sql-schema.ts header.
 
 export const DEFAULT_EXAMPLE_SELECT_PROMPT = `Find useful examples to help with this task.
 

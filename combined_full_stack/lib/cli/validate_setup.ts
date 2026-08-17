@@ -8,6 +8,20 @@ import {
 } from "@/lib/inference-setup-files"
 import { loadProjectContext, readTextFile, type ProjectContext } from "@/lib/cli/project_context"
 import type { CliCommandResult, CliIssue } from "@/lib/cli/types"
+import { InputType } from "@/lib/types"
+
+function toCliIssues(issues: SetupFileIssue[]): CliIssue[] {
+  return issues.map((i) => ({ level: i.level, where: i.where, message: i.message }))
+}
+
+function jsonContentByName(ctx: ProjectContext): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const spec of ctx.seed.docSpecs) {
+    if (spec.type !== InputType.Json) continue
+    out[spec.name] = readTextFile(spec.path)
+  }
+  return out
+}
 
 function toCliIssues(issues: SetupFileIssue[]): CliIssue[] {
   return issues.map((i) => ({ level: i.level, where: i.where, message: i.message }))
@@ -24,7 +38,9 @@ export function validateSetupCommand(ctx: ProjectContext, setupPath: string): Cl
       data: { projectName: ctx.project.name, setupFile: abs },
     }
   }
-  const issues = toCliIssues(validateInferenceSetupFile(parsed.setup, ctx.project, ctx.docRefs))
+  const issues = toCliIssues(
+    validateInferenceSetupFile(parsed.setup, ctx.project, ctx.docRefs, jsonContentByName(ctx)),
+  )
   return {
     ok: !issues.some((i) => i.level === "error"),
     command: "validate setup",

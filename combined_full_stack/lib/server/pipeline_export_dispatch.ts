@@ -426,7 +426,9 @@ const emitExampleSelect: Record<ExportLang, StepBodyEmitter> = {
       exportComment(TS, exampleSelectComment(outName)),
       `const description = ${generateExampleContextExprTs(ctxLabel, ctx.m.exampleContextField)};`,
       // AI : TODO (example-select-view) — export must project each item for the prompt and still return full rows.
-      // AI : TODO (sql-schema) — export SELECT from the prompt view; return rows from the source table.
+      // AI : TODO (sql-schema) — const cols = examplePromptColumns(ctx.m); if cols?.length pass as 5th arg
+      // AI :   selectRelevant(items, description, template, reason, cols) else keep 3/4-arg. Same for py/go/rs below.
+      // AI :   Import examplePromptColumns from @/lib/sql-schema in this dispatch file (host, not the copied runtime).
       "const items = exampleSelectItems(input);",
       `const template = ${JSON.stringify(prompt)};`,
       `return (await ${selectCall}) as ${ctx.outType};`,
