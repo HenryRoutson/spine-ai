@@ -1,9 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronDown } from "lucide-react"
+import { IoPager } from "@/components/logging/io-pager"
 import { cn } from "@/lib/utils"
-import type { InputDescriptionCheckResult, PipelineModule, RunStep } from "@/lib/types"
+import type { InputDescriptionCheckItem, InputDescriptionCheckResult, PipelineModule, RunStep } from "@/lib/types"
 import {
   LOGGING_SETTINGS_CHANGED_EVENT,
   readHideInputDescriptionsDefault,
@@ -28,6 +29,30 @@ export function moduleInputDescription(m: Pick<PipelineModule, "inputDescription
   return m.inputDescription?.trim() || undefined
 }
 
+function CheckMatchLine({ matches, reason }: { matches: boolean; reason: string }) {
+  return (
+    <p
+      className={cn(
+        "mt-1 rounded border px-2 py-1.5 font-mono text-[10px] leading-relaxed",
+        matches
+          ? "border-border bg-muted/20 text-muted-foreground"
+          : "border-destructive/40 bg-destructive/5 text-destructive",
+      )}
+    >
+      <span className="font-medium">{matches ? "matches: true" : "matches: false"}</span>
+      {reason ? ` — ${reason}` : ""}
+    </p>
+  )
+}
+
+function itemCheckReason(check: InputDescriptionCheckResult, item?: InputDescriptionCheckItem): string {
+  const rejected = check.matches === false
+  const failed = check.items?.find((entry) => !entry.matches)
+  if (!rejected) return item?.reason.trim() ?? ""
+  if (item && !item.matches) return item.reason.trim() || check.reason.trim()
+  return check.reason.trim() || failed?.reason.trim() || ""
+}
+
 function InputDescriptionCheckPanel({
   check,
   forceVisible,
@@ -36,64 +61,31 @@ function InputDescriptionCheckPanel({
   forceVisible?: boolean
 }) {
   const listItems = check.items?.length ? check.items : undefined
-  const [itemIndex, setItemIndex] = useState(0)
-
-  useEffect(() => {
-    setItemIndex(0)
-  }, [check])
-
-  const activeItem = listItems?.[itemIndex]
-  const failedItems = listItems?.filter((item) => !item.matches) ?? []
   const rejected = check.matches === false
-  const reason = (() => {
-    if (!rejected) return activeItem?.reason.trim() ?? ""
-    if (activeItem && !activeItem.matches) return activeItem.reason.trim() || check.reason.trim()
-    return check.reason.trim() || failedItems[0]?.reason.trim() || ""
-  })()
+
+  if (!listItems) {
+    if (!rejected) return null
+    return <CheckMatchLine matches={false} reason={check.reason.trim()} />
+  }
 
   return (
-    <>
-      {listItems && listItems.length > 1 && (
-        <div className="mt-1 flex items-center justify-between gap-2">
-          <button
-            type="button"
-            disabled={itemIndex <= 0}
-            onClick={() => setItemIndex((i) => Math.max(0, i - 1))}
-            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border text-muted-foreground hover:text-foreground disabled:opacity-30"
-            aria-label="Previous validation item"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-          </button>
-          <span className="min-w-0 flex-1 truncate text-center font-mono text-[10px] text-muted-foreground">
-            {activeItem?.label ?? `item ${itemIndex + 1}`}{" "}
-            <span className="tabular-nums">
-              ({itemIndex + 1}/{listItems.length})
-            </span>
-          </span>
-          <button
-            type="button"
-            disabled={itemIndex >= listItems.length - 1}
-            onClick={() => setItemIndex((i) => Math.min(listItems.length - 1, i + 1))}
-            className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-border text-muted-foreground hover:text-foreground disabled:opacity-30"
-            aria-label="Next validation item"
-          >
-            <ChevronRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
-      {rejected && (
-        <p className="mt-1 rounded border border-destructive/40 bg-destructive/5 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-destructive">
-          <span className="font-medium">matches: false</span>
-          {reason ? ` — ${reason}` : ""}
-        </p>
-      )}
-      {!rejected && listItems && listItems.length > 1 && (forceVisible || activeItem) && (
-        <p className="mt-1 rounded border border-border bg-muted/20 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-muted-foreground">
-          <span className="font-medium">matches: true</span>
-          {reason ? ` — ${reason}` : ""}
-        </p>
-      )}
-    </>
+    <div className="mt-1">
+      <IoPager
+        items={listItems.map((item, i) => ({
+          label: item.label?.trim() || `item ${i + 1}`,
+          text: item.reason,
+        }))}
+        renderItem={(_, i) => {
+          const item = listItems[i]!
+          const reason = itemCheckReason(check, item)
+          if (rejected) return <CheckMatchLine matches={false} reason={reason} />
+          if (listItems.length > 1 && (forceVisible || item)) {
+            return <CheckMatchLine matches={true} reason={reason} />
+          }
+          return null
+        }}
+      />
+    </div>
   )
 }
 
@@ -160,12 +152,9 @@ export function StepInputDescription({
           {text}
         </p>
       )}
-      {rejected && !showCheckPanel && check?.reason.trim() && (
-        <p className="mt-1 rounded border border-destructive/40 bg-destructive/5 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-destructive">
-          <span className="font-medium">matches: false</span>
-          {` — ${check.reason.trim()}`}
-        </p>
-      )}
+      {rejected && !showCheckPanel && check?.reason.trim() ? (
+        <CheckMatchLine matches={false} reason={check.reason.trim()} />
+      ) : null}
     </div>
   )
 }

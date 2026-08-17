@@ -6,6 +6,8 @@ export const BUILTIN_QUOTE_SPAN_ALIAS_ID = "ta_builtin_quote_span" as TypeAliasI
 export const BUILTIN_TEXT_QUOTE_ALIAS_ID = "ta_builtin_text_quote" as TypeAliasId;
 
 // AI : platform quote types — LLM wire string vs linked span struct; injected like Document, not user-editable.
+// AI : TODO (sql-schema) — quote_string_t = TEXT the LLM emits; quote_span_t = resolved FK+offsets;
+// AI :   text_quote_t = (text, doc_id, start, end). Link Quotes is UPDATE/INSERT that attaches the FK.
 export const BUILTIN_TYPE_ALIASES: TypeAlias[] = [
   {
     id: BUILTIN_QUOTE_STRING_ALIAS_ID,

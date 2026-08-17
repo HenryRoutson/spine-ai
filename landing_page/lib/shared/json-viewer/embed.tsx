@@ -4,7 +4,13 @@
 
 import { useEffect, useRef } from "react"
 import type { JsonViewerHumanViewId, JsonViewerSyntaxThemeId } from "./types"
-import { DEFAULT_JSON_VIEWER_SYNTAX_THEME } from "./types"
+import {
+  DEFAULT_JSON_VIEWER_HUMAN_VIEW,
+  DEFAULT_JSON_VIEWER_SYNTAX_THEME,
+  JSON_VIEWER_MESSAGE_FULLSCREEN,
+  JSON_VIEWER_MESSAGE_LOAD,
+  JSON_VIEWER_MESSAGE_SETTINGS,
+} from "./types"
 
 export type JsonViewerEmbedProps = {
   json: string
@@ -41,14 +47,14 @@ export function JsonViewerEmbed({
     target.postMessage(payload, window.location.origin)
   }
 
-  const resolvedDefaultView = defaultView ?? readDefaultView?.() ?? "tree"
+  const resolvedDefaultView = defaultView ?? readDefaultView?.() ?? DEFAULT_JSON_VIEWER_HUMAN_VIEW
   const resolvedSyntaxTheme =
     syntaxTheme ?? readSyntaxTheme?.() ?? DEFAULT_JSON_VIEWER_SYNTAX_THEME
   const showFullscreen = !!onFullscreen
 
   function sendLoad() {
     post({
-      type: "json-viewer:load",
+      type: JSON_VIEWER_MESSAGE_LOAD,
       json,
       defaultView: resolvedDefaultView,
       syntaxTheme: resolvedSyntaxTheme,
@@ -64,8 +70,8 @@ export function JsonViewerEmbed({
     if (!onSettingsEventName) return
     const onSettings = () => {
       post({
-        type: "json-viewer:settings",
-        defaultView: defaultView ?? readDefaultView?.() ?? "tree",
+        type: JSON_VIEWER_MESSAGE_SETTINGS,
+        defaultView: defaultView ?? readDefaultView?.() ?? DEFAULT_JSON_VIEWER_HUMAN_VIEW,
         syntaxTheme: syntaxTheme ?? readSyntaxTheme?.() ?? DEFAULT_JSON_VIEWER_SYNTAX_THEME,
         showFullscreen: !!onFullscreenRef.current,
       })
@@ -79,7 +85,7 @@ export function JsonViewerEmbed({
     const onMessage = (e: MessageEvent) => {
       if (e.origin !== window.location.origin) return
       if (e.source !== iframeRef.current?.contentWindow) return
-      if (!e.data || e.data.type !== "json-viewer:fullscreen") return
+      if (!e.data || e.data.type !== JSON_VIEWER_MESSAGE_FULLSCREEN) return
       onFullscreenRef.current?.()
     }
     window.addEventListener("message", onMessage)

@@ -67,8 +67,9 @@ export function buildFieldTypesPromptBlock(): string {
 export function buildInputTypesPromptBlock(): string {
   return `${INPUT_TYPES.map((t) => `- ${t.value}: ${t.label}`).join("\n")}
 JSON-native (direct parse in input when ONLY these types are selected): excel, json
-Needs LLM conversion (auto locked "Parse to structure" step when structureOut is not Document): pdf, word, text, web, image
-Mixed selections (e.g. pdf + excel) always use Document on the input step plus the auto LLM convert step when a structure is selected.`;
+Plain text (already instantiated Document.content; LLM parse only when structureOut is not Document): text, markdown, latex
+Needs convert-to-text (auto locked "Convert to text" step; then "Parse to structure" if structureOut is not Document): pdf, word, image, web
+Mixed selections (e.g. pdf + excel) always use Document on the input step plus convert-to-text when any binary type is selected. Do NOT emit Convert to text or Parse to structure yourself.`;
 }
 
 export function buildModelOptionsPromptBlock(): string {
@@ -107,7 +108,7 @@ export function buildStructureRulesPromptBlock(): string {
 /** AI : maps server validation messages to fixes — shown when proposal materialization fails. */
 export function buildPipelineValidationErrorsPromptBlock(): string {
   return `How pipeline validation works (your proposal is checked before the user approves):
-1. The server materializes your modules array into real steps (auto-inserts Parse-to-structure, Link Quotes, combine side inputs).
+1. The server materializes your modules array into real steps (auto-inserts Convert to text, Parse-to-structure, Link Quotes, combine side inputs).
 2. It walks the linear spine left-to-right and flags I/O mismatches, missing notes, duplicate labels, and compile errors.
 3. If invalid, you receive the exact error text and must return a FULL replacement modules array (modulePatch null) — up to 2 automatic retries.
 
@@ -169,7 +170,8 @@ Before returning modules, walk the chain: for each adjacent pair, confirm previo
 export function buildMultiDocumentWorkflowPromptBlock(): string {
   return `Multi-document inputs and map-reduce:
 - One input step per kind of document (e.g. "Receipts"). Do NOT create hundreds of separate input steps.
-- Non-JSON input types (pdf, word, text, web, image) always structureOut Document on the input step — a locked "Parse to structure" LLM step is auto-inserted when you pick a target structure. Do NOT emit that LLM yourself.
+- Non-JSON input types always structureOut Document on the input step. PDF/word/image/web get a locked "Convert to text" step (parser or OCR, cached per doc). A locked "Parse to structure" LLM step is auto-inserted when you pick a target structure that is not Document. Do NOT emit those auto steps yourself.
+- Text/markdown/latex are already text — no Convert to text step. Parse to structure still auto-inserts when structureOut is not Document.
 - Excel/json-only inputs may structureOut a typed model directly (JSON parse in the input step) — no auto LLM step.
 - When many files of the same kind upload into one slot, use list[structureOut] on that input ("Emit list output"). Without it, inference only allows one file and the spine stays single Document.
 - Set inputMinCount: 2+ when the task implies batch uploads (hundreds, many, each, all).
@@ -183,7 +185,7 @@ export function buildMultiDocumentWorkflowPromptBlock(): string {
 - Every structureIn / structureOut name MUST appear in your models array — do not reference structures you forgot to define.
 - llm-batch requires list[structureIn] on the spine — the step before it must emit a list (often the input with list[Document], or custom-code with list[Row]).
 - Two different document kinds (policy + expense report) = two input steps + combine — not the same as many receipts in one slot.
-- Reference: Batch LLM Example seed (Wrap → List → llm-batch → Unwrap); Example Select Demo (context label + example-select → draft); homework grader Student Submissions (list[Document] input).`;
+- Reference: Batch LLM Example seed (Wrap → List → llm-batch → Unwrap); Example Select Demo (context label + example-select → draft); homework grader Student Submissions (list[Document] input); Web Research Scraper (n8n-shaped JSON hits → Python scrape → llm-batch extract).`;
 }
 
 /** AI : two (or more) document KINDS — combine merges pipeline state with a new upload. */
@@ -278,7 +280,7 @@ ${buildLlmCallStrategyPromptBlock()}
 - assemble: set structureOut (or leave unset for auto-derived product) and assembleBindings mapping each field to spine, a prior step label, or a path into either. At least one binding must use spine.
 - parallel: fixed author-time branches (field + prompt + structureOut each); shared spine input; server joins into one auto product.
 - llm steps with tuple[text,quote] outputs get a Link Quotes step auto-inserted after them — do NOT emit quote steps yourself.
-- Non-JSON inputs with a typed structureOut get a locked "Parse to structure" LLM step auto-inserted after the input — do NOT emit it yourself.
+- PDF/word/image/web inputs get a locked Convert to text step auto-inserted after the input (parser or OCR). Omit it from modules JSON and seeds — do NOT emit it yourself. A locked Parse to structure LLM step is auto-inserted when structureOut is not Document — do NOT emit that either.
 - transform reshapes upstream data. When a list feeds a single-object output, include a list field on that structure (prefer list[model] ref = input structure) so transform can wrap items automatically, or use custom-code.
 - Add output steps wherever a named artifact snapshot is needed — pipelines may have several.
 - Use model ids from:\n${buildModelOptionsPromptBlock()}

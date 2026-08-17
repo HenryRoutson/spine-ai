@@ -428,6 +428,7 @@ function expandModuleSpecs(
 ): PipelineModule[] {
   const out: PipelineModule[] = [];
   for (const spec of specs) {
+    if ((spec as { kind?: string }).kind === ModuleKind.DocToText) continue;
     if (spec.kind === "combine") {
       // AI : skip auto side input when agent already emitted an input step immediately before combine.
       const sideInputPresent = out[out.length - 1]?.kind === ModuleKind.Input;

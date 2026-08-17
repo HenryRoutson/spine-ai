@@ -23,6 +23,9 @@ export function fillExampleSelectPrompt(
   description: string,
   example: unknown,
 ): string {
+  // AI : TODO (example-select-view) — stringify the prompt view (examplePromptFields / template), not the
+  // AI :   full spine item. Opaque nested FKs (billed_items.work_item_id) must not land in the uncached suffix.
+  // AI : TODO (sql-schema) — example text is the view row (SELECT); stringify JSON or format columns.
   const exampleText =
     typeof example === "string" ? example : JSON.stringify(example, null, 2)
   return template

@@ -58,7 +58,7 @@ function buildExpectedOutputs(project: Project): Record<string, unknown> {
   if (Object.keys(golden).length) {
     // AI : input steps log doc refs; combine logs a field summary — same data, not scored in tests.
     const unpinnable = new Set(
-      project.modules.filter((m) => m.kind === "input" || m.kind === "combine").map((m) => m.label.trim()),
+      project.modules.filter((m) => m.kind === "input" || m.kind === "combine" || m.kind === "doc-to-text").map((m) => m.label.trim()),
     );
     return Object.fromEntries(Object.entries(golden).filter(([label]) => !unpinnable.has(label.trim())));
   }

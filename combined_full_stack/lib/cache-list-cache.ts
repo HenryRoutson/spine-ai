@@ -22,6 +22,7 @@ export type CacheEntryDetail = CacheEntryRow & {
   outputJson: string
   docId?: DocId
   inputPreviewItems?: import("@/lib/types").InputPreviewItem[]
+  outputPreviewItems?: import("@/lib/types").InputPreviewItem[]
 }
 
 type cache_list_key_string = string

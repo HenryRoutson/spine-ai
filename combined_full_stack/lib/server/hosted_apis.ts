@@ -10,7 +10,7 @@ import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { dataDir } from "./config";
 import { createAdminClient } from "./supabase_admin";
 import { hashContent, type Store } from "./store";
-import { migrateProjectModules } from "./validity";
+import { migrateProjectModules, projectWithAuthoredModules } from "./validity";
 import { isMissingSchemaError } from "./supabase_store";
 import { isLocalDevMode, LOCAL_DEV_USER_ID, type user_id_string } from "./require_auth";
 import {
@@ -281,7 +281,7 @@ export async function publishHostedApi(input: PublishHostedApiInput): Promise<Pu
   assertValidBillablePricing(callerFundsHostedApi(fundingMode), billingMultiple, flatFeeCents, "API pricing");
 
   const { key, prefix, hash } = generateHostedApiKey();
-  const snapshot = migrateProjectModules(structuredClone(input.project));
+  const snapshot = projectWithAuthoredModules(migrateProjectModules(structuredClone(input.project)));
   const defaultDocs: SharedLinkDefaultDoc[] = [];
   mkdirSync(defaultDocsDir(id), { recursive: true });
 

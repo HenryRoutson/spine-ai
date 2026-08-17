@@ -19,11 +19,12 @@ function moduleStepEvents(
   before: PipelineModule[],
   after: PipelineModule[],
 ) {
-  const beforeIds = new Set(before.map((m) => m.id));
-  const afterIds = new Set(after.map((m) => m.id));
+  const beforeIds = new Set(before.filter((m) => m.kind !== "doc-to-text").map((m) => m.id));
+  const afterIds = new Set(after.filter((m) => m.kind !== "doc-to-text").map((m) => m.id));
   const events = [];
 
   for (const m of after) {
+    if (m.kind === "doc-to-text") continue;
     if (!beforeIds.has(m.id)) {
       events.push({
         userId: userId as user_id_string,
@@ -35,6 +36,7 @@ function moduleStepEvents(
     }
   }
   for (const m of before) {
+    if (m.kind === "doc-to-text") continue;
     if (!afterIds.has(m.id)) {
       events.push({
         userId: userId as user_id_string,
@@ -46,6 +48,7 @@ function moduleStepEvents(
     }
   }
   for (const m of after) {
+    if (m.kind === "doc-to-text") continue;
     const prev = before.find((x) => x.id === m.id);
     if (!prev) continue;
     if (JSON.stringify(prev) !== JSON.stringify(m)) {

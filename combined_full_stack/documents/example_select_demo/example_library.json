@@ -1,24 +1,37 @@
-{
-  "examples": [
-    {
-      "id": "ex-bathroom-leak",
-      "title": "Upstairs bathroom leak — ceiling collapse below",
-      "scope_text": "1. Isolate water supply to upstairs bathroom.\n2. Remove collapsed plasterboard ceiling in kitchen (approx. 4m²).\n3. Dry structural timber with dehumidifiers for 5–7 days; monitor moisture readings.\n4. Replace damaged ceiling joists where deflection exceeds 5mm.\n5. Re-sheet ceiling, stop, and paint to match adjacent areas."
-    },
-    {
-      "id": "ex-roof-storm",
-      "title": "Roof storm damage — tile replacement",
-      "scope_text": "1. Erect edge protection to roof perimeter.\n2. Replace broken roof tiles (approx. 12 nr).\n3. Reseal ridge capping and valley flashings.\n4. Internal: patch ceiling stains only where roof leak was active."
-    },
-    {
-      "id": "ex-kitchen-reno",
-      "title": "Kitchen renovation — cabinetry only",
-      "scope_text": "1. Remove existing kitchen cabinetry and benchtops.\n2. Supply and install new flat-pack cabinetry per plan.\n3. Connect plumbing and electrical by licensed trades.\n4. No structural or ceiling works included."
-    },
-    {
-      "id": "ex-cupping-floor",
-      "title": "Timber floor cupping after slow leak",
-      "scope_text": "1. Confirm subfloor moisture below 12% before floor works.\n2. Sand and recoat cupped timber boards in affected zone (approx. 12m²).\n3. Replace boards that remain crowned after drying period.\n4. Coordinate with ceiling repairs above if leak source not yet rectified."
-    }
-  ]
-}
+[
+  {
+    "id": "ex-bathroom-leak",
+    "title": "Upstairs bathroom leak — ceiling collapse below",
+    "scope_text": "1. Isolate water supply to upstairs bathroom.\n2. Remove collapsed plasterboard ceiling in kitchen (approx. 4m²).\n3. Dry structural timber with dehumidifiers for 5–7 days; monitor moisture readings.\n4. Replace damaged ceiling joists where deflection exceeds 5mm.\n5. Re-sheet ceiling, stop, and paint to match adjacent areas."
+  },
+  {
+    "id": "ex-roof-storm",
+    "title": "Roof storm damage — tile replacement",
+    "scope_text": "1. Erect edge protection to roof perimeter.\n2. Replace broken roof tiles (approx. 12 nr).\n3. Reseal ridge capping and valley flashings.\n4. Internal: patch ceiling stains only where roof leak was active."
+  },
+  {
+    "id": "ex-kitchen-reno",
+    "title": "Kitchen renovation — cabinetry only",
+    "scope_text": "1. Remove existing kitchen cabinetry and benchtops.\n2. Supply and install new flat-pack cabinetry per plan.\n3. Connect plumbing and electrical by licensed trades.\n4. No structural or ceiling works included."
+  },
+  {
+    "id": "ex-cupping-floor",
+    "title": "Timber floor cupping after slow leak",
+    "scope_text": "1. Confirm subfloor moisture below 12% before floor works.\n2. Sand and recoat cupped timber boards in affected zone (approx. 12m²).\n3. Replace boards that remain crowned after drying period.\n4. Coordinate with ceiling repairs above if leak source not yet rectified."
+  },
+  {
+    "id": "ex-door-hinge",
+    "title": "Front door — sagging hinge replacement",
+    "scope_text": "1. Remove existing front door from frame.\n2. Replace worn butt hinges (3 nr) with stainless steel 100mm hinges.\n3. Plane door edge if required to restore even margins.\n4. Refit door, adjust latch, and confirm swing clearance.\n5. No wet works, ceiling, or flooring included."
+  },
+  {
+    "id": "ex-fence-palings",
+    "title": "Side boundary fence — paling replacement",
+    "scope_text": "1. Remove rotten palings along side boundary (approx. 8 lm).\n2. Supply and fix treated pine palings to existing rails.\n3. Replace one split rail as required.\n4. Stain new palings to match remaining fence.\n5. No internal, plumbing, or roof works."
+  },
+  {
+    "id": "ex-flyscreen",
+    "title": "Bedroom window — flyscreen respline",
+    "scope_text": "1. Remove existing flyscreen from bedroom window.\n2. Respline new fibreglass mesh to aluminium frame.\n3. Refit screen and confirm latch operation.\n4. No glass, framing, or weatherseal replacement."
+  }
+]

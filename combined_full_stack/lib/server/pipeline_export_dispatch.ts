@@ -41,6 +41,10 @@ import {
   generateInputStepBodyPy,
   generateInputStepBodyRust,
   generateInputStepBodyTs,
+  generateDocToTextStepBodyGo,
+  generateDocToTextStepBodyPy,
+  generateDocToTextStepBodyRust,
+  generateDocToTextStepBodyTs,
   generateMergeStepBodyGo,
   generateMergeStepBodyPy,
   generateMergeStepBodyRust,
@@ -421,7 +425,9 @@ const emitExampleSelect: Record<ExportLang, StepBodyEmitter> = {
     return [
       exportComment(TS, exampleSelectComment(outName)),
       `const description = ${generateExampleContextExprTs(ctxLabel, ctx.m.exampleContextField)};`,
-      "const items = Array.isArray(input) ? input : [input];",
+      // AI : TODO (example-select-view) — export must project each item for the prompt and still return full rows.
+      // AI : TODO (sql-schema) — export SELECT from the prompt view; return rows from the source table.
+      "const items = exampleSelectItems(input);",
       `const template = ${JSON.stringify(prompt)};`,
       `return (await ${selectCall}) as ${ctx.outType};`,
     ].join("\n");
@@ -430,13 +436,10 @@ const emitExampleSelect: Record<ExportLang, StepBodyEmitter> = {
     const prompt = ctx.m.prompt ?? DEFAULT_EXAMPLE_PROMPT;
     const ctxLabel = ctx.m.exampleContextLabel ?? DEFAULT_EXAMPLE_CTX;
     const outName = outLabel(ctx);
-    const itemsLine = ctx.inType.startsWith("list[")
-      ? "items = input"
-      : "items = input if isinstance(input, list) else [input]";
     return [
       exportComment(PY, exampleSelectComment(outName)),
       ...generateExampleContextLinesPy(ctxLabel, ctx.m.exampleContextField),
-      itemsLine,
+      "items = example_select_items(input)",
       `template = ${exportStringLiteral(prompt)}`,
       pyCast(ctx, "await select_relevant(items, description, template)"),
     ].join("\n");
@@ -498,13 +501,9 @@ const emitExampleSelect: Record<ExportLang, StepBodyEmitter> = {
       `if err != nil {`,
       `\treturn ${zero}, err`,
       `}`,
-      `var items []json.RawMessage`,
-      `if len(inJSON) > 0 && inJSON[0] == '[' {`,
-      `\tif err := json.Unmarshal(inJSON, &items); err != nil {`,
-      `\t\treturn ${zero}, err`,
-      `\t}`,
-      `} else {`,
-      `\titems = []json.RawMessage{inJSON}`,
+      `items, err := exampleSelectItems(inJSON)`,
+      `if err != nil {`,
+      `\treturn ${zero}, err`,
       `}`,
       `template := ${exportStringLiteral(prompt)}`,
       `selected, err := selectRelevant(items, description, template)`,
@@ -537,7 +536,7 @@ const emitExampleSelect: Record<ExportLang, StepBodyEmitter> = {
       pointer === "None" ? `let picked = &ctx_value;` : `let picked = ctx_value.pointer(${pointer}).unwrap_or(&ctx_value);`,
       `let description = if let Some(s) = picked.as_str() { s.to_string() } else { serde_json::to_string_pretty(picked)? };`,
       "let input_value = serde_json::to_value(&input)?;",
-      "let items = if let Value::Array(arr) = &input_value { arr.clone() } else { vec![input_value] };",
+      "let items = example_select_items(&input_value);",
       `let template = ${exportStringLiteral(prompt)};`,
       "let selected = select_relevant(items, &description, &template).await?;",
       "let mut out = Vec::new();",
@@ -671,6 +670,12 @@ export const STEP_BODY: Record<ModuleKind, Record<ExportLang, StepBodyEmitter>> 
     py: (ctx) => generateInputStepBodyPy(ctx.m, ctx.outType),
     go: (ctx) => generateInputStepBodyGo(ctx.m, ctx.outType),
     rs: (ctx) => generateInputStepBodyRust(ctx.m, ctx.outType),
+  },
+  [ModuleKind.DocToText]: {
+    ts: (ctx) => generateDocToTextStepBodyTs(ctx.m),
+    py: (ctx) => generateDocToTextStepBodyPy(ctx.m),
+    go: (ctx) => generateDocToTextStepBodyGo(ctx.m, ctx.outType),
+    rs: (ctx) => generateDocToTextStepBodyRust(ctx.m),
   },
   [ModuleKind.Llm]: emitLlm,
   [ModuleKind.LlmBatch]: emitLlmBatch,

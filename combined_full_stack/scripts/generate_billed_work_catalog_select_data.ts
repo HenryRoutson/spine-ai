@@ -21,6 +21,9 @@ type JobExample = {
   id: string;
   title: string;
   work_description: string;
+  // AI : TODO (example-select-view) — keep billed_items on the library/spine; do not inline catalog rows here.
+  // AI : TODO (type-join) — work_item_id is fk → WorkItem.id; expand only as a prompt/context view (pass 2 / draft).
+  // AI : TODO (sql-schema) — job_example + billed_line (job_id FK, work_item_id FK) + work_item. Nested JSON is a view.
   billed_items: { work_item_id: string; quantity: number }[];
 };
 
@@ -387,14 +390,10 @@ function main(): void {
     }
   }
 
-  writeJson("work_item_catalog.json", { items });
-  writeJson("job_example_library.json", { examples });
+  writeJson("work_item_catalog.json", items);
+  writeJson("job_example_library.json", examples);
   writeFileSync(join(OUT_DIR, "billed_work_description.txt"), `${WORK_DESCRIPTION}\n`);
   console.log("wrote billed_work_description.txt");
-
-  writeJson("expected/normalize_case.json", { description: WORK_DESCRIPTION });
-  writeJson("expected/parse_job_examples.json", examples);
-  writeJson("expected/parse_work_items.json", items);
 
   console.log(`catalog: ${items.length} items`);
   console.log(`examples: ${examples.length} jobs`);

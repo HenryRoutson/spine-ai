@@ -7,11 +7,12 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
-import { AUTO_STRUCTURE_PARSE_EXPLAINER, isAutoStructureParseStep } from "@/lib/structure-parse-steps"
+import { AUTO_DOC_TO_TEXT_EXPLAINER, AUTO_STRUCTURE_PARSE_EXPLAINER, isAutoDocToTextStep, isAutoStructureParseStep } from "@/lib/structure-parse-steps"
+import { inputModuleNeedsOcr, upstreamInputModule } from "@/lib/inference-input"
 import { isExampleSelectKind } from "@/lib/example-select"
 import { isLlmKind, isMergeModuleKind, usesPassthroughStructure } from "@/lib/module-kinds"
 import { formatModuleSpineIn, formatModuleSpineOut } from "@/lib/spine-type"
-import { MODULE_META, ModuleKind, type PipelineModule, type StructureModel, type TypeAlias } from "@/lib/types"
+import { MODULE_META, ModuleKind, DOC_PARSE_MODES, docParseModeForModule, type PipelineModule, type StructureModel, type TypeAlias } from "@/lib/types"
 import {
   InvalidKind,
   IoMismatchFixKind,
@@ -34,6 +35,7 @@ import {
   StaticValue,
   StructureModelSelect,
   IoMismatchFieldFix,
+  OcrExtraFields,
   useLlmSchemaPreview,
 } from "@/components/pipeline-fields/shared"
 import { InputModuleFields } from "@/components/pipeline-fields/input-fields"
@@ -116,6 +118,76 @@ export function PipelineModuleFields({
             </StaticValue>
           )}
         </PipelineField>
+      </div>
+    )
+  }
+
+  if (isAutoDocToTextStep(selected)) {
+    const sourceInput = upstreamInputModule(selected, modules)
+    const ocrOk = sourceInput ? inputModuleNeedsOcr(sourceInput) : true
+    return (
+      <div className="space-y-3">
+        <InspectorCollapsibleSection title="Overview">
+          <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
+            {AUTO_DOC_TO_TEXT_EXPLAINER}
+          </p>
+        </InspectorCollapsibleSection>
+        <PipelineField label="Structure">
+          <StaticValue mono>
+            <StructureLink models={models} structureId={selected.inStructureId} />
+            <span className="text-muted-foreground"> → </span>
+            <StructureLink models={models} structureId={selected.outStructureId} />
+            <span className="mt-1 block font-mono text-[10px] text-muted-foreground">
+              content None → instantiated text · cached per document
+            </span>
+          </StaticValue>
+        </PipelineField>
+        {ocrOk && (
+          <PipelineField
+            label="Conversion"
+            hint={edit ? "Built-in parser, or DeepSeek / vision OCR for scans. Original bytes stay in storage — not on the spine." : undefined}
+          >
+            {edit ? (
+              <div className="space-y-3 rounded-md border border-dashed border-chart-3/40 bg-chart-3/5 p-3">
+                <div className="flex flex-wrap gap-1.5">
+                  {DOC_PARSE_MODES.map((mode) => {
+                    const active = docParseModeForModule(selected) === mode.value
+                    return (
+                      <button
+                        key={mode.value}
+                        type="button"
+                        onClick={() =>
+                          onUpdate({
+                            useOcr: mode.value === "llm" ? true : undefined,
+                            model: mode.value === "llm" ? selected.model ?? "gemini-3-flash" : undefined,
+                            prompt: mode.value === "llm" ? selected.prompt : undefined,
+                          })
+                        }
+                        className={cn(
+                          "rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
+                          active
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:border-muted-foreground/40",
+                        )}
+                        title={mode.hint}
+                      >
+                        {mode.label}
+                      </button>
+                    )
+                  })}
+                </div>
+                {docParseModeForModule(selected) === "llm" && (
+                  <OcrExtraFields selected={selected} edit={!!edit} onUpdate={onUpdate} />
+                )}
+              </div>
+            ) : (
+              <StaticValue>
+                {DOC_PARSE_MODES.find((m) => m.value === docParseModeForModule(selected))?.label ??
+                  "Built-in parser"}
+              </StaticValue>
+            )}
+          </PipelineField>
+        )}
       </div>
     )
   }

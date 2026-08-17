@@ -39,7 +39,9 @@ export function isPdfDoc(doc: DocMeta, hasPdfFile = false): boolean {
   return doc?.name.toLowerCase().endsWith(".pdf") ?? false
 }
 
-// AI : "parser" = built-in PDF.js / upload text (docs.content). "vision" = cached OpenRouter OCR.
+// AI : "parser" = built-in PDF.js / upload text (docs.content). "vision" = cached OCR text.
+// AI : TODO ocr-boxes — when convert-to-text stores OcrBox[] (lib/ocr-boxes.ts), append a boxes tab
+// AI :   for pdf/image and overlay on the original-bytes blob (no extra encoded copies).
 export function docViewerTabs(
   doc: DocMeta,
   hasPdfFile: boolean,

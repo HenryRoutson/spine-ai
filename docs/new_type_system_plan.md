@@ -272,6 +272,49 @@ Code markers: `AI : TODO (linter-first)` in repo.
 - [ ] Delete `typeExprToZod` spine path; runtime validation via pydantic/serde only
 - [ ] Drop duplicate TS export lint or keep as secondary smoke test only
 
+### Phase 6 — Views, FKs, lookup-embed (SQL joins in the type system)
+
+Do **not** add a `Join` TypeExpr that runs SQL. Annotate keys; derive views; keep step `inType`/`outType` stable unless a join *step* emits expanded rows.
+
+- [ ] **Prompt view on example-select** (`examplePromptFields`) — dual of `exampleContextField`. `{example}` / `{input_to_prompt}` is a Pick of the item; spine passthrough stays the full row + `selection_reason`. `{passthrough}` is not a template var.
+  - billed_work **Select Relevant Jobs**: prompt `title` + `work_description` only. Do not dump `billed_items` into the uncached suffix.
+  - Do not reshape via custom-code (throws away FKs). Python only as an optional string formatter.
+- [ ] **Field relations** — `ModelField.relation?: { kind: "pk" } | { kind: "fk"; to: { modelId; field } }`. Runtime type stays `text`. `BilledLineRef.work_item_id` → `WorkItem.id`.
+- [ ] **Type operators** — `Pick[Model, fields]`, `Omit[Model, fields]`, `A & { field: T }`. `SelectedJobExample` → `JobExample & { selection_reason: text }` instead of a cloned model.
+- [ ] **Lookup-embed engine** (generic, once): `{ leftPath, leftKey, right: state[label], rightKey, embedAs, how }`. Derived type: walk left at `leftPath`, intersect item with `{ embedAs: Right }`. Nested documents, not 3NF flatten. Assemble/combine stay product-zip.
+- [ ] **View vs spine** — attach join spec as consumer config (example-select / LLM context) so filtering can get more complex without changing step I/O types. Join *step* only when downstream must consume expanded values.
+- [ ] billed_work pass 2 cached prefix / draft: optional expand of selected jobs’ `billed_items`. Pass 2 `{example}` stays a catalog row. Do not denormalize `job_example_library.json`.
+
+### Phase 7 — SQL DDL as the unified type annotation (no engine required at first)
+
+Keep Phase 6. Add SQL as the **language** structures are shown and authored in. A SQLite instance is optional later.
+
+**Unify documents, quotes, blobs, and catalogs in one schema:**
+
+```sql
+CREATE TABLE document (
+  id TEXT PRIMARY KEY,          -- content hash (DocId)
+  filename TEXT NOT NULL,
+  mime TEXT,                    -- pdf / text / json / … (InputType)
+  content TEXT,                 -- extracted text; NULL until doc-to-text
+  blob BLOB                     -- original bytes (PDF wrapper)
+);
+
+CREATE TABLE quote_span (
+  doc_id TEXT NOT NULL REFERENCES document(id),
+  start INTEGER NOT NULL,
+  end INTEGER NOT NULL
+);
+```
+
+- [ ] **Types tab emits `schema.sql`** from StructureModel (CREATE TABLE / VIEW) next to models.py — even while runtime is still JSON maps.
+- [ ] **Quotes are FKs** — `quote_string_t` is LLM wire TEXT; Link Quotes INSERTs `quote_span`. Not a parallel type universe.
+- [ ] **PDFs/files are blob columns** on `document`, not TypeExpr `file` forever. doc-originals storage is the blob backend.
+- [ ] **Nested list[model]** — child table (FK) or JSON column; declare which. Recursive trees may stay JSON.
+- [ ] **Prompt views are SQL** — `CREATE VIEW job_example_prompt AS SELECT id, title, work_description FROM job_example`. Same inType/outType as Phase 6.
+- [ ] **Optional later:** in-memory SQLite per run, `.sqlite` input/export, live Postgres connector. Not required for the annotation to be useful.
+- [ ] Do not delete TypeExpr; it remains the IR. DDL is the human/LLM-facing form.
+
 ---
 
 ## Concrete fix for the markdown parser pipeline

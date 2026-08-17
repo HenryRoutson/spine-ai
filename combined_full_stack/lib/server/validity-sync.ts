@@ -10,6 +10,7 @@ import type {
 import { DEFAULT_MODEL, MODULE_META, ModuleKind } from "./types";
 import { DEFAULT_LLM_STEP_COST_LIMIT_CENTS } from "@/lib/llm-cost-limit";
 import {
+  inputModuleNeedsDocToText,
   inputModuleTypesAreAllJsonNative,
 } from "@/lib/inference-input-core";
 import { BUILTIN_DOCUMENT_ID, BUILTIN_CHATBOT_PROMPT_ID, BUILTIN_CHATBOT_RESULT_ID, isBuiltinDocumentModel, stripSharedModels, withSharedModels } from "./builtin_models";
@@ -39,7 +40,10 @@ export const AUTO_QUOTE_EXPLAINER =
   "Auto-inserted when an LLM output includes quote fields. Same model in and out (e.g. AtomicRule): the LLM returns verbatim strings; this step links them to document spans. If rules look wrong, inspect the LLM step; if quotes won't click, inspect this step.";
 
 export const AUTO_STRUCTURE_PARSE_EXPLAINER =
-  "Auto-inserted when this input accepts non-JSON file types (PDF, Word, text, web, image). Upload → Document, then this LLM maps content into your chosen structure. Excel and JSON-only inputs parse directly in the input step — no LLM needed.";
+  "Auto-inserted when this input's I/O model is not Document. Convert-to-text (if any) runs first so this LLM sees instantiated content. Excel and JSON-only inputs parse directly in the input step — no LLM needed.";
+
+export const AUTO_DOC_TO_TEXT_EXPLAINER =
+  "Auto-inserted when this input accepts PDF, Word, image, or web files. Input only binds the file; this step fills Document.content (parser or DeepSeek OCR) and is cached per document. If it is slow or fails, the problem is here — not on Input.";
 
 export function isAutoStructureParseStep(m: PipelineModule): boolean {
   return (
@@ -48,22 +52,44 @@ export function isAutoStructureParseStep(m: PipelineModule): boolean {
   );
 }
 
-// AI : side-input group before a combine is [input, autoParseLlm?] — it feeds the combine's
+export function isAutoDocToTextStep(m: PipelineModule): boolean {
+  return m.kind === ModuleKind.DocToText;
+}
+
+export function isInputManagedFollower(m: PipelineModule | undefined): boolean {
+  return !!m && (isAutoDocToTextStep(m) || isAutoStructureParseStep(m));
+}
+
+function indexAfterInputManaged(modules: PipelineModule[], inputIndex: number): number {
+  let j = inputIndex + 1;
+  while (isInputManagedFollower(modules[j])) j++;
+  return j;
+}
+
+// AI : side-input group before a combine is [input, convert?, parse?] — it feeds the combine's
 // AI : newDocument and must not be treated as a spine input.
 export function inputFeedsCombine(modules: PipelineModule[], i: number): boolean {
-  const next = modules[i + 1];
-  if (next?.kind === ModuleKind.Combine) return true;
-  return !!next && isAutoStructureParseStep(next) && modules[i + 2]?.kind === ModuleKind.Combine;
+  if (modules[i]?.kind !== ModuleKind.Input) return false;
+  return modules[indexAfterInputManaged(modules, i)]?.kind === ModuleKind.Combine;
 }
 
 export function isCombineSideParseStep(modules: PipelineModule[], i: number): boolean {
   const m = modules[i];
-  return (
-    !!m &&
-    isAutoStructureParseStep(m) &&
-    modules[i - 1]?.kind === ModuleKind.Input &&
-    modules[i + 1]?.kind === ModuleKind.Combine
-  );
+  if (!m || !isAutoStructureParseStep(m) || modules[i + 1]?.kind !== ModuleKind.Combine) return false;
+  const prev = modules[i - 1];
+  if (prev?.kind === ModuleKind.Input) return true;
+  return !!prev && isAutoDocToTextStep(prev) && modules[i - 2]?.kind === ModuleKind.Input;
+}
+
+export function autoDocToTextStepForInput(
+  modules: PipelineModule[],
+  inputId: ModuleId,
+): PipelineModule | undefined {
+  const i = modules.findIndex((m) => m.id === inputId);
+  if (i < 0) return undefined;
+  const next = modules[i + 1];
+  if (next && isAutoDocToTextStep(next)) return next;
+  return modules.find((m) => m.id === (`mod_ocr_${inputId}` as ModuleId));
 }
 
 export function autoStructureParseStepForInput(
@@ -72,7 +98,9 @@ export function autoStructureParseStepForInput(
 ): PipelineModule | undefined {
   const i = modules.findIndex((m) => m.id === inputId);
   if (i < 0) return undefined;
-  const next = modules[i + 1];
+  let j = i + 1;
+  if (modules[j] && isAutoDocToTextStep(modules[j]!)) j++;
+  const next = modules[j];
   if (next && isAutoStructureParseStep(next)) return next;
   return modules.find((m) => m.id === (`mod_struct_${inputId}` as ModuleId));
 }
@@ -134,7 +162,141 @@ function targetInputPatch(m: PipelineModule, targetId: StructureModelId): Pipeli
   };
 }
 
+function stripInputOcrConfig(m: PipelineModule): PipelineModule {
+  if (m.useOcr == null && m.model == null && m.prompt == null) return m;
+  return { ...m, useOcr: undefined, model: undefined, prompt: undefined };
+}
+
+function foldConvertOcrOntoInput(input: PipelineModule, convert: PipelineModule | undefined): PipelineModule {
+  if (!inputModuleNeedsDocToText(input)) return stripInputOcrConfig(input);
+  if (!convert) return input;
+  const useOcr = convert.useOcr || undefined;
+  return {
+    ...input,
+    useOcr,
+    model: useOcr ? convert.model : undefined,
+    prompt: useOcr ? convert.prompt : undefined,
+  };
+}
+
+// AI : authored graph — Convert to text is derived from inputType, never stored in seeds / DB JSON.
+export function authoredPipelineModules(modules: PipelineModule[]): PipelineModule[] {
+  const out: PipelineModule[] = [];
+  for (let i = 0; i < modules.length; i++) {
+    const m = modules[i]!;
+    if (isAutoDocToTextStep(m)) continue;
+    if (m.kind === ModuleKind.Input) {
+      const next = modules[i + 1];
+      const convert = next && isAutoDocToTextStep(next) ? next : autoDocToTextStepForInput(modules, m.id);
+      out.push(foldConvertOcrOntoInput(m, convert));
+      continue;
+    }
+    out.push(m);
+  }
+  return modulesEqual(modules, out) ? modules : out;
+}
+
+export function projectWithAuthoredModules(project: Project): Project {
+  const modules = authoredPipelineModules(project.modules);
+  return modules === project.modules ? project : { ...project, modules };
+}
+
+function autoDocToTextStepLabel(input: PipelineModule, taken: Set<string>): string {
+  return uniqueStepLabel("Convert to text", taken, input.label.trim() || input.id);
+}
+
+// AI : PDF/Word/image/web → locked convert step at runtime. Authored JSON keeps OCR flags on Input.
+export function syncAutoDocToTextSteps(modules: PipelineModule[]): PipelineModule[] {
+  const stripped = modules.filter((m) => !isAutoDocToTextStep(m));
+  const taken = new Set(stripped.map((m) => m.label.trim()).filter(Boolean));
+  const out: PipelineModule[] = [];
+
+  for (const m of stripped) {
+    if (m.kind !== ModuleKind.Input) {
+      out.push(m);
+      continue;
+    }
+    if (!inputModuleNeedsDocToText(m)) {
+      out.push(stripInputOcrConfig(m));
+      continue;
+    }
+    const existing = autoDocToTextStepForInput(modules, m.id);
+    const useOcr = existing?.useOcr ?? m.useOcr;
+    const preferred = existing?.label.trim();
+    const label =
+      preferred && !taken.has(preferred) ? preferred : autoDocToTextStepLabel(m, taken);
+    taken.add(label);
+    const listOut = stepEmitsList(m);
+    out.push(stripInputOcrConfig(m));
+    out.push({
+      id: (existing?.id ?? (`mod_ocr_${m.id}` as ModuleId)) as ModuleId,
+      kind: ModuleKind.DocToText,
+      auto: true,
+      label,
+      note: "Auto · Document.content None → instantiated text · parser or OCR, cached per document. Failures belong here, not on Input.",
+      inStructureId: BUILTIN_DOCUMENT_ID,
+      outStructureId: BUILTIN_DOCUMENT_ID,
+      inType: structureSpineType(BUILTIN_DOCUMENT_ID, listOut),
+      outType: structureSpineType(BUILTIN_DOCUMENT_ID, listOut),
+      useOcr: useOcr || undefined,
+      model: useOcr ? existing?.model ?? m.model : undefined,
+      prompt: useOcr ? existing?.prompt ?? m.prompt : undefined,
+      cached: true,
+      avgMs: existing?.avgMs ?? 0,
+      avgCostCents: existing?.avgCostCents ?? 0,
+    });
+  }
+
+  return modulesEqual(modules, out) ? modules : out;
+}
+
+function makeStructureParseStep(
+  input: PipelineModule,
+  target: StructureModel,
+  existing: PipelineModule | undefined,
+  taken: Set<string>,
+  globalModel: ModelId,
+): PipelineModule {
+  const preferred = existing?.label.trim();
+  const label =
+    preferred && !taken.has(preferred) ? preferred : autoStructureParseStepLabel(input, taken);
+  taken.add(label);
+  const listOut = stepEmitsList(input);
+  return {
+    id: (existing?.id ?? (`mod_struct_${input.id}` as ModuleId)) as ModuleId,
+    kind: ModuleKind.Llm,
+    auto: true,
+    label,
+    note: `Auto · Document → ${target.name} · LLM maps uploaded content into your structure.`,
+    inStructureId: BUILTIN_DOCUMENT_ID,
+    outStructureId: target.id,
+    inType: structureSpineType(BUILTIN_DOCUMENT_ID, listOut),
+    outType: structureSpineType(target.id, listOut),
+    prompt:
+      existing?.prompt?.trim() ||
+      `Extract structured data from the uploaded document into the ${target.name} schema. Use only content from the document.`,
+    model: existing?.model ?? globalModel,
+    costLimitCents: existing?.costLimitCents ?? DEFAULT_LLM_STEP_COST_LIMIT_CENTS,
+    cached: true,
+    avgMs: existing?.avgMs ?? 0,
+    avgCostCents: existing?.avgCostCents ?? 0,
+  };
+}
+
+function parseTargetForInput(
+  m: PipelineModule,
+  modules: PipelineModule[],
+  merged: StructureModel[],
+): StructureModel | undefined {
+  if (inputModuleTypesAreAllJsonNative(m)) return undefined;
+  const targetId = resolveInputTargetId(m, modules);
+  const target = targetId ? merged.find((x) => x.id === targetId) : undefined;
+  if (!target || isBuiltinDocumentModel(target)) return undefined;
+  return target;
+}
+
 // AI : non-JSON inputs emit Document; locked LLM step maps Document → user's target structure.
+// AI : sits after convert-to-text when that step exists.
 export function syncAutoStructureParseSteps(
   modules: PipelineModule[],
   models: StructureModel[],
@@ -145,57 +307,33 @@ export function syncAutoStructureParseSteps(
   const taken = new Set(stripped.map((m) => m.label.trim()).filter(Boolean));
   const out: PipelineModule[] = [];
 
-  for (const m of stripped) {
-    if (m.kind !== ModuleKind.Input) {
-      out.push(m);
-      continue;
-    }
-
-    const existing = existingStructLlmForInput(modules, m.id);
-    const allJsonNative = inputModuleTypesAreAllJsonNative(m);
-
-    if (allJsonNative) {
-      const targetId = resolveInputTargetId(m, modules);
-      out.push(targetId ? targetInputPatch(m, targetId) : m);
-      continue;
-    }
-
-    const targetId = resolveInputTargetId(m, modules);
-    const target = targetId ? merged.find((x) => x.id === targetId) : undefined;
-    const wantsDocument = !target || isBuiltinDocumentModel(target);
-
-    if (!wantsDocument && target) {
+  for (let idx = 0; idx < stripped.length; idx++) {
+    const m = stripped[idx]!;
+    if (m.kind === ModuleKind.Input) {
+      const existing = existingStructLlmForInput(modules, m.id);
+      if (inputModuleTypesAreAllJsonNative(m)) {
+        const targetId = resolveInputTargetId(m, modules);
+        out.push(targetId ? targetInputPatch(m, targetId) : m);
+        continue;
+      }
+      const target = parseTargetForInput(m, modules, merged);
       out.push(documentInputPatch(m));
-      const preferred = existing?.label.trim();
-      const label =
-        preferred && !taken.has(preferred)
-          ? preferred
-          : autoStructureParseStepLabel(m, taken);
-      taken.add(label);
-      const listOut = stepEmitsList(m);
-      out.push({
-        id: (existing?.id ?? (`mod_struct_${m.id}` as ModuleId)) as ModuleId,
-        kind: ModuleKind.Llm,
-        auto: true,
-        label,
-        note: `Auto · Document → ${target.name} · LLM maps uploaded content into your structure.`,
-        inStructureId: BUILTIN_DOCUMENT_ID,
-        outStructureId: target.id,
-        inType: structureSpineType(BUILTIN_DOCUMENT_ID, listOut),
-        outType: structureSpineType(target.id, listOut),
-        prompt:
-          existing?.prompt?.trim() ||
-          `Extract structured data from the uploaded document into the ${target.name} schema. Use only content from the document.`,
-        model: existing?.model ?? globalModel,
-        costLimitCents: existing?.costLimitCents ?? DEFAULT_LLM_STEP_COST_LIMIT_CENTS,
-        cached: true,
-        avgMs: existing?.avgMs ?? 0,
-        avgCostCents: existing?.avgCostCents ?? 0,
-      });
+      const next = stripped[idx + 1];
+      if (target && !isAutoDocToTextStep(next)) {
+        out.push(makeStructureParseStep(m, target, existing, taken, globalModel));
+      }
       continue;
     }
 
-    out.push(documentInputPatch(m));
+    out.push(m);
+    if (isAutoDocToTextStep(m)) {
+      const input = [...out].reverse().find((x) => x.kind === ModuleKind.Input);
+      const target = input ? parseTargetForInput(input, modules, merged) : undefined;
+      if (input && target) {
+        const existing = existingStructLlmForInput(modules, input.id);
+        out.push(makeStructureParseStep(input, target, existing, taken, globalModel));
+      }
+    }
   }
 
   return modulesEqual(modules, out) ? modules : out;
@@ -207,7 +345,10 @@ export function syncManagedPipelineSteps(
   globalModel: ModelId = DEFAULT_MODEL,
 ): PipelineModule[] {
   return migrateModulesSpineTypes(
-    syncAutoQuoteSteps(syncAutoStructureParseSteps(modules, models, globalModel), models),
+    syncAutoQuoteSteps(
+      syncAutoStructureParseSteps(syncAutoDocToTextSteps(modules), models, globalModel),
+      models,
+    ),
   );
 }
 
@@ -218,16 +359,17 @@ export function isAutoQuoteStep(m: PipelineModule): boolean {
   );
 }
 
+export function isManagedLockedStep(m: PipelineModule): boolean {
+  return isAutoQuoteStep(m) || isAutoDocToTextStep(m) || isAutoStructureParseStep(m);
+}
+
 // AI : managed steps may share MODULE_META[kind].label until sync assigns unique labels.
 export function isKindDefaultLabel(m: PipelineModule): boolean {
   return m.label.trim() === MODULE_META[m.kind].label;
 }
 
 export function skipDuplicateLabelCheck(m: PipelineModule): boolean {
-  return (
-    (isAutoQuoteStep(m) && isKindDefaultLabel(m)) ||
-    (isAutoStructureParseStep(m) && isKindDefaultLabel(m))
-  );
+  return isManagedLockedStep(m) && isKindDefaultLabel(m);
 }
 
 export function uniqueStepLabel(base: string, taken: Set<string>, disambiguator?: string): string {
@@ -344,31 +486,6 @@ export function syncAutoQuoteSteps(
   return modulesEqual(modules, out) ? modules : out;
 }
 
-// AI : fold legacy doc-to-text steps into the preceding input (parser / vision OCR now live on input).
-function foldDocToTextSteps(modules: PipelineModule[]): PipelineModule[] {
-  const out: PipelineModule[] = [];
-  for (const m of modules) {
-    if ((m.kind as string) !== "doc-to-text") {
-      out.push(m);
-      continue;
-    }
-    const prev = out[out.length - 1];
-    const legacy = m as PipelineModule & { docParseMode?: "parser" | "llm" };
-    const useLlm = legacy.docParseMode === "llm";
-    if (prev?.kind === "input") {
-      out[out.length - 1] = {
-        ...prev,
-        note: legacy.note ?? prev.note,
-        useOcr: useLlm ? true : prev.useOcr,
-        model: useLlm ? legacy.model ?? prev.model : prev.model,
-        prompt: useLlm ? legacy.prompt ?? prev.prompt : prev.prompt,
-        inputDescription: legacy.inputDescription ?? prev.inputDescription,
-      };
-    }
-  }
-  return modulesEqual(modules, out) ? modules : out;
-}
-
 // AI : outStructureId on passthrough steps is display-only and must equal inStructureId to avoid
 // runtime validation failures. Remove the mismatch rather than blocking the user.
 function normalizePassthroughStructureIds(modules: PipelineModule[]): PipelineModule[] {
@@ -415,8 +532,7 @@ export function migrateProjectModules(project: Project): Project {
   let models = normalizeStructureModels(
     withSharedModels(dedupeInferredModelsByShape(stripSharedModels(project.models))),
   );
-  const folded = foldDocToTextSteps(project.modules);
-  const quoted = syncManagedPipelineSteps(folded, models);
+  const quoted = syncManagedPipelineSteps(project.modules, models);
   const placed = syncAssertPlacement(quoted);
   const migrated = placed.map((m) => migrateListMergeModule(migrateCustomCodeModule(m)));
   const listSynced = syncListOpsModules(migrated, models);
@@ -438,8 +554,8 @@ export function migrateProjectModules(project: Project): Project {
     });
   const changed =
     modelsChangedFlag ||
-    folded !== project.modules ||
-    placed !== folded ||
+    quoted !== project.modules ||
+    placed !== quoted ||
     migrated.some((m, i) => m !== placed[i]) ||
     !modulesEqual(listSynced.modules, migrated) ||
     !modulesEqual(assembleSynced.modules, listSynced.modules) ||

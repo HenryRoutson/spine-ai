@@ -18,6 +18,9 @@ class PipelineRuntime:
     open_router_app_title: str | None = None
     open_router_base_url: str | None = None
     open_router_seed: int | None = None
+    docs_dir: str | None = None
+    deepseek_ocr_base_url: str | None = None
+    deepseek_ocr_model: str | None = None
     vision_ocr_model: str | None = None
     source_text: str | None = None
     source_doc_id: str | None = None
@@ -191,15 +194,31 @@ async def llm_batch_structured(
 relevance_schema = {"chain_of_thought":"string","is_relevant":"boolean"}
 
 DEFAULT_VISION_OCR_MODEL: ProviderModelId = "google/gemini-3-flash-preview"
+DEFAULT_DEEPSEEK_OCR_MODEL = "deepseek-ai/DeepSeek-OCR-2"
 OCR_SYSTEM = "You are an OCR engine. Transcribe documents faithfully. Preserve structure with markdown headings and lists where helpful. Output only the transcribed text — no commentary."
 DEFAULT_OCR_PROMPT = "Transcribe every visible word, number, and label from this document into plain text. Preserve section headings and question numbering."
+DEEPSEEK_OCR_PROMPT = "<image>\n<|grounding|>Convert the document to markdown."
+
+_ocr_text_cache: dict[str, str] = {}
+
+def _mime_from_filename(filename: str) -> str:
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext == "pdf":
+        return "application/pdf"
+    if ext == "png":
+        return "image/png"
+    if ext in ("jpg", "jpeg"):
+        return "image/jpeg"
+    if ext == "webp":
+        return "image/webp"
+    return "application/octet-stream"
 
 def _resolve_vision_ocr_model() -> ProviderModelId:
     return runtime.vision_ocr_model or runtime.llm_provider_model or runtime.open_router_model or DEFAULT_VISION_OCR_MODEL
 
 async def _open_router_vision_chat(prompt: str, attachments: list[dict[str, str]], provider_model: ProviderModelId) -> str:
     if not runtime.open_router_api_key:
-        raise RuntimeError("configure_pipeline_runtime(open_router_api_key=...) for vision OCR")
+        raise RuntimeError("configure_pipeline_runtime(open_router_api_key=...) for vision OCR fallback")
     content: list[dict[str, object]] = [{"type": "text", "text": prompt}]
     for a in attachments:
         content.append({"type": "image_url", "image_url": {"url": f"data:{a['mime']};base64,{a['base64']}"}})
@@ -231,10 +250,83 @@ async def _open_router_vision_chat(prompt: str, attachments: list[dict[str, str]
         raise RuntimeError("vision OCR returned empty text")
     return text.strip()
 
+async def deepseek_ocr(data: bytes, mime: str) -> str:
+    """DeepSeek-OCR-2 via vLLM OpenAI-compatible /chat/completions. Bytes are not stored on Document."""
+    import base64
+    base = (runtime.deepseek_ocr_base_url or "").rstrip("/")
+    if not base:
+        raise RuntimeError("configure_pipeline_runtime(deepseek_ocr_base_url=...) for DeepSeek OCR")
+    model = runtime.deepseek_ocr_model or DEFAULT_DEEPSEEK_OCR_MODEL
+    b64 = base64.b64encode(data).decode("ascii")
+    payload = {
+        "model": model,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                {"type": "text", "text": DEEPSEEK_OCR_PROMPT},
+            ],
+        }],
+        "max_tokens": 8192,
+        "temperature": 0,
+        "extra_body": {
+            "skip_special_tokens": False,
+            "vllm_xargs": {"ngram_size": 30, "window_size": 90, "whitelist_token_ids": [128821, 128822]},
+        },
+    }
+    async with httpx.AsyncClient(timeout=180) as client:
+        res = await client.post(f"{base}/chat/completions", json=payload)
+    if res.status_code != 200:
+        raise RuntimeError(f"DeepSeek OCR {res.status_code}: {res.text}")
+    data_json: Any = res.json()
+    choices: Any = data_json.get("choices") if isinstance(data_json, dict) else None
+    first: Any = choices[0] if isinstance(choices, list) and choices else {}
+    message: Any = first.get("message", {}) if isinstance(first, dict) else {}
+    text: Any = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(text, str) or not text.strip():
+        raise RuntimeError("DeepSeek OCR returned empty text")
+    return text.strip()
+
+async def _ocr_bytes(data: bytes, mime: str, purpose: str) -> str:
+    key = f"{runtime.deepseek_ocr_base_url or 'or'}:{runtime.deepseek_ocr_model or runtime.vision_ocr_model or ''}:{hash(data)}"
+    hit = _ocr_text_cache.get(key)
+    if hit:
+        return hit
+    if runtime.deepseek_ocr_base_url:
+        text = await deepseek_ocr(data, mime)
+    else:
+        import base64
+        prompt = f"{DEFAULT_OCR_PROMPT}\n\nDocument purpose: {purpose or 'general transcription'}"
+        text = await _open_router_vision_chat(prompt, [{"mime": mime, "base64": base64.b64encode(data).decode("ascii")}], _resolve_vision_ocr_model())
+    _ocr_text_cache[key] = text
+    return text
+
+async def convert_doc_to_text(doc: Any, ocr: bool = False, purpose: str = "general transcription") -> Any:
+    """Instantiate Document.content from docs_dir. Never stores encoded copies on Document."""
+    from pathlib import Path
+    filename = getattr(doc, "filename", None) or (doc.get("filename") if isinstance(doc, dict) else None)
+    content = getattr(doc, "content", None) or (doc.get("content") if isinstance(doc, dict) else None)
+    if isinstance(content, str) and content.strip():
+        return type(doc)(content=content, filename=filename) if not isinstance(doc, dict) else {"content": content, "filename": filename}
+    if not filename:
+        raise RuntimeError("convert to text: Document.filename is required")
+    path = Path(runtime.docs_dir or "docs") / str(filename)
+    data = path.read_bytes()
+    mime = _mime_from_filename(str(filename))
+    if ocr:
+        text = await _ocr_bytes(data, mime, purpose)
+    else:
+        text = data.decode("utf-8", errors="replace").strip()
+        if not text:
+            raise RuntimeError(f"convert to text: no parser text for {filename} — set ocr=True for scans")
+    if isinstance(doc, dict):
+        return {"content": text, "filename": filename}
+    return type(doc)(content=text, filename=filename)
+
 async def vision_ocr(mime: str, base64: str, purpose: str = "general transcription") -> str:
-    """Vision OCR via OpenRouter multimodal. Override vision_ocr_model for DeepSeek-OCR hosts."""
-    prompt = f"{DEFAULT_OCR_PROMPT}\n\nDocument purpose: {purpose or 'general transcription'}"
-    return await _open_router_vision_chat(prompt, [{"mime": mime, "base64": base64}], _resolve_vision_ocr_model())
+    """Deprecated — prefer convert_doc_to_text. Kept for older generated steps."""
+    import base64 as b64mod
+    return await _ocr_bytes(b64mod.b64decode(base64), mime, purpose)
 
 def resolve_quotes(data: Any, source_text: str, doc_id: str) -> Any:
     text = runtime.source_text or source_text
@@ -327,8 +419,20 @@ def _merge_pair(left: Any, right: Any, policy: Any) -> Any:
         return list(left) + list(right)
     return left if scalar_s == "first" else right
 
+def example_select_items(data: Any) -> list[Any]:
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        arrays = [v for v in data.values() if isinstance(v, list)]
+        if len(arrays) == 1:
+            return arrays[0]
+    return [] if data is None else [data]
+
+
 async def select_relevant(items: list[Any], description: str, template: str) -> list[Any]:
     def prompt_for(item: Any) -> str:
+        # AI : TODO (example-select-view) — dump the prompt view, not the full item; kept rows stay passthrough.
+        # AI : TODO (sql-schema) — dump the VIEW row; keep rows from the source TABLE.
         return template.replace("{description}", description).replace("{example}", json.dumps(item, default=str))
     verdicts = await llm_batch_structured(items, prompt_for, relevance_schema)
     kept: list[Any] = []

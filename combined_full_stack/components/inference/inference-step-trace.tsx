@@ -255,7 +255,13 @@ export function InferenceStepRow({
         />
       )}
       {showPromptPreview && runStep && (
-        <StepPromptSection step={runStep} label={label} runId={runId} className={ioClassName} />
+        <StepPromptSection
+          step={runStep}
+          label={label}
+          runId={runId}
+          models={models}
+          className={ioClassName}
+        />
       )}
       {showInputDocPreview && (
         <StepLoadedDocSection

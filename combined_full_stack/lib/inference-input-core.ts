@@ -27,11 +27,23 @@ export function inputTypesForModule(inputModule: PipelineModule): InputType[] {
   return Array.isArray(inputModule.inputType) ? inputModule.inputType : [inputModule.inputType]
 }
 
-// AI : Excel + JSON parse to structured data in the input step; everything else needs an LLM convert step.
+// AI : Excel + JSON parse to structured data in the input step.
 export const JSON_NATIVE_INPUT_TYPES: readonly InputType[] = [InputType.Excel, InputType.Json]
+// AI : already text — no convert-to-text step; LLM parse only when I/O is not Document.
+export const PLAIN_TEXT_INPUT_TYPES: readonly InputType[] = [InputType.Text, InputType.Markdown, InputType.Latex]
+// AI : binary / markup that needs a locked convert-to-text step to instantiate Document.content.
+export const DOC_TO_TEXT_INPUT_TYPES: readonly InputType[] = [InputType.Pdf, InputType.Word, InputType.Image, InputType.Web]
 
 export function isJsonNativeInputType(type: InputType): boolean {
   return JSON_NATIVE_INPUT_TYPES.includes(type)
+}
+
+export function isPlainTextInputType(type: InputType): boolean {
+  return PLAIN_TEXT_INPUT_TYPES.includes(type)
+}
+
+export function isDocToTextInputType(type: InputType): boolean {
+  return DOC_TO_TEXT_INPUT_TYPES.includes(type)
 }
 
 export function inputTypesAreAllJsonNative(types: InputType[]): boolean {
@@ -48,6 +60,14 @@ export function inputTypesNeedOcr(types: InputType[]): boolean {
 
 export function inputModuleNeedsOcr(inputModule: PipelineModule): boolean {
   return inputModule.kind === "input" && inputTypesNeedOcr(inputTypesForModule(inputModule))
+}
+
+export function inputTypesNeedDocToText(types: InputType[]): boolean {
+  return types.some(isDocToTextInputType)
+}
+
+export function inputModuleNeedsDocToText(inputModule: PipelineModule): boolean {
+  return inputModule.kind === "input" && inputTypesNeedDocToText(inputTypesForModule(inputModule))
 }
 
 export function upstreamInputModule(

@@ -36,7 +36,11 @@ export const SEEDS_DIR = resolve(process.cwd(), "seeds");
 const enumOf = <T extends string>(values: readonly T[]) => z.enum(values as [T, ...T[]]);
 const FieldTypeSchema = enumOf(FIELD_TYPES);
 const InputTypeSchema = enumOf(INPUT_TYPES.map((t) => t.value) as InputType[]);
-const ModuleKindSchema = enumOf(Object.keys(MODULE_META) as ModuleKind[]);
+// AI : Convert to text is auto-inserted from inputType — never authored in seeds/*.json.
+const AUTHORED_MODULE_KINDS = (Object.keys(MODULE_META) as ModuleKind[]).filter(
+  (k) => k !== ModuleKind.DocToText,
+);
+const ModuleKindSchema = enumOf(AUTHORED_MODULE_KINDS);
 const StrategyKindSchema = enumOf(Object.keys(STRATEGY_META) as StrategyKind[]);
 
 const fieldExampleListSchema = z.array(z.string().max(4_000)).max(32).optional();
@@ -135,11 +139,14 @@ const SeedFileSchema = z.object({
       code: z.string().optional(),
       maxRunMs: z.number().int().min(1).optional(),
       model: z.string().optional(),
+      useOcr: z.boolean().optional(),
       costLimitCents: z.number().min(0).optional(),
       exampleContextLabel: z.string().optional(),
       exampleContextField: z.string().optional(),
       exampleReasonField: z.string().optional(),
       examplePreFilterMax: z.number().int().min(1).optional(),
+      // AI : TODO (example-select-view) — examplePromptFields: z.array(z.string()).optional()
+      // AI : TODO (sql-schema) — examplePromptView: z.string().optional() — SQL SELECT/VIEW text
       mergeStateLabel: z.string().optional(),
       mergeWrapListField: z.string().optional(),
       mergeCustom: z.string().optional(),
@@ -263,6 +270,18 @@ export interface ProjectSeed {
 
 export { isUnavailableSeedDoc, unavailableSeedDocMessage } from "../seed-doc";
 
+function stripSeedDocToTextModules(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const obj = raw as { modules?: unknown };
+  if (!Array.isArray(obj.modules)) return raw;
+  return {
+    ...obj,
+    modules: obj.modules.filter(
+      (m) => !(m && typeof m === "object" && (m as { kind?: string }).kind === "doc-to-text"),
+    ),
+  };
+}
+
 // AI : in-app documents/ wins (Vercel bundle); monorepo dev falls back to repo-root documents/.
 export function resolveSeedDocPath(relativeFile: string): string {
   const inApp = join(DOCUMENTS_DIR, relativeFile);
@@ -336,7 +355,7 @@ export function expectedOutputsForRun(project: Project, runInputDocNames: string
 
 // AI : the generic entry point — any validated seed JSON becomes a project + its source docs.
 export function loadProjectSeed(path: string): ProjectSeed {
-  const raw = SeedFileSchema.parse(JSON.parse(readFileSync(path, "utf8")));
+  const raw = SeedFileSchema.parse(stripSeedDocToTextModules(JSON.parse(readFileSync(path, "utf8"))));
   const expectedOutputs = loadExpectedOutputs(raw.expectedOutputs);
   const inferencePresets: InferencePreset[] | undefined = raw.inferencePresets?.map((p) => ({
     name: p.name,
@@ -498,7 +517,7 @@ export function seedJsonFilenames(): string[] {
 
 export function projectTemplateSummaryFromFile(filename: string): ProjectTemplateSummary {
   const raw = SeedTemplateSummaryFileSchema.parse(
-    JSON.parse(readFileSync(join(SEEDS_DIR, filename), "utf8")),
+    stripSeedDocToTextModules(JSON.parse(readFileSync(join(SEEDS_DIR, filename), "utf8"))),
   );
   return {
     id: raw.id as ProjectId,

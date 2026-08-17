@@ -12,7 +12,7 @@ import { readStepCache, writeStepCache } from "../step_cache";
 import { hasQuoteField, validateStepOutput } from "../structure";
 import { llmStepCostLimitCents, StepCostLimitExceededError } from "../step_cost_limit";
 import { customCodeMaxRunMs } from "@/lib/custom-code-max-run";
-import { DEFAULT_INPUT_CHECK_MODEL, FailureKind, inputUsesVisionOcr, ModuleKind, RunStepStatus, type LlmCallRecord } from "../types";
+import { DEFAULT_INPUT_CHECK_MODEL, FailureKind, ModuleKind, RunStepStatus, type LlmCallRecord } from "../types";
 import { serializeCtx, resolveStepInputForCheck } from "./context";
 import { execModule } from "./exec_module";
 import {
@@ -24,7 +24,7 @@ import {
   snapshotForByLabel,
   validatesStepOutputAsList,
 } from "./helpers";
-import { applyInputCacheSideEffects, failedStepResult, jsonStringifyStepValue, resultFromCache } from "./results";
+import { applyDocToTextCacheSideEffects, failedStepResult, jsonStringifyStepValue, resultFromCache } from "./results";
 import { exportLangfuseRunStep } from "../langfuse_export";
 import type { ExecResult, LinearStepParams } from "./engine_types";
 
@@ -134,8 +134,8 @@ export async function runLinearStepsFrom(
           }
           if (cached) {
             applyModuleSideEffects(m, ctx, ctx.store, log);
-            if (m.kind === "input" && inputUsesVisionOcr(m)) {
-              applyInputCacheSideEffects(m, cached, ctx);
+            if (m.kind === "doc-to-text") {
+              applyDocToTextCacheSideEffects(cached, ctx);
             }
             status = RunStepStatus.Cached;
             savedCostCents = cached.costCents ?? 0;
@@ -187,6 +187,7 @@ export async function runLinearStepsFrom(
                   docId: result.docId,
                   inputPreview: result.inputPreview,
                   inputPreviewItems: result.inputPreviewItems,
+                  outputPreviewItems: result.outputPreviewItems,
                   costCents: stepCost,
                 },
                 {
@@ -371,6 +372,7 @@ export async function runLinearStepsFrom(
       inputPreview: result.inputPreview ?? defaultInputPreview,
       inputPreviewItems: result.inputPreviewItems,
       outputPreview: result.preview,
+      outputPreviewItems: result.outputPreviewItems,
       outputJson: result.json,
       inputDescription: m.inputDescription?.trim() || undefined,
       inputDescriptionCheck,

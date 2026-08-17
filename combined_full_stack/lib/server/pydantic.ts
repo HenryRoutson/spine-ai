@@ -12,6 +12,7 @@ import {
 import { stripBuiltinTypeAliases } from "./builtin_types";
 import { stripSharedModels } from "./builtin_models";
 import type { TypeExpr } from "./types";
+// AI : TODO (sql-schema) — allModelsToSql CREATE TABLE from StructureModel; quotes/documents as FKs+blob cols.
 import {
   goFieldIdent,
   modelExportIdentifier,
@@ -112,7 +113,7 @@ function pydanticBuiltinModels(): string {
     "    quote: QuoteSpan",
     "",
     "class Document(BaseModel):",
-    '    content: str = Field(description="Full extracted text of the file")',
+    '    content: str | None = Field(default=None, description="Extracted text — None until Convert to text instantiates it")',
     '    filename: str = Field(description="Original upload filename")',
     "",
     "class FileInput(BaseModel):",
@@ -175,7 +176,7 @@ export function allModelsToDts(
     "export type QuoteSpan = { doc_id: string; start: number; end: number };",
     "export type Quote = QuoteSpan;",
     "export type TextQuote = { text: string; quote: QuoteSpan };",
-    "export type Document = { content: string; filename: string };",
+    "export type Document = { content: string | null; filename: string };",
     "export type FileInput = Document;",
     "export type quote_string_t = string;",
     "export type quote_span_t = QuoteSpan;",
@@ -261,7 +262,7 @@ export function allModelsToRust(
     "",
     "#[derive(Debug, Clone, Serialize, Deserialize)]",
     "pub struct Document {",
-    "    pub content: String,",
+    "    pub content: Option<String>,",
     "    pub filename: String,",
     "}",
     "",
@@ -352,8 +353,8 @@ export function allModelsToGo(models: StructureModel[], typeAliases: TypeAlias[]
     "}",
     "",
     "type Document struct {",
-    '\tContent  string `json:"content"`',
-    '\tFilename string `json:"filename"`',
+    '\tContent  *string `json:"content"`',
+    '\tFilename string  `json:"filename"`',
     "}",
     "",
     "type FileInput = Document",
@@ -455,7 +456,7 @@ export function allModelsToBaml(
     "}",
     "",
     "class Document {",
-    '  content string @description("Full extracted text of the file")',
+    '  content string? @description("Extracted text — None until Convert to text instantiates it")',
     '  filename string @description("Original upload filename")',
     "}",
     "",

@@ -84,6 +84,29 @@ describe("example select demo — inference presets", () => {
   })
 })
 
+describe("web research scraper — python scrape + n8n-shaped hits", () => {
+  const webResearchSeed = resolve(SEEDS_DIR, "web_research_scraper.json")
+
+  it("includes a python scrape step and n8n-shaped search-hit fixtures", () => {
+    const ctx = loadProjectContext(webResearchSeed)
+    const scrape = ctx.project.modules.find((m) => m.label === "Scrape Pages")
+    expect(scrape?.kind).toBe("custom-code")
+    expect(scrape?.fallbackList?.some((e) => Boolean(e.python?.trim()))).toBe(true)
+    expect(ctx.project.modules.some((m) => m.kind === "llm-batch")).toBe(true)
+    expect(ctx.seed.docSpecs.some((d) => d.name === "search_hits.json")).toBe(true)
+  })
+
+  it("validates the bundled inference preset", () => {
+    const ctx = loadProjectContext(webResearchSeed)
+    const inferenceSetups = ctx.seed.docSpecs.filter((d) => d.name.endsWith("_inference.json"))
+    expect(inferenceSetups.length).toBeGreaterThanOrEqual(1)
+    for (const spec of inferenceSetups) {
+      const result = validateSetupCommand(ctx, spec.path)
+      expect(result.ok, `${spec.name}: ${result.issues.map((i) => i.message).join("; ")}`).toBe(true)
+    }
+  })
+})
+
 describe("billed work catalog select — structured catalog", () => {
   const billedWorkSeed = resolve(SEEDS_DIR, "billed_work_catalog_select.json")
 
@@ -91,7 +114,7 @@ describe("billed work catalog select — structured catalog", () => {
     const ctx = loadProjectContext(billedWorkSeed)
     const selectSteps = ctx.project.modules.filter((m) => m.kind === "example-select")
     expect(selectSteps).toHaveLength(2)
-    expect(ctx.project.modules.filter((m) => m.kind === "combine")).toHaveLength(2)
+    expect(ctx.project.modules.filter((m) => m.kind === "combine")).toHaveLength(1)
     expect(ctx.seed.docSpecs.some((d) => d.name === "work_item_catalog.json")).toBe(true)
   })
 

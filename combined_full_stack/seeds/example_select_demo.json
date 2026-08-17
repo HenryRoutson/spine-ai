@@ -4,21 +4,6 @@
   "kind": "example-select-demo",
   "models": [
     {
-      "id": "m_scope_desc",
-      "name": "ScopeDescription",
-      "description": "New damage case text — fills {description} in the example-select prompt.",
-      "fields": [
-        {
-          "id": "f_desc",
-          "name": "description",
-          "type": "text",
-          "optional": false,
-          "description": "Plain-language damage description",
-          "minLength": 1
-        }
-      ]
-    },
-    {
       "id": "m_scope_ex",
       "name": "ScopeExample",
       "description": "One reference scope-of-works row from the example library.",
@@ -107,45 +92,6 @@
       ]
     },
     {
-      "id": "m_library_file",
-      "name": "ExampleLibraryFile",
-      "description": "Parsed JSON upload — examples array for the library input step.",
-      "fields": [
-        {
-          "id": "f_examples",
-          "name": "examples",
-          "type": "list[model]",
-          "ref": "m_scope_ex",
-          "optional": false,
-          "description": "Reference scope rows",
-          "minItems": 1
-        }
-      ]
-    },
-    {
-      "id": "m_select_bundle",
-      "name": "ScopeSelectBundle",
-      "description": "Damage case + example library merged by combine.",
-      "fields": [
-        {
-          "id": "f_case",
-          "name": "case",
-          "type": "model",
-          "ref": "m_scope_desc",
-          "optional": false,
-          "description": "ScopeDescription from Normalize Case (pipeline state)"
-        },
-        {
-          "id": "f_library",
-          "name": "library",
-          "type": "model",
-          "ref": "m_library_file",
-          "optional": false,
-          "description": "Example library from the side input"
-        }
-      ]
-    },
-    {
       "id": "m_scope_draft",
       "name": "ScopeDraft",
       "description": "Draft scope of works for the new case.",
@@ -181,24 +127,7 @@
       "cached": true,
       "avgMs": 80,
       "avgCostCents": 0,
-      "note": "New leak description — feeds {description} via Normalize Case"
-    },
-    {
-      "id": "mod_normalize",
-      "kind": "custom-code",
-      "label": "Normalize Case",
-      "note": "Document → ScopeDescription — deterministic wrapper for the example-select context label.",
-      "inputDescription": "Damage case Document with plain-text content",
-      "inStructureId": "m_builtin_document",
-      "outStructureId": "m_scope_desc",
-      "cached": true,
-      "avgMs": 5,
-      "avgCostCents": 0,
-      "fallbackList": [
-        {
-          "typescript": "(doc) => ({ description: String(doc?.content ?? \"\").trim() })"
-        }
-      ]
+      "note": "New leak description — example-select reads Document.content as {description}"
     },
     {
       "id": "mod_library_in",
@@ -206,41 +135,12 @@
       "label": "Example Library",
       "inputType": "json",
       "inputNameContains": "example_library",
-      "inputDescription": "JSON file with examples array of past scope-of-works rows",
-      "outStructureId": "m_library_file",
+      "inputDescription": "JSON array of past scope-of-works rows (id, title, scope_text)",
+      "outStructureId": "m_scope_ex",
       "cached": true,
       "avgMs": 80,
       "avgCostCents": 0,
-      "note": "Reference example library — side input for combine (must follow Normalize Case on spine)"
-    },
-    {
-      "id": "mod_combine",
-      "kind": "combine",
-      "label": "Combine Inputs",
-      "note": "Merges ScopeDescription (pipeline state) with Example Library side input — required after input → code → input.",
-      "inputDescription": "Example library JSON (new input) plus ScopeDescription from Normalize Case on pipeline state",
-      "inStructureId": "m_scope_desc",
-      "outStructureId": "m_select_bundle",
-      "cached": true,
-      "avgMs": 40,
-      "avgCostCents": 0
-    },
-    {
-      "id": "mod_parse_examples",
-      "kind": "custom-code",
-      "label": "Parse Examples",
-      "note": "ScopeSelectBundle → list[ScopeExample] — examples from the merged library field.",
-      "inputDescription": "ScopeSelectBundle from combine — case + library",
-      "inStructureId": "m_select_bundle",
-      "outStructureId": "m_scope_ex",
-      "cached": true,
-      "avgMs": 5,
-      "avgCostCents": 0,
-      "fallbackList": [
-        {
-          "typescript": "(bundle) => { const rows = bundle?.library?.examples; if (!Array.isArray(rows)) throw new Error(\"expected examples array\"); return rows; }"
-        }
-      ],
+      "note": "Reference example library — JSON array on the spine for example-select",
       "outType": {
         "kind": "list",
         "item": { "kind": "ref", "modelId": "m_scope_ex" }
@@ -251,11 +151,11 @@
       "kind": "example-select",
       "label": "Select Relevant Examples",
       "note": "LLM relevance filter — cached prefix + per-item is_relevant; not embedding RAG.",
-      "inputDescription": "list[ScopeExample] from the parsed library",
+      "inputDescription": "list[ScopeExample] from the example library JSON",
       "inStructureId": "m_scope_ex",
       "outStructureId": "m_selected",
-      "exampleContextLabel": "Normalize Case",
-      "exampleContextField": "description",
+      "exampleContextLabel": "Damage Case",
+      "exampleContextField": "content",
       "exampleReasonField": "selection_reason",
       "prompt": "Find useful examples to help create a scope of works for this description of the works.\n\nDESCRIPTION:\n\n{description}\n\nPOSSIBLE USEFUL EXAMPLE:\n\n{example}",
       "model": "deepseek-v4",
@@ -269,15 +169,25 @@
       }
     },
     {
-      "id": "mod_merge",
-      "kind": "merge",
-      "label": "Merge for Draft",
-      "note": "Deep-merge Normalize Case (pipeline state) with selected_examples from example-select → ScopeDraftRequest.",
+      "id": "mod_assemble",
+      "kind": "assemble",
+      "label": "Assemble Draft Request",
+      "note": "Zip Damage Case.content with selected_examples → ScopeDraftRequest.",
       "inputDescription": "Filtered SelectedExample rows with selection_reason",
       "inStructureId": "m_selected",
       "outStructureId": "m_draft_req",
-      "mergeStateLabel": "Normalize Case",
-      "mergeWrapListField": "selected_examples",
+      "inType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_selected" }
+      },
+      "outType": {
+        "kind": "ref",
+        "modelId": "m_draft_req"
+      },
+      "assembleBindings": {
+        "description": { "kind": "path", "from": { "label": "Damage Case" }, "path": "content" },
+        "selected_examples": { "kind": "spine" }
+      },
       "cached": true,
       "avgMs": 5,
       "avgCostCents": 0
@@ -419,11 +329,7 @@
       "inputs": {
         "Damage Case": "damage_case.txt",
         "Example Library": "example_library.json"
-      },
-      "expectedOutputs": [
-        { "stepLabel": "Normalize Case", "file": "example_select_demo/expected/normalize_case.json" },
-        { "stepLabel": "Parse Examples", "file": "example_select_demo/expected/parse_examples.json" }
-      ]
+      }
     },
     {
       "name": "Roof storm",
@@ -431,11 +337,7 @@
       "inputs": {
         "Damage Case": "damage_case_roof_storm.txt",
         "Example Library": "example_library.json"
-      },
-      "expectedOutputs": [
-        { "stepLabel": "Normalize Case", "file": "example_select_demo/expected/roof_storm_normalize_case.json" },
-        { "stepLabel": "Parse Examples", "file": "example_select_demo/expected/parse_examples.json" }
-      ]
+      }
     },
     {
       "name": "Kitchen reno",
@@ -443,21 +345,7 @@
       "inputs": {
         "Damage Case": "damage_case_kitchen_reno.txt",
         "Example Library": "example_library.json"
-      },
-      "expectedOutputs": [
-        { "stepLabel": "Normalize Case", "file": "example_select_demo/expected/kitchen_reno_normalize_case.json" },
-        { "stepLabel": "Parse Examples", "file": "example_select_demo/expected/parse_examples.json" }
-      ]
-    }
-  ],
-  "expectedOutputs": [
-    {
-      "stepLabel": "Normalize Case",
-      "file": "example_select_demo/expected/normalize_case.json"
-    },
-    {
-      "stepLabel": "Parse Examples",
-      "file": "example_select_demo/expected/parse_examples.json"
+      }
     }
   ]
 }

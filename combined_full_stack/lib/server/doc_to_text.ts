@@ -1,7 +1,6 @@
-import { readFileSync } from "node:fs";
 import { type VisionAttachment } from "./openrouter_llm";
 import { llmVisionString, type CallContext } from "./llm";
-import { originalDocFile, type Store } from "./store";
+import { resolveOriginalDocBytes, type Store } from "./store";
 import { type DocId, type ModelId } from "./types";
 import { type ServerLogger } from "./server_logger";
 import { visionCacheKey } from "./doc_text_cache";
@@ -24,9 +23,9 @@ function looksLikePdf(bytes: Uint8Array): boolean {
 }
 
 export async function loadDocBytesForVision(store: Store, docId: DocId): Promise<DocBytes | undefined> {
-  const file = await originalDocFile(docId);
+  const file = await resolveOriginalDocBytes(store, docId);
   if (file) {
-    const bytes = new Uint8Array(readFileSync(file.path));
+    const bytes = file.bytes;
     // AI : seed backfill used to copy .json onto <hash>.pdf — don't send that as a vision image.
     if (file.ext === "pdf" && !looksLikePdf(bytes)) {
       return { bytes, mime: "text/plain" };

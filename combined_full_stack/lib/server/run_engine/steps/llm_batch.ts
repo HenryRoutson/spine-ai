@@ -1,6 +1,7 @@
 import { llmBatchStructured } from "../../llm";
 import { deferBrowserLlmIfNeeded } from "../defer_browser_llm";
 import { llmSchema, structuredLlmPrompt } from "../../structure";
+import { labeledJsonPreviewItems } from "@/lib/step-response-preview";
 import type { PipelineModule } from "../../types";
 import { llmCallBudget, modelById } from "../helpers";
 import { requireLinearInput } from "../context";
@@ -64,11 +65,13 @@ export async function execLlmBatchStep(m: PipelineModule, ctx: RunCtx, log: RunL
   );
   log.info(`llm-batch complete`, { moduleId: m.id, rows: rows.length });
   const value = rows;
+  const inputPreview = batchInputPreview(items, promptFor);
   return {
     value,
     preview: `${items.length} items → ${value.length} ${out.name}`,
     json: JSON.stringify(value, null, 2),
-    ...batchInputPreview(items, promptFor),
+    ...inputPreview,
+    outputPreviewItems: labeledJsonPreviewItems(rows, inputPreview.inputPreviewItems),
     llmCalls: ctx.stepLlmCalls,
   };
 }

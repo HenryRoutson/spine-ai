@@ -7,4 +7,4 @@
 7. Product feedback router — Classify feedback into eng/design/docs buckets with representative quotes.
 8. Vendor SLA breach report — Monthly uptime PDFs → structured breach table for account managers.
 9. Bug report enricher — User report + logs snippet → repro steps, severity, likely component.
-10. 
+10. Web research scraper — n8n-shaped search hits → Python/Ray scrape → per-page LLM extract → briefing. 

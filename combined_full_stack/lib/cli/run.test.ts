@@ -13,6 +13,9 @@ const exampleSelectTest = resolve(SEEDS_DIR, "../documents/example_select_demo/k
 const exampleSelect2Seed = resolve(SEEDS_DIR, "billed_work_catalog_select.json")
 const exampleSelect2Setup = resolve(SEEDS_DIR, "../documents/billed_work_catalog_select/billed_work_catalog_select_inference.json")
 const exampleSelect2Test = resolve(SEEDS_DIR, "../documents/billed_work_catalog_select/billed_work_catalog_select_testing.json")
+const webResearchSeed = resolve(SEEDS_DIR, "web_research_scraper.json")
+const webResearchSetup = resolve(SEEDS_DIR, "../documents/web_research_scraper/web_research_scraper_inference.json")
+const webResearchTest = resolve(SEEDS_DIR, "../documents/web_research_scraper/web_research_scraper_testing.json")
 
 describe("spine cli run", () => {
   it("returns help for empty argv", async () => {
@@ -151,6 +154,34 @@ describe("spine cli run", () => {
       exampleSelect2Seed,
       "--file",
       exampleSelect2Test,
+    ])
+    expect(result.command).toBe("validate test")
+    expect(result.ok).toBe(true)
+    expect(result.issues.filter((i) => i.level === "error")).toHaveLength(0)
+  })
+
+  it("validate setup passes web research scraper inference preset", async () => {
+    const result = await runSpineCli([
+      "validate",
+      "setup",
+      "--project",
+      webResearchSeed,
+      "--file",
+      webResearchSetup,
+    ])
+    expect(result.command).toBe("validate setup")
+    expect(result.ok).toBe(true)
+    expect(result.data?.setupFile).toBe(webResearchSetup)
+  })
+
+  it("validate test passes web research scraper fixture", async () => {
+    const result = await runSpineCli([
+      "validate",
+      "test",
+      "--project",
+      webResearchSeed,
+      "--file",
+      webResearchTest,
     ])
     expect(result.command).toBe("validate test")
     expect(result.ok).toBe(true)

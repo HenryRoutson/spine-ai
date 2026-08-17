@@ -12,7 +12,7 @@ import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import { dataDir } from "./config";
 import { createAdminClient } from "./supabase_admin";
 import { hashContent, type Store } from "./store";
-import { migrateProjectModules } from "./validity";
+import { migrateProjectModules, projectWithAuthoredModules } from "./validity";
 import { isMissingSchemaError } from "./supabase_store";
 import { LOCAL_DEV_USER_ID, isLocalDevMode, type user_id_string } from "./require_auth";
 import {
@@ -401,7 +401,7 @@ export async function publishSharedLink(input: PublishSharedLinkInput): Promise<
   assertValidSharedLinkPricing(fundingMode, billingMultiple, flatFeeCents);
   const embedOptions = normalizeEmbedOptions(isEmbed ? input.embedOptions : undefined);
 
-  const snapshot = migrateProjectModules(structuredClone(input.project));
+  const snapshot = projectWithAuthoredModules(migrateProjectModules(structuredClone(input.project)));
   const defaultDocs: SharedLinkDefaultDoc[] = [];
   mkdirSync(defaultDocsDir(id), { recursive: true });
 

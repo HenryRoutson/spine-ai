@@ -64,6 +64,14 @@ export function runLogText(run: PipelineRun): string {
       step.inputPreview.split("\n").forEach((l) => lines.push(`     ${l}`))
     }
 
+    if (step.outputPreviewItems?.length) {
+      lines.push(`   Responses:`)
+      for (const item of step.outputPreviewItems) {
+        lines.push(`     ── ${item.label} ──`)
+        item.text.split("\n").forEach((l) => lines.push(`     ${l}`))
+      }
+    }
+
     const output = step.outputJson ?? step.outputPreview
     if (output && step.status !== "error") {
       lines.push(`   Output:`)

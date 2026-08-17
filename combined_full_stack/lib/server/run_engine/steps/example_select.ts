@@ -8,8 +8,10 @@ import {
 import {
   DEFAULT_EXAMPLE_SELECT_PROMPT,
   exampleReasonField,
+  exampleSelectItems,
 } from "@/lib/example-select";
 import { buildExampleSelectVerdicts } from "@/lib/example-select-verdicts";
+import { labeledJsonPreviewItems } from "@/lib/step-response-preview";
 import { labelAsStateKey } from "../../pipeline_state";
 import type { PipelineModule } from "../../types";
 import { llmCallBudget, materializeHints, materializeStepOutput, modelById, prevModuleFor } from "../helpers";
@@ -41,6 +43,9 @@ function formatExampleContext(value: unknown, fieldPath?: string): string {
 }
 
 function exampleSelectPrompt(template: string, description: string, example: unknown): string {
+  // AI : TODO (example-select-view) — project `example` via m.examplePromptFields before fill; kept rows
+  // AI :   stay the original object (buildExampleSelectVerdicts already passthroughs + reason).
+  // AI : TODO (sql-schema) — project via prompt VIEW; passthrough is the TABLE row.
   return fillExampleSelectPrompt(template, description, example);
 }
 
@@ -78,7 +83,7 @@ export async function execExampleSelectStep(m: PipelineModule, ctx: RunCtx, log:
   const stepModel = m.model ?? ctx.model;
 
   const data = requireLinearInput(m, ctx);
-  let items = Array.isArray(data) ? data : [data];
+  let items = exampleSelectItems(data);
   const totalCandidates = items.length;
   if (m.examplePreFilterMax != null && m.examplePreFilterMax > 0) {
     items = items.slice(0, m.examplePreFilterMax);
@@ -140,12 +145,14 @@ export async function execExampleSelectStep(m: PipelineModule, ctx: RunCtx, log:
 
   const prev = prevModuleFor(project.modules, ctx.prevModuleId);
   const value = materializeStepOutput(m, project, kept, materializeHints(m, ctx), prev);
+  const inputPreview = batchInputPreview(items, promptFor);
 
   return {
     value,
     preview: `${totalCandidates} candidates → ${kept.length} selected · ${out.name}`,
     json: JSON.stringify(value, null, 2),
-    ...batchInputPreview(items, promptFor),
+    ...inputPreview,
+    outputPreviewItems: labeledJsonPreviewItems(relevanceRows, inputPreview.inputPreviewItems, "candidate"),
     llmCalls: ctx.stepLlmCalls,
     exampleSelectVerdicts: verdicts,
   };

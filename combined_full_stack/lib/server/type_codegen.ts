@@ -1,5 +1,6 @@
 import { allModelsToPydantic, allModelsToDts } from "./pydantic";
 // AI : TODO (linter-first) — add generatePipelineTypesRust + pipeline_types.rs; typecheck via cargo check, not TS.
+// AI : TODO (sql-schema) — generatePipelineTypesSql → schema.sql; optional sqlite check, not required to ship DDL.
 import {
   pipelineStatePyTypedDict,
   pipelineStateFields,
@@ -21,6 +22,7 @@ export type GeneratedPipelineTypes = {
   modelsDts: string;
   pipelinePy: string;
   pipelineDts: string;
+  // AI : TODO (sql-schema) — schemaSql?: string — CREATE TABLE/VIEW dump for the Types tab.
 };
 
 export function generateModelsDts(
@@ -29,6 +31,8 @@ export function generateModelsDts(
 ): string {
   return allModelsToDts(models, typeAliases ?? []);
 }
+// AI : TODO (sql-schema) — also emit schema.sql (CREATE TABLE/VIEW) next to models.py / models.d.ts.
+// AI :   DDL is the Types-tab artifact LLMs and humans read first; Pydantic stays the document/LLM wire.
 
 function stepFunctionName(m: PipelineModule, index: number): string {
   const key = labelToPyKey(m.label);

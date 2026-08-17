@@ -1,6 +1,5 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { Download, FileJson, FileSpreadsheet, Table2 } from "lucide-react"
 import { buttonVariants } from "@/components/ui/button"
 import {
@@ -14,7 +13,8 @@ import {
 import { buildDownloadBaseName } from "@/lib/data-download-name"
 import { downloadDataAs, isDownloadableJson, type DataDownloadFormat } from "@/lib/data-download"
 import { useOptionalStore } from "@/lib/store"
-import { createClient } from "@/utils/supabase/client"
+import { useSupabaseSession } from "@/lib/use-supabase-session"
+import { HTML_EXPORT_SKIP_PROPS } from "@/lib/html-export-mark"
 import { cn } from "@/lib/utils"
 import type { StructureModel } from "@/lib/types"
 
@@ -37,15 +37,8 @@ export function DataDownloadMenu({
 }) {
   const store = useOptionalStore()
   const models = modelsProp ?? store?.models
-  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const { email: userEmail } = useSupabaseSession()
   const canDownload = isDownloadableJson(content)
-
-  useEffect(() => {
-    void createClient()
-      .then((supabase) => supabase.auth.getUser())
-      .then(({ data }) => setUserEmail(data.user?.email ?? null))
-      .catch(() => setUserEmail(null))
-  }, [])
 
   async function handleDownload(format: DataDownloadFormat) {
     try {
@@ -65,6 +58,8 @@ export function DataDownloadMenu({
   }
 
   return (
+    // AI : skipped in HTML export — json-viewer snapshot srcdoc owns JSON/CSV/xlsx download
+    <span {...HTML_EXPORT_SKIP_PROPS} className="inline-flex">
     <DropdownMenu>
       <DropdownMenuTrigger
         disabled={!canDownload}
@@ -94,5 +89,6 @@ export function DataDownloadMenu({
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+    </span>
   )
 }

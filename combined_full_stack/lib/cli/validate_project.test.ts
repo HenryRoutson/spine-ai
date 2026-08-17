@@ -48,7 +48,7 @@ describe("validate project command", () => {
   })
 
   it("flags second input after processing when combine is missing", () => {
-    const ctx = loadProjectContext(resolve(SEEDS_DIR, "example_select_demo.json"))
+    const ctx = loadProjectContext(resolve(SEEDS_DIR, "billed_work_catalog_select.json"))
     const broken = {
       ...ctx.project,
       modules: ctx.project.modules.filter((m) => m.kind !== "combine"),

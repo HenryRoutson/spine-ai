@@ -1,17 +1,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AUTH_SIGN_IN_REQUIRED } from "@/lib/auth-messages";
-// AI : TODO refactor (prod) — add original doc bytes via Supabase Storage (see store.ts saveOriginalDocBytes).
-// AI : TODO bug (prod) — user-uploaded PDF/image bytes lost on redeploy; GET /api/docs/[id]/file 404s.
+// AI : original PDF/image bytes persist via Supabase Storage (see persistOriginalDocBytes).
 // AI : adopted from backend_with_users/ — implements the same Store contract, so
 // AI : runPipeline & co accept this store unchanged. Session JWT + explicit user_id
 // AI : on writes keep rows scoped to the signed-in user.
-import { hashContent, type Store } from "./store";
+import { hashContent, parseOriginalDocExt, type OriginalDocBytes, type OriginalDocMeta, type Store } from "./store";
 import type { user_id_string } from "./require_auth";
 import { storeErrorMessage } from "./errors";
 import { listTeamsForUser } from "./teams";
-import { migrateProjectModules } from "./validity";
+import { migrateProjectModules, projectWithAuthoredModules } from "./validity";
 import { stripSharedModels } from "./builtin_models";
 import { buildDocRef, docRefFromDbRow, type DocDbRow, userDocDbRow } from "./doc_ref";
+import {
+  downloadOriginalDocObject,
+  findOriginalDocObject,
+  removeOriginalDocObject,
+  uploadOriginalDocObject,
+} from "./doc_original_storage";
 import {
   clearPlatformSeedDocState,
   ingestPlatformSeedDocRows,
@@ -135,7 +140,7 @@ export class SupabaseStore implements Store {
   }
 
   private projectDataForStorage(p: Project): Project {
-    const { teamReadOnly, teamProjectOwnerId, ...rest } = p;
+    const { teamReadOnly, teamProjectOwnerId, ...rest } = projectWithAuthoredModules(p);
     return rest;
   }
 
@@ -229,7 +234,7 @@ export class SupabaseStore implements Store {
       }
     }
 
-    return [...ownedProjects, ...sharedTeamProjects];
+    return [...ownedProjects, ...sharedTeamProjects].map((p) => migrateProjectModules(p));
   }
 
   // AI : warm lambdas miss projects created on another instance — re-read before state/runs 404.
@@ -594,6 +599,33 @@ export class SupabaseStore implements Store {
     return this.state.contents.get(id);
   }
 
+  // AI : own folder first, then team-shared project owners (bytes live under the uploader's user_id).
+  private originalBytesOwnerIds(): user_id_string[] {
+    const ids: user_id_string[] = [this.scopedUserId];
+    for (const p of this.state.projects) {
+      if (p.teamProjectOwnerId && !ids.includes(p.teamProjectOwnerId)) ids.push(p.teamProjectOwnerId);
+    }
+    return ids;
+  }
+
+  persistOriginalDocBytes(id: DocId, bytes: Uint8Array, ext: string): void {
+    const parsed = parseOriginalDocExt(ext);
+    if (!parsed) return;
+    const body = Buffer.from(bytes);
+    const ownerId = this.scopedUserId;
+    this.queueRest(() => uploadOriginalDocObject(this.db, ownerId, id, body, parsed));
+  }
+
+  async loadOriginalDocMeta(id: DocId): Promise<OriginalDocMeta | undefined> {
+    const found = await findOriginalDocObject(this.db, this.originalBytesOwnerIds(), id);
+    if (!found) return undefined;
+    return { mime: found.mime, ext: found.ext, source: "storage" };
+  }
+
+  async loadOriginalDocBytes(id: DocId): Promise<OriginalDocBytes | undefined> {
+    return downloadOriginalDocObject(this.db, this.originalBytesOwnerIds(), id);
+  }
+
   parserCacheGetByFileHash(fileHash: FileContentHash, parser: ParserKind): ParserCacheRow | undefined {
     return parserCacheGetByFileHash(this.cacheIndex, fileHash, parser);
   }
@@ -702,6 +734,7 @@ export class SupabaseStore implements Store {
     purgeParserVisionCacheForDoc(this.cacheIndex, id);
     if (!platformOnly) {
       this.queueRest(() => this.db.from("docs").delete().eq("id", id));
+      this.queueRest(() => removeOriginalDocObject(this.db, this.scopedUserId, id));
     } else {
       this.platformSeedDocIds.delete(id);
     }

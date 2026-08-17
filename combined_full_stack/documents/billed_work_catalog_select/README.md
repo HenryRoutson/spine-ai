@@ -10,9 +10,13 @@ You have ~100+ billable work items (scaling to 10k) and past jobs that billed a 
 
 ## Approach
 
-1. **Pass 1 — filter past jobs** — cached prefix with `{description}` from Normalize Case; each job is `{example}`.
-2. **Merge for Item Filter** — `{ description, selected_examples }` becomes the per-run cached block for pass 2.
-3. **Pass 2 — filter catalog** — same relevance schema; only each `WorkItem` row changes per call.
+1. **Pass 1 — filter past jobs** — cached prefix with `{description}` from Work Description.content; each job is `{example}`.
+   - TODO (example-select-view): `{example}` must be `title` + `work_description` only. Opaque `billed_items` (`WI-xxxxx`) are uncached noise; keep them on the spine for pass 2 / draft.
+   - TODO (sql-schema): `CREATE VIEW job_example_prompt AS SELECT id, title, work_description FROM job_example;` — DDL annotation even without a SQLite instance.
+2. **Assemble Item Filter** — `{ description, selected_examples }` becomes the per-run cached block for pass 2.
+   - TODO (type-join): denormalize billed lines here (lookup-embed `work_item_id` → `WorkItem`), not inside pass 1 candidates.
+   - TODO (sql-schema): join view on `billed_line` ⋈ `work_item` for the cached prefix only.
+3. **Pass 2 — filter catalog** — same relevance schema; only each `WorkItem` row changes per call. Combine Catalog is required because pass 1 sits between the job library and catalog inputs; example-select unwraps `items` from the combine product.
 4. **Draft Billed Work** — final LLM picks quantities from filtered items using `selection_reason` on kept rows.
 
 Excluded candidates are auditable: each example-select step stores `exampleSelectVerdicts` on the run step (kept + excluded, each with `chain_of_thought`). Browse **excluded** in Logging → Step trace → Relevance verdicts.
@@ -21,17 +25,13 @@ Excluded candidates are auditable: each example-select step stores `exampleSelec
 
 | Step | Kind | Role |
 |------|------|------|
-| Work Description | input | Claim narrative |
-| Normalize Case | custom-code | `{ description }` on pipeline state |
-| Job Example Library | input | Structured past jobs |
-| Combine Job Inputs | combine | case + library |
-| Parse Job Examples | custom-code | `list[JobExample]` |
+| Work Description | input | Claim narrative — context for pass 1 via `content` |
+| Job Example Library | input | JSON array of structured past jobs |
 | Select Relevant Jobs | example-select | Pass 1 |
-| Merge for Item Filter | merge | Context for pass 2 |
-| Work Item Catalog | input | 100 catalog rows |
-| Combine Catalog | combine | context + catalog |
-| Parse Work Items | custom-code | `list[WorkItem]` |
-| Select Relevant Work Items | example-select | Pass 2 (100 LLM calls) |
+| Assemble Item Filter | assemble | `{ description, selected_examples }` for pass 2 |
+| Work Item Catalog | input | 100 catalog rows (JSON array) |
+| Combine Catalog | combine | context + catalog list — required after pass-1 processing |
+| Select Relevant Work Items | example-select | Pass 2 (unwraps combine `items`; 100 LLM calls) |
 | Merge for Draft | merge | Request for final LLM |
 | Draft Billed Work | llm | Structured `line_items` |
 | Billed Work Output | output | Final artifact |

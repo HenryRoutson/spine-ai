@@ -1,5 +1,6 @@
 import { LOCAL_DEV_USER_ID, type user_id_string } from "@/lib/server/require_auth"
 import { createAdminClient } from "@/lib/server/supabase_admin"
+import { removeAllOriginalDocObjectsForUser } from "@/lib/server/doc_original_storage"
 
 export class DeleteAccountError extends Error {
   constructor(
@@ -111,6 +112,8 @@ export async function deleteUserAccount(
   for (const table of USER_SCOPED_TABLES) {
     await deleteRowsByColumn(admin, table, "user_id", userId)
   }
+
+  await removeAllOriginalDocObjectsForUser(admin, userId)
 
   const { error } = await admin.auth.admin.deleteUser(userId)
   if (error) throw new Error(error.message)

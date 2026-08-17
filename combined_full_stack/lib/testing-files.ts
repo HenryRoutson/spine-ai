@@ -104,12 +104,13 @@ export function inputModulesOf(modules: PipelineModule[]): PipelineModule[] {
 
 // AI : input/combine steps are not scored — run log stores the full value (same shape as expected).
 export function isComparableStep(m: PipelineModule): boolean {
-  return m.kind !== ModuleKind.Input && m.kind !== ModuleKind.Combine
+  return m.kind !== ModuleKind.Input && m.kind !== ModuleKind.Combine && m.kind !== ModuleKind.DocToText
 }
 
 export function skipReasonForTestStep(m: PipelineModule): string | undefined {
   if (m.kind === ModuleKind.Input) return "Input — no computation"
   if (m.kind === ModuleKind.Combine) return "Combine — input checked, output not scored"
+  if (m.kind === ModuleKind.DocToText) return "Convert to text — auto from input types"
   return undefined
 }
 

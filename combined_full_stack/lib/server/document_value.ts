@@ -6,6 +6,7 @@ type DocumentHints = {
 };
 
 // AI : normalize runtime document values — supports legacy body/doc_id and the shared Document struct.
+// AI : TODO (sql-schema) — these helpers are column projections off document(id, filename, content, blob).
 export function documentContentFrom(value: unknown, fallback = ""): string {
   if (typeof value === "string") return value;
   if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
@@ -46,5 +47,13 @@ export function documentValueFrom(
   return {
     content: documentContentFrom(value, fallbackContent),
     filename: documentFilenameFrom(value, hints, hints.docId ?? "document"),
+  };
+}
+
+// AI : input of binary types emits content None — convert-to-text instantiates it. No encoded bytes on the spine.
+export function documentPendingValue(hints: DocumentHints = {}): { content: null; filename: string } {
+  return {
+    content: null,
+    filename: documentFilenameFrom(undefined, hints, hints.docId ?? "document"),
   };
 }

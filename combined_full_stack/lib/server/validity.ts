@@ -39,16 +39,19 @@ import {
   type TypeExpr,
 } from "./type_expr";
 import { typeExprAssignable, validateAssembleBindings } from "@/lib/assemble-type-expr";
+import { exampleSelectAcceptsWrapper } from "@/lib/example-select";
 import {
   stepEmits,
   stepEmitsList,
   inputFeedsCombine,
   isCombineSideParseStep,
   isAutoQuoteStep,
-  isAutoStructureParseStep,
+  isManagedLockedStep,
   skipDuplicateLabelCheck,
   AUTO_QUOTE_EXPLAINER,
   AUTO_STRUCTURE_PARSE_EXPLAINER,
+  AUTO_DOC_TO_TEXT_EXPLAINER,
+  projectWithAuthoredModules,
   syncAutoQuoteSteps,
   syncAutoStructureParseSteps,
   syncManagedPipelineSteps,
@@ -89,8 +92,13 @@ export {
   stepEmits,
   isAutoQuoteStep,
   isAutoStructureParseStep,
+  isAutoDocToTextStep,
+  isManagedLockedStep,
   AUTO_QUOTE_EXPLAINER,
   AUTO_STRUCTURE_PARSE_EXPLAINER,
+  AUTO_DOC_TO_TEXT_EXPLAINER,
+  authoredPipelineModules,
+  projectWithAuthoredModules,
   syncAutoQuoteSteps,
   syncAutoStructureParseSteps,
   syncManagedPipelineSteps,
@@ -186,6 +194,8 @@ function stepAcceptsSpineType(
   if (typeExprAssignable(expected, actual, typeAliases, models) || typeExprEqual(expected, actual)) return true;
   // AI : passthrough steps read pipeline state by label — spine type at this index is not their contract.
   if (m.kind === ModuleKind.Output || m.kind === ModuleKind.Assert || m.kind === ModuleKind.HumanReview || m.kind === ModuleKind.Quote) return true;
+  // AI : example-select unwraps the sole list[T] field on a combine (or similar) wrapper struct.
+  if (m.kind === ModuleKind.ExampleSelect && exampleSelectAcceptsWrapper(expected, actual, models)) return true;
   if (!cardinalityMismatch(expected, actual)) return false;
   // AI : custom-code / coded transform steps reshape list↔object at runtime — spine item type still matches.
   if (m.kind === ModuleKind.CustomCode || m.kind === ModuleKind.Chunk || isMergeModuleKind(m.kind) || (m.kind === ModuleKind.Transform && !!m.code?.trim())) return true;
@@ -527,7 +537,7 @@ function computeStructureFieldInvalid(
 function computeInputDescriptionInvalid(modules: PipelineModule[]): InvalidMap {
   const invalid: InvalidMap = new Map();
   for (const m of modules) {
-    if (isAutoQuoteStep(m) || isAutoStructureParseStep(m)) continue;
+    if (isManagedLockedStep(m)) continue;
     if (m.inputDescription?.trim()) continue;
     pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.MissingInputDescription });
   }
@@ -551,6 +561,9 @@ function computeExampleSelectInvalid(modules: PipelineModule[]): InvalidMap {
     if (!labelsInScope(modules, i).has(label)) {
       pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.StateKeyMissing, missingLabel: label });
     }
+    // AI : TODO (example-select-view) — when examplePromptFields ships, flag names not on inType item fields.
+    // AI : TODO (type-join) — prompt view must be a Pick/join of the item type, not an arbitrary reshape.
+    // AI : TODO (sql-schema) — if examplePromptView is SQL, prepare/EXPLAIN against declared tables; unknown columns = invalid.
   }
   return invalid;
 }
@@ -782,7 +795,7 @@ export function computeInvalid(
     if (transformIssue) pushInvalid(invalid, transformIssue);
   }
 
-  for (const [id, issues] of computeUnusedOutputInvalid(modules)) {
+  for (const [id, issues] of computeUnusedOutputInvalid(modules, models)) {
     for (const issue of issues) {
       if (!invalidIssuesForModule(invalid, id).some((x) => x.kind === issue.kind)) {
         pushInvalid(invalid, issue);
@@ -826,7 +839,7 @@ export function computeInvalid(
 }
 
 // AI : middle steps must feed a downstream inStructureId (combine counts via inStructureId).
-function computeUnusedOutputInvalid(modules: PipelineModule[]): InvalidMap {
+function computeUnusedOutputInvalid(modules: PipelineModule[], models: StructureModel[]): InvalidMap {
   const invalid: InvalidMap = new Map();
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i]!;
@@ -834,7 +847,18 @@ function computeUnusedOutputInvalid(modules: PipelineModule[]): InvalidMap {
     if (!emitted || m.kind === ModuleKind.Input || usesPassthroughStructure(m.kind)) continue;
     // AI : a combine consumes the previous step's output as its newDocument regardless of inStructureId.
     if (modules[i + 1]?.kind === ModuleKind.Combine) continue;
-    const used = modules.slice(i + 1).some((down) => down.inStructureId === emitted);
+    const used = modules.slice(i + 1).some((down) => {
+      if (down.inStructureId === emitted) return true;
+      const expected = stepSpineInType(down);
+      const actual = stepSpineOutType(m);
+      // AI : example-select unwraps the sole list[T] field on a combine wrapper struct.
+      return (
+        down.kind === ModuleKind.ExampleSelect &&
+        !!expected &&
+        !!actual &&
+        exampleSelectAcceptsWrapper(expected, actual, models)
+      );
+    });
     if (!used) pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.UnusedOutput, expects: emitted });
   }
   return invalid;

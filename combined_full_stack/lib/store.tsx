@@ -53,7 +53,7 @@ import {
 } from "@/lib/api-client"
 import { API_ROUTES } from "@/lib/api-routes"
 import { migrateProjectModules } from "@/lib/quote-steps"
-import { syncManagedPipelineSteps } from "@/lib/structure-parse-steps"
+import { authoredPipelineModules, syncManagedPipelineSteps } from "@/lib/structure-parse-steps"
 import { stripSharedModels, stripBuiltinTypeAliases, withBuiltinTypeAliases, withSharedModels } from "@/lib/structure"
 import { mergeInferredStructuresForDoc, modelsChanged } from "@/lib/sync-doc-structures"
 import { docTextContent, fetchDocText, invalidateDocText } from "@/lib/doc-text-cache"
@@ -167,7 +167,7 @@ function serializeProjectPutBody(p: Project): string {
     kind: p.kind,
     models: p.models,
     typeAliases: p.typeAliases,
-    modules: p.modules,
+    modules: authoredPipelineModules(p.modules),
     strategies: p.strategies,
     seedDocNames: p.seedDocNames,
     expectedOutputs: p.expectedOutputs,

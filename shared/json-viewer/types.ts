@@ -28,6 +28,11 @@ export const DEFAULT_JSON_VIEWER_SYNTAX_THEME: JsonViewerSyntaxThemeId = "app"
 
 export const JSON_VIEWER_SETTINGS_CHANGED_EVENT = "json-viewer-settings-changed" as const
 
+// AI : keep in sync with json-viewer.html postMessage types
+export const JSON_VIEWER_MESSAGE_LOAD = "json-viewer:load" as const
+export const JSON_VIEWER_MESSAGE_SETTINGS = "json-viewer:settings" as const
+export const JSON_VIEWER_MESSAGE_FULLSCREEN = "json-viewer:fullscreen" as const
+
 // AI : sample snippet for settings preview — keep in sync with json-viewer.html preview
 export const JSON_VIEWER_SYNTAX_PREVIEW =
   '{\n  "rule_id": "R-01",\n  "active": true,\n  "count": 42\n}'

@@ -3,6 +3,7 @@ import { ModuleKind, type PipelineModule } from "../types";
 import { isMergeModuleKind } from "@/lib/module-kinds";
 import type { ExecResult, RunCtx, RunLogger } from "./engine_types";
 import { execInputStep } from "./steps/input";
+import { execDocToTextStep } from "./steps/doc_to_text";
 import { execLlmStep } from "./steps/llm";
 import { execLlmBatchStep } from "./steps/llm_batch";
 import { execExampleSelectStep } from "./steps/example_select";
@@ -26,6 +27,8 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
   switch (m.kind) {
     case ModuleKind.Input:
       return execInputStep(m, ctx, log);
+    case ModuleKind.DocToText:
+      return execDocToTextStep(m, ctx, log);
     case ModuleKind.Llm:
       return execLlmStep(m, ctx, log);
     case ModuleKind.Assemble:

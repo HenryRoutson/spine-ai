@@ -23,7 +23,7 @@ import { SEED_LLM_PROVIDER_ID } from "@/lib/server/llm/providers/seed";
 import { seedOpenAiChatCompletion } from "@/lib/server/llm/seed_response";
 import { DEEPSEEK_FLASH_SLUG, DEEPSEEK_SLUG } from "@/lib/server/openrouter_slugs";
 import { generatePipelineSourceTs } from "@/lib/server/pipeline_ts_export";
-import { exportRuntimeTsPath } from "@/lib/server/pipeline_export_runtime_lib";
+import { exportRuntimeTsPath } from "@/lib/server/pipeline_export_runtime_files";
 import { loadProjectSeed, resolveSeedDocPath, type ProjectSeed } from "@/lib/server/seed";
 import { hashContent, type Store } from "@/lib/server/store";
 import { computeInvalid } from "@/lib/server/validity";

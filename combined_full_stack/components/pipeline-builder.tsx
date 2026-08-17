@@ -1,7 +1,7 @@
 "use client"
 
 // AI : TODO refactor — only extract shared pipeline chrome if a third layout consumer appears (Logging already uses PipelineCanvas).
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import {
   Plus,
   Trash2,
@@ -22,13 +22,17 @@ import { LOGGING_SETTINGS_CHANGED_EVENT } from "@/lib/logging-settings"
 import { useRerenderOnEvent } from "@/lib/use-browser-pref-event"
 import { AUTO_QUOTE_EXPLAINER, isAutoQuoteStep } from "@/lib/quote-steps"
 import {
+  AUTO_DOC_TO_TEXT_EXPLAINER,
   AUTO_STRUCTURE_PARSE_EXPLAINER,
+  authoredPipelineModules,
+  isAutoDocToTextStep,
   isAutoStructureParseStep,
+  isManagedLockedStep,
   patchInputTargetStructure,
 } from "@/lib/structure-parse-steps"
 import { moduleMetrics } from "@/lib/billing"
 import { managedPipelinePairIds } from "@/lib/pipeline-layout"
-import { KindMenuItemIcon } from "@/lib/module-ui"
+import { KindMenuItemIcon, AutoQuoteLock, AutoDocToTextLock, AutoStructureParseLock } from "@/lib/module-ui"
 import { makeModule } from "@/lib/pipeline-module-factory"
 import { MODULE_META, ModuleKind, type PipelineModule, type ModuleId } from "@/lib/types"
 import { WindowHeader } from "@/components/window-header"
@@ -168,7 +172,7 @@ export function PipelineBuilder() {
 
   function remove(id: string) {
     const m = modules.find((x) => x.id === id)
-    if (m && (isAutoQuoteStep(m) || isAutoStructureParseStep(m))) return
+    if (m && isManagedLockedStep(m)) return
     const drop = new Set(managedPipelinePairIds(modules, id))
     const next = modules.filter((m) => !drop.has(m.id))
     setModules(next)
@@ -177,7 +181,7 @@ export function PipelineBuilder() {
 
   function move(id: string, dir: -1 | 1) {
     const m = modules.find((x) => x.id === id)
-    if (m && (isAutoQuoteStep(m) || isAutoStructureParseStep(m))) return
+    if (m && isManagedLockedStep(m)) return
     const ids = managedPipelinePairIds(modules, id)
     const block = ids.map((x) => modules.find((m) => m.id === x)!)
     const rest = modules.filter((m) => !ids.includes(m.id))
@@ -189,7 +193,7 @@ export function PipelineBuilder() {
   }
 
   async function copyPipelineJson() {
-    const json = JSON.stringify({ models, modules, typeAliases }, null, 2)
+    const json = JSON.stringify({ models, modules: authoredPipelineModules(modules), typeAliases }, null, 2)
     let extra = ""
     try {
       const res = await fetch(API_ROUTES.pipelineLint, {
@@ -356,9 +360,17 @@ export function PipelineBuilder() {
                         {MODULE_META[selected.kind].label}
                       </span>
                       {isAutoQuoteStep(selected) ? (
-                        <AutoQuoteLockTooltip />
+                        <AutoLockTooltip explainer={AUTO_QUOTE_EXPLAINER}>
+                          <AutoQuoteLock />
+                        </AutoLockTooltip>
+                      ) : isAutoDocToTextStep(selected) ? (
+                        <AutoLockTooltip explainer={AUTO_DOC_TO_TEXT_EXPLAINER}>
+                          <AutoDocToTextLock />
+                        </AutoLockTooltip>
                       ) : isAutoStructureParseStep(selected) ? (
-                        <AutoStructureParseLockTooltip />
+                        <AutoLockTooltip explainer={AUTO_STRUCTURE_PARSE_EXPLAINER}>
+                          <AutoStructureParseLock />
+                        </AutoLockTooltip>
                       ) : editingBlocked ? null : (
                         <div className="flex items-center gap-1">
                           <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => move(selected.id, -1)}>
@@ -394,7 +406,7 @@ export function PipelineBuilder() {
                         editingBlocked ? undefined : (mismatchModuleId, kind) => fixIoMismatch(mismatchModuleId, kind)
                       }
                     />
-                    {!isAutoQuoteStep(selected) && !isAutoStructureParseStep(selected) && (
+                    {!isManagedLockedStep(selected) && (
                       <InspectorCollapsibleSection title="Performance">
                         <div className="grid grid-cols-2 gap-2">
                           <Stat
@@ -431,37 +443,18 @@ export function PipelineBuilder() {
   )
 }
 
-function AutoQuoteLockTooltip() {
+function AutoLockTooltip({ children, explainer }: { children: ReactNode; explainer: string }) {
   return (
     <Tooltip>
       <TooltipTrigger
         render={<span />}
-        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-chart-2/40 bg-chart-2/10 px-1.5 py-0.5 text-chart-2"
+        className="inline-flex shrink-0"
         onClick={(e) => e.stopPropagation()}
       >
-        <Lock className="h-3 w-3" />
-        <span className="font-mono text-[9px]">auto</span>
+        {children}
       </TooltipTrigger>
       <TooltipContent side="left" className="max-w-xs text-left leading-relaxed">
-        {AUTO_QUOTE_EXPLAINER}
-      </TooltipContent>
-    </Tooltip>
-  )
-}
-
-function AutoStructureParseLockTooltip() {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={<span />}
-        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-chart-3/40 bg-chart-3/10 px-1.5 py-0.5 text-chart-3"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Lock className="h-3 w-3" />
-        <span className="font-mono text-[9px]">auto</span>
-      </TooltipTrigger>
-      <TooltipContent side="left" className="max-w-xs text-left leading-relaxed">
-        {AUTO_STRUCTURE_PARSE_EXPLAINER}
+        {explainer}
       </TooltipContent>
     </Tooltip>
   )

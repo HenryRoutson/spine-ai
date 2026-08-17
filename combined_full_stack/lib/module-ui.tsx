@@ -50,6 +50,7 @@ export const KIND_ICON: Record<ModuleKind, ModuleIcon> = {
   [ModuleKind.LlmBatch]: BatchSparkleIcon,
   [ModuleKind.ExampleSelect]: ListFilter,
   [ModuleKind.Quote]: Link2,
+  [ModuleKind.DocToText]: FileText,
   [ModuleKind.Transform]: Shuffle,
   [ModuleKind.Chunk]: Scissors,
   [ModuleKind.Merge]: Layers,
@@ -71,6 +72,7 @@ export const KIND_COLOR: Record<ModuleKind, string> = {
   [ModuleKind.LlmBatch]: "text-primary",
   [ModuleKind.ExampleSelect]: "text-chart-3",
   [ModuleKind.Quote]: "text-chart-2",
+  [ModuleKind.DocToText]: "text-chart-3",
   [ModuleKind.Transform]: "text-chart-3",
   [ModuleKind.Chunk]: "text-chart-1",
   [ModuleKind.Merge]: "text-chart-1",
@@ -93,6 +95,7 @@ export const KIND_SURFACE: Record<ModuleKind, string> = {
   [ModuleKind.LlmBatch]: "border-primary/40 bg-primary/10",
   [ModuleKind.ExampleSelect]: "border-chart-3/40 bg-chart-3/10",
   [ModuleKind.Quote]: "border-chart-2/40 bg-chart-2/10",
+  [ModuleKind.DocToText]: "border-chart-3/40 bg-chart-3/10",
   [ModuleKind.Transform]: "border-chart-3/40 bg-chart-3/10",
   [ModuleKind.Chunk]: "border-chart-1/40 bg-chart-1/10",
   [ModuleKind.Merge]: "border-chart-1/40 bg-chart-1/10",
@@ -121,12 +124,8 @@ export function KindMenuItemIcon({ kind }: { kind: ModuleKind }) {
   )
 }
 
-const LEGACY_KIND_ICON: Partial<Record<RunStepKind, ModuleIcon>> = {
-  "doc-to-text": FileText,
-}
-
 export function stepKindIcon(kind: RunStepKind): ModuleIcon {
-  return KIND_ICON[kind as ModuleKind] ?? LEGACY_KIND_ICON[kind] ?? FileInput
+  return KIND_ICON[kind as ModuleKind] ?? FileInput
 }
 
 export function KindIcon({ kind, size = "md" }: { kind: ModuleKind; size?: "sm" | "md" }) {
@@ -162,11 +161,14 @@ export function PipelineConnector({ invalid }: { invalid?: boolean }) {
   )
 }
 
-export function AutoQuoteLock({ className }: { className?: string }) {
+function AutoLockBadge({ className, tone }: { className?: string; tone: "quote" | "managed" }) {
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-md border border-chart-2/40 bg-chart-2/10 px-1.5 py-0.5 text-chart-2",
+        "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5",
+        tone === "quote"
+          ? "border-chart-2/40 bg-chart-2/10 text-chart-2"
+          : "border-chart-3/40 bg-chart-3/10 text-chart-3",
         className,
       )}
     >
@@ -176,16 +178,12 @@ export function AutoQuoteLock({ className }: { className?: string }) {
   )
 }
 
-export function AutoStructureParseLock({ className }: { className?: string }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded-md border border-chart-3/40 bg-chart-3/10 px-1.5 py-0.5 text-chart-3",
-        className,
-      )}
-    >
-      <Lock className="h-3 w-3" />
-      <span className="font-mono text-[9px]">auto</span>
-    </span>
-  )
+export function AutoQuoteLock({ className }: { className?: string }) {
+  return <AutoLockBadge tone="quote" className={className} />
 }
+
+export function AutoStructureParseLock({ className }: { className?: string }) {
+  return <AutoLockBadge tone="managed" className={className} />
+}
+
+export const AutoDocToTextLock = AutoStructureParseLock

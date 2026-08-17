@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "path";
 import { spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 import { generatePipelineSourceTs } from "./pipeline_ts_export";
-import { exportRuntimeTsPath } from "./pipeline_export_runtime_lib";
+import { exportRuntimeTsPath } from "./pipeline_export_runtime_files";
 import { stepFnNameFromLabel } from "./pipeline_export_shared";
 import type { ModuleId, PipelineModule, Project } from "./types";
 

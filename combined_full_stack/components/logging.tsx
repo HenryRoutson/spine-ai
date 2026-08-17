@@ -59,6 +59,8 @@ import { STEP_TRACE_IO_INDENT_MARGIN } from "@/lib/step-trace-layout"
 import { filterRuns, isTestingRun, RunNotesPreview } from "@/components/logging/run-picker-column"
 import { filterRunsByErrorStatus, runHasErrors } from "@/lib/run-error-log"
 import { IsolatedErrorActions } from "@/components/logging/isolated-error-actions"
+import { InferenceHtmlDownloadButton } from "@/components/inference/inference-html-download-button"
+import { HTML_EXPORT_ROOT_PROPS, HTML_EXPORT_SKIP_PROPS } from "@/lib/html-export-mark"
 import { useDiagnosisAgents } from "@/lib/diagnosis-agent-context"
 import { scrollToDiagnosisRunLink } from "@/lib/diagnosis-link"
 import { TestResults } from "@/components/test-results"
@@ -305,7 +307,7 @@ export function Logging() {
             </div>
           ) : (
             <ScrollArea className="min-h-0 min-w-0 flex-1">
-              <div className="space-y-4 p-4">
+              <div className="space-y-4 p-4" {...HTML_EXPORT_ROOT_PROPS}>
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-mono text-[10px] uppercase text-muted-foreground">Run</p>
@@ -321,7 +323,7 @@ export function Logging() {
                       </a>
                     ) : null}
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
+                  <div className="flex shrink-0 items-center gap-1.5" {...HTML_EXPORT_SKIP_PROPS}>
                     {active && runHasErrors(active) && (
                       <>
                         <IsolatedErrorActions run={active} modules={modules} />
@@ -374,6 +376,12 @@ export function Logging() {
                       {logCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
                       {logCopied ? "copied" : "copy_log"}
                     </Button>
+                    <InferenceHtmlDownloadButton
+                      run={active}
+                      models={models}
+                      shareTitle={project.name}
+                      variant="button"
+                    />
                   </div>
                 </div>
 
@@ -528,6 +536,7 @@ export function Logging() {
                               step={step}
                               label={step.label}
                               runId={active?.id}
+                              models={models}
                               className={STEP_TRACE_IO_INDENT_MARGIN}
                             />
                           ) : (
@@ -666,7 +675,7 @@ export function Logging() {
                 </div>
 
                 {runPipeline && (
-                  <div className="rounded-lg border border-border bg-card">
+                  <div className="rounded-lg border border-border bg-card" {...HTML_EXPORT_SKIP_PROPS}>
                     <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-2.5">
                       <div>
                         <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -723,7 +732,9 @@ export function Logging() {
                   </div>
                 )}
 
-                <StepProfiling runs={runs} stepOrder={active.steps} />
+                <div {...HTML_EXPORT_SKIP_PROPS}>
+                  <StepProfiling runs={runs} stepOrder={active.steps} />
+                </div>
               </div>
             </ScrollArea>
           )

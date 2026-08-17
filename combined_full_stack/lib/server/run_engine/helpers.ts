@@ -1,4 +1,7 @@
 import { isLlmKind, usesPassthroughStructure } from "@/lib/module-kinds";
+// AI : TODO (sql-schema) — materializeStepOutput / spine list-ness is INSERT into a named table (or JSON
+// AI :   column). Helpers stay; annotation is CREATE TABLE step_<label> AS SELECT …
+import { inputModuleNeedsDocToText } from "@/lib/inference-input-core";
 import { failuresFromLlmCalls } from "@/lib/llm-distribution";
 import type { JobLogEntry } from "@/lib/run-types";
 import { MAX_STEP_LOGS } from "../log_limits";
@@ -117,8 +120,10 @@ export function applyModuleSideEffects(m: PipelineModule, ctx: RunCtx, store: im
   if (m.kind !== "input") return;
   const docIds = ctx.inputByModule.get(m.id) ?? [];
   const docId = docIds[0];
-  const content = docId ? store.docContent(docId) ?? "" : "";
   log.info(`input module side effects`, { docId, docCount: docIds.length, cached: true });
+  // AI : PDF/Word/image/web bind only — convert-to-text cache hit fills sourceText.
+  if (inputModuleNeedsDocToText(m)) return;
+  const content = docId ? store.docContent(docId) ?? "" : "";
   if (!ctx.sourceText && content) {
     ctx.sourceText = content;
     ctx.sourceDocId = docId ?? ("none" as DocId);

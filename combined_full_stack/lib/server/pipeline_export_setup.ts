@@ -1,8 +1,7 @@
-// AI : zip extras (.env, README, runners) + copy of lib/export_runtime/{ts,py,go,rs} — do not string-generate those libraries.
+// AI : zip extras (.env, README, runners). Runtime libraries are copied on the server (pipeline_export_runtime_files).
 import { orderedInputModules } from "@/lib/inference-input";
 import { labelAsStateKey } from "./pipeline_state";
 import type { PipelineSetupFile } from "./pipeline_export_shared";
-import { exportRuntimeLibraryFiles } from "./pipeline_export_runtime_lib";
 import { generatePipelineRunnerFiles } from "./pipeline_export_runners";
 import { ModuleKind } from "./types";
 import { isMergeModuleKind } from "@/lib/module-kinds";
@@ -19,6 +18,7 @@ export type ExportRuntimeNeeds = {
   chatbot: boolean;
   webhook: boolean;
   visionOcr: boolean;
+  docToText: boolean;
   inputModules: { label: string; filenameHint?: string; inputType?: string }[];
   webhookEnvKeys: { label: string; envKey: string; authEnv?: string }[];
 };
@@ -40,6 +40,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
   let chatbot = false;
   let webhook = false;
   let visionOcr = false;
+  let docToText = false;
   for (const m of project.modules) {
     if (m.kind === ModuleKind.Llm) llm = true;
     // AI : example-select uses llmBatchStructured — treat like llm-batch for stub inclusion.
@@ -50,7 +51,8 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
     if (m.kind === ModuleKind.HumanReview) humanReview = true;
     if (m.kind === ModuleKind.Chatbot) chatbot = true;
     if (m.kind === ModuleKind.Webhook) webhook = true;
-    if (m.kind === ModuleKind.Input && m.useOcr) visionOcr = true;
+    if (m.kind === ModuleKind.DocToText) docToText = true;
+    if (m.kind === ModuleKind.DocToText && m.useOcr) visionOcr = true;
   }
   return {
     llm,
@@ -62,6 +64,7 @@ export function analyzeExportRuntimeNeeds(project: Project): ExportRuntimeNeeds 
     chatbot,
     webhook,
     visionOcr,
+    docToText,
     inputModules,
     webhookEnvKeys: collectWebhookExportEnvKeys(project.modules),
   };
@@ -97,6 +100,23 @@ export function generateEnvExample(project: Project): string {
       'CUSTOM_LLM_PROVIDER_ID="custom"',
       'CUSTOM_LLM_API_URL=""',
       'CUSTOM_LLM_API_KEY=""',
+      "",
+    );
+  }
+
+  if (needs.docToText) {
+    lines.push(
+      "# Convert to text — directory of original files (read by filename, not stored on Document)",
+      'PIPELINE_DOCS_DIR="docs"',
+      "",
+    );
+  }
+
+  if (needs.visionOcr) {
+    lines.push(
+      "# DeepSeek-OCR-2 (vLLM OpenAI-compatible). Leave empty to fall back to OpenRouter vision.",
+      'DEEPSEEK_OCR_BASE_URL=""',
+      'DEEPSEEK_OCR_MODEL="deepseek-ai/DeepSeek-OCR-2"',
       "",
     );
   }
@@ -216,13 +236,20 @@ export function generateSetupReadme(project: Project, slug: string): string {
 
   if (needs.visionOcr) {
     lines.push(
-      "## Vision OCR",
+      "## Convert to text / DeepSeek OCR",
       "",
-      "Input steps with `useOcr` call `visionOcr({ mime, base64 })` (OpenRouter multimodal).",
-      "Default vision model: Gemini Flash via OpenRouter (`google/gemini-3-flash-preview`). Override with `visionOcrModel`.",
-      "Pass file bytes as base64 on the Document (`{ filename, content?, mime, base64 }`). If `content` is already text, OCR is skipped.",
+      "PDF/Word/image inputs emit Document with `content=None`. The locked **Convert to text** step instantiates `content` from files in `docsDir` (default `./docs`) — it does **not** put base64 on Document.",
+      "OCR mode calls DeepSeek-OCR-2 via a vLLM OpenAI-compatible endpoint (`DEEPSEEK_OCR_BASE_URL`, model `deepseek-ai/DeepSeek-OCR-2`).",
+      "If that URL is unset, the helper falls back to OpenRouter multimodal (Gemini Flash). Transcribed text is cached in memory by file hash.",
       "",
-      "DeepSeek-OCR (specialized OCR) is not the OpenRouter default — point `visionOcrModel` at a vision-capable slug, or swap the helper for a DeepSeek-OCR / vLLM endpoint.",
+      "Parser mode reads UTF-8 from the file (PDF.js already ran at upload in the hosted app; export expects text or OCR).",
+      "",
+    );
+  } else if (needs.docToText) {
+    lines.push(
+      "## Convert to text",
+      "",
+      "Set `docsDir` / `docs_dir` so Convert to text can read originals by filename. Document on the spine stays `{ filename, content }` — never encoded file bytes.",
       "",
     );
   }
@@ -269,8 +296,8 @@ export function generateSetupReadme(project: Project, slug: string): string {
     }
     lines.push(
       "",
-      needs.visionOcr
-        ? "Each input step expects `{ filename, content }` and/or `{ filename, mime, base64 }` when vision OCR is enabled."
+      needs.docToText
+        ? "Each input step expects `{ filename, content? }`. Convert to text reads originals from `docsDir` by filename — do not put base64 on Document."
         : "Each input step expects `{ content: string, filename: string }` (read file text into `content`).",
       "",
     );
@@ -486,6 +513,5 @@ export function generatePipelineSetupFiles(project: Project): PipelineSetupFile[
     { filename: "requirements.txt", content: requirements, mime: "text/plain" },
     ...generateCustomLlmProviderExportFiles(project),
     ...generatePipelineRunnerFiles(project),
-    ...exportRuntimeLibraryFiles(),
   ];
 }

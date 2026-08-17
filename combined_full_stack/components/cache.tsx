@@ -355,11 +355,15 @@ export function Cache() {
                                 <StepPromptPreview
                                   inputPreview={detail.inputPreview}
                                   inputPreviewItems={detail.inputPreviewItems}
+                                  responseItems={detail.outputPreviewItems}
                                 />
                               </div>
                             ) : (
                               <div className="rounded border border-border bg-muted/20 p-3 font-mono text-xs leading-relaxed text-muted-foreground">
-                                <StepPromptPreview inputPreview={detail.inputPreview} />
+                                <StepPromptPreview
+                                  inputPreview={detail.inputPreview}
+                                  responseItems={detail.outputPreviewItems}
+                                />
                               </div>
                             )}
                           </section>

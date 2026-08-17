@@ -4,8 +4,6 @@ import { cn } from "@/lib/utils"
 import { WARNING_TEXT_CLASS } from "@/lib/ui-classes"
 import {
   INPUT_TYPES,
-  DOC_PARSE_MODES,
-  docParseModeForModule,
   type InputType,
   type PipelineModule,
   type StructureModel,
@@ -14,12 +12,14 @@ import {
   inputTypeLabel,
   inputNameRestrictionLabel,
   inputTypesForModule,
-  inputTypesNeedOcr,
-  inputModuleNeedsOcr,
+  inputModuleNeedsDocToText,
   inputModuleTypesAreAllJsonNative,
+  isDocToTextInputType,
   isJsonNativeInputType,
+  isPlainTextInputType,
 } from "@/lib/inference-input"
 import {
+  autoDocToTextStepForInput,
   autoStructureParseStepForInput,
   inputTargetStructureId,
 } from "@/lib/structure-parse-steps"
@@ -45,7 +45,6 @@ import {
   StaticValue,
   StructureModelSelect,
   IoMismatchFieldFix,
-  OcrExtraFields,
 } from "@/components/pipeline-fields/shared"
 
 type InputModuleFieldsProps = {
@@ -71,20 +70,22 @@ export function InputModuleFields({
   onUpdate,
   onFixIoMismatch,
 }: InputModuleFieldsProps) {
-  const inputOcrAvailable = inputModuleNeedsOcr(selected)
+  const needsConvert = inputModuleNeedsDocToText(selected)
   const allJsonNative = inputModuleTypesAreAllJsonNative(selected)
   const mergedModels = withSharedModels(models)
   const targetStructureId = inputTargetStructureId(selected, modules)
   const targetStructure = mergedModels.find((m) => m.id === targetStructureId)
   const autoParse = autoStructureParseStepForInput(modules, selected.id)
+  const autoConvert = autoDocToTextStepForInput(modules, selected.id)
   const jsonNativeTypes = INPUT_TYPES.filter((t) => isJsonNativeInputType(t.value))
-  const convertTypes = INPUT_TYPES.filter((t) => !isJsonNativeInputType(t.value))
+  const plainTextTypes = INPUT_TYPES.filter((t) => isPlainTextInputType(t.value))
+  const convertTypes = INPUT_TYPES.filter((t) => isDocToTextInputType(t.value))
 
   return (
     <>
       <PipelineField
         label="Input types"
-        hint={edit ? "JSON-native types parse directly; others use a locked LLM convert step when a structure is selected" : undefined}
+        hint={edit ? "JSON-native parses directly; plain text is already instantiated; PDF/Word/image/web get a locked Convert to text step" : undefined}
       >
         {edit ? (
           <div className="space-y-2">
@@ -109,7 +110,26 @@ export function InputModuleFields({
             </div>
             <div>
               <p className="mb-1 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
-                Needs LLM conversion if not Document I/O model.
+                Plain text · already instantiated
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {plainTextTypes.map((t) => {
+                  const active = inputTypesForModule(selected).includes(t.value)
+                  return (
+                    <TypeChip
+                      key={t.value}
+                      label={t.label}
+                      active={active}
+                      tone="json"
+                      onClick={() => toggleInputType(t.value, active, selected, onUpdate!)}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+            <div>
+              <p className="mb-1 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
+                Needs convert to text (PDF, Word, image, web)
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {convertTypes.map((t) => {
@@ -138,73 +158,29 @@ export function InputModuleFields({
               Upload → JSON parse →{" "}
               <span className="text-foreground">{targetStructure?.name ?? "structure"}</span>
             </p>
-          ) : targetStructure && !isBuiltinDocumentModel(targetStructure) ? (
-            <>
-              <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
-                Upload → Document →{" "}
-                <span className="text-primary">{autoParse?.label ?? "Parse to structure"}</span> →{" "}
-                <span className="text-foreground">{targetStructure.name}</span>
-              </p>
-              <p className="font-mono text-[9px] leading-relaxed text-muted-foreground/80">
-                Locked LLM step is inserted automatically — you only pick the target structure below.
-              </p>
-            </>
           ) : (
             <p className="font-mono text-[10px] leading-relaxed text-muted-foreground">
-              Upload → Document (raw text + filename)
+              Upload → Document
+              {needsConvert ? (
+                <>
+                  {" → "}
+                  <span className="text-primary">{autoConvert?.label ?? "Convert to text"}</span>
+                </>
+              ) : null}
+              {targetStructure && !isBuiltinDocumentModel(targetStructure) ? (
+                <>
+                  {" → "}
+                  <span className="text-primary">{autoParse?.label ?? "Parse to structure"}</span>
+                  {" → "}
+                  <span className="text-foreground">{targetStructure.name}</span>
+                </>
+              ) : (
+                <> (content {needsConvert ? "instantiated by convert step" : "already text"})</>
+              )}
             </p>
           )}
         </div>
       </PipelineField>
-      {inputOcrAvailable && (
-        <PipelineField
-          label="Conversion"
-          hint={edit ? "Built-in parser at upload, or vision OCR for scans and handwriting" : undefined}
-        >
-          {edit ? (
-            <div className="space-y-3 rounded-md border border-dashed border-chart-3/40 bg-chart-3/5 p-3">
-              <p className="font-mono text-[10px] text-muted-foreground">
-                Built-in parser runs at upload (PDF.js → docs.content). Vision OCR runs via OpenRouter and is cached separately.
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {DOC_PARSE_MODES.map((mode) => {
-                  const active = docParseModeForModule(selected) === mode.value
-                  return (
-                    <button
-                      key={mode.value}
-                      type="button"
-                      onClick={() =>
-                        onUpdate!({
-                          useOcr: mode.value === "llm" ? true : undefined,
-                          model: mode.value === "llm" ? selected.model ?? "gemini-3-flash" : undefined,
-                          prompt: mode.value === "llm" ? selected.prompt : undefined,
-                        })
-                      }
-                      className={cn(
-                        "rounded-md border px-2 py-1 font-mono text-[10px] transition-colors",
-                        active
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border text-muted-foreground hover:border-muted-foreground/40",
-                      )}
-                      title={mode.hint}
-                    >
-                      {mode.label}
-                    </button>
-                  )
-                })}
-              </div>
-              {docParseModeForModule(selected) === "llm" && onUpdate && (
-                <OcrExtraFields selected={selected} edit={!!edit} onUpdate={onUpdate} />
-              )}
-            </div>
-          ) : (
-            <StaticValue>
-              {DOC_PARSE_MODES.find((m) => m.value === docParseModeForModule(selected))?.label ??
-                "Built-in parser"}
-            </StaticValue>
-          )}
-        </PipelineField>
-      )}
       <PipelineField
         label="Filename must contain"
         hint={edit ? "optional — only documents whose name includes this text can be assigned to this input" : undefined}
@@ -326,13 +302,7 @@ function toggleInputType(
   const next = active ? current.filter((v) => v !== value) : [...current, value]
   if (!next.length) return
   const spec = next.length === 1 ? next[0]! : next
-  const ocrOk = inputTypesNeedOcr(next)
-  onUpdate({
-    inputType: spec,
-    useOcr: ocrOk ? selected.useOcr : undefined,
-    model: ocrOk && selected.useOcr ? selected.model : undefined,
-    prompt: ocrOk && selected.useOcr ? selected.prompt : undefined,
-  })
+  onUpdate({ inputType: spec })
 }
 
 function TypeChip({

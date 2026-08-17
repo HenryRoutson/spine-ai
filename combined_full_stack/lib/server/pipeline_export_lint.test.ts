@@ -72,8 +72,8 @@ describe("pipeline TS export lint", () => {
   it("example-select export respects exampleContextField", () => {
     const { project } = loadProjectSeed(resolve(SEEDS_DIR, "billed_work_catalog_select.json"));
     const src = generatePipelineSourceTs(project);
-    expect(src).toMatch(/const description = \(typeof \(state\["Normalize Case"\] as Record<string, unknown>\)\["description"\]/);
-    expect(src).not.toMatch(/JSON\.stringify\(state\["Normalize Case"\], null, 2\)/);
+    expect(src).toMatch(/const description = \(typeof \(state\["Work Description"\] as Record<string, unknown>\)\["content"\]/);
+    expect(src).not.toMatch(/JSON\.stringify\(state\["Work Description"\], null, 2\)/);
   });
 
   it("emits example-select relevance schema once", () => {
@@ -87,7 +87,7 @@ describe("pipeline TS export lint", () => {
   it("emits merge runtime once", () => {
     const { project } = loadProjectSeed(resolve(SEEDS_DIR, "billed_work_catalog_select.json"));
     const src = generatePipelineSourceTs(project);
-    expect(src.match(/mergeFold\(/g)?.length).toBe(2);
+    expect(src.match(/mergeFold\(/g)?.length).toBe(1);
     expect(src).not.toMatch(/function __itemKeyFn/);
     expect(src).toMatch(/from "\.\/pipeline_runtime"/);
   });

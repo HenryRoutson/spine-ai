@@ -3,27 +3,31 @@ import { RunStepStatus } from "@/lib/types"
 import type { PipelineModule } from "@/lib/types"
 import { isLlmKind } from "@/lib/module-kinds"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
-import { isAutoStructureParseStep } from "@/lib/structure-parse-steps"
+import { isAutoDocToTextStep, isAutoStructureParseStep, isInputManagedFollower } from "@/lib/structure-parse-steps"
 
 export type PipelineSegment =
   | { kind: "step"; module: PipelineModule; index: number }
-  | { kind: "combine"; combine: PipelineModule; input: PipelineModule; parse?: PipelineModule; index: number }
+  | { kind: "combine"; combine: PipelineModule; input: PipelineModule; convert?: PipelineModule; parse?: PipelineModule; index: number }
 
 // AI : TODO(spec) — delete combine segments when implicit combine ships (pipeline_state.ts #10).
 // AI : second+ input steps stand alone; canvas shows label-keyed state arrows instead.
 
-// AI : combine groups are [input, autoParseLlm?, combine] — the sync inserts a locked LLM between
-// AI : the side input and the combine when the input needs conversion to a non-Document structure.
+// AI : combine groups are [input, convert?, autoParseLlm?, combine].
 export function combineGroupAt(
   modules: PipelineModule[],
   i: number,
-): { input: PipelineModule; parse?: PipelineModule } | undefined {
+): { input: PipelineModule; convert?: PipelineModule; parse?: PipelineModule } | undefined {
   if (modules[i]?.kind !== "combine") return undefined
-  const prev = modules[i - 1]
-  if (prev?.kind === "input") return { input: prev }
-  if (prev && isAutoStructureParseStep(prev) && modules[i - 2]?.kind === "input") {
-    return { input: modules[i - 2]!, parse: prev }
+  let j = i - 1
+  let parse: PipelineModule | undefined
+  let convert: PipelineModule | undefined
+  while (j >= 0 && isInputManagedFollower(modules[j])) {
+    const m = modules[j]!
+    if (isAutoStructureParseStep(m)) parse = m
+    if (isAutoDocToTextStep(m)) convert = m
+    j--
   }
+  if (modules[j]?.kind === "input") return { input: modules[j]!, convert, parse }
   return undefined
 }
 
@@ -35,6 +39,7 @@ export function segmentPipeline(modules: PipelineModule[]): PipelineSegment[] {
     const g = combineGroupAt(modules, i)
     if (g) {
       inGroup.add(g.input.id)
+      if (g.convert) inGroup.add(g.convert.id)
       if (g.parse) inGroup.add(g.parse.id)
     }
   }
@@ -58,14 +63,21 @@ export function combinePairIds(modules: PipelineModule[], id: string): string[] 
   for (let c = i; c <= i + 2 && c < modules.length; c++) {
     const g = combineGroupAt(modules, c)
     if (!g) continue
-    const ids: string[] = [g.input.id, ...(g.parse ? [g.parse.id] : []), modules[c]!.id]
+    const ids: string[] = [
+      g.input.id,
+      ...(g.convert ? [g.convert.id] : []),
+      ...(g.parse ? [g.parse.id] : []),
+      modules[c]!.id,
+    ]
     if (ids.includes(id)) return ids
   }
   return [id]
 }
 
 export function insertBeforeIndex(seg: PipelineSegment): number {
-  return seg.kind === "combine" ? seg.index - (seg.parse ? 2 : 1) : seg.index
+  return seg.kind === "combine"
+    ? seg.index - (seg.parse ? 1 : 0) - (seg.convert ? 1 : 0) - 1
+    : seg.index
 }
 
 export function insertAfterIndex(seg: PipelineSegment): number {
@@ -74,7 +86,9 @@ export function insertAfterIndex(seg: PipelineSegment): number {
 
 // AI : modules whose test config belongs on the same aligned row as this canvas segment.
 export function modulesInSegment(seg: PipelineSegment): PipelineModule[] {
-  if (seg.kind === "combine") return [seg.input, ...(seg.parse ? [seg.parse] : []), seg.combine]
+  if (seg.kind === "combine") {
+    return [seg.input, ...(seg.convert ? [seg.convert] : []), ...(seg.parse ? [seg.parse] : []), seg.combine]
+  }
   return [seg.module]
 }
 
@@ -96,7 +110,8 @@ export function blocksInsertBefore(modules: PipelineModule[], insertAt: number):
   const next = modules[insertAt]
   return (
     (isLlmKind(prev.kind) && isAutoQuoteStep(next)) ||
-    (prev.kind === "input" && isAutoStructureParseStep(next))
+    (prev.kind === "input" && isInputManagedFollower(next)) ||
+    (isAutoDocToTextStep(prev) && isAutoStructureParseStep(next))
   )
 }
 
@@ -108,12 +123,16 @@ export function managedPipelinePairIds(modules: PipelineModule[], id: string): s
   if (i < 0) return [id]
   const m = modules[i]
   if (m.kind === "input") {
-    const next = modules[i + 1]
-    if (next && isAutoStructureParseStep(next)) return [m.id, next.id]
+    const ids = [m.id]
+    let j = i + 1
+    while (isInputManagedFollower(modules[j])) {
+      ids.push(modules[j]!.id)
+      j++
+    }
+    return ids
   }
-  if (isAutoStructureParseStep(m)) {
-    const prev = modules[i - 1]
-    if (prev?.kind === "input") return [prev.id, m.id]
+  if (isInputManagedFollower(m) && i > 0) {
+    return managedPipelinePairIds(modules, modules[i - 1]!.id)
   }
   return [id]
 }

@@ -268,6 +268,8 @@ const pipelineModulePatchSchema = z
     exampleContextField: z.string().max(512).optional(),
     exampleReasonField: z.string().max(200).optional(),
     examplePreFilterMax: z.number().int().min(1).max(10_000).optional(),
+    // AI : TODO (example-select-view) — examplePromptFields: z.array(z.string().max(200)).max(64).optional()
+    // AI : TODO (sql-schema) — examplePromptView: z.string().max(MAX_MODULE_STRING_CHARS).optional()
     webhookUrl: z.string().max(4_096).optional(),
     webhookMethod: z.enum(["POST", "PUT", "PATCH"]).optional(),
     webhookAuthEnv: z.string().max(256).optional(),

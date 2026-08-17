@@ -1,4 +1,3 @@
-// AI : TODO refactor (prod) — persist original bytes to Supabase Storage on upload, not local disk only.
 import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP, unknownProject } from "@/lib/server/api-errors";
@@ -10,7 +9,7 @@ import {
   writeParserCacheIfFresh,
   shouldSaveOriginalBytes,
 } from "@/lib/server/doc_upload_parse";
-import { linkDocToProject, saveOriginalDocBytes } from "@/lib/server/store";
+import { linkDocToProject, persistOriginalDocBytes } from "@/lib/server/store";
 import { logger } from "@/lib/server/server_logger";
 import { DocLabel } from "@/lib/server/types";
 import type { ProjectId } from "@/lib/server/types";
@@ -94,9 +93,16 @@ export async function POST(req: NextRequest) {
   if (projectId) linkDocToProject(store, projectId, uploadFile.name);
   const ext = uploadFile.name.split(".").pop()?.toLowerCase() ?? "";
   if (shouldSaveOriginalBytes(type)) {
-    saveOriginalDocBytes(doc.id, bytes, ext);
+    persistOriginalDocBytes(store, doc.id, bytes, ext);
+  } else {
+    apiLog.debug(`skip original bytes — type has no binary viewer`, { name: uploadFile.name, type });
   }
   await store.flush();
-  apiLog.info(`doc saved`, { docId: doc.id, name: uploadFile.name, label });
+  apiLog.info(`doc saved`, {
+    docId: doc.id,
+    name: uploadFile.name,
+    label,
+    originalBytes: shouldSaveOriginalBytes(type) ? "queued (disk + Storage)" : "none",
+  });
   return NextResponse.json(doc);
 }

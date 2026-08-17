@@ -45,6 +45,7 @@ import {
   type ChatbotTurn,
 } from "@/lib/chatbot-step"
 import { API_ROUTES } from "@/lib/api-routes"
+import { HTML_EXPORT_ROOT_PROPS, HTML_EXPORT_SKIP_PROPS } from "@/lib/html-export-mark"
 import { RunPhase } from "@/lib/run-phase"
 
 export function InferenceRunSection({
@@ -62,6 +63,7 @@ export function InferenceRunSection({
 }) {
   return (
     <section
+      {...(variant === "last" ? HTML_EXPORT_ROOT_PROPS : {})}
       className={cn(
         "rounded-lg border p-4",
         variant === "last"
@@ -137,6 +139,7 @@ export function GoToLoggingButton({
     <Button
       variant={inline ? "outline" : "default"}
       size={inline ? "sm" : "default"}
+      {...HTML_EXPORT_SKIP_PROPS}
       className={cn(
         "gap-1.5",
         inline ? "bg-transparent" : "w-full animate-in fade-in slide-in-from-bottom-2 duration-500 motion-safe:animate-[pulse_2s_ease-in-out_infinite] motion-safe:ring-2 motion-safe:ring-primary/30",

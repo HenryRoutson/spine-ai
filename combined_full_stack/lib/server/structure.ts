@@ -2,7 +2,7 @@ import { z, type ZodError, type ZodType } from "zod";
 import { inferStructuresFromJson } from "@/lib/doc-structure-infer";
 import { isValidJsonString } from "@/lib/json-utils";
 import { isBuiltinDocumentModel } from "./builtin_models";
-import { documentContentFrom, documentFilenameFrom, documentValueFrom } from "@/lib/server/document_value";
+import { documentContentFrom, documentFilenameFrom, documentPendingValue, documentValueFrom } from "@/lib/server/document_value";
 import { modelHasQuoteFields } from "./quote_schema";
 import {
   fieldTypeToExpr,
@@ -15,7 +15,7 @@ import {
   withFieldMeta,
   zodFromModel as zodFromModelExpr,
 } from "./type_expr";
-import { inputModuleTypesAreAllJsonNative } from "@/lib/inference-input-core";
+import { inputModuleNeedsDocToText, inputModuleTypesAreAllJsonNative } from "@/lib/inference-input-core";
 import { type FieldType, type ModelField, type PipelineModule, type StructureModel, type StructureModelId, type TypeAlias } from "./types";
 
 export { QuoteSchema, isListFieldType } from "./type_expr";
@@ -266,6 +266,9 @@ export function materializeInputDocument(
   hints: MaterializeHints = {},
 ): unknown {
   const out = models.find((x) => x.id === m.outStructureId);
+  if (inputModuleNeedsDocToText(m)) {
+    return documentPendingValue({ docId, docName: hints.docName });
+  }
   if (!out) return documentValueFrom(undefined, { docId, docName: hints.docName }, content);
 
   const docHints = { ...hints, docId, sourceText: content };

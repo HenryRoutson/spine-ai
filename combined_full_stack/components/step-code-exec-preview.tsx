@@ -7,7 +7,7 @@ import { groupProfileSlotsByLine } from "@/lib/custom_code_trace"
 import { CODE_LANG_NAME, CODE_LANG_SHORT, MonacoSyntaxLine, useMonacoSyntaxLines } from "@/lib/code-syntax-highlight"
 import { MONACO_CODE_PREVIEW_BASE_CLASS } from "@/lib/monaco-theme"
 import type { CustomCodeLanguage } from "@/lib/types"
-import type { CodeLineProfile, CodeExecUiState } from "@/lib/code-exec-ui"
+import type { CodeExecUiStatus, CodeLineProfile } from "@/lib/code-exec-ui"
 
 export function StepCodeExecPreview({
   code,
@@ -24,7 +24,7 @@ export function StepCodeExecPreview({
   activeLine?: number
   activeSlot?: number
   lineMs?: CodeLineProfile
-  status?: CodeExecUiState["status"]
+  status?: CodeExecUiStatus
   compact?: boolean
   className?: string
 }) {

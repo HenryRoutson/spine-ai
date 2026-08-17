@@ -667,30 +667,16 @@ function pyCustomCodeCall(code: string, outPy: string): string {
 
 export function generateInputStepBodyTs(m: PipelineModule, outTs: string): string {
   // AI : TODO export — emit input-description LLM guard when checkInputDescription is enabled.
-  // AI : TODO export — emit output-description LLM guard when checkOutputDescription ships (spec § pipeline).
-  const purpose = m.inputDescription?.trim() || m.label || "general transcription";
   const lines = [
     ...inputStepCommentLines("//", m),
-    "const doc = input as Document & { base64?: string; mime?: string };",
+    "const doc = input as Document;",
   ];
-  if (m.useOcr) {
-    lines.push(
-      `let content = doc.content ?? "";`,
-      `if (doc.base64 && doc.mime) {`,
-      `  // Vision OCR via OpenRouter multimodal (override runtime.visionOcrModel for DeepSeek-OCR hosts)`,
-      `  content = await visionOcr({ mime: doc.mime, base64: doc.base64 }, ${JSON.stringify(purpose)});`,
-      `} else if (!content.trim()) {`,
-      `  throw new Error("Vision OCR: pass Document.base64 + mime, or pre-extracted content");`,
-      `}`,
-    );
-  } else {
-    lines.push("const content = doc.content;");
-  }
   if (inputOutputsDocument(m)) {
-    const docObj = "{ content, filename: doc.filename }";
+    const docObj = "{ content: doc.content ?? null, filename: doc.filename }";
     lines.push(stepEmitsList(m) ? `return [${docObj}];` : `return ${docObj};`);
     return lines.join("\n");
   }
+  lines.push("const content = doc.content ?? \"\";");
   if (stepEmitsList(m)) {
     lines.push(`const parsed = JSON.parse(content) as unknown;`);
     lines.push(`return (Array.isArray(parsed) ? parsed : [parsed]) as ${outTs};`);
@@ -701,33 +687,19 @@ export function generateInputStepBodyTs(m: PipelineModule, outTs: string): strin
 }
 
 export function generateInputStepBodyPy(m: PipelineModule, outPy: string): string {
-  const purpose = m.inputDescription?.trim() || m.label || "general transcription";
   const lines = [
     ...inputStepCommentLines("#", m),
     "doc = input",
   ];
-  if (m.useOcr) {
-    lines.push(
-      'content = getattr(doc, "content", None) or (doc.get("content") if isinstance(doc, dict) else "") or ""',
-      'base64 = getattr(doc, "base64", None) or (doc.get("base64") if isinstance(doc, dict) else None)',
-      'mime = getattr(doc, "mime", None) or (doc.get("mime") if isinstance(doc, dict) else None)',
-      "if base64 and mime:",
-      "    # Vision OCR via OpenRouter multimodal (override vision_ocr_model for DeepSeek-OCR hosts)",
-      `    content = await vision_ocr(str(mime), str(base64), ${JSON.stringify(purpose)})`,
-      "elif not str(content).strip():",
-      '    raise RuntimeError("Vision OCR: pass Document base64 + mime, or pre-extracted content")',
-    );
-  } else {
-    lines.push("content = doc.content");
-  }
   if (inputOutputsDocument(m)) {
     lines.push(
       stepEmitsList(m)
-        ? "return [Document(content=content, filename=doc.filename)]"
-        : "return Document(content=content, filename=doc.filename)",
+        ? "return [Document(content=getattr(doc, \"content\", None), filename=doc.filename)]"
+        : "return Document(content=getattr(doc, \"content\", None), filename=doc.filename)",
     );
     return lines.join("\n");
   }
+  lines.push("content = doc.content or \"\"");
   if (stepEmitsList(m)) {
     lines.push("parsed = json.loads(content)");
     lines.push(`return cast(${outPy}, cast(object, parsed if isinstance(parsed, list) else [parsed]))`);
@@ -737,11 +709,56 @@ export function generateInputStepBodyPy(m: PipelineModule, outPy: string): strin
   return lines.join("\n");
 }
 
-export function generateInputStepBodyRust(m: PipelineModule, outRust: string): string {
+export function generateDocToTextStepBodyTs(m: PipelineModule): string {
+  const purpose = m.note?.trim() || m.label || "general transcription";
+  const ocr = !!m.useOcr;
   const lines = [
-    ...inputStepCommentLines("//", m),
-    ...(m.useOcr ? [exportComment("//", visionOcrEnabledComment())] : []),
+    exportComment("//", "Convert to text — instantiate Document.content from docsDir (no encoded copies on Document)"),
+    ...(ocr ? [exportComment("//", "DeepSeek OCR when DEEPSEEK_OCR_BASE_URL is set; OpenRouter vision fallback")] : []),
+    `const convertOne = (doc: Document) => convertDocToText(doc, { ocr: ${ocr ? "true" : "false"}, purpose: ${JSON.stringify(purpose)} });`,
   ];
+  if (stepEmitsList(m)) {
+    lines.push("const items = Array.isArray(input) ? input : [input];");
+    lines.push("return Promise.all(items.map(convertOne));");
+  } else {
+    lines.push("return convertOne(input as Document);");
+  }
+  return lines.join("\n");
+}
+
+export function generateDocToTextStepBodyPy(m: PipelineModule): string {
+  const purpose = m.note?.trim() || m.label || "general transcription";
+  const ocr = m.useOcr ? "True" : "False";
+  const lines = [
+    exportComment("#", "Convert to text — instantiate Document.content from docs_dir (no encoded copies on Document)"),
+    ...(m.useOcr ? [exportComment("#", "DeepSeek OCR when deepseek_ocr_base_url is set; OpenRouter vision fallback")] : []),
+  ];
+  if (stepEmitsList(m)) {
+    lines.push("items = input if isinstance(input, list) else [input]");
+    lines.push(`return [await convert_doc_to_text(doc, ocr=${ocr}, purpose=${JSON.stringify(purpose)}) for doc in items]`);
+  } else {
+    lines.push(`return await convert_doc_to_text(input, ocr=${ocr}, purpose=${JSON.stringify(purpose)})`);
+  }
+  return lines.join("\n");
+}
+
+export function generateDocToTextStepBodyGo(m: PipelineModule, outGo: string): string {
+  const zero = goZeroValue(outGo);
+  return [
+    exportComment("//", "Convert to text — port convertDocToText from the TS/Python runtime (read docsDir/filename; DeepSeek OCR). Do not store base64 on Document."),
+    `return ${zero}, fmt.Errorf("convert to text: port convertDocToText from pipeline_runtime.ts")`,
+  ].join("\n");
+}
+
+export function generateDocToTextStepBodyRust(m: PipelineModule): string {
+  return [
+    exportComment("//", "Convert to text — port convertDocToText from the TS/Python runtime (read docsDir/filename; DeepSeek OCR). Do not store base64 on Document."),
+    "Err(anyhow::anyhow!(\"convert to text: port convertDocToText from pipeline_runtime.ts\"))",
+  ].join("\n");
+}
+
+export function generateInputStepBodyRust(m: PipelineModule, outRust: string): string {
+  const lines = [...inputStepCommentLines("//", m)];
   if (inputOutputsDocument(m)) {
     if (stepEmitsList(m)) {
       lines.push("Ok(vec![input])");
@@ -750,7 +767,8 @@ export function generateInputStepBodyRust(m: PipelineModule, outRust: string): s
     }
     return lines.join("\n");
   }
-  lines.push("let parsed: Value = serde_json::from_str(&input.content)?;");
+  lines.push("let content = input.content.as_deref().unwrap_or(\"\");");
+  lines.push("let parsed: Value = serde_json::from_str(content)?;");
   if (stepEmitsList(m)) {
     lines.push(`let out: ${outRust} = if parsed.is_array() {`);
     lines.push("    serde_json::from_value(parsed)?");
@@ -767,10 +785,7 @@ export function generateInputStepBodyRust(m: PipelineModule, outRust: string): s
 
 export function generateInputStepBodyGo(m: PipelineModule, outGo: string): string {
   const zero = goZeroValue(outGo);
-  const lines = [
-    ...inputStepCommentLines("//", m),
-    ...(m.useOcr ? [exportComment("//", visionOcrEnabledComment())] : []),
-  ];
+  const lines = [...inputStepCommentLines("//", m)];
   if (inputOutputsDocument(m)) {
     if (stepEmitsList(m)) {
       lines.push("return []Document{input}, nil");
@@ -779,8 +794,11 @@ export function generateInputStepBodyGo(m: PipelineModule, outGo: string): strin
     }
     return lines.join("\n");
   }
+  lines.push("if input.Content == nil || *input.Content == \"\" {");
+  lines.push(`\treturn ${zero}, fmt.Errorf("input content is empty")`);
+  lines.push("}");
   lines.push("var parsed any");
-  lines.push("if err := json.Unmarshal([]byte(input.Content), &parsed); err != nil {");
+  lines.push("if err := json.Unmarshal([]byte(*input.Content), &parsed); err != nil {");
   lines.push(`\treturn ${zero}, err`);
   lines.push("}");
   if (stepEmitsList(m)) {
@@ -814,6 +832,13 @@ function combineSideStructId(m: PipelineModule, project: Project): StructureMode
   return id && id !== BUILTIN_DOCUMENT_ID && id !== m.inStructureId ? id : undefined;
 }
 
+function combineSideIsList(
+  f: { type: FieldType; ref?: StructureModelId },
+  sideId: StructureModelId | undefined,
+): boolean {
+  return !!sideId && f.ref === sideId && f.type === FieldType.ListModel;
+}
+
 export function generateCombineStepBodyTs(m: PipelineModule, project: Project, outTs: string): string {
   const out = project.models.find((x) => x.id === m.outStructureId);
   const inName = modelName(project, m.inStructureId);
@@ -824,7 +849,14 @@ export function generateCombineStepBodyTs(m: PipelineModule, project: Project, o
   const fieldExprs =
     out?.fields.map((f) => {
       if (f.type === FieldType.Document) return `${f.name}: newDoc as Document`;
-      if (sideId && f.ref === sideId) return `${f.name}: newDoc as ${modelName(project, sideId)}`;
+      if (sideId && f.ref === sideId) {
+        const name = modelName(project, sideId);
+        // AI : list side-inputs stay arrays — runtime combine does not unwrap ListModel fields.
+        if (combineSideIsList(f, sideId)) {
+          return `${f.name}: (Array.isArray(input) ? input : [newDoc]) as ${name}[]`;
+        }
+        return `${f.name}: newDoc as ${name}`;
+      }
       // AI : missing upstream label → index via Record so tsc still accepts the fallback key.
       return upstreamLabel
         ? `${f.name}: state[${upstreamKey}]`
@@ -1067,7 +1099,12 @@ export function generateCombineStepBodyPy(
   const fieldExprs =
     out?.fields.map((f) => {
       if (f.type === FieldType.Document) return `"${f.name}": new_doc`;
-      if (sideId && f.ref === sideId) return `"${f.name}": new_doc`;
+      if (sideId && f.ref === sideId) {
+        if (combineSideIsList(f, sideId)) {
+          return `"${f.name}": input if isinstance(input, list) else [new_doc]`;
+        }
+        return `"${f.name}": new_doc`;
+      }
       return `"${f.name}": state[${upstreamKey}]`;
     }) ?? [];
   // AI : skip isinstance when the spine type is already a list.
@@ -1088,18 +1125,25 @@ export function generateCombineStepBodyRust(m: PipelineModule, project: Project,
   const upstreamKey = upstreamLabel ? JSON.stringify(upstreamLabel) : '"upstream"';
   const rawOutName = modelName(project, m.outStructureId);
   const outName = rawOutName ? modelExportIdentifierRust(rawOutName) : outRust;
+  const hasListSide = !!out?.fields.some((f) => combineSideIsList(f, sideId));
   const fieldExprs =
     out?.fields.map((f) => {
       const fname = rustFieldIdent(f.name).ident;
       if (f.type === FieldType.Document) return `        ${fname}: new_doc.clone(),`;
       if (sideId && f.ref === sideId) {
+        if (combineSideIsList(f, sideId)) {
+          const listExpr = inRust.startsWith("Vec<") ? "&input" : "&vec![new_doc.clone()]";
+          return `        ${fname}: serde_json::from_value(serde_json::to_value(${listExpr})?)?,`;
+        }
         return `        ${fname}: serde_json::from_value(serde_json::to_value(&new_doc)?)?,`;
       }
       return `        ${fname}: serde_json::from_value(state.get(${upstreamKey}).cloned().unwrap_or(Value::Null))?,`;
     }) ?? [];
-  // AI : mirror TS/Py — list side-inputs unwrap to the first document.
+  // AI : clone the first item when a list side-field still needs the full Vec.
   const unwrap = inRust.startsWith("Vec<")
-    ? 'let new_doc = input.into_iter().next().ok_or_else(|| anyhow::anyhow!("combine expects at least one document"))?;'
+    ? hasListSide
+      ? 'let new_doc = input.first().cloned().ok_or_else(|| anyhow::anyhow!("combine expects at least one document"))?;'
+      : 'let new_doc = input.into_iter().next().ok_or_else(|| anyhow::anyhow!("combine expects at least one document"))?;'
     : "let new_doc = input;";
   return [
     exportComment("//", mergeUpstreamComment(inName)),
@@ -1127,7 +1171,13 @@ export function generateCombineStepBodyGo(
   const zero = goZeroValue(outGo);
   const fieldEntries =
     out?.fields.map((f) => {
-      if (f.type === FieldType.Document || (sideId && f.ref === sideId)) {
+      if (f.type === FieldType.Document) {
+        return `\t\t${JSON.stringify(f.name)}: newDoc,`;
+      }
+      if (sideId && f.ref === sideId) {
+        if (combineSideIsList(f, sideId)) {
+          return `\t\t${JSON.stringify(f.name)}: input,`;
+        }
         return `\t\t${JSON.stringify(f.name)}: newDoc,`;
       }
       return `\t\t${JSON.stringify(f.name)}: state[${upstreamKey}],`;

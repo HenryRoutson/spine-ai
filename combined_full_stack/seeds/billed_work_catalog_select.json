@@ -4,21 +4,6 @@
   "kind": "billed-work-catalog-select",
   "models": [
     {
-      "id": "m_work_desc",
-      "name": "WorkDescription",
-      "description": "New claim work description — fills {description} in the first example-select pass.",
-      "fields": [
-        {
-          "id": "f_desc",
-          "name": "description",
-          "type": "text",
-          "optional": false,
-          "description": "Plain-language damage description",
-          "minLength": 1
-        }
-      ]
-    },
-    {
       "id": "m_billed_line",
       "name": "BilledLineRef",
       "description": "Reference to a catalog work item on a past job.",
@@ -130,45 +115,6 @@
       ]
     },
     {
-      "id": "m_job_lib",
-      "name": "JobExampleLibraryFile",
-      "description": "Parsed JSON upload — examples array for job library input.",
-      "fields": [
-        {
-          "id": "f_examples",
-          "name": "examples",
-          "type": "list[model]",
-          "ref": "m_job_ex",
-          "optional": false,
-          "description": "Past job rows",
-          "minItems": 1
-        }
-      ]
-    },
-    {
-      "id": "m_job_bundle",
-      "name": "JobSelectBundle",
-      "description": "Work description + job example library merged by combine.",
-      "fields": [
-        {
-          "id": "f_case",
-          "name": "case",
-          "type": "model",
-          "ref": "m_work_desc",
-          "optional": false,
-          "description": "WorkDescription from Normalize Case"
-        },
-        {
-          "id": "f_library",
-          "name": "library",
-          "type": "model",
-          "ref": "m_job_lib",
-          "optional": false,
-          "description": "Job example library side input"
-        }
-      ]
-    },
-    {
       "id": "m_item_filter_ctx",
       "name": "ItemFilterContext",
       "description": "Claim description + selected past jobs — cached context for catalog filtering.",
@@ -234,25 +180,9 @@
       ]
     },
     {
-      "id": "m_work_catalog",
-      "name": "WorkItemCatalogFile",
-      "description": "Parsed JSON upload — items array for catalog input.",
-      "fields": [
-        {
-          "id": "f_items",
-          "name": "items",
-          "type": "list[model]",
-          "ref": "m_work_item",
-          "optional": false,
-          "description": "Master catalog rows",
-          "minItems": 1
-        }
-      ]
-    },
-    {
       "id": "m_catalog_bundle",
       "name": "CatalogSelectBundle",
-      "description": "Item filter context + work item catalog merged by combine.",
+      "description": "Item filter context + catalog rows merged by combine.",
       "fields": [
         {
           "id": "f_ctx",
@@ -260,15 +190,16 @@
           "type": "model",
           "ref": "m_item_filter_ctx",
           "optional": false,
-          "description": "Description + selected jobs from Merge for Item Filter"
+          "description": "Description + selected jobs from Assemble Item Filter"
         },
         {
-          "id": "f_catalog",
-          "name": "catalog",
-          "type": "model",
-          "ref": "m_work_catalog",
+          "id": "f_items",
+          "name": "items",
+          "type": "list[model]",
+          "ref": "m_work_item",
           "optional": false,
-          "description": "Work item catalog side input"
+          "description": "Catalog rows from the side input",
+          "minItems": 1
         }
       ]
     },
@@ -421,24 +352,7 @@
       "cached": true,
       "avgMs": 80,
       "avgCostCents": 0,
-      "note": "New claim narrative — feeds {description} via Normalize Case"
-    },
-    {
-      "id": "mod_normalize",
-      "kind": "custom-code",
-      "label": "Normalize Case",
-      "note": "Document → WorkDescription — deterministic wrapper for example-select context.",
-      "inputDescription": "Work description Document with plain-text content",
-      "inStructureId": "m_builtin_document",
-      "outStructureId": "m_work_desc",
-      "cached": true,
-      "avgMs": 5,
-      "avgCostCents": 0,
-      "fallbackList": [
-        {
-          "typescript": "(doc) => ({ description: String(doc?.content ?? \"\").trim() })"
-        }
-      ]
+      "note": "New claim narrative — example-select reads Document.content as {description}"
     },
     {
       "id": "mod_job_lib_in",
@@ -446,41 +360,12 @@
       "label": "Job Example Library",
       "inputType": "json",
       "inputNameContains": "job_example_library",
-      "inputDescription": "JSON file with examples array of structured past jobs",
-      "outStructureId": "m_job_lib",
+      "inputDescription": "JSON array of structured past jobs (id, title, work_description, billed_items)",
+      "outStructureId": "m_job_ex",
       "cached": true,
       "avgMs": 80,
       "avgCostCents": 0,
-      "note": "Past jobs with billed_items references — side input before combine"
-    },
-    {
-      "id": "mod_combine_jobs",
-      "kind": "combine",
-      "label": "Combine Job Inputs",
-      "note": "Merges WorkDescription with Job Example Library side input.",
-      "inputDescription": "Job library JSON plus WorkDescription from Normalize Case on pipeline state",
-      "inStructureId": "m_work_desc",
-      "outStructureId": "m_job_bundle",
-      "cached": true,
-      "avgMs": 40,
-      "avgCostCents": 0
-    },
-    {
-      "id": "mod_parse_jobs",
-      "kind": "custom-code",
-      "label": "Parse Job Examples",
-      "note": "JobSelectBundle → list[JobExample].",
-      "inputDescription": "JobSelectBundle from combine — case + library",
-      "inStructureId": "m_job_bundle",
-      "outStructureId": "m_job_ex",
-      "cached": true,
-      "avgMs": 5,
-      "avgCostCents": 0,
-      "fallbackList": [
-        {
-          "typescript": "(bundle) => { const rows = bundle?.library?.examples; if (!Array.isArray(rows)) throw new Error(\"expected examples array\"); return rows; }"
-        }
-      ],
+      "note": "Past jobs with billed_items references — JSON array on the spine for pass 1",
       "outType": {
         "kind": "list",
         "item": { "kind": "ref", "modelId": "m_job_ex" }
@@ -490,12 +375,12 @@
       "id": "mod_select_jobs",
       "kind": "example-select",
       "label": "Select Relevant Jobs",
-      "note": "Pass 1 — filter past jobs by similarity to the claim description.",
-      "inputDescription": "list[JobExample] from the parsed job library",
+      "note": "Pass 1 — filter past jobs by similarity to the claim description. TODO (example-select-view): {example} should be title+work_description only; billed_items stay on spine passthrough. TODO (sql-schema): CREATE VIEW job_example_prompt AS SELECT id, title, work_description FROM job_example;",
+      "inputDescription": "list[JobExample] from the job library JSON",
       "inStructureId": "m_job_ex",
       "outStructureId": "m_selected_job",
-      "exampleContextLabel": "Normalize Case",
-      "exampleContextField": "description",
+      "exampleContextLabel": "Work Description",
+      "exampleContextField": "content",
       "exampleReasonField": "selection_reason",
       "prompt": "Find past repair jobs that are useful references for scoping this new insurance claim.\n\nWORK DESCRIPTION:\n\n{description}\n\nCANDIDATE PAST JOB:\n\n{example}",
       "model": "deepseek-v4",
@@ -509,15 +394,25 @@
       }
     },
     {
-      "id": "mod_merge_item_ctx",
-      "kind": "merge",
-      "label": "Merge for Item Filter",
-      "note": "Deep-merge Normalize Case with selected_examples → ItemFilterContext (cached prefix for pass 2).",
+      "id": "mod_assemble_item_ctx",
+      "kind": "assemble",
+      "label": "Assemble Item Filter",
+      "note": "Zip Work Description.content with selected_examples → ItemFilterContext (cached prefix for pass 2).",
       "inputDescription": "Filtered SelectedJobExample rows",
       "inStructureId": "m_selected_job",
       "outStructureId": "m_item_filter_ctx",
-      "mergeStateLabel": "Normalize Case",
-      "mergeWrapListField": "selected_examples",
+      "inType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_selected_job" }
+      },
+      "outType": {
+        "kind": "ref",
+        "modelId": "m_item_filter_ctx"
+      },
+      "assembleBindings": {
+        "description": { "kind": "path", "from": { "label": "Work Description" }, "path": "content" },
+        "selected_examples": { "kind": "spine" }
+      },
       "cached": true,
       "avgMs": 5,
       "avgCostCents": 0
@@ -528,19 +423,23 @@
       "label": "Work Item Catalog",
       "inputType": "json",
       "inputNameContains": "work_item_catalog",
-      "inputDescription": "JSON file with items array — master catalog of billable work items",
-      "outStructureId": "m_work_catalog",
+      "inputDescription": "JSON array of billable work items — master catalog",
+      "outStructureId": "m_work_item",
       "cached": true,
       "avgMs": 120,
       "avgCostCents": 0,
-      "note": "100-item catalog for pass 2 — too large for one prompt; filtered per row with cached prefix"
+      "note": "100-item catalog for pass 2 — too large for one prompt; filtered per row with cached prefix",
+      "outType": {
+        "kind": "list",
+        "item": { "kind": "ref", "modelId": "m_work_item" }
+      }
     },
     {
       "id": "mod_combine_catalog",
       "kind": "combine",
       "label": "Combine Catalog",
-      "note": "Merges ItemFilterContext with Work Item Catalog side input.",
-      "inputDescription": "Catalog JSON plus ItemFilterContext from Merge for Item Filter on pipeline state",
+      "note": "Merges ItemFilterContext with Work Item Catalog side input — required after pass-1 processing.",
+      "inputDescription": "Catalog JSON array plus ItemFilterContext from Assemble Item Filter on pipeline state",
       "inStructureId": "m_item_filter_ctx",
       "outStructureId": "m_catalog_bundle",
       "cached": true,
@@ -548,35 +447,14 @@
       "avgCostCents": 0
     },
     {
-      "id": "mod_parse_items",
-      "kind": "custom-code",
-      "label": "Parse Work Items",
-      "note": "CatalogSelectBundle → list[WorkItem].",
-      "inputDescription": "CatalogSelectBundle from combine — draft_context + catalog",
-      "inStructureId": "m_catalog_bundle",
-      "outStructureId": "m_work_item",
-      "cached": true,
-      "avgMs": 5,
-      "avgCostCents": 0,
-      "fallbackList": [
-        {
-          "typescript": "(bundle) => { const rows = bundle?.catalog?.items; if (!Array.isArray(rows)) throw new Error(\"expected items array\"); return rows; }"
-        }
-      ],
-      "outType": {
-        "kind": "list",
-        "item": { "kind": "ref", "modelId": "m_work_item" }
-      }
-    },
-    {
       "id": "mod_select_items",
       "kind": "example-select",
       "label": "Select Relevant Work Items",
-      "note": "Pass 2 — filter catalog rows; context is full ItemFilterContext JSON (description + selected jobs).",
-      "inputDescription": "list[WorkItem] from the parsed catalog",
+      "note": "Pass 2 — filter catalog rows; context is full ItemFilterContext JSON (description + selected jobs). TODO (type-join): optional lookup-embed of billed_items → WorkItem on the cached prefix only; leave {example} as a catalog row. TODO (sql-schema): CREATE VIEW selected_job_expanded AS SELECT … JOIN billed_line JOIN work_item;",
+      "inputDescription": "list[WorkItem] from Combine Catalog.items",
       "inStructureId": "m_work_item",
       "outStructureId": "m_selected_item",
-      "exampleContextLabel": "Merge for Item Filter",
+      "exampleContextLabel": "Assemble Item Filter",
       "exampleReasonField": "selection_reason",
       "prompt": "You are filtering a master construction work-item catalog for an insurance repair claim.\n\nThe CASE and RELEVANT PAST JOBS (with billed_items) are below. Decide whether the CANDIDATE WORK ITEM could be required for this claim.\n\nCASE AND PAST JOBS:\n\n{description}\n\nCANDIDATE WORK ITEM:\n\n{example}",
       "model": "deepseek-v4",
@@ -593,11 +471,11 @@
       "id": "mod_merge_draft",
       "kind": "merge",
       "label": "Merge for Draft",
-      "note": "Deep-merge ItemFilterContext with selected_work_items → BilledWorkDraftRequest.",
+      "note": "Deep-merge Assemble Item Filter with selected_work_items → BilledWorkDraftRequest.",
       "inputDescription": "Filtered SelectedWorkItem rows",
       "inStructureId": "m_selected_item",
       "outStructureId": "m_draft_req",
-      "mergeStateLabel": "Merge for Item Filter",
+      "mergeStateLabel": "Assemble Item Filter",
       "mergeWrapListField": "selected_work_items",
       "cached": true,
       "avgMs": 5,
@@ -711,26 +589,7 @@
         "Work Description": "billed_work_description.txt",
         "Job Example Library": "job_example_library.json",
         "Work Item Catalog": "work_item_catalog.json"
-      },
-      "expectedOutputs": [
-        { "stepLabel": "Normalize Case", "file": "billed_work_catalog_select/expected/normalize_case.json" },
-        { "stepLabel": "Parse Job Examples", "file": "billed_work_catalog_select/expected/parse_job_examples.json" },
-        { "stepLabel": "Parse Work Items", "file": "billed_work_catalog_select/expected/parse_work_items.json" }
-      ]
-    }
-  ],
-  "expectedOutputs": [
-    {
-      "stepLabel": "Normalize Case",
-      "file": "billed_work_catalog_select/expected/normalize_case.json"
-    },
-    {
-      "stepLabel": "Parse Job Examples",
-      "file": "billed_work_catalog_select/expected/parse_job_examples.json"
-    },
-    {
-      "stepLabel": "Parse Work Items",
-      "file": "billed_work_catalog_select/expected/parse_work_items.json"
+      }
     }
   ]
 }

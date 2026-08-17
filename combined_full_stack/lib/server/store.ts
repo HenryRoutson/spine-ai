@@ -14,7 +14,7 @@ import {
   userProjectsFrom,
   type SeedDocSpec,
 } from "./seed";
-import { computeInvalid, migrateProjectModules, syncManagedPipelineSteps } from "./validity";
+import { computeInvalid, migrateProjectModules, projectWithAuthoredModules, syncManagedPipelineSteps } from "./validity";
 import { stripSharedModels } from "./builtin_models";
 import type {
   DocId,
@@ -38,6 +38,9 @@ import {
   type VisionCacheRow,
 } from "./doc_text_cache";
 import { buildDocRef } from "./doc_ref";
+import { logger } from "./server_logger";
+
+const origLog = logger("docs:original-bytes");
 
 function visionCacheDir(): string {
   return join(dataDir(), "vision_cache");
@@ -57,14 +60,11 @@ function docsDir(): string {
   return join(dataDir(), "docs");
 }
 
-// AI : original file bytes live beside extracted text (data/docs/<hash>.<ext>) for PDF viewer + vision OCR.
-// AI : TODO bug (prod) — local disk only; SupabaseStore persists text in `docs` but not file
-// AI : bytes, and on Vercel this lands in ephemeral /tmp. User uploads → GET /file 404.
-// AI : Fix: Supabase Storage (or inline blob) + serve from there, not dataDir().
-const ORIGINAL_DOC_EXTS = ["pdf", "png", "jpg", "jpeg", "webp"] as const;
-type OriginalDocExt = (typeof ORIGINAL_DOC_EXTS)[number];
+// AI : original PDF/image bytes — local disk for JsonStore / warm cache; Supabase Storage in prod.
+export const ORIGINAL_DOC_EXTS = ["pdf", "png", "jpg", "jpeg", "webp"] as const;
+export type OriginalDocExt = (typeof ORIGINAL_DOC_EXTS)[number];
 
-const EXT_MIME: Record<OriginalDocExt, string> = {
+export const EXT_MIME: Record<OriginalDocExt, string> = {
   pdf: "application/pdf",
   png: "image/png",
   jpg: "image/jpeg",
@@ -72,9 +72,14 @@ const EXT_MIME: Record<OriginalDocExt, string> = {
   webp: "image/webp",
 };
 
+export function parseOriginalDocExt(ext: string): OriginalDocExt | undefined {
+  const safe = ext.toLowerCase().replace(/^\./, "");
+  return (ORIGINAL_DOC_EXTS as readonly string[]).includes(safe) ? (safe as OriginalDocExt) : undefined;
+}
+
 export function saveOriginalDocBytes(id: DocId, bytes: Uint8Array, ext: string): void {
-  const safe = ext.toLowerCase().replace(/^\./, "") as OriginalDocExt;
-  if (!ORIGINAL_DOC_EXTS.includes(safe)) return;
+  const safe = parseOriginalDocExt(ext);
+  if (!safe) return;
   mkdirSync(docsDir(), { recursive: true });
   writeFileSync(join(docsDir(), `${id}.${safe}`), bytes);
 }
@@ -85,6 +90,9 @@ export function savePdfBytes(id: DocId, bytes: Uint8Array): void {
 }
 
 export type OriginalDocFile = { path: string; mime: string; ext: OriginalDocExt };
+export type OriginalDocSource = "disk" | "storage";
+export type OriginalDocMeta = { mime: string; ext: OriginalDocExt; source: OriginalDocSource };
+export type OriginalDocBytes = OriginalDocMeta & { bytes: Uint8Array };
 
 function copySeedPdfToDocsDir(id: DocId, pdfPath: string): OriginalDocFile {
   const dest = join(docsDir(), `${id}.pdf`);
@@ -136,6 +144,87 @@ export async function pdfFilePath(id: DocId): Promise<string | undefined> {
   return file?.ext === "pdf" ? file.path : undefined;
 }
 
+// AI : disk first (warm instance / JsonStore), then Supabase Storage for prod after redeploy.
+export function persistOriginalDocBytes(store: Store, id: DocId, bytes: Uint8Array, ext: string): void {
+  const parsed = parseOriginalDocExt(ext);
+  if (!parsed) {
+    origLog.warn(`skip original bytes — ext is not stored`, {
+      docId: id,
+      ext: ext || "(none)",
+      storedExts: ORIGINAL_DOC_EXTS.join(","),
+    });
+    return;
+  }
+  saveOriginalDocBytes(id, bytes, parsed);
+  if (store.persistOriginalDocBytes) {
+    origLog.info(`queue original bytes → Supabase Storage bucket doc-originals`, {
+      docId: id,
+      ext: parsed,
+      bytes: bytes.length,
+    });
+    store.persistOriginalDocBytes(id, bytes, parsed);
+    return;
+  }
+  origLog.info(`original bytes disk-only (JsonStore — no Storage backend)`, {
+    docId: id,
+    ext: parsed,
+    bytes: bytes.length,
+  });
+}
+
+function logOriginalMiss(id: DocId, docName: string | undefined, hasStorageBackend: boolean): void {
+  origLog.debug(`original bytes MISS — not on disk, not in bundled seeds, not in Storage bucket doc-originals`, {
+    docId: id,
+    docName,
+    hasStorageBackend,
+    hint: "re-upload the PDF/image",
+  });
+}
+
+export async function originalDocMeta(
+  store: Store,
+  id: DocId,
+  docName?: string,
+): Promise<OriginalDocMeta | undefined> {
+  const file = await originalDocFile(id, docName);
+  if (file) {
+    origLog.debug(`original bytes HIT local disk`, { docId: id, ext: file.ext, docName });
+    return { mime: file.mime, ext: file.ext, source: "disk" };
+  }
+  const remote = await store.loadOriginalDocMeta?.(id);
+  if (remote) {
+    origLog.info(`original bytes HIT Supabase Storage`, { docId: id, ext: remote.ext, source: "storage" });
+    return { ...remote, source: "storage" };
+  }
+  logOriginalMiss(id, docName, !!store.loadOriginalDocMeta);
+  return undefined;
+}
+
+export async function resolveOriginalDocBytes(
+  store: Store,
+  id: DocId,
+  docName?: string,
+): Promise<OriginalDocBytes | undefined> {
+  const file = await originalDocFile(id, docName);
+  if (file) {
+    origLog.debug(`original bytes HIT local disk`, { docId: id, ext: file.ext, docName });
+    return { bytes: new Uint8Array(readFileSync(file.path)), mime: file.mime, ext: file.ext, source: "disk" };
+  }
+  const remote = await store.loadOriginalDocBytes?.(id);
+  if (remote) {
+    origLog.info(`original bytes HIT Supabase Storage`, {
+      docId: id,
+      ext: remote.ext,
+      bytes: remote.bytes.length,
+      source: "storage",
+    });
+    saveOriginalDocBytes(id, remote.bytes, remote.ext);
+    return { ...remote, source: "storage" };
+  }
+  logOriginalMiss(id, docName, !!store.loadOriginalDocBytes);
+  return undefined;
+}
+
 interface Persisted {
   projects: Project[];
   docs: DocRef[];
@@ -181,6 +270,12 @@ export interface Store {
   syncRunsFromDb?(): Promise<void>;
   /** AI : re-read docs visible via RLS (own + shared-owner pointers). */
   syncDocsFromDb?(): Promise<void>;
+  /** AI : queue original PDF/image bytes to Supabase Storage (no-op on JsonStore). */
+  persistOriginalDocBytes?(id: DocId, bytes: Uint8Array, ext: string): void;
+  /** AI : fetch original bytes from Supabase Storage after local/seed miss. */
+  loadOriginalDocBytes?(id: DocId): Promise<OriginalDocBytes | undefined>;
+  /** AI : HEAD /file — existence + mime without downloading bytes. */
+  loadOriginalDocMeta?(id: DocId): Promise<OriginalDocMeta | undefined>;
 }
 
 // AI : prefer memory, then DB sync on warm SupabaseStore — JsonStore has no lag.
@@ -455,6 +550,7 @@ export class JsonStore implements Store {
     if (!fresh) {
       this.state = JSON.parse(readFileSync(this.storeFile, "utf8")) as Persisted;
       this.state.runProjects ??= {};
+      this.state.projects = this.state.projects.map((p) => migrateProjectModules(p));
     }
     await ensureSeeded(this);
     if (fresh && this.state.projects.length === 0) {
@@ -467,7 +563,11 @@ export class JsonStore implements Store {
   async flush(): Promise<void> {}
 
   private persist(): void {
-    writeFileSync(this.storeFile, JSON.stringify(this.state, null, 2), "utf8");
+    const disk = {
+      ...this.state,
+      projects: this.state.projects.map((p) => projectWithAuthoredModules(p)),
+    };
+    writeFileSync(this.storeFile, JSON.stringify(disk, null, 2), "utf8");
   }
 
   private ingest(name: string, type: InputType, content: string, label: DocLabel): DocRef {

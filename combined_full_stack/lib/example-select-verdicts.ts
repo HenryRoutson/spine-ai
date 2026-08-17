@@ -41,6 +41,7 @@ export function buildExampleSelectVerdicts(
     })
     if (!isRelevant) continue
     if (items[i] != null && typeof items[i] === "object" && !Array.isArray(items[i])) {
+      // AI : TODO (example-select-view) — this spread is the passthrough: full candidate, not the prompt view.
       kept.push({ ...(items[i] as Record<string, unknown>), [reasonField]: chainOfThought })
     } else {
       kept.push({ value: items[i], [reasonField]: chainOfThought })

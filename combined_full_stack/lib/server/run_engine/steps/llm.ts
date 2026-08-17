@@ -61,6 +61,7 @@ export async function execLlmStep(m: PipelineModule, ctx: RunCtx, log: RunLogger
     preview: `${count} ${out.name} item(s) produced`,
     json: JSON.stringify(value, null, 2),
     inputPreview: prompt,
+    outputPreviewItems: [{ label: "response", text: JSON.stringify(value, null, 2) }],
     docId: usesSourceDoc ? ctx.sourceDocId : undefined,
     llmCalls: ctx.stepLlmCalls,
   };

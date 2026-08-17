@@ -17,7 +17,13 @@ export type PipelineRuntime = {
   openRouterBaseUrl?: string;
   /** OpenRouter seed for deterministic sampling (temperature 0 + seed) */
   openRouterSeed?: number;
-  /** Vision OCR model slug (OpenRouter) — default Gemini Flash; override for DeepSeek-OCR hosts */
+  /** Directory of input files — convert-to-text reads by filename (do not put base64 on Document) */
+  docsDir?: string;
+  /** DeepSeek-OCR vLLM OpenAI-compatible base URL, e.g. http://127.0.0.1:8000/v1 */
+  deepseekOcrBaseUrl?: string;
+  /** HuggingFace / vLLM model id — default deepseek-ai/DeepSeek-OCR-2 */
+  deepseekOcrModel?: string;
+  /** Fallback OpenRouter vision slug when DeepSeek endpoint is unset */
   visionOcrModel?: string;
   sourceText?: string;
   sourceDocId?: string;
@@ -194,6 +200,15 @@ export async function llmBatchStructured<T>(
 export const relevanceSchema = {"chain_of_thought":"string","is_relevant":"boolean"};
 type RelevanceVerdict = { chain_of_thought?: string; is_relevant?: boolean };
 
+export function exampleSelectItems(input: unknown): unknown[] {
+  if (Array.isArray(input)) return input;
+  if (input && typeof input === "object") {
+    const arrays = Object.values(input as Record<string, unknown>).filter(Array.isArray);
+    if (arrays.length === 1) return arrays[0] as unknown[];
+  }
+  return input == null ? [] : [input];
+}
+
 export async function selectRelevant(
   items: unknown[],
   description: string,
@@ -202,6 +217,8 @@ export async function selectRelevant(
 ): Promise<unknown[]> {
   const verdicts = await llmBatchStructured<RelevanceVerdict>(
     items,
+    // AI : TODO (example-select-view) — stringify the prompt view, not the full item; kept rows below stay passthrough.
+    // AI : TODO (sql-schema) — stringify the VIEW row; INSERT kept rows from the source TABLE.
     (item: unknown) => template.replace("{description}", description).replace("{example}", JSON.stringify(item)),
     relevanceSchema,
   );
@@ -436,17 +453,36 @@ export function mergeFold(values: unknown[], policy: unknown): unknown {
 };
 
 const DEFAULT_VISION_OCR_MODEL: ProviderModelId = "google/gemini-3-flash-preview";
+const DEFAULT_DEEPSEEK_OCR_MODEL = "deepseek-ai/DeepSeek-OCR-2";
 const OCR_SYSTEM = "You are an OCR engine. Transcribe documents faithfully. Preserve structure with markdown headings and lists where helpful. Output only the transcribed text — no commentary.";
 const DEFAULT_OCR_PROMPT = "Transcribe every visible word, number, and label from this document into plain text. Preserve section headings and question numbering.";
+const DEEPSEEK_OCR_PROMPT = "<image>\n<|grounding|>Convert the document to markdown.";
 
 export type VisionOcrBytes = { mime: string; base64: string };
+
+const _ocrTextCache = new Map<string, string>();
+
+function hashBytes(bytes: Uint8Array): string {
+  let h = 0;
+  for (let i = 0; i < bytes.length; i++) h = (Math.imul(31, h) + bytes[i]!) | 0;
+  return (h >>> 0).toString(16);
+}
+
+function mimeFromFilename(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  if (ext === "pdf") return "application/pdf";
+  if (ext === "png") return "image/png";
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "webp") return "image/webp";
+  return "application/octet-stream";
+}
 
 function resolveVisionOcrModel(): ProviderModelId {
   return runtime.visionOcrModel ?? runtime.llmProviderModel ?? runtime.openRouterModel ?? DEFAULT_VISION_OCR_MODEL;
 }
 
 async function openRouterVisionChat(prompt: string, attachments: VisionOcrBytes[], providerModel: ProviderModelId): Promise<string> {
-  if (!runtime.openRouterApiKey) throw new Error("configurePipelineRuntime({ openRouterApiKey }) for vision OCR");
+  if (!runtime.openRouterApiKey) throw new Error("configurePipelineRuntime({ openRouterApiKey }) for vision OCR fallback");
   const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [{ type: "text", text: prompt }];
   for (const a of attachments) {
     content.push({ type: "image_url", image_url: { url: `data:${a.mime};base64,${a.base64}` } });
@@ -475,10 +511,86 @@ async function openRouterVisionChat(prompt: string, attachments: VisionOcrBytes[
   return text;
 }
 
-/** Vision OCR — pass PDF/image bytes as base64. Override model with runtime.visionOcrModel (e.g. DeepSeek-OCR host). */
+/** DeepSeek-OCR-2 via vLLM OpenAI-compatible /chat/completions. Request body is ephemeral — not stored on Document. */
+export async function deepseekOcr(bytes: Uint8Array, mime: string): Promise<string> {
+  const base = (runtime.deepseekOcrBaseUrl ?? "").replace(/\/$/, "");
+  if (!base) throw new Error("configurePipelineRuntime({ deepseekOcrBaseUrl }) for DeepSeek OCR");
+  const model = runtime.deepseekOcrModel ?? DEFAULT_DEEPSEEK_OCR_MODEL;
+  const b64 = Buffer.from(bytes).toString("base64");
+  const res = await fetch(`${base}/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: `data:${mime};base64,${b64}` } },
+          { type: "text", text: DEEPSEEK_OCR_PROMPT },
+        ],
+      }],
+      max_tokens: 8192,
+      temperature: 0,
+      extra_body: {
+        skip_special_tokens: false,
+        vllm_xargs: { ngram_size: 30, window_size: 90, whitelist_token_ids: [128821, 128822] },
+      },
+    }),
+  });
+  if (!res.ok) throw new Error(`DeepSeek OCR ${res.status}: ${await res.text()}`);
+  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  const text = data.choices?.[0]?.message?.content?.trim();
+  if (!text) throw new Error("DeepSeek OCR returned empty text");
+  return text;
+}
+
+async function ocrBytes(bytes: Uint8Array, mime: string, purpose: string): Promise<string> {
+  const key = `${runtime.deepseekOcrBaseUrl ?? "or"}:${runtime.deepseekOcrModel ?? runtime.visionOcrModel ?? ""}:${hashBytes(bytes)}`;
+  const hit = _ocrTextCache.get(key);
+  if (hit) return hit;
+  let text: string;
+  if (runtime.deepseekOcrBaseUrl) {
+    text = await deepseekOcr(bytes, mime);
+  } else {
+    const prompt = `${DEFAULT_OCR_PROMPT}\n\nDocument purpose: ${purpose || "general transcription"}`;
+    text = await openRouterVisionChat(prompt, [{ mime, base64: Buffer.from(bytes).toString("base64") }], resolveVisionOcrModel());
+  }
+  _ocrTextCache.set(key, text);
+  return text;
+}
+
+type ExportDocument = { content?: string | null; filename: string };
+
+function readDocsFile(filename: string): { bytes: Uint8Array; mime: string } {
+  const dir = runtime.docsDir ?? "docs";
+  const { readFileSync } = require("node:fs") as { readFileSync: (p: string) => Buffer };
+  const { join } = require("node:path") as { join: (...p: string[]) => string };
+  const bytes = new Uint8Array(readFileSync(join(dir, filename)));
+  return { bytes, mime: mimeFromFilename(filename) };
+}
+
+/** Convert-to-text — instantiates Document.content from docsDir. Never stores encoded copies on Document. */
+export async function convertDocToText(
+  doc: ExportDocument,
+  opts: { ocr?: boolean; purpose?: string } = {},
+): Promise<{ content: string; filename: string }> {
+  const filename = doc.filename;
+  if (typeof doc.content === "string" && doc.content.trim()) {
+    return { content: doc.content, filename };
+  }
+  const { bytes, mime } = readDocsFile(filename);
+  if (opts.ocr) {
+    return { content: await ocrBytes(bytes, mime, opts.purpose ?? "general transcription"), filename };
+  }
+  const text = new TextDecoder().decode(bytes).trim();
+  if (!text) throw new Error(`convert to text: no parser text for ${filename} — set ocr:true for scans`);
+  return { content: text, filename };
+}
+
+/** @deprecated use convertDocToText — kept so older generated steps compile */
 export async function visionOcr(bytes: VisionOcrBytes, purpose = "general transcription"): Promise<string> {
-  const prompt = `${DEFAULT_OCR_PROMPT}\n\nDocument purpose: ${purpose || "general transcription"}`;
-  return openRouterVisionChat(prompt, [bytes], resolveVisionOcrModel());
+  const raw = Buffer.from(bytes.base64, "base64");
+  return ocrBytes(new Uint8Array(raw), bytes.mime, purpose);
 }
 
 export function resolveQuotes<T>(_data: unknown, _sourceText: string, _docId: string): T {

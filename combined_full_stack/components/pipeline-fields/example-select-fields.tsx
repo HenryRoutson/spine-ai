@@ -144,6 +144,9 @@ export function ExampleSelectModuleFields({
         )}
       </PipelineField>
 
+      {/* AI : TODO (example-select-view) — Prompt fields picker (dual of Context field): which keys of each
+          candidate go into {example}. Default all. Billed-work pass 1: title, work_description only. */}
+      {/* AI : TODO (sql-schema) — Prompt view SQL editor: CREATE VIEW / SELECT. Same UI contract as field pick. */}
       <PipelineField
         label="Relevance prompt"
         hint="schema-first cached prefix · {description} per run · {example} last per candidate"

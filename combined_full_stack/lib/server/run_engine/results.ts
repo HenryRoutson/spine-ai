@@ -1,8 +1,9 @@
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
+import { labeledJsonPreviewItems } from "@/lib/step-response-preview";
 import { inputTypeLabel } from "../../inference-input";
 import { inputUsesVisionOcr } from "../types";
 import { StructuredResponseError } from "../openrouter_llm";
-import { documentContentFrom, documentDocIdFrom, documentFilenameFrom } from "../document_value";
+import { documentContentFrom, documentDocIdFrom } from "../document_value";
 import type { DocId, PipelineModule } from "../types";
 import type { StepCacheArtifact } from "../step_cache";
 import { materializeHints, materializeStepOutput, modelById, prevModuleFor } from "./helpers";
@@ -22,11 +23,13 @@ export function resultFromCache(m: PipelineModule, cached: StepCacheArtifact, ct
     })();
   const docId =
     valueDocId ??
-    (m.kind === "input" || m.kind === "quote" ? ctx.sourceDocId : undefined);
+    (m.kind === "input" || m.kind === "quote" || m.kind === "doc-to-text" ? ctx.sourceDocId : undefined);
 
   let preview = "(from cache)";
   if (m.kind === "input" && docId) {
-    preview = `loaded ${inputTypeLabel(m.inputType)} → ${docId}${inputUsesVisionOcr(m) ? " · OCR" : ""}`;
+    preview = `loaded ${inputTypeLabel(m.inputType)} → ${docId}`;
+  } else if (m.kind === "doc-to-text" && docId) {
+    preview = `convert to text → ${docId}${inputUsesVisionOcr(m) ? " · OCR" : " · parser"}`;
   } else if (m.kind === "quote" && docId) {
     preview = `linked quote(s) → ${docId}`;
   }
@@ -42,6 +45,7 @@ export function resultFromCache(m: PipelineModule, cached: StepCacheArtifact, ct
     docId,
     inputPreview: cached.inputPreview,
     inputPreviewItems: cached.inputPreviewItems,
+    outputPreviewItems: cached.outputPreviewItems,
   };
 }
 
@@ -68,6 +72,8 @@ export function failedStepResult(err: unknown, m: PipelineModule, ctx: RunCtx, p
     preview: (err as Error).message,
     json: failedJsonForStep(m, ctx, prior, err),
     inputPreview: prior?.inputPreview,
+    inputPreviewItems: prior?.inputPreviewItems,
+    outputPreviewItems: prior?.outputPreviewItems,
     docId: prior?.docId,
     llmCalls: prior?.llmCalls ?? ctx.stepLlmCalls,
   };
@@ -135,18 +141,25 @@ export function buildLlmClientResult(
   const out = modelById(project.models, m.outStructureId);
   const count = Array.isArray(value) ? value.length : 1;
   const providerLabel = llmClient ? `${llmClient.providerId}:${llmClient.providerModel}` : "browser provider";
+  const prompts = llmClient?.inputPreviewItems;
+  const outputPreviewItems = Array.isArray(value)
+    ? labeledJsonPreviewItems(value, prompts)
+    : value != null
+      ? [{ label: "response", text: JSON.stringify(value, null, 2) }]
+      : undefined;
   return {
     value,
     preview: `${count} ${out?.name ?? "item"}(s) via ${providerLabel}`,
     json: JSON.stringify(value, null, 2),
     inputPreview: llmClient?.inputPreview,
     inputPreviewItems: llmClient?.inputPreviewItems,
+    outputPreviewItems,
     llmCalls: [],
   };
 }
 
-export function applyInputCacheSideEffects(m: PipelineModule, cached: StepCacheArtifact, ctx: RunCtx): void {
-  if (m.kind !== "input" || !inputUsesVisionOcr(m)) return;
+// AI : convert-to-text owns sourceText — parser and OCR cache hits both instantiate Document.content.
+export function applyDocToTextCacheSideEffects(cached: StepCacheArtifact, ctx: RunCtx): void {
   const v = cached.value;
   const first = Array.isArray(v) ? v[0] : v;
   const body = documentContentFrom(first, "");

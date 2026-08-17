@@ -12,6 +12,7 @@ export const DocViewMode = {
   Vision: "vision",
   Json: "json",
   Formatted: "formatted",
+  // AI : TODO ocr-boxes — DocViewMode.OcrBoxes overlay; see lib/ocr-boxes.ts. Wire when convert-to-text stores OcrBox[].
 } as const
 
 export type DocViewMode = (typeof DocViewMode)[keyof typeof DocViewMode]

@@ -52,6 +52,7 @@ export interface ExecResult {
   json?: string;
   inputPreview?: string;
   inputPreviewItems?: InputPreviewItem[];
+  outputPreviewItems?: InputPreviewItem[];
   docId?: DocId;
   llmCalls?: LlmCallRecord[];
   exampleSelectVerdicts?: ExampleSelectVerdict[];

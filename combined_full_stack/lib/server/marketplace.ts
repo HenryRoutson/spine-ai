@@ -17,7 +17,7 @@ import { isMissingSchemaError } from "./supabase_store";
 import { getSupabasePublicEnv } from "@/utils/supabase/env";
 import type { user_id_string } from "./require_auth";
 import { cloneProject } from "./seed";
-import { migrateProjectModules } from "./validity";
+import { migrateProjectModules, projectWithAuthoredModules } from "./validity";
 import { logger } from "./server_logger";
 import type { Store } from "./store";
 import type {
@@ -62,7 +62,7 @@ export function newMarketplaceListingId(): MarketplaceListingId {
 
 // AI : strip run-scoped doc refs — buyers get the pipeline graph, not the seller's private files.
 function snapshotForMarketplace(project: Project): Project {
-  const snap = migrateProjectModules(structuredClone(project));
+  const snap = projectWithAuthoredModules(migrateProjectModules(structuredClone(project)));
   return {
     ...snap,
     seedDocNames: undefined,

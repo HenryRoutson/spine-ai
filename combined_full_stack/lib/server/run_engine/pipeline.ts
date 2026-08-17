@@ -368,6 +368,7 @@ export async function resumeRunPipeline(
         docId: result.docId,
         inputPreview: result.inputPreview,
         inputPreviewItems: result.inputPreviewItems,
+        outputPreviewItems: result.outputPreviewItems,
         costCents: +costCents.toFixed(4),
       },
       {
@@ -398,6 +399,7 @@ export async function resumeRunPipeline(
     inputPreview: result.inputPreview ?? defaultInputPreview,
     inputPreviewItems: result.inputPreviewItems,
     outputPreview: result.preview,
+    outputPreviewItems: result.outputPreviewItems,
     outputJson: result.json,
     inputDescription: m.inputDescription?.trim() || undefined,
     llmCalls: result.llmCalls?.length ? result.llmCalls : undefined,

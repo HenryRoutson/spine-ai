@@ -5,6 +5,8 @@ import type { ReactNode, RefObject } from "react"
 import { ChevronDown, Copy, Check } from "lucide-react"
 import { runErrorLogText, runHasErrors } from "@/lib/run-error-log"
 import { DiagnosisRunLink } from "@/components/diagnosis-agents/diagnosis-run-link"
+import { InferenceHtmlDownloadButton } from "@/components/inference/inference-html-download-button"
+import { HTML_EXPORT_SKIP_PROPS } from "@/lib/html-export-mark"
 import { runLogText } from "@/lib/run-log-text"
 import { runLogJson } from "@/lib/run-log-json"
 import { copyTextToClipboard } from "@/lib/clipboard"
@@ -173,7 +175,7 @@ export function InferenceStepTracePanel({
         </button>
         <div className="flex items-center gap-2">
           {phase === "done" && run && (
-            <>
+            <span {...HTML_EXPORT_SKIP_PROPS} className="flex items-center gap-2">
               {runHasErrors(run) && <DiagnosisRunLink runId={run.id} />}
               {runHasErrors(run) && (
                 <CopyTraceButton
@@ -202,7 +204,8 @@ export function InferenceStepTracePanel({
                   markCopied("log")
                 }}
               />
-            </>
+              <InferenceHtmlDownloadButton run={run} models={models} />
+            </span>
           )}
           <span className="font-mono text-[11px] text-primary">{progressPct}%</span>
         </div>
@@ -216,10 +219,14 @@ export function InferenceStepTracePanel({
           if (seg.kind === "combine") {
             const combineUi = stepStates.get(seg.combine.id)
             const inputUi = stepStates.get(seg.input.id)
+            const convertUi = seg.convert ? stepStates.get(seg.convert.id) : undefined
             const parseUi = seg.parse ? stepStates.get(seg.parse.id) : undefined
             const inputState = inputUi?.status ?? "idle"
+            const convertState = convertUi?.status ?? "idle"
             const parseState = parseUi?.status ?? "idle"
-            const sideState = seg.parse ? mergeCombineSegmentStatus(parseState, inputState) : inputState
+            let sideState = inputState
+            if (seg.convert) sideState = mergeCombineSegmentStatus(convertState, sideState)
+            if (seg.parse) sideState = mergeCombineSegmentStatus(parseState, sideState)
             const state = mergeCombineSegmentStatus(combineUi?.status ?? "idle", sideState)
             return (
               <div key={seg.combine.id} className="space-y-1">
@@ -230,6 +237,11 @@ export function InferenceStepTracePanel({
                 <InferenceStepRow
                   {...bindInferenceStepRow(seg.input, inputUi, stepCtx, { nested: true, isInputStep: true })}
                 />
+                {seg.convert && (
+                  <InferenceStepRow
+                    {...bindInferenceStepRow(seg.convert, convertUi, stepCtx, { nested: true })}
+                  />
+                )}
                 {seg.parse && (
                   <InferenceStepRow
                     {...bindInferenceStepRow(seg.parse, parseUi, stepCtx, { nested: true })}

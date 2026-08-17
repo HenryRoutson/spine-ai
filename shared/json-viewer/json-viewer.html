@@ -75,6 +75,7 @@ header {
 .ex-tab.active { background:var(--accent); color:var(--accent-fg); }
 .h-logo { display:flex; align-items:center; gap:8px; margin-right:16px; }
 .ex-tabs { display:flex; gap:2px; flex:1; }
+body[data-snapshot] .ex-tabs { overflow-x:auto; min-width:0; }
 .h-badge { font-size:10.5px; font-weight:600; padding:3px 10px; border-radius:999px; margin-left:8px; flex-shrink:0; }
 .hb-schema { background:#4c1d95; color:#c4b5fd; }
 .hb-data   { background:#14532d; color:#86efac; }
@@ -250,6 +251,23 @@ main { display:grid; grid-template-columns:1fr; overflow:hidden; }
 }
 body[data-fs="1"] .vbtn-fs { display:inline-flex; }
 body[data-fs="1"] .dp-fs { display:inline-flex; }
+
+/* AI : shareable snapshot — Download sits beside tree/table/json, hidden in embed/demo */
+.dl-wrap { display:none; position:relative; flex-shrink:0; }
+body[data-snapshot] .dl-wrap { display:block; }
+.dl-menu {
+  position:absolute; top:calc(100% + 4px); right:0; z-index:20;
+  min-width:148px; padding:4px;
+  background:var(--surface); border:1px solid var(--border); border-radius:6px;
+  box-shadow:var(--shadow);
+}
+.dl-item {
+  display:block; width:100%; text-align:left;
+  padding:6px 8px; font-size:11px; color:var(--text);
+  background:transparent; border:none; border-radius:4px;
+  cursor:pointer; font-family:inherit;
+}
+.dl-item:hover { background:var(--surface-2); color:var(--accent); }
 
 #rp-content { flex:1; overflow:auto; padding:4px 6px; display:flex; flex-direction:column; background:var(--bg); }
 
@@ -620,9 +638,9 @@ body[data-embed] .rp-header { min-height:28px; }
       <rect width="22" height="22" rx="6" fill="#6ee7a8"/>
       <path d="M7 8h8M7 11h5M7 14h7" stroke="white" stroke-width="1.6" stroke-linecap="round"/>
     </svg>
-    <span>JSON Viewer</span>
+    <span id="h-title">JSON Viewer</span>
   </div>
-  <div class="ex-tabs">
+  <div class="ex-tabs" id="ex-tabs">
     <button class="ex-tab" onclick="selectTab('portfolio')">Portfolio</button>
     <button class="ex-tab" onclick="selectTab('user')">User</button>
     <button class="ex-tab" onclick="selectTab('order')">Order</button>
@@ -664,6 +682,14 @@ body[data-embed] .rp-header { min-height:28px; }
         <button class="vbtn"        id="vb-json"  onclick="setView('json')">JSON</button>
         <button class="vbtn vbtn-fs" id="vb-fullscreen" type="button" title="Full screen" aria-label="Full screen" onclick="requestParentFullscreen()">⛶</button>
       </div>
+      <div class="dl-wrap" id="dl-wrap">
+        <button class="vbtn" id="dl-btn" type="button" title="Download data" onclick="toggleDownloadMenu(event)">Download</button>
+        <div class="dl-menu" id="dl-menu" hidden>
+          <button class="dl-item" type="button" onclick="downloadSnapshot('json')">JSON</button>
+          <button class="dl-item" type="button" onclick="downloadSnapshot('csv')">CSV</button>
+          <button class="dl-item" type="button" onclick="downloadSnapshot('xlsx')">Excel (.xlsx)</button>
+        </div>
+      </div>
     </div>
     <div id="rp-content"></div>
   </div>
@@ -684,6 +710,9 @@ body[data-embed] .rp-header { min-height:28px; }
 <script>
 // AI: lightweight structured logger — prefix all events for easy DevTools filtering
 const log = (event, detail={}) => console.log('[JSON Viewer]', event, detail);
+
+// AI : shareable HTML export injects a snapshot object between these tokens — keep in sync with shared/json-viewer/snapshot.ts JSON_VIEWER_SNAPSHOT_TOKEN
+const _SNAPSHOT = /*JSON_VIEWER_SNAPSHOT_JSON*/null/*JSON_VIEWER_SNAPSHOT_JSON*/;
 
 // ── Color palette for fold blocks ─────────────────────────────────────────────
 const PALETTE = [
@@ -1488,6 +1517,7 @@ let _currentVal  = null;
 let _currentMode = 'data';
 let _viewMode    = readDefaultView();
 let _leftMode    = 'structure'; // 'structure' | 'json'
+let _snapshotTabId = null;
 
 function setLeftMode(mode) {
   _leftMode = mode;
@@ -2714,6 +2744,313 @@ const EXAMPLES = {
   }
 };
 
+// ── Shareable snapshot + downloads ────────────────────────────────────────────
+function snapshotFileBase() {
+  const title = String(_SNAPSHOT?.title || 'inference').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'inference';
+  const tab = Array.isArray(_SNAPSHOT?.tabs) ? _SNAPSHOT.tabs.find(t => t.id === _snapshotTabId) : null;
+  const label = String(tab?.label || 'output').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'output';
+  return `${title}_${label}`;
+}
+
+function toggleDownloadMenu(ev) {
+  if (ev) ev.stopPropagation();
+  const menu = document.getElementById('dl-menu');
+  if (!menu) return;
+  menu.hidden = !menu.hidden;
+}
+
+function closeDownloadMenu() {
+  const menu = document.getElementById('dl-menu');
+  if (menu) menu.hidden = true;
+}
+
+document.addEventListener('click', (e) => {
+  const wrap = document.getElementById('dl-wrap');
+  if (!wrap || wrap.contains(e.target)) return;
+  closeDownloadMenu();
+});
+
+function downloadBytes(filename, data, mime) {
+  const blob = new Blob([data], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function cellToExportValue(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return v;
+  return JSON.stringify(v);
+}
+
+function flattenExportRow(obj, prefix, depth) {
+  const cols = {};
+  for (const [k, v] of Object.entries(obj)) {
+    const key = prefix ? `${prefix}.${k}` : k;
+    if (v !== null && typeof v === 'object' && !Array.isArray(v) && depth < 1) {
+      Object.assign(cols, flattenExportRow(v, key, depth + 1));
+    } else {
+      cols[key] = cellToExportValue(v);
+    }
+  }
+  return cols;
+}
+
+function extractTabularRows(parsed) {
+  if (Array.isArray(parsed)) {
+    if (!parsed.length) return [];
+    if (typeof parsed[0] === 'object' && parsed[0] !== null && !Array.isArray(parsed[0])) {
+      return parsed.map((row) => flattenExportRow(row, '', 0));
+    }
+    return parsed.map((v, i) => ({ index: i, value: cellToExportValue(v) }));
+  }
+  if (typeof parsed === 'object' && parsed !== null) {
+    return [flattenExportRow(parsed, '', 0)];
+  }
+  return [{ value: cellToExportValue(parsed) }];
+}
+
+function escapeCsvCell(v) {
+  if (v === null || v === undefined) return '';
+  const s = String(v);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function rowsToCsv(rows) {
+  if (!rows.length) return '';
+  const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  const header = keys.map(escapeCsvCell).join(',');
+  const body = rows.map((r) => keys.map((k) => escapeCsvCell(r[k] ?? null)).join(','));
+  return [header, ...body].join('\n');
+}
+
+const CRC32_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32Bytes(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) c = CRC32_TABLE[(c ^ bytes[i]) & 255] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function concatBytes(chunks) {
+  const total = chunks.reduce((n, c) => n + c.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+
+function u16le(n) {
+  const b = new Uint8Array(2);
+  new DataView(b.buffer).setUint16(0, n, true);
+  return b;
+}
+
+function u32le(n) {
+  const b = new Uint8Array(4);
+  new DataView(b.buffer).setUint32(0, n, true);
+  return b;
+}
+
+function zipStore(files) {
+  const enc = new TextEncoder();
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const file of files) {
+    const name = enc.encode(file.name);
+    const data = typeof file.data === 'string' ? enc.encode(file.data) : file.data;
+    const crc = crc32Bytes(data);
+    const local = concatBytes([
+      u32le(0x04034b50), u16le(20), u16le(0), u16le(0), u16le(0), u16le(0),
+      u32le(crc), u32le(data.length), u32le(data.length), u16le(name.length), u16le(0),
+      name, data,
+    ]);
+    locals.push(local);
+    centrals.push(concatBytes([
+      u32le(0x02014b50), u16le(20), u16le(20), u16le(0), u16le(0), u16le(0), u16le(0),
+      u32le(crc), u32le(data.length), u32le(data.length), u16le(name.length),
+      u16le(0), u16le(0), u16le(0), u16le(0), u32le(0), u32le(offset), name,
+    ]));
+    offset += local.length;
+  }
+  const central = concatBytes(centrals);
+  const end = concatBytes([
+    u32le(0x06054b50), u16le(0), u16le(0), u16le(files.length), u16le(files.length),
+    u32le(central.length), u32le(offset), u16le(0),
+  ]);
+  return concatBytes([...locals, central, end]);
+}
+
+function colLetter(n) {
+  let s = '';
+  let x = n + 1;
+  while (x > 0) {
+    const r = (x - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    x = Math.floor((x - 1) / 26);
+  }
+  return s;
+}
+
+function xmlEscape(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function xlsxCell(ref, value) {
+  if (value === null || value === undefined) return `<c r="${ref}"/>`;
+  if (typeof value === 'number' && Number.isFinite(value)) return `<c r="${ref}"><v>${value}</v></c>`;
+  if (typeof value === 'boolean') return `<c r="${ref}" t="b"><v>${value ? 1 : 0}</v></c>`;
+  const t = xmlEscape(String(value)).slice(0, 32767);
+  return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${t}</t></is></c>`;
+}
+
+function rowsToXlsx(rows) {
+  const keys = [...new Set(rows.flatMap((r) => Object.keys(r)))];
+  const header = keys.length ? keys : ['value'];
+  const sheetRows = [
+    `<row r="1">${header.map((k, i) => xlsxCell(`${colLetter(i)}1`, k)).join('')}</row>`,
+  ];
+  rows.forEach((row, ri) => {
+    const r = ri + 2;
+    sheetRows.push(`<row r="${r}">${header.map((k, i) => xlsxCell(`${colLetter(i)}${r}`, row[k] ?? null)).join('')}</row>`);
+  });
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows.join('')}</sheetData></worksheet>`;
+  return zipStore([
+    { name: '[Content_Types].xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+</Types>` },
+    { name: '_rels/.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>` },
+    { name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets>
+</workbook>` },
+    { name: 'xl/_rels/workbook.xml.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+</Relationships>` },
+    { name: 'xl/worksheets/sheet1.xml', data: sheet },
+  ]);
+}
+
+function downloadSnapshot(format) {
+  closeDownloadMenu();
+  const base = snapshotFileBase();
+  if (format === 'json') {
+    downloadBytes(`${base}.json`, JSON.stringify(_currentVal, null, 2), 'application/json');
+    return;
+  }
+  const rows = extractTabularRows(_currentVal);
+  if (format === 'csv') {
+    downloadBytes(`${base}.csv`, rowsToCsv(rows), 'text/csv');
+    return;
+  }
+  downloadBytes(
+    `${base}.xlsx`,
+    rowsToXlsx(rows),
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  );
+}
+
+function updateModeBadge() {
+  const badge = document.getElementById('hbadge');
+  if (!badge) return;
+  if (_currentMode === 'schema') { badge.className = 'h-badge hb-schema'; badge.textContent = 'Schema'; }
+  else { badge.className = 'h-badge hb-data'; badge.textContent = 'Data'; }
+}
+
+function applySnapshotValue(val) {
+  _currentVal = val;
+  _currentMode = detectMode(val);
+  updateModeBadge();
+  auditNoRawEmbeddedJsonLeaves(val);
+  renderStructurePanel(_currentVal, _currentMode);
+  renderRight();
+  closeDetail();
+}
+
+function loadSnapshotTab(id) {
+  const tab = _SNAPSHOT?.tabs?.find((t) => t.id === id);
+  if (!tab) return;
+  _snapshotTabId = id;
+  document.querySelectorAll('#ex-tabs .ex-tab').forEach((b) => {
+    b.classList.toggle('active', b.getAttribute('data-tab') === id);
+  });
+  if (tab.defaultView && JV_VALID_VIEWS.includes(tab.defaultView)) {
+    _viewMode = tab.defaultView;
+    ['tree', 'table', 'json'].forEach((vid) => {
+      const btn = document.getElementById('vb-' + vid);
+      if (btn) btn.classList.toggle('active', vid === tab.defaultView);
+    });
+  }
+  applySnapshotValue(tab.value);
+}
+
+function initSnapshot(s) {
+  document.body.setAttribute('data-snapshot', '1');
+  if (s.hideHeader) {
+    const hdr = document.querySelector('header');
+    if (hdr) hdr.style.display = 'none';
+  } else {
+    document.body.classList.add('has-header');
+  }
+  const titleEl = document.getElementById('h-title');
+  const title = s.title || 'Inference';
+  if (titleEl) titleEl.textContent = title;
+  document.title = title;
+  const tabsEl = document.getElementById('ex-tabs');
+  if (tabsEl) {
+    tabsEl.innerHTML = '';
+    s.tabs.forEach((tab, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ex-tab' + (i === 0 ? ' active' : '');
+      b.setAttribute('data-tab', tab.id);
+      b.textContent = tab.label;
+      b.addEventListener('click', () => loadSnapshotTab(tab.id));
+      tabsEl.appendChild(b);
+    });
+    if (s.tabs.length < 2) tabsEl.style.display = 'none';
+  }
+  const first = s.tabs[0];
+  _snapshotTabId = first.id;
+  const preferred = (first.defaultView && JV_VALID_VIEWS.includes(first.defaultView))
+    ? first.defaultView
+    : ((s.defaultView && JV_VALID_VIEWS.includes(s.defaultView)) ? s.defaultView : 'tree');
+  _viewMode = preferred;
+  ['tree', 'table', 'json'].forEach((id) => {
+    const btn = document.getElementById('vb-' + id);
+    if (btn) btn.classList.toggle('active', id === preferred);
+  });
+  applySyntaxTheme(readSyntaxTheme(s.syntaxTheme));
+  setFullscreenEnabled(!!s.showFullscreen);
+  applySnapshotValue(first.value);
+}
+
 // ── Tab selection ─────────────────────────────────────────────────────────────
 function selectTab(name) {
   log('tab:select', { name });
@@ -2733,7 +3070,15 @@ function selectTab(name) {
 
 // AI: embed mode (?embed in URL) — hide demo tabs + accept JSON from parent via postMessage
 const _isEmbed = new URLSearchParams(location.search).has('embed');
-if (_isEmbed) {
+const _isSnapshot = !!(
+  _SNAPSHOT &&
+  typeof _SNAPSHOT === 'object' &&
+  Array.isArray(_SNAPSHOT.tabs) &&
+  _SNAPSHOT.tabs.length > 0
+);
+if (_isSnapshot) {
+  initSnapshot(_SNAPSHOT);
+} else if (_isEmbed) {
   document.body.setAttribute('data-embed', '1');
   const hdr = document.querySelector('header');
   if (hdr) hdr.style.display = 'none';
@@ -2741,26 +3086,34 @@ if (_isEmbed) {
   document.body.classList.add('has-header');
 }
 
-// AI : parent enables fullscreen when it can host a larger PopupModal
+// AI : parent enables fullscreen when it can host a larger PopupModal (embed postMessage or snapshot.showFullscreen)
 function setFullscreenEnabled(on) {
   if (on) document.body.setAttribute('data-fs', '1');
   else document.body.removeAttribute('data-fs');
 }
-function requestParentFullscreen() {
-  if (!_isEmbed) return;
+function parentPostOrigin() {
   try {
-    window.parent.postMessage({ type: 'json-viewer:fullscreen' }, location.origin);
+    if (!location.origin || location.origin === 'null') return '*';
+  } catch (_) {}
+  return location.origin;
+}
+function requestParentFullscreen() {
+  // AI : embed (?embed) and snapshot srcdoc iframes both ask the parent — keep type in sync with JSON_VIEWER_MESSAGE_FULLSCREEN
+  if (window.parent === window) return;
+  try {
+    window.parent.postMessage({ type: 'json-viewer:fullscreen' }, parentPostOrigin());
   } catch (err) {
     console.warn('[JSON Viewer] fullscreen postMessage failed:', err);
   }
 }
 
-if (_isEmbed) {
+if (_isEmbed && !_isSnapshot) {
   document.getElementById('rp-content').innerHTML =
     '<div style="color:var(--muted);padding:24px;font-size:12px">Waiting for data…</div>';
 }
 
 window.addEventListener('message', (e) => {
+  if (_isSnapshot) return;
   if (e.origin !== location.origin) return;
   if (!e.data) return;
 
@@ -2794,13 +3147,25 @@ window.addEventListener('message', (e) => {
   }
 });
 
-if (!_isEmbed) {
+if (_isSnapshot) {
+  // AI : snapshot already rendered in initSnapshot
+} else if (!_isEmbed) {
   applyDefaultView(_viewMode);
   applySyntaxTheme(readSyntaxTheme());
   selectTab('portfolio');
 } else {
   applySyntaxTheme(readSyntaxTheme());
 }
+
+// AI : parent HTML export reads live viewer state to freeze this iframe into a snapshot srcdoc
+window.__JSON_VIEWER_EXPORT__ = function () {
+  return {
+    json: _currentVal,
+    view: _viewMode,
+    syntaxTheme: document.body.getAttribute('data-syntax-theme') || 'app',
+    showFullscreen: document.body.getAttribute('data-fs') === '1',
+  };
+};
 </script>
 </body>
 </html>

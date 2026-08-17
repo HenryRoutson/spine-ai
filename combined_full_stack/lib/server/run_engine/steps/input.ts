@@ -1,12 +1,12 @@
 import {
   inputMinCountForModule,
+  inputModuleNeedsDocToText,
   inputTypeLabel,
   isMultiDocInputModule,
 } from "../../../inference-input";
-import { docToTextViaLlm } from "../../doc_to_text";
 import { stepEmitsList } from "../../type_expr";
 import { materializeInputDocument, wrapListForOutputStructure } from "../../structure";
-import { DEFAULT_VISION_DOC_PARSE_MODEL, inputUsesVisionOcr, type DocId, type PipelineModule } from "../../types";
+import type { DocId, PipelineModule } from "../../types";
 import { materializeHints, modelById } from "../helpers";
 import { jsonStringifyStepValue } from "../results";
 import type { ExecResult, RunCtx, RunLogger } from "../engine_types";
@@ -19,27 +19,12 @@ export async function execInputStep(m: PipelineModule, ctx: RunCtx, log: RunLogg
     throw new Error(`input "${m.label}" needs at least ${min} document(s), got ${docIds.length}`);
   }
   const multi = isMultiDocInputModule(m) || docIds.length > 1;
-  log.info(`input module loaded doc(s)`, { moduleId: m.id, docCount: docIds.length, multi, useOcr: inputUsesVisionOcr(m) });
-  if (inputUsesVisionOcr(m)) ctx.stepLlmCalls = [];
-  let lastOcr: { model: string; fromVisionCache: boolean } | undefined;
+  const pendingText = inputModuleNeedsDocToText(m);
+  log.info(`input module loaded doc(s)`, { moduleId: m.id, docCount: docIds.length, multi, pendingText });
 
   const materializeDoc = async (docId: DocId, first: boolean) => {
-    let content = store.docContent(docId) ?? "";
-    if (inputUsesVisionOcr(m)) {
-      const stepModel = m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL;
-      const ocr = await docToTextViaLlm(
-        store,
-        docId,
-        m.note ?? m.label,
-        m.prompt,
-        { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls },
-        content,
-        log.child("input-ocr"),
-      );
-      content = ocr.text;
-      lastOcr = { model: ocr.model, fromVisionCache: ocr.fromVisionCache };
-    }
-    if (first && !ctx.sourceText) {
+    const content = store.docContent(docId) ?? "";
+    if (first && !ctx.sourceText && !pendingText) {
       ctx.sourceText = content;
       ctx.sourceDocId = docId;
     }
@@ -54,13 +39,11 @@ export async function execInputStep(m: PipelineModule, ctx: RunCtx, log: RunLogg
     ctx.outputs.set(m.id, value);
     return {
       value,
-      preview: `loaded ${inputTypeLabel(m.inputType)} → ${docId}${inputUsesVisionOcr(m) ? " · OCR" : ""}`,
+      preview: pendingText
+        ? `bound ${inputTypeLabel(m.inputType)} → ${docId} · text pending convert`
+        : `loaded ${inputTypeLabel(m.inputType)} → ${docId}`,
       json: jsonStringifyStepValue(value),
       docId,
-      inputPreview: inputUsesVisionOcr(m)
-        ? `vision OCR · ${lastOcr?.model ?? m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL}${lastOcr?.fromVisionCache ? " · cached" : ""}`
-        : undefined,
-      llmCalls: inputUsesVisionOcr(m) ? ctx.stepLlmCalls : undefined,
     };
   }
   const items = [];
@@ -82,13 +65,12 @@ export async function execInputStep(m: PipelineModule, ctx: RunCtx, log: RunLogg
   ctx.outputs.set(m.id, value);
   return {
     value,
-    preview: `loaded ${docIds.length} ${inputTypeLabel(m.inputType)} doc(s)${inputUsesVisionOcr(m) ? " · OCR" : ""}`,
+    preview: pendingText
+      ? `bound ${docIds.length} ${inputTypeLabel(m.inputType)} doc(s) · text pending convert`
+      : `loaded ${docIds.length} ${inputTypeLabel(m.inputType)} doc(s)`,
     json: jsonStringifyStepValue(value),
     docId: docIds[0],
-    inputPreview: inputUsesVisionOcr(m)
-      ? `vision OCR · ${lastOcr?.model ?? m.model ?? DEFAULT_VISION_DOC_PARSE_MODEL}${lastOcr?.fromVisionCache ? " · cached" : ""}`
-      : `${docIds.length} documents · browse with ◀ ▶`,
-    inputPreviewItems: inputUsesVisionOcr(m) ? undefined : inputPreviewItems,
-    llmCalls: inputUsesVisionOcr(m) ? ctx.stepLlmCalls : undefined,
+    inputPreview: `${docIds.length} documents · browse with ◀ ▶`,
+    inputPreviewItems,
   };
 }

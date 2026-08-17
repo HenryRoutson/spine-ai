@@ -27,6 +27,7 @@ function goImports(needs: ExportRuntimeNeeds, project: Project): string {
     needs.llm ||
     needs.llmBatch ||
     needs.visionOcr ||
+    needs.docToText ||
     needs.quote ||
     needs.humanReview ||
     needs.exampleSelect ||

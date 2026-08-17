@@ -1,0 +1,588 @@
+{
+  "id": "p_web_research",
+  "name": "Web Research Scraper",
+  "kind": "web-research",
+  "models": [
+    {
+      "id": "m_query",
+      "name": "ResearchQuery",
+      "description": "Normalized research brief \u2014 topic plus full goals text.",
+      "fields": [
+        {
+          "id": "f_topic",
+          "name": "topic",
+          "type": "text",
+          "optional": false,
+          "description": "Short research question or title",
+          "minLength": 1
+        },
+        {
+          "id": "f_goals",
+          "name": "goals",
+          "type": "text",
+          "optional": false,
+          "description": "Full brief body",
+          "minLength": 1
+        }
+      ]
+    },
+    {
+      "id": "m_hit",
+      "name": "SearchHit",
+      "description": "One n8n / search-API hit \u2014 URL plus optional HTML snapshot.",
+      "fields": [
+        {
+          "id": "f_hit_url",
+          "name": "url",
+          "type": "text",
+          "optional": false,
+          "description": "Page URL"
+        },
+        {
+          "id": "f_hit_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Search result title"
+        },
+        {
+          "id": "f_hit_snippet",
+          "name": "snippet",
+          "type": "text",
+          "optional": true,
+          "description": "Search snippet fallback when html is empty"
+        },
+        {
+          "id": "f_hit_html",
+          "name": "html",
+          "type": "text",
+          "optional": true,
+          "description": "HTML snapshot from n8n HTTP Request; omit to live-fetch"
+        }
+      ]
+    },
+    {
+      "id": "m_search_file",
+      "name": "SearchHitFile",
+      "description": "n8n-shaped search payload \u2014 query plus results array.",
+      "fields": [
+        {
+          "id": "f_q",
+          "name": "query",
+          "type": "text",
+          "optional": false,
+          "description": "Search query n8n ran"
+        },
+        {
+          "id": "f_provider",
+          "name": "provider",
+          "type": "text",
+          "optional": false,
+          "description": "Search backend label, e.g. n8n"
+        },
+        {
+          "id": "f_results",
+          "name": "results",
+          "type": "list[model]",
+          "ref": "m_hit",
+          "optional": false,
+          "description": "Organic hits",
+          "minItems": 1
+        }
+      ]
+    },
+    {
+      "id": "m_bundle",
+      "name": "ResearchBundle",
+      "description": "Brief query plus n8n search hits merged by combine.",
+      "fields": [
+        {
+          "id": "f_query",
+          "name": "query",
+          "type": "model",
+          "ref": "m_query",
+          "optional": false,
+          "description": "ResearchQuery from Parse Brief (pipeline state)"
+        },
+        {
+          "id": "f_search",
+          "name": "search",
+          "type": "model",
+          "ref": "m_search_file",
+          "optional": false,
+          "description": "SearchHitFile from the side input"
+        }
+      ]
+    },
+    {
+      "id": "m_page",
+      "name": "ScrapedPage",
+      "description": "Plain-text page after HTML strip or live fetch.",
+      "fields": [
+        {
+          "id": "f_page_url",
+          "name": "url",
+          "type": "text",
+          "optional": false,
+          "description": "Source URL"
+        },
+        {
+          "id": "f_page_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Page title"
+        },
+        {
+          "id": "f_page_text",
+          "name": "text",
+          "type": "text",
+          "optional": false,
+          "description": "Stripped page text"
+        },
+        {
+          "id": "f_page_status",
+          "name": "status",
+          "type": "text",
+          "optional": false,
+          "description": "ok | fetched | empty"
+        }
+      ]
+    },
+    {
+      "id": "m_extract",
+      "name": "PageExtract",
+      "description": "Structured facts from one scraped page.",
+      "fields": [
+        {
+          "id": "f_ex_url",
+          "name": "url",
+          "type": "text",
+          "optional": false,
+          "description": "Matches scraped page url"
+        },
+        {
+          "id": "f_ex_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Source title"
+        },
+        {
+          "id": "f_ex_name",
+          "name": "source_name",
+          "type": "text",
+          "optional": false,
+          "description": "Product, project, or site name",
+          "deterministic": false
+        },
+        {
+          "id": "f_ex_facts",
+          "name": "key_facts",
+          "type": "list[text]",
+          "optional": false,
+          "description": "Concrete facts from the page",
+          "minItems": 1,
+          "deterministic": false
+        },
+        {
+          "id": "f_ex_quote",
+          "name": "quote",
+          "type": "text",
+          "optional": false,
+          "description": "Short verbatim span from the page",
+          "deterministic": false
+        }
+      ]
+    },
+    {
+      "id": "m_brief_req",
+      "name": "BriefingRequest",
+      "description": "Research query plus extracted page facts for the final LLM.",
+      "fields": [
+        {
+          "id": "f_req_topic",
+          "name": "topic",
+          "type": "text",
+          "optional": false,
+          "description": "Research topic"
+        },
+        {
+          "id": "f_req_goals",
+          "name": "goals",
+          "type": "text",
+          "optional": false,
+          "description": "Full brief"
+        },
+        {
+          "id": "f_req_extracts",
+          "name": "extracts",
+          "type": "list[model]",
+          "ref": "m_extract",
+          "optional": false,
+          "description": "Per-page extracts",
+          "minItems": 1
+        }
+      ]
+    },
+    {
+      "id": "m_briefing",
+      "name": "ResearchBriefing",
+      "description": "Final research briefing with cited sources.",
+      "fields": [
+        {
+          "id": "f_br_title",
+          "name": "title",
+          "type": "text",
+          "optional": false,
+          "description": "Briefing title",
+          "deterministic": false
+        },
+        {
+          "id": "f_br_summary",
+          "name": "executive_summary",
+          "type": "text",
+          "optional": false,
+          "description": "Two-paragraph summary",
+          "deterministic": false
+        },
+        {
+          "id": "f_br_findings",
+          "name": "findings",
+          "type": "list[text]",
+          "optional": false,
+          "description": "Numbered findings",
+          "minItems": 1,
+          "deterministic": false
+        },
+        {
+          "id": "f_br_sources",
+          "name": "sources",
+          "type": "list[text]",
+          "optional": false,
+          "description": "Cited source URLs",
+          "minItems": 1
+        }
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "id": "mod_brief_in",
+      "kind": "input",
+      "label": "Research Brief",
+      "inputType": "text",
+      "inputNameContains": "research_brief",
+      "inputDescription": "Plain-text research question and coverage goals",
+      "outStructureId": "m_builtin_document",
+      "cached": true,
+      "avgMs": 80,
+      "avgCostCents": 0,
+      "note": "Research question \u2014 feeds topic/goals via Parse Brief"
+    },
+    {
+      "id": "mod_parse_brief",
+      "kind": "custom-code",
+      "label": "Parse Brief",
+      "note": "Document \u2192 ResearchQuery \u2014 first heading is topic, full text is goals.",
+      "inputDescription": "Research brief Document with plain-text content",
+      "inStructureId": "m_builtin_document",
+      "outStructureId": "m_query",
+      "cached": true,
+      "avgMs": 5,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "(doc) => { const text = String(doc?.content ?? \"\").trim(); const first = (text.split(\"\\n\").find((l) => l.trim()) ?? text).replace(/^#\\s*/, \"\").trim(); if (!first) throw new Error(\"research brief is empty\"); return { topic: first, goals: text }; }"
+        }
+      ]
+    },
+    {
+      "id": "mod_hits_in",
+      "kind": "input",
+      "label": "Search Hits",
+      "inputType": "json",
+      "inputNameContains": "search_hits",
+      "inputDescription": "n8n-shaped JSON with query, provider, and results array of url/title/snippet/html",
+      "outStructureId": "m_search_file",
+      "cached": true,
+      "avgMs": 80,
+      "avgCostCents": 0,
+      "note": "Search API / n8n output \u2014 side input for combine (must follow Parse Brief on spine)"
+    },
+    {
+      "id": "mod_combine",
+      "kind": "combine",
+      "label": "Combine Inputs",
+      "note": "Merges ResearchQuery (pipeline state) with Search Hits side input.",
+      "inputDescription": "SearchHitFile (new input) plus ResearchQuery from Parse Brief on pipeline state",
+      "inStructureId": "m_query",
+      "outStructureId": "m_bundle",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_parse_hits",
+      "kind": "custom-code",
+      "label": "Parse Hits",
+      "note": "ResearchBundle \u2192 list[SearchHit] \u2014 results from the merged search field.",
+      "inputDescription": "ResearchBundle from combine \u2014 query + search hits",
+      "inStructureId": "m_bundle",
+      "outStructureId": "m_hit",
+      "cached": true,
+      "avgMs": 5,
+      "avgCostCents": 0,
+      "fallbackList": [
+        {
+          "typescript": "(bundle) => { const rows = bundle?.search?.results; if (!Array.isArray(rows)) throw new Error(\"expected search.results array\"); return rows; }"
+        }
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_hit"
+        }
+      }
+    },
+    {
+      "id": "mod_scrape",
+      "kind": "custom-code",
+      "label": "Scrape Pages",
+      "note": "Python strip/fetch with optional Ray fan-out; TypeScript fallback strips html snapshots only.",
+      "inputDescription": "list[SearchHit] from Parse Hits \u2014 url, title, optional html snapshot",
+      "inStructureId": "m_hit",
+      "outStructureId": "m_page",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "maxRunMs": 90000,
+      "fallbackList": [
+        {
+          "python": "def transform(input, state=None):\n    # AI : prefer html snapshots; Ray is optional for live URL fan-out.\n    import re\n\n    def to_py(v):\n        return v.to_py() if hasattr(v, \"to_py\") else v\n\n    def strip_html(html):\n        text = re.sub(r\"(?is)<script[^>]*>.*?</script>\", \" \", html or \"\")\n        text = re.sub(r\"(?is)<style[^>]*>.*?</style>\", \" \", text)\n        text = re.sub(r\"(?s)<[^>]+>\", \" \", text)\n        return re.sub(r\"\\s+\", \" \", text).strip()\n\n    def fetch_url(url):\n        if not url:\n            return \"\"\n        try:\n            import urllib.request\n            req = urllib.request.Request(url, headers={\"User-Agent\": \"SpineResearchBot/1.0\"})\n            with urllib.request.urlopen(req, timeout=12) as resp:\n                return resp.read().decode(\"utf-8\", \"replace\")\n        except Exception:\n            return \"\"\n\n    def scrape_one(row):\n        row = to_py(row) or {}\n        url = str(row.get(\"url\") or \"\")\n        title = str(row.get(\"title\") or \"\")\n        html = str(row.get(\"html\") or \"\")\n        fetched = False\n        if not str(html).strip() and url:\n            html = fetch_url(url)\n            fetched = bool(html)\n        text = strip_html(html)\n        if not text:\n            text = str(row.get(\"snippet\") or \"\").strip()\n        status = \"fetched\" if fetched and text else (\"ok\" if text else \"empty\")\n        return {\"url\": url, \"title\": title, \"text\": text[:12000], \"status\": status}\n\n    raw = to_py(input)\n    rows = raw if isinstance(raw, list) else list((raw or {}).get(\"results\") or [])\n    try:\n        import ray\n        if not ray.is_initialized():\n            ray.init(ignore_reinit_error=True, include_dashboard=False)\n        remote_fn = ray.remote(scrape_one)\n        return ray.get([remote_fn.remote(r) for r in rows])\n    except Exception:\n        return [scrape_one(r) for r in rows]"
+        },
+        {
+          "typescript": "(hits) => { // AI : snapshot-only fallback — no live fetch (CORS).\n const rows = Array.isArray(hits) ? hits : []; const strip = (html) => String(html ?? \"\").replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, \" \").replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, \" \").replace(/<[^>]+>/g, \" \").replace(/\\s+/g, \" \").trim(); return rows.map((row) => { const text = (strip(row?.html) || String(row?.snippet ?? \"\").trim()).slice(0, 12000); return { url: String(row?.url ?? \"\"), title: String(row?.title ?? \"\"), text, status: text ? \"ok\" : \"empty\" }; }); }"
+        }
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_page"
+        }
+      }
+    },
+    {
+      "id": "mod_assert_scrape",
+      "kind": "assert",
+      "label": "\u2713 Scrape Pages",
+      "note": "Golden fixture \u2014 HTML snapshots strip to ScrapedPage rows",
+      "inStructureId": "m_page",
+      "outStructureId": "m_page",
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "inputDescription": "List of ScrapedPage objects \u2014 url, title, stripped text, status",
+      "fallbackList": [
+        {
+          "typescript": "assertEqual(step(\"Scrape Pages\"), \"Scrape Pages\");"
+        },
+        {
+          "python": "pages = step('Scrape Pages')\nhits = step('Parse Hits')\nif len_of(pages) != len_of(hits):\n    raise ValueError(f'expected {len_of(hits)} scraped pages, got {len_of(pages)}')"
+        }
+      ],
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_page"
+        }
+      }
+    },
+    {
+      "id": "mod_extract",
+      "kind": "llm-batch",
+      "label": "Extract Facts",
+      "note": "list[ScrapedPage] \u2192 list[PageExtract]. One structured LLM call per page.",
+      "inputDescription": "List of ScrapedPage objects \u2014 url, title, and stripped page text",
+      "inStructureId": "m_page",
+      "outStructureId": "m_extract",
+      "prompt": "Extract structured facts from this scraped page. Copy url and title unchanged. Set source_name to the product, project, or site this page is about. key_facts must be concrete claims from the page text (not the snippet alone). quote must be a short verbatim span copied from text. Ignore nav/boilerplate.",
+      "model": "deepseek-v4",
+      "cached": true,
+      "avgMs": 1800,
+      "avgCostCents": 4,
+      "outType": {
+        "kind": "list",
+        "item": {
+          "kind": "ref",
+          "modelId": "m_extract"
+        }
+      }
+    },
+    {
+      "id": "mod_merge",
+      "kind": "merge",
+      "label": "Merge for Briefing",
+      "note": "Deep-merge Parse Brief (pipeline state) with extracts from Extract Facts \u2192 BriefingRequest.",
+      "inputDescription": "Filtered PageExtract rows from each scraped page",
+      "inStructureId": "m_extract",
+      "outStructureId": "m_brief_req",
+      "mergeStateLabel": "Parse Brief",
+      "mergeWrapListField": "extracts",
+      "cached": true,
+      "avgMs": 5,
+      "avgCostCents": 0
+    },
+    {
+      "id": "mod_write",
+      "kind": "llm",
+      "label": "Write Briefing",
+      "note": "Final briefing using the research goals and per-page extracts.",
+      "inputDescription": "BriefingRequest with topic, goals, and extracts",
+      "inStructureId": "m_brief_req",
+      "outStructureId": "m_briefing",
+      "prompt": "Write a concise research briefing for topic using goals as the assignment. Use extracts only \u2014 each row has url, source_name, key_facts, and quote. findings should answer how Python teams scrape in parallel (Ray) and how n8n fits as a search/orchestration layer. sources must be the extract urls, one per line of the list. Do not invent pages that were not extracted.",
+      "model": "deepseek-v4",
+      "cached": true,
+      "avgMs": 2200,
+      "avgCostCents": 6
+    },
+    {
+      "id": "mod_output",
+      "kind": "output",
+      "label": "Briefing Output",
+      "inputDescription": "ResearchBriefing with title, executive_summary, findings, and sources",
+      "inStructureId": "m_briefing",
+      "outStructureId": "m_briefing",
+      "cached": true,
+      "avgMs": 40,
+      "avgCostCents": 0,
+      "note": ""
+    },
+    {
+      "id": "mod_assert_extract",
+      "kind": "assert",
+      "label": "\u2713 Extract Facts",
+      "note": "Structural check \u2014 one extract per scraped page, urls preserved",
+      "inStructureId": "m_briefing",
+      "outStructureId": "m_briefing",
+      "cached": true,
+      "avgMs": 2,
+      "avgCostCents": 0,
+      "inputDescription": "ResearchBriefing passthrough \u2014 assert reads Extract Facts from pipeline state",
+      "fallbackList": [
+        {
+          "typescript": "const rows = step(\"Extract Facts\");\nconst pages = step(\"Scrape Pages\");\nif (len(rows) !== len(pages)) throw new Error(`expected ${len(pages)} extracts, got ${len(rows)}`);\nfor (let i = 0; i < rows.length; i++) {\n  if (rows[i]?.url !== pages[i]?.url || !Array.isArray(rows[i]?.key_facts) || !rows[i].key_facts.length) {\n    throw new Error(`extract row ${i + 1} missing url match or key_facts`);\n  }\n}"
+        }
+      ]
+    }
+  ],
+  "strategies": [
+    {
+      "id": "s_single_web",
+      "kind": "single-llm",
+      "name": "Single LLM Call",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 80,
+      "latencyMs": 5200,
+      "costCents": 10,
+      "passRate": 90
+    },
+    {
+      "id": "s_agent_web",
+      "kind": "claude-code",
+      "name": "Agent (Frontier)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 92,
+      "latencyMs": 28000,
+      "costCents": 140,
+      "passRate": 97
+    },
+    {
+      "id": "s_cheap_web",
+      "kind": "cheap-agent",
+      "name": "Agent (Cheap Model)",
+      "enabled": true,
+      "model": "deepseek-v4",
+      "accuracy": 82,
+      "latencyMs": 18000,
+      "costCents": 12,
+      "passRate": 88
+    }
+  ],
+  "docs": [
+    {
+      "name": "research_brief.txt",
+      "type": "text",
+      "label": "inference",
+      "file": "web_research_scraper/research_brief.txt"
+    },
+    {
+      "name": "search_hits.json",
+      "type": "json",
+      "label": "inference",
+      "file": "web_research_scraper/search_hits.json"
+    },
+    {
+      "name": "web_research_scraper_inference.json",
+      "type": "json",
+      "label": "inference",
+      "file": "web_research_scraper/web_research_scraper_inference.json"
+    },
+    {
+      "name": "web_research_scraper_testing.json",
+      "type": "json",
+      "label": "training",
+      "file": "web_research_scraper/web_research_scraper_testing.json"
+    },
+    {
+      "name": "web_research_scraper_README.md",
+      "type": "text",
+      "label": "training",
+      "file": "web_research_scraper/README.md"
+    }
+  ],
+  "inferencePresets": [
+    {
+      "name": "Ray + n8n (default)",
+      "description": "Default inference preset \u2014 research_brief.txt + search_hits.json",
+      "inputs": {
+        "Research Brief": "research_brief.txt",
+        "Search Hits": "search_hits.json"
+      },
+      "expectedOutputs": [
+        {
+          "stepLabel": "Parse Brief",
+          "file": "web_research_scraper/expected/parse_brief.json"
+        },
+        {
+          "stepLabel": "Parse Hits",
+          "file": "web_research_scraper/expected/parse_hits.json"
+        },
+        {
+          "stepLabel": "Scrape Pages",
+          "file": "web_research_scraper/expected/scrape_pages.json"
+        }
+      ]
+    }
+  ],
+  "expectedOutputs": [
+    {
+      "stepLabel": "Parse Brief",
+      "file": "web_research_scraper/expected/parse_brief.json"
+    },
+    {
+      "stepLabel": "Parse Hits",
+      "file": "web_research_scraper/expected/parse_hits.json"
+    },
+    {
+      "stepLabel": "Scrape Pages",
+      "file": "web_research_scraper/expected/scrape_pages.json"
+    }
+  ]
+}

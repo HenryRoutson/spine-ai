@@ -7,9 +7,10 @@ import { StepPromptPreview } from "@/components/step-prompt-preview"
 import { stepIoLabels } from "@/lib/module-kinds"
 import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
 import { stepHasPromptPreview } from "@/lib/prompt-cache-regions"
+import { resolveStepResponsePreviewItems } from "@/lib/step-response-preview"
 import { stepSourceDocId } from "@/lib/step-doc"
 import { cn } from "@/lib/utils"
-import type { DocId, InputPreviewItem, RunStep, RunStepKind } from "@/lib/types"
+import type { DocId, InputPreviewItem, RunStep, RunStepKind, StructureModel } from "@/lib/types"
 
 type StepPromptSectionProps = {
   step?: RunStep
@@ -19,6 +20,7 @@ type StepPromptSectionProps = {
   inputPreviewItems?: InputPreviewItem[]
   sourceDocId?: DocId
   runId?: string
+  models?: StructureModel[]
   className?: string
 }
 
@@ -31,6 +33,7 @@ export function StepPromptSection({
   inputPreviewItems,
   sourceDocId: sourceDocIdProp,
   runId,
+  models,
   className,
 }: StepPromptSectionProps) {
   const [popup, setPopup] = useState<PopupPayload | null>(null)
@@ -53,6 +56,7 @@ export function StepPromptSection({
 
   const { inTitle } = stepIoLabels(resolvedKind)
   const summary = compactPreview(resolvedPreview ?? "", PREVIEW_STEP_IO_CHARS)
+  const responseItems = step ? resolveStepResponsePreviewItems(step) : []
 
   return (
     <>
@@ -66,19 +70,23 @@ export function StepPromptSection({
           setPopup({
             title: `${inTitle} (input) · ${label}`,
             promptItems: resolvedItems,
+            responseItems,
             inputPreview: resolvedPreview,
             sourceDocId,
+            models,
           })
         }
       >
         <StepPromptPreview
           inputPreview={resolvedPreview}
           inputPreviewItems={resolvedItems}
+          responseItems={responseItems}
           sourceDocId={sourceDocId}
           runStep={step}
           runId={runId}
           moduleId={step?.moduleId}
           stepLabel={label}
+          models={models}
         />
       </IoSection>
       {popup && <PopupModal payload={popup} onClose={() => setPopup(null)} />}

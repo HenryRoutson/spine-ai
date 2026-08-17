@@ -10,6 +10,8 @@ import { PromptText } from "@/components/highlight"
 import { QuoteLinks, quotesFromJson } from "@/components/quote-links"
 import { ServerLogLines } from "@/components/server-logs-panel"
 import { StepPromptPreview } from "@/components/step-prompt-preview"
+import { HTML_POPUP_CHROME } from "@/lib/html-popup"
+import type { JsonViewerHumanViewId } from "@/lib/json-viewer"
 import type { DocId, DocRef, InputPreviewItem, JobLogEntry, StructureModel } from "@/lib/types"
 
 export type PopupDocPreviewItem = {
@@ -20,9 +22,11 @@ export type PopupDocPreviewItem = {
 
 export type PopupPayload = {
   json?: string
+  defaultView?: JsonViewerHumanViewId
   text?: string
   inputPreview?: string
   promptItems?: InputPreviewItem[]
+  responseItems?: InputPreviewItem[]
   serverLogs?: JobLogEntry[]
   docPreviews?: PopupDocPreviewItem[]
   models?: StructureModel[]
@@ -47,28 +51,33 @@ export function PopupModal({ payload, onClose }: PopupModalProps) {
   }, [onClose])
 
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-[5vh]">
+    <div className={HTML_POPUP_CHROME.overlay}>
       <button
         aria-label="Close viewer"
-        className="absolute inset-0 bg-background/70 backdrop-blur-sm"
+        className={HTML_POPUP_CHROME.backdrop}
         onClick={onClose}
       />
-      <div className="relative flex h-[90vh] w-[90vw] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
-          <span className="font-mono text-xs text-muted-foreground">{payload.title}</span>
+      <div className={HTML_POPUP_CHROME.panel}>
+        <div className={HTML_POPUP_CHROME.header}>
+          <span className={HTML_POPUP_CHROME.title}>{payload.title}</span>
           <button
             onClick={onClose}
-            className="rounded p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className={HTML_POPUP_CHROME.close}
           >
             <X className="h-4 w-4" />
           </button>
         </div>
         {payload.json ? (
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div className={HTML_POPUP_CHROME.body}>
             {popupQuotes.length > 0 && (
               <QuoteLinks quotes={popupQuotes} className="border-b border-border px-4 py-3" />
             )}
-            <JsonPreviewPanel json={payload.json} models={payload.models} className="min-h-0 flex-1" />
+            <JsonPreviewPanel
+              json={payload.json}
+              models={payload.models}
+              defaultView={payload.defaultView}
+              className="min-h-0 flex-1"
+            />
           </div>
         ) : payload.serverLogs ? (
           <div className="min-h-0 flex-1 overflow-auto p-4 font-mono text-xs leading-relaxed">
@@ -110,7 +119,9 @@ export function PopupModal({ payload, onClose }: PopupModalProps) {
             <StepPromptPreview
               inputPreview={payload.inputPreview}
               inputPreviewItems={payload.promptItems}
+              responseItems={payload.responseItems}
               sourceDocId={payload.sourceDocId}
+              models={payload.models}
             />
           </div>
         ) : (

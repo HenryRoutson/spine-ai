@@ -20,6 +20,7 @@ export type StepCacheArtifact = {
   docId?: DocId;
   inputPreview?: string;
   inputPreviewItems?: InputPreviewItem[];
+  outputPreviewItems?: InputPreviewItem[];
   costCents?: number;
   createdAt?: number;
   meta?: StepCacheMeta;
@@ -265,6 +266,7 @@ export type StepCacheEntryDetail = StepCacheEntrySummary & {
   outputJson: string;
   docId?: DocId;
   inputPreviewItems?: InputPreviewItem[];
+  outputPreviewItems?: InputPreviewItem[];
 };
 
 export function getStepCacheEntryDetail(args: {
@@ -311,5 +313,6 @@ export function getStepCacheEntryDetail(args: {
     outputJson: artifactOutputText(artifact),
     docId: artifact.docId,
     inputPreviewItems: artifact.inputPreviewItems,
+    outputPreviewItems: artifact.outputPreviewItems,
   };
 }

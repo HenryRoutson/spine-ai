@@ -3,6 +3,11 @@
 import { Maximize2, Link2 } from "lucide-react"
 import { useDocViewer, type DocViewMode } from "@/lib/doc-viewer"
 import { OpenInDocumentsLink } from "@/components/open-in-documents"
+import {
+  HTML_EXPORT_EXPAND_PROPS,
+  HTML_EXPORT_EXPAND_ROOT_PROPS,
+  HTML_EXPORT_EXPAND_TITLE_ATTR,
+} from "@/lib/html-export-mark"
 import { cn } from "@/lib/utils"
 import type { DocId } from "@/lib/types"
 
@@ -37,8 +42,15 @@ export function IoSection({
     open({ docId: docLink.docId, start: 0, end: 0, mode: docLink.mode })
   }
 
+  const expandTitle = `${title} (${qualifier})`
+
   return (
-    <div id={anchorId} className={cn("mt-2 scroll-mt-4 pl-7", className)}>
+    <div
+      id={anchorId}
+      {...(onExpand ? HTML_EXPORT_EXPAND_ROOT_PROPS : {})}
+      {...(onExpand ? { [HTML_EXPORT_EXPAND_TITLE_ATTR]: expandTitle } : {})}
+      className={cn("mt-2 scroll-mt-4 pl-7", className)}
+    >
       <div className="mb-1 flex items-center justify-between gap-2">
         <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
           {title}{" "}
@@ -76,6 +88,8 @@ export function IoSection({
           )}
           {onExpand && (
             <button
+              type="button"
+              {...HTML_EXPORT_EXPAND_PROPS}
               onClick={onExpand}
               className="rounded p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
               title="Open in full-screen viewer"

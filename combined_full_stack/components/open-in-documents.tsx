@@ -3,6 +3,7 @@
 import { Files } from "lucide-react"
 import { useOptionalStore } from "@/lib/store"
 import { useOptionalAppShell } from "@/lib/app-shell"
+import { HTML_EXPORT_SKIP_PROPS } from "@/lib/html-export-mark"
 import { cn } from "@/lib/utils"
 import type { DocId } from "@/lib/types"
 
@@ -31,6 +32,7 @@ export function OpenInDocumentsLink({
   return (
     <button
       type="button"
+      {...HTML_EXPORT_SKIP_PROPS}
       onClick={(e) => {
         if (stopPropagation) e.stopPropagation()
         shell.openDocuments(docId)

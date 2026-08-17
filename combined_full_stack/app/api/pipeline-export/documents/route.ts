@@ -2,9 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { apiError, requireAuthStore } from "@/lib/server/api_context";
 import { HTTP } from "@/lib/server/api-errors";
 import { generatePipelineDocumentFiles } from "@/lib/server/pipeline_export_documents";
+import { exportRuntimeLibraryFiles } from "@/lib/server/pipeline_export_runtime_files";
 import type { Project } from "@/lib/server/types";
 
-// AI : document bundle reads from disk — server route only (not client-importable).
+// AI : document + runtime-library bundles read from disk — server route only (not client-importable).
 export async function POST(req: NextRequest) {
   const ctx = await requireAuthStore();
   if (ctx instanceof NextResponse) return ctx;
@@ -20,6 +21,6 @@ export async function POST(req: NextRequest) {
     return apiError("Project modules and models required", HTTP.BAD_REQUEST);
   }
 
-  const files = generatePipelineDocumentFiles(project);
+  const files = [...generatePipelineDocumentFiles(project), ...exportRuntimeLibraryFiles()];
   return NextResponse.json(files);
 }

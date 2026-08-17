@@ -134,6 +134,25 @@ pub fn relevance_schema() -> serde_json::Value {
     serde_json::json!({"chain_of_thought":"string","is_relevant":"boolean"})
 }
 
+pub fn example_select_items(input: &Value) -> Vec<Value> {
+    if let Value::Array(arr) = input {
+        return arr.clone();
+    }
+    if let Value::Object(map) = input {
+        let arrays: Vec<&Vec<Value>> = map
+            .values()
+            .filter_map(|v| v.as_array())
+            .collect();
+        if arrays.len() == 1 {
+            return arrays[0].clone();
+        }
+    }
+    if input.is_null() {
+        return Vec::new();
+    }
+    vec![input.clone()]
+}
+
 pub async fn select_relevant(
     items: Vec<Value>,
     description: &str,

@@ -267,6 +267,33 @@ func mergePair(left, right, policy any) any {
 	return right
 }
 
+func exampleSelectItems(input json.RawMessage) ([]json.RawMessage, error) {
+	if len(input) > 0 && input[0] == '[' {
+		var items []json.RawMessage
+		if err := json.Unmarshal(input, &items); err != nil {
+			return nil, err
+		}
+		return items, nil
+	}
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(input, &obj); err == nil {
+		var arrays [][]json.RawMessage
+		for _, v := range obj {
+			if len(v) > 0 && v[0] == '[' {
+				var arr []json.RawMessage
+				if err := json.Unmarshal(v, &arr); err != nil {
+					return nil, err
+				}
+				arrays = append(arrays, arr)
+			}
+		}
+		if len(arrays) == 1 {
+			return arrays[0], nil
+		}
+	}
+	return []json.RawMessage{input}, nil
+}
+
 func selectRelevant(items []json.RawMessage, description, template string) ([]json.RawMessage, error) {
 	out := make([]json.RawMessage, 0, len(items))
 	for _, item := range items {

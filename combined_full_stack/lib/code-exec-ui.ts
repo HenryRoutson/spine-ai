@@ -11,11 +11,13 @@ export type CodeProfileSnapshot = {
 // AI : persisted on RunStep after browser custom-code/assert — powers Logging tab code profile.
 export type StepCodeProfile = CodeProfileSnapshot & { lineMs: CodeLineProfile }
 
+export type CodeExecUiStatus = "running" | "done" | "error"
+
 export type CodeExecUiState = CodeProfileSnapshot & {
   moduleId: ModuleId
   activeLine?: number
   activeSlot?: number
-  status: "running" | "done" | "error"
+  status: CodeExecUiStatus
 }
 
 export function profileBarPct(ms: number, maxMs: number): number {

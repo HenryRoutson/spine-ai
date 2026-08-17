@@ -17,6 +17,7 @@ export type StructureModelId = string & { __brand: "StructureModelId" };
 export type TypeAliasId = string & { __brand: "TypeAliasId" };
 export type ModuleId = string & { __brand: "ModuleId" };
 export type DocId = string & { __brand: "ContentHash" }; // content hash == id
+// AI : TODO (sql-schema) — DocId is document.id PRIMARY KEY. Quotes and file blobs REFERENCES this row.
 export type RunId = string & { __brand: "RunId" };
 export type ModelId = string; // demo model id or routed ref "provider:modelId" (see parseRoutedModel)
 export type OpenRouterSlug = string & { __brand: "OpenRouterSlug" };
@@ -38,6 +39,10 @@ export enum FieldType {
   ListTupleTextQuote = "list[tuple[text,quote]]",
   Model = "model",
   ListModel = "list[model]",
+  // AI : TODO (sql-schema) — these FieldTypes are the SQL column/table annotation LLMs already know.
+  // AI :   text/int/float/bool/datetime → TEXT/INTEGER/REAL/INTEGER/TEXT; optional → NULL; json/markdown/latex → TEXT.
+  // AI :   document → row in `document` (pk id); list[document] → 1:N. quote → FK document(id) + start/end.
+  // AI :   model / list[model] without fk → nested JSON column OR child table; with fk → REFERENCES.
 }
 
 // AI : shown in Structure builder when a field uses type json
@@ -64,6 +69,10 @@ export interface ModelField {
   deterministic?: boolean;
   // AI : ± allowed on int/float test compare — field-level (spec § Testing), not per test file.
   testTolerance?: number;
+  // AI : TODO (type-join) — relation?: { kind: "pk" } | { kind: "fk"; to: { modelId: StructureModelId; field: string } }
+  // AI :   runtime type stays text; validity: fk field type equals target pk. Enables lookup-embed without Python joins.
+  // AI : TODO (sql-schema) — same annotation as PRIMARY KEY / REFERENCES in CREATE TABLE. Prefer emitting DDL
+  // AI :   (universal, first-glance) even if the runtime is still JSON maps, not a SQLite instance.
 }
 
 // AI : ModelField keys that resolve a field's TypeExpr — typeExpr overrides legacy type/ref.
@@ -114,6 +123,9 @@ export interface StructureModel {
   sourceDocId?: DocId; // AI : document this structure was inferred from — links back in Structure tab
   // AI : type params — Ref { modelId, args } / Generic Name[T] instantiate field typeExprs.
   params?: string[];
+  // AI : TODO (type-join) — pk lives on ModelField.relation, not here. Lookup-embed derives views; do not flatten models to 3NF.
+  // AI : TODO (sql-schema) — StructureModel = CREATE TABLE (or VIEW). Nested list[model] is either a child table
+  // AI :   or a JSON column — declare which. Generics/trees can stay JSON until someone needs adjacency-list SQL.
 }
 
 // AI : standalone reusable type — not a struct with fields; referenced by name in type expressions.
@@ -139,6 +151,9 @@ export enum InputType {
   Latex = "latex",
   Web = "web",
   Image = "image",
+  // AI : TODO (sql-schema) — InputType is document.mime / blob wrapper, not a separate type universe.
+  // AI :   pdf/image/word → BLOB + mime; json/text/markdown/latex → TEXT content (blob optional).
+  // AI :   sqlite/.sql dump as an input loads tables into the run catalog instead of nested JSON files.
 }
 
 // AI : input steps accept one type or a subset — e.g. ["word", "pdf"] for company filings.
@@ -150,7 +165,13 @@ export enum ModuleKind {
   Llm = "llm",
   LlmBatch = "llm-batch", // AI : backend addition — one structured call per list item, merged typed list out
   ExampleSelect = "example-select", // AI : LLM relevance filter per list item — chain_of_thought + is_relevant, not embedding RAG
+  // AI : TODO (example-select-view) — filter on a prompt view of each item; spine passthrough stays the full row + reason.
+  // AI : TODO (sql-schema) — candidates FROM table; {example} FROM view; INSERT selected_* with selection_reason.
   Quote = "quote", // AI : deterministic — resolve LLM quote strings → source-linked spans
+  // AI : TODO (sql-schema) — Link Quotes fills quote_span(doc_id FK, start, end). quote_string_t is the LLM
+  // AI :   wire type before the FK+offsets exist (INSERT pending resolve).
+  DocToText = "doc-to-text", // AI : auto — parser/OCR fills Document.content; not user-addable
+  // AI : TODO (sql-schema) — UPDATE document SET content = extracted WHERE id = ?; blob stays the original bytes.
   Transform = "transform",
   // AI : zip spine + state["Label"] → flat product (not Combine — that is upload ⊕ one state struct).
   Assemble = "assemble",
@@ -258,9 +279,8 @@ export enum DocParseMode {
   Llm = "llm",
 }
 
-// AI : legacy run logs may still reference folded doc-to-text steps.
+// AI : legacy run logs may still reference list-merge (now ModuleKind.Merge).
 export enum LegacyModuleKind {
-  DocToText = "doc-to-text",
   ListMerge = "list-merge", // AI : migrated to ModuleKind.Merge on project sync
 }
 export type RunStepKind = ModuleKind | LegacyModuleKind;
@@ -310,7 +330,15 @@ export interface PipelineModule {
   exampleContextField?: string; // optional dot path within that step output
   exampleReasonField?: string; // field on each output item for chain_of_thought (default selection_reason)
   examplePreFilterMax?: number; // optional cap on candidates before per-item LLM calls
-  useOcr?: boolean; // input only — vision OCR when PDF/image is accepted (built-in parser when off)
+  // AI : TODO (example-select-view) — examplePromptFields?: string[] (or omit list) so {example}/{input_to_prompt}
+  // AI :   serializes a Pick of the item; inType/outType unchanged. Dual of exampleContextField. Do not put
+  // AI :   {passthrough} in the template — passthrough is the kept spine row, already full object + reason.
+  // AI : TODO (example-select-view) — optional examplePromptItemTemplate for prose (Title: {title}) instead of JSON.
+  // AI : TODO (type-join) — optional examplePromptJoins: lookup-embed spec for the *view only* (pass 2 cached
+  // AI :   prefix / draft). Same inType/outType; do not denormalize billed_items onto pass 1 {example}.
+  // AI : TODO (sql-schema) — examplePromptView?: SQL (CREATE VIEW / SELECT). Same contract: view for {example},
+  // AI :   table for passthrough. Prefer this over Pick/join-spec once DDL is the annotation language.
+  useOcr?: boolean; // AI : doc-to-text (legacy: input) — vision OCR when PDF/image is accepted
   // AI : step result cache toggle — authoring may omit (defaults true via seed/factory).
   cached: boolean;
   // AI : webhook — server-side HTTP integration (URL may be literal or env:VAR / ${VAR})
@@ -539,6 +567,7 @@ export interface RunStep extends Omit<StepDescriptionFields, "outputPreview"> {
   inputPreview: string;
   inputPreviewItems?: InputPreviewItem[];
   outputPreview: string;
+  outputPreviewItems?: InputPreviewItem[]; // AI : per-call LLM JSON — aligned with inputPreviewItems (pre-filter for example-select)
   outputJson?: string;
   inputDescription?: string; // AI : snapshot at run time — expected input for this step
   docId?: DocId; // AI : source doc for input steps — powers logging trace links
@@ -717,6 +746,7 @@ export const DOC_PARSE_MODES: { value: DocParseMode; label: string; hint: string
 ];
 
 function moduleAcceptsVisionOcr(m: PipelineModule): boolean {
+  if (m.kind === ModuleKind.DocToText) return true;
   if (m.kind !== ModuleKind.Input || !m.inputType) return false;
   const types = Array.isArray(m.inputType) ? m.inputType : [m.inputType];
   return types.includes(InputType.Pdf) || types.includes(InputType.Image);
@@ -724,12 +754,12 @@ function moduleAcceptsVisionOcr(m: PipelineModule): boolean {
 
 export function docParseModeForModule(m: PipelineModule): DocParseMode {
   // AI : leftover useOcr on JSON/text slots must not route files through vision OCR.
-  if (m.kind === ModuleKind.Input && m.useOcr && moduleAcceptsVisionOcr(m)) return DocParseMode.Llm;
+  if (m.useOcr && moduleAcceptsVisionOcr(m)) return DocParseMode.Llm;
   return DocParseMode.Parser;
 }
 
 export function inputUsesVisionOcr(m: PipelineModule): boolean {
-  return m.kind === ModuleKind.Input && docParseModeForModule(m) === DocParseMode.Llm;
+  return docParseModeForModule(m) === DocParseMode.Llm;
 }
 
 // AI : step-cache model slug — vision OCR steps must not share keys with the global run model.
@@ -762,7 +792,11 @@ export const INPUT_TYPES: { value: InputType; label: string }[] = [
 export const MODULE_META: Record<ModuleKind, { label: string; description: string }> = {
   [ModuleKind.Input]: {
     label: "Input",
-    description: "Ingest a source (pdf, word, web, json…) — built-in parser or optional vision OCR",
+    description: "Ingest a source (pdf, word, web, json…) — convert-to-text runs as the next locked step when needed",
+  },
+  [ModuleKind.DocToText]: {
+    label: "Convert to text",
+    description: "Fill Document.content from the original file — built-in parser or DeepSeek OCR, cached per document",
   },
   [ModuleKind.Llm]: { label: "LLM Call", description: "Run a model against a prompt + schema" },
   [ModuleKind.LlmBatch]: { label: "Batch LLM", description: "list in → list out (one structured call per item). Wrap with Custom TS before/after when upstream/downstream is a single object." },
@@ -770,6 +804,8 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     label: "Example Select",
     description:
       "Filter a list of examples with a cheap LLM per item — {description} from a prior step, structured is_relevant + chain_of_thought (not embedding RAG)",
+    // AI : TODO (example-select-view) — description should mention prompt-view vs spine passthrough once shipped.
+    // AI : TODO (sql-schema) — mention table vs view once DDL ships.
   },
   [ModuleKind.Quote]: {
     label: "Link Quotes",

@@ -3,8 +3,8 @@
 
 import { MODULE_META, type PipelineModule, type StructureModel, type TypeAlias } from "@/lib/types"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
-import { isAutoStructureParseStep } from "@/lib/structure-parse-steps"
-import { AutoQuoteLock, AutoStructureParseLock } from "@/lib/module-ui"
+import { isAutoDocToTextStep, isAutoStructureParseStep } from "@/lib/structure-parse-steps"
+import { AutoDocToTextLock, AutoQuoteLock, AutoStructureParseLock } from "@/lib/module-ui"
 import { PipelineModuleFields } from "@/components/pipeline-module-fields"
 import { InspectorCollapsibleSection } from "@/components/inspector-collapsible-section"
 import { INSPECTOR_SECTION_BORDER_CLASS, INSPECTOR_SECTION_TITLE_CLASS } from "@/lib/ui-classes"
@@ -33,6 +33,7 @@ export function PipelineInspector({ module: selected, models, typeAliases = [], 
               {MODULE_META[selected.kind].label}
             </span>
             {isAutoQuoteStep(selected) && <AutoQuoteLock />}
+            {isAutoDocToTextStep(selected) && <AutoDocToTextLock />}
             {isAutoStructureParseStep(selected) && <AutoStructureParseLock />}
           </div>
           <PipelineModuleFields

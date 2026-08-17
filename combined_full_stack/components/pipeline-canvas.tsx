@@ -16,8 +16,9 @@ import {
   type PipelineSegment,
 } from "@/lib/pipeline-layout"
 import { isAutoQuoteStep } from "@/lib/quote-steps"
-import { inputTargetStructureId, isAutoStructureParseStep } from "@/lib/structure-parse-steps"
+import { inputTargetStructureId, isAutoDocToTextStep, isAutoStructureParseStep, isManagedLockedStep } from "@/lib/structure-parse-steps"
 import {
+  AutoDocToTextLock,
   AutoQuoteLock,
   AutoStructureParseLock,
   KindIcon,
@@ -156,7 +157,7 @@ function SegmentRow({
   const connectionInvalid = ioMismatchAtModuleIndex(modules, invalid, insertAt)
 
   if (seg.kind === "combine") {
-    const { combine, input, parse, index } = seg
+    const { combine, input, convert, parse, index } = seg
     const combineIssue = invalidForModule(invalid ?? new Map(), combine.id)
     const combineInvalid = combineIssue && combineIssue.kind !== "io-mismatch" && combineIssue.kind !== "cardinality-mismatch"
     const combineIoLinked = stepIoMismatchLinked(combine.id, modules, invalid)
@@ -167,9 +168,14 @@ function SegmentRow({
     const combineStatus = stepStatus?.get(combine.id)
     const inputStatus = stepStatus?.get(input.id)
     const parseStatus = parse ? stepStatus?.get(parse.id) : undefined
+    const convertStatus = convert ? stepStatus?.get(convert.id) : undefined
     const combineCoverage = testCoverage?.get(combine.id)
     const inputCoverage = testCoverage?.get(input.id)
-    const groupSelected = selectedId === combine.id || selectedId === input.id || selectedId === parse?.id
+    const groupSelected =
+      selectedId === combine.id ||
+      selectedId === input.id ||
+      selectedId === convert?.id ||
+      selectedId === parse?.id
     return (
       <div className="mx-auto flex w-full flex-col items-center">
         <div
@@ -252,6 +258,30 @@ function SegmentRow({
             {inputCoverage && <TestCoverageBadge status={inputCoverage} />}
             {!editMode && <RunStatusIcon status={inputStatus} />}
           </StepButton>
+          {convert && (
+            <StepButton
+              onClick={() => onSelect?.(convert.id)}
+              moduleId={convert.id}
+              label={convert.label}
+              kind={ModuleKind.DocToText}
+              snippet={convert.note}
+              className={cn(
+                "mt-2 flex w-full items-start gap-3 rounded-md border border-dashed border-chart-3/50 bg-chart-3/5 px-3 py-2.5 text-left transition-colors",
+                selectedId === convert.id
+                  ? "border-primary"
+                  : statusBorder(convertStatus) ?? "hover:border-chart-3",
+              )}
+            >
+              <KindIcon kind={ModuleKind.DocToText} size="sm" />
+              <StepBody
+                label={convert.label}
+                labelClass="text-xs"
+                detail={convertToTextDetail(convert)}
+              />
+              <AutoDocToTextLock />
+              {!editMode && <RunStatusIcon status={convertStatus} />}
+            </StepButton>
+          )}
           {/* AI : spec §input — llm convert step is visualised inside the combine group when the side input maps to a non-Document structure */}
           {parse && (
             <StepButton
@@ -309,7 +339,8 @@ function SegmentRow({
   const stepWarnings = warnings?.get(m.id)
   const autoQuote = isAutoQuoteStep(m)
   const autoStruct = isAutoStructureParseStep(m)
-  const locked = autoQuote || autoStruct
+  const autoConvert = isAutoDocToTextStep(m)
+  const locked = isManagedLockedStep(m)
   const status = stepStatus?.get(m.id)
   const coverage = testCoverage?.get(m.id)
 
@@ -392,7 +423,10 @@ function SegmentRow({
         snippet={m.note}
         className={cn(
           "group relative flex w-full items-start gap-3 rounded-lg border bg-card px-3.5 py-3 text-left transition-colors",
-          locked && (autoStruct ? "border-dashed border-chart-3/50 bg-chart-3/5" : "border-dashed border-chart-2/50 bg-chart-2/5"),
+          locked &&
+            (autoStruct || autoConvert
+              ? "border-dashed border-chart-3/50 bg-chart-3/5"
+              : "border-dashed border-chart-2/50 bg-chart-2/5"),
           isInvalid
             ? "border-destructive/70"
             : ioLinked
@@ -421,12 +455,8 @@ function SegmentRow({
                 <StructureLink models={models} structureId={m.inStructureId} />
                 <span className="text-muted-foreground/60"> · same model in/out</span>
               </>
-            ) : autoStruct ? (
-              <>
-                <StructureLink models={models} structureId={m.inStructureId} />
-                <span className="text-muted-foreground/60"> → </span>
-                <StructureLink models={models} structureId={m.outStructureId} />
-              </>
+            ) : autoConvert ? (
+              convertToTextDetail(m)
             ) : (
               <>
                 <StructureLink models={models} structureId={m.inStructureId} />
@@ -437,6 +467,7 @@ function SegmentRow({
           }
         />
         {autoQuote && <AutoQuoteLock />}
+        {autoConvert && <AutoDocToTextLock />}
         {autoStruct && <AutoStructureParseLock />}
         {m.kind === "llm" && m.model && (
           editMode ? (
@@ -567,6 +598,15 @@ function StepIndex({ index, className }: { index: number; className?: string }) 
     <span className={cn("font-mono text-[10px] text-muted-foreground", className)}>
       {String(index + 1).padStart(2, "0")}
     </span>
+  )
+}
+
+function convertToTextDetail(m: PipelineModule) {
+  return (
+    <>
+      Document.content None → text
+      <span className="text-muted-foreground/60">{m.useOcr ? " · OCR" : " · parser"}</span>
+    </>
   )
 }
 
