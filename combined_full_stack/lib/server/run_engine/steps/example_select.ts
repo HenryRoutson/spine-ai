@@ -10,6 +10,7 @@ import {
   exampleReasonField,
   exampleSelectItems,
 } from "@/lib/example-select";
+import { examplePromptColumns, projectExampleForPrompt } from "@/lib/sql-schema";
 import { buildExampleSelectVerdicts } from "@/lib/example-select-verdicts";
 import { labeledJsonPreviewItems } from "@/lib/step-response-preview";
 import { labelAsStateKey } from "../../pipeline_state";
@@ -42,14 +43,18 @@ function formatExampleContext(value: unknown, fieldPath?: string): string {
   return JSON.stringify(value, null, 2);
 }
 
-function exampleSelectPrompt(template: string, description: string, example: unknown): string {
+function exampleSelectPrompt(m: PipelineModule, template: string, description: string, example: unknown): string {
   // AI : TODO (example-select-view) — project `example` via m.examplePromptFields before fill; kept rows
   // AI :   stay the original object (buildExampleSelectVerdicts already passthroughs + reason).
   // AI : TODO (sql-schema) — change to exampleSelectPrompt(m, template, description, example):
   // AI :   const view = projectExampleForPrompt(example, examplePromptColumns(m))
   // AI :   return fillExampleSelectPrompt(template, description, view)
   // AI :   Update promptFor, llmBatchStructured mapper, and batchInputPreview to use that. items[] stay full.
-  return fillExampleSelectPrompt(template, description, example);
+  return fillExampleSelectPrompt(
+    template,
+    description,
+    projectExampleForPrompt(example, examplePromptColumns(m)),
+  );
 }
 
 function batchInputPreview(
@@ -103,7 +108,7 @@ export async function execExampleSelectStep(m: PipelineModule, ctx: RunCtx, log:
   });
 
   const promptFor = (item: unknown) =>
-    structuredLlmPrompt(exampleSelectPrompt(template, description, item), exampleSelectRelevanceSchema);
+    structuredLlmPrompt(exampleSelectPrompt(m, template, description, item), exampleSelectRelevanceSchema);
   const preview = batchInputPreview(items, promptFor);
 
   deferBrowserLlmIfNeeded(
@@ -126,7 +131,7 @@ export async function execExampleSelectStep(m: PipelineModule, ctx: RunCtx, log:
 
   const relevanceRows = await llmBatchStructured(
     items,
-    (item: unknown) => exampleSelectPrompt(template, description, item),
+    (item: unknown) => exampleSelectPrompt(m, template, description, item),
     exampleSelectRelevanceSchema,
     { model: stepModel, ledger: ctx.ledger, llmCalls: ctx.stepLlmCalls, ...llmCallBudget(ctx, m.label) },
     log.child("example-select"),

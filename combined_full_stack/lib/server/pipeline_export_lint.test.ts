@@ -77,6 +77,12 @@ describe("pipeline TS export lint", () => {
   });
   // AI : TODO (sql-schema) — after billed_work examplePromptView ships, assert src matches
   // AI :   /title","work_description/ or promptColumns array and does not include billed_items in that call.
+  it("billed_work example-select promptColumns omit billed_items", () => {
+    const { project } = loadProjectSeed(resolve(SEEDS_DIR, "billed_work_catalog_select.json"));
+    const src = generatePipelineSourceTs(project);
+    expect(src).toMatch(/"title","work_description"/);
+    expect(src).not.toMatch(/selectRelevant\([^;]*billed_items/);
+  });
 
   it("emits example-select relevance schema once", () => {
     const { project } = loadProjectSeed(resolve(SEEDS_DIR, "billed_work_catalog_select.json"));

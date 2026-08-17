@@ -49,6 +49,10 @@ export enum FieldType {
 export const JSON_FIELD_PREFER_STRUCTURE_MSG =
   "JSON fields store serialized data — prefer a typed structure (model / list[model]) when you can.";
 
+export type FieldRelation =
+  | { kind: "pk" }
+  | { kind: "fk"; to: { modelId: StructureModelId; field: string } };
+
 export interface ModelField {
   id: string;
   name: string;
@@ -75,6 +79,7 @@ export interface ModelField {
   // AI :   DDL emit: pk → PRIMARY KEY; fk → REFERENCES {sqlTable(to.modelId)}({to.field}).
   // AI :   If no pk on the model and a field is named "id", treat as PRIMARY KEY.
   // AI :   Spec + first-slice file list: lib/sql-schema.ts header.
+  relation?: FieldRelation;
 }
 
 // AI : ModelField keys that resolve a field's TypeExpr — typeExpr overrides legacy type/ref.
@@ -94,7 +99,7 @@ export type ModelFieldLegacyTypePick = Pick<ModelField, ModelFieldTypeSource.Typ
 // AI : meta-type — one field row inside a StructureDef (structure-of-structures)
 export type StructureFieldDef = Pick<
   ModelField,
-  "id" | "name" | "type" | "optional" | "description" | "examples" | "negativeExamples" | "ref" | "minItems" | "maxItems" | "minLength" | "maxLength" | "typeExpr" | "deterministic" | "testTolerance"
+  "id" | "name" | "type" | "optional" | "description" | "examples" | "negativeExamples" | "ref" | "minItems" | "maxItems" | "minLength" | "maxLength" | "typeExpr" | "deterministic" | "testTolerance" | "relation"
   // AI : TODO (sql-schema) — add | "relation" once FieldRelation exists so seeds persist pk/fk.
 >;
 
@@ -336,6 +341,7 @@ export interface PipelineModule {
   // AI : TODO (example-select-view) — examplePromptFields?: string[] (or omit list) so {example}/{input_to_prompt}
   // AI :   serializes a Pick of the item; inType/outType unchanged. Dual of exampleContextField. Do not put
   // AI :   {passthrough} in the template — passthrough is the kept spine row, already full object + reason.
+  examplePromptFields?: string[];
   // AI : TODO (example-select-view) — optional examplePromptItemTemplate for prose (Title: {title}) instead of JSON.
   // AI : TODO (type-join) — optional examplePromptJoins: lookup-embed spec for the *view only* (pass 2 cached
   // AI :   prefix / draft). Same inType/outType; do not denormalize billed_items onto pass 1 {example}.
@@ -345,6 +351,7 @@ export interface PipelineModule {
   // AI :   Export selectRelevant(..., promptColumns). Host: project before fillExampleSelectPrompt.
   // AI :   billed_work Select Relevant Jobs: SELECT id, title, work_description FROM job_example
   // AI :   Spec: lib/sql-schema.ts header.
+  examplePromptView?: string;
   useOcr?: boolean; // AI : doc-to-text (legacy: input) — vision OCR when PDF/image is accepted
   // AI : step result cache toggle — authoring may omit (defaults true via seed/factory).
   cached: boolean;

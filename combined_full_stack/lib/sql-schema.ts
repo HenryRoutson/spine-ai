@@ -210,4 +210,302 @@
 // AI :
 // AI : User rules: // AI : comments; StrReplace on large combined_full_stack files; python3; no extra markdown.
 
-export {}
+import { stripSharedModels } from "@/lib/server/builtin_models"
+import { fieldToTypeExpr, PrimName, TypeExprKind, type TypeExpr } from "@/lib/server/type_expr"
+import { modelExportIdentifier, modelsForPydanticExport, rustFieldIdent } from "@/lib/structure-shape"
+import { ModuleKind, type ModelField, type PipelineModule, type StructureModel } from "@/lib/types"
+
+const JOIN_SLICE_ERROR =
+  "prompt view in this slice is SELECT columns FROM table only (no JOIN)"
+
+const FORBIDDEN_SQL =
+  /\b(?:JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|UNION|INTERSECT|EXCEPT|HAVING|LIMIT|WHERE|WITH)\b|\bGROUP\s+BY\b|\(\s*SELECT\b/i
+
+export type ParsedSqlSelect = {
+  columns: string[]
+  from?: string
+  hasJoin: boolean
+  error?: string
+}
+
+export function sqlIdent(name: string): string {
+  return rustFieldIdent(modelExportIdentifier(name)).ident
+}
+
+export function sqlTableName(modelName: string): string {
+  return sqlIdent(modelName)
+}
+
+function stripSqlComments(sql: string): string {
+  return sql.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ")
+}
+
+function unquoteSqlIdent(raw: string): string {
+  const t = raw.trim()
+  if (t.length >= 2 && ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("`") && t.endsWith("`")))) {
+    return t.slice(1, -1)
+  }
+  return t
+}
+
+function columnName(raw: string): string {
+  const parts = raw.trim().split(".")
+  return unquoteSqlIdent(parts[parts.length - 1] ?? "")
+}
+
+export function parseSqlSelect(sql: string): ParsedSqlSelect {
+  const collapsed = stripSqlComments(sql).replace(/\s+/g, " ").trim().replace(/;+\s*$/, "")
+  if (!collapsed) return { columns: [], hasJoin: false, error: "could not parse SELECT …" }
+  if (FORBIDDEN_SQL.test(collapsed)) {
+    return { columns: [], hasJoin: true, error: JOIN_SLICE_ERROR }
+  }
+  const selectSql = collapsed.replace(/^CREATE\s+VIEW\s+\S+\s+AS\s+/i, "")
+  const selectMatch = /^SELECT\s+(.+)$/i.exec(selectSql)
+  if (!selectMatch) return { columns: [], hasJoin: false, error: "could not parse SELECT …" }
+  const body = selectMatch[1]!.trim()
+  const fromMatch = /^(.*?)\s+FROM\s+(\S+)$/i.exec(body)
+  const colSql = (fromMatch ? fromMatch[1] : body).trim()
+  const from = fromMatch ? unquoteSqlIdent(fromMatch[2] ?? "") : undefined
+  if (colSql === "*") return { columns: [], from, hasJoin: false }
+  const columns = colSql.split(",").map(columnName).filter(Boolean)
+  if (!columns.length) return { columns: [], from, hasJoin: false, error: "could not parse SELECT …" }
+  return { columns, from, hasJoin: false }
+}
+
+export function examplePromptColumns(m: PipelineModule): string[] | undefined {
+  const view = m.examplePromptView?.trim()
+  if (view) {
+    const parsed = parseSqlSelect(view)
+    if (parsed.error || parsed.hasJoin || parsed.columns.length === 0) return undefined
+    return parsed.columns
+  }
+  const fields = m.examplePromptFields?.map((f) => f.trim()).filter(Boolean)
+  return fields?.length ? fields : undefined
+}
+
+export function projectExampleForPrompt(item: unknown, columns?: string[]): unknown {
+  if (!columns?.length) return item
+  if (item == null || typeof item !== "object" || Array.isArray(item)) return item
+  const rec = item as Record<string, unknown>
+  return Object.fromEntries(columns.filter((c) => c in rec).map((c) => [c, rec[c]]))
+}
+
+function withSemicolon(sql: string): string {
+  const t = sql.trim().replace(/;+\s*$/, "")
+  return t ? `${t};` : t
+}
+
+export function exampleSelectViewSql(m: PipelineModule, models?: StructureModel[]): string | undefined {
+  const view = m.examplePromptView?.trim()
+  if (view) {
+    if (/^CREATE\s+VIEW\b/i.test(view)) return withSemicolon(view)
+    if (/^SELECT\b/i.test(view)) {
+      return `CREATE VIEW ${sqlIdent(m.label)}_prompt AS\n${view.replace(/;+\s*$/, "")};`
+    }
+    return undefined
+  }
+  const fields = m.examplePromptFields?.map((f) => f.trim()).filter(Boolean)
+  if (!fields?.length) return undefined
+  const inModel = models?.find((x) => x.id === m.inStructureId)
+  const from = sqlTableName(inModel?.name ?? "example")
+  return `CREATE VIEW ${sqlIdent(m.label)}_prompt AS\nSELECT ${fields.map(sqlIdent).join(", ")} FROM ${from};`
+}
+
+type Unwrapped = { inner: TypeExpr; optional: boolean }
+
+function unwrapOptional(expr: TypeExpr): Unwrapped {
+  if (expr.kind === TypeExprKind.Optional) {
+    const u = unwrapOptional(expr.inner)
+    return { inner: u.inner, optional: true }
+  }
+  return { inner: expr, optional: false }
+}
+
+function sqlBaseType(expr: TypeExpr): string {
+  switch (expr.kind) {
+    case TypeExprKind.Prim:
+      if (expr.name === PrimName.Int || expr.name === PrimName.Bool) return "INTEGER"
+      if (expr.name === PrimName.Float) return "REAL"
+      return "TEXT"
+    case TypeExprKind.Document:
+      return "TEXT"
+    default:
+      return "TEXT"
+  }
+}
+
+type ChildTable = {
+  parent: StructureModel
+  field: ModelField
+  childModelId: string
+  pkField: ModelField
+}
+
+type ColumnEmit = { line: string; childModelId?: string }
+
+function pkFieldOf(model: StructureModel): ModelField | undefined {
+  return model.fields.find((f) => f.relation?.kind === "pk") ?? model.fields.find((f) => f.name === "id")
+}
+
+function isPkColumn(f: ModelField, pkField: ModelField | undefined): boolean {
+  return !!pkField && f === pkField
+}
+
+function fkClause(f: ModelField, models: StructureModel[]): { sql: string; comment?: string } | undefined {
+  const rel = f.relation
+  if (rel?.kind !== "fk") return undefined
+  const target = models.find((m) => m.id === rel.to.modelId)
+  if (!target) {
+    return {
+      sql: ` REFERENCES unknown_${rel.to.modelId}(${sqlIdent(rel.to.field)})`,
+      comment: `unresolved fk ${rel.to.modelId}`,
+    }
+  }
+  return { sql: ` REFERENCES ${sqlTableName(target.name)}(${sqlIdent(rel.to.field)})` }
+}
+
+function emitColumnLine(
+  f: ModelField,
+  models: StructureModel[],
+  pkField: ModelField | undefined,
+  pkEmitted: { value: boolean },
+  nestedListAsJson: boolean,
+): ColumnEmit | undefined {
+  if (!f.name.trim()) return undefined
+  const unwrapped = unwrapOptional(fieldToTypeExpr(f))
+  const optional = unwrapped.optional || f.optional
+  const expr = unwrapped.inner
+
+  if (expr.kind === TypeExprKind.List && expr.item.kind === TypeExprKind.Ref) {
+    if (!nestedListAsJson && pkField) {
+      return { line: "", childModelId: expr.item.modelId }
+    }
+    const nullSql = optional ? "" : " NOT NULL"
+    return { line: `  ${sqlIdent(f.name)} TEXT${nullSql} -- nested list, no parent pk` }
+  }
+
+  let typeSql = "TEXT"
+  let extra = ""
+  let comment: string | undefined
+  switch (expr.kind) {
+    case TypeExprKind.Prim:
+      typeSql = sqlBaseType(expr)
+      break
+    case TypeExprKind.Document:
+      typeSql = "TEXT"
+      extra = " REFERENCES document(id)"
+      break
+    case TypeExprKind.Quote:
+    case TypeExprKind.TextQuote:
+      typeSql = "TEXT"
+      break
+    case TypeExprKind.Ref:
+      typeSql = "TEXT"
+      comment = "JSON"
+      break
+    case TypeExprKind.List:
+      typeSql = "TEXT"
+      comment = "JSON array"
+      break
+    default:
+      typeSql = "TEXT"
+  }
+
+  const thisPk = isPkColumn(f, pkField) && !pkEmitted.value
+  if (thisPk) pkEmitted.value = true
+  else if (f.relation?.kind === "pk") comment = comment ?? "extra pk"
+
+  const fk = fkClause(f, models)
+  if (fk) {
+    extra += fk.sql
+    if (fk.comment) comment = comment ? `${comment}; ${fk.comment}` : fk.comment
+  }
+
+  const pkSql = thisPk ? " PRIMARY KEY" : ""
+  const nullSql = thisPk || optional ? "" : " NOT NULL"
+  const commentSql = comment ? ` -- ${comment}` : ""
+  return { line: `  ${sqlIdent(f.name)} ${typeSql}${pkSql}${nullSql}${extra}${commentSql}` }
+}
+
+function emitCreateTable(name: string, lines: string[]): string {
+  const body = lines
+    .map((line, i) => {
+      const comma = i < lines.length - 1 ? "," : ""
+      const commentAt = line.indexOf(" -- ")
+      if (commentAt === -1) return `${line}${comma}`
+      return `${line.slice(0, commentAt)}${comma}${line.slice(commentAt)}`
+    })
+    .join("\n")
+  return `CREATE TABLE ${name} (\n${body}\n);`
+}
+
+function childTableName(parent: StructureModel, field: ModelField): string {
+  return `${sqlTableName(parent.name)}_${sqlIdent(field.name)}`
+}
+
+export function allModelsToSql(models: StructureModel[], modules?: PipelineModule[]): string {
+  const lookup = stripSharedModels(models)
+  const exported = modelsForPydanticExport(lookup)
+  const chunks: string[] = [
+    "-- generated schema.sql — annotation only; runtime is still JSON maps",
+    "",
+    emitCreateTable("document", [
+      "  id TEXT PRIMARY KEY",
+      "  filename TEXT NOT NULL",
+      "  mime TEXT",
+      "  content TEXT",
+      "  blob BLOB",
+    ]),
+    "",
+    emitCreateTable("quote_span", [
+      "  doc_id TEXT NOT NULL REFERENCES document(id)",
+      "  start INTEGER NOT NULL",
+      "  end INTEGER NOT NULL",
+    ]),
+  ]
+
+  const childTables: ChildTable[] = []
+  for (const model of exported) {
+    const pkField = pkFieldOf(model)
+    const pkEmitted = { value: false }
+    const colLines: string[] = []
+    for (const f of model.fields) {
+      const emitted = emitColumnLine(f, lookup, pkField, pkEmitted, false)
+      if (!emitted) continue
+      if (emitted.childModelId && pkField) {
+        childTables.push({ parent: model, field: f, childModelId: emitted.childModelId, pkField })
+        continue
+      }
+      colLines.push(emitted.line)
+    }
+    chunks.push("", emitCreateTable(sqlTableName(model.name), colLines.length ? colLines : ["  -- no columns"]))
+  }
+
+  for (const child of childTables) {
+    const childModel = lookup.find((m) => m.id === child.childModelId)
+    const parentPkType = sqlBaseType(unwrapOptional(fieldToTypeExpr(child.pkField)).inner)
+    const parentTable = sqlTableName(child.parent.name)
+    const parentPkName = sqlIdent(child.pkField.name)
+    const pkEmitted = { value: false }
+    const childPk = childModel ? pkFieldOf(childModel) : undefined
+    const colLines: string[] = [
+      `  ${parentTable}_id ${parentPkType} NOT NULL REFERENCES ${parentTable}(${parentPkName})`,
+    ]
+    for (const f of childModel?.fields ?? []) {
+      const emitted = emitColumnLine(f, lookup, childPk, pkEmitted, true)
+      if (!emitted || emitted.childModelId) continue
+      colLines.push(emitted.line)
+    }
+    chunks.push("", emitCreateTable(childTableName(child.parent, child.field), colLines))
+  }
+
+  if (modules) {
+    for (const m of modules) {
+      if (m.kind !== ModuleKind.ExampleSelect) continue
+      const view = exampleSelectViewSql(m, lookup)
+      if (view) chunks.push("", view)
+    }
+  }
+
+  return chunks.join("\n") + "\n"
+}

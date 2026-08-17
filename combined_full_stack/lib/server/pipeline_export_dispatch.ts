@@ -5,6 +5,7 @@
 import { assertEntriesForModule, wrapAssertPython, wrapAssertTypeScriptForExport } from "@/lib/assert_steps";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { DEFAULT_EXAMPLE_REASON_FIELD, exampleReasonField } from "@/lib/example-select";
+import { examplePromptColumns } from "@/lib/sql-schema";
 import { isMergeModuleKind } from "@/lib/module-kinds";
 import {
   exportWebhookStepBodyGo,
@@ -418,17 +419,22 @@ const emitExampleSelect: Record<ExportLang, StepBodyEmitter> = {
     const ctxLabel = ctx.m.exampleContextLabel ?? DEFAULT_EXAMPLE_CTX;
     const outName = outLabel(ctx);
     const reason = exampleReasonField(ctx.m);
-    const selectCall =
-      reason === DEFAULT_EXAMPLE_REASON_FIELD
-        ? "selectRelevant(items, description, template)"
-        : `selectRelevant(items, description, template, ${JSON.stringify(reason)})`;
+    const cols = examplePromptColumns(ctx.m);
+    // AI : TODO (example-select-view) — export must project each item for the prompt and still return full rows.
+    // AI : TODO (sql-schema) — const cols = examplePromptColumns(ctx.m); if cols?.length pass as 5th arg
+    // AI :   selectRelevant(items, description, template, reason, cols) else keep 3/4-arg. Same for py/go/rs below.
+    // AI :   Import examplePromptColumns from @/lib/sql-schema in this dispatch file (host, not the copied runtime).
+    let selectCall: string;
+    if (cols?.length) {
+      selectCall = `selectRelevant(items, description, template, ${JSON.stringify(reason)}, ${JSON.stringify(cols)})`;
+    } else if (reason === DEFAULT_EXAMPLE_REASON_FIELD) {
+      selectCall = "selectRelevant(items, description, template)";
+    } else {
+      selectCall = `selectRelevant(items, description, template, ${JSON.stringify(reason)})`;
+    }
     return [
       exportComment(TS, exampleSelectComment(outName)),
       `const description = ${generateExampleContextExprTs(ctxLabel, ctx.m.exampleContextField)};`,
-      // AI : TODO (example-select-view) — export must project each item for the prompt and still return full rows.
-      // AI : TODO (sql-schema) — const cols = examplePromptColumns(ctx.m); if cols?.length pass as 5th arg
-      // AI :   selectRelevant(items, description, template, reason, cols) else keep 3/4-arg. Same for py/go/rs below.
-      // AI :   Import examplePromptColumns from @/lib/sql-schema in this dispatch file (host, not the copied runtime).
       "const items = exampleSelectItems(input);",
       `const template = ${JSON.stringify(prompt)};`,
       `return (await ${selectCall}) as ${ctx.outType};`,
@@ -438,12 +444,17 @@ const emitExampleSelect: Record<ExportLang, StepBodyEmitter> = {
     const prompt = ctx.m.prompt ?? DEFAULT_EXAMPLE_PROMPT;
     const ctxLabel = ctx.m.exampleContextLabel ?? DEFAULT_EXAMPLE_CTX;
     const outName = outLabel(ctx);
+    const cols = examplePromptColumns(ctx.m);
+    const reason = exampleReasonField(ctx.m);
+    const args = ["items", "description", "template"];
+    if (reason !== DEFAULT_EXAMPLE_REASON_FIELD) args.push(`reason_field=${JSON.stringify(reason)}`);
+    if (cols?.length) args.push(`prompt_columns=${JSON.stringify(cols)}`);
     return [
       exportComment(PY, exampleSelectComment(outName)),
       ...generateExampleContextLinesPy(ctxLabel, ctx.m.exampleContextField),
       "items = example_select_items(input)",
       `template = ${exportStringLiteral(prompt)}`,
-      pyCast(ctx, "await select_relevant(items, description, template)"),
+      pyCast(ctx, `await select_relevant(${args.join(", ")})`),
     ].join("\n");
   },
   go: (ctx) => {
@@ -453,6 +464,7 @@ const emitExampleSelect: Record<ExportLang, StepBodyEmitter> = {
     const outName = outLabel(ctx);
     const zero = goZeroValue(ctx.outType);
     const itemGo = goItemType(ctx.outType);
+    const cols = examplePromptColumns(ctx.m);
     const fieldPath = ctx.m.exampleContextField?.trim();
     const descriptionBlock = fieldPath
       ? [
@@ -508,7 +520,9 @@ const emitExampleSelect: Record<ExportLang, StepBodyEmitter> = {
       `\treturn ${zero}, err`,
       `}`,
       `template := ${exportStringLiteral(prompt)}`,
-      `selected, err := selectRelevant(items, description, template)`,
+      cols?.length
+        ? `selected, err := selectRelevant(items, description, template, ${cols.map((c) => exportStringLiteral(c)).join(", ")})`
+        : `selected, err := selectRelevant(items, description, template)`,
       `if err != nil {`,
       `\treturn ${zero}, err`,
       `}`,
@@ -532,6 +546,10 @@ const emitExampleSelect: Record<ExportLang, StepBodyEmitter> = {
       : "None";
     const outName = outLabel(ctx);
     const itemRust = rsItemType(ctx.outType);
+    const cols = examplePromptColumns(ctx.m);
+    const promptCols = cols?.length
+      ? `&[${cols.map((c) => `${exportStringLiteral(c)}.to_string()`).join(", ")}]`
+      : "&[] as &[String]";
     return [
       exportComment(C, exampleSelectComment(outName)),
       `let ctx_value = state.get(${ctxKey}).cloned().unwrap_or(Value::Null);`,
@@ -540,7 +558,7 @@ const emitExampleSelect: Record<ExportLang, StepBodyEmitter> = {
       "let input_value = serde_json::to_value(&input)?;",
       "let items = example_select_items(&input_value);",
       `let template = ${exportStringLiteral(prompt)};`,
-      "let selected = select_relevant(items, &description, &template).await?;",
+      `let selected = select_relevant(items, &description, &template, ${promptCols}).await?;`,
       "let mut out = Vec::new();",
       "for row in selected {",
       `    out.push(serde_json::from_value::<${itemRust}>(row)?);`,

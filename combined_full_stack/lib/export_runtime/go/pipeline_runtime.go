@@ -294,12 +294,40 @@ func exampleSelectItems(input json.RawMessage) ([]json.RawMessage, error) {
 	return []json.RawMessage{input}, nil
 }
 
-func selectRelevant(items []json.RawMessage, description, template string) ([]json.RawMessage, error) {
+func projectExampleForPrompt(item any, columns []string) any {
+	if len(columns) == 0 {
+		return item
+	}
+	m, ok := item.(map[string]any)
+	if !ok {
+		return item
+	}
+	out := map[string]any{}
+	for _, c := range columns {
+		if v, ok := m[c]; ok {
+			out[c] = v
+		}
+	}
+	return out
+}
+
+func selectRelevant(items []json.RawMessage, description, template string, promptColumns ...string) ([]json.RawMessage, error) {
 	// AI : TODO (sql-schema) — add promptColumns ...string. Unmarshal item to map, pick keys, marshal for {example}.
 	// AI :   Kept row is still the original item map + chain_of_thought. Also replace {input_to_prompt}.
 	out := make([]json.RawMessage, 0, len(items))
 	for _, item := range items {
-		ask := strings.ReplaceAll(strings.ReplaceAll(template, "{description}", description), "{example}", string(item))
+		exampleJSON := string(item)
+		if len(promptColumns) > 0 {
+			var parsed any
+			if json.Unmarshal(item, &parsed) == nil {
+				b, err := json.Marshal(projectExampleForPrompt(parsed, promptColumns))
+				if err != nil {
+					return nil, err
+				}
+				exampleJSON = string(b)
+			}
+		}
+		ask := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(template, "{description}", description), "{example}", exampleJSON), "{input_to_prompt}", exampleJSON)
 		value, err := llmStructured(ask, relevanceSchema)
 		if err != nil {
 			return nil, err

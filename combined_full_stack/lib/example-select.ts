@@ -1,5 +1,8 @@
 import { FieldType, ModuleKind, type PipelineModule, type StructureModel } from "@/lib/types"
 import type { TypeExpr } from "@/lib/server/type_expr"
+import { examplePromptColumns, projectExampleForPrompt } from "@/lib/sql-schema"
+
+export { examplePromptColumns, projectExampleForPrompt }
 
 // AI : TODO (example-select-view) — {example} is per-candidate (uncached). Project the candidate for the
 // AI :   prompt; keep the full list item on the spine. exampleContextField already projects {description};

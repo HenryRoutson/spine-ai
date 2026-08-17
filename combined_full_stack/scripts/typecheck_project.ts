@@ -31,6 +31,7 @@ writeFileSync(join(outDir, "models.py"), generated.modelsPy);
 writeFileSync(join(outDir, "pipeline_types.py"), generated.pipelinePy);
 writeFileSync(join(outDir, "models.d.ts"), generated.modelsDts);
 writeFileSync(join(outDir, "pipeline_types.d.ts"), generated.pipelineDts);
+writeFileSync(join(outDir, "schema.sql"), generated.schemaSql);
 // AI : TODO (sql-schema) — writeFileSync(join(outDir, "schema.sql"), generated.schemaSql)
 // AI :   after generatePipelineTypes returns schemaSql. Console.log should mention schema.sql.
 
@@ -73,7 +74,7 @@ for (const m of project.modules) {
 }
 if (staticErrors === 0) console.log("(none)");
 
-console.log(`\nWrote ${outDir}/models.py, pipeline_types.py, pipeline_types.d.ts\n`);
+console.log(`\nWrote ${outDir}/models.py, pipeline_types.py, pipeline_types.d.ts, schema.sql\n`);
 
 if (runPyright) {
   const pyright = spawnSync("pyright", [outDir], { encoding: "utf8" });

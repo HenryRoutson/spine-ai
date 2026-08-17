@@ -12,7 +12,7 @@ import { CustomCodeLanguage } from "@/lib/types"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
-export type CodeViewerLanguage = "python" | "typescript" | "rust" | "go" | "baml"
+export type CodeViewerLanguage = "python" | "typescript" | "rust" | "go" | "baml" | "sql"
 // AI : TODO (sql-schema) — add | "sql". CODE_LANG_LABEL.sql = "SQL"; CODE_LANG_LINT_HINT.sql = "annotation".
 // AI :   monacoLanguageId can return "sql". Do NOT push "sql" onto CODE_VIEWER_LANGUAGES (export dialog).
 
@@ -24,6 +24,7 @@ export const CODE_LANG_LABEL: Record<CodeViewerLanguage, string> = {
   rust: "Rust",
   go: "Go",
   baml: "BAML",
+  sql: "SQL",
 }
 
 export const CODE_LANG_LINT_HINT: Record<CodeViewerLanguage, string> = {
@@ -32,6 +33,7 @@ export const CODE_LANG_LINT_HINT: Record<CodeViewerLanguage, string> = {
   rust: "cargo check",
   go: "go build",
   baml: "baml generate",
+  sql: "annotation",
 }
 
 export const MONACO_CODE_THEME = MONACO_VS_DARK_THEME

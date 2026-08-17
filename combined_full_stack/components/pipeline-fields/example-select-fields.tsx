@@ -150,6 +150,23 @@ export function ExampleSelectModuleFields({
           Textarea value={selected.examplePromptView ?? ""} placeholder="SELECT id, title, work_description FROM job_example"
           onChange → examplePromptView: empty string becomes undefined. font-mono text-xs min-h-20. Place BEFORE Relevance prompt. */}
       <PipelineField
+        label="Prompt view"
+        hint="uncached {example} columns — spine still the full row. Empty = all fields."
+      >
+        {edit ? (
+          <Textarea
+            value={selected.examplePromptView ?? ""}
+            onChange={(e) => onUpdate!({ examplePromptView: e.target.value || undefined })}
+            placeholder="SELECT id, title, work_description FROM job_example"
+            className="min-h-20 resize-y font-mono text-xs leading-relaxed"
+          />
+        ) : (
+          <StaticValue mono pre>
+            {selected.examplePromptView?.trim() || "all fields"}
+          </StaticValue>
+        )}
+      </PipelineField>
+      <PipelineField
         label="Relevance prompt"
         hint="schema-first cached prefix · {description} per run · {example} last per candidate"
       >

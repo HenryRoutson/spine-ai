@@ -9,7 +9,8 @@ import {
 } from "@/components/code-viewer"
 // AI : same model codegen as pipeline export (py / ts / rust / go / baml).
 import { allModelsToBaml, allModelsToDts, allModelsToGo, allModelsToPydantic, allModelsToRust } from "@/lib/pydantic"
-import type { StructureModel, TypeAlias } from "@/lib/types"
+import { allModelsToSql } from "@/lib/sql-schema"
+import type { PipelineModule, StructureModel, TypeAlias } from "@/lib/types"
 // AI : TODO (sql-schema) — import allModelsToSql from @/lib/sql-schema; add a source
 // AI :   { language: "sql", label: "SQL", filename: "schema.sql", content: allModelsToSql(models, modules) }.
 // AI :   Accept optional modules from StructureBuilder (useStore project.modules) so example-select views emit.
@@ -19,12 +20,20 @@ import type { StructureModel, TypeAlias } from "@/lib/types"
 export function StructureCodeView({
   models,
   typeAliases,
+  modules,
 }: {
   models: StructureModel[]
   typeAliases: TypeAlias[]
+  modules?: PipelineModule[]
 }) {
   const sources = useMemo<MultiLangCodeSource[]>(
     () => [
+      {
+        language: "sql",
+        label: CODE_LANG_LABEL.sql,
+        filename: "schema.sql",
+        content: allModelsToSql(models, modules),
+      },
       {
         language: "python",
         label: CODE_LANG_LABEL.python,
@@ -56,7 +65,7 @@ export function StructureCodeView({
         content: allModelsToBaml(models, typeAliases),
       },
     ],
-    [models, typeAliases],
+    [models, typeAliases, modules],
   )
 
   // AI : fill the Structures trailing pane — default min(60vh,28rem) leaves the split undersized / clipped.

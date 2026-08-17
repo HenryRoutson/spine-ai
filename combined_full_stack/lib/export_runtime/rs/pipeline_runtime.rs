@@ -153,19 +153,39 @@ pub fn example_select_items(input: &Value) -> Vec<Value> {
     vec![input.clone()]
 }
 
+fn project_example_for_prompt(item: &Value, prompt_columns: &[String]) -> Value {
+    if prompt_columns.is_empty() {
+        return item.clone();
+    }
+    let Some(map) = item.as_object() else {
+        return item.clone();
+    };
+    let mut out = serde_json::Map::new();
+    for c in prompt_columns {
+        if let Some(v) = map.get(c) {
+            out.insert(c.clone(), v.clone());
+        }
+    }
+    Value::Object(out)
+}
+
 pub async fn select_relevant(
     items: Vec<Value>,
     description: &str,
     template: &str,
+    prompt_columns: &[String],
 ) -> anyhow::Result<Vec<Value>> {
     // AI : TODO (sql-schema) — add prompt_columns: &[String]. Project object keys before to_string_pretty.
     // AI :   Kept Value::Object still the original map + selection_reason. Replace {input_to_prompt} too.
     let schema = relevance_schema();
     let mut out = Vec::new();
     for item in items {
+        let example = project_example_for_prompt(&item, prompt_columns);
+        let example_text = serde_json::to_string_pretty(&example)?;
         let ask = template
             .replace("{description}", description)
-            .replace("{example}", &serde_json::to_string_pretty(&item)?);
+            .replace("{example}", &example_text)
+            .replace("{input_to_prompt}", &example_text);
         let verdict = llm_structured(&ask, &schema).await?;
         if !verdict
             .get("is_relevant")

@@ -13,7 +13,8 @@
           "name": "work_item_id",
           "type": "text",
           "optional": false,
-          "description": "Catalog work item id"
+          "description": "Catalog work item id",
+          "relation": { "kind": "fk", "to": { "modelId": "m_work_item", "field": "id" } }
         },
         {
           "id": "f_qty",
@@ -41,7 +42,8 @@
           "name": "id",
           "type": "text",
           "optional": false,
-          "description": "Stable job example id"
+          "description": "Stable job example id",
+          "relation": { "kind": "pk" }
         },
         {
           "id": "f_title",
@@ -147,7 +149,8 @@
           "name": "id",
           "type": "text",
           "optional": false,
-          "description": "Catalog id"
+          "description": "Catalog id",
+          "relation": { "kind": "pk" }
         },
         {
           "id": "f_code",
@@ -382,6 +385,7 @@
       "exampleContextLabel": "Work Description",
       "exampleContextField": "content",
       "exampleReasonField": "selection_reason",
+      "examplePromptView": "SELECT id, title, work_description FROM job_example",
       "prompt": "Find past repair jobs that are useful references for scoping this new insurance claim.\n\nWORK DESCRIPTION:\n\n{description}\n\nCANDIDATE PAST JOB:\n\n{example}",
       "model": "deepseek-v4",
       "costLimitCents": 100,

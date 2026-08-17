@@ -1,4 +1,5 @@
 import { allModelsToPydantic, allModelsToDts } from "./pydantic";
+import { allModelsToSql } from "@/lib/sql-schema";
 // AI : TODO (linter-first) — add generatePipelineTypesRust + pipeline_types.rs; typecheck via cargo check, not TS.
 // AI : TODO (sql-schema) — generatePipelineTypesSql → schema.sql; optional sqlite check, not required to ship DDL.
 import {
@@ -22,6 +23,7 @@ export type GeneratedPipelineTypes = {
   modelsDts: string;
   pipelinePy: string;
   pipelineDts: string;
+  schemaSql: string;
   // AI : TODO (sql-schema) — schemaSql: string from allModelsToSql(project.models, project.modules).
   // AI :   generatePipelineTypes returns it; typecheck_project.ts writes schema.sql next to models.py.
 };
@@ -103,7 +105,7 @@ export function generatePipelineTypes(project: Project): GeneratedPipelineTypes 
     "",
   ].join("\n");
 
-  return { modelsPy, modelsDts, pipelinePy, pipelineDts };
+  return { modelsPy, modelsDts, pipelinePy, pipelineDts, schemaSql: allModelsToSql(project.models, project.modules) };
   // AI : TODO (sql-schema) — schemaSql: allModelsToSql(project.models, project.modules) from @/lib/sql-schema
 }
 

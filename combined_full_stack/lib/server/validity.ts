@@ -28,6 +28,7 @@ import {
   isBuiltinDocumentModel,
 } from "./structure";
 import { withSharedModels } from "./builtin_models";
+import { parseSqlSelect } from "@/lib/sql-schema";
 import {
   cardinalityMismatch,
   collectTypeExprRefModelIds,
@@ -544,7 +545,7 @@ function computeInputDescriptionInvalid(modules: PipelineModule[]): InvalidMap {
   return invalid;
 }
 
-function computeExampleSelectInvalid(modules: PipelineModule[]): InvalidMap {
+function computeExampleSelectInvalid(modules: PipelineModule[], models: StructureModel[]): InvalidMap {
   const invalid: InvalidMap = new Map();
   for (let i = 0; i < modules.length; i++) {
     const m = modules[i]!;
@@ -566,6 +567,41 @@ function computeExampleSelectInvalid(modules: PipelineModule[]): InvalidMap {
     // AI : TODO (sql-schema) — computeExampleSelectInvalid(modules, models): parse examplePromptView;
     // AI :   columns must exist on inStructureId item fields; JOIN in this slice → StructureField invalid.
     // AI :   Pass models from computeInvalid (already has them). Spec: lib/sql-schema.ts header.
+    const inModel = models.find((x) => x.id === m.inStructureId);
+    const fieldNames = new Set(inModel?.fields.map((f) => f.name) ?? []);
+    const view = m.examplePromptView?.trim();
+    if (view) {
+      const parsed = parseSqlSelect(view);
+      if (parsed.error || parsed.hasJoin) {
+        pushInvalid(invalid, {
+          moduleId: m.id,
+          kind: InvalidKind.StructureField,
+          structureMessage: parsed.error ?? "prompt view in this slice is SELECT columns FROM table only (no JOIN)",
+        });
+      } else if (inModel) {
+        for (const col of parsed.columns) {
+          if (!fieldNames.has(col)) {
+            pushInvalid(invalid, {
+              moduleId: m.id,
+              kind: InvalidKind.StructureField,
+              structureMessage: `prompt view column "${col}" is not a field on ${inModel.name}`,
+            });
+          }
+        }
+      }
+    } else if (m.examplePromptFields?.length && inModel) {
+      for (const raw of m.examplePromptFields) {
+        const col = raw.trim();
+        if (!col) continue;
+        if (!fieldNames.has(col)) {
+          pushInvalid(invalid, {
+            moduleId: m.id,
+            kind: InvalidKind.StructureField,
+            structureMessage: `prompt field "${col}" is not a field on ${inModel.name}`,
+          });
+        }
+      }
+    }
   }
   return invalid;
 }
@@ -660,7 +696,7 @@ export function computeInvalid(
     list.push(...issues);
     invalid.set(moduleId, list);
   }
-  for (const [moduleId, issues] of computeExampleSelectInvalid(modules)) {
+  for (const [moduleId, issues] of computeExampleSelectInvalid(modules, models)) {
     const list = invalid.get(moduleId) ?? [];
     list.push(...issues);
     invalid.set(moduleId, list);
