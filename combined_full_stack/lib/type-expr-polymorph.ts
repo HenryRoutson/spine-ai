@@ -1,4 +1,6 @@
 // AI : type-param substitution, path typing, and assignability (assemble stages B–D).
+// AI : TODO (generics) — expand/subst works if params are already on the project. GUI/MCP/CLI/assistant
+// AI :   cannot declare them. Codegen (pydantic.ts) ignores params — Types tab will not show TreeNode[T].
 // AI : TODO (type-join) — Pick/Omit/extend assignability: a prompt view must be a projection/join of the
 // AI :   item type, never an arbitrary reshape. Lookup-embed: leftPath + leftKey ⋈ state[label] on rightKey
 // AI :   → intersect item with { embedAs: Right }. Assemble/combine stay product-zip, not FK resolve.

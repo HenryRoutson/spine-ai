@@ -78,6 +78,7 @@ SPINE_API_URL / SPINE_API_TOKEN  HTTP egress for pull/push/start-run/billing
 // AI :   share mint / hosted API / marketplace; billing checkout / withdraw; teams
 // AI :   run cancel, human-review elicitation, Node custom-code host
 // AI :   inference *_setup.json editor; testing visual editor + alignment
+// AI : TODO (generics) — add-model/add-alias/add-field have no --params / typeExpr. Validate/run already honor seed params.
 
 function ok(command: string, data: Record<string, unknown>): CliCommandResult {
   return { ok: true, command, issues: [], data }
@@ -199,6 +200,7 @@ async function runSessionCommandInner(
   if (sub === "add-model") {
     const name = flagString(flags, "name")
     if (!name) return usage("session add-model requires --name")
+    // AI : TODO (generics) — accept --params T,U and pass to addNamedModel.
     addNamedModel(session, name)
     return ok("session add-model", {
       action: "applyProjectChanges",
@@ -229,6 +231,7 @@ async function runSessionCommandInner(
     const name = flagString(flags, "name")
     const expr = flagString(flags, "expr")
     if (!name || !expr) return usage("session add-alias requires --name --expr")
+    // AI : TODO (generics) — accept --params A,B so Pair is parametric, not just Generic in expr.
     addTypeAlias(session, name, expr)
     return ok("session add-alias", { structure: toStructureView(session.getSnapshot()) })
   }

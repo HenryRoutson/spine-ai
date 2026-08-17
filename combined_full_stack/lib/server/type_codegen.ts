@@ -38,6 +38,7 @@ function stepFunctionName(m: PipelineModule, index: number): string {
 }
 
 export function generatePipelineTypes(project: Project): GeneratedPipelineTypes {
+  // AI : TODO (generics) — step signatures print Foo[Bar] via typeExprToPy/Ts, but models.py/d.ts omit TypeVar on the defs.
   const typeAliases = project.typeAliases ?? [];
   const modelsPy = allModelsToPydantic(project.models, typeAliases);
   const modelsDts = generateModelsDts(project.models, typeAliases);

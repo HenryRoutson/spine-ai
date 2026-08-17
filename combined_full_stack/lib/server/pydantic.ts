@@ -47,6 +47,7 @@ function typeExprToAliasDefinitionPy(expr: TypeExpr, models: StructureModel[]): 
 }
 
 export function typeAliasToPydantic(alias: TypeAlias, models: StructureModel[]): string {
+  // AI : TODO (generics) — emit TypeVar + `type Pair[A, B] = …` when alias.params is set. Named "A"/"B" is invalid Python today.
   const id = typeAliasExportName(alias.name);
   const body = typeExprToAliasDefinitionPy(alias.expr, models);
   const note = alias.description?.trim();
@@ -73,6 +74,7 @@ function typeExprToAliasDefinitionTs(expr: TypeExpr, models: StructureModel[]): 
 }
 
 export function typeAliasToDts(alias: TypeAlias, models: StructureModel[]): string {
+  // AI : TODO (generics) — `export type Pair<A, B> = …` when alias.params is set.
   const id = typeAliasExportName(alias.name);
   const body = typeExprToAliasDefinitionTs(alias.expr, models);
   const note = alias.description?.trim();
@@ -85,6 +87,7 @@ export function typeAliasesToDts(aliases: TypeAlias[], models: StructureModel[])
 }
 
 export function modelToPydantic(model: StructureModel, models: StructureModel[]): string {
+  // AI : TODO (generics) — class TreeNode(BaseModel, Generic[T]) when model.params; field named T stays a bare identifier.
   const header = `class ${modelExportIdentifier(model.name)}(BaseModel):`;
   const doc = model.description ? `    """${model.description}"""` : null;
   const body =
@@ -157,6 +160,7 @@ export function allModelsToPydantic(
 }
 
 function modelToDts(model: StructureModel, models: StructureModel[]): string {
+  // AI : TODO (generics) — `export type TreeNode<T> = { … }` when model.params. Same gap in typeAliasToDts / Rust / Go.
   const lines = model.fields
     .filter((f) => f.name.trim())
     .map((f) => {

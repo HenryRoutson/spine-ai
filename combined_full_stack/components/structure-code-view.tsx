@@ -1,5 +1,6 @@
 "use client"
 // AI : parity ids — structure.export-pydantic
+// AI : TODO (generics) — preview uses allModelsToPydantic which ignores params; TreeNode[T] will not appear.
 
 import { useMemo } from "react"
 import {

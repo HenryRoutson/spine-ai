@@ -1,5 +1,6 @@
 "use client"
 // AI : parity ids — structure.add-model structure.add-alias
+// AI : TODO (generics) — add-model creates a non-parametric struct. Params belong on the excel header, not a second UI.
 
 // AI : TODO (spec) — per-structure "Quick summarise" button: cheap LLM flags inconsistencies (e.g. document_summary:int).
 import { useEffect, useMemo, useRef, useState } from "react"

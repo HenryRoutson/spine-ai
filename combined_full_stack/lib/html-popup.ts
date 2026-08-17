@@ -43,10 +43,12 @@ export type HtmlPopupExpandBoot = {
 
 // AI : no free variables — inference-html-export embeds this via Function#toString.
 export function bindHtmlPopupExpand(root: ParentNode, opts: HtmlPopupExpandBoot): () => void {
-  const doc = (root as Node).nodeType === 9 ? (root as Document) : (root as Node).ownerDocument
-  if (!doc) return function () {}
-  const win = doc.defaultView
-  if (!win) return function () {}
+  const ownerDoc = (root as Node).nodeType === 9 ? (root as Document) : (root as Node).ownerDocument
+  const ownerWin = ownerDoc?.defaultView
+  if (!ownerDoc || !ownerWin) return function () {}
+  // AI : rebind so nested listeners see Document/Window, not Document | null.
+  const doc: Document = ownerDoc
+  const win: Window = ownerWin
   const chrome = opts.chrome
   const unbind: Array<() => void> = []
   let overlay: HTMLElement | null = null

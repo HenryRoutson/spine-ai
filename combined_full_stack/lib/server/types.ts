@@ -39,6 +39,8 @@ export enum FieldType {
   ListTupleTextQuote = "list[tuple[text,quote]]",
   Model = "model",
   ListModel = "list[model]",
+  // AI : TODO (generics) — no FieldType.generic_param. A type param in a field is typeExpr { kind: "named", name: "T" }
+  // AI :   and only substitutes when StructureModel.params / TypeAlias.params bind T (type-expr-polymorph).
   // AI : FieldTypes are the SQL column/table annotation LLMs already know.
   // AI :   text/int/float/bool/datetime → TEXT/INTEGER/REAL/INTEGER/TEXT; optional → NULL; json/markdown/latex → TEXT.
   // AI :   document → row in `document` (pk id); list[document] → 1:N. quote → FK document(id) + start/end.
@@ -125,6 +127,8 @@ export interface StructureModel {
   locked?: boolean; // AI : read-only in Structure UI — cannot rename, edit fields, or delete
   sourceDocId?: DocId; // AI : document this structure was inferred from — links back in Structure tab
   // AI : type params — Ref { modelId, args } / Generic Name[T] instantiate field typeExprs.
+  // AI : TODO (generics) — IR + seed/API persist params. Authoring does not: Structure header, assistant spec,
+  // AI :   CLI add-model, MCP add_model, codegen (no Generic[T] / TypeVar). Grep TODO (generics).
   params?: string[];
   // AI : TODO (type-join) — pk lives on ModelField.relation, not here. Lookup-embed derives views; do not flatten models to 3NF.
   // AI : StructureModel = CREATE TABLE (or VIEW). Nested list[model] is either a child table
@@ -140,6 +144,8 @@ export interface TypeAlias {
   shared?: boolean; // AI : injected into every project — not persisted per project
   locked?: boolean; // AI : read-only in Structure UI
   // AI : parametric alias — Pair[A,B] via Generic name+args → substitute into expr.
+  // AI : TODO (generics) — alias editor / add-alias / typeAliasSpecSchema have no params field; paste Pair[int,str]
+  // AI :   instantiates, it does not declare type Pair[A, B] = ….
   params?: string[];
 }
 

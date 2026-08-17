@@ -115,6 +115,7 @@ export function StructureFieldTypeEditor({
       const aliasId = next.slice(ALIAS_PREFIX.length)
       const alias = typeAliases.find((t) => t.id === aliasId)
       if (!alias) return
+      // AI : TODO (generics) — parametric alias → Generic name+UNSET args, not a bare Named.
       onUpdate({
         type: FieldType.Json,
         typeExpr: { kind: "named", name: alias.name },

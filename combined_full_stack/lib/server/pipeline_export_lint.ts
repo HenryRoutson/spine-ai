@@ -76,8 +76,7 @@ export function stepAtExportLine(
   return { stepId: hit.step.id, stepLabel: hit.step.label };
 }
 
-const TSC_LINE =
-  /^(?<file>.+)\((?<line>\d+),(?<column>\d+)\):\s+(?<severity>error|warning)\s+(?<code>TS\d+):\s+(?<message>.*)$/;
+const TSC_LINE = /^(.+)\((\d+),(\d+)\):\s+(error|warning)\s+(TS\d+):\s+(.*)$/;
 
 export function parseTscDiagnostics(output: string, source: string, project: Project): ExportDiagnostic[] {
   const spans = stepSpansFromExportTs(source, project);
@@ -86,16 +85,16 @@ export function parseTscDiagnostics(output: string, source: string, project: Pro
   for (const raw of output.split("\n")) {
     const line = raw.trimEnd();
     const m = line.match(TSC_LINE);
-    if (m?.groups) {
+    if (m) {
       if (pending) items.push(pending);
-      const loc = stepAtExportLine(spans, Number(m.groups.line));
+      const loc = stepAtExportLine(spans, Number(m[2]));
       pending = {
-        severity: m.groups.severity as lint_severity,
-        code: m.groups.code!,
-        message: m.groups.message!,
-        file: m.groups.file!.replace(/\\/g, "/").split("/").pop() ?? m.groups.file!,
-        line: Number(m.groups.line),
-        column: Number(m.groups.column),
+        severity: m[4] as lint_severity,
+        code: m[5]!,
+        message: m[6]!,
+        file: m[1]!.replace(/\\/g, "/").split("/").pop() ?? m[1]!,
+        line: Number(m[2]),
+        column: Number(m[3]),
         stepId: loc?.stepId,
         stepLabel: loc?.stepLabel,
       };

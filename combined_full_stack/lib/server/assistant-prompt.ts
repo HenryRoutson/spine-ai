@@ -78,6 +78,7 @@ export function buildModelOptionsPromptBlock(): string {
 
 export function buildTypeAliasesRulesPromptBlock(): string {
   // AI : ChatbotPrompt / ChatbotResult listed in built-in structures below.
+  // AI : TODO (generics) — prompt has no params: ["A","B"] for Pair[A,B]. Instantiation is Pair[Summary, Entities], not a new alias.
   return `Reusable type aliases (typeAliases array):
 - Built-in types (always available — do NOT redefine in typeAliases): quote_string_t (LLM verbatim quote string), quote_span_t (linked QuoteSpan struct), text_quote_t (text + quote string pair). Prefer these over typeExpr tuple[text, quote].
 - Built-in structures (always available): Document (upload I/O), QuoteSpan (doc_id, start, end — linked span after Link Quotes), ChatbotPrompt (prompt text for Chatbot steps), ChatbotTurn, ChatbotResult (prompt + transcript + exit_reason).
@@ -91,6 +92,7 @@ export function buildTypeAliasesRulesPromptBlock(): string {
 }
 
 export function buildStructureRulesPromptBlock(): string {
+  // AI : TODO (generics) — no params on structure models; TreeNode[T] cannot be proposed. Wire via structureModelSpecSchema.
   return `Structure rules:
 - Structures are pydantic models: name, description (docstring), and typed fields.
 - Use "text" for strings (not "str"). Use "tuple[text,quote]" when extracted text must link back to a source span; quote offsets are resolved downstream — never ask for doc_id/start/end in the schema.

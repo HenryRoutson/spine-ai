@@ -1,5 +1,6 @@
 // AI : SQL DDL annotation — client-safe string building only (like lib/pydantic.ts).
 // AI :   No better-sqlite3 / sql.js / postgres in this slice. Runtime values stay JSON maps.
+// AI : TODO (generics) — parametric structs / trees stay JSON columns until someone needs adjacency-list SQL. Do not invent a GENERIC TABLE.
 // AI :
 // AI : =============================================================================
 // AI : PROBLEM

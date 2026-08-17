@@ -1,5 +1,5 @@
 import { ModuleKind, type PipelineModule, type StructureModel } from "@/lib/types"
-import { fieldToTypeExpr, type TypeExpr } from "@/lib/server/type_expr"
+import { fieldToTypeExpr, typeExprRefModelId, type TypeExpr } from "@/lib/server/type_expr"
 import { examplePromptColumns, projectExampleForPrompt } from "@/lib/sql-schema"
 
 export { examplePromptColumns, projectExampleForPrompt }
@@ -45,14 +45,14 @@ export function exampleSelectAcceptsWrapper(
   actual: TypeExpr,
   models: StructureModel[],
 ): boolean {
-  if (expected.kind !== "list" || expected.item.kind !== "ref") return false
-  if (actual.kind !== "ref") return false
+  if (expected.kind !== "list" || actual.kind !== "ref") return false
+  const itemId = typeExprRefModelId(expected)
+  if (!itemId) return false
   const model = models.find((x) => x.id === actual.modelId)
   if (!model) return false
-  const itemId = expected.item.modelId
   const matches = model.fields.filter((f) => {
     const expr = fieldToTypeExpr(f)
-    return expr.kind === "list" && expr.item.kind === "ref" && expr.item.modelId === itemId
+    return expr.kind === "list" && typeExprRefModelId(expr) === itemId
   })
   return matches.length === 1
 }

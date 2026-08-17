@@ -141,6 +141,7 @@ export function importSeedFromSession(file: string, sessionPath?: string) {
 }
 
 export function addModelFromSession(name: string, sessionPath?: string) {
+  // AI : TODO (generics) — pass params through to addNamedModel. No new MCP tool — extend this + add-alias.
   const session = openMcpSession(sessionPath, true)
   const model = addNamedModel(session, name)
   return { id: model.id, name: model.name }
@@ -167,6 +168,7 @@ export function removeFieldFromSession(model: string, name: string, sessionPath?
 }
 
 export function addAliasFromSession(name: string, expr: string, sessionPath?: string) {
+  // AI : TODO (generics) — session_action structure.add-alias has name+expr only; add params so Pair[A,B] can be declared.
   const session = openMcpSession(sessionPath, true)
   const alias = addTypeAlias(session, name, expr)
   return { id: alias.id, name: alias.name }

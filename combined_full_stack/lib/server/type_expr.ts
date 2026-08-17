@@ -68,6 +68,8 @@ export type TypeExpr =
   | { kind: typeof TypeExprKind.Map; key: TypeExpr; value: TypeExpr }
   | { kind: typeof TypeExprKind.Union; variants: TypeExpr[] }
   | { kind: typeof TypeExprKind.Generic; name: string; args: TypeExpr[] }
+  // AI : TODO (generics) — Generic is instantiation (Pair[A,B], tuple[…]) or expanded __struct_Name.
+  // AI :   Parametric *definitions* live on TypeAlias.params / StructureModel.params, not this variant.
   | { kind: typeof TypeExprKind.Named; name: string }
   | { kind: typeof TypeExprKind.Unset }
   | { kind: typeof TypeExprKind.Unknown };

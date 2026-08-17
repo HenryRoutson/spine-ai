@@ -109,6 +109,7 @@ function KindPicker({
               </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuGroup>
+              {/* AI : TODO (generics) — parametric alias should pick Generic name+args, not a bare Named. */}
               {typeAliases.map((t) => (
                 <DropdownMenuItem
                   key={t.id}
@@ -130,6 +131,7 @@ function KindPicker({
               </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuGroup>
+              {/* AI : TODO (generics) — picking TreeNode must fill type args (UNSET slots), not a bare Ref. */}
               {models.map((m) => (
                 <DropdownMenuItem
                   key={m.id}
@@ -248,6 +250,7 @@ function TypeExprNode({
   const containerLabel = kindLabel(node, models)
   const isUnion = node.kind === "union"
   const isTuple = node.kind === "generic" && node.name === "tuple"
+  // AI : TODO (generics) — add/remove-arg only for tuple. Pair[A,B] / TreeNode[T] cannot be built from the picker.
   const children = childPaths(node, [])
 
   return (

@@ -18,6 +18,7 @@ import { validateTestAgainstProject } from "@/lib/cli/validate_test"
 import type { CliCommandResult, CliIssue } from "@/lib/cli/types"
 
 export function addNamedModel(session: SpineSession, name: string): StructureModel {
+  // AI : TODO (generics) — optional params?: string[] so CLI/MCP/TUI can create TreeNode[T] without JSON seeds.
   const trimmed = name.trim()
   if (!trimmed) throw new Error("model name is empty")
   const model: StructureModel = {
@@ -162,6 +163,7 @@ export function addModelField(
   type: FieldType,
   opts?: { optional?: boolean; description?: string; deterministic?: boolean },
 ): void {
+  // AI : TODO (generics) — --type is FieldType enum only. Need typeExpr / generic_param T, not just presets.
   const models = (session.project?.models ?? []).map((m) => {
     if (m.name !== modelName && m.id !== modelName) return m
     return {
@@ -192,6 +194,7 @@ export function removeModelField(session: SpineSession, modelName: string, field
 }
 
 export function addTypeAlias(session: SpineSession, name: string, expr: string): TypeAlias {
+  // AI : TODO (generics) — --params A,B to set TypeAlias.params. Parser can produce Generic; it never declares params.
   const parsed = tryParseTypeExprString(expr, session.models)
   if (!parsed.ok) throw new Error(parsed.error)
   const alias: TypeAlias = {

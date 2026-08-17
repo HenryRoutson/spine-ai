@@ -42,6 +42,7 @@ export const TYPE_KIND_OPTIONS: { id: TypeKindPick; label: string; hint?: string
   { id: TypeKindPick.Optional, label: "Optional[…]", hint: "May be absent" },
   { id: TypeKindPick.Tuple, label: "tuple[…]", hint: "Fixed-length product" },
   { id: TypeKindPick.Union, label: "A | B", hint: "One of several types" },
+  // AI : TODO (generics) — picker has containers only. Named Generic (Pair[…]) is paste-or-parse, not a KindPick.
   { id: TypeKindPick.Str, label: "str" },
   { id: TypeKindPick.Int, label: "int" },
   { id: TypeKindPick.Float, label: "float" },
@@ -108,6 +109,7 @@ export function exprFromKindPick(
       return { kind: TypeExprKind.Named, name: "quote_id_t" }
     case TypeKindPick.Model: {
       const id = modelId ?? (models[0]?.id as StructureModelId | undefined)
+      // AI : TODO (generics) — parametric model → Ref with UNSET args matching model.params, not a bare Ref.
       return id ? { kind: TypeExprKind.Ref, modelId: id } : UNSET_TYPE_EXPR
     }
   }

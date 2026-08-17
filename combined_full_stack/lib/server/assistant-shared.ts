@@ -27,12 +27,14 @@ export const typeAliasSpecSchema = z.object({
   name: z.string(),
   description: z.string().default(""),
   expr: z.string(),
+  // AI : TODO (generics) — add params: z.array(z.string()) so vibe/MCP can emit type Pair[A, B] = ….
 });
 
 export const structureModelSpecSchema = z.object({
   name: z.string(),
   description: z.string().default(""),
   fields: z.array(modelFieldSpecSchema),
+  // AI : TODO (generics) — add params so assistant can declare TreeNode[T]; materializeStructureModels drops them today.
 });
 
 export type StructureAssistantModelSpec = z.infer<typeof structureModelSpecSchema>;
@@ -114,6 +116,7 @@ export function materializeTypeAliases(
       name: spec.name,
       description: spec.description,
       expr: parsed.ok ? parsed.expr : { kind: "named", name: spec.expr.trim() || "Any" },
+      // AI : TODO (generics) — copy spec.params (and keep prev.params) once typeAliasSpecSchema has params.
     };
   });
 }
@@ -222,6 +225,7 @@ export function materializeStructureModels(
       auto: prev?.auto,
       locked: prev?.locked,
       sourceDocId: prev?.sourceDocId,
+      // AI : TODO (generics) — preserve prev.params / spec.params once structureModelSpecSchema has params.
     };
   }).concat(
     existing.filter(

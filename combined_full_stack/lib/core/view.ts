@@ -408,6 +408,7 @@ export function toStructureView(snap: SessionSnapshot): StructureView {
       name: m.name,
       fields: m.fields.map((f) => `${f.name}:${f.type}${f.optional ? "?" : ""}`),
     })),
+    // AI : TODO (generics) — print Report[T] when params set; aliases should include [A, B] not just name=expr.
     aliases: (project?.typeAliases ?? []).map((a) => `${a.name}=${formatTypeExprPy(a.expr, project?.models ?? [])}`),
   }
 }

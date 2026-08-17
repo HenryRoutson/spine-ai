@@ -46,7 +46,7 @@ export async function execInputStep(m: PipelineModule, ctx: RunCtx, log: RunLogg
       docId,
     };
   }
-  const items = [];
+  const items: unknown[] = [];
   const inputPreviewItems: { label: string; text: string }[] = [];
   for (let i = 0; i < docIds.length; i++) {
     const docId = docIds[i]!;

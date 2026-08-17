@@ -56,6 +56,7 @@ const SeedFileSchema = z.object({
       description: z.string(),
       auto: z.boolean().optional(),
       dynamic: z.boolean().optional(),
+      // AI : TODO (generics) — seeds persist params; no typeAliases.params in this schema if aliases are added later.
       params: z.array(z.string()).optional(),
       fields: z.array(
         z.object({

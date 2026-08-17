@@ -104,6 +104,7 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[oklch(0.16_0.004_264)]">
       {/* AI : model title row — spreadsheet header band */}
+      {/* AI : TODO (generics) — params chips on this header (TreeNode[T]). Phase 3 of docs/new_type_system_plan.md. */}
       <div className="shrink-0 border-b border-border bg-secondary/30 px-4 py-3">
         {selectedLocked && lockMessage && (
           <div

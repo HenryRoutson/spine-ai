@@ -336,6 +336,7 @@ const structureModelPatchSchema = z
     id: z.string().max(128),
     name: z.string().max(200),
     description: z.string().max(4_000).optional(),
+    // AI : TODO (generics) — PUT already accepts model.params. Assistant typeAliasSpec / structureModelSpec do not emit them.
     params: z.array(z.string().max(64)).max(16).optional(),
     fields: z.array(structureFieldPatchSchema).max(200).optional(),
     auto: z.boolean().optional(),
@@ -413,6 +414,7 @@ export const projectPatchSchema = z
     name: z.string().max(200).optional(),
     kind: z.string().max(64).optional(),
     models: z.array(structureModelPatchSchema).max(200).optional(),
+    // AI : TODO (generics) — typeAliases are loose JSON so params round-trip if present; GUI/assistant never write them.
     typeAliases: z.array(jsonSizeBounded(10_000)).max(100).optional(),
     modules: z.array(pipelineModulePatchSchema).max(200).optional(),
     strategies: z.array(strategyPatchSchema).max(50).optional(),

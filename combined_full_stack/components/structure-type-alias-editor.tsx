@@ -1,5 +1,6 @@
 "use client"
 // AI : parity ids — structure.add-alias
+// AI : TODO (generics) — no params: ["A","B"] chips. Paste Pair[int, str] instantiates; it does not declare Pair[A, B].
 
 import { Trash2 } from "lucide-react"
 import { TypeExprEditor } from "@/components/type-expr-editor"
