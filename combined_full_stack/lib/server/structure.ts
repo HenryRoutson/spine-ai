@@ -419,7 +419,7 @@ export function validateStepOutput(
   value: unknown,
   model: StructureModel,
   models: StructureModel[],
-  opts: { isList?: boolean; rawQuotes?: boolean; typeAliases?: TypeAlias[] } = {},
+  opts: { isList?: boolean; rawQuotes?: boolean; typeAliases?: TypeAlias[]; coerceList?: boolean } = {},
 ): ValidationResult {
   const isList = opts.isList ?? false;
   const typeAliases = opts.typeAliases ?? [];
@@ -427,7 +427,8 @@ export function validateStepOutput(
     ? llmSchema(model, models, false, typeAliases)
     : zodFromModel(model, models, typeAliases);
   if (isList) {
-    const parsed = z.array(itemSchema).safeParse(coerceLlmListOutput(value));
+    const listValue = opts.coerceList === false ? value : coerceLlmListOutput(value);
+    const parsed = z.array(itemSchema).safeParse(listValue);
     return parsed.success
       ? { ok: true, value: parsed.data }
       : { ok: false, error: formatZodError(parsed.error) };

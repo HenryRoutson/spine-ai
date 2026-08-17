@@ -66,6 +66,8 @@ function validateJsonInputSpine(
   const check = validateStepOutput(parsed, model, structs.models, {
     isList,
     typeAliases: structs.typeAliases ?? [],
+    // AI : file JSON must match list[T] vs T exactly — LLM list coerce unwraps {jobs:[]} wrappers.
+    coerceList: false,
   })
   if (check.ok) return undefined
   return {

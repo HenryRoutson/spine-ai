@@ -23,10 +23,6 @@ function jsonContentByName(ctx: ProjectContext): Record<string, string> {
   return out
 }
 
-function toCliIssues(issues: SetupFileIssue[]): CliIssue[] {
-  return issues.map((i) => ({ level: i.level, where: i.where, message: i.message }))
-}
-
 export function validateSetupCommand(ctx: ProjectContext, setupPath: string): CliCommandResult {
   const abs = resolve(setupPath)
   const parsed = parseInferenceSetupFile(readTextFile(abs))
