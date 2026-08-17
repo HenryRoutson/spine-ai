@@ -78,12 +78,12 @@ export function buildModelOptionsPromptBlock(): string {
 
 export function buildTypeAliasesRulesPromptBlock(): string {
   // AI : ChatbotPrompt / ChatbotResult listed in built-in structures below.
-  // AI : TODO (generics) — prompt has no params: ["A","B"] for Pair[A,B]. Instantiation is Pair[Summary, Entities], not a new alias.
   return `Reusable type aliases (typeAliases array):
 - Built-in types (always available — do NOT redefine in typeAliases): quote_string_t (LLM verbatim quote string), quote_span_t (linked QuoteSpan struct), text_quote_t (text + quote string pair). Prefer these over typeExpr tuple[text, quote].
 - Built-in structures (always available): Document (upload I/O), QuoteSpan (doc_id, start, end — linked span after Link Quotes), ChatbotPrompt (prompt text for Chatbot steps), ChatbotTurn, ChatbotResult (prompt + transcript + exit_reason).
 - Define standalone Python-style types when a field shape is reused or nested: list[list[int]], dict[str, str], Optional[T], tuple[Section, Meta].
-- Each alias: name, description, expr (Python type string — same syntax as the Structure → Types editor).
+- Parametric aliases: set params to ["A","B"] and use those names in expr (e.g. name Pair, params ["A","B"], expr tuple[A, B]). Instantiation is Pair[Summary, Entities] on a field typeExpr — do not clone a new alias per instantiation.
+- Each alias: name, description, expr (Python type string — same syntax as the Structure → Types editor), optional params.
 - Reference an alias from a struct field by using the alias name as the field type (e.g. type: "quote_id_t").
 - Or set field typeExpr to a Python string for one-off expressions.
 - Quote-friendly presets stay on fields: tuple[text,quote], list[tuple[text,quote]] — equivalent to text_quote_t / list[text_quote_t]; set field type to those presets; do NOT use typeExpr generic tuple[text, quote].
@@ -92,9 +92,10 @@ export function buildTypeAliasesRulesPromptBlock(): string {
 }
 
 export function buildStructureRulesPromptBlock(): string {
-  // AI : TODO (generics) — no params on structure models; TreeNode[T] cannot be proposed. Wire via structureModelSpecSchema.
   return `Structure rules:
-- Structures are pydantic models: name, description (docstring), and typed fields.
+- Structures are pydantic models: name, description (docstring), optional params (e.g. ["T"] for TreeNode[T]), and typed fields.
+- A type parameter in a field is typeExpr named T (or type: "T") — it substitutes when the structure's params bind T.
+- Instantiation: field typeExpr "TreeNode[Section]" or ref TreeNode with type args — do not clone TreeNode per payload type.
 - Use "text" for strings (not "str"). Use "tuple[text,quote]" when extracted text must link back to a source span; quote offsets are resolved downstream — never ask for doc_id/start/end in the schema.
 - Use "model" / "list[model]" with ref set to another structure's exact name when nesting.
 - Use "document" for the shared Document structure ({ content, filename }).
@@ -738,6 +739,7 @@ export function buildProjectContextBlock(
     withBuiltinTypeAliases(project.typeAliases ?? []).map((t) => ({
       name: t.name,
       description: t.description,
+      params: t.params,
       expr: formatTypeExprPy(t.expr, project.models),
     })),
     null,
@@ -748,6 +750,7 @@ export function buildProjectContextBlock(
       id: m.id,
       name: m.name,
       description: m.description,
+      params: m.params,
       fields: m.fields.map((f) => ({
         name: f.name,
         type: f.type,

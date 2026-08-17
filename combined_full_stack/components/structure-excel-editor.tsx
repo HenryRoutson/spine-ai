@@ -18,6 +18,7 @@ import {
   formatFieldExamplesSummary,
 } from "@/components/field-examples-editor-dialog"
 import { StructureFieldTypeEditor } from "@/components/structure-field-type-editor"
+import { TypeParamsField } from "@/components/type-params-field"
 import { StructureSourceDocLink } from "@/components/structure-source-doc-link"
 import { fieldTypeLabel } from "@/lib/structure-field-labels"
 import { fieldIsMapType, fieldIsSetType, fieldToTypeExpr, fieldUsesItemCardinality } from "@/lib/server/type_expr"
@@ -104,7 +105,6 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[oklch(0.16_0.004_264)]">
       {/* AI : model title row — spreadsheet header band */}
-      {/* AI : TODO (generics) — params chips on this header (TreeNode[T]). Phase 3 of docs/new_type_system_plan.md. */}
       <div className="shrink-0 border-b border-border bg-secondary/30 px-4 py-3">
         {selectedLocked && lockMessage && (
           <div
@@ -160,6 +160,12 @@ export function StructureExcelEditor({ selectedId, onSelectId }: StructureExcelE
               onFocus={selectedLocked ? notifyLocked : undefined}
               placeholder="What does this structure represent?"
               className="w-full border-0 bg-transparent text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/70 read-only:cursor-not-allowed"
+            />
+            <TypeParamsField
+              params={selected.params}
+              locked={selectedLocked}
+              onLockedInteract={notifyLocked}
+              onChange={(params) => updateModel({ ...selected, params })}
             />
           </div>
           {models.length > 1 && !selectedLocked && (

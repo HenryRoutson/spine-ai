@@ -10,10 +10,17 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { StructureFieldRefPicker } from "@/components/structure-field-ref-picker"
+import { TypeExprEditor } from "@/components/type-expr-editor"
 import { FIELD_TYPES, FieldType, type ModelField, type StructureModel } from "@/lib/types"
 import { fieldTypeLabel } from "@/lib/structure-field-labels"
 import { pickDefaultModelRef } from "@/lib/structure-ref"
 import { legacyFieldFromTypeExpr, formatTypeExprPy } from "@/lib/type-expr-parse"
+import {
+  formatParametricName,
+  instantiateAliasType,
+  instantiateModelType,
+  typeExprNeedsArgEditor,
+} from "@/lib/type-params"
 import { fieldToTypeExpr, typeExprEqual, typeExprRefModelId } from "@/lib/server/type_expr"
 import { useStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
@@ -21,6 +28,7 @@ import { cn } from "@/lib/utils"
 const REF_TYPES: FieldType[] = [FieldType.Model, FieldType.ListModel]
 const PRESET_TYPES = FIELD_TYPES.filter((t) => !REF_TYPES.includes(t))
 const ALIAS_PREFIX = "alias:"
+const PARAM_PREFIX = "param:"
 
 function isRefField(field: ModelField): boolean {
   if (REF_TYPES.includes(field.type) && !field.typeExpr) return true
@@ -48,13 +56,19 @@ function resolveSelectValueWithAliases(
   field: ModelField,
   models: StructureModel[],
   typeAliases: { id: string; name: string; expr: import("@/lib/server/type_expr").TypeExpr }[],
+  hostParams: string[] = [],
 ): { value: string; orphanLabel?: string } {
   const expr = field.typeExpr
   if (expr) {
     if (expr.kind === "named") {
+      if (hostParams.includes(expr.name)) return { value: `${PARAM_PREFIX}${expr.name}` }
       const alias = typeAliases.find((t) => t.name === expr.name)
       if (alias) return { value: `${ALIAS_PREFIX}${alias.id}` }
       return { value: "__orphan__", orphanLabel: expr.name }
+    }
+    if (expr.kind === "generic") {
+      const alias = typeAliases.find((t) => t.name === expr.name)
+      if (alias) return { value: `${ALIAS_PREFIX}${alias.id}` }
     }
     const legacy = legacyFieldFromTypeExpr(expr)
     if (legacy?.type === "model" || legacy?.type === "list[model]") return { value: legacy.type }
@@ -72,13 +86,14 @@ function resolveSelectValueWithAliases(
 
 function resolveSelectDisplayLabel(
   selectValue: string,
-  typeAliases: { id: string; name: string }[],
+  typeAliases: { id: string; name: string; params?: string[] }[],
   orphanLabel?: string,
 ): string {
   if (selectValue.startsWith(ALIAS_PREFIX)) {
     const alias = typeAliases.find((t) => t.id === selectValue.slice(ALIAS_PREFIX.length))
-    return alias?.name ?? selectValue
+    return alias ? formatParametricName(alias.name, alias.params) : selectValue
   }
+  if (selectValue.startsWith(PARAM_PREFIX)) return selectValue.slice(PARAM_PREFIX.length)
   if (selectValue === "__orphan__") {
     return orphanLabel ? `${orphanLabel} (pick a type)` : "Unknown type"
   }
@@ -104,32 +119,58 @@ export function StructureFieldTypeEditor({
   onUpdate: (patch: Partial<ModelField>) => void
 }) {
   const { typeAliases } = useStore()
-  const { value: selectValue, orphanLabel } = resolveSelectValueWithAliases(field, models, typeAliases)
+  const hostModel = models.find((m) => m.id === selectedId)
+  const hostParams = hostModel?.params ?? []
+  const { value: selectValue, orphanLabel } = resolveSelectValueWithAliases(
+    field,
+    models,
+    typeAliases,
+    hostParams,
+  )
   const selectDisplayLabel = resolveSelectDisplayLabel(selectValue, typeAliases, orphanLabel)
   const showRefPicker = isRefField(field)
+  const argExpr = field.typeExpr
+
+  function applyModelRef(next: FieldType, ref: StructureModel["id"] | undefined) {
+    const model = models.find((m) => m.id === ref)
+    if (model?.params?.length) {
+      const inner = instantiateModelType(model)
+      onUpdate({
+        type: FieldType.Json,
+        ref: undefined,
+        typeExpr: next === FieldType.ListModel ? { kind: "list", item: inner } : inner,
+      })
+      return
+    }
+    onUpdate({ type: next, ref, typeExpr: undefined })
+  }
 
   function selectType(next: string | null) {
     if (!next || next === "__orphan__") return
+
+    if (next.startsWith(PARAM_PREFIX)) {
+      onUpdate({
+        type: FieldType.Json,
+        typeExpr: { kind: "named", name: next.slice(PARAM_PREFIX.length) },
+        ref: undefined,
+      })
+      return
+    }
 
     if (next.startsWith(ALIAS_PREFIX)) {
       const aliasId = next.slice(ALIAS_PREFIX.length)
       const alias = typeAliases.find((t) => t.id === aliasId)
       if (!alias) return
-      // AI : TODO (generics) — parametric alias → Generic name+UNSET args, not a bare Named.
       onUpdate({
         type: FieldType.Json,
-        typeExpr: { kind: "named", name: alias.name },
+        typeExpr: instantiateAliasType(alias),
         ref: undefined,
       })
       return
     }
 
     if (next === FieldType.Model || next === FieldType.ListModel) {
-      onUpdate({
-        type: next as FieldType,
-        typeExpr: undefined,
-        ref: pickDefaultModelRef(models, selectedId),
-      })
+      applyModelRef(next, pickDefaultModelRef(models, selectedId))
       return
     }
 
@@ -168,6 +209,18 @@ export function StructureFieldTypeEditor({
               List of records…
             </SelectItem>
           </SelectGroup>
+          {hostParams.length > 0 && (
+            <SelectGroup>
+              <SelectLabel className="font-mono text-[10px] uppercase tracking-wider">
+                Params
+              </SelectLabel>
+              {hostParams.map((p) => (
+                <SelectItem key={p} value={`${PARAM_PREFIX}${p}`} className="font-mono text-xs">
+                  {p}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          )}
           {typeAliases.length > 0 && (
             <SelectGroup>
               <SelectLabel className="font-mono text-[10px] uppercase tracking-wider">
@@ -175,7 +228,7 @@ export function StructureFieldTypeEditor({
               </SelectLabel>
               {typeAliases.map((t) => (
                 <SelectItem key={t.id} value={`${ALIAS_PREFIX}${t.id}`} className="font-mono text-xs">
-                  {t.name}
+                  {formatParametricName(t.name, t.params)}
                 </SelectItem>
               ))}
             </SelectGroup>
@@ -198,14 +251,19 @@ export function StructureFieldTypeEditor({
           selectedId={selectedId}
           locked={locked}
           compact
-          onRefChange={(ref) =>
-            onUpdate({
-              type: refFieldType(field),
-              ref,
-              typeExpr: undefined,
-            })
-          }
+          onRefChange={(ref) => applyModelRef(refFieldType(field), ref)}
         />
+      )}
+
+      {argExpr && typeExprNeedsArgEditor(argExpr) && (
+        <div className={cn(locked && "pointer-events-none opacity-70")}>
+          <TypeExprEditor
+            expr={argExpr}
+            models={models}
+            typeAliases={typeAliases}
+            onChange={(expr) => onUpdate({ type: FieldType.Json, typeExpr: expr, ref: undefined })}
+          />
+        </div>
       )}
 
       {typeAliases.length === 0 && (

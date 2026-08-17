@@ -171,9 +171,9 @@ export function formatTypeExprPy(expr: TypeExpr, models: StructureModel[] = []):
     case TypeExprKind.List:
       return `list[${formatTypeExprPy(expr.item, models)}]`
     case TypeExprKind.Ref: {
-      const name = models.find((m) => m.id === expr.modelId)?.name
-      // AI : TODO (generics) — drop args vs formatTypeExpr: Report not Report[Summary]. Types preview / TUI aliases lie.
-      return name ?? String(expr.modelId)
+      const name = models.find((m) => m.id === expr.modelId)?.name ?? String(expr.modelId)
+      if (!expr.args?.length) return name
+      return `${name}[${expr.args.map((a) => formatTypeExprPy(a, models)).join(", ")}]`
     }
     case TypeExprKind.Optional:
       return `Optional[${formatTypeExprPy(expr.inner, models)}]`

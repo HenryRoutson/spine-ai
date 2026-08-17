@@ -5,6 +5,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { FieldType, FIELD_TYPES, ModuleKind } from "@/lib/types"
 import type { ModelId, PipelineModule, StructureModel, StructureModelId, TypeAlias, TypeAliasId } from "@/lib/types"
+import type { TypeExpr } from "@/lib/server/type_expr"
 import type { SpineSession } from "@/lib/core/session"
 import { uid } from "@/lib/id"
 import { makeModule } from "@/lib/pipeline-module-factory"
@@ -13,18 +14,19 @@ import { loadProjectContext } from "@/lib/cli/project_context"
 import { SEEDS_DIR, type SeedDocSpec } from "@/lib/server/seed"
 import { allModelsToPydantic } from "@/lib/server/pydantic"
 import { tryParseTypeExprString } from "@/lib/type-expr-parse"
+import { normalizeTypeParams } from "@/lib/type-params"
 import { isTestingFileName } from "@/lib/testing-files"
 import { validateTestAgainstProject } from "@/lib/cli/validate_test"
 import type { CliCommandResult, CliIssue } from "@/lib/cli/types"
 
-export function addNamedModel(session: SpineSession, name: string): StructureModel {
-  // AI : TODO (generics) — optional params?: string[] so CLI/MCP/TUI can create TreeNode[T] without JSON seeds.
+export function addNamedModel(session: SpineSession, name: string, params?: string | string[]): StructureModel {
   const trimmed = name.trim()
   if (!trimmed) throw new Error("model name is empty")
   const model: StructureModel = {
     id: uid<StructureModelId>("m_"),
     name: trimmed,
     description: "",
+    params: normalizeTypeParams(params),
     fields: [
       {
         id: uid("f_"),
@@ -156,14 +158,29 @@ export function parseFieldType(raw: string): FieldType | undefined {
   return FIELD_TYPES.find((t) => t === raw)
 }
 
+export function fieldFromTypeRaw(
+  raw: string,
+  models: StructureModel[],
+): { type: FieldType; typeExpr?: TypeExpr; ref?: StructureModelId } {
+  const preset = parseFieldType(raw)
+  if (preset) return { type: preset }
+  const parsed = tryParseTypeExprString(raw, models)
+  if (parsed.ok) return { type: FieldType.Json, typeExpr: parsed.expr }
+  const name = raw.trim()
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    return { type: FieldType.Json, typeExpr: { kind: "named", name } }
+  }
+  throw new Error(`unknown field type: ${raw}`)
+}
+
 export function addModelField(
   session: SpineSession,
   modelName: string,
   fieldName: string,
-  type: FieldType,
+  typeRaw: string,
   opts?: { optional?: boolean; description?: string; deterministic?: boolean },
 ): void {
-  // AI : TODO (generics) — --type is FieldType enum only. Need typeExpr / generic_param T, not just presets.
+  const resolved = fieldFromTypeRaw(typeRaw, session.models)
   const models = (session.project?.models ?? []).map((m) => {
     if (m.name !== modelName && m.id !== modelName) return m
     return {
@@ -173,7 +190,9 @@ export function addModelField(
         {
           id: uid("f_"),
           name: fieldName,
-          type,
+          type: resolved.type,
+          typeExpr: resolved.typeExpr,
+          ref: resolved.ref,
           optional: opts?.optional ?? false,
           description: opts?.description ?? "",
           deterministic: opts?.deterministic,
@@ -193,8 +212,7 @@ export function removeModelField(session: SpineSession, modelName: string, field
   session.applyProjectChanges({ models })
 }
 
-export function addTypeAlias(session: SpineSession, name: string, expr: string): TypeAlias {
-  // AI : TODO (generics) — --params A,B to set TypeAlias.params. Parser can produce Generic; it never declares params.
+export function addTypeAlias(session: SpineSession, name: string, expr: string, params?: string | string[]): TypeAlias {
   const parsed = tryParseTypeExprString(expr, session.models)
   if (!parsed.ok) throw new Error(parsed.error)
   const alias: TypeAlias = {
@@ -202,6 +220,7 @@ export function addTypeAlias(session: SpineSession, name: string, expr: string):
     name,
     description: "",
     expr: parsed.expr,
+    params: normalizeTypeParams(params),
   }
   session.setTypeAliases([...(session.project?.typeAliases ?? []), alias])
   return alias

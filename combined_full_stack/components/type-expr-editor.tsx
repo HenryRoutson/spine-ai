@@ -26,6 +26,7 @@ import {
   type TypePath,
 } from "@/lib/type-expr-edit"
 import { formatTypeExprPy } from "@/lib/type-expr-parse"
+import { formatParametricName, instantiateAliasType, instantiateModelType } from "@/lib/type-params"
 import { TypeExprHighlight } from "@/components/type-expr-preview"
 import type { TypeExpr } from "@/lib/server/type_expr"
 import { PrimName, TypeExprKind, UNSET_TYPE_EXPR } from "@/lib/server/type_expr"
@@ -109,14 +110,13 @@ function KindPicker({
               </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuGroup>
-              {/* AI : TODO (generics) — parametric alias should pick Generic name+args, not a bare Named. */}
               {typeAliases.map((t) => (
                 <DropdownMenuItem
                   key={t.id}
                   className="font-mono text-xs"
                   onClick={() => onPick("named", undefined, t.name)}
                 >
-                  {t.name}
+                  {formatParametricName(t.name, t.params)}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>
@@ -131,14 +131,13 @@ function KindPicker({
               </DropdownMenuLabel>
             </DropdownMenuGroup>
             <DropdownMenuGroup>
-              {/* AI : TODO (generics) — picking TreeNode must fill type args (UNSET slots), not a bare Ref. */}
               {models.map((m) => (
                 <DropdownMenuItem
                   key={m.id}
                   className="font-mono text-xs"
                   onClick={() => onPick("model", m.id as StructureModelId)}
                 >
-                  {m.name}
+                  {formatParametricName(m.name, m.params)}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuGroup>
@@ -168,8 +167,12 @@ function TypeExprNode({
 
   const replace = (next: TypeExpr) => onChange(setAtPath(expr, path, next))
   const pickType = (pick: TypeKindPick, modelId?: StructureModelId, aliasName?: string) => {
-    if (aliasName) replace({ kind: "named", name: aliasName })
-    else replace(exprFromKindPick(pick, models, modelId))
+    if (aliasName) {
+      const alias = typeAliases?.find((t) => t.name === aliasName)
+      replace(alias ? instantiateAliasType(alias) : { kind: "named", name: aliasName })
+      return
+    }
+    replace(exprFromKindPick(pick, models, modelId))
   }
 
   if (node.kind === "unset") {
@@ -206,27 +209,54 @@ function TypeExprNode({
   }
 
   if (node.kind === "ref") {
+    const paramNames = models.find((m) => m.id === node.modelId)?.params
+    const argChildren = childPaths(node, [], paramNames)
     return (
-      <div className="inline-flex items-center gap-1">
-        <select
-          value={node.modelId}
-          onChange={(e) => replace({ kind: "ref", modelId: e.target.value as StructureModelId })}
-          className="h-7 rounded-md border border-border bg-background px-2 font-mono text-[11px]"
-        >
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.name}
-            </option>
-          ))}
-        </select>
-        <KindPicker
-          models={models}
-          typeAliases={typeAliases}
-          onPick={pickType}
-          className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-7 px-2 font-mono text-[10px]")}
-        >
-          change
-        </KindPicker>
+      <div className="inline-flex flex-col gap-1.5">
+        <div className="inline-flex items-center gap-1">
+          <select
+            value={node.modelId}
+            onChange={(e) => {
+              const id = e.target.value as StructureModelId
+              const model = models.find((m) => m.id === id)
+              replace(model ? instantiateModelType(model) : { kind: "ref", modelId: id })
+            }}
+            className="h-7 rounded-md border border-border bg-background px-2 font-mono text-[11px]"
+          >
+            {models.map((m) => (
+              <option key={m.id} value={m.id}>
+                {formatParametricName(m.name, m.params)}
+              </option>
+            ))}
+          </select>
+          <KindPicker
+            models={models}
+            typeAliases={typeAliases}
+            onPick={pickType}
+            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-7 px-2 font-mono text-[10px]")}
+          >
+            change
+          </KindPicker>
+        </div>
+        {argChildren.length > 0 && (
+          <div className="flex flex-col gap-2 border-l border-border/60 pl-2">
+            {argChildren.map(({ label, path: childRel }) => (
+              <div key={childRel.join(".")} className="flex flex-wrap items-start gap-2">
+                <span className="mt-1 shrink-0 font-mono text-[9px] uppercase text-muted-foreground">
+                  {label}
+                </span>
+                <TypeExprNode
+                  expr={expr}
+                  path={[...path, ...childRel]}
+                  models={models}
+                  typeAliases={typeAliases}
+                  depth={depth + 1}
+                  onChange={onChange}
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     )
   }
@@ -250,8 +280,9 @@ function TypeExprNode({
   const containerLabel = kindLabel(node, models)
   const isUnion = node.kind === "union"
   const isTuple = node.kind === "generic" && node.name === "tuple"
-  // AI : TODO (generics) — add/remove-arg only for tuple. Pair[A,B] / TreeNode[T] cannot be built from the picker.
-  const children = childPaths(node, [])
+  const paramNames =
+    node.kind === "generic" ? typeAliases?.find((t) => t.name === node.name)?.params : undefined
+  const children = childPaths(node, [], paramNames)
 
   return (
     <div

@@ -21,6 +21,7 @@ import {
   rustFieldIdent,
 } from "../structure-shape";
 import type { StructureModel, TypeAlias } from "./types";
+import { formatParamsGo, formatParamsTs, formatTypeParams } from "../type-params";
 
 function typeAliasExportName(name: string): string {
   return modelExportIdentifier(name);
@@ -47,11 +48,11 @@ function typeExprToAliasDefinitionPy(expr: TypeExpr, models: StructureModel[]): 
 }
 
 export function typeAliasToPydantic(alias: TypeAlias, models: StructureModel[]): string {
-  // AI : TODO (generics) — emit TypeVar + `type Pair[A, B] = …` when alias.params is set. Named "A"/"B" is invalid Python today.
   const id = typeAliasExportName(alias.name);
   const body = typeExprToAliasDefinitionPy(alias.expr, models);
   const note = alias.description?.trim();
-  return note ? `type ${id} = ${body}  # ${note}` : `type ${id} = ${body}`;
+  const head = `type ${id}${formatTypeParams(alias.params)}`
+  return note ? `${head} = ${body}  # ${note}` : `${head} = ${body}`;
 }
 
 export function typeAliasesToPydantic(aliases: TypeAlias[], models: StructureModel[]): string {
@@ -74,11 +75,11 @@ function typeExprToAliasDefinitionTs(expr: TypeExpr, models: StructureModel[]): 
 }
 
 export function typeAliasToDts(alias: TypeAlias, models: StructureModel[]): string {
-  // AI : TODO (generics) — `export type Pair<A, B> = …` when alias.params is set.
   const id = typeAliasExportName(alias.name);
   const body = typeExprToAliasDefinitionTs(alias.expr, models);
   const note = alias.description?.trim();
-  return note ? `/** ${note} */\nexport type ${id} = ${body};` : `export type ${id} = ${body};`;
+  const head = `export type ${id}${formatParamsTs(alias.params)}`
+  return note ? `/** ${note} */\n${head} = ${body};` : `${head} = ${body};`;
 }
 
 export function typeAliasesToDts(aliases: TypeAlias[], models: StructureModel[]): string {
@@ -87,8 +88,7 @@ export function typeAliasesToDts(aliases: TypeAlias[], models: StructureModel[])
 }
 
 export function modelToPydantic(model: StructureModel, models: StructureModel[]): string {
-  // AI : TODO (generics) — class TreeNode(BaseModel, Generic[T]) when model.params; field named T stays a bare identifier.
-  const header = `class ${modelExportIdentifier(model.name)}(BaseModel):`;
+  const header = `class ${modelExportIdentifier(model.name)}${formatTypeParams(model.params)}(BaseModel):`;
   const doc = model.description ? `    """${model.description}"""` : null;
   const body =
     model.fields.length > 0
@@ -160,7 +160,6 @@ export function allModelsToPydantic(
 }
 
 function modelToDts(model: StructureModel, models: StructureModel[]): string {
-  // AI : TODO (generics) — `export type TreeNode<T> = { … }` when model.params. Same gap in typeAliasToDts / Rust / Go.
   const lines = model.fields
     .filter((f) => f.name.trim())
     .map((f) => {
@@ -168,7 +167,7 @@ function modelToDts(model: StructureModel, models: StructureModel[]): string {
       if (f.optional) t = `${t} | undefined`;
       return `  ${f.name}: ${t};`;
     });
-  return `export type ${modelExportIdentifier(model.name)} = {\n${lines.join("\n")}\n};`;
+  return `export type ${modelExportIdentifier(model.name)}${formatParamsTs(model.params)} = {\n${lines.join("\n")}\n};`;
 }
 
 export function allModelsToDts(
@@ -209,7 +208,8 @@ export function typeAliasToRust(alias: TypeAlias, models: StructureModel[]): str
   const id = typeAliasExportNameRust(alias.name);
   const body = typeExprToAliasDefinitionRust(alias.expr, models);
   const note = alias.description?.trim();
-  return note ? `/// ${note}\npub type ${id} = ${body};` : `pub type ${id} = ${body};`;
+  const head = `pub type ${id}${formatParamsTs(alias.params)}`
+  return note ? `/// ${note}\n${head} = ${body};` : `${head} = ${body};`;
 }
 
 function fieldToRust(field: { name: string; optional: boolean; description?: string }, models: StructureModel[], expr: TypeExpr): string {
@@ -232,7 +232,7 @@ function modelToRust(model: StructureModel, models: StructureModel[]): string {
   const body = fields.length ? fields.join("\n") : "    // empty";
   return [
     doc + "#[derive(Debug, Clone, Serialize, Deserialize)]",
-    `pub struct ${id} {`,
+    `pub struct ${id}${formatParamsTs(model.params)} {`,
     body,
     "}",
   ].join("\n");
@@ -311,7 +311,8 @@ export function typeAliasToGo(alias: TypeAlias, models: StructureModel[]): strin
   const id = typeAliasExportNameGo(alias.name);
   const body = typeExprToAliasDefinitionGo(alias.expr, models);
   const note = alias.description?.trim();
-  return note ? `// ${note}\ntype ${id} = ${body}` : `type ${id} = ${body}`;
+  const head = `type ${id}${formatParamsGo(alias.params)}`
+  return note ? `// ${note}\n${head} = ${body}` : `${head} = ${body}`;
 }
 
 function fieldToGo(
@@ -336,7 +337,7 @@ function modelToGo(model: StructureModel, models: StructureModel[]): string {
     .filter((f) => f.name.trim())
     .map((f) => fieldToGo(f, models, fieldToTypeExpr(f)));
   const body = fields.length ? fields.join("\n") : "\t// empty";
-  return `${doc}type ${id} struct {\n${body}\n}`;
+  return `${doc}type ${id}${formatParamsGo(model.params)} struct {\n${body}\n}`;
 }
 
 // AI : single-file Go structs for pipeline export — encoding/json round-trip.

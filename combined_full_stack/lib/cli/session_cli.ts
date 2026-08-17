@@ -35,7 +35,6 @@ import {
   listSeedIds,
   moveStep,
   parseAddableKind,
-  parseFieldType,
   patchStep,
   removeModelField,
   removeStep,
@@ -50,10 +49,10 @@ Usage:
   spine session open <id> | rename --name <name> | clone [id] | delete <id>
   spine session import-seed --file <seed.json|id>
   spine session set-docs --text <markdown>
-  spine session add-model --name <Name>
-  spine session add-field --model <Name> --name <field> --type <text|int|...> [--optional]
+  spine session add-model --name <Name> [--params T]
+  spine session add-field --model <Name> --name <field> --type <text|int|T|list[Foo]|...> [--optional]
   spine session remove-field --model <Name> --name <field>
-  spine session add-alias --name <Name> --expr <TypeExpr>
+  spine session add-alias --name <Name> --expr <TypeExpr> [--params A,B]
   spine session add-step --kind <llm|input|...> [--label <Label>]
   spine session patch-step --id <id|label> [--label] [--prompt] [--note]
   spine session assign-structure --id <id|label> --model <Name>
@@ -78,7 +77,6 @@ SPINE_API_URL / SPINE_API_TOKEN  HTTP egress for pull/push/start-run/billing
 // AI :   share mint / hosted API / marketplace; billing checkout / withdraw; teams
 // AI :   run cancel, human-review elicitation, Node custom-code host
 // AI :   inference *_setup.json editor; testing visual editor + alignment
-// AI : TODO (generics) — add-model/add-alias/add-field have no --params / typeExpr. Validate/run already honor seed params.
 
 function ok(command: string, data: Record<string, unknown>): CliCommandResult {
   return { ok: true, command, issues: [], data }
@@ -200,8 +198,7 @@ async function runSessionCommandInner(
   if (sub === "add-model") {
     const name = flagString(flags, "name")
     if (!name) return usage("session add-model requires --name")
-    // AI : TODO (generics) — accept --params T,U and pass to addNamedModel.
-    addNamedModel(session, name)
+    addNamedModel(session, name, flagString(flags, "params"))
     return ok("session add-model", {
       action: "applyProjectChanges",
       models: session.project?.models.map((m) => m.name) ?? [],
@@ -213,9 +210,7 @@ async function runSessionCommandInner(
     const name = flagString(flags, "name")
     const typeRaw = flagString(flags, "type")
     if (!model || !name || !typeRaw) return usage("session add-field requires --model --name --type")
-    const type = parseFieldType(typeRaw)
-    if (!type) return usage(`unknown field type: ${typeRaw}`)
-    addModelField(session, model, name, type, { optional: flags.optional === true })
+    addModelField(session, model, name, typeRaw, { optional: flags.optional === true })
     return ok("session add-field", { action: "applyProjectChanges", structure: toStructureView(session.getSnapshot()) })
   }
 
@@ -231,8 +226,7 @@ async function runSessionCommandInner(
     const name = flagString(flags, "name")
     const expr = flagString(flags, "expr")
     if (!name || !expr) return usage("session add-alias requires --name --expr")
-    // AI : TODO (generics) — accept --params A,B so Pair is parametric, not just Generic in expr.
-    addTypeAlias(session, name, expr)
+    addTypeAlias(session, name, expr, flagString(flags, "params"))
     return ok("session add-alias", { structure: toStructureView(session.getSnapshot()) })
   }
 

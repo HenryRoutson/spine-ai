@@ -13,7 +13,6 @@ import {
   assignStepStructure,
   importSeed,
   parseAddableKind,
-  parseFieldType,
   patchStep,
   removeModelField,
   removeStep,
@@ -140,11 +139,10 @@ export function importSeedFromSession(file: string, sessionPath?: string) {
   return { id: project.id, name: project.name }
 }
 
-export function addModelFromSession(name: string, sessionPath?: string) {
-  // AI : TODO (generics) — pass params through to addNamedModel. No new MCP tool — extend this + add-alias.
+export function addModelFromSession(name: string, sessionPath?: string, params?: string) {
   const session = openMcpSession(sessionPath, true)
-  const model = addNamedModel(session, name)
-  return { id: model.id, name: model.name }
+  const model = addNamedModel(session, name, params)
+  return { id: model.id, name: model.name, params: model.params }
 }
 
 export function addFieldFromSession(
@@ -155,9 +153,7 @@ export function addFieldFromSession(
   sessionPath?: string,
 ) {
   const session = openMcpSession(sessionPath, true)
-  const parsed = parseFieldType(type)
-  if (!parsed) throw new Error(`unknown field type: ${type}`)
-  addModelField(session, model, name, parsed, { optional })
+  addModelField(session, model, name, type, { optional })
   return getProjectFromSession(sessionPath)
 }
 
@@ -167,11 +163,10 @@ export function removeFieldFromSession(model: string, name: string, sessionPath?
   return getProjectFromSession(sessionPath)
 }
 
-export function addAliasFromSession(name: string, expr: string, sessionPath?: string) {
-  // AI : TODO (generics) — session_action structure.add-alias has name+expr only; add params so Pair[A,B] can be declared.
+export function addAliasFromSession(name: string, expr: string, sessionPath?: string, params?: string) {
   const session = openMcpSession(sessionPath, true)
-  const alias = addTypeAlias(session, name, expr)
-  return { id: alias.id, name: alias.name }
+  const alias = addTypeAlias(session, name, expr, params)
+  return { id: alias.id, name: alias.name, params: alias.params }
 }
 
 export function addStepFromSession(kind: string, label?: string, sessionPath?: string) {
@@ -286,6 +281,7 @@ export type SessionActionArgs = {
   type?: string
   optional?: boolean
   expr?: string
+  params?: string
   stepId?: string
   prompt?: string
   note?: string
@@ -328,7 +324,7 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
     case "structure.add-model":
     case "add_model":
       if (!args.name) throw new Error("name required")
-      return addModelFromSession(args.name, sessionPath)
+      return addModelFromSession(args.name, sessionPath, args.params)
     case "structure.add-field":
       if (!args.model || !args.name || !args.type) throw new Error("model, name, type required")
       return addFieldFromSession(args.model, args.name, args.type, args.optional === true, sessionPath)
@@ -337,7 +333,7 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
       return removeFieldFromSession(args.model, args.name, sessionPath)
     case "structure.add-alias":
       if (!args.name || !args.expr) throw new Error("name, expr required")
-      return addAliasFromSession(args.name, args.expr, sessionPath)
+      return addAliasFromSession(args.name, args.expr, sessionPath, args.params)
     case "pipeline.add-step":
     case "add_step":
       if (!args.kind) throw new Error("kind required")

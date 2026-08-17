@@ -118,7 +118,7 @@ export const TUI_COMMANDS: TuiCommand[] = [...ACTION_COMMANDS, ...TAB_COMMANDS]
 // AI :   rich structure editing (field types/examples, Excel derive, type aliases)
 // AI :   share/marketplace mint, billing checkout, teams, human-review pause, Node custom-code host
 // AI :   binary doc upload/remove, inference *_setup.json, run cancel, logging compare/hydrate
-// AI : TODO (generics) — do not build a type-param editor in Ink. Show Report[T] in structure view; author via GUI/JSON/assistant.
+// AI : parametric types: structure view prints Report[T]; author params in GUI/JSON/assistant, not Ink.
 
 export const EXAMPLE_MODEL_NAMES = ["Receipt", "Invoice", "Contract", "Finding"] as const
 

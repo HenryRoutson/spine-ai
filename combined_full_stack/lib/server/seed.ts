@@ -25,6 +25,7 @@ import {
   type Strategy,
   type StrategyKind,
   type StructureModel,
+  type TypeAlias,
 } from "./types";
 
 // AI : projects are seeded from generic JSON files under combined_full_stack/seeds/ —
@@ -56,7 +57,6 @@ const SeedFileSchema = z.object({
       description: z.string(),
       auto: z.boolean().optional(),
       dynamic: z.boolean().optional(),
-      // AI : TODO (generics) — seeds persist params; no typeAliases.params in this schema if aliases are added later.
       params: z.array(z.string()).optional(),
       fields: z.array(
         z.object({
@@ -89,6 +89,17 @@ const SeedFileSchema = z.object({
       ),
     }),
   ),
+  typeAliases: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        description: z.string().default(""),
+        expr: TypeExprSchema,
+        params: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
   modules: z.array(
     z.object({
       id: z.string(),
@@ -381,6 +392,7 @@ export function loadProjectSeed(path: string): ProjectSeed {
       name: raw.name,
       kind: raw.kind,
       models: normalizeStructureModels(raw.models as StructureModel[]),
+      typeAliases: raw.typeAliases as TypeAlias[] | undefined,
       modules: raw.modules.map((m) => ({
         ...m,
         note: resolveModuleNote(m.kind, m.note, {

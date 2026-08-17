@@ -252,10 +252,9 @@ Code markers: `AI : TODO (linter-first)` in repo.
 
 ### Phase 3 — Field-level generics
 
-- [ ] Extend `FieldType` with `set[text]`, `optional[model]`, `generic_param`.
-- [ ] Structure editor: generic params UI on model header.
+- [x] Type params authoring: model/alias header, KindPicker fills `Ref`/`Generic` args, assistant `params`, CLI/MCP `--params`, TUI `Report[T]` display, codegen `class TreeNode[T]` / `type Pair<A, B>`.
+- [ ] Extend `FieldType` with `set[text]`, `optional[model]` presets (type params stay named `typeExpr`, not a new FieldType).
 - [ ] Fix `HierarchicalSection`-style trees: allow self-ref with same type args for nested subsections.
-- [ ] **Authoring (IR subst already works — grep `TODO (generics)`):** params chips on alias + model header; KindPicker fills `Ref`/`Generic` args; assistant `typeAliasSpec`/`structureModelSpec` + materialize keep `params`; CLI `--params` on add-model/add-alias; TUI display `Report[T]` only (no Ink editor); codegen `TypeVar` / `class TreeNode(Generic[T])` / `type Pair<A, B>`. Do not add four parallel UIs.
 
 ### Phase 4 — Full codegen + linter (Python **or** Rust)
 

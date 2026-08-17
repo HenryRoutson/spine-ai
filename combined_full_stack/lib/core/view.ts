@@ -8,6 +8,7 @@ import { quoteHref, type QuoteMatch } from "@/lib/quotes"
 import { isTestingFileName, lastTestRunVerdictForDoc, testReportPassed } from "@/lib/testing-files"
 import { derivePipelineMermaid } from "@/lib/pipeline-mermaid"
 import { formatTypeExprPy } from "@/lib/type-expr-parse"
+import { formatParametricName } from "@/lib/type-params"
 import { formatCostCents, formatMs } from "@/lib/format"
 import { timeAgo } from "@/lib/time-ago"
 import { runBilledCents, runSavedCents, runTotalMs } from "@/lib/run-metrics"
@@ -405,11 +406,12 @@ export function toStructureView(snap: SessionSnapshot): StructureView {
   const project = snap.projects.find((p) => p.id === snap.activeProjectId) ?? snap.projects[0]
   return {
     models: (project?.models ?? []).map((m) => ({
-      name: m.name,
+      name: formatParametricName(m.name, m.params),
       fields: m.fields.map((f) => `${f.name}:${f.type}${f.optional ? "?" : ""}`),
     })),
-    // AI : TODO (generics) — print Report[T] when params set; aliases should include [A, B] not just name=expr.
-    aliases: (project?.typeAliases ?? []).map((a) => `${a.name}=${formatTypeExprPy(a.expr, project?.models ?? [])}`),
+    aliases: (project?.typeAliases ?? []).map(
+      (a) => `${formatParametricName(a.name, a.params)}=${formatTypeExprPy(a.expr, project?.models ?? [])}`,
+    ),
   }
 }
 

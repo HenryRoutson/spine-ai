@@ -6,6 +6,7 @@ import {
 } from "@/lib/server/type_expr"
 import { MarkupKind } from "@/lib/markup-kinds"
 import type { StructureModel, StructureModelId } from "@/lib/types"
+import { instantiateModelType } from "@/lib/type-params"
 
 export type TypePath = number[]
 
@@ -42,7 +43,6 @@ export const TYPE_KIND_OPTIONS: { id: TypeKindPick; label: string; hint?: string
   { id: TypeKindPick.Optional, label: "Optional[…]", hint: "May be absent" },
   { id: TypeKindPick.Tuple, label: "tuple[…]", hint: "Fixed-length product" },
   { id: TypeKindPick.Union, label: "A | B", hint: "One of several types" },
-  // AI : TODO (generics) — picker has containers only. Named Generic (Pair[…]) is paste-or-parse, not a KindPick.
   { id: TypeKindPick.Str, label: "str" },
   { id: TypeKindPick.Int, label: "int" },
   { id: TypeKindPick.Float, label: "float" },
@@ -109,8 +109,9 @@ export function exprFromKindPick(
       return { kind: TypeExprKind.Named, name: "quote_id_t" }
     case TypeKindPick.Model: {
       const id = modelId ?? (models[0]?.id as StructureModelId | undefined)
-      // AI : TODO (generics) — parametric model → Ref with UNSET args matching model.params, not a bare Ref.
-      return id ? { kind: TypeExprKind.Ref, modelId: id } : UNSET_TYPE_EXPR
+      if (!id) return UNSET_TYPE_EXPR
+      const model = models.find((m) => m.id === id)
+      return model ? instantiateModelType(model) : { kind: TypeExprKind.Ref, modelId: id }
     }
   }
 }
@@ -141,6 +142,8 @@ function childAt(expr: TypeExpr, index: number): TypeExpr {
       return expr.variants[index] ?? UNSET_TYPE_EXPR
     case TypeExprKind.Generic:
       return expr.args[index] ?? UNSET_TYPE_EXPR
+    case TypeExprKind.Ref:
+      return expr.args?.[index] ?? UNSET_TYPE_EXPR
     default:
       return UNSET_TYPE_EXPR
   }
@@ -170,6 +173,12 @@ function mapChild(expr: TypeExpr, index: number, fn: (child: TypeExpr) => TypeEx
       return { ...expr, variants }
     }
     case TypeExprKind.Generic: {
+      const args = [...expr.args]
+      args[index] = fn(args[index] ?? UNSET_TYPE_EXPR)
+      return { ...expr, args }
+    }
+    case TypeExprKind.Ref: {
+      if (!expr.args?.length) return expr
       const args = [...expr.args]
       args[index] = fn(args[index] ?? UNSET_TYPE_EXPR)
       return { ...expr, args }
@@ -208,7 +217,11 @@ export function removeChildAt(root: TypeExpr, path: TypePath, index: number): Ty
   return root
 }
 
-export function childPaths(expr: TypeExpr, base: TypePath = []): { label: string; path: TypePath }[] {
+export function childPaths(
+  expr: TypeExpr,
+  base: TypePath = [],
+  paramNames?: readonly string[],
+): { label: string; path: TypePath }[] {
   switch (expr.kind) {
     case TypeExprKind.List:
     case TypeExprKind.Set:
@@ -226,7 +239,12 @@ export function childPaths(expr: TypeExpr, base: TypePath = []): { label: string
       if (expr.name === "tuple") {
         return expr.args.map((_, i) => ({ label: `#${i + 1}`, path: [...base, i] }))
       }
-      return expr.args.map((_, i) => ({ label: `arg ${i + 1}`, path: [...base, i] }))
+      return expr.args.map((_, i) => ({ label: paramNames?.[i] ?? `arg ${i + 1}`, path: [...base, i] }))
+    case TypeExprKind.Ref:
+      return (expr.args ?? []).map((_, i) => ({
+        label: paramNames?.[i] ?? `arg ${i + 1}`,
+        path: [...base, i],
+      }))
     default:
       return []
   }
@@ -246,6 +264,8 @@ export function typeExprHasUnset(expr: TypeExpr): boolean {
       return expr.variants.some(typeExprHasUnset)
     case TypeExprKind.Generic:
       return expr.args.some(typeExprHasUnset)
+    case TypeExprKind.Ref:
+      return (expr.args ?? []).some(typeExprHasUnset)
     default:
       return false
   }

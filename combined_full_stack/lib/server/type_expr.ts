@@ -68,8 +68,8 @@ export type TypeExpr =
   | { kind: typeof TypeExprKind.Map; key: TypeExpr; value: TypeExpr }
   | { kind: typeof TypeExprKind.Union; variants: TypeExpr[] }
   | { kind: typeof TypeExprKind.Generic; name: string; args: TypeExpr[] }
-  // AI : TODO (generics) — Generic is instantiation (Pair[A,B], tuple[…]) or expanded __struct_Name.
-  // AI :   Parametric *definitions* live on TypeAlias.params / StructureModel.params, not this variant.
+  // AI : Generic is instantiation (Pair[A,B], tuple[…]) or expanded __struct_Name.
+  // AI :   Parametric *definitions* live on TypeAlias.params / StructureModel.params.
   | { kind: typeof TypeExprKind.Named; name: string }
   | { kind: typeof TypeExprKind.Unset }
   | { kind: typeof TypeExprKind.Unknown };
@@ -872,7 +872,9 @@ export function typeExprToBaml(expr: TypeExpr, models: StructureModel[] = []): s
       return `${bamlWrap(expr.item, models)}[]`;
     case TypeExprKind.Ref: {
       const name = modelName(models, expr.modelId);
-      return name ? modelExportIdentifierRust(name) : "string";
+      const base = name ? modelExportIdentifierRust(name) : "string";
+      if (!expr.args?.length) return base;
+      return `${base}<${expr.args.map((a) => typeExprToBaml(a, models)).join(", ")}>`;
     }
     case TypeExprKind.Optional:
       return `${bamlWrap(expr.inner, models)}?`;
@@ -935,7 +937,9 @@ export function typeExprToRust(expr: TypeExpr, models: StructureModel[] = []): s
       return `Vec<${typeExprToRust(expr.item, models)}>`;
     case TypeExprKind.Ref: {
       const name = modelName(models, expr.modelId);
-      return name ? modelExportIdentifierRust(name) : "serde_json::Value";
+      const base = name ? modelExportIdentifierRust(name) : "serde_json::Value";
+      if (!expr.args?.length) return base;
+      return `${base}<${expr.args.map((a) => typeExprToRust(a, models)).join(", ")}>`;
     }
     case TypeExprKind.Optional:
       return `Option<${typeExprToRust(expr.inner, models)}>`;
@@ -997,7 +1001,9 @@ export function typeExprToGo(expr: TypeExpr, models: StructureModel[] = []): str
       return `[]${typeExprToGo(expr.item, models)}`;
     case TypeExprKind.Ref: {
       const name = modelName(models, expr.modelId);
-      return name ? modelExportIdentifierGo(name) : "json.RawMessage";
+      const base = name ? modelExportIdentifierGo(name) : "json.RawMessage";
+      if (!expr.args?.length) return base;
+      return `${base}[${expr.args.map((a) => typeExprToGo(a, models)).join(", ")}]`;
     }
     case TypeExprKind.Optional:
       return `*${typeExprToGo(expr.inner, models)}`;

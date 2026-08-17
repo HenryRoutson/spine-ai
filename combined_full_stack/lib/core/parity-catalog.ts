@@ -272,7 +272,6 @@ export const PARITY_ROWS: ParityRow[] = [
     y("PUT /api/projects/:id models", "/api/projects"),
     y("add_model", "add_model"),
     y("addNamedModel(session, name)"),
-    // AI : TODO (generics) — all five surfaces create a non-parametric stub. Params belong on apply_project_changes / header UI.
   ),
   row(
     "structure.add-field",
@@ -309,7 +308,6 @@ export const PARITY_ROWS: ParityRow[] = [
     y("PUT /api/projects/:id typeAliases", "/api/projects"),
     y("session_action id=structure.add-alias", "session_action"),
     y("addTypeAlias(session, name, expr)"),
-    // AI : TODO (generics) — add-alias has name+expr only; no params on any surface.
   ),
   row(
     "structure.export-pydantic",

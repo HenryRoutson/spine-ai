@@ -6,7 +6,6 @@
 // AI : TODO (mcp-capability) — wrap remaining GUI verbs: pullRemoteState, flushPendingSave, hydrateRunDetail,
 // AI :   removeDoc, linkQuotes, setDocProjects, executeProposedActions, resyncExamples, wait_for_run,
 // AI :   billed ask HTTP, share/hosted mint, Stripe, run cancel. Host-bound stays GUI: CodeHost, human-review, chatbot.
-// AI : TODO (generics) — no new tool. add_model / add-alias lack params; apply_project_changes works once assistant specs emit them.
 
 import { resolve } from "node:path"
 import "./bootstrap-env.js"
@@ -269,6 +268,7 @@ server.tool(
     type: z.string().optional(),
     optional: z.boolean().optional(),
     expr: z.string().optional(),
+    params: z.string().optional(),
     stepId: z.string().optional(),
     prompt: z.string().optional(),
     note: z.string().optional(),
@@ -333,9 +333,8 @@ server.tool(
 server.tool(
   "add_model",
   "Add a named structure model (press m in the TUI).",
-  { sessionPath: z.string().optional(), name: z.string() },
-  // AI : TODO (generics) — no params arg. Prefer apply_project_changes once assistant specs emit params; or add --params here.
-  async (args) => textContent(addModelFromSession(args.name, args.sessionPath)),
+  { sessionPath: z.string().optional(), name: z.string(), params: z.string().optional() },
+  async (args) => textContent(addModelFromSession(args.name, args.sessionPath, args.params)),
 )
 
 server.tool(

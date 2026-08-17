@@ -1,9 +1,9 @@
 "use client"
 // AI : parity ids — structure.add-alias
-// AI : TODO (generics) — no params: ["A","B"] chips. Paste Pair[int, str] instantiates; it does not declare Pair[A, B].
 
 import { Trash2 } from "lucide-react"
 import { TypeExprEditor } from "@/components/type-expr-editor"
+import { TypeParamsField } from "@/components/type-params-field"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { typeExprHasUnset } from "@/lib/type-expr-edit"
@@ -78,6 +78,13 @@ export function StructureTypeAliasEditor({
         )}
       </div>
 
+      <TypeParamsField
+        params={alias.params}
+        locked={locked}
+        onLockedInteract={onLockedInteract}
+        onChange={(params) => onUpdate({ params })}
+      />
+
       <div
         className={cn("rounded-lg border border-border bg-secondary/10 p-4", locked && "cursor-not-allowed")}
         onPointerDown={locked ? onLockedInteract : undefined}
@@ -103,10 +110,23 @@ export function StructureTypeAliasEditor({
         </p>
       )}
 
-      <p className="font-mono text-[10px] text-muted-foreground">
+        <p className="font-mono text-[10px] text-muted-foreground">
         Reference in struct fields as{" "}
-        <code className="text-foreground">{alias.name || "TypeName"}</code> or{" "}
-        <code className="text-foreground">list[{alias.name || "TypeName"}]</code>
+        <code className="text-foreground">{alias.name || "TypeName"}</code>
+        {alias.params?.length ? (
+          <>
+            {" "}
+            or instantiate{" "}
+            <code className="text-foreground">
+              {alias.name}[{alias.params.join(", ")}]
+            </code>
+          </>
+        ) : (
+          <>
+            {" "}
+            or <code className="text-foreground">list[{alias.name || "TypeName"}]</code>
+          </>
+        )}
       </p>
     </div>
   )
