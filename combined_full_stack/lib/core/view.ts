@@ -1,4 +1,6 @@
 // AI : (snapshot) -> ViewModel — React and CLI render; they do not derive.
+// AI : TODO (opt-browser-tui-snapshot) — optional GUI terminal mode renders these same to*View models;
+// AI :   map useStore → SessionSnapshot (also arch-gui-viewmodels).
 
 import { computeInvalid, invalidIssuesForModule } from "@/lib/validity"
 import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-validity"

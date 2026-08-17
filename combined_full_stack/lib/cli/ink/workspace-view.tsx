@@ -1,4 +1,6 @@
 // AI : presentational Ink view — only ViewModels; tests use renderToString without a TTY.
+// AI : TODO (opt-browser-tui-view) — optional DOM twin (monospace CSS) consuming the same props/ViewModels.
+// AI :   Do not import ink into components/; keep this file for CLI + tui.test.tsx.
 
 import { Box, Text } from "ink"
 import type {

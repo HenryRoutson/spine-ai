@@ -625,6 +625,7 @@ export function Settings() {
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Optional visual editors under Build — Vibe already has full project control.
               </p>
+              {/* AI : TODO (opt-browser-tui-chrome) — optional Terminal mode setting mirroring the header toggle. */}
             </div>
             <label className="flex cursor-pointer items-start gap-3 px-4 py-3">
               <Switch

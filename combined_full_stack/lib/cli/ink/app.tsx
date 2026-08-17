@@ -1,5 +1,7 @@
 // AI : parity ids — tui.quit
 // AI : Ink app — dispatches SpineSession methods (same names as useStore); no fetch in render.
+// AI : TODO (opt-browser-tui-controller) — lift prompt/hotkey/runCommand out of useInput so a DOM
+// AI :   host can drive the same machine. Ink stays the TTY adapter; q in the browser leaves GUI mode.
 
 import { useState } from "react"
 import { useApp, useInput } from "ink"
@@ -109,6 +111,7 @@ export function SpineTui({ session, sessionPath, interactive = true, initialTab 
     setAgentBusy(true)
     void (async () => {
       try {
+        // AI : TODO (opt-browser-tui-vibe) — browser host should call /api/pipeline-assistant, not this CLI import.
         const { askAgent } = await import("@/lib/cli/agent")
         await askAgent(session, value)
       } finally {
@@ -248,6 +251,7 @@ export function SpineTui({ session, sessionPath, interactive = true, initialTab 
       setPrompt({ kind: "delete", name: snap.projects.find((p) => p.id === selectedProjectId)?.name ?? selectedProjectId })
       return
     }
+    // AI : TODO (opt-browser-tui-keys) — Ink exit(); browser host should restore GUI surface instead.
     if (id === "quit") exit()
   }
 

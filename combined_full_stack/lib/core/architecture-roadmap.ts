@@ -61,5 +61,7 @@
 // AI : TODO (arch-pydantic-walk) — allModelsTo{Pydantic,Dts,Rust,Go,Baml} share a field walk; printers only.
 // AI : TODO (arch-cli-result) — flagString / ok / usage copied in run.ts, session_cli.ts, agent_cli.ts.
 // AI : TODO (arch-parser-cache) — JsonStore parser/vision cache should use parser_vision_cache_index + fs adapter.
+// AI : TODO (opt-browser-tui) — optional GUI terminal mode (not required). DOM skin of Ink ViewModels
+// AI :   + extracted controller; never Ink-in-browser or a PTY. lib/cli/ink/browser-tui-roadmap.ts.
 
 export {}

@@ -11,7 +11,7 @@ type FileDropZoneProps = {
   uploading?: boolean
   accept?: string
   multiple?: boolean
-  /** AI : compact = composer strip; default = Documents / Vibe inputs. */
+  /** AI : compact = Vibe input rows; default = Documents. */
   compact?: boolean
   className?: string
   label?: string

@@ -21,7 +21,6 @@ import { invalidStepMessage } from "@/lib/validity"
 import { chatOwnerLabel, useProjectAssistant, useProjectAssistantSession } from "@/lib/project-assistant-context"
 import {
   PROJECT_ASSISTANT_INITIAL_MESSAGE,
-  PROJECT_ASSISTANT_STARTERS,
   type ProjectProposal,
 } from "@/lib/project-assistant-types"
 import {
@@ -280,7 +279,6 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
           teammateLabel ? `View only — ${teammateLabel}'s chat. Start a new chat to reply.` : undefined
         }
         initialMessage={PROJECT_ASSISTANT_INITIAL_MESSAGE}
-        starters={PROJECT_ASSISTANT_STARTERS}
         placeholder="Describe… or type @ to mention steps, runs, cache, files"
         loadingLabel={(phase) =>
           phase === "retrying"

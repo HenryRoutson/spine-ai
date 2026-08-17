@@ -1,6 +1,8 @@
 "use client"
 
 // AI : TODO (spec) — git-like branching, merge, and revision history for project collaboration (spec § history).
+// AI : TODO (opt-browser-tui-shell) — optional: when surface=tui, hide AppWindowNav + GUI panels and
+// AI :   mount a DOM WorkspaceView; keep this header so the toggle stays reachable. Not Ink-in-browser.
 import dynamic from "next/dynamic"
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { Loader2 } from "lucide-react"

@@ -60,6 +60,7 @@ export function AppChromeHeader({
         </>
       ) : null}
 
+      {/* AI : TODO (opt-browser-tui-chrome) — Terminal|GUI toggle here, like a theme switch; skip when embed. */}
       {trailing ? <div className="ml-auto flex shrink-0 items-center gap-2">{trailing}</div> : null}
     </header>
   )

@@ -3,6 +3,8 @@
 // AI : TODO refactor — optional split: persistence, billing refresh, project CRUD into separate hooks.
 // AI : TODO (arch-thin-store) — wrap SpineSession for local mutations (rename/delete/applyProposal);
 // AI :   React keeps hydration, debounce save, billing caches (docs/parity.md §8.5). Do not merge stores.
+// AI : TODO (opt-browser-tui-snapshot) — optional: expose SessionSnapshot from this store so a DOM TUI
+// AI :   can call to*View without a second SpineSession. Mutations stay these methods.
 // AI : TODO (spec) — prefetch project-scoped cache entries on hydrate; Cache tab should not refetch from cold on every open.
 // AI : the client half of the bridge — hydrates from GET /api/state, applies mutations
 // AI : optimistically, and persists them through the thin API routes. Method names match

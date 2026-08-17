@@ -129,6 +129,14 @@ export const assistantDockSplit = defineSplit({
   max: 720,
 })
 
+// AI : Vibe chat on the left — observation tabs (inference / logging) fill the rest.
+export const vibeChatSplit = defineSplit({
+  keySuffix: "vibe-chat-width",
+  defaultWidth: 400,
+  min: 300,
+  max: 640,
+})
+
 export function useLayoutSplitWidth(read: () => pixel_width): pixel_width {
   return useBrowserPrefEvent(LAYOUT_SPLIT_SETTINGS_CHANGED_EVENT, read)
 }

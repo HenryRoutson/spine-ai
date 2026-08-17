@@ -13,13 +13,13 @@ import {
   Layers,
   Loader2,
   Maximize2,
+  Paperclip,
   AlertTriangle,
   Send,
   User,
   Workflow,
   X,
 } from "lucide-react"
-import { FileDropZone } from "@/components/file-drop-zone"
 import { allUploadAccept } from "@/lib/inference-input"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -352,8 +352,11 @@ function ChatInput({
   // AI : ClipboardEvent has no modifiers — track Shift for Cmd/Ctrl+Shift+V plain insert.
   const shiftDownRef = React.useRef(false)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = React.useRef<HTMLInputElement>(null)
   const [atTrigger, setAtTrigger] = React.useState<AtTrigger | null>(null)
   const [mentionIndex, setMentionIndex] = React.useState(0)
+  const [fileDragOver, setFileDragOver] = React.useState(false)
+  const fileUploadBlocked = disabled || filesUploading
 
   const filteredMentions = React.useMemo(() => {
     if (!mentionsEnabled || !atTrigger || !mentionOptions) return []
@@ -489,20 +492,26 @@ function ChatInput({
           ))}
         </div>
       ) : null}
-      {fileUploadEnabled && onFilesSelected ? (
-        <div className="px-3 pt-2">
-          <FileDropZone
-            compact
-            accept={allUploadAccept()}
-            disabled={disabled}
-            uploading={filesUploading}
-            onFiles={onFilesSelected}
-            label="Drag & drop files here"
-            browseLabel="Browse files"
-          />
-        </div>
-      ) : null}
-      <div className="relative flex gap-2 p-3">
+      <div
+        className={cn(
+          "relative flex gap-2 p-3 transition-colors",
+          fileUploadEnabled && fileDragOver && "bg-primary/5",
+        )}
+        onDragOver={(e) => {
+          if (!fileUploadEnabled || fileUploadBlocked) return
+          e.preventDefault()
+          setFileDragOver(true)
+        }}
+        onDragLeave={() => setFileDragOver(false)}
+        onDrop={(e) => {
+          if (!fileUploadEnabled || !onFilesSelected) return
+          e.preventDefault()
+          setFileDragOver(false)
+          if (fileUploadBlocked) return
+          const list = e.dataTransfer.files
+          if (list?.length) onFilesSelected(Array.from(list))
+        }}
+      >
         {mentionOpen ? (
           <div
             data-slot="mention-menu"
@@ -561,6 +570,42 @@ function ChatInput({
               ))
             )}
           </div>
+        ) : null}
+        {fileUploadEnabled && onFilesSelected ? (
+          <>
+            {/* AI : paperclip — browse; drop still works on this composer row. */}
+            <Button
+              type="button"
+              size="icon"
+              variant="outline"
+              className={cn(
+                "h-10 w-10 shrink-0",
+                fileDragOver && "border-primary text-primary",
+              )}
+              disabled={fileUploadBlocked}
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="Attach files"
+            >
+              {filesUploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Paperclip className="h-4 w-4" />
+              )}
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={allUploadAccept()}
+              className="hidden"
+              disabled={fileUploadBlocked}
+              onChange={(e) => {
+                const list = e.target.files
+                if (list?.length) onFilesSelected(Array.from(list))
+                e.target.value = ""
+              }}
+            />
+          </>
         ) : null}
         <Textarea
           ref={textareaRef}

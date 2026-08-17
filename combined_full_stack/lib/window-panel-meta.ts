@@ -159,7 +159,7 @@ const BUILDER_WINDOW_HEADERS: Record<AppWindowId, WindowHeaderCopy> = {
   vibe: {
     step: AppWindowStepLabel.Vibe,
     title: AppWindowTitle.Vibe,
-    description: "Talk to the agent to build the full project — structures, pipeline, docs, and run.",
+    description: "Talk to the agent to build the full project — structures, pipeline, docs, and run. Inference and Logging sit on the right for files, live progress, and past runs.",
   },
   billing: {
     step: AppWindowStepLabel.Billing,

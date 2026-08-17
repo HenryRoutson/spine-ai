@@ -1,4 +1,5 @@
 // AI : TUI command catalog + suggest — one list drives hotkeys, / palette, and prompt autocomplete.
+// AI : TODO (opt-browser-tui-controller) — already host-agnostic; browser terminal mode should import this, not fork it.
 
 import { MODULE_META, type ModuleKind } from "@/lib/types"
 import { USER_ADDABLE_MODULE_KINDS } from "@/lib/module-kinds"

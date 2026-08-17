@@ -39,14 +39,4 @@ export type ProjectProposal = {
 }
 
 export const PROJECT_ASSISTANT_INITIAL_MESSAGE =
-  "Describe what you want to build. I'll propose structures, pipeline steps (with correct list/single spine wiring), docs, and sample test documents — same full project control whether you're on Vibe or Build. I can also propose a pipeline run after you approve. Approve to apply — invalid pipelines are caught and retried automatically before you see them."
-
-export const PROJECT_ASSISTANT_STARTERS = [
-  "Set up structures, type aliases, pipeline, and sample test documents from scratch",
-  "Add reusable types like list[quote_id_t] and wire them into my structs",
-  "Design a map-reduce pipeline for long document field extraction",
-  "Create inference test documents that match my input steps",
-  "Fix validation errors and simplify this project",
-  "Run the pipeline on the default test documents",
-  "Run my *_testing.json suite and report the verdict",
-]
+  "Describe what you want to build. I'll propose structures, pipeline steps (with correct list/single spine wiring), docs, and sample test documents — same full project control whether you're on Vibe or Build. On Vibe, pick existing files and watch runs in Inference and Logging on the right. I can also propose a pipeline run after you approve. Approve to apply — invalid pipelines are caught and retried automatically before you see them."

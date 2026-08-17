@@ -40,7 +40,8 @@ import { RunNotesEditor } from "@/components/run-notes-editor"
 import { StepServerLogsSection } from "@/components/server-logs-panel"
 import { StepInputDescription, resolveStepInputDescription } from "@/components/step-input-description"
 import { stepKindIcon } from "@/lib/module-ui"
-import { Search, GitCompareArrows, Zap, Copy, Check, AlertTriangle, Bot } from "lucide-react"
+import { Search, GitCompareArrows, Zap, Copy, Check, AlertTriangle, Bot, List } from "lucide-react"
+import { formatRunErrorForDisplay } from "@/lib/run-errors"
 import { resolveRunInputDocIds, runInputDocsSummary } from "@/lib/inference-input"
 import { stepIoLabels } from "@/lib/module-kinds"
 import { compactPreview, PREVIEW_STEP_IO_CHARS } from "@/lib/text-preview"
@@ -68,7 +69,9 @@ import { CompareModal } from "@/components/logging/compare-modal"
 import { PopupModal, type PopupPayload } from "@/components/logging/popup-modal"
 import { LlmRetryGridSection } from "@/components/logging/llm-retry-grid"
 
-export function Logging() {
+type LoggingListDensity = "full" | "compact"
+
+export function Logging({ listDensity = "full" }: { listDensity?: LoggingListDensity } = {}) {
   const palette = useStatusPalette()
   const { runs, billingRuns, docs, modules, models, project, typeAliases, model: globalModel, hydrateRunDetail } = useStore()
   const { focusRunId, focusRunAnchor, clearFocusRun, setSharedRunDocScope } = useAppShell()
@@ -78,6 +81,8 @@ export function Logging() {
   const [selectedPipelineModuleId, setSelectedPipelineModuleId] = useState<ModuleId | undefined>()
   const [compareOpen, setCompareOpen] = useState(false)
   const [errorsOnly, setErrorsOnly] = useState(false)
+  // AI : Vibe defaults compact (time + ok/error); toggle restores the full file/model/cost row.
+  const [compactList, setCompactList] = useState(listDensity === "compact")
   const [logCopied, setLogCopied] = useState(false)
   const [jsonCopied, setJsonCopied] = useState(false)
   const [pendingScrollAnchor, setPendingScrollAnchor] = useState<"validation-errors" | null>(null)
@@ -226,6 +231,23 @@ export function Logging() {
                   data-spine-id="logging.errors-only"
                 />
               </label>
+              <label
+                className={cn(
+                  "flex cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-1.5 transition-colors",
+                  compactList ? "border-border bg-muted/20" : "border-border bg-background",
+                )}
+              >
+                <span className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+                  <List className="h-3 w-3 shrink-0" />
+                  Compact
+                </span>
+                <Switch
+                  size="sm"
+                  checked={compactList}
+                  onCheckedChange={(checked) => setCompactList(!!checked)}
+                  data-spine-id="logging.compact-list"
+                />
+              </label>
             </div>
             <ScrollArea className="min-h-0 flex-1">
               {filtered.length === 0 ? (
@@ -251,26 +273,28 @@ export function Logging() {
                           }
                         }}
                         className={cn(
-                          "flex w-full cursor-pointer flex-col gap-1 px-3 py-2.5 text-left transition-colors hover:bg-accent",
+                          "flex w-full cursor-pointer text-left transition-colors hover:bg-accent",
+                          compactList ? "items-center gap-2 px-3 py-1.5" : "flex-col gap-1 px-3 py-2.5",
                           active?.id === run.id && "bg-accent",
                         )}
+                        title={
+                          compactList
+                            ? [
+                                run.status,
+                                timeAgo(run.startedAt),
+                                runInputLabel(run),
+                                formatRunErrorForDisplay(run)?.title,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")
+                            : undefined
+                        }
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="min-w-0 flex-1 break-all font-mono text-xs">{runInputLabel(run)}</span>
-                          <div className="flex shrink-0 items-center gap-1.5">
-                            {isSharedRun(run) && (
-                              <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
-                                shared run
-                              </Badge>
-                            )}
-                            {isTestingRun(run) && (
-                              <Badge variant="outline" className="shrink-0 border-chart-3/40 font-mono text-[9px] text-chart-3">
-                                test
-                              </Badge>
-                            )}
-                            {runInputDocIds(run).map((docId) => (
-                              <OpenInDocumentsLink key={docId} docId={docId} label="store" className="text-[9px]" />
-                            ))}
+                        {compactList ? (
+                          <>
+                            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground">
+                              {timeAgo(run.startedAt)}
+                            </span>
                             <Badge
                               variant="outline"
                               className="shrink-0 font-mono text-[10px]"
@@ -280,18 +304,48 @@ export function Logging() {
                             >
                               {run.status}
                             </Badge>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground">
-                          <span className="min-w-0 truncate">{run.model}</span>
-                          <span className="shrink-0">
-                            {formatSecondsShort(runTotalMs(run))} · {formatCostCents(runBilledCents(run))}
-                          </span>
-                        </div>
-                        <span className="break-all font-mono text-[10px] text-muted-foreground">
-                          {new Date(run.startedAt).toLocaleString()} · {timeAgo(run.startedAt)} · {run.id}
-                        </span>
-                        {run.notes && <RunNotesPreview notes={run.notes} />}
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex items-start justify-between gap-2">
+                              <span className="min-w-0 flex-1 break-all font-mono text-xs">{runInputLabel(run)}</span>
+                              <div className="flex shrink-0 items-center gap-1.5">
+                                {isSharedRun(run) && (
+                                  <Badge variant="secondary" className="shrink-0 font-mono text-[9px]">
+                                    shared run
+                                  </Badge>
+                                )}
+                                {isTestingRun(run) && (
+                                  <Badge variant="outline" className="shrink-0 border-chart-3/40 font-mono text-[9px] text-chart-3">
+                                    test
+                                  </Badge>
+                                )}
+                                {runInputDocIds(run).map((docId) => (
+                                  <OpenInDocumentsLink key={docId} docId={docId} label="store" className="text-[9px]" />
+                                ))}
+                                <Badge
+                                  variant="outline"
+                                  className="shrink-0 font-mono text-[10px]"
+                                  style={run.status === "ok"
+                                    ? { color: palette.ok, borderColor: `${palette.ok}66` }
+                                    : { color: palette.err, borderColor: `${palette.err}66` }}
+                                >
+                                  {run.status}
+                                </Badge>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground">
+                              <span className="min-w-0 truncate">{run.model}</span>
+                              <span className="shrink-0">
+                                {formatSecondsShort(runTotalMs(run))} · {formatCostCents(runBilledCents(run))}
+                              </span>
+                            </div>
+                            <span className="break-all font-mono text-[10px] text-muted-foreground">
+                              {new Date(run.startedAt).toLocaleString()} · {timeAgo(run.startedAt)} · {run.id}
+                            </span>
+                            {run.notes && <RunNotesPreview notes={run.notes} />}
+                          </>
+                        )}
                       </div>
                     </li>
                   ))}

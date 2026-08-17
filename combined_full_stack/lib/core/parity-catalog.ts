@@ -876,6 +876,7 @@ export const PARITY_ROWS: ParityRow[] = [
     n("no MCP signup"),
     host("browser auth"),
   ),
+  // AI : TODO (opt-browser-tui-parity) — optional chrome.surface.tui toggle; in-browser q leaves mode (not exit).
   row(
     "tui.quit",
     "chrome",

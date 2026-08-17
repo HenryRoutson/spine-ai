@@ -49,7 +49,7 @@ export function ProjectAssistantDockToggle() {
 }
 
 type ProjectAssistantDockPanelProps = {
-  // AI : Vibe embeds agent full-pane — no dock chrome / close / Select UI.
+  // AI : Vibe embeds agent as the left pane — no dock chrome / close.
   embedded?: boolean
 }
 
@@ -172,25 +172,22 @@ export function ProjectAssistantDockPanel({ embedded = false }: ProjectAssistant
               {ownerSubtitle}
             </p>
           ) : null}
-          {/* AI : Vibe has sparse Select UI targets — keep Select on dock/build only. */}
-          {!embedded ? (
-            <Button
-              type="button"
-              size="sm"
-              variant={selectMode ? "secondary" : "outline"}
-              className="h-7 gap-1 px-2 font-mono text-[10px]"
-              onClick={toggleSelectMode}
-              aria-label={selectMode ? "Exit select UI mode" : "Select UI for agent"}
-              title={selectMode ? "Exit select UI mode (Esc)" : "Select UI for agent"}
-              spineId="assistant.select-ui"
-            >
-              <Crosshair className="h-3.5 w-3.5" />
-              {selectMode ? "Selecting…" : "Select"}
-              {uiContextPins.length > 0 ? (
-                <span className="rounded bg-primary/20 px-1 text-[9px]">{uiContextPins.length}</span>
-              ) : null}
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant={selectMode ? "secondary" : "outline"}
+            className="h-7 gap-1 px-2 font-mono text-[10px]"
+            onClick={toggleSelectMode}
+            aria-label={selectMode ? "Exit select UI mode" : "Select UI for agent"}
+            title={selectMode ? "Exit select UI mode (Esc)" : "Select UI for agent"}
+            spineId="assistant.select-ui"
+          >
+            <Crosshair className="h-3.5 w-3.5" />
+            {selectMode ? "Selecting…" : "Select"}
+            {uiContextPins.length > 0 ? (
+              <span className="rounded bg-primary/20 px-1 text-[9px]">{uiContextPins.length}</span>
+            ) : null}
+          </Button>
           <Button
             type="button"
             variant="ghost"

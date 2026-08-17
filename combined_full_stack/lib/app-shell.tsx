@@ -10,6 +10,7 @@ import {
   isBuildStep,
   windowToArea,
   type AppArea,
+  type VibeObserveTab,
 } from "@/lib/app-nav-config"
 import { openLlmProvidersSettings, scrollToSettingsSection } from "@/lib/settings-nav"
 import type { SharedRunDocScope } from "@/lib/shared-run-doc-scope"
@@ -42,6 +43,9 @@ interface AppShellState {
   focusRunAnchor: LoggingFocusAnchor | null
   openLogging: (focus?: string | LoggingFocus) => void
   clearFocusRun: () => void
+  // AI : Vibe right-pane tab — stay on Vibe when opening logs / inference.
+  vibeObserveTab: VibeObserveTab
+  setVibeObserveTab: (tab: VibeObserveTab) => void
   focusStructureId: StructureModelId | null
   openStructure: (structureId?: StructureModelId) => void
   clearFocusStructure: () => void
@@ -69,6 +73,7 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
   const [focusDocId, setFocusDocId] = useState<DocId | null>(null)
   const [focusRunId, setFocusRunId] = useState<string | null>(null)
   const [focusRunAnchor, setFocusRunAnchor] = useState<LoggingFocusAnchor | null>(null)
+  const [vibeObserveTab, setVibeObserveTab] = useState<VibeObserveTab>(AppWindow.Inference)
   const [focusStructureId, setFocusStructureId] = useState<StructureModelId | null>(null)
   const [activeSharedLinkId, setActiveSharedLinkId] = useState<string | null>(null)
   const [sharedRunDocScope, setSharedRunDocScope] = useState<SharedRunDocScope | null>(null)
@@ -97,8 +102,14 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       setFocusRunId(focus.runId ?? null)
       setFocusRunAnchor(focus.anchor ?? null)
     }
+    // AI : Vibe already hosts Logging — don't leave the surface (vibe-first also bounces editors away).
+    if (activeWindow === AppWindow.Vibe || readHideDeveloperTools()) {
+      setVibeObserveTab(AppWindow.Logging)
+      if (activeWindow !== AppWindow.Vibe) setActiveWindow(AppWindow.Vibe)
+      return
+    }
     setActiveWindow(AppWindow.Logging)
-  }, [])
+  }, [activeWindow])
 
   const clearFocusRun = useCallback(() => {
     setFocusRunId(null)
@@ -149,6 +160,8 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
         focusRunAnchor,
         openLogging,
         clearFocusRun,
+        vibeObserveTab,
+        setVibeObserveTab,
         focusStructureId,
         openStructure,
         clearFocusStructure,

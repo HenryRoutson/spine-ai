@@ -160,6 +160,18 @@ export const BUILDER_WORKSPACE_WINDOW_IDS: AppWindowId[] = BUILDER_WORKSPACE_NAV
 
 export const BUILDER_PANEL_IDS: AppWindowId[] = Object.values(AppWindowId)
 
+// AI : Vibe right pane — observe-only (pick files / run / logs); chat owns project edits.
+export const VIBE_OBSERVE_WINDOW_IDS = [AppWindowId.Inference, AppWindowId.Logging] as const
+export type VibeObserveTab = (typeof VIBE_OBSERVE_WINDOW_IDS)[number]
+
+export function isVibeObserveTab(window: AppWindowId): window is VibeObserveTab {
+  return (VIBE_OBSERVE_WINDOW_IDS as readonly AppWindowId[]).includes(window)
+}
+
+export const VIBE_OBSERVE_NAV_ITEMS: AppNavItem[] = BUILDER_NAV_ITEMS.filter((item) =>
+  isVibeObserveTab(item.id),
+)
+
 export function isAccountWindow(window: AppWindowId): boolean {
   return ACCOUNT_WINDOW_IDS.has(window)
 }

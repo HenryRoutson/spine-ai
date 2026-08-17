@@ -1,4 +1,6 @@
 // AI : vibe-first default — hide Build / technical editors unless the user opts in.
+// AI : TODO (opt-browser-tui-pref) — optional sibling pref: surface "gui" | "tui" (default gui), same
+// AI :   booleanBrowserPref / useBrowserPrefEvent pattern. Not developer-tools; a chrome mode switch.
 
 import { booleanBrowserPref } from "@/lib/browser-storage-pref"
 import { useBrowserPrefEvent } from "@/lib/use-browser-pref-event"

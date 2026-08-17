@@ -68,7 +68,6 @@ type AssistantChatProps<TProposal> = {
   title: string
   subtitle: string
   initialMessage: string
-  starters: string[]
   placeholder: string
   loadingLabel: string | ((phase: AssistantLoadingPhase) => string)
   showDebug?: boolean
@@ -128,7 +127,6 @@ export function AssistantChat<TProposal>({
   title,
   subtitle,
   initialMessage,
-  starters,
   placeholder,
   loadingLabel,
   showDebug = false,
@@ -339,22 +337,6 @@ export function AssistantChat<TProposal>({
   const loadingText =
     typeof loadingLabel === "function" ? loadingLabel(loadingPhase) : loadingLabel
 
-  const starterFooter =
-    messages.length <= 1 && !loading ? (
-      <div className="flex flex-wrap gap-1.5 px-3 pt-2">
-        {starters.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => void send(s, [])}
-            className="rounded-full border border-border bg-secondary/40 px-2.5 py-1 font-mono text-[9px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
-          >
-            {s}
-          </button>
-        ))}
-      </div>
-    ) : null
-
   const quoteEnabled = Boolean(onPinUiContext) && !readOnly
 
   return (
@@ -512,7 +494,6 @@ export function AssistantChat<TProposal>({
         onSend={() => void send(input, pastes)}
         placeholder={readOnly ? (readOnlyHint ?? "View only — this is a teammate's chat") : placeholder}
         disabled={loading || readOnly}
-        footer={readOnly ? undefined : starterFooter}
         attachments={readOnly ? undefined : composerAttachments}
         canSend={
           !readOnly && (Boolean(input.trim()) || pastes.length > 0 || canSendWithoutText)

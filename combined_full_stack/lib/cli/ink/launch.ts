@@ -1,4 +1,5 @@
 // AI : Ink host — TTY uses render(); tests/CI/piped use renderToString (no hang).
+// AI : TODO (opt-browser-tui) — do not PTY/xterm this into the GUI. Browser mode is a DOM skin of ViewModels.
 
 import { render, renderToString } from "ink"
 import type { SpineSession } from "@/lib/core/session"
