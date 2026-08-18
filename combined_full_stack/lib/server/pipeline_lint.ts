@@ -90,6 +90,8 @@ function graphLints(project: Project): PipelineLint[] {
 
   for (const m of project.modules) {
     for (const issue of invalidIssuesForModule(invalid, m.id)) {
+      // AI : TODO (lint-skip-structure-field) — drops llm Document-field errors. Prefer validate_project
+      // AI :   / computeInvalid; or include StructureField here so lint_pipeline catches source_file:document.
       if (issue.kind === InvalidKind.StructureField) continue;
       out.push({
         severity: "error",

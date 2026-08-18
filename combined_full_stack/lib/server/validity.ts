@@ -194,6 +194,9 @@ function stepAcceptsSpineType(
   // AI : TODO (linter-first) — delete when spine compat is cargo/pyright on generated orchestrator only.
   if (typeExprAssignable(expected, actual, typeAliases, models) || typeExprEqual(expected, actual)) return true;
   // AI : passthrough steps read pipeline state by label — spine type at this index is not their contract.
+  // AI : TODO (quote-spine-bypass) — Quote is NOT passthrough (usesPassthroughStructure) but is
+  // AI :   included here, so Link Quotes inType=ReceiptRow after llm-batch list[ReceiptRow] never
+  // AI :   flags. Output likewise. Check quote list-ness inheritance; don't blanket-return true.
   if (m.kind === ModuleKind.Output || m.kind === ModuleKind.Assert || m.kind === ModuleKind.HumanReview || m.kind === ModuleKind.Quote) return true;
   // AI : example-select unwraps the sole list[T] field on a combine (or similar) wrapper struct.
   if (m.kind === ModuleKind.ExampleSelect && exampleSelectAcceptsWrapper(expected, actual, models)) return true;
@@ -357,6 +360,8 @@ function computeMissingStructureInvalid(
   models: StructureModel[],
 ): InvalidMap {
   // AI : TODO bug — also flag dangling field.ref, empty field names, and input I/O shape vs uploaded doc sample.
+  // AI : TODO (input-assigned-docs) — pdf input + assigned sample_receipt_1.txt is valid today;
+  // AI :   Inference excludes the file (wrong-type). Flag inputType vs session inference docs.
   const invalid: InvalidMap = new Map();
   const modelIds = new Set(models.map((m) => m.id));
   for (const m of modules) {
@@ -373,6 +378,8 @@ function computeLlmDocumentFieldInvalid(
   modules: PipelineModule[],
   models: StructureModel[],
 ): InvalidMap {
+  // AI : TODO (tsx-export-star) — this check is dead in MCP until isLlmKind sees real ModuleKind
+  // AI :   values. ReceiptRow.source_file:document on llm-batch validated as ok via validate_project.
   const invalid: InvalidMap = new Map();
   const allModels = withSharedModels(models);
   for (const m of modules) {

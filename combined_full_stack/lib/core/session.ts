@@ -457,6 +457,9 @@ export class SpineSession {
   }
 
   setPendingProposal(proposal: ProjectProposal | null): void {
+    // AI : TODO (vibe-pending-compose) — replace, not merge. A later Vibe turn with
+    // AI :   changed.models=false still stores live models in proposal.models; Approve
+    // AI :   then skips models and keeps the broken schema. Overlay pending onto live first.
     this.commit({ ...this.snap, pendingProposal: proposal })
   }
 
@@ -467,6 +470,8 @@ export class SpineSession {
       this.renameProject(project.id, proposal.projectName)
     }
     if (proposal.changed.models || proposal.changed.modules || proposal.changed.typeAliases) {
+      // AI : TODO (vibe-pending-compose) — skipped keys keep live project values. Follow-up with
+      // AI :   changed.models=false after an unapplied schema edit Approves modules onto the old models.
       this.applyProjectChanges({
         ...(proposal.changed.models ? { models: proposal.models } : {}),
         ...(proposal.changed.modules ? { modules: proposal.modules } : {}),

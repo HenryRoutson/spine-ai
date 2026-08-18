@@ -348,6 +348,8 @@ function makeModuleFromSpec(
   models: StructureModel[],
   globalModel: ModelId,
 ): PipelineModule {
+  // AI : TODO (vibe-rewrite-ids) — always uid() a new step id. Full modules rewrite (vs modulePatch)
+  // AI :   orphans inferenceInputDocIds keyed by the old input id. Preserve ids by label/index.
   const inHint = parseStructureHint(spec.structureIn);
   const outHint = parseStructureHint(spec.structureOut);
   const inName = inHint?.name ?? spec.structureIn;
@@ -384,6 +386,9 @@ function makeModuleFromSpec(
       kind: spec.kind,
       label: spec.label,
       note: spec.note,
+      // AI : TODO (vibe-input-default-pdf) — omitted inputType becomes PDF. Few-shots use text so
+      // AI :   stand-in .txt files run; greenfield "receipts" then cannot pick sample_receipt_*.txt.
+      // AI :   Default to text (or align from session/proposal docs), not Pdf.
       inputType: spec.kind === ModuleKind.Input ? (spec.inputType as PipelineModule["inputType"]) ?? InputType.Pdf : undefined,
       inputNameContains: spec.inputNameContains,
       inputDescription: spec.inputDescription,
@@ -530,6 +535,8 @@ function alignInputTypesToSyntheticDocs(
   modules: PipelineModule[],
   docs: ProjectAssistantDocSpec[],
 ): PipelineModule[] {
+  // AI : TODO (vibe-align-session-docs) — only proposal docs[], not session uploads. Catalog already
+  // AI :   listed sample_receipt_*.txt while inputType stayed pdf. Also align from testDocsCatalog.
   if (!docs.length) return modules;
   const jsonOnly = docs.every((d) => d.type === InputType.Json);
   const standInType = jsonOnly ? InputType.Json : InputType.Text;
@@ -561,6 +568,8 @@ function buildThinkingUserPrompt(
   recentRuns?: AssistantRunSummary[],
   lastFailedRun?: AssistantRunSummary | null,
 ): string {
+  // AI : TODO (vibe-thinking-fields) — thinking prompt lists model names only, not field types.
+  // AI :   Agent cannot see amount:tuple[text,quote] vs float here; include name:type? per field.
   const modelsBlock = project.models.length
     ? project.models.map((m) => `- ${m.name}: ${m.description ?? "(no description)"}`).join("\n")
     : "(none yet)";
@@ -650,6 +659,9 @@ export function materializeProposal(
   project: Project,
   globalModel: ModelId,
 ): PipelineAssistantProposal | null {
+  // AI : TODO (vibe-prompt-vs-schema) — no check that llm/llm-batch prompt matches field types.
+  // AI :   Vibe asked for quotes on amount/tax after those fields became float (and the reverse).
+  // AI :   Flag quote-language vs non-quote fields, or strip quote instructions when type is float.
   // AI : full rewrite takes priority; patch applies when modules is null but modulePatch has entries.
   const hasPipelineRewrite = raw.modules !== null;
   const hasPipelinePatch = !hasPipelineRewrite && (raw.modulePatch?.length ?? 0) > 0;

@@ -163,6 +163,8 @@ export async function runBilledProjectAssistant(
   }
 
   try {
+    // AI : TODO (vibe-pending-compose) — GUI Send also proposes against the saved project, not the
+    // AI :   last unapproved chat proposal. Same clobber as CLI/MCP ask_agent if the user Sends twice.
     result = await proposeProjectChange(project, trimmed, history, model, enrichedOpts)
   } catch (err) {
     caught = err

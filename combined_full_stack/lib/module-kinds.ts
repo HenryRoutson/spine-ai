@@ -1,3 +1,6 @@
+// AI : TODO (tsx-export-star) — ModuleKind values are undefined under tsx ESM `export *` from
+// AI :   lib/types.ts. isLlmKind("llm-batch") is then false, so computeLlmDocumentFieldInvalid
+// AI :   never fires in MCP validate_project. Import from @/lib/server/types like mcp_tool does.
 import { LegacyModuleKind, ModuleKind } from "@/lib/types"
 import type { RunStepKind } from "@/lib/types"
 

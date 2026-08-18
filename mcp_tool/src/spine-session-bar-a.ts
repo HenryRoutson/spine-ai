@@ -230,6 +230,9 @@ export function rejectProposalFromSession(sessionPath?: string) {
 
 export async function askAgentFromSession(message: string, sessionPath?: string, kind?: string) {
   // AI : TODO (mcp-vibe-http) — POST /api/pipeline-assistant (billed + auth) like GUI Send, not in-process proposePipelineChange.
+  // AI : TODO (vibe-pending-compose) — askAgent proposes from live session.project then replaces pendingProposal.
+  // AI : TODO (mcp-vibe-review) — return data.proposal compact review is in CliCommandResult; Cursor
+  // AI :   still showed names-only get_project. Surface pending.changed + inputType vs docs in the review.
   const session = openMcpSession(sessionPath, false)
   const assistant =
     kind === "structure" || kind === "testing" || kind === "diagnosis" || kind === "vibe" ? kind : "vibe"

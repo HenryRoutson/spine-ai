@@ -568,6 +568,9 @@ export function compactProposalReview(proposal: ProjectProposal) {
 }
 
 export function toMcpProjectReview(snap: SessionSnapshot) {
+  // AI : TODO (mcp-vibe-review) — compact review still omits inputType-vs-assigned-docs mismatches
+  // AI :   and pending vs live field diffs. Cursor MCP truncated this to model names only in practice;
+  // AI :   keep a one-line issues[] (pdf slot + .txt docs, pending.changed) so agents see the problem.
   const project = snap.projects.find((p) => p.id === snap.activeProjectId) ?? snap.projects[0]
   if (!project) throw new Error("no active project — session add-project first")
   return {

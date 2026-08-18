@@ -1,5 +1,6 @@
 // AI : same propose/apply path as Vibe — LLM is remote; apply is local session mutation.
 // AI : TODO (arch-structure-assistant) — askStructureAgent uses proposeStructureChange; GUI structure tab uses full project assistant.
+// AI : TODO (tsx-export-star) — DocLabel/InputType may be undefined under tsx; use @/lib/server/types.
 
 import { DocLabel, InputType } from "@/lib/types"
 import type { ModelId, Project } from "@/lib/types"
@@ -105,6 +106,11 @@ async function askVibeAgent(
   session.appendChat({ role: "user", content: trimmed })
   try {
     const propose = opts.propose ?? defaultAgentPropose
+    // AI : TODO (vibe-pending-compose) — propose against session.project (live), then setPendingProposal
+    // AI :   overwrites any unapproved proposal. Chat history claims the last turn already changed
+    // AI :   models, so the model returns models:null; materialize keeps the live (old) schema.
+    // AI :   Follow-up Send before Approve dropped ReceiptRow float/optional fixes. Propose from
+    // AI :   pending overlay, or merge changed flags instead of replacing the whole proposal.
     const result = await propose(session.project, trimmed, history, session.model)
     session.appendChat({ role: "assistant", content: result.message })
     const proposal = result.proposal ? toProjectProposal(result.proposal) : null
