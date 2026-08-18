@@ -162,6 +162,7 @@ server.tool(
 
 server.tool(
   "validate_pipeline_wiring",
+  // AI : TODO (allow-pipeline-non-linear-fork) — description: tree I/O (lanes), not only linear spine.
   "Check linear spine I/O validity across all steps — same computeInvalid rules as the pipeline editor.",
   {
     projectSeedPath: z.string(),

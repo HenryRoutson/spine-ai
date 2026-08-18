@@ -18,6 +18,8 @@
 // AI :   for local mutations. React keeps hydration, debounce save, billing caches (parity.md §8.5).
 // AI : TODO (arch-gui-viewmodels) — React pipeline/docs panels should consume toPipelineView /
 // AI :   toDocsView so CLI and GUI cannot drift (parity.md §8.5).
+// AI : TODO (allow-pipeline-non-linear-fork) — series-parallel Fork step (nested linear lanes + join).
+// AI :   Not React Flow. See lib/server/fork-roadmap.ts. Linear spine + Parallel/Combine/Assemble stay.
 // AI : TODO (arch-module-union) — PipelineModule is a god object; discriminated union per ModuleKind.
 // AI : TODO (arch-store-async) — Store is sync + write-behind RAM; make methods async (JsonStore vs
 // AI :   SupabaseStore should not both be in-memory mirrors).

@@ -5,6 +5,7 @@ import { computeStructureIssues, structureIssueMessage } from "@/lib/structure-v
 import { computeInvalid, invalidIssuesForModule } from "@/lib/validity"
 import { invalidStepMessage } from "@/lib/server/validity-messages"
 import { withSharedModels } from "@/lib/server/builtin_models"
+import { DocLabel } from "@/lib/types"
 import type { ProjectContext } from "@/lib/cli/project_context"
 import type { CliCommandResult, CliIssue } from "@/lib/cli/types"
 
@@ -19,7 +20,12 @@ function structureIssues(ctx: ProjectContext): CliIssue[] {
 
 function pipelineIssues(ctx: ProjectContext): CliIssue[] {
   const { modules, models, typeAliases = [] } = ctx.project
-  const invalid = computeInvalid(modules, models, { typeAliases })
+  const invalid = computeInvalid(modules, models, {
+    typeAliases,
+    inferenceDocs: ctx.docRefs
+      .filter((d) => d.label === DocLabel.Inference)
+      .map((d) => ({ name: d.name, type: d.type })),
+  })
   const modelsForMessages = withSharedModels(models)
   const issues: CliIssue[] = []
   for (const m of modules) {

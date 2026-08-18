@@ -18,6 +18,7 @@ export function labelAsStateKey(label: string): StepLabel {
 }
 
 export function labelsForModules(modules: PipelineModule[]): StepLabel[] {
+  // AI : TODO (allow-pipeline-non-linear-fork) — include nested forkBranches labels (unique across tree).
   return modules.map((m) => labelAsStateKey(m.label)).filter(Boolean);
 }
 

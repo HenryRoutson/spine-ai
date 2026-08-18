@@ -1,6 +1,7 @@
 // AI : kind × lang step-body table — adding a ModuleKind must fill ts/py/go/rs (typecheck).
 // AI : TODO (arch-export-file) — generatePipelineSource* still assemble sections in 4 files.
 // AI : TODO (arch-export-orchestrator) — after dispatch is the only kind switch, one IR then printers (leave BAML).
+// AI : TODO (allow-pipeline-non-linear-fork) — Fork row in STEP_BODY; lane modules dispatched as today.
 
 import { assertEntriesForModule, wrapAssertPython, wrapAssertTypeScriptForExport } from "@/lib/assert_steps";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
@@ -744,6 +745,7 @@ export const STEP_BODY: Record<ModuleKind, Record<ExportLang, StepBodyEmitter>> 
     go: (ctx) => generateParallelStepBodyGo(ctx.m, ctx.project, ctx.outType),
     rs: (ctx) => generateParallelStepBodyRust(ctx.m, ctx.project, ctx.outType),
   },
+  // AI : TODO (allow-pipeline-non-linear-fork) — dispatch table row for Fork (lane bodies + join).
   [ModuleKind.Chunk]: {
     ts: emitTsMergeChunkCustom,
     py: emitPyMergeChunkCustom,

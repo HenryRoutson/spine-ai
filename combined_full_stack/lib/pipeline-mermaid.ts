@@ -88,6 +88,7 @@ function themeClassDefs(theme: PipelineMermaidTheme): string[] {
 }
 
 // AI : flowchart LR mirrors the pipeline canvas — spine plus dashed side feeds into combine steps.
+// AI : TODO (allow-pipeline-non-linear-fork) — mermaid subgraph per lane; join node after parallel edges.
 export function derivePipelineMermaid(
   modules: PipelineModule[],
   models: StructureModel[],

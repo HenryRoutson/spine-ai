@@ -72,6 +72,7 @@ type PipelineCanvasProps = {
 }
 
 // AI : shared linear pipeline canvas — Logging (read-only) and Pipeline builder (edit + inserts).
+// AI : TODO (allow-pipeline-non-linear-fork) — fork segment: N columns of insert-slot lanes, join row; no open canvas.
 export function PipelineCanvas({
   modules,
   models,

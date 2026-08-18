@@ -27,8 +27,6 @@ export function docMatchesInputModule(doc: DocRef, inputModule: PipelineModule):
   return docNameMatchesInputModule(doc, inputModule)
 }
 
-// AI : TODO (input-assigned-docs) — picker excludes wrong-type files, but validate_project does not.
-// AI :   Vibe pdf input + sample_receipt_1.txt stayed "valid"; Inference slot looks empty.
 export function exclusionReasonForInputModule(
   doc: DocRef,
   inputModule: PipelineModule,

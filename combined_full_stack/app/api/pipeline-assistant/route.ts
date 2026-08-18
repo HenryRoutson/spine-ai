@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   const parsed = await parseRequestJson(req, assistantRequestBodySchema);
   if ("validationError" in parsed) return apiError(parsed.validationError, HTTP.BAD_REQUEST);
-  const { projectId, message, history = [], stream = false, uiContext } = parsed;
+  const { projectId, message, history = [], stream = false, uiContext, pendingProposal } = parsed;
 
   const modelOrErr = parseAssistantRequestModel(parsed.model);
   if (modelOrErr instanceof NextResponse) return modelOrErr;
@@ -45,7 +45,12 @@ export async function POST(req: NextRequest) {
   });
 
   const trimmedHistory = trimAssistantHistory(history);
-  const assistantOptsBase = uiContext?.length ? { uiContext } : undefined;
+  const assistantOptsBase = {
+    ...(uiContext?.length ? { uiContext } : {}),
+    ...(pendingProposal
+      ? { pendingProposal: pendingProposal as import("@/lib/project-assistant-types").ProjectProposal }
+      : {}),
+  };
 
   try {
     if (!stream) {

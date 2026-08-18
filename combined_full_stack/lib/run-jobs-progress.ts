@@ -1,5 +1,6 @@
 // AI : shared progress helpers for global run job tracking.
 import { segmentPipeline } from "@/lib/pipeline-layout"
+// AI : TODO (allow-pipeline-non-linear-fork) — job progress walks fork lanes, not only outer segments.
 import type { StepUiState } from "@/lib/run-engine"
 import type { ModuleId, PipelineModule } from "@/lib/types"
 

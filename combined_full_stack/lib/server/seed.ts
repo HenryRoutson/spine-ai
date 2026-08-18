@@ -34,6 +34,7 @@ import {
 export const SEEDS_DIR = resolve(process.cwd(), "seeds");
 
 // AI : zod guard for user-authored seed files — fails early with a precise error (config.py pattern).
+// AI : TODO (allow-pipeline-non-linear-fork) — SeedFileSchema nested modules on Fork; stage F seeds.
 const enumOf = <T extends string>(values: readonly T[]) => z.enum(values as [T, ...T[]]);
 const FieldTypeSchema = enumOf(FIELD_TYPES);
 const InputTypeSchema = enumOf(INPUT_TYPES.map((t) => t.value) as InputType[]);

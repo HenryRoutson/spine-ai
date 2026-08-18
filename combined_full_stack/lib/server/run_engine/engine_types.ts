@@ -70,6 +70,7 @@ export interface RunCtx {
   sourceText: string;
   sourceDocId: DocId;
   prevModuleId?: ModuleId;
+  // AI : TODO (allow-pipeline-non-linear-fork) — pause/resume needs branchId + lane index, not only prevModuleId.
   reportSub?: (sub: StepSubProgress) => void;
   stepLlmCalls?: LlmCallRecord[];
   stepExtraFailures?: RunFailureRecord[];

@@ -165,8 +165,6 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
       renameProject(project.id, proposal.projectName)
     }
     if (proposal.changed.models || proposal.changed.modules || proposal.changed.typeAliases) {
-      // AI : TODO (vibe-pending-compose) — same as session.applyProposal: skipped changed.models
-      // AI :   keeps the live schema when the last Send was a modules-only follow-up.
       applyProjectChanges({
         ...(proposal.changed.models ? { models: proposal.models } : {}),
         ...(proposal.changed.modules ? { modules: proposal.modules } : {}),
@@ -338,13 +336,11 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
         requestAssistant={async (
           text,
           history,
-          { setLoadingPhase, onThinkingDelta, onMessageDelta, onDebugEntry, uiContext },
+          { setLoadingPhase, onThinkingDelta, onMessageDelta, onDebugEntry, uiContext, pendingProposal },
         ) => {
           // AI : Paste chips already appear in message/history as <pasted>…</pasted> from AssistantChat.
           // AI : uiContext is snapshotted at send — don't read live pins (cleared after success).
           const pins = uiContext ?? []
-          // AI : TODO (vibe-pending-compose) — POST uses live projectId; unapproved proposal on the
-          // AI :   last assistant bubble is not the propose base. Follow-up Send before Approve loses schema edits.
           const res = await fetch(API_ROUTES.projectAssistant, {
             method: "POST",
             headers: JSON_HEADERS,
@@ -356,6 +352,7 @@ export function ProjectAssistant({ className, chatId }: ProjectAssistantProps) {
               stream: true,
               humanSurface,
               ...(pins.length > 0 ? { uiContext: pins } : {}),
+              ...(pendingProposal ? { pendingProposal } : {}),
             }),
           })
           if (!res.ok) {

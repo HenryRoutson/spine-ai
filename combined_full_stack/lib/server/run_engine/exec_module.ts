@@ -35,6 +35,7 @@ export async function execModule(m: PipelineModule, ctx: RunCtx, log: RunLogger)
       return execAssembleStep(m, ctx, log);
     case ModuleKind.Parallel:
       return execParallelStep(m, ctx, log);
+    // AI : TODO (allow-pipeline-non-linear-fork) — case Fork: execForkStep (Promise.all lanes + join).
     case ModuleKind.Combine:
       return execCombineStep(m, ctx, log);
     case ModuleKind.Transform:

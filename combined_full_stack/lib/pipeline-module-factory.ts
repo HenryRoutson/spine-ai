@@ -69,6 +69,7 @@ export function resolveModuleNote(
 }
 
 // AI : shared defaults for UI "add step" and pipeline-assistant materialization.
+// AI : TODO (allow-pipeline-non-linear-fork) — factory defaults for Fork (2 empty lanes + product join).
 export function createPipelineModule(
   opts: ModuleFactoryOpts,
   models: StructureModel[],

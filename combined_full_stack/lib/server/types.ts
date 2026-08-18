@@ -181,6 +181,7 @@ export enum ModuleKind {
   Assemble = "assemble",
   // AI : fixed author-time LLM branches on same spine input → Promise.all → flat product join.
   Parallel = "parallel",
+  // AI : TODO (allow-pipeline-non-linear-fork) — Fork = nested linear lanes + join (not Parallel LLM-only).
   Combine = "combine",
   Chunk = "chunk", // AI : split text / document into list chunks (generated TS)
   Merge = "merge", // AI : recursive structural merge — dict deep, list concat/union/dedupe, per-path rules
@@ -329,6 +330,7 @@ export interface PipelineModule {
   assembleBindings?: Record<string, AssembleSource>;
   // AI : parallel — fixed LLM branches sharing spine input; joined into auto product
   parallelBranches?: ParallelBranch[];
+  // AI : TODO (allow-pipeline-non-linear-fork) — forkBranches / forkJoin on Fork steps (nested modules[]).
   // AI : example-select — cached-prefix relevance filter (see lib/example-select.ts defaults)
   exampleContextLabel?: string; // prior step label supplying {description} text
   exampleContextField?: string; // optional dot path within that step output
@@ -433,6 +435,7 @@ export interface Project {
   kind: string;
   models: StructureModel[];
   typeAliases?: TypeAlias[];
+  // AI : TODO (allow-pipeline-non-linear-fork) — outer spine; Fork nests per-lane modules[]. flatten for logs/cache.
   modules: PipelineModule[];
   strategies: Strategy[];
   seedDocNames?: string[]; // AI : filenames from seeds/*.json — scopes inference inputs to this project
@@ -825,6 +828,7 @@ export const MODULE_META: Record<ModuleKind, { label: string; description: strin
     label: "Parallel LLM",
     description: "Run fixed LLM branches on the same spine input concurrently, then join into one structure",
   },
+  // AI : TODO (allow-pipeline-non-linear-fork) — MODULE_META.Fork: nested linear lanes + join.
   [ModuleKind.Combine]: { label: "Combine Inputs", description: "Merge a new input with the pipeline state" },
   [ModuleKind.Chunk]: {
     label: "Chunk",

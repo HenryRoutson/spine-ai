@@ -91,6 +91,7 @@ const ACTION_COMMANDS: TuiCommand[] = [
   { id: "configure-step", key: "e", aliases: ["edit", "configure", "inspect", "step"], label: "Configure step", hint: "Switch step and edit prompt / structure / note", needsProject: true, needsSteps: true },
   { id: "add-model", key: "m", aliases: ["model", "structure", "schema"], label: "Add model", hint: "Named structure — fixes Input / Output", needsProject: true },
   { id: "add-step", key: "s", aliases: ["step", "llm", "module"], label: "Add step", hint: "Insert llm, combine, chunk, …", needsProject: true },
+  // AI : TODO (allow-pipeline-non-linear-fork) — TUI add-step / list shows lane indent; fork kind in picker.
   { id: "vibe", key: "a", aliases: ["vibe", "agent", "ask"], label: "Ask vibe", hint: "Describe a change in plain language", needsProject: true },
   { id: "run-inference", key: "i", aliases: ["run", "infer", "inference"], label: "Run inference", hint: "Execute the pipeline — appears in Logging", needsProject: true },
   { id: "run-test", key: "t", aliases: ["test", "testing"], label: "Run test", hint: "Run *_testing.json and record the verdict", needsProject: true },

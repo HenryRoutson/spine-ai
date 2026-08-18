@@ -16,6 +16,7 @@ export function createWriteLive(
   return (runningIndex: number) => {
     if (!enabled) return;
     const display: LiveStep[] = project.modules.map((m, idx) => {
+      // AI : TODO (allow-pipeline-non-linear-fork) — flatten Fork lanes so live HTML lists nested steps.
       const done = steps.find((s) => s.moduleId === m.id);
       if (done) {
         const inLabel = isLlmKind(m.kind) ? "prompt" : "in";

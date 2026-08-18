@@ -2,6 +2,7 @@
 
 import { useMemo } from "react"
 import { segmentPipeline } from "@/lib/pipeline-layout"
+// AI : TODO (allow-pipeline-non-linear-fork) — progress % over flattened tree (lanes), not outer modules only.
 import { formatRunErrorForDisplay, pipelineRunError } from "@/lib/run-errors"
 import { useCyclingWaitPhrase } from "@/lib/inference-wait-phrases"
 import type { StepUiState } from "@/lib/run-engine"

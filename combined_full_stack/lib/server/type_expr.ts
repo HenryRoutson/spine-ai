@@ -295,6 +295,11 @@ export function stepSpineOutType(m: PipelineModule | undefined): TypeExpr | unde
 }
 
 export function stepSpineInType(m: PipelineModule): TypeExpr | undefined {
+  // AI : Link Quotes inherits list-ness from the LLM outType — stored inType may still be a single ref.
+  if (m.kind === "quote") {
+    if (m.outType) return m.outType;
+    if (m.inStructureId) return structureSpineType(m.inStructureId, stepEmitsList(m));
+  }
   if (m.inType) return m.inType;
   if (!m.inStructureId) return undefined;
   if (m.kind === "llm-batch" || m.kind === "example-select") {

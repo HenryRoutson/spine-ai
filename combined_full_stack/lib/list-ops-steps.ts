@@ -215,6 +215,7 @@ export function syncListOpsModules(
   modules: PipelineModule[],
   models: StructureModel[],
 ): { modules: PipelineModule[]; models: StructureModel[] } {
+  // AI : TODO (allow-pipeline-non-linear-fork) — prev is previous in lane, not modules[i-1] of a flat list.
   let scratchModels = models
   const nextModules = modules.map((m, i) => {
     const prev = i > 0 ? modules[i - 1] : undefined

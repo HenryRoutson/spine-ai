@@ -1,6 +1,7 @@
 "use client"
 
 // AI : one scroll — each pipeline segment row stays horizontally aligned with its test config.
+// AI : TODO (allow-pipeline-non-linear-fork) — fork row with N test columns (still one vertical scroll).
 
 import { useCallback, useMemo, useRef, type ReactNode } from "react"
 import {

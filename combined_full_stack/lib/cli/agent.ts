@@ -1,7 +1,5 @@
 // AI : same propose/apply path as Vibe — LLM is remote; apply is local session mutation.
 // AI : TODO (arch-structure-assistant) — askStructureAgent uses proposeStructureChange; GUI structure tab uses full project assistant.
-// AI : TODO (tsx-export-star) — DocLabel/InputType may be undefined under tsx; use @/lib/server/types.
-
 import { DocLabel, InputType } from "@/lib/types"
 import type { ModelId, Project } from "@/lib/types"
 import type { SpineSession } from "@/lib/core/session"
@@ -15,6 +13,7 @@ import { generateTestFile } from "@/lib/server/testing_assistant"
 import { diagnoseRunStream } from "@/lib/server/diagnosis_assistant"
 import type { CliCommandResult } from "@/lib/cli/types"
 import { compactProposalReview } from "@/lib/core/view"
+import { mergePendingProposals, overlayProposalOnProject } from "@/lib/project-proposal-overlay"
 
 export type AgentKind = "vibe" | "structure" | "testing" | "diagnosis"
 
@@ -105,18 +104,27 @@ async function askVibeAgent(
   const history = session.chat
   session.appendChat({ role: "user", content: trimmed })
   try {
+    const live = session.project
+    if (!live) {
+      return {
+        ok: false,
+        command: "agent ask",
+        issues: [{ level: "error", where: "session", message: "no active project — session add-project first" }],
+      }
+    }
     const propose = opts.propose ?? defaultAgentPropose
-    // AI : TODO (vibe-pending-compose) — propose against session.project (live), then setPendingProposal
-    // AI :   overwrites any unapproved proposal. Chat history claims the last turn already changed
-    // AI :   models, so the model returns models:null; materialize keeps the live (old) schema.
-    // AI :   Follow-up Send before Approve dropped ReceiptRow float/optional fixes. Propose from
-    // AI :   pending overlay, or merge changed flags instead of replacing the whole proposal.
-    const result = await propose(session.project, trimmed, history, session.model)
+    const prevPending = session.pendingProposal
+    const result = await propose(
+      overlayProposalOnProject(live, prevPending),
+      trimmed,
+      history,
+      session.model,
+    )
     session.appendChat({ role: "assistant", content: result.message })
     const proposal = result.proposal ? toProjectProposal(result.proposal) : null
     const actions = proposal?.proposedActions ?? []
     if (proposal) {
-      session.setPendingProposal(proposal)
+      session.setPendingProposal(mergePendingProposals(prevPending, proposal))
       if (opts.apply) session.applyPendingProposal()
     }
     let ran = 0

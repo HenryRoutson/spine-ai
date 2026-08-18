@@ -304,6 +304,7 @@ export function syncAssembleModules(
   models: StructureModel[],
   typeAliases: TypeAlias[] = [],
 ): { modules: PipelineModule[]; models: StructureModel[] } {
+  // AI : TODO (allow-pipeline-non-linear-fork) — sync assemble/parallel inside fork lanes.
   let scratch = models
   const nextModules = modules.map((m, i) => {
     if (m.kind !== ModuleKind.Assemble && m.kind !== ModuleKind.Parallel) return m

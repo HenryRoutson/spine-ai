@@ -14,7 +14,7 @@ import {
   Zap,
 } from "lucide-react"
 import { useStore } from "@/lib/store"
-import { computeInvalidForUi } from "@/lib/pipeline-validity-ui"
+import { computeInvalidForUi, invalidOptsForDocs } from "@/lib/pipeline-validity-ui"
 import { structureIssueMessagesForUi } from "@/lib/structure-validity-ui"
 import { computeWorkspaceValidity } from "@/lib/workspace-validity-ui"
 import { computeWarnings, formatInvalidMapErrors, InvalidKind, ioMismatchInspectorFix, invalidForModule, invalidIssuesForModule, IoMismatchFixKind, prevModuleId } from "@/lib/validity"
@@ -76,7 +76,7 @@ import {
 } from "@/lib/editor-split-settings"
 
 export function PipelineBuilder() {
-  const { modules, setModules, models, setModels, model: globalModel, runs, typeAliases, project } = useStore()
+  const { modules, setModules, models, setModels, model: globalModel, runs, typeAliases, project, docs, inferenceInputDocIds } = useStore()
   const [selectedId, setSelectedId] = useState<string>(modules[0]?.id ?? "")
   const [copied, setCopied] = useState(false)
   useRerenderOnEvent(LOGGING_SETTINGS_CHANGED_EVENT)
@@ -92,7 +92,7 @@ export function PipelineBuilder() {
     !!project?.teamReadOnly,
   )
   const typeIssueMessages = structureIssueMessagesForUi(models, typeAliases)
-  const invalid = computeInvalidForUi(modules, models, typeAliases)
+  const invalid = computeInvalidForUi(modules, models, typeAliases, invalidOptsForDocs(docs, inferenceInputDocIds))
   const warnings = computeWarnings(modules, models)
   const warningCount = [...warnings.values()].reduce((n, ws) => n + ws.length, 0)
   const metrics = moduleMetrics(runs)
@@ -103,6 +103,7 @@ export function PipelineBuilder() {
     okRuns.length > 0 ? okRuns.reduce((a, r) => a + runBilledCents(r), 0) / okRuns.length : null
   const cachedCount = modules.filter((m) => m.cached).length
 
+  // AI : TODO (allow-pipeline-non-linear-fork) — insert/move/remove take optional branchId; splice into that lane.
   function insertModule(kind: ModuleKind, at = modules.length) {
     const fresh: PipelineModule[] =
       kind === ModuleKind.Combine

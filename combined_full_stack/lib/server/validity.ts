@@ -5,6 +5,7 @@
 // AI : TODO (arch-validity-split) — this file still mixes graph I/O, n8n, canRunStep, billedCents notes.
 // AI :   Keep computeInvalid as the graph checker; move n8n/canRunStep to own modules (messages already split).
 // AI : TODO (spec) — derive dependency graph from step() refs in custom code; flag unused/isolated steps (linear spine only today).
+// AI : TODO (allow-pipeline-non-linear-fork) — computeInvalid walks Fork lanes with synthetic predecessor; join product is next spine.
 // AI : TODO security — runs.data is user-writable via RLS; billedCents in JSON can be forged for display.
 // AI : Split billing fields to server-only columns or restrict data updates with a trigger.
 import type {
@@ -19,7 +20,7 @@ import { ModuleKind, FieldType } from "./types";
 import { customCodeEntriesForModule } from "@/lib/custom_code_entries";
 import { tryCompileCustomCodeEntry } from "@/lib/custom_code";
 import { usesPassthroughStructure, isLlmKind, isMergeModuleKind, stepRequiresNote } from "@/lib/module-kinds";
-import { inputModuleTypesAreAllJsonNative } from "@/lib/inference-input-core";
+import { inputModuleTypesAreAllJsonNative, inputTypeLabel, inputTypesForModule } from "@/lib/inference-input-core";
 import { assertEntriesForModule, parseAssertReferencedLabels } from "@/lib/assert_steps";
 import {
   canAutoWrapListIntoOutputStructure,
@@ -194,10 +195,7 @@ function stepAcceptsSpineType(
   // AI : TODO (linter-first) — delete when spine compat is cargo/pyright on generated orchestrator only.
   if (typeExprAssignable(expected, actual, typeAliases, models) || typeExprEqual(expected, actual)) return true;
   // AI : passthrough steps read pipeline state by label — spine type at this index is not their contract.
-  // AI : TODO (quote-spine-bypass) — Quote is NOT passthrough (usesPassthroughStructure) but is
-  // AI :   included here, so Link Quotes inType=ReceiptRow after llm-batch list[ReceiptRow] never
-  // AI :   flags. Output likewise. Check quote list-ness inheritance; don't blanket-return true.
-  if (m.kind === ModuleKind.Output || m.kind === ModuleKind.Assert || m.kind === ModuleKind.HumanReview || m.kind === ModuleKind.Quote) return true;
+  if (m.kind === ModuleKind.Output || m.kind === ModuleKind.Assert || m.kind === ModuleKind.HumanReview) return true;
   // AI : example-select unwraps the sole list[T] field on a combine (or similar) wrapper struct.
   if (m.kind === ModuleKind.ExampleSelect && exampleSelectAcceptsWrapper(expected, actual, models)) return true;
   if (!cardinalityMismatch(expected, actual)) return false;
@@ -359,9 +357,7 @@ function computeMissingStructureInvalid(
   modules: PipelineModule[],
   models: StructureModel[],
 ): InvalidMap {
-  // AI : TODO bug — also flag dangling field.ref, empty field names, and input I/O shape vs uploaded doc sample.
-  // AI : TODO (input-assigned-docs) — pdf input + assigned sample_receipt_1.txt is valid today;
-  // AI :   Inference excludes the file (wrong-type). Flag inputType vs session inference docs.
+  // AI : TODO bug — also flag dangling field.ref and empty field names.
   const invalid: InvalidMap = new Map();
   const modelIds = new Set(models.map((m) => m.id));
   for (const m of modules) {
@@ -378,8 +374,6 @@ function computeLlmDocumentFieldInvalid(
   modules: PipelineModule[],
   models: StructureModel[],
 ): InvalidMap {
-  // AI : TODO (tsx-export-star) — this check is dead in MCP until isLlmKind sees real ModuleKind
-  // AI :   values. ReceiptRow.source_file:document on llm-batch validated as ok via validate_project.
   const invalid: InvalidMap = new Map();
   const allModels = withSharedModels(models);
   for (const m of modules) {
@@ -409,6 +403,42 @@ function computeJsonInputMismatchInvalid(
     const out = models.find((x) => x.id === m.outStructureId);
     if (isBuiltinDocumentModel(out)) {
       pushInvalid(invalid, { moduleId: m.id, kind: InvalidKind.JsonInputMismatch });
+    }
+  }
+  return invalid;
+}
+
+function computeInputAssignedDocInvalid(
+  modules: PipelineModule[],
+  opts?: ComputeInvalidOpts,
+): InvalidMap {
+  const invalid: InvalidMap = new Map();
+  const docs = opts?.inferenceDocs ?? [];
+  if (!docs.length && !opts?.assignedDocTypes) return invalid;
+  for (const m of modules) {
+    if (m.kind !== ModuleKind.Input) continue;
+    const allowed = inputTypesForModule(m);
+    if (!allowed.length) continue;
+    const allowedSet = new Set(allowed as string[]);
+    const assigned = opts?.assignedDocTypes?.[m.id] ?? [];
+    const wrongAssigned = assigned.filter((t) => !allowedSet.has(t));
+    if (wrongAssigned.length) {
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: `assigned ${wrongAssigned.join(", ")} file does not match input type ${inputTypeLabel(m.inputType)}`,
+      });
+      continue;
+    }
+    if (!docs.length) continue;
+    const passable = docs.filter((d) => allowedSet.has(d.type));
+    if (!passable.length) {
+      const seen = [...new Set(docs.map((d) => d.type))].join(", ");
+      pushInvalid(invalid, {
+        moduleId: m.id,
+        kind: InvalidKind.StructureField,
+        structureMessage: `no uploaded inference docs match this input (${inputTypeLabel(m.inputType)}; have ${seen})`,
+      });
     }
   }
   return invalid;
@@ -447,6 +477,8 @@ function computeCodeCompileInvalid(modules: PipelineModule[]): InvalidMap {
 export type ComputeInvalidOpts = {
   requireInputDescriptions?: boolean;
   typeAliases?: TypeAlias[];
+  inferenceDocs?: { name: string; type: string }[];
+  assignedDocTypes?: Partial<Record<ModuleId, string[]>>;
 };
 
 function modulesForStructure(modelId: StructureModelId, modules: PipelineModule[]): ModuleId[] {
@@ -705,6 +737,7 @@ function computeWebhookInvalid(modules: PipelineModule[]): InvalidMap {
 // AI :   require credential env when description.credentials required (see lib/server/n8n-roadmap.ts).
 
 // AI : canonical I/O-validity check — strictly linear except combine (pipeline state + side doc).
+// AI : TODO (allow-pipeline-non-linear-fork) — tree walk: outer spine + per-lane computeInvalid + join outType.
 export function computeInvalid(
   modules: PipelineModule[],
   models: StructureModel[] = [],
@@ -894,6 +927,11 @@ export function computeInvalid(
       pushInvalid(invalid, issue);
     }
   }
+  for (const [id, issues] of computeInputAssignedDocInvalid(modules, opts)) {
+    for (const issue of issues) {
+      pushInvalid(invalid, issue);
+    }
+  }
   for (const [id, issues] of computeCodeCompileInvalid(modules)) {
     for (const issue of issues) {
       pushInvalid(invalid, issue);
@@ -965,6 +1003,21 @@ function computeDuplicateIoStructInvalid(modules: PipelineModule[]): InvalidMap 
 }
 
 // AI : warnings don't block runs — empty LLM prompts fall back at runtime but should be visible.
+function llmPromptQuoteMismatch(prompt: string, model: StructureModel): string | null {
+  const quoteTypes = new Set<string>([FieldType.TupleTextQuote, FieldType.ListTupleTextQuote]);
+  for (const f of model.fields) {
+    if (quoteTypes.has(f.type)) continue;
+    const name = f.name.trim();
+    if (!name) continue;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(?:quote\\w*|quoted)\\W{0,40}${escaped}|${escaped}\\W{0,40}(?:quote\\w*|quoted)`, "i");
+    if (re.test(prompt)) {
+      return `${model.name}.${name} is ${f.type} but the prompt asks to quote it`;
+    }
+  }
+  return null;
+}
+
 export function computeWarnings(
   modules: PipelineModule[],
   models: StructureModel[] = [],
@@ -981,6 +1034,13 @@ export function computeWarnings(
     const m = modules[i];
     if (isLlmKind(m.kind) && !m.prompt?.trim()) {
       add(m.id, { moduleId: m.id, kind: PipelineWarningKind.NoPrompt });
+    }
+    if (isLlmKind(m.kind) && m.prompt?.trim() && m.outStructureId) {
+      const out = models.find((x) => x.id === m.outStructureId);
+      const mismatch = out ? llmPromptQuoteMismatch(m.prompt, out) : null;
+      if (mismatch) {
+        add(m.id, { moduleId: m.id, kind: PipelineWarningKind.PromptQuoteMismatch, detail: mismatch });
+      }
     }
     if (m.kind === ModuleKind.Quote && !isAutoQuoteStep(m) && m.outStructureId) {
       const out = models.find((x) => x.id === m.outStructureId);

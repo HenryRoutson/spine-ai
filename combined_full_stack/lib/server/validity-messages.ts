@@ -101,6 +101,9 @@ export function warningStepMessage(
   if (issue.kind === PipelineWarningKind.NoPrompt) return "no prompt — schema-only call at runtime";
   if (issue.kind === PipelineWarningKind.JsonInputType) return "JSON file type is not typed — set I/O model to a structure";
   if (issue.kind === PipelineWarningKind.QuoteNoFields) return "output model has no quote fields";
+  if (issue.kind === PipelineWarningKind.PromptQuoteMismatch) {
+    return issue.detail ?? "prompt asks to quote a field that is not a quote type";
+  }
   if (issue.kind === PipelineWarningKind.TransformMultiList) {
     const m = modules.find((x) => x.id === issue.moduleId);
     const name = modelName(models, m?.outStructureId) ?? "output";

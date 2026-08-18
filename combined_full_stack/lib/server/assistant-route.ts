@@ -31,6 +31,8 @@ import { logger } from "./server_logger"
 import type { BillingUserKey } from "./billing_account"
 import { UnknownModelError, parseRequestModel } from "./model_catalog"
 import { ensureModelOptionsFresh } from "./openrouter_models"
+import type { ProjectProposal } from "@/lib/project-assistant-types"
+import { mergePendingProposals, overlayProposalOnProject } from "@/lib/project-proposal-overlay"
 import { DEFAULT_MODEL, type ModelId, type Project, ProjectId } from "./types"
 import type { Store } from "./store"
 
@@ -134,7 +136,7 @@ export async function runBilledProjectAssistant(
   message: string,
   history: ChatTurn[],
   model: ModelId,
-  opts?: PipelineAssistantOpts,
+  opts?: PipelineAssistantOpts & { pendingProposal?: ProjectProposal | null },
 ): Promise<AssistantSessionResult | NextResponse> {
   const billingOrErr = await requireAssistantBilling()
   if (billingOrErr instanceof NextResponse) return billingOrErr
@@ -147,25 +149,31 @@ export async function runBilledProjectAssistant(
   let caught: unknown
   let billedCents = 0
 
-  // AI : @file / Select UI pins — load doc bytes + live step/model defs before the prompt.
-  const observe = buildObserveOpts(store, project, opts?.humanSurface)
+  const pendingProposal = opts?.pendingProposal ?? null
+  const { pendingProposal: _drop, ...restOpts } = (opts ?? {}) as PipelineAssistantOpts & {
+    pendingProposal?: ProjectProposal | null
+  }
+  const base = overlayProposalOnProject(project, pendingProposal)
+  const observe = buildObserveOpts(store, base, restOpts.humanSurface)
   const enrichedOpts: PipelineAssistantOpts = {
-    ...opts,
-    ...(opts?.uiContext?.length
-      ? { uiContext: enrichUiContextRefs(store, project, opts.uiContext) }
+    ...restOpts,
+    ...(restOpts.uiContext?.length
+      ? { uiContext: enrichUiContextRefs(store, base, restOpts.uiContext) }
       : {}),
-    // AI : always attach Testing catalog — Vibe must not lose Build visibility.
-    testDocsCatalog: opts?.testDocsCatalog ?? buildTestDocsCatalog(store, project),
-    recentRuns: opts?.recentRuns ?? observe.recentRuns,
-    lastFailedRun: opts?.lastFailedRun ?? observe.lastFailedRun,
-    // AI : Phase 4 observe tools need store inside proposePipelineChange.
-    store: opts?.store ?? store,
+    testDocsCatalog: restOpts.testDocsCatalog ?? buildTestDocsCatalog(store, base),
+    recentRuns: restOpts.recentRuns ?? observe.recentRuns,
+    lastFailedRun: restOpts.lastFailedRun ?? observe.lastFailedRun,
+    store: restOpts.store ?? store,
   }
 
   try {
-    // AI : TODO (vibe-pending-compose) — GUI Send also proposes against the saved project, not the
-    // AI :   last unapproved chat proposal. Same clobber as CLI/MCP ask_agent if the user Sends twice.
-    result = await proposeProjectChange(project, trimmed, history, model, enrichedOpts)
+    result = await proposeProjectChange(base, trimmed, history, model, enrichedOpts)
+    if (result.proposal && pendingProposal) {
+      result = {
+        ...result,
+        proposal: mergePendingProposals(pendingProposal, result.proposal as ProjectProposal) as typeof result.proposal,
+      }
+    }
   } catch (err) {
     caught = err
   } finally {

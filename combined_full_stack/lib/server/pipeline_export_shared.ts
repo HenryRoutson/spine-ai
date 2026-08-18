@@ -333,6 +333,7 @@ export function exportSpineOutType(
   project: Project,
   index: number,
 ): TypeExpr | undefined {
+  // AI : TODO (allow-pipeline-non-linear-fork) — passthrough prev is lane predecessor, not project.modules[index-1].
   if (usesPassthroughStructure(m.kind)) {
     const prev = index > 0 ? project.modules[index - 1] : undefined;
     return prev ? stepSpineOutType(prev) : stepSpineOutType(m);
@@ -1287,6 +1288,7 @@ function orchestratorInvokeLine(
 }
 
 // AI : TODO (arch-export-orchestrator) — Ts/Py/Rust/Go walk the same spine; one IR then printers.
+// AI : TODO (allow-pipeline-non-linear-fork) — Fork → Promise.all of lane IIFEs then join (ts/py/go/rs).
 export function generateOrchestratorTs(project: Project, stepFnName: (m: PipelineModule, i: number) => string): string {
   const inputMods = orchestratorInputMods(project);
   const multi = inputMods.length > 1;
@@ -1345,6 +1347,7 @@ export function generateOrchestratorTs(project: Project, stepFnName: (m: Pipelin
 }
 
 export function generateOrchestratorPy(project: Project, stepFnName: (m: PipelineModule, i: number) => string): string {
+  // AI : TODO (allow-pipeline-non-linear-fork) — same Promise.all + join as generateOrchestratorTs.
   const inputMods = orchestratorInputMods(project);
   const multi = inputMods.length > 1;
   const lines: string[] = [
@@ -1390,6 +1393,7 @@ export function generateOrchestratorPy(project: Project, stepFnName: (m: Pipelin
 }
 
 // AI : async Rust orchestrator — spine as Value between steps for open typing.
+// AI : TODO (allow-pipeline-non-linear-fork) — tokio::join! / futures per lane then join (same as TS Promise.all).
 export function generateOrchestratorRust(project: Project, stepFnName: (m: PipelineModule, i: number) => string): string {
   const inputMods = orchestratorInputMods(project);
   const multi = inputMods.length > 1;
@@ -1425,6 +1429,7 @@ export function generateOrchestratorRust(project: Project, stepFnName: (m: Pipel
 }
 
 // AI : Go orchestrator — spine as json.RawMessage between steps for open typing.
+// AI : TODO (allow-pipeline-non-linear-fork) — errgroup per lane then join (same as TS Promise.all).
 export function generateOrchestratorGo(project: Project, stepFnName: (m: PipelineModule, i: number) => string): string {
   const inputMods = orchestratorInputMods(project);
   const multi = inputMods.length > 1;

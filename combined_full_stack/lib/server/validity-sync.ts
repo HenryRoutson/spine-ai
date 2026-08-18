@@ -1,4 +1,5 @@
 // AI : Pipeline step sync & migration helpers — standalone, no dependency on validity.ts I/O graph.
+// AI : TODO (allow-pipeline-non-linear-fork) — sync/migrate recurse into forkBranches; unique labels across tree.
 import type {
   ModelId,
   ModuleId,

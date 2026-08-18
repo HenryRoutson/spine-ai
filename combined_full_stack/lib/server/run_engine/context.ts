@@ -55,6 +55,7 @@ export function restoreCtx(
 }
 
 export function requireLinearInput(m: PipelineModule, ctx: RunCtx): unknown {
+  // AI : TODO (allow-pipeline-non-linear-fork) — lane steps still use this; Fork join is a separate exec.
   const prev = ctx.prevModuleId ? ctx.project.modules.find((x) => x.id === ctx.prevModuleId) : undefined;
   const upstream = stepEmits(prev);
   if (m.inStructureId !== upstream) {

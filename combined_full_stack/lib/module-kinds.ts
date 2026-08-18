@@ -1,6 +1,3 @@
-// AI : TODO (tsx-export-star) — ModuleKind values are undefined under tsx ESM `export *` from
-// AI :   lib/types.ts. isLlmKind("llm-batch") is then false, so computeLlmDocumentFieldInvalid
-// AI :   never fires in MCP validate_project. Import from @/lib/server/types like mcp_tool does.
 import { LegacyModuleKind, ModuleKind } from "@/lib/types"
 import type { RunStepKind } from "@/lib/types"
 
@@ -15,6 +12,7 @@ export const USER_ADDABLE_MODULE_KINDS = [
   ModuleKind.Merge,
   ModuleKind.Assemble,
   ModuleKind.Parallel,
+  // AI : TODO (allow-pipeline-non-linear-fork) — ModuleKind.Fork once kind exists (lanes, not Parallel).
   ModuleKind.Combine,
   ModuleKind.CustomCode,
   ModuleKind.Assert,
@@ -35,7 +33,8 @@ export function usesPassthroughStructure(kind: ModuleKind): boolean {
 export const LLM_KINDS: ModuleKind[] = [ModuleKind.Llm, ModuleKind.LlmBatch, ModuleKind.ExampleSelect]
 
 export function isLlmKind(kind: RunStepKind): boolean {
-  return LLM_KINDS.includes(kind as ModuleKind)
+  // AI : string literals — tsx `export *` can drop ModuleKind enum values; LLM_KINDS.includes then misses.
+  return kind === "llm" || kind === "llm-batch" || kind === "example-select"
 }
 
 // AI : these kinds always put list[item] on the spine — structureOut is the ITEM name, not list[Name].

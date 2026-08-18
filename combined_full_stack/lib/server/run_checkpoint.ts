@@ -34,6 +34,7 @@ export type RunCheckpoint = {
     sourceText: string;
     sourceDocId: DocId;
     prevModuleId?: ModuleId;
+    // AI : TODO (allow-pipeline-non-linear-fork) — serialize branchId when paused inside a lane.
   };
   clientStep: {
     moduleId: ModuleId;

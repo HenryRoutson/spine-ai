@@ -32,6 +32,7 @@ export async function runLinearStepsFrom(
   params: LinearStepParams,
   startIndex: number,
 ): Promise<"ok" | "error" | "paused"> {
+  // AI : TODO (allow-pipeline-non-linear-fork) — keep this for a module list; Fork calls it per lane then joins.
   const { project, projectId, model, cacheOwnerId, ctx, steps, artifacts, ledger, log, opts, writeLive, runId, startedAt, inputDocId, fingerprintInputDocIds, savedCentsAcc } =
     params;
 

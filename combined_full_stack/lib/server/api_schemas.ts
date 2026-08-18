@@ -818,6 +818,26 @@ export const assistantRequestBodySchema = z
     uiContext: z.array(uiContextRefSchema).max(MAX_UI_CONTEXT_ITEMS).optional(),
     // AI : Vibe vs Build — prompt awareness only; never gates agent write power.
     humanSurface: z.enum(["vibe", "build"]).optional(),
+    pendingProposal: z
+      .object({
+        modules: z.array(z.unknown()).optional(),
+        models: z.array(z.unknown()).optional(),
+        typeAliases: z.array(z.unknown()).optional(),
+        docs: z.array(z.unknown()).optional(),
+        documentation: z.string().optional(),
+        projectName: z.string().optional(),
+        proposedActions: z.array(z.unknown()).optional(),
+        changed: z.object({
+          modules: z.boolean(),
+          models: z.boolean(),
+          typeAliases: z.boolean(),
+          docs: z.boolean(),
+          documentation: z.boolean(),
+          name: z.boolean().optional(),
+          actions: z.boolean().optional(),
+        }),
+      })
+      .optional(),
   })
   .strict()
   .refine(

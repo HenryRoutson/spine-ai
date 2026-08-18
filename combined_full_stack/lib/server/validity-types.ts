@@ -41,11 +41,13 @@ export enum PipelineWarningKind {
   QuoteNoFields = "quote-no-fields",
   TransformMultiList = "transform-multi-list",
   JsonInputType = "json-input-type",
+  PromptQuoteMismatch = "prompt-quote-mismatch",
 }
 
 export interface PipelineWarning {
   moduleId: ModuleId;
   kind: PipelineWarningKind;
+  detail?: string;
 }
 
 export enum IoMismatchFixKind {
@@ -78,6 +80,7 @@ export function modelName(models: StructureModel[], id?: StructureModelId): stri
 }
 
 export function prevModuleId(modules: PipelineModule[], moduleId: ModuleId): ModuleId | undefined {
+  // AI : TODO (allow-pipeline-non-linear-fork) — predecessor is previous in lane, not modules[i-1] of a flat list.
   const i = modules.findIndex((m) => m.id === moduleId);
   return i > 0 ? modules[i - 1]!.id : undefined;
 }

@@ -78,6 +78,7 @@ const MODULE_KINDS = USER_ADDABLE_MODULE_KINDS;
 
 const INPUT_TYPE_VALUES = INPUT_TYPES.map((t) => t.value);
 
+// AI : TODO (allow-pipeline-non-linear-fork) — moduleSpecSchema nested forkBranches; materialize lane modules.
 const moduleSpecSchema = z
   .object({
     kind: z.enum(MODULE_KINDS),
@@ -347,9 +348,8 @@ function makeModuleFromSpec(
   spec: PipelineAssistantModuleSpec,
   models: StructureModel[],
   globalModel: ModelId,
+  existingId?: ModuleId,
 ): PipelineModule {
-  // AI : TODO (vibe-rewrite-ids) — always uid() a new step id. Full modules rewrite (vs modulePatch)
-  // AI :   orphans inferenceInputDocIds keyed by the old input id. Preserve ids by label/index.
   const inHint = parseStructureHint(spec.structureIn);
   const outHint = parseStructureHint(spec.structureOut);
   const inName = inHint?.name ?? spec.structureIn;
@@ -382,14 +382,11 @@ function makeModuleFromSpec(
 
   let mod = createPipelineModule(
     {
-      id: uid<ModuleId>(),
+      id: existingId ?? uid<ModuleId>(),
       kind: spec.kind,
       label: spec.label,
       note: spec.note,
-      // AI : TODO (vibe-input-default-pdf) — omitted inputType becomes PDF. Few-shots use text so
-      // AI :   stand-in .txt files run; greenfield "receipts" then cannot pick sample_receipt_*.txt.
-      // AI :   Default to text (or align from session/proposal docs), not Pdf.
-      inputType: spec.kind === ModuleKind.Input ? (spec.inputType as PipelineModule["inputType"]) ?? InputType.Pdf : undefined,
+      inputType: spec.kind === ModuleKind.Input ? (spec.inputType as PipelineModule["inputType"]) ?? InputType.Text : undefined,
       inputNameContains: spec.inputNameContains,
       inputDescription: spec.inputDescription,
       inputMinCount: spec.inputMinCount,
@@ -426,41 +423,66 @@ function makeModuleFromSpec(
   return mod;
 }
 
+function takeExistingModuleId(
+  spec: { kind: string; label?: string },
+  existing: PipelineModule[],
+  used: Set<string>,
+): ModuleId | undefined {
+  const label = spec.label?.trim();
+  if (label) {
+    const hit = existing.find((m) => !used.has(m.id) && m.kind === spec.kind && m.label.trim() === label);
+    if (hit) {
+      used.add(hit.id);
+      return hit.id;
+    }
+  }
+  const hit = existing.find((m) => !used.has(m.id) && m.kind === spec.kind);
+  if (hit) {
+    used.add(hit.id);
+    return hit.id;
+  }
+  return undefined;
+}
+
 function expandModuleSpecs(
   specs: PipelineAssistantModuleSpec[],
   models: StructureModel[],
   globalModel: ModelId,
+  existing: PipelineModule[] = [],
 ): PipelineModule[] {
   const out: PipelineModule[] = [];
+  const used = new Set<string>();
   for (const spec of specs) {
     if ((spec as { kind?: string }).kind === ModuleKind.DocToText) continue;
     if (spec.kind === "combine") {
       // AI : skip auto side input when agent already emitted an input step immediately before combine.
       const sideInputPresent = out[out.length - 1]?.kind === ModuleKind.Input;
       if (!sideInputPresent) {
+        const sideSpec = {
+          kind: ModuleKind.Input,
+          label: spec.label?.trim() ? `${spec.label} Document` : "Document Input",
+          note: spec.note?.trim() || `Side document for "${spec.label}"`,
+          structureOut: "Document",
+          inputType: (spec.inputType as InputType | undefined) ?? InputType.Text,
+          inputNameContains: spec.inputNameContains,
+          inputMinCount: spec.inputMinCount,
+          inputDescription:
+            spec.inputDescription?.trim() ||
+            `Document for combine side slot "${spec.label}"`,
+        };
         out.push(
           makeModuleFromSpec(
-            {
-              kind: ModuleKind.Input,
-              label: spec.label?.trim() ? `${spec.label} Document` : "Document Input",
-              note: spec.note?.trim() || `Side document for "${spec.label}"`,
-              structureOut: "Document",
-              inputType: (spec.inputType as InputType | undefined) ?? InputType.Text,
-              inputNameContains: spec.inputNameContains,
-              inputMinCount: spec.inputMinCount,
-              inputDescription:
-                spec.inputDescription?.trim() ||
-                `Document for combine side slot "${spec.label}"`,
-            },
+            sideSpec,
             models,
             globalModel,
+            takeExistingModuleId(sideSpec, existing, used),
           ),
         );
       }
-      out.push(makeModuleFromSpec(spec, models, globalModel));
+      out.push(makeModuleFromSpec(spec, models, globalModel, takeExistingModuleId(spec, existing, used)));
       continue;
     }
-    out.push(makeModuleFromSpec(spec, models, globalModel));
+    out.push(makeModuleFromSpec(spec, models, globalModel, takeExistingModuleId(spec, existing, used)));
   }
   return out;
 }
@@ -531,12 +553,20 @@ function materializeDocs(
   }));
 }
 
+function inputsNeedStandInAlign(modules: PipelineModule[], docs: { type: string }[]): boolean {
+  if (!docs.length) return false;
+  const inputs = modules.filter((m) => m.kind === ModuleKind.Input);
+  if (!inputs.length) return false;
+  const catalogTypes = new Set(docs.map((d) => d.type));
+  const anyMatch = inputs.some((m) => inputTypesForModule(m).some((t) => catalogTypes.has(t)));
+  if (anyMatch) return false;
+  return docs.every((d) => d.type === InputType.Text || d.type === InputType.Json || d.type === InputType.Markdown);
+}
+
 function alignInputTypesToSyntheticDocs(
   modules: PipelineModule[],
-  docs: ProjectAssistantDocSpec[],
+  docs: { type: string }[],
 ): PipelineModule[] {
-  // AI : TODO (vibe-align-session-docs) — only proposal docs[], not session uploads. Catalog already
-  // AI :   listed sample_receipt_*.txt while inputType stayed pdf. Also align from testDocsCatalog.
   if (!docs.length) return modules;
   const jsonOnly = docs.every((d) => d.type === InputType.Json);
   const standInType = jsonOnly ? InputType.Json : InputType.Text;
@@ -548,6 +578,7 @@ function alignInputTypesToSyntheticDocs(
 }
 
 function buildThinkingSystemPrompt(hasValidationErrors: boolean): string {
+  // AI : TODO (allow-pipeline-non-linear-fork) — reasoner: Fork when independent lanes share one input.
   return `You are the Agent for "Spine" — structures, pipeline steps, and inference test documents.
 
 ${hasValidationErrors
@@ -568,10 +599,13 @@ function buildThinkingUserPrompt(
   recentRuns?: AssistantRunSummary[],
   lastFailedRun?: AssistantRunSummary | null,
 ): string {
-  // AI : TODO (vibe-thinking-fields) — thinking prompt lists model names only, not field types.
-  // AI :   Agent cannot see amount:tuple[text,quote] vs float here; include name:type? per field.
   const modelsBlock = project.models.length
-    ? project.models.map((m) => `- ${m.name}: ${m.description ?? "(no description)"}`).join("\n")
+    ? project.models
+        .map((m) => {
+          const fields = m.fields.map((f) => `${f.name}:${f.type}${f.optional ? "?" : ""}`).join(", ");
+          return `- ${m.name} (${fields || "no fields"}): ${m.description ?? ""}`;
+        })
+        .join("\n")
     : "(none yet)";
   const stepsBlock = project.modules.length
     ? project.modules
@@ -658,10 +692,8 @@ export function materializeProposal(
   raw: z.infer<typeof assistantResponseSchema>,
   project: Project,
   globalModel: ModelId,
+  alignDocs: { type: string }[] = [],
 ): PipelineAssistantProposal | null {
-  // AI : TODO (vibe-prompt-vs-schema) — no check that llm/llm-batch prompt matches field types.
-  // AI :   Vibe asked for quotes on amount/tax after those fields became float (and the reverse).
-  // AI :   Flag quote-language vs non-quote fields, or strip quote instructions when type is float.
   // AI : full rewrite takes priority; patch applies when modules is null but modulePatch has entries.
   const hasPipelineRewrite = raw.modules !== null;
   const hasPipelinePatch = !hasPipelineRewrite && (raw.modulePatch?.length ?? 0) > 0;
@@ -697,17 +729,18 @@ export function materializeProposal(
       : (project.typeAliases ?? []);
   let modules: PipelineModule[];
   if (hasPipelineRewrite) {
-    modules = expandModuleSpecs(raw.modules ?? [], models, globalModel);
+    modules = expandModuleSpecs(raw.modules ?? [], models, globalModel, project.modules);
   } else if (hasPipelinePatch) {
     modules = applyModulePatches(project.modules, raw.modulePatch!, models);
   } else {
     modules = project.modules;
   }
   const docs = materializeDocs(raw.docs);
-  if (hasDocChange && docs.length) {
-    modules = alignInputTypesToSyntheticDocs(modules, docs);
+  const shouldAlign = docs.length > 0 || inputsNeedStandInAlign(modules, alignDocs);
+  if (shouldAlign) {
+    modules = alignInputTypesToSyntheticDocs(modules, docs.length ? docs : alignDocs);
   }
-  if (hasPipelineChange || (hasDocChange && docs.length)) {
+  if (hasPipelineChange || shouldAlign) {
     modules = syncManagedPipelineSteps(modules, models, globalModel) ?? modules;
   }
   return {
@@ -925,7 +958,7 @@ export async function proposePipelineChange(
     llmAttempt += 1;
     opts?.onLlmResponse?.(fixErrors ? `retry-${fixAttempt}` : "initial", raw);
 
-    let proposal = materializeProposal(raw, project, globalModel);
+    let proposal = materializeProposal(raw, project, globalModel, opts?.testDocsCatalog ?? []);
     let retryCount = 0;
 
     for (let retry = 0; retry < MAX_VALIDATION_RETRIES && proposal; retry++) {
@@ -982,7 +1015,7 @@ export async function proposePipelineChange(
       );
       llmAttempt += 1;
       opts?.onLlmResponse?.(`retry-${retryCount}`, raw);
-      proposal = materializeProposal(raw, retryProject, globalModel);
+      proposal = materializeProposal(raw, retryProject, globalModel, opts?.testDocsCatalog ?? []);
     }
 
     const invalidCount = proposal

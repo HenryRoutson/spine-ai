@@ -154,6 +154,7 @@ export async function runPipeline(
   });
 
   const writeLive = createWriteLive(project, model, steps, opts.liveHtml ?? persist);
+  // AI : TODO (allow-pipeline-non-linear-fork) — walk outer spine; Fork → Promise.all lanes then join (not a flat index loop).
   await runLinearStepsFrom(
     {
       project,
@@ -440,6 +441,7 @@ export async function resumeRunPipeline(
     return run;
   }
 
+  // AI : TODO (allow-pipeline-non-linear-fork) — resume must restore branchId and continue that lane.
   await runLinearStepsFrom(
     {
       project,

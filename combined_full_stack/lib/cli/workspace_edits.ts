@@ -90,6 +90,7 @@ export function parseAddableKind(raw: string): ModuleKind | undefined {
 }
 
 export function addPipelineStep(session: SpineSession, kind: ModuleKind, label?: string): PipelineModule[] {
+  // AI : TODO (allow-pipeline-non-linear-fork) — insertAt + optional branchId; Fork inserts 2 empty lanes.
   const models = session.models
   const globalModel = session.model as ModelId
   const modules = session.modules
@@ -259,6 +260,7 @@ export function removeStep(session: SpineSession, idOrLabel: string): void {
 }
 
 export function moveStep(session: SpineSession, idOrLabel: string, at: number): void {
+  // AI : TODO (allow-pipeline-non-linear-fork) — move within a lane; do not splice across fork boundaries.
   const modules = [...session.modules]
   const from = modules.findIndex((m) => m.id === idOrLabel || m.label === idOrLabel)
   if (from < 0) throw new Error(`unknown step ${idOrLabel}`)

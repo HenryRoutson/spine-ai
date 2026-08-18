@@ -12,6 +12,7 @@ import { runLogJson } from "@/lib/run-log-json"
 import { copyTextToClipboard } from "@/lib/clipboard"
 import { Progress } from "@/components/ui/progress"
 import { segmentPipeline, mergeCombineSegmentStatus } from "@/lib/pipeline-layout"
+// AI : TODO (allow-pipeline-non-linear-fork) — trace panel renders fork columns, not a single segment column.
 import type { StepUiState } from "@/lib/run-engine"
 import type { DocRef, JobLogEntry, ModuleId, PipelineModule, PipelineRun, StructureModel } from "@/lib/types"
 import {

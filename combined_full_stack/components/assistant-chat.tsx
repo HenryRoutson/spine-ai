@@ -84,6 +84,8 @@ type AssistantChatProps<TProposal> = {
       onDebugEntry: (entry: AssistantDebugEntry) => void
       /** AI : snapshot of pins at send — avoid racing clearUiContextPins */
       uiContext?: UiContextRef[]
+      /** AI : last unapproved proposal — follow-up Send overlays instead of proposing from live project */
+      pendingProposal?: TProposal
     },
   ) => Promise<AssistantRequestResult<TProposal>>
   /** AI : shared session — when set, chat history persists across tab mounts */
@@ -249,11 +251,15 @@ export function AssistantChat<TProposal>({
     onStreamingDraftChange?.(emptyStreamingDraft())
 
     const history = buildAssistantHistory(messages, ASSISTANT_HISTORY_LIMIT)
+    const pendingProposal = [...messages]
+      .reverse()
+      .find((m) => m.role === "assistant" && m.proposal && m.status === "pending")?.proposal
     // AI : API message is wire form (includes <pasted>); empty typed + ui-context still sends "".
     const apiMessage = composed.trim() ? composed : text.trim()
 
     try {
       const data = await requestAssistant(apiMessage, history, {
+        setLoadingPhase,
         setLoadingPhase,
         onThinkingDelta: (delta) => {
           setLiveThinking((prev) => prev + delta)
@@ -271,6 +277,7 @@ export function AssistantChat<TProposal>({
         },
         onDebugEntry: handleDebugEntry,
         uiContext: pinsAtSend,
+        pendingProposal,
       })
       const assistantMsg: AssistantChatMessage<TProposal> = {
         id: uid(),

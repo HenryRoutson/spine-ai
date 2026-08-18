@@ -8,6 +8,7 @@ import { isAutoDocToTextStep, isAutoStructureParseStep, isInputManagedFollower }
 export type PipelineSegment =
   | { kind: "step"; module: PipelineModule; index: number }
   | { kind: "combine"; combine: PipelineModule; input: PipelineModule; convert?: PipelineModule; parse?: PipelineModule; index: number }
+  // AI : TODO (allow-pipeline-non-linear-fork) — kind "fork": boxed lanes + join; insert scoped to branchId.
 
 // AI : TODO(spec) — delete combine segments when implicit combine ships (pipeline_state.ts #10).
 // AI : second+ input steps stand alone; canvas shows label-keyed state arrows instead.
@@ -33,6 +34,7 @@ export function combineGroupAt(
 
 // AI : combine steps consume pipeline state + a secondary input module immediately before them —
 // AI : group input (+ auto parse llm) so the linear canvas shows where the extra document feeds in.
+// AI : TODO (allow-pipeline-non-linear-fork) — emit fork segments; flatten is not a linear walk.
 export function segmentPipeline(modules: PipelineModule[]): PipelineSegment[] {
   const inGroup = new Set<string>()
   for (let i = 0; i < modules.length; i++) {

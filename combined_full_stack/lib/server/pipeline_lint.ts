@@ -72,6 +72,7 @@ export function parsePipelineLintInput(
 }
 
 function graphLints(project: Project): PipelineLint[] {
+  // AI : TODO (allow-pipeline-non-linear-fork) — lints on nested lane modules (flatten or recurse).
   const models = withSharedModels(project.models);
   const typeAliases = project.typeAliases ?? [];
   const invalid = computeInvalid(project.modules, project.models, { typeAliases });
@@ -90,9 +91,17 @@ function graphLints(project: Project): PipelineLint[] {
 
   for (const m of project.modules) {
     for (const issue of invalidIssuesForModule(invalid, m.id)) {
-      // AI : TODO (lint-skip-structure-field) — drops llm Document-field errors. Prefer validate_project
-      // AI :   / computeInvalid; or include StructureField here so lint_pipeline catches source_file:document.
-      if (issue.kind === InvalidKind.StructureField) continue;
+      if (issue.kind === InvalidKind.StructureField) {
+        out.push({
+          severity: "error",
+          source: "structure",
+          code: issue.kind,
+          message: issue.structureMessage ?? invalidStepMessage(issue, models, project.modules),
+          stepId: m.id,
+          stepLabel: m.label,
+        });
+        continue;
+      }
       out.push({
         severity: "error",
         source: issue.kind === InvalidKind.CodeCompileError ? "step-code" : "pipeline",

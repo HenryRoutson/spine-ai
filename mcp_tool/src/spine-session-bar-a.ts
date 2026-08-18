@@ -230,9 +230,6 @@ export function rejectProposalFromSession(sessionPath?: string) {
 
 export async function askAgentFromSession(message: string, sessionPath?: string, kind?: string) {
   // AI : TODO (mcp-vibe-http) — POST /api/pipeline-assistant (billed + auth) like GUI Send, not in-process proposePipelineChange.
-  // AI : TODO (vibe-pending-compose) — askAgent proposes from live session.project then replaces pendingProposal.
-  // AI : TODO (mcp-vibe-review) — return data.proposal compact review is in CliCommandResult; Cursor
-  // AI :   still showed names-only get_project. Surface pending.changed + inputType vs docs in the review.
   const session = openMcpSession(sessionPath, false)
   const assistant =
     kind === "structure" || kind === "testing" || kind === "diagnosis" || kind === "vibe" ? kind : "vibe"
@@ -335,6 +332,7 @@ export async function runSessionAction(args: SessionActionArgs): Promise<unknown
       return addAliasFromSession(args.name, args.expr, sessionPath, args.params)
     case "pipeline.add-step":
     case "add_step":
+      // AI : TODO (allow-pipeline-non-linear-fork) — add_step args: optional branchId for insert into a lane.
       if (!args.kind) throw new Error("kind required")
       return addStepFromSession(args.kind, args.label, sessionPath)
     case "pipeline.configure-step":

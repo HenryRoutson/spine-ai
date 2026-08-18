@@ -111,7 +111,9 @@ export function buildStructureRulesPromptBlock(): string {
 }
 
 /** AI : maps server validation messages to fixes — shown when proposal materialization fails. */
+// AI : TODO (allow-pipeline-non-linear-fork) — validation walk is a tree (lanes), not only left-to-right spine.
 export function buildPipelineValidationErrorsPromptBlock(): string {
+  // AI : TODO (allow-pipeline-non-linear-fork) — validation walk is a tree (lanes), not only left-to-right spine.
   return `How pipeline validation works (your proposal is checked before the user approves):
 1. The server materializes your modules array into real steps (auto-inserts Convert to text, Parse-to-structure, Link Quotes, combine side inputs).
 2. It walks the linear spine left-to-right and flags I/O mismatches, missing notes, duplicate labels, and compile errors.
@@ -265,6 +267,7 @@ export function buildAssistantStructuredResponsePromptBlock(): string {
 
 export function buildPipelineRulesPromptBlock(globalModel: ModelId): string {
   // AI : Assemble zips state labels → flat product (not Combine); dynamic N → llm-batch; avoid zip∘zip.
+  // AI : TODO (allow-pipeline-non-linear-fork) — drop "strictly linear"; teach Fork lanes + join vs Parallel.
   return `Pipeline rules:
 - Pipelines are strictly linear. Each step must consume ONLY the previous step's output — never an earlier structure with the same model name. combine is the exception: it reads pipeline state (by structure name) plus the document input immediately before it. assemble is the other exception: it zips spine + state["Label"] (or path) bindings into one flat structure (no LLM). parallel runs fixed LLM branches on the same spine input concurrently and joins into one structure.
 - Prefer assemble over custom-code when joining two prior LLM outputs into one object. Prefer N-way assemble over nesting assemble steps. Prefer parallel when independent LLM extractions share one input and wall-clock matters. Dynamic N same-schema calls → llm-batch, not assemble/parallel.
@@ -387,7 +390,9 @@ export function isGreenfieldProject(project: Project, _history: ChatTurn[] = [])
 
 /** AI : one user-message shape for landing + in-app greenfield design — keep in sync with buildFewShotPromptBlock. */
 export function buildGreenfieldPipelineUserMessage(task: string): string {
+  // AI : TODO (allow-pipeline-non-linear-fork) — allow Fork when independent sub-pipelines share one input.
   const trimmed = task.trim();
+  // AI : TODO (allow-pipeline-non-linear-fork) — allow Fork when independent sub-pipelines share one input.
   return `Design a complete Spine pipeline to automate this task. Include input step(s), processing (llm / llm-batch / transform / custom-code / combine as needed), and output step(s). Name structures clearly. Walk the linear spine chain before returning modules — adjacent steps must match single vs list types. Use combine (not one giant llm) when two different document kinds must merge; use llm-batch (not one llm) when many files or rows need the same extraction.
 
 If the goal is a spreadsheet/CSV/Excel of extracted rows, end at list[Row] → output — do NOT add custom-code that folds rows into a CSV string (lists are already CSV/XLSX-exportable in the UI).
@@ -738,6 +743,7 @@ Key patterns all examples demonstrate:
 }
 
 export function buildProjectAssistantSystemPrompt(globalModel: ModelId, projectName: string): string {
+  // AI : TODO (allow-pipeline-non-linear-fork) — "linear processing graph" → series-parallel (Fork lanes).
   return `You are the Agent for "Spine" — a linear document-processing IDE with structure models, a step pipeline, and a document store for inference.
 
 You can propose changes to ALL of the following in one response:
